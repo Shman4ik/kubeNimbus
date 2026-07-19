@@ -142,12 +142,18 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         try
         {
             var namespaces = await Client.ListResourceOnceAsync(ResourceDescriptor.Namespaces);
+            var previousSelection = SelectedNamespace;
             NamespaceOptions.Clear();
             NamespaceOptions.Add(AllNamespaces);
             foreach (var ns in namespaces.OrderBy(n => n.Name, StringComparer.OrdinalIgnoreCase))
             {
                 NamespaceOptions.Add(ns.Name);
             }
+
+            // Clearing/repopulating the bound collection can round-trip the ComboBox's
+            // SelectedItem through null via the two-way binding; re-assert a valid
+            // selection so the selector never ends up showing blank.
+            SelectedNamespace = NamespaceOptions.Contains(previousSelection) ? previousSelection : AllNamespaces;
         }
         catch (Exception ex)
         {

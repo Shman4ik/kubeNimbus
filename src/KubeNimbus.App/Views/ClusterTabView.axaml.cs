@@ -1,12 +1,21 @@
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using KubeNimbus.App.ViewModels;
 
 namespace KubeNimbus.App.Views;
 
 public partial class ClusterTabView : UserControl
 {
-    public ClusterTabView() => InitializeComponent();
+    public ClusterTabView()
+    {
+        InitializeComponent();
+
+        // DataGrid's own class handler consumes Enter (commit-edit / move-down)
+        // before a bubble-routed instance handler on the same element would ever
+        // see it, so this has to run in the Tunnel phase to win.
+        ResourceGrid.AddHandler(KeyDownEvent, OnGridKeyDown, RoutingStrategies.Tunnel);
+    }
 
     private ClusterTabViewModel? Vm => DataContext as ClusterTabViewModel;
 
