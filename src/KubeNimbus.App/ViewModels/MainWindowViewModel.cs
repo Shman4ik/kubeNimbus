@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KubeNimbus.Core;
@@ -7,60 +6,50 @@ using KubeNimbus.Core;
 namespace KubeNimbus.App.ViewModels;
 
 /// <summary>
-/// Phase-1 shell: pick a kubeconfig context, connect, and show a live
-/// (watch-driven) pod list. Deliberately minimal — the sidebar tree, YAML
-/// editor, exec and port-forward hang off this later.
+/// Shell root: multi-cluster context tabs (each a <see cref="ClusterTabViewModel"/>
+/// with its own connection/sidebar/list/inspector state), the command palette,
+/// and workspace persistence (tabs + theme, no credentials — CLAUDE.md rule #4).
 /// </summary>
 public sealed partial class MainWindowViewModel : ObservableObject
 {
-    private ClusterClient? _client;
-    private CancellationTokenSource? _watchCts;
+    public ObservableCollection<ClusterContext> AvailableContexts { get; } = [];
 
-    /// <summary>Fast lookup for in-place row updates keyed by namespace/name.</summary>
-    private readonly Dictionary<string, PodRowViewModel> _podsByKey = new(StringComparer.Ordinal);
-
-    public ObservableCollection<ClusterContext> Contexts { get; } = [];
-
-    public ObservableCollection<PodRowViewModel> Pods { get; } = [];
+    public ObservableCollection<ClusterTabViewModel> Tabs { get; } = [];
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(ConnectCommand))]
-    private ClusterContext? _selectedContext;
+    private ClusterTabViewModel? _selectedTab;
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(ConnectCommand))]
-    private bool _isConnecting;
-
-    [ObservableProperty]
-    private bool _isConnected;
+    private ClusterContext? _newTabContext;
 
     [ObservableProperty]
     private string _status = "Loading kubeconfig…";
 
-    /// <summary>Non-null when the watch reports a connection problem; surfaced in the UI.</summary>
-    [ObservableProperty]
-    private string? _connectionWarning;
+    public CommandPaletteViewModel Palette { get; }
 
     public MainWindowViewModel()
     {
-        _ = LoadContextsAsync();
+        Palette = new CommandPaletteViewModel(BuildPaletteItems);
+        _ = InitializeAsync();
     }
 
-    private async Task LoadContextsAsync()
+    private async Task InitializeAsync()
     {
         try
         {
             var contexts = await Kubeconfig.LoadContextsAsync();
-            Contexts.Clear();
+            AvailableContexts.Clear();
             foreach (var ctx in contexts)
             {
-                Contexts.Add(ctx);
+                AvailableContexts.Add(ctx);
             }
 
-            SelectedContext = Contexts.FirstOrDefault();
-            Status = Contexts.Count == 0
+            NewTabContext = AvailableContexts.FirstOrDefault();
+            Status = AvailableContexts.Count == 0
                 ? "No kubeconfig contexts found."
-                : $"{Contexts.Count} context(s) — pick one and connect.";
+                : $"{AvailableContexts.Count} context(s) available.";
+
+            await RestoreWorkspaceAsync();
         }
         catch (Exception ex)
         {
@@ -68,121 +57,104 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    private bool CanConnect => SelectedContext is not null && !IsConnecting;
-
-    [RelayCommand(CanExecute = nameof(CanConnect))]
-    private async Task ConnectAsync()
+    private async Task RestoreWorkspaceAsync()
     {
-        if (SelectedContext is not { } context)
+        var settings = WorkspaceStore.Load();
+        foreach (var snapshot in settings.Tabs)
+        {
+            var match = AvailableContexts.FirstOrDefault(c =>
+                c.Name == snapshot.ContextName && c.KubeconfigPath == snapshot.KubeconfigPath);
+            if (match is not null)
+            {
+                await AddTabAsync(match);
+            }
+        }
+
+        if (Tabs.Count == 0 && AvailableContexts.Count > 0)
+        {
+            await AddTabAsync(AvailableContexts[0]);
+        }
+    }
+
+    [RelayCommand]
+    private async Task AddNewTabAsync()
+    {
+        if (NewTabContext is { } context)
+        {
+            await AddTabAsync(context);
+        }
+    }
+
+    private async Task AddTabAsync(ClusterContext context)
+    {
+        var tab = new ClusterTabViewModel(context);
+        Tabs.Add(tab);
+        SelectedTab = tab;
+        SaveWorkspace();
+        await tab.ConnectCommand.ExecuteAsync(null);
+    }
+
+    [RelayCommand]
+    private async Task CloseTabAsync(ClusterTabViewModel tab)
+    {
+        var index = Tabs.IndexOf(tab);
+        Tabs.Remove(tab);
+        await tab.DisposeAsync();
+        if (SelectedTab == tab)
+        {
+            SelectedTab = Tabs.Count == 0 ? null : Tabs[Math.Min(index, Tabs.Count - 1)];
+        }
+
+        SaveWorkspace();
+    }
+
+    /// <summary>Drag-reorder support — called from the view's drag/drop handler.</summary>
+    public void MoveTab(int oldIndex, int newIndex)
+    {
+        if (oldIndex == newIndex || oldIndex < 0 || newIndex < 0 || oldIndex >= Tabs.Count || newIndex >= Tabs.Count)
         {
             return;
         }
 
-        await DisconnectAsync();
-
-        IsConnecting = true;
-        ConnectionWarning = null;
-        Status = $"Connecting to {context.Name}…";
-
-        try
-        {
-            var client = ClusterClient.Connect(context);
-            var version = await client.GetServerVersionAsync();
-            _client = client;
-            IsConnected = true;
-            Status = $"Connected to {context.Name} (Kubernetes {version.GitVersion}).";
-            StartPodWatch(context.Namespace);
-        }
-        catch (Exception ex)
-        {
-            Status = $"Connection failed: {ex.Message}";
-            IsConnected = false;
-        }
-        finally
-        {
-            IsConnecting = false;
-        }
+        Tabs.Move(oldIndex, newIndex);
+        SaveWorkspace();
     }
 
-    private void StartPodWatch(string? @namespace)
+    private void SaveWorkspace()
     {
-        _watchCts = new CancellationTokenSource();
-        var token = _watchCts.Token;
-        var client = _client!;
-
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await foreach (var evt in client.WatchPodsAsync(
-                    @namespace,
-                    connectionLost: ex => Dispatcher.UIThread.Post(() => ConnectionWarning = ex.Message),
-                    cancellationToken: token))
-                {
-                    // Apply on the UI thread — the collections are bound to the view.
-                    await Dispatcher.UIThread.InvokeAsync(() => Apply(evt));
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                // normal on disconnect
-            }
-            catch (Exception ex)
-            {
-                Dispatcher.UIThread.Post(() => Status = $"Watch ended: {ex.Message}");
-            }
-        }, token);
+        var settings = WorkspaceStore.Load();
+        var tabs = Tabs.Select(t => new TabSnapshot(t.Context.Name, t.Context.KubeconfigPath)).ToList();
+        WorkspaceStore.Save(settings with { Tabs = tabs });
     }
 
-    private void Apply(ResourceEvent<k8s.Models.V1Pod> evt)
+    public void PersistTheme(string? theme)
     {
-        switch (evt.Type)
-        {
-            case ResourceEventType.Reset:
-                Pods.Clear();
-                _podsByKey.Clear();
-                ConnectionWarning = null;
-                break;
-
-            case ResourceEventType.Added or ResourceEventType.Modified when evt.Resource is { } pod:
-                var key = PodRowViewModel.KeyFor(pod);
-                if (_podsByKey.TryGetValue(key, out var existing))
-                {
-                    existing.Update(pod);
-                }
-                else
-                {
-                    var row = new PodRowViewModel(pod);
-                    _podsByKey[key] = row;
-                    Pods.Add(row);
-                }
-
-                break;
-
-            case ResourceEventType.Deleted when evt.Resource is { } pod:
-                var delKey = PodRowViewModel.KeyFor(pod);
-                if (_podsByKey.Remove(delKey, out var removed))
-                {
-                    Pods.Remove(removed);
-                }
-
-                break;
-        }
+        var settings = WorkspaceStore.Load();
+        WorkspaceStore.Save(settings with { Theme = theme });
     }
 
-    private async Task DisconnectAsync()
+    private IEnumerable<PaletteItem> BuildPaletteItems()
     {
-        if (_watchCts is { } cts)
+        foreach (var tab in Tabs)
         {
-            await cts.CancelAsync();
-            cts.Dispose();
-            _watchCts = null;
+            yield return new PaletteItem($"Switch to {tab.Header}", "Cluster tab", "SwapHorizontalIconGeometry", () => SelectedTab = tab);
         }
 
-        _client?.Dispose();
-        _client = null;
-        IsConnected = false;
-        Pods.Clear();
-        _podsByKey.Clear();
+        foreach (var ctx in AvailableContexts)
+        {
+            yield return new PaletteItem($"Open new tab: {ctx.Name}", "Connect", "PlusIconGeometry", () => _ = AddTabAsync(ctx));
+        }
+
+        if (SelectedTab is { } current)
+        {
+            foreach (var section in current.SidebarSections)
+            {
+                foreach (var kind in section.Kinds)
+                {
+                    yield return new PaletteItem(kind.DisplayName, $"{section.Title} · {current.Header}", section.IconKey,
+                        () => current.SelectKindCommand.Execute(kind));
+                }
+            }
+        }
     }
 }

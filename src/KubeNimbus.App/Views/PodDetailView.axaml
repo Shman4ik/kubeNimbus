@@ -1,0 +1,111 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:KubeNimbus.App.ViewModels"
+             xmlns:core="using:KubeNimbus.Core"
+             xmlns:sys="using:System"
+             xmlns:conv="using:KubeNimbus.App.Converters"
+             x:Class="KubeNimbus.App.Views.PodDetailView"
+             x:DataType="vm:PodDetailTabViewModel">
+
+  <Grid ColumnDefinitions="220,*" Margin="12">
+
+    <!-- Containers -->
+    <Border Grid.Column="0" Classes="card" Margin="0,0,8,0" Padding="8">
+      <Grid RowDefinitions="Auto,*,Auto">
+        <TextBlock Grid.Row="0" Classes="sectionHeader" Text="CONTAINERS" Margin="2,0,0,8" />
+        <ListBox Grid.Row="1" ItemsSource="{Binding Containers}" SelectedItem="{Binding SelectedContainer}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ContainerViewModel">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Ellipse Classes="statusDot" Classes.ok="{Binding Ready}" Classes.warn="{Binding !Ready}" />
+                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding RestartCount, StringFormat='↻{0}'}" Opacity="0.6" FontSize="11"
+                           VerticalAlignment="Center" IsVisible="{Binding RestartCount, Converter={x:Static conv:CountToBoolConverter.Instance}}" />
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6" Margin="2,8,0,0">
+          <Button Classes="toolbar" Command="{Binding ExecCommand}" ToolTip.Tip="Exec into selected container" Padding="6">
+            <PathIcon Data="{StaticResource ConsoleIconGeometry}" Width="14" Height="14" />
+          </Button>
+          <Button Classes="toolbar" Command="{Binding PortForwardCommand}" ToolTip.Tip="Port-forward selected container" Padding="6">
+            <PathIcon Data="{StaticResource SwapHorizontalIconGeometry}" Width="14" Height="14" />
+          </Button>
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Grid Grid.Column="1" RowDefinitions="Auto,*">
+
+      <!-- Owner chain -->
+      <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="0,0,0,8"
+                  IsVisible="{Binding Owners.Count, Converter={x:Static conv:CountToBoolConverter.Instance}}">
+        <TextBlock Text="Owned by" Opacity="0.6" FontSize="12" VerticalAlignment="Center" />
+        <ItemsControl ItemsSource="{Binding Owners}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Orientation="Horizontal" Spacing="4" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="core:OwnerRef">
+              <Button Classes="chip" Padding="8,3" Opacity="1"
+                      Command="{Binding $parent[UserControl].((vm:PodDetailTabViewModel)DataContext).OpenOwnerCommand}"
+                      CommandParameter="{Binding}">
+                <TextBlock FontSize="12">
+                  <Run Text="{Binding Kind}" FontWeight="SemiBold" />
+                  <Run Text="/" />
+                  <Run Text="{Binding Name}" />
+                </TextBlock>
+              </Button>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+
+      <TabControl Grid.Row="1">
+        <TabItem Header="Logs">
+          <Grid RowDefinitions="Auto,*">
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
+              <ToggleButton Classes="chip" Padding="6" IsChecked="{Binding IsFollowingLogs}" Command="{Binding ToggleFollowLogsCommand}"
+                            ToolTip.Tip="Follow logs (cancels the stream when toggled off)">
+                <PathIcon Data="{StaticResource PlayIconGeometry}" Width="12" Height="12" />
+              </ToggleButton>
+              <TextBlock Text="{Binding SelectedContainer.Name, StringFormat='Following {0}'}" Opacity="0.6" FontSize="12"
+                         VerticalAlignment="Center" IsVisible="{Binding IsFollowingLogs}" />
+            </StackPanel>
+            <Border Grid.Row="1" Classes="card" Padding="8">
+              <ScrollViewer Name="LogScroll">
+                <ItemsControl ItemsSource="{Binding LogLines}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="sys:String">
+                      <TextBlock Text="{Binding}" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11" TextWrapping="NoWrap" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </Border>
+          </Grid>
+        </TabItem>
+
+        <TabItem Header="Events">
+          <Grid RowDefinitions="Auto,*">
+            <Button Grid.Row="0" Classes="toolbar" Command="{Binding RefreshEventsCommand}" HorizontalAlignment="Right" Padding="6">
+              <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="13" Height="13" />
+            </Button>
+            <DataGrid Grid.Row="1" ItemsSource="{Binding Events}" IsReadOnly="True" GridLinesVisibility="Horizontal" CanUserResizeColumns="True">
+              <DataGrid.Columns>
+                <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="Auto" />
+                <DataGridTextColumn Header="Reason" Binding="{Binding Reason}" Width="Auto" />
+                <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="*" />
+                <DataGridTextColumn Header="Count" Binding="{Binding Count}" Width="Auto" />
+                <DataGridTextColumn Header="Last seen" Binding="{Binding LastSeen}" Width="Auto" />
+              </DataGrid.Columns>
+            </DataGrid>
+          </Grid>
+        </TabItem>
+      </TabControl>
+    </Grid>
+  </Grid>
+</UserControl>

@@ -1,0 +1,104 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:KubeNimbus.App.ViewModels"
+             xmlns:conv="using:KubeNimbus.App.Converters"
+             x:Class="KubeNimbus.App.Views.ClusterTabView"
+             x:DataType="vm:ClusterTabViewModel">
+
+  <Grid ColumnDefinitions="0.65*,2*">
+
+    <!-- Sidebar: sits directly on the shell tone, Files-style — no card chrome. -->
+    <ScrollViewer Grid.Column="0" Margin="0,0,8,0">
+      <ItemsControl ItemsSource="{Binding SidebarSections}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:SidebarSectionViewModel">
+            <StackPanel Margin="0,0,0,12">
+              <TextBlock Classes="sectionHeader" Text="{Binding Title}" Margin="8,4,8,6" />
+              <ItemsControl ItemsSource="{Binding Kinds}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:SidebarKindViewModel">
+                    <ListBoxItem Classes="navRow" IsSelected="{Binding IsSelected}"
+                                 Tapped="OnSidebarKindTapped">
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <PathIcon Data="{Binding IconKey, Converter={x:Static conv:IconKeyToGeometryConverter.Instance}}"
+                                  Width="13" Height="13" VerticalAlignment="Center" Opacity="0.8" />
+                        <TextBlock Text="{Binding DisplayName}" FontSize="12" VerticalAlignment="Center" />
+                      </StackPanel>
+                    </ListBoxItem>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+
+    <!-- Content: raised layer, Files-style. -->
+    <Border Grid.Column="1" Classes="layer">
+      <Grid RowDefinitions="Auto,*">
+
+        <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,*,Auto" Margin="0,0,0,10">
+          <TextBlock Grid.Column="0" Text="{Binding SelectedKind.DisplayName}" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" />
+          <ComboBox Grid.Column="1" ItemsSource="{Binding NamespaceOptions}" SelectedItem="{Binding SelectedNamespace}"
+                     Margin="12,0,0,0" MinWidth="170"
+                     IsEnabled="{Binding SelectedKind.Descriptor.Namespaced}" />
+          <Button Grid.Column="3" Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="Refresh" Padding="6">
+            <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="14" Height="14" />
+          </Button>
+        </Grid>
+
+        <Grid Grid.Row="1" ColumnDefinitions="*,Auto">
+
+          <DataGrid Grid.Column="0" Name="ResourceGrid"
+                     ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}"
+                     IsReadOnly="True" GridLinesVisibility="Horizontal" CanUserResizeColumns="True"
+                     DoubleTapped="OnRowDoubleTapped" KeyDown="OnGridKeyDown">
+            <DataGrid.Columns>
+              <DataGridTemplateColumn Header="" Width="28">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                    <Ellipse Classes="statusDot" Fill="{Binding StatusHealth, Converter={x:Static conv:HealthToBrushConverter.Instance}}"
+                             HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTextColumn Header="Namespace" Binding="{Binding Namespace}" Width="Auto" />
+              <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*" />
+              <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="Auto" />
+            </DataGrid.Columns>
+          </DataGrid>
+
+          <Border Grid.Column="1" Width="440" Margin="10,0,0,0" Classes="card" Padding="0"
+                  IsVisible="{Binding InspectorTabs.Count, Converter={x:Static conv:CountToBoolConverter.Instance}}">
+            <Grid RowDefinitions="Auto,*">
+              <ItemsControl Grid.Row="0" ItemsSource="{Binding InspectorTabs}" Margin="4">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <WrapPanel Orientation="Horizontal" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:InspectorTabViewModelBase">
+                    <Border Classes="card" Padding="8,4" Margin="2" CornerRadius="6" Tapped="OnInspectorTabTapped">
+                      <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="{Binding Title}" FontSize="12" Opacity="{Binding IsPreview, Converter={x:Static conv:PreviewToOpacityConverter.Instance}}" />
+                        <Button Classes="chip" Padding="0" MinWidth="14" MinHeight="14"
+                                Command="{Binding $parent[UserControl].((vm:ClusterTabViewModel)DataContext).CloseInspectorTabCommand}"
+                                CommandParameter="{Binding}">
+                          <PathIcon Data="{StaticResource CloseIconGeometry}" Width="9" Height="9" />
+                        </Button>
+                      </StackPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+
+              <ContentControl Grid.Row="1" Content="{Binding SelectedInspectorTab}" />
+            </Grid>
+          </Border>
+        </Grid>
+      </Grid>
+    </Border>
+  </Grid>
+</UserControl>

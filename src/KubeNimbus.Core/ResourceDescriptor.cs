@@ -44,4 +44,9 @@ public sealed record ResourceDescriptor(
     public static readonly ResourceDescriptor Events = new(
         Group: "", Version: "v1", Kind: "Event", Plural: "events", SingularName: "event",
         Namespaced: true, ShortNames: ["ev"], Categories: []);
+
+    /// <summary>Well-known descriptor for core/v1 Namespaces — used to populate the namespace selector.</summary>
+    public static readonly ResourceDescriptor Namespaces = new(
+        Group: "", Version: "v1", Kind: "Namespace", Plural: "namespaces", SingularName: "namespace",
+        Namespaced: false, ShortNames: ["ns"], Categories: []);
 }
