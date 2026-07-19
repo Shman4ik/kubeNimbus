@@ -1,0 +1,26 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:KubeNimbus.App.ViewModels"
+             x:Class="KubeNimbus.App.Views.PortForwardView"
+             x:DataType="vm:PortForwardTabViewModel">
+
+  <Grid RowDefinitions="Auto,Auto,Auto,Auto" Margin="16" MaxWidth="360" HorizontalAlignment="Left">
+    <TextBlock Grid.Row="0" Classes="sectionHeader" Text="PORT FORWARD" Margin="0,0,0,12" />
+
+    <Grid Grid.Row="1" ColumnDefinitions="Auto,90,24,Auto,90" RowDefinitions="Auto,Auto">
+      <TextBlock Grid.Column="0" Text="Pod port" VerticalAlignment="Center" />
+      <NumericUpDown Grid.Column="1" Value="{Binding PodPort}" Minimum="1" Maximum="65535" ShowButtonSpinner="False" FormatString="0" />
+      <TextBlock Grid.Column="3" Text="Local port" VerticalAlignment="Center" />
+      <NumericUpDown Grid.Column="4" Value="{Binding LocalPort}" Minimum="0" Maximum="65535" ShowButtonSpinner="False" FormatString="0"
+                     ToolTip.Tip="0 = pick an available port automatically" />
+    </Grid>
+
+    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="0,12,0,0">
+      <Button Classes="accent" Content="Start" Command="{Binding StartCommand}" IsEnabled="{Binding !IsRunning}" />
+      <Button Content="Stop" Command="{Binding StopCommand}" IsEnabled="{Binding IsRunning}" />
+      <Ellipse Classes="statusDot" Classes.ok="{Binding IsRunning}" Classes.idle="{Binding !IsRunning}" VerticalAlignment="Center" Margin="8,0,0,0" />
+    </StackPanel>
+
+    <TextBlock Grid.Row="3" Text="{Binding StatusMessage}" Margin="0,12,0,0" TextWrapping="Wrap" Opacity="0.75" FontSize="12" />
+  </Grid>
+</UserControl>

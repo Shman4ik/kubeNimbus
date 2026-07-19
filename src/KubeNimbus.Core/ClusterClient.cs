@@ -18,8 +18,12 @@ namespace KubeNimbus.Core;
 /// (client cert on the handler, bearer/exec token via <see cref="Kubernetes.Credentials"/>)
 /// and TLS. Watch frames are line-delimited JSON parsed with <see cref="JsonDocument"/>
 /// (AOT-safe) and materialized through source-generated <see cref="KubernetesJson"/>.
+/// Discovery, generic (CRD-capable) watch, server-side apply, events, exec and
+/// port-forward live in the other <c>ClusterClient.*.cs</c> partial-class files;
+/// they all funnel through the same <see cref="SendRequestAsync"/>/<see cref="WatchAsync{T}"/>
+/// primitives declared here.
 /// </remarks>
-public sealed class ClusterClient : IDisposable
+public sealed partial class ClusterClient : IDisposable
 {
     private const int ListPageSize = 500;
     private static readonly TimeSpan InitialBackoff = TimeSpan.FromSeconds(1);
@@ -350,17 +354,36 @@ public sealed class ClusterClient : IDisposable
     /// ResponseHeadersRead, applying the client's credentials so exec/token auth
     /// is honored. TLS and client-cert auth already live on the handler chain.
     /// </summary>
-    private async Task<HttpResponseMessage> SendStreamingGetAsync(string relativePath, CancellationToken ct)
+    private Task<HttpResponseMessage> SendStreamingGetAsync(string relativePath, CancellationToken ct) =>
+        SendRequestAsync(HttpMethod.Get, relativePath, content: null, HttpCompletionOption.ResponseHeadersRead, ct);
+
+    /// <summary>
+    /// General-purpose request against the client's own HttpClient/credentials —
+    /// the same auth path <see cref="SendStreamingGetAsync"/> uses, generalized
+    /// with method/body/completion-option so discovery, generic get/apply/delete
+    /// and events (the other <c>ClusterClient.*.cs</c> files) don't need their own
+    /// copy of the credential-injection dance.
+    /// </summary>
+    internal async Task<HttpResponseMessage> SendRequestAsync(
+        HttpMethod method, string relativePath, HttpContent? content, HttpCompletionOption completion, CancellationToken ct)
     {
-        var request = new HttpRequestMessage(HttpMethod.Get, new Uri(_client.BaseUri, relativePath));
+        var request = new HttpRequestMessage(method, new Uri(_client.BaseUri, relativePath)) { Content = content };
         if (_client.Credentials is not null)
         {
             await _client.Credentials.ProcessHttpRequestAsync(request, ct).ConfigureAwait(false);
         }
 
-        return await _client.HttpClient
-            .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct)
-            .ConfigureAwait(false);
+        return await _client.HttpClient.SendAsync(request, completion, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Buffered GET returning a parsed JSON document — caller disposes.</summary>
+    internal async Task<JsonDocument> GetJsonDocumentAsync(string relativePath, CancellationToken ct)
+    {
+        using var response = await SendRequestAsync(
+            HttpMethod.Get, relativePath, content: null, HttpCompletionOption.ResponseContentRead, ct).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        return await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
     }
 
     public void Dispose() => _client.Dispose();

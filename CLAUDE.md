@@ -99,9 +99,41 @@ with `HttpCompletionOption.ResponseHeadersRead`:
   relist on `ERROR` frame / 410 Gone → exponential backoff with
   `connectionLost` callback on transient failures.
 
-If you add a new watched resource, reuse the generic `WatchAsync<T>` core; only
-supply the list path, a paged lister, and a `KubernetesJson.Deserialize<T>`
-delegate.
+If you add a new **typed** watched resource, reuse the generic `WatchAsync<T>`
+core; only supply the list path, a paged lister, and a
+`KubernetesJson.Deserialize<T>` delegate. For **any resource kind discovered at
+runtime** (CRDs included — there's no compile-time type for those), use
+`ClusterClient.WatchResourceAsync(ResourceDescriptor, ...)` instead: it runs
+the same engine with `DynamicResource` (a JsonElement-backed wrapper, see
+`DynamicResource.cs`) as `T`. The sidebar/list view always goes through this
+generic path — pods included — so there's exactly one live-list code path in
+the App layer.
+
+## Discovery, server-side apply, events, exec, port-forward
+
+- **Discovery** (`ClusterClient.Discovery.cs`) walks `/api` and `/apis` with
+  raw `JsonDocument` parsing (same reasoning as watch frames — no source-gen
+  model needed for a shape this simple) into `ResourceDescriptor` records.
+  `SidebarGrouping` (App layer) buckets each descriptor into
+  Workloads/Network/Config/Storage/CRDs by Kind — an unrecognized API group
+  falls through to CRDs automatically, nothing is hardcoded.
+- **Server-side apply** (`ClusterClient.Dynamic.cs`) PATCHes with
+  `Content-Type: application/apply-patch+yaml`; the body is JSON (valid JSON
+  is valid YAML, so the API server's apply decoder accepts it) produced by
+  `YamlJson.cs`. That file uses YamlDotNet's **structural** `RepresentationModel`
+  (`YamlNode`/`YamlStream`) to convert YAML ⇄ JSON — never YamlDotNet's
+  attribute/reflection-based (de)serializer, which is not AOT/trim-safe and
+  can't handle arbitrary CRD shapes anyway. A 409 conflict raises
+  `ServerSideApplyConflictException` for the UI to offer a force-apply retry.
+- **Exec** (`ClusterClient.Exec.cs`) uses `Kubernetes.MuxedStreamNamespacedPodExecAsync`
+  — the one exec helper `KubernetesClient.Aot` *does* ship, because it's
+  WebSocket-based rather than SPDY and needed no reflection-based transport.
+- **Port-forward** (`ClusterClient.PortForward.cs`) has no equivalent helper,
+  so it opens a raw `WebSocketNamespacedPodPortForwardAsync` websocket per
+  accepted local TCP connection (matching kubectl's own approach — the k8s
+  websocket port-forward channel framing doesn't support multiplexing several
+  local clients over one upstream connection) and pumps bytes with the
+  channel-byte-prefix framing by hand.
 
 ## Sandbox cluster bootstrap (how tests get a real cluster)
 
@@ -173,18 +205,21 @@ calls `WithDeveloperTools()` under `#if DEBUG`, so the Avalonia DevTools MCP can
 attach to a running Debug build and screenshot/inspect the tree. It never enters
 the Release/AOT build.
 
-## MVP scope (phase 1 — build toward this, don't scaffold beyond it)
+## MVP scope (phase 1 — shipped, see Current status below)
 
 - [x] Context picker from kubeconfig (exec-plugin auth working).
 - [x] Live-updating pod list (watch) — proven end-to-end in the app.
-- [ ] Sidebar tree (Workloads/Network/Config/Storage/CRDs via discovery),
+- [x] Sidebar tree (Workloads/Network/Config/Storage/CRDs via discovery),
       namespace-scoped, live list views.
-- [ ] Pod detail: containers, status, live log streaming (follow, container
-      picker, cancel), events. *(Core log streaming already implemented.)*
-- [ ] YAML view/edit for any resource → server-side apply; delete with confirm.
-- [ ] Exec into a pod container (interactive terminal) and port-forward.
-      *(The AOT client exposes `MuxedStreamNamespacedPodExecAsync` for this.)*
-- [ ] Command palette (Ctrl/Cmd+K); light/dark theme.
+- [x] Pod detail: containers, status, live log streaming (follow, container
+      picker, cancel), events.
+- [x] YAML view/edit for any resource → server-side apply; delete with confirm.
+- [x] Exec into a pod container (interactive terminal) and port-forward.
+- [x] Command palette (Ctrl/Cmd+K); light/dark theme.
+- [x] Multi-cluster context tabs (drag-reorder, workspace-restore).
+- [x] Owner-reference navigation (pod → replicaset → deployment, etc.).
+- [x] pgNimbus visual design system ported (Theme.axaml, two-tone shell,
+      brand-blue accent, MDI icon vectors).
 
 **Later phases (do NOT build now, but don't paint into a corner):** Helm release
 browsing, resource metrics/graphs, RBAC inspection, multi-cluster aggregated
@@ -194,8 +229,24 @@ views.
 
 ## Current status
 
-Foundation bootstrapped. Core `ClusterClient` (kubeconfig load, connect,
-list+watch pods as `IAsyncEnumerable`, cancellable log streaming) is proven by
-TUnit integration tests against a live k3s cluster (5/5 passing). The Avalonia
-shell (context picker → live pod list) is verified running against the sandbox,
-and NativeAOT publish succeeds end-to-end.
+**Phase-1 MVP shipped.** Core `ClusterClient` covers kubeconfig load/connect,
+typed pod list+watch, cancellable log streaming, discovery (`/api` + `/apis`
+walk), a generic CRD-capable list+watch (`WatchResourceAsync`/`DynamicResource`),
+server-side apply with conflict surfacing, generic delete, events-for-resource,
+owner-reference resolution, interactive exec and port-forward — all proven by
+12 TUnit integration tests against a live k3s cluster (12/12 passing).
+
+The Avalonia shell wears pgNimbus's design system (Theme.axaml: brand-blue
+accent, two-tone Mica/AcrylicBlur shell, card/layer/pill-nav/status-dot
+classes) and now has: multi-cluster drag-reorderable context tabs with
+workspace persistence; a discovery-driven sidebar (Workloads/Network/
+Config/Storage/CRDs — verified against real cluster CRDs, not just built-ins);
+a generic namespace-scoped/all-namespaces live list; a pod detail pane
+(containers, live logs, events, owner-chip navigation); a YAML editor
+(AvaloniaEdit) with apply/reload/two-step-delete; exec and port-forward panes;
+and a Ctrl/Cmd+K command palette. Verified end-to-end running against the
+sandbox (screenshotted via the Avalonia DevTools MCP) and via NativeAOT
+publish (0 new warnings beyond the known DataGrid trim warnings).
+
+Not yet built (see "Later phases" above): Helm release browsing, resource
+metrics/graphs, RBAC inspection, multi-cluster aggregated views.

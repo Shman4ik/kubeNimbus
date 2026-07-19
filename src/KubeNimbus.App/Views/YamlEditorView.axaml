@@ -1,0 +1,41 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:KubeNimbus.App.ViewModels"
+             xmlns:ae="using:AvaloniaEdit"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             x:Class="KubeNimbus.App.Views.YamlEditorView"
+             x:DataType="vm:YamlEditorTabViewModel">
+
+  <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="12">
+
+    <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,0,0,8">
+      <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+      <Button Grid.Column="1" Classes="toolbar" Command="{Binding ReloadCommand}" ToolTip.Tip="Reload from server" Padding="6">
+        <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="14" Height="14" />
+      </Button>
+      <Button Grid.Column="2" Classes="accent" Content="Apply" Command="{Binding ApplyCommand}" IsEnabled="{Binding !IsBusy}" Margin="8,0,0,0" />
+      <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" Margin="8,0,0,0">
+        <Button Content="Delete" Command="{Binding RequestDeleteCommand}" IsVisible="{Binding !IsConfirmingDelete}" />
+        <Button Content="Confirm delete" Command="{Binding ConfirmDeleteCommand}" Foreground="IndianRed" IsVisible="{Binding IsConfirmingDelete}" />
+        <Button Content="Cancel" Command="{Binding CancelDeleteCommand}" IsVisible="{Binding IsConfirmingDelete}" />
+      </StackPanel>
+    </Grid>
+
+    <Border Grid.Row="1" Classes="card" Padding="0">
+      <ae:TextEditor Name="Editor" ShowLineNumbers="True" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="12"
+                     IsReadOnly="{Binding IsDeleted}" Margin="4" />
+    </Border>
+
+    <Border Grid.Row="2" Classes="card" Padding="10" Margin="0,8,0,0"
+            IsVisible="{Binding ConflictDetails, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
+      <StackPanel Spacing="6">
+        <TextBlock Text="Apply conflict — another field manager owns some of these fields." Classes="statusText warn" />
+        <TextBlock Text="{Binding ConflictDetails}" TextWrapping="Wrap" FontSize="11" Opacity="0.8" />
+        <Button Content="Force apply" Command="{Binding ForceApplyCommand}" />
+      </StackPanel>
+    </Border>
+
+    <TextBlock Grid.Row="3" Text="{Binding StatusMessage}" Opacity="0.7" FontSize="12" Margin="0,6,0,0"
+               IsVisible="{Binding ConflictDetails, Converter={x:Static conv:ObjectConverters.IsNull}}" />
+  </Grid>
+</UserControl>
