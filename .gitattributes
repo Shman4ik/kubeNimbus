@@ -1,0 +1,12 @@
+# Normalize line endings: text files are LF in the repo, checked out native.
+* text=auto eol=lf
+
+# Windows-only / tooling files stay CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.manifest text eol=crlf
+
+# Binary assets — never normalize.
+*.png binary
+*.ico binary
+*.icns binary
