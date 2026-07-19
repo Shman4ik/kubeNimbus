@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/KubeNimbus.Core/KubeNimbus.Core.csproj" />
+    <Project Path="src/KubeNimbus.App/KubeNimbus.App.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/KubeNimbus.Core.Tests/KubeNimbus.Core.Tests.csproj" />
+  </Folder>
+</Solution>

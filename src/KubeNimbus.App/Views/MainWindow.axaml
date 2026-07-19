@@ -1,0 +1,70 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:KubeNimbus.App.ViewModels"
+        xmlns:core="using:KubeNimbus.Core"
+        x:Class="KubeNimbus.App.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="kubeNimbus"
+        Width="1100" Height="720"
+        FontFamily="{StaticResource InterFontFamily}">
+
+  <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="12">
+
+    <!-- Context picker -->
+    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
+      <TextBlock Text="Context" VerticalAlignment="Center" />
+      <ComboBox MinWidth="280"
+                ItemsSource="{Binding Contexts}"
+                SelectedItem="{Binding SelectedContext}">
+        <ComboBox.ItemTemplate>
+          <DataTemplate x:DataType="core:ClusterContext">
+            <TextBlock Text="{Binding Name}" />
+          </DataTemplate>
+        </ComboBox.ItemTemplate>
+      </ComboBox>
+      <Button Content="Connect"
+              Command="{Binding ConnectCommand}"
+              IsEnabled="{Binding !IsConnecting}" />
+      <ProgressBar IsIndeterminate="True"
+                   Width="120"
+                   IsVisible="{Binding IsConnecting}"
+                   VerticalAlignment="Center" />
+    </StackPanel>
+
+    <!-- Connection warning banner -->
+    <Border Grid.Row="1"
+            Background="#33FFA000"
+            BorderBrush="#FFA000" BorderThickness="1"
+            CornerRadius="4" Padding="8,4" Margin="0,0,0,8"
+            IsVisible="{Binding ConnectionWarning, Converter={x:Static ObjectConverters.IsNotNull}}">
+      <TextBlock Text="{Binding ConnectionWarning}" TextWrapping="Wrap" />
+    </Border>
+
+    <!-- Live pod list -->
+    <DataGrid Grid.Row="2"
+              ItemsSource="{Binding Pods}"
+              IsReadOnly="True"
+              CanUserResizeColumns="True"
+              GridLinesVisibility="Horizontal"
+              IsVisible="{Binding IsConnected}">
+      <DataGrid.Columns>
+        <DataGridTextColumn Header="Namespace" Binding="{Binding Namespace}" Width="Auto" />
+        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*" />
+        <DataGridTextColumn Header="Ready" Binding="{Binding Ready}" Width="Auto" />
+        <DataGridTextColumn Header="Phase" Binding="{Binding Phase}" Width="Auto" />
+        <DataGridTextColumn Header="Restarts" Binding="{Binding Restarts}" Width="Auto" />
+        <DataGridTextColumn Header="Node" Binding="{Binding Node}" Width="Auto" />
+      </DataGrid.Columns>
+    </DataGrid>
+
+    <!-- Empty-state placeholder before connect -->
+    <TextBlock Grid.Row="2"
+               Text="Pick a context and connect to see a live pod list."
+               HorizontalAlignment="Center" VerticalAlignment="Center"
+               Opacity="0.6"
+               IsVisible="{Binding !IsConnected}" />
+
+    <!-- Status bar -->
+    <TextBlock Grid.Row="3" Text="{Binding Status}" Margin="0,8,0,0" Opacity="0.8" />
+  </Grid>
+</Window>

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <!-- TUnit runs on Microsoft.Testing.Platform. Do NOT add Microsoft.NET.Test.Sdk;
+         it hijacks discovery and breaks the TUnit runner. -->
+    <EnableMSTestRunner>false</EnableMSTestRunner>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="TUnit" Version="1.61.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/KubeNimbus.Core/KubeNimbus.Core.csproj" />
+  </ItemGroup>
+
+</Project>

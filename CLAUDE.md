@@ -1,0 +1,201 @@
+# kubeNimbus — Claude working notes
+
+Keep this file current in **every** PR, same discipline as pgNimbus. It is the
+contract for how this repo is built; if a rule below changes, change it here in
+the same change that breaks it.
+
+## Mission
+
+A fast, open-source (MIT) Kubernetes desktop client — the Kubernetes sibling of
+[pgNimbus](https://github.com/Shman4ik/pgNimbus). An alternative to Lens.
+
+The 2026 Kubernetes GUI market has the same hole the PostgreSQL GUI market had:
+Lens is subscription-only for commercial use (Mirantis moved exec/logs/shell
+into proprietary code in 6.3) and a heavy Electron app; OpenLens is dead;
+FreeLens (the surviving fork) is still Electron; Aptakube is fast and polished
+but paid/closed; Headlamp is web-first; k9s is a keyboard TUI. Nobody ships
+**truly fast + open source + modern native desktop UI**. kubeNimbus fills that
+gap: Aptakube's polish, NativeAOT startup speed, MIT licensed, Kubernetes-first.
+
+**Headline benchmark:** ~150 ms to first frame (vs Electron's seconds). NativeAOT
+publish is the *shipping* configuration, not an afterthought — every dependency
+choice must be AOT/trimming-compatible from day one.
+
+## Tech stack
+
+- **net10.0** everywhere. NativeAOT is the shipping config.
+- **KubeNimbus.Core** — references ONLY the official Kubernetes client, via the
+  **`KubernetesClient.Aot`** package (source-generated serialization). NEVER swap
+  it for the reflection-based `KubernetesClient` — that one does not survive
+  NativeAOT.
+- **KubeNimbus.App** — Avalonia 12 (Fluent theme, Inter font, DataGrid,
+  AvaloniaEdit for YAML), `CommunityToolkit.Mvvm` source generators
+  (`[ObservableProperty]`/`[RelayCommand]`, no hand-written INPC).
+  `AvaloniaUseCompiledBindingsByDefault=true`; no reflection bindings.
+- **KubeNimbus.Core.Tests** — TUnit on Microsoft.Testing.Platform. **NEVER add
+  `Microsoft.NET.Test.Sdk` to a TUnit project — it breaks discovery.** The
+  runner is pinned in `global.json` (`test.runner = Microsoft.Testing.Platform`).
+- Nullable enabled; async all the way (no `.Result`/`.Wait()`); DTOs are records.
+
+## Hard architectural rules (non-negotiable)
+
+1. **KubeNimbus.Core has ZERO Avalonia/UI dependencies.** The engine stays
+   reusable for a future CLI/test harness. No `Avalonia.*` or
+   `CommunityToolkit.Mvvm` types in Core.
+2. **Streaming + cancellation everywhere.** Resource lists use list+watch
+   (informer-style local cache) so the UI updates live without polling; large
+   lists paginate via `continue` tokens and render incrementally via
+   `IAsyncEnumerable`. Pod logs stream with follow-mode honoring
+   `CancellationToken` mid-stream. Watch connections auto-reconnect with
+   resourceVersion resume + relist on 410 Gone; connection loss is surfaced in
+   the UI, never a silent hang.
+3. **Kubernetes-native, not lowest-common-denominator.** CRDs are first-class
+   browsable resources (discovery API, not a hardcoded list). YAML edits go
+   through server-side apply with a field manager, showing conflicts. Events,
+   `metrics.k8s.io`, and owner-reference navigation (pod → replicaset →
+   deployment) are core, not afterthoughts.
+4. **No credentials ever persisted by the app.** Kubeconfig is the single source
+   of truth (all `$KUBECONFIG` entries + `~/.kube/config`); exec-plugin auth
+   (`aws eks get-token`, `gke-gcloud-auth-plugin`, `azure kubelogin`) must work.
+   Never copy tokens/certs into app storage; re-resolve through the kubeconfig
+   chain at connect time.
+
+## UI design rules
+
+1. **Minimalist.** Every always-visible control must be justified; default answer
+   is no. Secondary actions live in a command palette (Ctrl+K) or context menus.
+2. **Double-click = default action** everywhere (pod → logs/describe, deployment
+   → details, context → connect); Space = quick-peek.
+3. **Multi-cluster via tabs** (like pgNimbus query tabs): each tab bound to a
+   kubeconfig context; drag-reorder; workspace snapshot restores tabs.
+4. **No hardcoded Ctrl gestures** — [`Hotkeys.cs`](src/KubeNimbus.App/Hotkeys.cs)
+   resolves Ctrl vs Cmd per platform; palette labels and cheat sheet derive
+   from it.
+5. **Opening a resource/YAML never overwrites an active editor tab.**
+
+## Repository layout
+
+```
+src/KubeNimbus.Core        Engine: kubeconfig, ClusterClient (watch/logs). No UI.
+src/KubeNimbus.App         Avalonia 12 desktop shell.
+tests/KubeNimbus.Core.Tests  TUnit integration tests against a live cluster.
+```
+
+## The AOT watch/log implementation (important, non-obvious)
+
+`KubernetesClient.Aot` (unlike the reflection client) ships **no `WatchAsync`
+helper and no `WatchEventType` enum**. So `ClusterClient` issues watch and
+log-follow requests directly against the client's own `Kubernetes.HttpClient`
+with `HttpCompletionOption.ResponseHeadersRead`:
+
+- Auth is reused from the client — client-cert/TLS live on the handler chain;
+  bearer/exec tokens are applied by calling `Kubernetes.Credentials
+  .ProcessHttpRequestAsync` on our manual request. This is what makes exec-plugin
+  auth work for watches.
+- Watch frames are line-delimited JSON, parsed with `System.Text.Json.JsonDocument`
+  (AOT-safe) and materialized with source-generated `KubernetesJson.Deserialize`.
+- The informer loop lives in `ClusterClient.PumpAsync`/`StreamWatchAsync`:
+  paginated initial list (Reset + Added per item) → resumable watch →
+  relist on `ERROR` frame / 410 Gone → exponential backoff with
+  `connectionLost` callback on transient failures.
+
+If you add a new watched resource, reuse the generic `WatchAsync<T>` core; only
+supply the list path, a paged lister, and a `KubernetesJson.Deserialize<T>`
+delegate.
+
+## Sandbox cluster bootstrap (how tests get a real cluster)
+
+Integration tests run against a **real local Kubernetes cluster**, not mocks.
+The suite auto-discovers `./.sandbox/kubeconfig.yaml` (git-ignored — it holds
+cluster CA + client certs) or `$KUBENIMBUS_TEST_KUBECONFIG`. Tests **skip
+cleanly** (return) when no cluster is reachable, so CI without one stays green.
+
+**Recipe (k3s in Docker — used to develop this repo; Docker Desktop required):**
+
+```bash
+# 1. Start a single-node k3s cluster, API on localhost:6550.
+docker run -d --name kubenimbus-sandbox --privileged -p 6550:6443 \
+  rancher/k3s:v1.33.4-k3s1 server --tls-san 127.0.0.1
+
+# 2. Export its kubeconfig into the repo (git-ignored) and point it at :6550.
+mkdir -p .sandbox
+docker exec kubenimbus-sandbox cat /etc/rancher/k3s/k3s.yaml > .sandbox/kubeconfig.yaml
+#   then replace  https://127.0.0.1:6443  with  https://127.0.0.1:6550  in that file.
+
+# 3. Verify.
+KUBECONFIG=.sandbox/kubeconfig.yaml kubectl get pods -A
+```
+
+`kind` works equally well if you prefer it (`kind create cluster`, then
+`kind get kubeconfig > .sandbox/kubeconfig.yaml`). Tear down k3s with
+`docker rm -f kubenimbus-sandbox`.
+
+## Verification workflow
+
+```powershell
+# Build everything.
+dotnet build KubeNimbus.slnx
+
+# Run Core tests against the sandbox cluster (skips if none).
+dotnet test tests/KubeNimbus.Core.Tests/KubeNimbus.Core.Tests.csproj
+
+# Run the app against the sandbox during development.
+$env:KUBECONFIG = ".sandbox/kubeconfig.yaml"
+dotnet run --project src/KubeNimbus.App
+
+# NativeAOT publish — THE shipping build. Verify it end-to-end on every change
+# that could affect trimming/AOT (new package, new reflection, new binding).
+dotnet publish src/KubeNimbus.App -c Release -r win-x64 -p:PublishAot=true -o publish/app
+```
+
+### NativeAOT publish needs the MSVC toolchain (Windows)
+
+The ILCompiler links with `link.exe` and locates it via `vswhere.exe`. On this
+machine the raw `dotnet publish -p:PublishAot=true` fails with
+`'vswhere.exe' is not recognized` unless run from a VC dev environment **with the
+VS Installer dir on PATH**. Working invocation:
+
+```bat
+call "C:\Program Files\Microsoft Visual Studio\18\Insiders\VC\Auxiliary\Build\vcvars64.bat"
+set "PATH=%PATH%;C:\Program Files (x86)\Microsoft Visual Studio\Installer"
+dotnet publish src\KubeNimbus.App\KubeNimbus.App.csproj -c Release -r win-x64 -p:PublishAot=true -o publish\app
+```
+
+Known AOT warnings today: `Avalonia.Controls.DataGrid` emits IL2104/IL3053 trim
+warnings. The publish still succeeds and the app runs; revisit if DataGrid gets
+an AOT-clean release. Do not let *new* trim/AOT warnings from our own code slip
+in unnoticed.
+
+### DevTools / visual inspection
+
+`KubeNimbus.App` references `AvaloniaUI.DiagnosticsSupport` **Debug-only** and
+calls `WithDeveloperTools()` under `#if DEBUG`, so the Avalonia DevTools MCP can
+attach to a running Debug build and screenshot/inspect the tree. It never enters
+the Release/AOT build.
+
+## MVP scope (phase 1 — build toward this, don't scaffold beyond it)
+
+- [x] Context picker from kubeconfig (exec-plugin auth working).
+- [x] Live-updating pod list (watch) — proven end-to-end in the app.
+- [ ] Sidebar tree (Workloads/Network/Config/Storage/CRDs via discovery),
+      namespace-scoped, live list views.
+- [ ] Pod detail: containers, status, live log streaming (follow, container
+      picker, cancel), events. *(Core log streaming already implemented.)*
+- [ ] YAML view/edit for any resource → server-side apply; delete with confirm.
+- [ ] Exec into a pod container (interactive terminal) and port-forward.
+      *(The AOT client exposes `MuxedStreamNamespacedPodExecAsync` for this.)*
+- [ ] Command palette (Ctrl/Cmd+K); light/dark theme.
+
+**Later phases (do NOT build now, but don't paint into a corner):** Helm release
+browsing, resource metrics/graphs, RBAC inspection, multi-cluster aggregated
+views.
+
+**Non-goals forever:** cluster provisioning, in-cluster agents, telemetry.
+
+## Current status
+
+Foundation bootstrapped. Core `ClusterClient` (kubeconfig load, connect,
+list+watch pods as `IAsyncEnumerable`, cancellable log streaming) is proven by
+TUnit integration tests against a live k3s cluster (5/5 passing). The Avalonia
+shell (context picker → live pod list) is verified running against the sandbox,
+and NativeAOT publish succeeds end-to-end.

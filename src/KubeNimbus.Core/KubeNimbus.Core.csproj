@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsAotCompatible>true</IsAotCompatible>
+    <RootNamespace>KubeNimbus.Core</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Aot variant only: source-generated serialization, survives NativeAOT.
+         Never swap for the reflection-based "KubernetesClient" package. -->
+    <PackageReference Include="KubernetesClient.Aot" Version="19.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="KubeNimbus.Core.Tests" />
+  </ItemGroup>
+
+</Project>
