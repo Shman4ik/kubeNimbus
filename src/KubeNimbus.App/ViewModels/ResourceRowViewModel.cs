@@ -31,6 +31,11 @@ public sealed partial class ResourceRowViewModel : ObservableObject
     [ObservableProperty]
     private DateTimeOffset? _createdAt;
 
+    /// <summary>Live "120m · 84Mi" usage readout from metrics.k8s.io — empty when unavailable or (for
+    /// non-Pod kinds/most rows before the first refresh tick) simply not populated.</summary>
+    [ObservableProperty]
+    private string _usageDisplay = "";
+
     public ResourceRowViewModel(DynamicResource resource)
     {
         Key = resource.Key;
@@ -49,4 +54,9 @@ public sealed partial class ResourceRowViewModel : ObservableObject
         CreatedAt = resource.CreationTimestamp;
         (Status, StatusHealth) = ResourceStatusSummary.Summarize(resource);
     }
+
+    /// <summary>Applies a metrics.k8s.io snapshot for this pod (see <see cref="ClusterTabViewModel"/>'s
+    /// poll timer), or clears the readout when metrics briefly have no entry for it.</summary>
+    public void UpdateMetrics(DynamicResource? podMetrics) =>
+        UsageDisplay = podMetrics is null ? "" : ResourceFormat.Combined(podMetrics.TotalCpuCores(), podMetrics.TotalMemoryBytes());
 }

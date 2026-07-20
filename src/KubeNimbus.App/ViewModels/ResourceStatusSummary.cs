@@ -13,6 +13,23 @@ public static class ResourceStatusSummary
 {
     public static (string Text, string Health) Summarize(DynamicResource resource)
     {
+        // core/v1 Event: Type/Reason/Count live at the top level, not under status —
+        // "Warning" events read as warn (so they visually stand out in the sidebar's
+        // Events view the same way pod-detail's Events tab already colors them).
+        if (resource.Kind == "Event" && resource.ApiVersion == "v1")
+        {
+            var reason = resource.Reason();
+            if (reason.Length == 0)
+            {
+                return ("", "idle");
+            }
+
+            var count = resource.Count();
+            var text = count > 1 ? $"{reason} ×{count}" : reason;
+            var health = string.Equals(resource.Type(), "Warning", StringComparison.OrdinalIgnoreCase) ? "warn" : "ok";
+            return (text, health);
+        }
+
         if (!resource.Raw.TryGetProperty("status", out var status) || status.ValueKind != JsonValueKind.Object)
         {
             return ("", "idle");

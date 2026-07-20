@@ -3,6 +3,7 @@
     "kind": "Event",
     "apiVersion": "v1",
     "metadata": { "name": "checkout-worker-5d8f7b9c4-qz9pl.17f2a1", "namespace": "payments" },
+    "involvedObject": { "apiVersion": "v1", "kind": "Pod", "name": "checkout-worker-5d8f7b9c4-qz9pl", "namespace": "payments", "uid": "a2222222-2222-2222-2222-222222222222" },
     "type": "Warning",
     "reason": "BackOff",
     "message": "Back-off restarting failed container worker in pod checkout-worker-5d8f7b9c4-qz9pl_payments(a2222222)",
@@ -13,6 +14,7 @@
     "kind": "Event",
     "apiVersion": "v1",
     "metadata": { "name": "checkout-worker-5d8f7b9c4-qz9pl.17f2a0", "namespace": "payments" },
+    "involvedObject": { "apiVersion": "v1", "kind": "Pod", "name": "checkout-worker-5d8f7b9c4-qz9pl", "namespace": "payments", "uid": "a2222222-2222-2222-2222-222222222222" },
     "type": "Warning",
     "reason": "Unhealthy",
     "message": "Readiness probe failed: HTTP probe failed with statuscode: 503",
@@ -23,6 +25,7 @@
     "kind": "Event",
     "apiVersion": "v1",
     "metadata": { "name": "checkout-worker-5d8f7b9c4-qz9pl.17f29f", "namespace": "payments" },
+    "involvedObject": { "apiVersion": "v1", "kind": "Pod", "name": "checkout-worker-5d8f7b9c4-qz9pl", "namespace": "payments", "uid": "a2222222-2222-2222-2222-222222222222" },
     "type": "Normal",
     "reason": "Pulled",
     "message": "Container image \"registry.internal/payments/checkout-worker:9.0.1\" already present on machine",
@@ -33,10 +36,33 @@
     "kind": "Event",
     "apiVersion": "v1",
     "metadata": { "name": "checkout-worker-5d8f7b9c4-qz9pl.17f29e", "namespace": "payments" },
+    "involvedObject": { "apiVersion": "v1", "kind": "Pod", "name": "checkout-worker-5d8f7b9c4-qz9pl", "namespace": "payments", "uid": "a2222222-2222-2222-2222-222222222222" },
     "type": "Normal",
     "reason": "Scheduled",
     "message": "Successfully assigned payments/checkout-worker-5d8f7b9c4-qz9pl to node-pool-a-7fzk",
     "count": 1,
     "lastTimestamp": "2026-07-20T02:40:01Z"
+  },
+  {
+    "kind": "Event",
+    "apiVersion": "v1",
+    "metadata": { "name": "fraud-detector-6c7d9f8b5-2n8wt.17f2b3", "namespace": "payments" },
+    "involvedObject": { "apiVersion": "v1", "kind": "Pod", "name": "fraud-detector-6c7d9f8b5-2n8wt", "namespace": "payments", "uid": "a4444444-4444-4444-4444-444444444444" },
+    "type": "Normal",
+    "reason": "Created",
+    "message": "Created container fraud-detector",
+    "count": 1,
+    "lastTimestamp": "2026-07-20T03:20:05Z"
+  },
+  {
+    "kind": "Event",
+    "apiVersion": "v1",
+    "metadata": { "name": "checkout-worker-5d8f7b9c4.17f298", "namespace": "payments" },
+    "involvedObject": { "apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "checkout-worker-5d8f7b9c4", "namespace": "payments", "uid": "b2222222-2222-2222-2222-222222222222" },
+    "type": "Warning",
+    "reason": "FailedCreate",
+    "message": "Error creating: pods \"checkout-worker-5d8f7b9c4-\" is forbidden: exceeded quota",
+    "count": 3,
+    "lastTimestamp": "2026-07-20T02:39:40Z"
   }
 ]

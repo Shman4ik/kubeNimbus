@@ -88,4 +88,39 @@ public static class EventFields
 
         return e.CreationTimestamp;
     }
+
+    /// <summary>
+    /// The object this event is about, e.g. the pod a "BackOff" event fired on —
+    /// reuses <see cref="OwnerRef"/> since the shape (apiVersion/kind/name/uid)
+    /// is identical to an ownerReference, letting callers navigate to it through
+    /// the same resolve-and-open path as owner-chip navigation.
+    /// </summary>
+    public static OwnerRef? InvolvedObject(this DynamicResource e)
+    {
+        if (!e.Raw.TryGetProperty("involvedObject", out var io) || io.ValueKind != System.Text.Json.JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var kind = io.TryGetProperty("kind", out var k) ? k.GetString() ?? "" : "";
+        var name = io.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+        if (kind.Length == 0 || name.Length == 0)
+        {
+            return null;
+        }
+
+        return new OwnerRef(
+            ApiVersion: io.TryGetProperty("apiVersion", out var av) ? av.GetString() ?? "" : "",
+            Kind: kind,
+            Name: name,
+            Uid: io.TryGetProperty("uid", out var u) ? u.GetString() : null,
+            Controller: false);
+    }
+
+    /// <summary>The involved object's own namespace (may differ from the event's), when set.</summary>
+    public static string? InvolvedObjectNamespace(this DynamicResource e) =>
+        e.Raw.TryGetProperty("involvedObject", out var io) && io.ValueKind == System.Text.Json.JsonValueKind.Object
+        && io.TryGetProperty("namespace", out var ns)
+            ? ns.GetString()
+            : null;
 }

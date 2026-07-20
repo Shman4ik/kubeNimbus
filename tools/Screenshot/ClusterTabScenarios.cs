@@ -13,6 +13,9 @@ internal static class ClusterTabScenarios
     private static readonly ResourceDescriptor DeploymentDescriptor =
         new("apps", "v1", "Deployment", "deployments", "deployment", true, [], []);
 
+    private static readonly ResourceDescriptor SecretDescriptor =
+        new("", "v1", "Secret", "secrets", "secret", true, [], []);
+
     private static ClusterTabViewModel BaseTab(bool populateRows = true)
     {
         var context = new ClusterContext("prod-payments", "prod-payments-cluster", "payments", "fake-user", "fixture");
@@ -65,6 +68,43 @@ internal static class ClusterTabScenarios
 
     public static ClusterTabViewModel WorkloadsList() => BaseTab();
 
+    /// <summary>Same pod list, with the CPU/Mem column populated — demonstrates the metrics.k8s.io-present path.</summary>
+    public static ClusterTabViewModel WorkloadsListWithMetrics()
+    {
+        var tab = BaseTab();
+        ApplyMetrics(tab);
+        return tab;
+    }
+
+    private static void ApplyMetrics(ClusterTabViewModel tab)
+    {
+        tab.IsMetricsAvailable = true;
+        var byKey = FixtureData.PodMetrics.ToDictionary(m => m.Key, StringComparer.Ordinal);
+        foreach (var row in tab.Rows)
+        {
+            row.UpdateMetrics(byKey.TryGetValue(row.Key, out var m) ? m : null);
+        }
+    }
+
+    /// <summary>Namespace/cluster-wide Events browsing — selecting the Events kind in the sidebar
+    /// (Config section, distinct bell icon) shows the same generic list, with Type-driven color coding.</summary>
+    public static ClusterTabViewModel EventsList()
+    {
+        var tab = BaseTab(populateRows: false);
+        var eventsKind = tab.SidebarSections.First(s => s.Title == "Config").Kinds.First(k => k.Descriptor.Kind == "Event");
+        eventsKind.IsSelected = true;
+        tab.SelectedKind = eventsKind;
+
+        foreach (var e in FixtureData.Events)
+        {
+            tab.Rows.Add(new ResourceRowViewModel(e));
+        }
+
+        tab.IsListEmpty = false;
+        tab.IsListLoading = false;
+        return tab;
+    }
+
     public static ClusterTabViewModel SidebarFiltered()
     {
         var tab = BaseTab();
@@ -111,12 +151,20 @@ internal static class ClusterTabScenarios
         var client = FixtureData.CreateOfflineClient();
         var detail = new PodDetailTabViewModel(client, row, _ => { }, (_, _) => Task.CompletedTask) { IsPreview = false };
 
-        detail.LogLines.Add("2026-07-20T08:41:02.114Z INFO  starting report-generator v2.14.3");
-        detail.LogLines.Add("2026-07-20T08:41:02.331Z INFO  connected to postgres primary (payments-db.internal:5432)");
-        detail.LogLines.Add("2026-07-20T08:41:02.402Z INFO  listening on :8080");
-        detail.LogLines.Add("2026-07-20T08:44:17.008Z INFO  generated monthly-settlement report for merchant=acme-retail (842ms)");
-        detail.LogLines.Add("2026-07-20T08:44:55.771Z WARN  slow query detected: SELECT * FROM settlements WHERE ... (1204ms)");
-        detail.LogLines.Add("2026-07-20T08:45:01.220Z INFO  generated chargeback-summary report for merchant=north-store (391ms)");
+        foreach (var raw in new[]
+        {
+            "2026-07-20T08:41:02.114Z INFO  starting report-generator v2.14.3",
+            "2026-07-20T08:41:02.331Z INFO  connected to postgres primary (payments-db.internal:5432)",
+            "2026-07-20T08:41:02.402Z INFO  listening on :8080",
+            "2026-07-20T08:44:17.008Z INFO  generated monthly-settlement report for merchant=acme-retail (842ms)",
+            "2026-07-20T08:44:55.771Z WARN  slow query detected: SELECT * FROM settlements WHERE ... (1204ms)",
+            "2026-07-20T08:44:58.019Z ERROR failed to upload report to blob storage: connection reset by peer",
+            "2026-07-20T08:45:01.220Z INFO  generated chargeback-summary report for merchant=north-store (391ms)",
+        })
+        {
+            detail.LogLines.Add(new LogLineViewModel(raw, detail.ShowLogTimestamps));
+        }
+
         detail.IsFollowingLogs = true;
 
         detail.Events.Clear();
@@ -125,8 +173,52 @@ internal static class ClusterTabScenarios
             detail.Events.Add(new EventRowViewModel(e));
         }
 
+        detail.IsMetricsAvailable = true;
+        var metrics = FixtureData.PodMetrics.FirstOrDefault(m => m.Name == row.Name);
+        if (metrics is not null)
+        {
+            var usageByContainer = metrics.ContainerUsage().ToDictionary(c => c.Name, StringComparer.Ordinal);
+            foreach (var container in detail.Containers)
+            {
+                if (usageByContainer.TryGetValue(container.Name, out var usage))
+                {
+                    container.UsageDisplay = ResourceFormat.Combined(usage.CpuCores, usage.MemoryBytes);
+                }
+            }
+        }
+
         tab.InspectorTabs.Add(detail);
         tab.SelectedInspectorTab = detail;
+        return tab;
+    }
+
+    /// <summary>Pod detail's Environment tab — literal values, unresolved Secret/ConfigMap refs, and
+    /// one already-revealed value (demoing what RevealEnvVarCommand's result looks like, without a network call).</summary>
+    public static ClusterTabViewModel PodDetailEnvironment()
+    {
+        var tab = PodDetail();
+        if (tab.SelectedInspectorTab is PodDetailTabViewModel detail)
+        {
+            detail.SelectedDetailTabIndex = 1;
+            var revealed = detail.EnvironmentVars.FirstOrDefault(v => v.Name == "DB_USERNAME");
+            if (revealed is not null)
+            {
+                revealed.RevealedValue = "payments_svc";
+            }
+        }
+
+        return tab;
+    }
+
+    /// <summary>Pod detail's Events tab — Type-colored pills and the "open involved object" chevron.</summary>
+    public static ClusterTabViewModel PodDetailEvents()
+    {
+        var tab = PodDetail();
+        if (tab.SelectedInspectorTab is PodDetailTabViewModel detail)
+        {
+            detail.SelectedDetailTabIndex = 2;
+        }
+
         return tab;
     }
 
@@ -160,6 +252,32 @@ internal static class ClusterTabScenarios
             yaml.ConflictDetails = "Field .spec.replicas is owned by field manager \"kubectl-scale\" (apply conflicts with your changes).";
         }
 
+        return tab;
+    }
+
+    /// <summary>Secret YAML — masked by default, matching kubectl's own base64 display.</summary>
+    public static ClusterTabViewModel YamlEditorSecretMasked() => BuildYamlEditorSecret(reveal: false);
+
+    /// <summary>Same Secret with "Reveal values" toggled on — exercises the real decode path (YamlJson parse + base64), not a stand-in.</summary>
+    public static ClusterTabViewModel YamlEditorSecretRevealed() => BuildYamlEditorSecret(reveal: true);
+
+    private static ClusterTabViewModel BuildYamlEditorSecret(bool reveal)
+    {
+        var tab = BaseTab();
+        var client = FixtureData.CreateOfflineClient();
+        var secret = FixtureData.Secret;
+        var yamlTab = new YamlEditorTabViewModel(client, SecretDescriptor, secret.Namespace, secret.Name, secret.ToYaml())
+        {
+            IsPreview = false,
+        };
+
+        if (reveal)
+        {
+            yamlTab.ToggleSecretValuesRevealedCommand.Execute(null);
+        }
+
+        tab.InspectorTabs.Add(yamlTab);
+        tab.SelectedInspectorTab = yamlTab;
         return tab;
     }
 

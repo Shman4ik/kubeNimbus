@@ -1,3 +1,6 @@
+using System.Collections.ObjectModel;
+using System.Text;
+using System.Text.Json.Nodes;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KubeNimbus.Core;
@@ -9,6 +12,10 @@ namespace KubeNimbus.App.ViewModels;
 /// (two-step confirm, no modal dialog needed) and conflict surfacing. Content
 /// is a snapshot taken at open time — live watch updates never overwrite text
 /// the user might be mid-edit on; <see cref="ReloadCommand"/> re-fetches explicitly.
+/// For a Secret, <c>data</c> stays base64 in the editable text (matching
+/// kubectl) — <see cref="IsSecretValuesRevealed"/> only shows a separate,
+/// read-only decoded preview panel, masked by default, computed from whatever
+/// the editor currently holds (so it reflects in-progress edits too).
 /// </summary>
 public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
 {
@@ -42,6 +49,13 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
     [ObservableProperty]
     private bool _isDeleted;
 
+    public bool IsSecret => _descriptor is { Kind: "Secret", Group: "" };
+
+    [ObservableProperty]
+    private bool _isSecretValuesRevealed;
+
+    public ObservableCollection<SecretValuePreviewViewModel> DecodedSecretValues { get; } = [];
+
     public YamlEditorTabViewModel(ClusterClient client, ResourceDescriptor descriptor, string? @namespace, string name, string initialYaml)
         : base($"{descriptor.Kind}/{name}")
     {
@@ -53,7 +67,63 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
         Key = $"yaml:{descriptor.ApiVersion}/{descriptor.Kind}:{@namespace}/{name}";
     }
 
-    partial void OnYamlTextChanged(string value) => IsDirty = true;
+    partial void OnYamlTextChanged(string value)
+    {
+        IsDirty = true;
+        if (IsSecretValuesRevealed)
+        {
+            RefreshDecodedSecretValues();
+        }
+    }
+
+    [RelayCommand]
+    private void ToggleSecretValuesRevealed()
+    {
+        IsSecretValuesRevealed = !IsSecretValuesRevealed;
+        if (IsSecretValuesRevealed)
+        {
+            RefreshDecodedSecretValues();
+        }
+        else
+        {
+            DecodedSecretValues.Clear();
+        }
+    }
+
+    private void RefreshDecodedSecretValues()
+    {
+        DecodedSecretValues.Clear();
+        try
+        {
+            if (YamlJson.ParseYamlToJson(YamlText) is not JsonObject root || root["data"] is not JsonObject data)
+            {
+                return;
+            }
+
+            foreach (var (key, valueNode) in data)
+            {
+                var base64 = valueNode?.GetValue<string>() ?? "";
+                DecodedSecretValues.Add(new SecretValuePreviewViewModel(key, DecodeBase64(base64)));
+            }
+        }
+        catch (Exception)
+        {
+            // Editor text may be mid-edit and not valid YAML/JSON right now — the
+            // preview just stays empty until it parses again, no need to surface an error.
+        }
+    }
+
+    private static string DecodeBase64(string base64)
+    {
+        try
+        {
+            return Encoding.UTF8.GetString(Convert.FromBase64String(base64));
+        }
+        catch (FormatException)
+        {
+            return "<invalid base64>";
+        }
+    }
 
     [RelayCommand]
     private async Task ApplyAsync() => await ApplyCoreAsync(force: false);

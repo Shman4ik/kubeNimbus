@@ -18,6 +18,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     private readonly Dictionary<string, ResourceRowViewModel> _rowsByKey = new(StringComparer.Ordinal);
     private CancellationTokenSource? _watchCts;
+    private DispatcherTimer? _metricsTimer;
 
     public ClusterContext Context { get; }
 
@@ -36,6 +37,11 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     [ObservableProperty]
     private string? _connectionWarning;
+
+    /// <summary>Whether metrics.k8s.io is present on this cluster — gates the pod list's CPU/Mem column
+    /// and pod detail's usage readout, since metrics-server is an optional addon, not guaranteed.</summary>
+    [ObservableProperty]
+    private bool _isMetricsAvailable;
 
     public ObservableCollection<SidebarSectionViewModel> SidebarSections { get; } = [];
 
@@ -107,6 +113,12 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             await BuildSidebarAsync();
             await RefreshNamespacesAsync();
 
+            IsMetricsAvailable = await client.IsMetricsApiAvailableAsync();
+            if (IsMetricsAvailable)
+            {
+                StartMetricsTimer();
+            }
+
             var defaultKind = SidebarSections
                 .FirstOrDefault(s => s.Title == "Workloads")?.Kinds
                 .FirstOrDefault(k => k.Descriptor.Kind == "Pod")
@@ -144,7 +156,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         foreach (var descriptor in catalog.OrderBy(d => d.Kind, StringComparer.OrdinalIgnoreCase))
         {
             var title = SidebarGrouping.SectionFor(descriptor);
-            sections[title].Kinds.Add(new SidebarKindViewModel(descriptor, SidebarGrouping.IconKeyFor(title)));
+            sections[title].Kinds.Add(new SidebarKindViewModel(descriptor, SidebarGrouping.IconKeyFor(descriptor, title)));
         }
 
         SidebarSections.Clear();
@@ -266,6 +278,11 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         var descriptor = SelectedKind.Descriptor;
         var @namespace = descriptor.Namespaced && SelectedNamespace != AllNamespaces ? SelectedNamespace : null;
 
+        if (descriptor.Kind == "Pod" && IsMetricsAvailable)
+        {
+            _ = RefreshPodMetricsAsync();
+        }
+
         _watchCts = new CancellationTokenSource();
         var token = _watchCts.Token;
         var client = Client;
@@ -331,6 +348,41 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         RecomputeListEmpty();
     }
 
+    /// <summary>
+    /// The metrics API is poll-only (no watch verb), so a timer is the whole
+    /// story here — refreshes only matter while the Pods kind is selected,
+    /// <see cref="RefreshPodMetricsAsync"/> is a no-op otherwise.
+    /// </summary>
+    private void StartMetricsTimer()
+    {
+        _metricsTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
+        _metricsTimer.Tick += (_, _) => _ = RefreshPodMetricsAsync();
+        _metricsTimer.Start();
+    }
+
+    private async Task RefreshPodMetricsAsync()
+    {
+        if (Client is null || !IsMetricsAvailable || SelectedKind?.Descriptor.Kind != "Pod")
+        {
+            return;
+        }
+
+        var @namespace = SelectedNamespace != AllNamespaces ? SelectedNamespace : null;
+        try
+        {
+            var metrics = await Client.GetPodMetricsAsync(@namespace);
+            var byKey = metrics.ToDictionary(m => m.Key, StringComparer.Ordinal);
+            foreach (var row in Rows)
+            {
+                row.UpdateMetrics(byKey.TryGetValue(row.Key, out var m) ? m : null);
+            }
+        }
+        catch (Exception)
+        {
+            // Metrics are supplementary; a transient failure shouldn't disrupt the list.
+        }
+    }
+
     /// <summary>Double-click / Enter: promotes (or opens) a permanent tab. Pod → detail; anything else → YAML.</summary>
     [RelayCommand]
     private async Task OpenSelectedAsync() => await OpenRowAsync(SelectedRow, preview: false);
@@ -343,6 +395,16 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     {
         if (row is null || Client is null || SelectedKind is null)
         {
+            return;
+        }
+
+        // Events aren't independently editable/useful objects to browse — jumping
+        // straight to what the event is about (the same navigation owner-chips use)
+        // is the more useful default action here, matching CLAUDE.md's "double-click
+        // = default action" rule.
+        if (SelectedKind.Descriptor is { Kind: "Event", Group: "" } && row.Resource.InvolvedObject() is { } involved)
+        {
+            await OpenOwnerAsync(involved, row.Resource.InvolvedObjectNamespace() ?? row.Namespace);
             return;
         }
 
@@ -452,6 +514,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     public async ValueTask DisposeAsync()
     {
+        _metricsTimer?.Stop();
+
         if (_watchCts is not null)
         {
             await _watchCts.CancelAsync();

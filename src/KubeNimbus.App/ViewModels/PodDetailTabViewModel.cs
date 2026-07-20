@@ -1,6 +1,12 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Text;
 using System.Text.Json;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Input.Platform;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -10,19 +16,25 @@ namespace KubeNimbus.App.ViewModels;
 
 /// <summary>
 /// Pod detail: containers, live status, live log streaming (follow/container
-/// picker/cancel) and events. Tracks the same <see cref="ResourceRowViewModel"/>
-/// instance the live list uses, so container status stays current without a
-/// second watch — only logs and events are fetched independently.
+/// picker/previous/search/timestamps/wrap/copy/download), environment
+/// variables (with on-demand Secret/ConfigMap reveal), live CPU/Mem usage
+/// (metrics.k8s.io, when present) and events. Tracks the same
+/// <see cref="ResourceRowViewModel"/> instance the live list uses, so
+/// container status stays current without a second watch.
 /// </summary>
 public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
 {
     private const int MaxLogLines = 4000;
+    private const int MetricsIntervalSeconds = 20;
 
     private readonly ClusterClient _client;
     private readonly ResourceRowViewModel _row;
     private readonly Action<InspectorTabViewModelBase> _openTab;
     private readonly Func<OwnerRef, string?, Task> _openOwner;
+    private readonly List<LogLineViewModel> _allLogLines = [];
+    private readonly Dictionary<string, Task<DynamicResource?>> _secretConfigMapCache = new(StringComparer.Ordinal);
     private CancellationTokenSource? _logCts;
+    private DispatcherTimer? _metricsTimer;
 
     public override string Key { get; }
 
@@ -35,14 +47,44 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     [ObservableProperty]
     private ContainerViewModel? _selectedContainer;
 
-    public ObservableCollection<string> LogLines { get; } = [];
+    /// <summary>Filtered (by <see cref="LogSearchText"/>) view over the buffered log lines — this is what's rendered.</summary>
+    public ObservableCollection<LogLineViewModel> LogLines { get; } = [];
 
     [ObservableProperty]
     private bool _isFollowingLogs;
 
+    /// <summary>True while showing the previous (crashed/restarted) container instance's logs — a one-shot fetch, not a follow.</summary>
+    [ObservableProperty]
+    private bool _isShowingPreviousLogs;
+
+    [ObservableProperty]
+    private string _logSearchText = "";
+
+    [ObservableProperty]
+    private bool _showLogTimestamps;
+
+    [ObservableProperty]
+    private bool _wrapLogLines;
+
     public ObservableCollection<EventRowViewModel> Events { get; } = [];
 
+    /// <summary>The selected container's env vars — literal values inline, Secret/ConfigMap refs shown
+    /// unresolved until <see cref="RevealEnvVarCommand"/> is invoked on that row.</summary>
+    public ObservableCollection<EnvVarViewModel> EnvironmentVars { get; } = [];
+
+    /// <summary>The selected container's <c>envFrom</c> sources — reference-only, no per-key reveal
+    /// (the pod spec doesn't declare individual keys for these; open the Secret/ConfigMap's own YAML for that).</summary>
+    public ObservableCollection<string> EnvFromSources { get; } = [];
+
     public IReadOnlyList<OwnerRef> Owners => _row.Resource.OwnerReferences;
+
+    /// <summary>Whether metrics.k8s.io is present on this cluster — gates the per-container usage readout.</summary>
+    [ObservableProperty]
+    private bool _isMetricsAvailable;
+
+    /// <summary>Which of the Logs/Environment/Events tabs is showing — lets the screenshot harness (and any future deep link) pick a specific tab.</summary>
+    [ObservableProperty]
+    private int _selectedDetailTabIndex;
 
     public PodDetailTabViewModel(
         ClusterClient client,
@@ -62,6 +104,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         _row.PropertyChanged += OnRowChanged;
         RefreshFromRow();
         _ = RefreshEventsAsync();
+        _ = InitializeMetricsAsync();
     }
 
     private void OnRowChanged(object? sender, PropertyChangedEventArgs e)
@@ -71,6 +114,8 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
             Dispatcher.UIThread.Post(RefreshFromRow);
         }
     }
+
+    partial void OnSelectedContainerChanged(ContainerViewModel? value) => RefreshEnvironment();
 
     private void RefreshFromRow()
     {
@@ -141,6 +186,217 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         }
 
         SelectedContainer ??= Containers.FirstOrDefault();
+        RefreshEnvironment();
+    }
+
+    private void RefreshEnvironment()
+    {
+        EnvironmentVars.Clear();
+        EnvFromSources.Clear();
+
+        if (SelectedContainer is not { } container)
+        {
+            return;
+        }
+
+        var raw = _row.Resource.Raw;
+        if (!raw.TryGetProperty("spec", out var spec) || !spec.TryGetProperty("containers", out var containers)
+            || containers.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        JsonElement? containerSpec = null;
+        foreach (var c in containers.EnumerateArray())
+        {
+            if (c.TryGetProperty("name", out var n) && n.GetString() == container.Name)
+            {
+                containerSpec = c;
+                break;
+            }
+        }
+
+        if (containerSpec is not { } spec2)
+        {
+            return;
+        }
+
+        if (spec2.TryGetProperty("env", out var env) && env.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var e in env.EnumerateArray())
+            {
+                EnvironmentVars.Add(ParseEnvVar(e));
+            }
+        }
+
+        if (spec2.TryGetProperty("envFrom", out var envFrom) && envFrom.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var ef in envFrom.EnumerateArray())
+            {
+                var prefix = ef.TryGetProperty("prefix", out var p) ? p.GetString() : null;
+                var prefixSuffix = string.IsNullOrEmpty(prefix) ? "" : $" (prefix \"{prefix}\")";
+
+                if (ef.TryGetProperty("secretRef", out var sr) && sr.TryGetProperty("name", out var srName))
+                {
+                    EnvFromSources.Add($"All keys from Secret/{srName.GetString()}{prefixSuffix}");
+                }
+                else if (ef.TryGetProperty("configMapRef", out var cr) && cr.TryGetProperty("name", out var crName))
+                {
+                    EnvFromSources.Add($"All keys from ConfigMap/{crName.GetString()}{prefixSuffix}");
+                }
+            }
+        }
+    }
+
+    private static EnvVarViewModel ParseEnvVar(JsonElement e)
+    {
+        var name = e.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+
+        if (e.TryGetProperty("value", out var v) && v.ValueKind == JsonValueKind.String)
+        {
+            return new EnvVarViewModel(name, v.GetString(), null, null, null, null);
+        }
+
+        if (!e.TryGetProperty("valueFrom", out var valueFrom) || valueFrom.ValueKind != JsonValueKind.Object)
+        {
+            return new EnvVarViewModel(name, "", null, null, null, null);
+        }
+
+        if (valueFrom.TryGetProperty("secretKeyRef", out var skr))
+        {
+            var refName = skr.TryGetProperty("name", out var rn) ? rn.GetString() ?? "" : "";
+            var key = skr.TryGetProperty("key", out var rk) ? rk.GetString() ?? "" : "";
+            return new EnvVarViewModel(name, null, $"Secret/{refName} · key={key}", "Secret", refName, key);
+        }
+
+        if (valueFrom.TryGetProperty("configMapKeyRef", out var cmkr))
+        {
+            var refName = cmkr.TryGetProperty("name", out var rn) ? rn.GetString() ?? "" : "";
+            var key = cmkr.TryGetProperty("key", out var rk) ? rk.GetString() ?? "" : "";
+            return new EnvVarViewModel(name, null, $"ConfigMap/{refName} · key={key}", "ConfigMap", refName, key);
+        }
+
+        if (valueFrom.TryGetProperty("fieldRef", out var fr) && fr.TryGetProperty("fieldPath", out var fp))
+        {
+            return new EnvVarViewModel(name, null, $"fieldRef: {fp.GetString()}", null, null, null);
+        }
+
+        if (valueFrom.TryGetProperty("resourceFieldRef", out var rfr) && rfr.TryGetProperty("resource", out var res))
+        {
+            return new EnvVarViewModel(name, null, $"resourceFieldRef: {res.GetString()}", null, null, null);
+        }
+
+        return new EnvVarViewModel(name, "", null, null, null, null);
+    }
+
+    [RelayCommand]
+    private async Task RevealEnvVarAsync(EnvVarViewModel v)
+    {
+        if (!v.CanReveal || v.SecretOrConfigMapName is not { } refName || v.Key is not { } key || v.SecretOrConfigMapKind is not { } kind)
+        {
+            return;
+        }
+
+        v.IsRevealing = true;
+        v.RevealError = null;
+        var cacheKey = $"{kind}/{refName}";
+        try
+        {
+            if (!_secretConfigMapCache.TryGetValue(cacheKey, out var fetchTask))
+            {
+                var descriptor = kind == "Secret" ? ResourceDescriptor.Secrets : ResourceDescriptor.ConfigMaps;
+                fetchTask = _client.ReadResourceAsync(descriptor, PodNamespace, refName);
+                _secretConfigMapCache[cacheKey] = fetchTask;
+            }
+
+            var resource = await fetchTask;
+            if (resource is null)
+            {
+                v.RevealError = $"{kind} \"{refName}\" not found.";
+                return;
+            }
+
+            if (!resource.Raw.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object
+                || !data.TryGetProperty(key, out var rawValue) || rawValue.ValueKind != JsonValueKind.String)
+            {
+                v.RevealError = $"Key \"{key}\" not found in {kind}/{refName}.";
+                return;
+            }
+
+            v.RevealedValue = kind == "Secret" ? DecodeBase64(rawValue.GetString()!) : rawValue.GetString();
+        }
+        catch (Exception ex)
+        {
+            // A stale cached failure (e.g. transient network error) shouldn't block a retry;
+            // an RBAC 403 will keep failing the same way, which is the correct behavior.
+            _secretConfigMapCache.Remove(cacheKey);
+            v.RevealError = ex.Message;
+        }
+        finally
+        {
+            v.IsRevealing = false;
+        }
+    }
+
+    private static string DecodeBase64(string base64)
+    {
+        try
+        {
+            return Encoding.UTF8.GetString(Convert.FromBase64String(base64));
+        }
+        catch (FormatException)
+        {
+            return "<invalid base64>";
+        }
+    }
+
+    private async Task InitializeMetricsAsync()
+    {
+        try
+        {
+            IsMetricsAvailable = await _client.IsMetricsApiAvailableAsync();
+        }
+        catch (Exception)
+        {
+            IsMetricsAvailable = false;
+        }
+
+        if (!IsMetricsAvailable)
+        {
+            return;
+        }
+
+        _metricsTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(MetricsIntervalSeconds) };
+        _metricsTimer.Tick += (_, _) => _ = RefreshMetricsAsync();
+        _metricsTimer.Start();
+        _ = RefreshMetricsAsync();
+    }
+
+    private async Task RefreshMetricsAsync()
+    {
+        try
+        {
+            var metrics = await _client.GetPodMetricsAsync(PodNamespace, PodName);
+            if (metrics is null)
+            {
+                return;
+            }
+
+            var usageByContainer = metrics.ContainerUsage().ToDictionary(c => c.Name, StringComparer.Ordinal);
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                foreach (var container in Containers)
+                {
+                    container.UsageDisplay = usageByContainer.TryGetValue(container.Name, out var usage)
+                        ? ResourceFormat.Combined(usage.CpuCores, usage.MemoryBytes)
+                        : "";
+                }
+            });
+        }
+        catch (Exception)
+        {
+            // Metrics are supplementary; a transient failure shouldn't disrupt the rest of the tab.
+        }
     }
 
     private async Task RefreshEventsAsync()
@@ -164,6 +420,10 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     private void RefreshEvents() => _ = RefreshEventsAsync();
 
     [RelayCommand]
+    private Task OpenEventInvolvedObject(EventRowViewModel evt) =>
+        evt.InvolvedObject is { } involved ? _openOwner(involved, evt.InvolvedObjectNamespace ?? PodNamespace) : Task.CompletedTask;
+
+    [RelayCommand]
     private void ToggleFollowLogs()
     {
         if (IsFollowingLogs)
@@ -172,8 +432,59 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         }
         else
         {
+            IsShowingPreviousLogs = false;
             StartLogs();
         }
+    }
+
+    [RelayCommand]
+    private void TogglePreviousLogs()
+    {
+        if (IsShowingPreviousLogs)
+        {
+            IsShowingPreviousLogs = false;
+            StartLogs();
+            return;
+        }
+
+        StopLogs();
+        ClearLogBuffer();
+        IsShowingPreviousLogs = true;
+        LoadPreviousLogs();
+    }
+
+    private void LoadPreviousLogs()
+    {
+        if (SelectedContainer is not { } container)
+        {
+            return;
+        }
+
+        _logCts?.Cancel();
+        _logCts?.Dispose();
+        _logCts = new CancellationTokenSource();
+        var token = _logCts.Token;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await foreach (var line in _client.StreamPodLogsAsync(
+                    PodNamespace, PodName, container.Name, follow: false, tailLines: 1000,
+                    previous: true, timestamps: true, cancellationToken: token))
+                {
+                    await Dispatcher.UIThread.InvokeAsync(() => AppendLogLine(line));
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // normal on stop/close
+            }
+            catch (Exception ex)
+            {
+                await Dispatcher.UIThread.InvokeAsync(() => AppendLogLine($"[no previous container logs available: {ex.Message}]"));
+            }
+        }, token);
     }
 
     private void StartLogs()
@@ -184,7 +495,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         }
 
         StopLogs();
-        LogLines.Clear();
+        ClearLogBuffer();
         _logCts = new CancellationTokenSource();
         var token = _logCts.Token;
         IsFollowingLogs = true;
@@ -194,16 +505,10 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
             try
             {
                 await foreach (var line in _client.StreamPodLogsAsync(
-                    PodNamespace, PodName, container.Name, follow: true, tailLines: 200, cancellationToken: token))
+                    PodNamespace, PodName, container.Name, follow: true, tailLines: 200,
+                    timestamps: true, cancellationToken: token))
                 {
-                    await Dispatcher.UIThread.InvokeAsync(() =>
-                    {
-                        LogLines.Add(line);
-                        while (LogLines.Count > MaxLogLines)
-                        {
-                            LogLines.RemoveAt(0);
-                        }
-                    });
+                    await Dispatcher.UIThread.InvokeAsync(() => AppendLogLine(line));
                 }
             }
             catch (OperationCanceledException)
@@ -212,7 +517,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
             }
             catch (Exception ex)
             {
-                await Dispatcher.UIThread.InvokeAsync(() => LogLines.Add($"[log stream ended: {ex.Message}]"));
+                await Dispatcher.UIThread.InvokeAsync(() => AppendLogLine($"[log stream ended: {ex.Message}]"));
             }
             finally
             {
@@ -228,6 +533,95 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         _logCts = null;
         IsFollowingLogs = false;
     }
+
+    private void ClearLogBuffer()
+    {
+        _allLogLines.Clear();
+        LogLines.Clear();
+    }
+
+    private void AppendLogLine(string rawLine)
+    {
+        var line = new LogLineViewModel(rawLine, ShowLogTimestamps);
+        _allLogLines.Add(line);
+        while (_allLogLines.Count > MaxLogLines)
+        {
+            var removed = _allLogLines[0];
+            _allLogLines.RemoveAt(0);
+            LogLines.Remove(removed);
+        }
+
+        if (MatchesLogFilter(line))
+        {
+            LogLines.Add(line);
+        }
+    }
+
+    private bool MatchesLogFilter(LogLineViewModel line) =>
+        LogSearchText.Length == 0 || line.Message.Contains(LogSearchText, StringComparison.OrdinalIgnoreCase);
+
+    partial void OnLogSearchTextChanged(string value) => ApplyLogFilter();
+
+    private void ApplyLogFilter()
+    {
+        LogLines.Clear();
+        foreach (var line in _allLogLines)
+        {
+            if (MatchesLogFilter(line))
+            {
+                LogLines.Add(line);
+            }
+        }
+    }
+
+    partial void OnShowLogTimestampsChanged(bool value)
+    {
+        foreach (var line in _allLogLines)
+        {
+            line.ShowTimestamp = value;
+        }
+    }
+
+    [RelayCommand]
+    private async Task CopyLogsAsync()
+    {
+        var window = GetMainWindow();
+        if (window?.Clipboard is not { } clipboard)
+        {
+            return;
+        }
+
+        await clipboard.SetTextAsync(string.Join(Environment.NewLine, LogLines.Select(l => l.DisplayText)));
+    }
+
+    [RelayCommand]
+    private async Task DownloadLogsAsync()
+    {
+        var window = GetMainWindow();
+        if (window?.StorageProvider is not { } storage)
+        {
+            return;
+        }
+
+        var file = await storage.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Save pod logs",
+            SuggestedFileName = $"{PodName}-{SelectedContainer?.Name ?? "pod"}.log",
+            FileTypeChoices = [new FilePickerFileType("Log file") { Patterns = ["*.log"] }],
+        });
+
+        if (file is null)
+        {
+            return;
+        }
+
+        await using var stream = await file.OpenWriteAsync();
+        await using var writer = new StreamWriter(stream);
+        await writer.WriteAsync(string.Join(Environment.NewLine, LogLines.Select(l => l.DisplayText)));
+    }
+
+    private static Window? GetMainWindow() =>
+        Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop ? desktop.MainWindow : null;
 
     [RelayCommand]
     private void Exec()
@@ -258,6 +652,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     {
         _row.PropertyChanged -= OnRowChanged;
         StopLogs();
+        _metricsTimer?.Stop();
         return Task.CompletedTask;
     }
 }

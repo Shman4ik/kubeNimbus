@@ -20,4 +20,8 @@ public sealed partial class ContainerViewModel(string name, string image) : Obse
 
     [ObservableProperty]
     private IReadOnlyList<int> _tcpPorts = [];
+
+    /// <summary>Live usage readout from metrics.k8s.io ("120m · 84Mi"), empty when unavailable.</summary>
+    [ObservableProperty]
+    private string _usageDisplay = "";
 }

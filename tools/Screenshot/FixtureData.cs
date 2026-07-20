@@ -19,6 +19,8 @@ internal static class FixtureData
     private static readonly JsonDocument PodsDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(FixturesDir, "pods.json")));
     private static readonly JsonDocument DeploymentsDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(FixturesDir, "deployments.json")));
     private static readonly JsonDocument EventsDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(FixturesDir, "events.json")));
+    private static readonly JsonDocument PodMetricsDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(FixturesDir, "pod-metrics.json")));
+    private static readonly JsonDocument SecretDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(FixturesDir, "secret.json")));
 
     public static IReadOnlyList<DynamicResource> Pods { get; } =
         [.. PodsDoc.RootElement.EnumerateArray().Select(e => new DynamicResource(e))];
@@ -28,6 +30,13 @@ internal static class FixtureData
 
     public static IReadOnlyList<DynamicResource> Events { get; } =
         [.. EventsDoc.RootElement.EnumerateArray().Select(e => new DynamicResource(e))];
+
+    /// <summary>metrics.k8s.io PodMetrics fixtures — obviously-fake usage numbers, one entry per running pod in <see cref="Pods"/>.</summary>
+    public static IReadOnlyList<DynamicResource> PodMetrics { get; } =
+        [.. PodMetricsDoc.RootElement.EnumerateArray().Select(e => new DynamicResource(e))];
+
+    /// <summary>A Secret fixture with obviously-fake base64 placeholder data (see the file's own comment) — for the YAML editor's reveal-values scenario.</summary>
+    public static DynamicResource Secret { get; } = new(SecretDoc.RootElement[0]);
 
     public static readonly string[] Namespaces = ["default", "kube-system", "monitoring", "payments"];
 
@@ -49,6 +58,7 @@ internal static class FixtureData
             Descriptor("networking.k8s.io", "v1", "NetworkPolicy", "networkpolicies", true),
             Descriptor("", "v1", "ConfigMap", "configmaps", true),
             Descriptor("", "v1", "Secret", "secrets", true),
+            Descriptor("", "v1", "Event", "events", true),
             Descriptor("", "v1", "ServiceAccount", "serviceaccounts", true),
             Descriptor("rbac.authorization.k8s.io", "v1", "Role", "roles", true),
             Descriptor("rbac.authorization.k8s.io", "v1", "RoleBinding", "rolebindings", true),
@@ -106,7 +116,7 @@ internal static class FixtureData
         foreach (var descriptor in catalog.OrderBy(d => d.Kind, StringComparer.OrdinalIgnoreCase))
         {
             var title = SidebarGrouping.SectionFor(descriptor);
-            sections[title].Kinds.Add(new SidebarKindViewModel(descriptor, SidebarGrouping.IconKeyFor(title)));
+            sections[title].Kinds.Add(new SidebarKindViewModel(descriptor, SidebarGrouping.IconKeyFor(descriptor, title)));
         }
 
         return [.. SidebarGrouping.SectionOrder.Select(t => sections[t]).Where(s => s.Kinds.Count > 0)];

@@ -133,6 +133,15 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="CPU/Mem" Width="Auto" MinWidth="90"
+                                         IsVisible="{Binding $parent[UserControl].((vm:ClusterTabViewModel)DataContext).IsMetricsAvailable}">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                      <TextBlock Text="{Binding UsageDisplay}" FontSize="11" Opacity="0.7" VerticalAlignment="Center"
+                                 IsVisible="{Binding UsageDisplay, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
               </DataGrid.Columns>
             </DataGrid>
 
