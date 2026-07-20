@@ -416,6 +416,21 @@ Kubernetes' other classic on-call surface (env vars/secrets):
   read-only decoded-values panel computed from whatever the editor currently
   holds via the existing `YamlJson` YAML→JSON conversion — masked by default,
   nothing decoded until asked.
+- **Pod-detail layout redesign** (mid-session correction, screenshot-driven):
+  the first pass kept `PodDetailView`'s original fixed-width left CONTAINERS
+  column and a DataGrid for Events, and at the panel's default (non-maximized)
+  width that was unusable — Type/Reason/Message/Count/LastSeen had no room in
+  a DataGrid, and Logs/Env/Events tab headers wrapped onto separate lines. Fix:
+  the container picker moved from a fixed side column into a horizontal
+  `WrapPanel`-backed `ListBox` strip above the tabs (chips: status dot, name,
+  restart count, usage — Exec/port-forward buttons alongside it), which alone
+  frees most of the panel's width for the tabs; Events became a card feed
+  (`ItemsControl` of Border "card"s: color pill + reason, wrapped message,
+  count/timestamp, "open involved object" chevron) instead of a DataGrid,
+  since five columns were never going to fit an inspector-width panel and a
+  scannable feed reads better for events anyway; the Environment tab's env-var
+  rows are a vertical stack (name, then value/reference+Reveal button, then
+  revealed value) rather than a fixed-column grid, for the same reason.
 - Fixture-only this session (see below): `tools/Screenshot/Fixtures/pod-metrics.json`
   (obviously-fake usage numbers), `secret.json` (obviously-fake base64,
   flagged in the file itself), and `events.json` gained `involvedObject` on
@@ -444,7 +459,5 @@ API groups in the sidebar (e.g. `Backup` from both velero.io and
 postgresql.cnpg.io currently renders as two identical-looking rows), a
 "recently used kinds" section, transition/hover animation polish, a proper
 win-x64 NativeAOT pass (still only linux-x64 has ever been verified), a live
-k3s pass for this session's changes, node-level CPU/Mem (only pod-level
-shipped), and the pod-detail inspector panel's default (non-maximized) width
-being tight for three tabs plus a container list — workable but cramped
-below the maximize toggle already documented above.
+k3s pass for this session's changes, and node-level CPU/Mem (only pod-level
+shipped).
