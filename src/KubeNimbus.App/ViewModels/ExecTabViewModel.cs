@@ -21,6 +21,7 @@ public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
     private readonly string _namespace;
     private readonly string _podName;
     private readonly string _container;
+    private readonly StringBuilder _outputBuilder = new();
     private ExecSession? _session;
     private CancellationTokenSource? _cts;
 
@@ -85,11 +86,13 @@ public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
                 var text = AnsiText.StripEscapeCodes(Encoding.UTF8.GetString(buffer, 0, read));
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
-                    OutputText += text;
-                    if (OutputText.Length > MaxOutputChars)
+                    _outputBuilder.Append(text);
+                    if (_outputBuilder.Length > MaxOutputChars)
                     {
-                        OutputText = OutputText[^MaxOutputChars..];
+                        _outputBuilder.Remove(0, _outputBuilder.Length - MaxOutputChars);
                     }
+
+                    OutputText = _outputBuilder.ToString();
                 });
             }
         }

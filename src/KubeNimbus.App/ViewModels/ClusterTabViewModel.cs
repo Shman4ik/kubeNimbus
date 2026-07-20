@@ -172,7 +172,9 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// </summary>
     private void ApplySidebarFilter()
     {
-        var query = SidebarFilter.Trim();
+        // The filter TextBox's two-way binding can round-trip null on
+        // control (re)creation — same reasoning as SelectedNamespace above.
+        var query = (SidebarFilter ?? "").Trim();
         var filtering = query.Length > 0;
 
         foreach (var section in SidebarSections)

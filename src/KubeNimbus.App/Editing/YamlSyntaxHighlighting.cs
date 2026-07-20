@@ -7,15 +7,14 @@ namespace KubeNimbus.App.Editing;
 /// <summary>
 /// AvaloniaEdit ships highlighting definitions for C#/JSON/XML/etc but not YAML —
 /// this loads a small hand-written one (see Assets/Yaml-Mode.xshd) from the
-/// embedded resource. Loaded lazily and cached; the XML-based .xshd loader does
-/// its own manual parsing (no reflection-based serialization), so this stays
-/// NativeAOT/trim-safe.
+/// embedded resource. Loaded once via a static field initializer (CLR-guaranteed
+/// thread-safe, unlike a manual `??=` lazy-init check); the XML-based .xshd
+/// loader does its own manual parsing (no reflection-based serialization), so
+/// this stays NativeAOT/trim-safe.
 /// </summary>
 public static class YamlSyntaxHighlighting
 {
-    private static IHighlightingDefinition? _instance;
-
-    public static IHighlightingDefinition Instance => _instance ??= Load();
+    public static IHighlightingDefinition Instance { get; } = Load();
 
     private static IHighlightingDefinition Load()
     {

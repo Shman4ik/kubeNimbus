@@ -1,5 +1,6 @@
 using System.Globalization;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
 
@@ -14,7 +15,7 @@ public sealed class MaximizedToIconConverter : IValueConverter
     {
         var key = value is true ? "FullscreenExitIconGeometry" : "FullscreenIconGeometry";
         return Application.Current is { } app
-            && app.Resources.TryGetResource(key, app.ActualThemeVariant, out var resource) && resource is Geometry geometry
+            && app.TryFindResource(key, app.ActualThemeVariant, out var resource) && resource is Geometry geometry
                 ? geometry
                 : null;
     }
