@@ -110,6 +110,8 @@
             <StreamGeometry x:Key="PlusIconGeometry">M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z</StreamGeometry>
             <StreamGeometry x:Key="HexagonIconGeometry">M17.5,3.5L23,12L17.5,20.5H6.5L1,12L6.5,3.5H17.5M16.4,5.5H7.6L3.36,12L7.6,18.5H16.4L20.64,12L16.4,5.5Z</StreamGeometry>
             <StreamGeometry x:Key="AlertCircleIconGeometry">M13,13H11V7H13M13,17H11V15H13M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z</StreamGeometry>
+            <StreamGeometry x:Key="FullscreenIconGeometry">M7,14H5V19H10V17H7V14M5,10H7V7H10V5H5V10M17,17H14V19H19V14H17V17M14,5V7H17V10H19V5H14Z</StreamGeometry>
+            <StreamGeometry x:Key="FullscreenExitIconGeometry">M5,16H8V19H10V14H5V16M8,8H5V10H10V5H8V8M14,19H16V16H19V14H14V19M16,8V5H14V10H19V8H16Z</StreamGeometry>
         </ResourceDictionary>
     </Styles.Resources>
 

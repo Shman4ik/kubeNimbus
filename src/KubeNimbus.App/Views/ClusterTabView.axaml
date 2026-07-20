@@ -86,9 +86,13 @@
           </Button>
         </Grid>
 
-        <Grid Grid.Row="1" ColumnDefinitions="*,Auto">
+        <Grid Grid.Row="1">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="{Binding IsInspectorMaximized, Converter={x:Static conv:MaximizedToListWidthConverter.Instance}}" MinWidth="0" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
 
-          <Grid Grid.Column="0">
+          <Grid Grid.Column="0" IsVisible="{Binding !IsInspectorMaximized}">
             <DataGrid Name="ResourceGrid"
                        ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}"
                        IsReadOnly="True" GridLinesVisibility="Horizontal" CanUserResizeColumns="True"
@@ -149,30 +153,39 @@
             </StackPanel>
           </Grid>
 
-          <Border Grid.Column="1" Width="440" Margin="10,0,0,0" Classes="card" Padding="0"
+          <Border Grid.Column="1" Margin="10,0,0,0" MinWidth="360" Classes="card" Padding="0"
                   IsVisible="{Binding InspectorTabs.Count, Converter={x:Static conv:CountToBoolConverter.Instance}}">
             <Grid RowDefinitions="Auto,*">
-              <ItemsControl Grid.Row="0" ItemsSource="{Binding InspectorTabs}" Margin="4">
-                <ItemsControl.ItemsPanel>
-                  <ItemsPanelTemplate>
-                    <WrapPanel Orientation="Horizontal" />
-                  </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="vm:InspectorTabViewModelBase">
-                    <Border Classes="card" Padding="8,4" Margin="2" CornerRadius="6" Tapped="OnInspectorTabTapped">
-                      <StackPanel Orientation="Horizontal" Spacing="6">
-                        <TextBlock Text="{Binding Title}" FontSize="12" Opacity="{Binding IsPreview, Converter={x:Static conv:PreviewToOpacityConverter.Instance}}" />
-                        <Button Classes="chip" Padding="0" MinWidth="14" MinHeight="14"
-                                Command="{Binding $parent[UserControl].((vm:ClusterTabViewModel)DataContext).CloseInspectorTabCommand}"
-                                CommandParameter="{Binding}">
-                          <PathIcon Data="{StaticResource CloseIconGeometry}" Width="9" Height="9" />
-                        </Button>
-                      </StackPanel>
-                    </Border>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
+              <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                <ItemsControl Grid.Column="0" ItemsSource="{Binding InspectorTabs}" Margin="4">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <WrapPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:InspectorTabViewModelBase">
+                      <Border Classes="card" Padding="8,4" Margin="2" CornerRadius="6" Tapped="OnInspectorTabTapped">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                          <TextBlock Text="{Binding Title}" FontSize="12" Opacity="{Binding IsPreview, Converter={x:Static conv:PreviewToOpacityConverter.Instance}}" />
+                          <Button Classes="chip" Padding="0" MinWidth="14" MinHeight="14"
+                                  Command="{Binding $parent[UserControl].((vm:ClusterTabViewModel)DataContext).CloseInspectorTabCommand}"
+                                  CommandParameter="{Binding}">
+                            <PathIcon Data="{StaticResource CloseIconGeometry}" Width="9" Height="9" />
+                          </Button>
+                        </StackPanel>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Button Grid.Column="1" Classes="toolbar" Margin="0,4,4,0"
+                        Command="{Binding ToggleInspectorMaximizedCommand}"
+                        ToolTip.Tip="{Binding IsInspectorMaximized, Converter={x:Static conv:MaximizedToTooltipConverter.Instance}}"
+                        Padding="6">
+                  <PathIcon Width="13" Height="13"
+                            Data="{Binding IsInspectorMaximized, Converter={x:Static conv:MaximizedToIconConverter.Instance}}" />
+                </Button>
+              </Grid>
 
               <ContentControl Grid.Row="1" Content="{Binding SelectedInspectorTab}" />
             </Grid>

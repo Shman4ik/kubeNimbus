@@ -145,6 +145,13 @@ internal static class ClusterTabScenarios
         return tab;
     }
 
+    public static ClusterTabViewModel YamlEditorMaximized()
+    {
+        var tab = YamlEditor();
+        tab.IsInspectorMaximized = true;
+        return tab;
+    }
+
     public static ClusterTabViewModel YamlEditorConflict()
     {
         var tab = YamlEditor();

@@ -75,6 +75,14 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [ObservableProperty]
     private InspectorTabViewModelBase? _selectedInspectorTab;
 
+    /// <summary>Expands the inspector to fill the content area (list hidden) — the
+    /// fixed ~440px sidecar is too cramped for YAML editing or an exec terminal.</summary>
+    [ObservableProperty]
+    private bool _isInspectorMaximized;
+
+    [RelayCommand]
+    private void ToggleInspectorMaximized() => IsInspectorMaximized = !IsInspectorMaximized;
+
     public ClusterTabViewModel(ClusterContext context)
     {
         Context = context;
@@ -432,6 +440,11 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             SelectedInspectorTab = InspectorTabs.Count == 0
                 ? null
                 : InspectorTabs[Math.Min(index, InspectorTabs.Count - 1)];
+        }
+
+        if (InspectorTabs.Count == 0)
+        {
+            IsInspectorMaximized = false;
         }
     }
 
