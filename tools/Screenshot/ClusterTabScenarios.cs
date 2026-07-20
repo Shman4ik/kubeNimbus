@@ -52,6 +52,14 @@ internal static class ClusterTabScenarios
             tab.SelectedRow = tab.Rows.FirstOrDefault();
         }
 
+        // Setting SelectedNamespace above triggers the real RestartWatch(), which
+        // (with no Client wired up in this fixture) latches IsListEmpty before the
+        // rows above are added. Recompute now that the fixture's own row population
+        // is done — production code never hits this ordering since RestartWatch's
+        // background pump is what populates Rows there, not a direct caller.
+        tab.IsListEmpty = tab.Rows.Count == 0;
+        tab.IsListLoading = false;
+
         return tab;
     }
 
@@ -76,6 +84,14 @@ internal static class ClusterTabScenarios
     {
         var tab = BaseTab(populateRows: false);
         tab.SelectedNamespace = "kube-system";
+        tab.IsListEmpty = true;
+        return tab;
+    }
+
+    public static ClusterTabViewModel Loading()
+    {
+        var tab = BaseTab(populateRows: false);
+        tab.IsListLoading = true;
         return tab;
     }
 

@@ -33,6 +33,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-exec", () => HostInMainWindow(ClusterTabScenarios.Exec())),
     ("cluster-tab-port-forward", () => HostInMainWindow(ClusterTabScenarios.PortForward())),
     ("cluster-tab-empty-namespace", () => HostInMainWindow(ClusterTabScenarios.EmptyNamespace())),
+    ("cluster-tab-loading", () => HostInMainWindow(ClusterTabScenarios.Loading())),
     ("cluster-tab-disconnected", () => HostInMainWindow(ClusterTabScenarios.Disconnected())),
     ("main-window", BuildMainWindowContent),
 };

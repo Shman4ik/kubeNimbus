@@ -307,4 +307,46 @@
     <Style Selector="Ellipse.statusDot.idle">
         <Setter Property="Fill" Value="#80808080" />
     </Style>
+
+    <!-- Status pill: colored text badge for the resource list's Status column —
+         a plain dot alone doesn't distinguish "Pending" from "CrashLoopBackOff"
+         at a glance; the pill's tint carries the same ok/warn/error read. -->
+    <Style Selector="Border.statusPill">
+        <Setter Property="CornerRadius" Value="{StaticResource PillCornerRadius}" />
+        <Setter Property="Padding" Value="8,2" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Background" Value="{StaticResource HoverBackgroundBrush}" />
+    </Style>
+    <Style Selector="Border.statusPill.ok">
+        <Setter Property="Background" Value="#1C46A758" />
+    </Style>
+    <Style Selector="Border.statusPill.ok TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource ActiveDotBrush}" />
+    </Style>
+    <Style Selector="Border.statusPill.warn">
+        <Setter Property="Background" Value="#1CD9822B" />
+    </Style>
+    <Style Selector="Border.statusPill.warn TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource WarnBrush}" />
+    </Style>
+    <Style Selector="Border.statusPill.error">
+        <Setter Property="Background" Value="#1CCD5C5C" />
+    </Style>
+    <Style Selector="Border.statusPill.error TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource ErrorBrush}" />
+    </Style>
+
+    <!-- Inline "connection lost" banner — CommandBar row, next to the namespace picker. -->
+    <Style Selector="Border.inlineWarning">
+        <Setter Property="Background" Value="#1CD9822B" />
+        <Setter Property="CornerRadius" Value="{StaticResource PillCornerRadius}" />
+        <Setter Property="Padding" Value="10,4" />
+    </Style>
+    <Style Selector="Border.inlineWarning PathIcon">
+        <Setter Property="Foreground" Value="{StaticResource WarnBrush}" />
+    </Style>
+    <Style Selector="Border.inlineWarning TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource WarnBrush}" />
+    </Style>
 </Styles>

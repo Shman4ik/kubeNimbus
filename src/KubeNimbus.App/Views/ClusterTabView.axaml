@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:KubeNimbus.App.ViewModels"
              xmlns:conv="using:KubeNimbus.App.Converters"
+             xmlns:aconv="using:Avalonia.Data.Converters"
              x:Class="KubeNimbus.App.Views.ClusterTabView"
              x:DataType="vm:ClusterTabViewModel">
 
@@ -73,6 +74,13 @@
           <ComboBox Grid.Column="1" ItemsSource="{Binding NamespaceOptions}" SelectedItem="{Binding SelectedNamespace}"
                      Margin="12,0,0,0" MinWidth="170"
                      IsEnabled="{Binding SelectedKind.Descriptor.Namespaced}" />
+          <Border Grid.Column="2" Classes="inlineWarning" Margin="12,0,0,0" HorizontalAlignment="Left"
+                  IsVisible="{Binding ConnectionWarning, Converter={x:Static aconv:ObjectConverters.IsNotNull}}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <PathIcon Data="{StaticResource AlertCircleIconGeometry}" Width="12" Height="12" />
+              <TextBlock Text="{Binding ConnectionWarning}" FontSize="12" TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+          </Border>
           <Button Grid.Column="3" Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="Refresh" Padding="6">
             <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="14" Height="14" />
           </Button>
@@ -80,24 +88,66 @@
 
         <Grid Grid.Row="1" ColumnDefinitions="*,Auto">
 
-          <DataGrid Grid.Column="0" Name="ResourceGrid"
-                     ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}"
-                     IsReadOnly="True" GridLinesVisibility="Horizontal" CanUserResizeColumns="True"
-                     DoubleTapped="OnRowDoubleTapped">
-            <DataGrid.Columns>
-              <DataGridTemplateColumn Header="" Width="28">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate x:DataType="vm:ResourceRowViewModel">
-                    <Ellipse Classes="statusDot" Fill="{Binding StatusHealth, Converter={x:Static conv:HealthToBrushConverter.Instance}}"
-                             HorizontalAlignment="Center" VerticalAlignment="Center" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTextColumn Header="Namespace" Binding="{Binding Namespace}" Width="Auto" MinWidth="90" />
-              <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="2*" MinWidth="180" />
-              <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="*" MinWidth="140" />
-            </DataGrid.Columns>
-          </DataGrid>
+          <Grid Grid.Column="0">
+            <DataGrid Name="ResourceGrid"
+                       ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}"
+                       IsReadOnly="True" GridLinesVisibility="Horizontal" CanUserResizeColumns="True"
+                       DoubleTapped="OnRowDoubleTapped">
+              <DataGrid.Columns>
+                <DataGridTemplateColumn Header="" Width="28">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                      <Ellipse Classes="statusDot" Fill="{Binding StatusHealth, Converter={x:Static conv:HealthToBrushConverter.Instance}}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Namespace" Width="Auto" MinWidth="90">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                      <TextBlock Text="{Binding Namespace}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Namespace}" VerticalAlignment="Center" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Name" Width="2*" MinWidth="180">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                      <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" VerticalAlignment="Center" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Status" Width="*" MinWidth="150">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                      <Border Classes="statusPill" Classes.ok="{Binding StatusHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=ok}"
+                              Classes.warn="{Binding StatusHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=warn}"
+                              Classes.error="{Binding StatusHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=error}"
+                              IsVisible="{Binding Status, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}"
+                              ToolTip.Tip="{Binding Status}">
+                        <TextBlock Text="{Binding Status}" FontSize="11.5" TextTrimming="CharacterEllipsis" />
+                      </Border>
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+              </DataGrid.Columns>
+            </DataGrid>
+
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8"
+                        IsVisible="{Binding IsListLoading}">
+              <TextBlock Text="Loading…" Opacity="0.5" HorizontalAlignment="Center" FontSize="13" />
+            </StackPanel>
+
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" MaxWidth="320"
+                        IsVisible="{Binding IsListEmpty}">
+              <PathIcon Data="{Binding SelectedKind.IconKey, Converter={x:Static conv:IconKeyToGeometryConverter.Instance}}"
+                        Width="28" Height="28" Opacity="0.25" HorizontalAlignment="Center" />
+              <TextBlock Text="{Binding SelectedKind.DisplayName, StringFormat='No {0} found'}"
+                         FontWeight="SemiBold" FontSize="13" HorizontalAlignment="Center" Opacity="0.7" />
+              <TextBlock Text="{Binding SelectedNamespace, StringFormat='in {0}'}" FontSize="12" Opacity="0.5"
+                         HorizontalAlignment="Center"
+                         IsVisible="{Binding SelectedKind.Descriptor.Namespaced}" />
+            </StackPanel>
+          </Grid>
 
           <Border Grid.Column="1" Width="440" Margin="10,0,0,0" Classes="card" Padding="0"
                   IsVisible="{Binding InspectorTabs.Count, Converter={x:Static conv:CountToBoolConverter.Instance}}">

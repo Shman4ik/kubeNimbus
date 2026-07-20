@@ -52,6 +52,21 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     public ObservableCollection<ResourceRowViewModel> Rows { get; } = [];
 
+    /// <summary>True from the moment a watch (re)starts until its first event
+    /// arrives — distinguishes "still loading" from "genuinely empty" so the
+    /// list doesn't flash an empty state while the initial list is in flight.</summary>
+    [ObservableProperty]
+    private bool _isListLoading;
+
+    /// <summary>True once the list has genuinely settled on zero rows (not
+    /// merely mid-load) — drives the "No <kind> found" empty state.</summary>
+    [ObservableProperty]
+    private bool _isListEmpty;
+
+    partial void OnIsListLoadingChanged(bool value) => RecomputeListEmpty();
+
+    private void RecomputeListEmpty() => IsListEmpty = Rows.Count == 0 && !IsListLoading;
+
     [ObservableProperty]
     private ResourceRowViewModel? _selectedRow;
 
@@ -230,6 +245,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         Rows.Clear();
         _rowsByKey.Clear();
+        IsListLoading = Client is not null && SelectedKind is not null;
+        RecomputeListEmpty();
 
         if (Client is null || SelectedKind is null)
         {
@@ -268,6 +285,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     private void Apply(ResourceEvent<DynamicResource> evt)
     {
+        IsListLoading = false;
+
         switch (evt.Type)
         {
             case ResourceEventType.Reset:
@@ -298,6 +317,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
                 break;
         }
+
+        RecomputeListEmpty();
     }
 
     /// <summary>Double-click / Enter: promotes (or opens) a permanent tab. Pod → detail; anything else → YAML.</summary>
