@@ -2,18 +2,21 @@ using System.Text;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using KubeNimbus.App.Terminal;
 using KubeNimbus.Core;
 
 namespace KubeNimbus.App.ViewModels;
 
 /// <summary>
 /// Interactive exec session for one container. A line-oriented terminal (no
-/// ANSI/PTY rendering) — enough to run shell commands and read their output,
-/// which covers the MVP's "interactive terminal" bar without pulling in a
-/// full terminal-emulator control.
+/// PTY rendering, ANSI escape codes stripped rather than colorized) — enough
+/// to run shell commands and read their output, which covers the MVP's
+/// "interactive terminal" bar without pulling in a full terminal-emulator control.
 /// </summary>
 public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
 {
+    private const int MaxOutputChars = 200_000;
+
     private readonly ClusterClient _client;
     private readonly string _namespace;
     private readonly string _podName;
@@ -79,8 +82,15 @@ public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
                     break;
                 }
 
-                var text = Encoding.UTF8.GetString(buffer, 0, read);
-                await Dispatcher.UIThread.InvokeAsync(() => OutputText += text);
+                var text = AnsiText.StripEscapeCodes(Encoding.UTF8.GetString(buffer, 0, read));
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    OutputText += text;
+                    if (OutputText.Length > MaxOutputChars)
+                    {
+                        OutputText = OutputText[^MaxOutputChars..];
+                    }
+                });
             }
         }
         catch (OperationCanceledException)
