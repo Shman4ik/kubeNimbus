@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Hand-written: AvaloniaEdit bundles highlighting for C#/JSON/XML/etc but not YAML,
+     and every Kubernetes resource in kubeNimbus is edited as YAML. Covers comments,
+     mapping keys, quoted strings, numbers, bool/null keywords, anchors/aliases, and
+     document markers — enough to read a manifest at a glance, not a full YAML 1.2 grammar. -->
+<SyntaxDefinition name="YAML" extensions=".yaml;.yml" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+  <Color name="Comment" foreground="#6A9955" exampleText="# comment" />
+  <Color name="Key" foreground="#4FC1FF" exampleText="key: value" />
+  <Color name="String" foreground="#CE9178" exampleText="value: &quot;text&quot;" />
+  <Color name="Number" foreground="#B5CEA8" exampleText="value: 123" />
+  <Color name="Keyword" foreground="#569CD6" exampleText="value: true" />
+  <Color name="Anchor" foreground="#DCDCAA" exampleText="&amp;anchor" />
+  <Color name="Document" foreground="#808080" exampleText="---" />
+
+  <RuleSet name="StringInterior">
+    <Span begin="\\" end="." />
+  </RuleSet>
+
+  <RuleSet>
+    <Span color="Comment" begin="#" />
+    <Span color="String" ruleSet="StringInterior">
+      <Begin>"</Begin>
+      <End>"</End>
+    </Span>
+    <Span color="String" ruleSet="StringInterior">
+      <Begin>'</Begin>
+      <End>'</End>
+    </Span>
+
+    <Rule color="Document">
+      ^---|^\.\.\.
+    </Rule>
+
+    <Rule color="Anchor">
+      [&amp;*][A-Za-z0-9_-]+
+    </Rule>
+
+    <Keywords color="Keyword">
+      <Word>true</Word>
+      <Word>True</Word>
+      <Word>TRUE</Word>
+      <Word>false</Word>
+      <Word>False</Word>
+      <Word>FALSE</Word>
+      <Word>null</Word>
+      <Word>Null</Word>
+      <Word>NULL</Word>
+      <Word>yes</Word>
+      <Word>Yes</Word>
+      <Word>no</Word>
+      <Word>No</Word>
+    </Keywords>
+
+    <Rule color="Number">
+      \b\d+(\.\d+)?\b
+    </Rule>
+
+    <Rule color="Key">
+      ^\s*(-\s+)?[\w.\-/]+(?=\s*:(\s|$))
+    </Rule>
+  </RuleSet>
+</SyntaxDefinition>

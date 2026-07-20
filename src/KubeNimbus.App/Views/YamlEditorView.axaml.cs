@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Avalonia.Controls;
+using KubeNimbus.App.Editing;
 using KubeNimbus.App.ViewModels;
 
 namespace KubeNimbus.App.Views;
@@ -17,6 +18,7 @@ public partial class YamlEditorView : UserControl
     public YamlEditorView()
     {
         InitializeComponent();
+        Editor.SyntaxHighlighting = YamlSyntaxHighlighting.Instance;
         Editor.TextChanged += OnEditorTextChanged;
         DataContextChanged += (_, _) => Bind();
         Bind();

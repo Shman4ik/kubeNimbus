@@ -32,4 +32,9 @@
     <ProjectReference Include="../KubeNimbus.Core/KubeNimbus.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Hand-written YAML highlighting definition (AvaloniaEdit doesn't bundle one) — see Editing/YamlSyntaxHighlighting.cs. -->
+    <EmbeddedResource Include="Assets\Yaml-Mode.xshd" LogicalName="Yaml-Mode.xshd" />
+  </ItemGroup>
+
 </Project>
