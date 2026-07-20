@@ -36,7 +36,8 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-empty-namespace", () => HostInMainWindow(ClusterTabScenarios.EmptyNamespace())),
     ("cluster-tab-loading", () => HostInMainWindow(ClusterTabScenarios.Loading())),
     ("cluster-tab-disconnected", () => HostInMainWindow(ClusterTabScenarios.Disconnected())),
-    ("main-window", BuildMainWindowContent),
+    ("main-window", () => BuildMainWindowContent()),
+    ("main-window-shortcuts", () => BuildMainWindowContent(openShortcuts: true)),
 };
 
 foreach (var (name, build) in scenarios)
@@ -97,7 +98,7 @@ static Control HostInMainWindow(ClusterTabViewModel tab, int height = 800)
     return window;
 }
 
-static Control BuildMainWindowContent()
+static Control BuildMainWindowContent(bool openShortcuts = false)
 {
     var window = new MainWindow();
     var vm = new MainWindowViewModel();
@@ -111,6 +112,7 @@ static Control BuildMainWindowContent()
     vm.Tabs.Add(tabA);
     vm.Tabs.Add(tabB);
     vm.SelectedTab = tabB;
+    vm.IsShortcutsOpen = openShortcuts;
 
     return window;
 }
