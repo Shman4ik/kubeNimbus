@@ -75,6 +75,19 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [ObservableProperty]
     private InspectorTabViewModelBase? _selectedInspectorTab;
 
+    partial void OnSelectedInspectorTabChanged(InspectorTabViewModelBase? oldValue, InspectorTabViewModelBase? newValue)
+    {
+        if (oldValue is not null)
+        {
+            oldValue.IsActive = false;
+        }
+
+        if (newValue is not null)
+        {
+            newValue.IsActive = true;
+        }
+    }
+
     /// <summary>Expands the inspector to fill the content area (list hidden) — the
     /// fixed ~440px sidecar is too cramped for YAML editing or an exec terminal.</summary>
     [ObservableProperty]

@@ -18,6 +18,12 @@ public abstract partial class InspectorTabViewModelBase(string title) : Observab
     [ObservableProperty]
     private bool _isPreview;
 
+    /// <summary>True while this tab is the one shown in the dock — drives the active-tab
+    /// highlight in the dock header. Kept in sync by <c>ClusterTabViewModel</c> whenever
+    /// <c>SelectedInspectorTab</c> changes.</summary>
+    [ObservableProperty]
+    private bool _isActive;
+
     /// <summary>Stable identity used to find-and-reuse an already-open tab for the same object.</summary>
     public abstract string Key { get; }
 

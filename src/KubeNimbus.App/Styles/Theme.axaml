@@ -135,6 +135,46 @@
         <Setter Property="CornerRadius" Value="{StaticResource CardCornerRadius}" />
     </Style>
 
+    <!-- Bottom inspector dock (Lens-style): header tab strip + draggable splitter. -->
+    <Style Selector="Grid.dockHeader">
+        <Setter Property="Background" Value="{StaticResource CardBackgroundBrush}" />
+    </Style>
+    <Style Selector="Border.dockTab">
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Padding" Value="10,4" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.dockTab:pointerover">
+        <Setter Property="Background" Value="{StaticResource HoverBackgroundBrush}" />
+    </Style>
+    <Style Selector="Border.dockTab.active">
+        <Setter Property="Background" Value="{StaticResource AppSelectionBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
+    </Style>
+
+    <!-- Compact TabItem headers. FluentTheme sizes these at 24px, which dwarfs the
+         dock (see the pod detail Logs/Events strip); pull them down to body scale. -->
+    <Style Selector="TabItem">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Padding" Value="12,6" />
+    </Style>
+    <Style Selector="TabItem /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
+    </Style>
+
+    <!-- Row splitter between the resource list and the bottom dock. -->
+    <Style Selector="GridSplitter.dock">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="GridSplitter.dock:pointerover">
+        <Setter Property="Background" Value="{StaticResource AppSelectionBrush}" />
+    </Style>
+
     <!-- Files-style two-tone shell: chrome-tinted base, content pane as a raised "layer". -->
     <Style Selector="Border.layer">
         <Setter Property="Background" Value="{DynamicResource SystemControlPageBackgroundAltHighBrush}" />

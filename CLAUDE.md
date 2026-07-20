@@ -77,11 +77,16 @@ choice must be AOT/trimming-compatible from day one.
    sidebar's filter box + collapsible sections (CRDs collapsed by default,
    `SidebarSectionViewModel.IsExpanded`) are load-bearing UX, not optional
    polish — any new sidebar content must stay filterable and collapsible.
-7. **The inspector panel is responsive-width, not a fixed pixel sidecar,**
-   and any inspector tab kind (pod detail, YAML, exec, port-forward) can be
-   maximized to fill the content area (`ClusterTabViewModel.IsInspectorMaximized`)
-   — YAML editing and an exec terminal both need more room than a quick
-   pod-detail glance does.
+7. **The inspector docks along the bottom (Lens-style), not in a side sidecar.**
+   The resource list fills the content area's width; opening a resource docks a
+   detail/logs/exec/YAML tab under it, full-width, so logs and terminals read on
+   long lines instead of wrapping in a cramped column. A draggable `GridSplitter`
+   resizes the dock and any inspector tab kind can be maximized to fill the
+   content area (`ClusterTabViewModel.IsInspectorMaximized`). The three dock
+   states (hidden / split / maximized) are driven from `ClusterTabView`'s
+   code-behind `ApplyDockState` by mutating the content grid's row heights —
+   a `GridSplitter` mutates `RowDefinition.Height` directly and would fight a
+   one-way height binding, which is why this is code-behind, not XAML.
 8. **Every list/panel state gets an explicit visual** — loading, empty,
    disconnected, conflict, delete-confirm — never a blank rectangle that
    looks like a bug. `ClusterTabViewModel.IsListLoading`/`IsListEmpty` is the
@@ -340,9 +345,16 @@ but reworked the structure for a resource browser rather than a query tool:
   warn as a merely-Pending pod; explicit loading/empty states
   (`IsListLoading`/`IsListEmpty`) and an inline disconnected-watch banner
   replace what used to be an undifferentiated blank rectangle.
-- Inspector panel is now a responsive-width split (not a fixed 440px) with a
-  maximize toggle that fills the content area — YAML editing and the exec
-  terminal both needed more room than a pod-detail glance.
+- Inspector panel was reworked from a cramped right-side sidecar into a
+  Lens-style **bottom dock**: the resource list spans the full content width and
+  detail/logs/exec/YAML tabs dock beneath it, so logs and the exec terminal read
+  on full-width lines instead of a narrow column. A draggable `GridSplitter`
+  resizes the dock (floored so it can't collapse to a sliver) and the maximize
+  toggle still fills the whole content area. Row heights for the hidden/split/
+  maximized states live in `ClusterTabView.ApplyDockState` (code-behind, since a
+  `GridSplitter` fights a one-way height binding). Dock tab headers show an
+  active-tab highlight (`InspectorTabViewModelBase.IsActive`); Fluent's oversized
+  24px `TabItem` headers were pulled down to body scale in `Theme.axaml`.
 - YAML editor gained syntax highlighting (hand-written `.xshd`, AvaloniaEdit
   ships none for YAML) — see `Editing/YamlSyntaxHighlighting.cs`.
 - A keyboard-shortcuts cheat sheet (F1 / the command bar's `?` button)
