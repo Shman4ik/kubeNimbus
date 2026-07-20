@@ -72,6 +72,20 @@ choice must be AOT/trimming-compatible from day one.
    resolves Ctrl vs Cmd per platform; palette labels and cheat sheet derive
    from it.
 5. **Opening a resource/YAML never overwrites an active editor tab.**
+6. **The sidebar filters and collapses, it doesn't just scroll.** A cluster's
+   resource catalog (built-ins + CRDs) commonly runs past 100 kinds; the
+   sidebar's filter box + collapsible sections (CRDs collapsed by default,
+   `SidebarSectionViewModel.IsExpanded`) are load-bearing UX, not optional
+   polish — any new sidebar content must stay filterable and collapsible.
+7. **The inspector panel is responsive-width, not a fixed pixel sidecar,**
+   and any inspector tab kind (pod detail, YAML, exec, port-forward) can be
+   maximized to fill the content area (`ClusterTabViewModel.IsInspectorMaximized`)
+   — YAML editing and an exec terminal both need more room than a quick
+   pod-detail glance does.
+8. **Every list/panel state gets an explicit visual** — loading, empty,
+   disconnected, conflict, delete-confirm — never a blank rectangle that
+   looks like a bug. `ClusterTabViewModel.IsListLoading`/`IsListEmpty` is the
+   pattern to extend for new list-backed views.
 
 ## Repository layout
 
@@ -175,10 +189,22 @@ dotnet test tests/KubeNimbus.Core.Tests/KubeNimbus.Core.Tests.csproj
 $env:KUBECONFIG = ".sandbox/kubeconfig.yaml"
 dotnet run --project src/KubeNimbus.App
 
+# Headless visual check (no display, e.g. Claude Code Cloud) — see below.
+dotnet run --project tools/Screenshot -- /tmp/kubenimbus-screenshots
+
 # NativeAOT publish — THE shipping build. Verify it end-to-end on every change
 # that could affect trimming/AOT (new package, new reflection, new binding).
 dotnet publish src/KubeNimbus.App -c Release -r win-x64 -p:PublishAot=true -o publish/app
 ```
+
+On a machine without the Windows/MSVC toolchain (e.g. this repo's Linux dev
+containers, Claude Code Cloud), `dotnet publish src/KubeNimbus.App -c Release
+-r linux-x64 -p:PublishAot=true -o publish/app` exercises the same
+IL-trimming/AOT analysis and catches the same class of problems (new
+reflection, a non-trim-safe binding) even though it isn't the shipping
+binary — run it after any change that could plausibly affect trimming, and
+call out in the PR that the authoritative win-x64 publish still needs a
+local Windows pass.
 
 ### NativeAOT publish needs the MSVC toolchain (Windows)
 
@@ -204,6 +230,57 @@ in unnoticed.
 calls `WithDeveloperTools()` under `#if DEBUG`, so the Avalonia DevTools MCP can
 attach to a running Debug build and screenshot/inspect the tree. It never enters
 the Release/AOT build.
+
+### Headless screenshot harness (`tools/Screenshot`)
+
+For environments with no display and no DevTools MCP (Claude Code Cloud
+sessions, CI) — renders real Views bound to fixture ViewModels via
+`Avalonia.Headless` (Skia software rendering, `UseHeadlessDrawing = false`)
+and dumps PNGs. Not part of the shipping app; excluded from the App's
+NativeAOT publish.
+
+```bash
+dotnet run --project tools/Screenshot -- <outputDir> [scenario-name-substring]
+```
+
+Writes one `<scenario>.<light|dark>.png` per scenario × theme to `outputDir`
+(pass a scratch dir — nothing under it is committed). Omit the filter to
+render every scenario in `Program.cs`'s `scenarios` array.
+
+Key structural point: a `ClusterTabView` (or any inspector tab view) screenshot
+must be hosted inside a real `MainWindow`, not a bare wrapper — `ContentControl`'s
+implicit `DataTemplate` lookup only resolves `PodDetailView`/`YamlEditorView`/etc
+by walking the visual tree to `MainWindow.axaml`'s `Window.DataTemplates`; a
+bare `Border`/`Window` wrapper falls back to a `ToString()`-in-a-TextBlock
+placeholder instead of the real view. See `HostInMainWindow` in `Program.cs`.
+
+Fixture data (`tools/Screenshot/Fixtures/*.json` — pods, deployments, events,
+a 72-kind CRD catalog spanning cert-manager/argoproj/istio/velero/keda/flux/etc
+to stress-test sidebar scaling realistically) is loaded by `FixtureData.cs`
+into real `DynamicResource`/`ResourceDescriptor` instances. `ClusterTabScenarios.cs`
+builds fully-populated `ClusterTabViewModel`s by setting the same public
+properties `ConnectAsync`/`RestartWatch`/`Apply` would, using an **offline
+`ClusterClient`** (`FixtureData.CreateOfflineClient()`, pointed at
+`Fixtures/kubeconfig-fake.yaml` → `https://127.0.0.1:1`, an address nothing
+listens on) so ViewModel constructors that require a live `ClusterClient`
+(pod detail's event refresh, exec's connect) still work — those calls just
+fail fast in the background and are swallowed by the same error handling a
+real lost connection already has.
+
+Gotcha already hit once: setting `SelectedNamespace` on a fixture
+`ClusterTabViewModel` fires the real `OnSelectedNamespaceChanged` → `RestartWatch()`
+hook. With no `Client` wired up that only touches `IsListLoading`/`IsListEmpty`,
+but if you set `SelectedNamespace` *before* manually populating `Rows`, the
+empty-state flag latches `true` and never gets recomputed (production code
+never hits this ordering — there, `RestartWatch`'s background pump is what
+populates `Rows`). `ClusterTabScenarios.BaseTab()` recomputes `IsListEmpty`
+after populating rows for exactly this reason; follow the same pattern for
+new scenarios that set view-model properties directly.
+
+When Docker is available (unlike this session — `docker version` succeeds but
+`dockerd` isn't running here), prefer driving the harness against a real
+k3s sandbox (see below) instead of fixtures for a final verification pass;
+note in the PR which screenshots were fixture-only.
 
 ## MVP scope (phase 1 — shipped, see Current status below)
 
@@ -248,5 +325,46 @@ and a Ctrl/Cmd+K command palette. Verified end-to-end running against the
 sandbox (screenshotted via the Avalonia DevTools MCP) and via NativeAOT
 publish (0 new warnings beyond the known DataGrid trim warnings).
 
+**UX polish pass (post-MVP, layout redesigned from scratch — see UI design
+rules 6-8 above):** PR #2's shell mechanically ported pgNimbus's SQL-client
+layout; this pass kept the visual language (color/type/iconography/materials)
+but reworked the structure for a resource browser rather than a query tool:
+- Sidebar gained a live filter box and collapsible sections (CRDs collapsed
+  by default) — verified against a 72-kind synthetic CRD catalog
+  (`tools/Screenshot/Fixtures/crd-catalog.json`) spanning cert-manager,
+  argoproj, istio, velero, keda, flux, and others, since a handful of
+  built-in kinds doesn't expose how the sidebar behaves on a real cluster.
+- Resource list: Name/Namespace/Status trim with an ellipsis + tooltip
+  instead of hard-clipping; Status renders as a color-coded pill; a pod with
+  0 ready containers (CrashLoopBackOff) now reads as error, not the same
+  warn as a merely-Pending pod; explicit loading/empty states
+  (`IsListLoading`/`IsListEmpty`) and an inline disconnected-watch banner
+  replace what used to be an undifferentiated blank rectangle.
+- Inspector panel is now a responsive-width split (not a fixed 440px) with a
+  maximize toggle that fills the content area — YAML editing and the exec
+  terminal both needed more room than a pod-detail glance.
+- YAML editor gained syntax highlighting (hand-written `.xshd`, AvaloniaEdit
+  ships none for YAML) — see `Editing/YamlSyntaxHighlighting.cs`.
+- A keyboard-shortcuts cheat sheet (F1 / the command bar's `?` button)
+  surfaces Space/Enter/double-click/drag-tab, none of which had any
+  discoverability before.
+- Pod logs now actually auto-scroll while "Following" (that toggle only
+  controlled the stream before, not the ScrollViewer); the exec terminal
+  strips ANSI escape codes per chunk and caps scrollback at 200k chars
+  (mirrors the existing 4000-line cap on pod logs).
+- New: `tools/Screenshot`, a headless Avalonia visual-verification harness
+  for environments with no display (see "Headless screenshot harness"
+  above) — this pass's screenshots were fixture-driven (no Docker daemon in
+  this session's environment); a live-cluster pass locally is still worth
+  doing before/soon after merge to catch anything fixture data wouldn't
+  surface (real CRD status shapes, real watch reconnect behavior under the
+  new empty/loading states, actual terminal ANSI output from a real shell).
+
 Not yet built (see "Later phases" above): Helm release browsing, resource
-metrics/graphs, RBAC inspection, multi-cluster aggregated views.
+metrics/graphs, RBAC inspection, multi-cluster aggregated views. The UX pass
+above is also not exhaustive — there's no finish line here, just diminishing
+returns; candidates for a follow-up iteration: coalescing duplicate CRD
+`Kind`s across API groups in the sidebar (e.g. `Backup` from both velero.io
+and postgresql.cnpg.io currently renders as two identical-looking rows),
+a "recently used kinds" section, transition/hover animation polish, and a
+proper win-x64 NativeAOT pass (this session could only verify linux-x64).
