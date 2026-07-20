@@ -27,6 +27,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     public CommandPaletteViewModel Palette { get; }
 
+    [ObservableProperty]
+    private bool _isShortcutsOpen;
+
+    [RelayCommand]
+    private void ToggleShortcuts() => IsShortcutsOpen = !IsShortcutsOpen;
+
+    [RelayCommand]
+    private void CloseShortcuts() => IsShortcutsOpen = false;
+
     public MainWindowViewModel()
     {
         Palette = new CommandPaletteViewModel(BuildPaletteItems);

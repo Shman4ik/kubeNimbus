@@ -39,6 +39,9 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     public ObservableCollection<SidebarSectionViewModel> SidebarSections { get; } = [];
 
+    [ObservableProperty]
+    private string _sidebarFilter = "";
+
     public ObservableCollection<string> NamespaceOptions { get; } = [AllNamespaces];
 
     [ObservableProperty]
@@ -49,6 +52,21 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     public ObservableCollection<ResourceRowViewModel> Rows { get; } = [];
 
+    /// <summary>True from the moment a watch (re)starts until its first event
+    /// arrives — distinguishes "still loading" from "genuinely empty" so the
+    /// list doesn't flash an empty state while the initial list is in flight.</summary>
+    [ObservableProperty]
+    private bool _isListLoading;
+
+    /// <summary>True once the list has genuinely settled on zero rows (not
+    /// merely mid-load) — drives the "No <kind> found" empty state.</summary>
+    [ObservableProperty]
+    private bool _isListEmpty;
+
+    partial void OnIsListLoadingChanged(bool value) => RecomputeListEmpty();
+
+    private void RecomputeListEmpty() => IsListEmpty = Rows.Count == 0 && !IsListLoading;
+
     [ObservableProperty]
     private ResourceRowViewModel? _selectedRow;
 
@@ -56,6 +74,14 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     [ObservableProperty]
     private InspectorTabViewModelBase? _selectedInspectorTab;
+
+    /// <summary>Expands the inspector to fill the content area (list hidden) — the
+    /// fixed ~440px sidecar is too cramped for YAML editing or an exec terminal.</summary>
+    [ObservableProperty]
+    private bool _isInspectorMaximized;
+
+    [RelayCommand]
+    private void ToggleInspectorMaximized() => IsInspectorMaximized = !IsInspectorMaximized;
 
     public ClusterTabViewModel(ClusterContext context)
     {
@@ -129,6 +155,41 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 SidebarSections.Add(sections[title]);
             }
         }
+
+        ApplySidebarFilter();
+    }
+
+    partial void OnSidebarFilterChanged(string value) => ApplySidebarFilter();
+
+    [RelayCommand]
+    private void ClearSidebarFilter() => SidebarFilter = "";
+
+    /// <summary>
+    /// Filters sidebar kinds by substring match on display name, live as the user
+    /// types. A section with at least one match force-expands (without touching
+    /// the user's own collapse choice, restored once the filter is cleared) so
+    /// filtering never hides a result inside a collapsed section.
+    /// </summary>
+    private void ApplySidebarFilter()
+    {
+        // The filter TextBox's two-way binding can round-trip null on
+        // control (re)creation — same reasoning as SelectedNamespace above.
+        var query = (SidebarFilter ?? "").Trim();
+        var filtering = query.Length > 0;
+
+        foreach (var section in SidebarSections)
+        {
+            var anyMatch = false;
+            foreach (var kind in section.Kinds)
+            {
+                var match = !filtering || kind.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase);
+                kind.IsVisible = match;
+                anyMatch |= match;
+            }
+
+            section.HasVisibleKinds = anyMatch;
+            section.IsForceExpanded = filtering && anyMatch;
+        }
     }
 
     [RelayCommand]
@@ -194,6 +255,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         Rows.Clear();
         _rowsByKey.Clear();
+        IsListLoading = Client is not null && SelectedKind is not null;
+        RecomputeListEmpty();
 
         if (Client is null || SelectedKind is null)
         {
@@ -232,6 +295,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     private void Apply(ResourceEvent<DynamicResource> evt)
     {
+        IsListLoading = false;
+
         switch (evt.Type)
         {
             case ResourceEventType.Reset:
@@ -262,6 +327,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
                 break;
         }
+
+        RecomputeListEmpty();
     }
 
     /// <summary>Double-click / Enter: promotes (or opens) a permanent tab. Pod → detail; anything else → YAML.</summary>
@@ -375,6 +442,11 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             SelectedInspectorTab = InspectorTabs.Count == 0
                 ? null
                 : InspectorTabs[Math.Min(index, InspectorTabs.Count - 1)];
+        }
+
+        if (InspectorTabs.Count == 0)
+        {
+            IsInspectorMaximized = false;
         }
     }
 

@@ -2,37 +2,68 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:KubeNimbus.App.ViewModels"
              xmlns:conv="using:KubeNimbus.App.Converters"
+             xmlns:aconv="using:Avalonia.Data.Converters"
              x:Class="KubeNimbus.App.Views.ClusterTabView"
              x:DataType="vm:ClusterTabViewModel">
 
   <Grid ColumnDefinitions="0.65*,2*">
 
     <!-- Sidebar: sits directly on the shell tone, Files-style — no card chrome. -->
-    <ScrollViewer Grid.Column="0" Margin="0,0,8,0">
-      <ItemsControl ItemsSource="{Binding SidebarSections}">
-        <ItemsControl.ItemTemplate>
-          <DataTemplate x:DataType="vm:SidebarSectionViewModel">
-            <StackPanel Margin="0,0,0,12">
-              <TextBlock Classes="sectionHeader" Text="{Binding Title}" Margin="8,4,8,6" />
-              <ItemsControl ItemsSource="{Binding Kinds}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="vm:SidebarKindViewModel">
-                    <ListBoxItem Classes="navRow" IsSelected="{Binding IsSelected}"
-                                 Tapped="OnSidebarKindTapped">
-                      <StackPanel Orientation="Horizontal" Spacing="8">
-                        <PathIcon Data="{Binding IconKey, Converter={x:Static conv:IconKeyToGeometryConverter.Instance}}"
-                                  Width="13" Height="13" VerticalAlignment="Center" Opacity="0.8" />
-                        <TextBlock Text="{Binding DisplayName}" FontSize="12" VerticalAlignment="Center" />
-                      </StackPanel>
-                    </ListBoxItem>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </StackPanel>
-          </DataTemplate>
-        </ItemsControl.ItemTemplate>
-      </ItemsControl>
-    </ScrollViewer>
+    <Grid Grid.Column="0" RowDefinitions="Auto,*" Margin="0,0,8,0">
+
+      <TextBox Grid.Row="0" Classes="filterbox" Margin="4,0,4,8"
+                Text="{Binding SidebarFilter}" PlaceholderText="Filter resources…">
+        <TextBox.InnerLeftContent>
+          <PathIcon Data="{StaticResource MagnifyIconGeometry}" Width="11" Height="11" Opacity="0.5" Margin="8,0,0,0" />
+        </TextBox.InnerLeftContent>
+        <TextBox.InnerRightContent>
+          <Button Classes="chip" Padding="0" MinWidth="16" MinHeight="16" Margin="0,0,4,0"
+                  IsVisible="{Binding SidebarFilter, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}"
+                  Command="{Binding $parent[UserControl].((vm:ClusterTabViewModel)DataContext).ClearSidebarFilterCommand}"
+                  ToolTip.Tip="Clear filter">
+            <PathIcon Data="{StaticResource CloseIconGeometry}" Width="9" Height="9" />
+          </Button>
+        </TextBox.InnerRightContent>
+      </TextBox>
+
+      <ScrollViewer Grid.Row="1">
+        <ItemsControl ItemsSource="{Binding SidebarSections}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:SidebarSectionViewModel">
+              <StackPanel Margin="0,0,0,8" IsVisible="{Binding HasVisibleKinds}">
+                <Border Classes="sectionHeaderRow" Tapped="OnSidebarSectionTapped">
+                  <Grid ColumnDefinitions="Auto,*,Auto">
+                    <PathIcon Grid.Column="0" Data="{StaticResource ChevronRightIconGeometry}" Width="10" Height="10"
+                              Opacity="0.5" Margin="0,0,4,0" VerticalAlignment="Center"
+                              RenderTransformOrigin="50%,50%">
+                      <PathIcon.RenderTransform>
+                        <RotateTransform Angle="{Binding ShowKinds, Converter={x:Static conv:ExpandedToAngleConverter.Instance}}" />
+                      </PathIcon.RenderTransform>
+                    </PathIcon>
+                    <TextBlock Grid.Column="1" Classes="sectionHeader" Text="{Binding Title}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="2" Classes="sectionHeader" Text="{Binding KindCount}" Opacity="0.4" VerticalAlignment="Center" />
+                  </Grid>
+                </Border>
+                <ItemsControl ItemsSource="{Binding Kinds}" IsVisible="{Binding ShowKinds}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SidebarKindViewModel">
+                      <ListBoxItem Classes="navRow" IsSelected="{Binding IsSelected}" IsVisible="{Binding IsVisible}"
+                                   Tapped="OnSidebarKindTapped">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                          <PathIcon Data="{Binding IconKey, Converter={x:Static conv:IconKeyToGeometryConverter.Instance}}"
+                                    Width="13" Height="13" VerticalAlignment="Center" Opacity="0.8" />
+                          <TextBlock Text="{Binding DisplayName}" FontSize="12" VerticalAlignment="Center" />
+                        </StackPanel>
+                      </ListBoxItem>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </Grid>
 
     <!-- Content: raised layer, Files-style. -->
     <Border Grid.Column="1" Classes="layer">
@@ -43,56 +74,118 @@
           <ComboBox Grid.Column="1" ItemsSource="{Binding NamespaceOptions}" SelectedItem="{Binding SelectedNamespace}"
                      Margin="12,0,0,0" MinWidth="170"
                      IsEnabled="{Binding SelectedKind.Descriptor.Namespaced}" />
+          <Border Grid.Column="2" Classes="inlineWarning" Margin="12,0,0,0" HorizontalAlignment="Left"
+                  IsVisible="{Binding ConnectionWarning, Converter={x:Static aconv:ObjectConverters.IsNotNull}}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <PathIcon Data="{StaticResource AlertCircleIconGeometry}" Width="12" Height="12" />
+              <TextBlock Text="{Binding ConnectionWarning}" FontSize="12" TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+          </Border>
           <Button Grid.Column="3" Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="Refresh" Padding="6">
             <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="14" Height="14" />
           </Button>
         </Grid>
 
-        <Grid Grid.Row="1" ColumnDefinitions="*,Auto">
+        <Grid Grid.Row="1">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="{Binding IsInspectorMaximized, Converter={x:Static conv:MaximizedToListWidthConverter.Instance}}" MinWidth="0" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
 
-          <DataGrid Grid.Column="0" Name="ResourceGrid"
-                     ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}"
-                     IsReadOnly="True" GridLinesVisibility="Horizontal" CanUserResizeColumns="True"
-                     DoubleTapped="OnRowDoubleTapped">
-            <DataGrid.Columns>
-              <DataGridTemplateColumn Header="" Width="28">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate x:DataType="vm:ResourceRowViewModel">
-                    <Ellipse Classes="statusDot" Fill="{Binding StatusHealth, Converter={x:Static conv:HealthToBrushConverter.Instance}}"
-                             HorizontalAlignment="Center" VerticalAlignment="Center" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <DataGridTextColumn Header="Namespace" Binding="{Binding Namespace}" Width="Auto" MinWidth="90" />
-              <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="2*" MinWidth="180" />
-              <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="*" MinWidth="140" />
-            </DataGrid.Columns>
-          </DataGrid>
+          <Grid Grid.Column="0" IsVisible="{Binding !IsInspectorMaximized}">
+            <DataGrid Name="ResourceGrid"
+                       ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}"
+                       IsReadOnly="True" GridLinesVisibility="Horizontal" CanUserResizeColumns="True"
+                       DoubleTapped="OnRowDoubleTapped">
+              <DataGrid.Columns>
+                <DataGridTemplateColumn Header="" Width="28">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                      <Ellipse Classes="statusDot" Fill="{Binding StatusHealth, Converter={x:Static conv:HealthToBrushConverter.Instance}}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Namespace" Width="Auto" MinWidth="90">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                      <TextBlock Text="{Binding Namespace}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Namespace}" VerticalAlignment="Center" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Name" Width="2*" MinWidth="180">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                      <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" VerticalAlignment="Center" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Status" Width="*" MinWidth="150">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                      <Border Classes="statusPill" Classes.ok="{Binding StatusHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=ok}"
+                              Classes.warn="{Binding StatusHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=warn}"
+                              Classes.error="{Binding StatusHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=error}"
+                              IsVisible="{Binding Status, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}"
+                              ToolTip.Tip="{Binding Status}">
+                        <TextBlock Text="{Binding Status}" FontSize="11.5" TextTrimming="CharacterEllipsis" />
+                      </Border>
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+              </DataGrid.Columns>
+            </DataGrid>
 
-          <Border Grid.Column="1" Width="440" Margin="10,0,0,0" Classes="card" Padding="0"
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8"
+                        IsVisible="{Binding IsListLoading}">
+              <TextBlock Text="Loading…" Opacity="0.5" HorizontalAlignment="Center" FontSize="13" />
+            </StackPanel>
+
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" MaxWidth="320"
+                        IsVisible="{Binding IsListEmpty}">
+              <PathIcon Data="{Binding SelectedKind.IconKey, Converter={x:Static conv:IconKeyToGeometryConverter.Instance}}"
+                        Width="28" Height="28" Opacity="0.25" HorizontalAlignment="Center" />
+              <TextBlock Text="{Binding SelectedKind.DisplayName, StringFormat='No {0} found'}"
+                         FontWeight="SemiBold" FontSize="13" HorizontalAlignment="Center" Opacity="0.7" />
+              <TextBlock Text="{Binding SelectedNamespace, StringFormat='in {0}'}" FontSize="12" Opacity="0.5"
+                         HorizontalAlignment="Center"
+                         IsVisible="{Binding SelectedKind.Descriptor.Namespaced}" />
+            </StackPanel>
+          </Grid>
+
+          <Border Grid.Column="1" Margin="10,0,0,0" MinWidth="360" Classes="card" Padding="0"
                   IsVisible="{Binding InspectorTabs.Count, Converter={x:Static conv:CountToBoolConverter.Instance}}">
             <Grid RowDefinitions="Auto,*">
-              <ItemsControl Grid.Row="0" ItemsSource="{Binding InspectorTabs}" Margin="4">
-                <ItemsControl.ItemsPanel>
-                  <ItemsPanelTemplate>
-                    <WrapPanel Orientation="Horizontal" />
-                  </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="vm:InspectorTabViewModelBase">
-                    <Border Classes="card" Padding="8,4" Margin="2" CornerRadius="6" Tapped="OnInspectorTabTapped">
-                      <StackPanel Orientation="Horizontal" Spacing="6">
-                        <TextBlock Text="{Binding Title}" FontSize="12" Opacity="{Binding IsPreview, Converter={x:Static conv:PreviewToOpacityConverter.Instance}}" />
-                        <Button Classes="chip" Padding="0" MinWidth="14" MinHeight="14"
-                                Command="{Binding $parent[UserControl].((vm:ClusterTabViewModel)DataContext).CloseInspectorTabCommand}"
-                                CommandParameter="{Binding}">
-                          <PathIcon Data="{StaticResource CloseIconGeometry}" Width="9" Height="9" />
-                        </Button>
-                      </StackPanel>
-                    </Border>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
+              <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                <ItemsControl Grid.Column="0" ItemsSource="{Binding InspectorTabs}" Margin="4">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <WrapPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:InspectorTabViewModelBase">
+                      <Border Classes="card" Padding="8,4" Margin="2" CornerRadius="6" Tapped="OnInspectorTabTapped">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                          <TextBlock Text="{Binding Title}" FontSize="12" Opacity="{Binding IsPreview, Converter={x:Static conv:PreviewToOpacityConverter.Instance}}" />
+                          <Button Classes="chip" Padding="0" MinWidth="14" MinHeight="14"
+                                  Command="{Binding $parent[UserControl].((vm:ClusterTabViewModel)DataContext).CloseInspectorTabCommand}"
+                                  CommandParameter="{Binding}">
+                            <PathIcon Data="{StaticResource CloseIconGeometry}" Width="9" Height="9" />
+                          </Button>
+                        </StackPanel>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Button Grid.Column="1" Classes="toolbar" Margin="0,4,4,0"
+                        Command="{Binding ToggleInspectorMaximizedCommand}"
+                        ToolTip.Tip="{Binding IsInspectorMaximized, Converter={x:Static conv:MaximizedToTooltipConverter.Instance}}"
+                        Padding="6">
+                  <PathIcon Width="13" Height="13"
+                            Data="{Binding IsInspectorMaximized, Converter={x:Static conv:MaximizedToIconConverter.Instance}}" />
+                </Button>
+              </Grid>
 
               <ContentControl Grid.Row="1" Content="{Binding SelectedInspectorTab}" />
             </Grid>

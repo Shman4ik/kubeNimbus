@@ -1,5 +1,6 @@
 using System.Globalization;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
 
@@ -13,7 +14,7 @@ public sealed class IconKeyToGeometryConverter : IValueConverter
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         if (value is string key && Application.Current is { } app
-            && app.Resources.TryGetResource(key, app.ActualThemeVariant, out var resource) && resource is Geometry geometry)
+            && app.TryFindResource(key, app.ActualThemeVariant, out var resource) && resource is Geometry geometry)
         {
             return geometry;
         }

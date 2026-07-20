@@ -27,6 +27,14 @@ public partial class ClusterTabView : UserControl
         }
     }
 
+    private void OnSidebarSectionTapped(object? sender, TappedEventArgs e)
+    {
+        if (sender is Border { DataContext: SidebarSectionViewModel section })
+        {
+            section.ToggleExpandedCommand.Execute(null);
+        }
+    }
+
     private void OnRowDoubleTapped(object? sender, TappedEventArgs e) => Vm?.OpenSelectedCommand.Execute(null);
 
     private void OnGridKeyDown(object? sender, KeyEventArgs e)

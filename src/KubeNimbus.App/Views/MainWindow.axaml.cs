@@ -22,6 +22,8 @@ public partial class MainWindow : Window
         KeyBindings.Add(new KeyBinding { Gesture = Hotkeys.CommandPalette, Command = new RelayOpenPaletteCommand(this) });
         PaletteShortcutLabel.Text = Hotkeys.Describe(Hotkeys.CommandPalette);
 
+        KeyBindings.Add(new KeyBinding { Gesture = Hotkeys.ShortcutsHelp, Command = new RelayToggleShortcutsCommand(this) });
+
         Opened += (_, _) =>
         {
             UpdateThemeIcon();
@@ -87,6 +89,14 @@ public partial class MainWindow : Window
         if (e.Source == sender)
         {
             Vm?.Palette.Close();
+        }
+    }
+
+    private void OnShortcutsBackdropPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.Source == sender)
+        {
+            Vm?.CloseShortcutsCommand.Execute(null);
         }
     }
 
@@ -198,4 +208,14 @@ internal sealed class RelayOpenPaletteCommand(MainWindow window) : System.Window
     public bool CanExecute(object? parameter) => true;
 
     public void Execute(object? parameter) => window.OpenPalette();
+}
+
+/// <summary>Trivial ICommand so the F1 gesture can live in a KeyBinding without a ViewModel round-trip.</summary>
+internal sealed class RelayToggleShortcutsCommand(MainWindow window) : System.Windows.Input.ICommand
+{
+    public event EventHandler? CanExecuteChanged { add { } remove { } }
+
+    public bool CanExecute(object? parameter) => true;
+
+    public void Execute(object? parameter) => (window.DataContext as ViewModels.MainWindowViewModel)?.ToggleShortcutsCommand.Execute(null);
 }

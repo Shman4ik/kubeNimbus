@@ -1,0 +1,118 @@
+[
+  {
+    "kind": "Pod",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "payment-service-report-generator-7f9c8d6bcd-x7k2m",
+      "namespace": "payments",
+      "uid": "a1111111-1111-1111-1111-111111111111",
+      "creationTimestamp": "2026-07-19T08:12:00Z",
+      "labels": { "app": "payment-service-report-generator", "pod-template-hash": "7f9c8d6bcd" },
+      "ownerReferences": [
+        { "apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "payment-service-report-generator-7f9c8d6bcd", "uid": "b1111111-1111-1111-1111-111111111111", "controller": true }
+      ]
+    },
+    "spec": {
+      "containers": [
+        { "name": "app", "image": "registry.internal/payments/report-generator:2.14.3", "ports": [{ "containerPort": 8080, "protocol": "TCP" }] },
+        { "name": "envoy-sidecar", "image": "envoyproxy/envoy:v1.29.2", "ports": [{ "containerPort": 15000, "protocol": "TCP" }] }
+      ]
+    },
+    "status": {
+      "phase": "Running",
+      "containerStatuses": [
+        { "name": "app", "ready": true, "restartCount": 0, "state": { "running": { "startedAt": "2026-07-19T08:12:05Z" } } },
+        { "name": "envoy-sidecar", "ready": true, "restartCount": 0, "state": { "running": { "startedAt": "2026-07-19T08:12:02Z" } } }
+      ]
+    }
+  },
+  {
+    "kind": "Pod",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "checkout-worker-5d8f7b9c4-qz9pl",
+      "namespace": "payments",
+      "uid": "a2222222-2222-2222-2222-222222222222",
+      "creationTimestamp": "2026-07-20T02:40:00Z",
+      "labels": { "app": "checkout-worker" },
+      "ownerReferences": [
+        { "apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "checkout-worker-5d8f7b9c4", "uid": "b2222222-2222-2222-2222-222222222222", "controller": true }
+      ]
+    },
+    "spec": { "containers": [ { "name": "worker", "image": "registry.internal/payments/checkout-worker:9.0.1" } ] },
+    "status": {
+      "phase": "Running",
+      "containerStatuses": [
+        {
+          "name": "worker", "ready": false, "restartCount": 14,
+          "state": { "waiting": { "reason": "CrashLoopBackOff", "message": "back-off 5m0s restarting failed container" } }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "Pod",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "db-migration-job-4x2kv",
+      "namespace": "payments",
+      "uid": "a3333333-3333-3333-3333-333333333333",
+      "creationTimestamp": "2026-07-20T03:05:00Z",
+      "labels": { "job-name": "db-migration-job" },
+      "ownerReferences": [
+        { "apiVersion": "batch/v1", "kind": "Job", "name": "db-migration-job", "uid": "b3333333-3333-3333-3333-333333333333", "controller": true }
+      ]
+    },
+    "spec": { "containers": [ { "name": "migrate", "image": "registry.internal/payments/migrate:1.2.0" } ] },
+    "status": { "phase": "Succeeded", "containerStatuses": [ { "name": "migrate", "ready": false, "restartCount": 0, "state": { "terminated": { "reason": "Completed", "exitCode": 0 } } } ] }
+  },
+  {
+    "kind": "Pod",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "fraud-detector-6c7d9f8b5-2n8wt",
+      "namespace": "payments",
+      "uid": "a4444444-4444-4444-4444-444444444444",
+      "creationTimestamp": "2026-07-20T03:20:00Z",
+      "labels": { "app": "fraud-detector" },
+      "ownerReferences": [
+        { "apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "fraud-detector-6c7d9f8b5", "uid": "b4444444-4444-4444-4444-444444444444", "controller": true }
+      ]
+    },
+    "spec": { "containers": [ { "name": "model-server", "image": "registry.internal/ml/fraud-detector:4.1.0" } ] },
+    "status": { "phase": "Pending", "containerStatuses": [] }
+  },
+  {
+    "kind": "Pod",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "redis-cache-0",
+      "namespace": "payments",
+      "uid": "a5555555-5555-5555-5555-555555555555",
+      "creationTimestamp": "2026-07-15T11:00:00Z",
+      "labels": { "app": "redis-cache" },
+      "ownerReferences": [
+        { "apiVersion": "apps/v1", "kind": "StatefulSet", "name": "redis-cache", "uid": "b5555555-5555-5555-5555-555555555555", "controller": true }
+      ]
+    },
+    "spec": { "containers": [ { "name": "redis", "image": "redis:7.4-alpine", "ports": [{ "containerPort": 6379, "protocol": "TCP" }] } ] },
+    "status": { "phase": "Running", "containerStatuses": [ { "name": "redis", "ready": true, "restartCount": 2, "state": { "running": { "startedAt": "2026-07-18T09:00:00Z" } } } ] }
+  },
+  {
+    "kind": "Pod",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "notification-dispatcher-8b6f5d7c9-k9m3q",
+      "namespace": "payments",
+      "uid": "a6666666-6666-6666-6666-666666666666",
+      "creationTimestamp": "2026-07-20T04:01:00Z",
+      "deletionTimestamp": "2026-07-20T04:15:00Z",
+      "labels": { "app": "notification-dispatcher" },
+      "ownerReferences": [
+        { "apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "notification-dispatcher-8b6f5d7c9", "uid": "b6666666-6666-6666-6666-666666666666", "controller": true }
+      ]
+    },
+    "spec": { "containers": [ { "name": "dispatcher", "image": "registry.internal/payments/notification-dispatcher:3.3.3" } ] },
+    "status": { "phase": "Running", "containerStatuses": [ { "name": "dispatcher", "ready": true, "restartCount": 0, "state": { "running": { "startedAt": "2026-07-20T04:01:05Z" } } } ] }
+  }
+]

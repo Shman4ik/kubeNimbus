@@ -16,6 +16,8 @@ public static class Hotkeys
 
     public static readonly KeyGesture CommandPalette = new(Key.K, Primary);
 
+    public static readonly KeyGesture ShortcutsHelp = new(Key.F1);
+
     /// <summary>Human-readable label for a gesture, for palette rows and the cheat sheet.</summary>
     public static string Describe(KeyGesture gesture)
     {
@@ -24,4 +26,21 @@ public static class Hotkeys
             : "";
         return string.IsNullOrEmpty(mod) ? gesture.Key.ToString() : $"{mod}+{gesture.Key}";
     }
+
+    public sealed record ShortcutEntry(string Action, string Keys);
+
+    /// <summary>Single source of truth for the F1 cheat sheet (ShortcutsOverlay) —
+    /// every entry here is a real gesture or interaction handled somewhere in the
+    /// app, not aspirational documentation.</summary>
+    public static readonly IReadOnlyList<ShortcutEntry> CheatSheet =
+    [
+        new("Open the command palette", Describe(CommandPalette)),
+        new("Show this cheat sheet", Describe(ShortcutsHelp)),
+        new("Open the selected resource", "Enter"),
+        new("Quick-peek the selected resource", "Space"),
+        new("Default action (pod → logs, resource → YAML, …)", "Double-click"),
+        new("Reorder cluster tabs", "Drag tab"),
+        new("Filter the sidebar's resource kinds", "Type in the filter box"),
+        new("Maximize the inspector over the list", "Inspector's expand icon"),
+    ];
 }

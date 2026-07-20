@@ -35,6 +35,7 @@ public static class ResourceStatusSummary
                 "Succeeded" => "ok",
                 "Failed" => "error",
                 "Pending" => "warn",
+                _ when total > 0 && ready == 0 => "error", // e.g. CrashLoopBackOff: fully down, not just degraded
                 _ => ready < total ? "warn" : "ok",
             };
             return (text, health);

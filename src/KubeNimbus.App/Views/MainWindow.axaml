@@ -5,6 +5,7 @@
         xmlns:core="using:KubeNimbus.Core"
         xmlns:conv="using:KubeNimbus.App.Converters"
         xmlns:aconv="using:Avalonia.Data.Converters"
+        xmlns:local="using:KubeNimbus.App"
         x:Class="KubeNimbus.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="kubeNimbus"
@@ -92,7 +93,11 @@
             </Grid>
           </Button>
 
-          <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+          <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Spacing="2">
+            <Button Classes="chip" Padding="5" Command="{Binding ToggleShortcutsCommand}"
+                    ToolTip.Tip="Keyboard shortcuts (F1)">
+              <PathIcon Data="{StaticResource HelpCircleIconGeometry}" Width="15" Height="15" />
+            </Button>
             <Button Name="ThemeToggleButton" Classes="chip" Padding="5" Click="OnToggleThemeClick" ToolTip.Tip="Toggle light/dark theme">
               <PathIcon Name="ThemeIcon" Data="{StaticResource WeatherNightIconGeometry}" Width="14" Height="14" />
             </Button>
@@ -138,6 +143,32 @@
             </ListBox.ItemTemplate>
           </ListBox>
         </Grid>
+      </Border>
+    </Border>
+
+    <!-- Shortcuts cheat sheet overlay (F1 / the ? button) -->
+    <Border Background="#80000000" IsVisible="{Binding IsShortcutsOpen}" PointerPressed="OnShortcutsBackdropPressed">
+      <Border Classes="layer" Width="420" VerticalAlignment="Center" HorizontalAlignment="Center">
+        <StackPanel Spacing="4">
+          <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">
+            <TextBlock Grid.Column="0" Text="Keyboard shortcuts" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" />
+            <Button Grid.Column="1" Classes="chip" Padding="0" MinWidth="18" MinHeight="18" Command="{Binding CloseShortcutsCommand}">
+              <PathIcon Data="{StaticResource CloseIconGeometry}" Width="10" Height="10" />
+            </Button>
+          </Grid>
+          <ItemsControl ItemsSource="{x:Static local:Hotkeys.CheatSheet}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="local:Hotkeys+ShortcutEntry">
+                <Grid ColumnDefinitions="*,Auto" Margin="0,5">
+                  <TextBlock Grid.Column="0" Text="{Binding Action}" FontSize="12.5" VerticalAlignment="Center" />
+                  <Border Grid.Column="1" Classes="card" Padding="7,2">
+                    <TextBlock Text="{Binding Keys}" FontSize="11.5" FontFamily="Cascadia Mono,Consolas,monospace" />
+                  </Border>
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
       </Border>
     </Border>
   </Grid>
