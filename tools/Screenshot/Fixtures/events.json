@@ -1,0 +1,42 @@
+[
+  {
+    "kind": "Event",
+    "apiVersion": "v1",
+    "metadata": { "name": "checkout-worker-5d8f7b9c4-qz9pl.17f2a1", "namespace": "payments" },
+    "type": "Warning",
+    "reason": "BackOff",
+    "message": "Back-off restarting failed container worker in pod checkout-worker-5d8f7b9c4-qz9pl_payments(a2222222)",
+    "count": 42,
+    "lastTimestamp": "2026-07-20T04:58:00Z"
+  },
+  {
+    "kind": "Event",
+    "apiVersion": "v1",
+    "metadata": { "name": "checkout-worker-5d8f7b9c4-qz9pl.17f2a0", "namespace": "payments" },
+    "type": "Warning",
+    "reason": "Unhealthy",
+    "message": "Readiness probe failed: HTTP probe failed with statuscode: 503",
+    "count": 18,
+    "lastTimestamp": "2026-07-20T04:57:10Z"
+  },
+  {
+    "kind": "Event",
+    "apiVersion": "v1",
+    "metadata": { "name": "checkout-worker-5d8f7b9c4-qz9pl.17f29f", "namespace": "payments" },
+    "type": "Normal",
+    "reason": "Pulled",
+    "message": "Container image \"registry.internal/payments/checkout-worker:9.0.1\" already present on machine",
+    "count": 15,
+    "lastTimestamp": "2026-07-20T04:40:02Z"
+  },
+  {
+    "kind": "Event",
+    "apiVersion": "v1",
+    "metadata": { "name": "checkout-worker-5d8f7b9c4-qz9pl.17f29e", "namespace": "payments" },
+    "type": "Normal",
+    "reason": "Scheduled",
+    "message": "Successfully assigned payments/checkout-worker-5d8f7b9c4-qz9pl to node-pool-a-7fzk",
+    "count": 1,
+    "lastTimestamp": "2026-07-20T02:40:01Z"
+  }
+]

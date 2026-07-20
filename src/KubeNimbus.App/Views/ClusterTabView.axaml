@@ -8,31 +8,61 @@
   <Grid ColumnDefinitions="0.65*,2*">
 
     <!-- Sidebar: sits directly on the shell tone, Files-style — no card chrome. -->
-    <ScrollViewer Grid.Column="0" Margin="0,0,8,0">
-      <ItemsControl ItemsSource="{Binding SidebarSections}">
-        <ItemsControl.ItemTemplate>
-          <DataTemplate x:DataType="vm:SidebarSectionViewModel">
-            <StackPanel Margin="0,0,0,12">
-              <TextBlock Classes="sectionHeader" Text="{Binding Title}" Margin="8,4,8,6" />
-              <ItemsControl ItemsSource="{Binding Kinds}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="vm:SidebarKindViewModel">
-                    <ListBoxItem Classes="navRow" IsSelected="{Binding IsSelected}"
-                                 Tapped="OnSidebarKindTapped">
-                      <StackPanel Orientation="Horizontal" Spacing="8">
-                        <PathIcon Data="{Binding IconKey, Converter={x:Static conv:IconKeyToGeometryConverter.Instance}}"
-                                  Width="13" Height="13" VerticalAlignment="Center" Opacity="0.8" />
-                        <TextBlock Text="{Binding DisplayName}" FontSize="12" VerticalAlignment="Center" />
-                      </StackPanel>
-                    </ListBoxItem>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </StackPanel>
-          </DataTemplate>
-        </ItemsControl.ItemTemplate>
-      </ItemsControl>
-    </ScrollViewer>
+    <Grid Grid.Column="0" RowDefinitions="Auto,*" Margin="0,0,8,0">
+
+      <TextBox Grid.Row="0" Classes="filterbox" Margin="4,0,4,8"
+                Text="{Binding SidebarFilter}" PlaceholderText="Filter resources…">
+        <TextBox.InnerLeftContent>
+          <PathIcon Data="{StaticResource MagnifyIconGeometry}" Width="11" Height="11" Opacity="0.5" Margin="8,0,0,0" />
+        </TextBox.InnerLeftContent>
+        <TextBox.InnerRightContent>
+          <Button Classes="chip" Padding="0" MinWidth="16" MinHeight="16" Margin="0,0,4,0"
+                  IsVisible="{Binding SidebarFilter, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}"
+                  Command="{Binding $parent[UserControl].((vm:ClusterTabViewModel)DataContext).ClearSidebarFilterCommand}"
+                  ToolTip.Tip="Clear filter">
+            <PathIcon Data="{StaticResource CloseIconGeometry}" Width="9" Height="9" />
+          </Button>
+        </TextBox.InnerRightContent>
+      </TextBox>
+
+      <ScrollViewer Grid.Row="1">
+        <ItemsControl ItemsSource="{Binding SidebarSections}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:SidebarSectionViewModel">
+              <StackPanel Margin="0,0,0,8" IsVisible="{Binding HasVisibleKinds}">
+                <Border Classes="sectionHeaderRow" Tapped="OnSidebarSectionTapped">
+                  <Grid ColumnDefinitions="Auto,*,Auto">
+                    <PathIcon Grid.Column="0" Data="{StaticResource ChevronRightIconGeometry}" Width="10" Height="10"
+                              Opacity="0.5" Margin="0,0,4,0" VerticalAlignment="Center"
+                              RenderTransformOrigin="50%,50%">
+                      <PathIcon.RenderTransform>
+                        <RotateTransform Angle="{Binding ShowKinds, Converter={x:Static conv:ExpandedToAngleConverter.Instance}}" />
+                      </PathIcon.RenderTransform>
+                    </PathIcon>
+                    <TextBlock Grid.Column="1" Classes="sectionHeader" Text="{Binding Title}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="2" Classes="sectionHeader" Text="{Binding KindCount}" Opacity="0.4" VerticalAlignment="Center" />
+                  </Grid>
+                </Border>
+                <ItemsControl ItemsSource="{Binding Kinds}" IsVisible="{Binding ShowKinds}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SidebarKindViewModel">
+                      <ListBoxItem Classes="navRow" IsSelected="{Binding IsSelected}" IsVisible="{Binding IsVisible}"
+                                   Tapped="OnSidebarKindTapped">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                          <PathIcon Data="{Binding IconKey, Converter={x:Static conv:IconKeyToGeometryConverter.Instance}}"
+                                    Width="13" Height="13" VerticalAlignment="Center" Opacity="0.8" />
+                          <TextBlock Text="{Binding DisplayName}" FontSize="12" VerticalAlignment="Center" />
+                        </StackPanel>
+                      </ListBoxItem>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </Grid>
 
     <!-- Content: raised layer, Files-style. -->
     <Border Grid.Column="1" Classes="layer">

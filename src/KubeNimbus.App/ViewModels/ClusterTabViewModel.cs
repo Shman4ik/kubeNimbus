@@ -39,6 +39,9 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     public ObservableCollection<SidebarSectionViewModel> SidebarSections { get; } = [];
 
+    [ObservableProperty]
+    private string _sidebarFilter = "";
+
     public ObservableCollection<string> NamespaceOptions { get; } = [AllNamespaces];
 
     [ObservableProperty]
@@ -128,6 +131,39 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             {
                 SidebarSections.Add(sections[title]);
             }
+        }
+
+        ApplySidebarFilter();
+    }
+
+    partial void OnSidebarFilterChanged(string value) => ApplySidebarFilter();
+
+    [RelayCommand]
+    private void ClearSidebarFilter() => SidebarFilter = "";
+
+    /// <summary>
+    /// Filters sidebar kinds by substring match on display name, live as the user
+    /// types. A section with at least one match force-expands (without touching
+    /// the user's own collapse choice, restored once the filter is cleared) so
+    /// filtering never hides a result inside a collapsed section.
+    /// </summary>
+    private void ApplySidebarFilter()
+    {
+        var query = SidebarFilter.Trim();
+        var filtering = query.Length > 0;
+
+        foreach (var section in SidebarSections)
+        {
+            var anyMatch = false;
+            foreach (var kind in section.Kinds)
+            {
+                var match = !filtering || kind.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase);
+                kind.IsVisible = match;
+                anyMatch |= match;
+            }
+
+            section.HasVisibleKinds = anyMatch;
+            section.IsForceExpanded = filtering && anyMatch;
         }
     }
 
