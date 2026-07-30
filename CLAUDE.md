@@ -154,6 +154,73 @@ the App layer.
   local clients over one upstream connection) and pumps bytes with the
   channel-byte-prefix framing by hand.
 
+## Metrics (metrics.k8s.io)
+
+`ClusterClient.Metrics.cs` reads the aggregated metrics API for pod (per
+container) and node usage. Three things are deliberate:
+
+- **The API version comes from discovery**, not a hardcoded `v1beta1` — same
+  rule as everywhere else: nothing about the server's API surface is assumed.
+- **Absence is a first-class outcome.** No metrics-server (group missing) and a
+  registered-but-dead metrics API (503/404) both raise
+  `MetricsUnavailableException`; the UI hides the CPU/Memory columns instead of
+  showing an error or a column full of dashes.
+- **This is the one thing the app polls** (15s). The metrics API is a
+  point-in-time aggregate over a ~30s window with no watch endpoint, so there is
+  nothing to stream; polling is scoped to the current list's `CancellationToken`
+  so it dies with the watch when the kind/namespace changes.
+
+Quantity strings (`"100m"`, `"128Mi"`, `"12345n"`, `"129e6"`) are parsed by
+`Quantity.cs` — a small AOT-safe reader, since `ResourceQuantity` from the k8s
+client only covers typed models and metrics/CRD objects arrive as raw JSON.
+The CPU/Memory `DataGridColumn`s are shown/hidden from `ClusterTabView`
+code-behind: a `DataGridColumn` isn't in the visual tree, so it never inherits
+the DataContext and cannot bind its `IsVisible`.
+
+## Helm release browsing (read-only)
+
+`ClusterClient.Helm.cs` reads Helm 3 releases **straight off the cluster** — no
+Helm binary, nothing shelled out. Helm stores each revision in a Secret of type
+`helm.sh/release.v1`, whose `release` value is base64(gzip(JSON)) with
+Kubernetes' own base64 on top: reading one means undoing two base64 layers and a
+gzip (`TryReadReleaseRecord`). A record that doesn't unwrap is skipped, never
+thrown — one broken release must not take out the list. The encoding is pinned
+by `HelmReleaseTests` (no cluster needed), because getting a layer wrong fails
+silently as "no releases".
+
+In the App layer the Helm entry is a **synthetic sidebar kind**
+(`SidebarGrouping.HelmReleaseDescriptor`, group `helm.sh` — no server serves
+that, so it can't collide with a discovered kind). Selecting it stops the watch
+and swaps the content area to the release list (`ClusterTabViewModel.IsHelmView`)
+rather than starting a watch, since releases aren't an API kind. The section is
+added at connect time **only when the cluster actually stores releases** (UI rule
+1) — a release installed later in the session appears after a reconnect. Opening
+a release docks a tab with its values, rendered manifest, notes and revision
+history; double-clicking a history row loads that revision. Everything is
+read-only: install/upgrade/rollback stays Helm's job.
+
+## RBAC access review
+
+`ClusterClient.Rbac.cs` answers two different questions two different ways, and
+the split matters:
+
+- **"What may I do here?"** goes to the API server's own
+  `SelfSubjectRulesReview`. Never re-implement RBAC evaluation locally — a local
+  evaluator silently disagrees with the server as soon as webhook authorizers,
+  aggregation or impersonation are in play. When the server reports
+  `incomplete`, the UI says so; a permissions list quietly missing entries is
+  worse than no list.
+- **"Where does this subject's access come from?"** has no server endpoint, so
+  it's assembled from (Cluster)RoleBindings whose subjects match, each binding's
+  role resolved to its rules. That's provenance, not an authorization decision —
+  and a binding whose role is gone is still listed, since a dangling binding is
+  exactly what you open this view to find.
+
+Entry points are command-palette only (UI rule 1): "Access review — my
+permissions" always, plus a subject review when the selected row is a
+ServiceAccount (the only RBAC subject that exists as an object — Users and
+Groups are just strings inside a binding).
+
 ## Sandbox cluster bootstrap (how tests get a real cluster)
 
 Integration tests run against a **real local Kubernetes cluster**, not mocks.
@@ -303,9 +370,10 @@ note in the PR which screenshots were fixture-only.
 - [x] pgNimbus visual design system ported (Theme.axaml, two-tone shell,
       brand-blue accent, MDI icon vectors).
 
-**Later phases (do NOT build now, but don't paint into a corner):** Helm release
-browsing, resource metrics/graphs, RBAC inspection, multi-cluster aggregated
-views.
+**Later phases (do NOT build now, but don't paint into a corner):** multi-cluster
+aggregated views. (Resource metrics, read-only Helm release browsing and RBAC
+access review shipped — see the sections above; usage graphs over time and
+"who can do X across the cluster" are still open.)
 
 **Non-goals forever:** cluster provisioning, in-cluster agents, telemetry.
 
@@ -375,8 +443,6 @@ but reworked the structure for a resource browser rather than a query tool:
 Not yet built (see "Later phases" above): Helm release browsing, resource
 metrics/graphs, RBAC inspection, multi-cluster aggregated views. The UX pass
 above is also not exhaustive — there's no finish line here, just diminishing
-returns; candidates for a follow-up iteration: coalescing duplicate CRD
-`Kind`s across API groups in the sidebar (e.g. `Backup` from both velero.io
-and postgresql.cnpg.io currently renders as two identical-looking rows),
+returns; candidates for a follow-up iteration:
 a "recently used kinds" section, transition/hover animation polish, and a
 proper win-x64 NativeAOT pass (this session could only verify linux-x64).

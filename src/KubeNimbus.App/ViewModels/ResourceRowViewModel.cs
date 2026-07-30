@@ -31,6 +31,18 @@ public sealed partial class ResourceRowViewModel : ObservableObject
     [ObservableProperty]
     private DateTimeOffset? _createdAt;
 
+    /// <summary>
+    /// Measured CPU/memory for this row, when the kind has any (pods and nodes)
+    /// and the cluster runs metrics-server. Rendered as text because the columns
+    /// are display-only; "—" is the deliberate stand-in for "not reported yet",
+    /// which is different from zero.
+    /// </summary>
+    [ObservableProperty]
+    private string _cpuText = "—";
+
+    [ObservableProperty]
+    private string _memoryText = "—";
+
     public ResourceRowViewModel(DynamicResource resource)
     {
         Key = resource.Key;
@@ -48,5 +60,19 @@ public sealed partial class ResourceRowViewModel : ObservableObject
         Name = resource.Name;
         CreatedAt = resource.CreationTimestamp;
         (Status, StatusHealth) = ResourceStatusSummary.Summarize(resource);
+    }
+
+    /// <summary>Applies one metrics.k8s.io sample; nulls render as "—".</summary>
+    public void ApplyUsage(long? cpuNanocores, long? memoryBytes)
+    {
+        CpuText = Quantity.FormatCpu(cpuNanocores);
+        MemoryText = Quantity.FormatMemory(memoryBytes);
+    }
+
+    /// <summary>Clears usage back to "—" (kind switched away from a metered kind, or metrics went away).</summary>
+    public void ClearUsage()
+    {
+        CpuText = "—";
+        MemoryText = "—";
     }
 }

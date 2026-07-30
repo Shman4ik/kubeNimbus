@@ -53,6 +53,10 @@
                           <PathIcon Data="{Binding IconKey, Converter={x:Static conv:IconKeyToGeometryConverter.Instance}}"
                                     Width="13" Height="13" VerticalAlignment="Center" Opacity="0.8" />
                           <TextBlock Text="{Binding DisplayName}" FontSize="12" VerticalAlignment="Center" />
+                          <!-- Only set when another kind in this section shares the name. -->
+                          <TextBlock Text="{Binding GroupLabel}" IsVisible="{Binding HasGroupLabel}"
+                                     FontSize="10.5" Opacity="0.45" VerticalAlignment="Center"
+                                     TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding GroupLabel}" />
                         </StackPanel>
                       </ListBoxItem>
                     </DataTemplate>
@@ -95,8 +99,8 @@
           </Button>
         </Grid>
 
-        <!-- Resource list -->
-        <Grid Grid.Row="1">
+        <!-- Resource list (hidden while the Helm browser is showing) -->
+        <Grid Grid.Row="1" IsVisible="{Binding !IsHelmView}">
           <DataGrid Name="ResourceGrid"
                      ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}"
                      IsReadOnly="True" GridLinesVisibility="Horizontal" CanUserResizeColumns="True"
@@ -137,6 +141,26 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
+              <!-- Usage columns: only meaningful for pods/nodes on a cluster with
+                   metrics-server, so ClusterTabView.ApplyMetricsColumns shows and
+                   hides them (a DataGridColumn isn't in the visual tree and can't
+                   bind to the DataContext). -->
+              <DataGridTemplateColumn Header="CPU" Width="Auto" MinWidth="70" IsVisible="False">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                    <TextBlock Text="{Binding CpuText}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                               FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Memory" Width="Auto" MinWidth="80" IsVisible="False">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                    <TextBlock Text="{Binding MemoryText}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                               FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
             </DataGrid.Columns>
           </DataGrid>
 
@@ -154,6 +178,91 @@
             <TextBlock Text="{Binding SelectedNamespace, StringFormat='in {0}'}" FontSize="12" Opacity="0.5"
                        HorizontalAlignment="Center"
                        IsVisible="{Binding SelectedKind.Descriptor.Namespaced}" />
+          </StackPanel>
+        </Grid>
+
+        <!-- Helm release browser: same slot as the resource list, shown when the
+             synthetic Helm sidebar entry is selected. Read-only. -->
+        <Grid Grid.Row="1" IsVisible="{Binding IsHelmView}">
+          <DataGrid Name="HelmGrid"
+                     ItemsSource="{Binding HelmReleases}" SelectedItem="{Binding SelectedHelmRelease}"
+                     IsReadOnly="True" GridLinesVisibility="Horizontal" CanUserResizeColumns="True"
+                     DoubleTapped="OnHelmRowDoubleTapped">
+            <DataGrid.Columns>
+              <DataGridTemplateColumn Header="" Width="28">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
+                    <Ellipse Classes="statusDot" Fill="{Binding StatusHealth, Converter={x:Static conv:HealthToBrushConverter.Instance}}"
+                             HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Namespace" Width="Auto" MinWidth="90">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
+                    <TextBlock Text="{Binding Namespace}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Namespace}" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Release" Width="2*" MinWidth="160">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
+                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Description}" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Chart" Width="*" MinWidth="140">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
+                    <TextBlock Text="{Binding Chart}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Chart}" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="App" Width="Auto" MinWidth="70">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
+                    <TextBlock Text="{Binding AppVersion}" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Rev" Width="Auto" MinWidth="50">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
+                    <TextBlock Text="{Binding Revision}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Status" Width="Auto" MinWidth="110">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
+                    <Border Classes="statusPill" Classes.ok="{Binding StatusHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=ok}"
+                            Classes.warn="{Binding StatusHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=warn}"
+                            Classes.error="{Binding StatusHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=error}"
+                            ToolTip.Tip="{Binding Description}">
+                      <TextBlock Text="{Binding Status}" FontSize="11.5" TextTrimming="CharacterEllipsis" />
+                    </Border>
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Updated" Width="Auto" MinWidth="150">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
+                    <TextBlock Text="{Binding Updated}" Opacity="0.75" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+            </DataGrid.Columns>
+          </DataGrid>
+
+          <TextBlock Text="Reading Helm releases…" Opacity="0.5" FontSize="13"
+                     HorizontalAlignment="Center" VerticalAlignment="Center"
+                     IsVisible="{Binding IsHelmLoading}" />
+
+          <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" MaxWidth="340"
+                      IsVisible="{Binding IsHelmEmpty}">
+            <PathIcon Data="{StaticResource LayersIconGeometry}" Width="28" Height="28" Opacity="0.25" HorizontalAlignment="Center" />
+            <TextBlock Text="No Helm releases found" FontWeight="SemiBold" FontSize="13" HorizontalAlignment="Center" Opacity="0.7" />
+            <TextBlock Text="{Binding SelectedNamespace, StringFormat='in {0}'}" FontSize="12" Opacity="0.5" HorizontalAlignment="Center" />
           </StackPanel>
         </Grid>
 

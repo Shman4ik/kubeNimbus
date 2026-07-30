@@ -16,11 +16,16 @@
         <ListBox Grid.Row="1" ItemsSource="{Binding Containers}" SelectedItem="{Binding SelectedContainer}">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:ContainerViewModel">
-              <StackPanel Orientation="Horizontal" Spacing="6">
-                <Ellipse Classes="statusDot" Classes.ok="{Binding Ready}" Classes.warn="{Binding !Ready}" />
-                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                <TextBlock Text="{Binding RestartCount, StringFormat='↻{0}'}" Opacity="0.6" FontSize="11"
-                           VerticalAlignment="Center" IsVisible="{Binding RestartCount, Converter={x:Static conv:CountToBoolConverter.Instance}}" />
+              <StackPanel Spacing="1" ToolTip.Tip="{Binding ResourcesTooltip}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <Ellipse Classes="statusDot" Classes.ok="{Binding Ready}" Classes.warn="{Binding !Ready}" />
+                  <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Text="{Binding RestartCount, StringFormat='↻{0}'}" Opacity="0.6" FontSize="11"
+                             VerticalAlignment="Center" IsVisible="{Binding RestartCount, Converter={x:Static conv:CountToBoolConverter.Instance}}" />
+                </StackPanel>
+                <!-- Measured usage; absent (and this line hidden) without metrics-server. -->
+                <TextBlock Text="{Binding UsageSummary}" IsVisible="{Binding HasUsage}" Margin="14,0,0,0"
+                           Opacity="0.55" FontSize="11" FontFamily="Cascadia Mono,Consolas,monospace" />
               </StackPanel>
             </DataTemplate>
           </ListBox.ItemTemplate>

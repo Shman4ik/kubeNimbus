@@ -46,6 +46,7 @@ public partial class ClusterTabView : UserControl
         }
 
         ApplyDockState();
+        ApplyMetricsColumns();
     }
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -53,6 +54,30 @@ public partial class ClusterTabView : UserControl
         if (e.PropertyName == nameof(ClusterTabViewModel.IsInspectorMaximized))
         {
             ApplyDockState();
+        }
+        else if (e.PropertyName == nameof(ClusterTabViewModel.AreMetricsVisible))
+        {
+            ApplyMetricsColumns();
+        }
+    }
+
+    /// <summary>
+    /// Shows the CPU/Memory columns only for kinds metrics.k8s.io reports on, on
+    /// clusters that actually run metrics-server. Code-behind because a
+    /// DataGridColumn isn't part of the visual tree: it never inherits the
+    /// DataContext, so <c>IsVisible="{Binding …}"</c> on a column can't work.
+    /// Matched on header text rather than index so reordering the columns in
+    /// XAML doesn't silently hide the wrong one.
+    /// </summary>
+    private void ApplyMetricsColumns()
+    {
+        var visible = Vm?.AreMetricsVisible == true;
+        foreach (var column in ResourceGrid.Columns)
+        {
+            if (column.Header is "CPU" or "Memory")
+            {
+                column.IsVisible = visible;
+            }
         }
     }
 
@@ -127,6 +152,9 @@ public partial class ClusterTabView : UserControl
     }
 
     private void OnRowDoubleTapped(object? sender, TappedEventArgs e) => Vm?.OpenSelectedCommand.Execute(null);
+
+    private void OnHelmRowDoubleTapped(object? sender, TappedEventArgs e) =>
+        Vm?.OpenSelectedHelmReleaseCommand.Execute(null);
 
     private void OnGridKeyDown(object? sender, KeyEventArgs e)
     {

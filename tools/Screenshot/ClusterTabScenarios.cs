@@ -50,6 +50,18 @@ internal static class ClusterTabScenarios
             }
 
             tab.SelectedRow = tab.Rows.FirstOrDefault();
+
+            // metrics-server can't be reached from an offline fixture client, so
+            // stand in for one poll's samples — otherwise the CPU/Memory columns
+            // never appear in a screenshot. Deterministic per row, not random,
+            // so screenshots stay diffable.
+            tab.AreMetricsVisible = true;
+            for (var i = 0; i < tab.Rows.Count; i++)
+            {
+                tab.Rows[i].ApplyUsage(
+                    cpuNanocores: (3 + i * 17) * 1_000_000L,
+                    memoryBytes: (48 + i * 37) * 1024L * 1024L);
+            }
         }
 
         // Setting SelectedNamespace above triggers the real RestartWatch(), which
@@ -119,6 +131,13 @@ internal static class ClusterTabScenarios
         detail.LogLines.Add("2026-07-20T08:45:01.220Z INFO  generated chargeback-summary report for merchant=north-store (391ms)");
         detail.IsFollowingLogs = true;
 
+        // Same reasoning as the list rows: no live metrics API behind the fixture,
+        // so the per-container usage line gets a stand-in sample.
+        for (var i = 0; i < detail.Containers.Count; i++)
+        {
+            detail.Containers[i].ApplyUsage((11 + i * 23) * 1_000_000L, (64 + i * 55) * 1024L * 1024L);
+        }
+
         detail.Events.Clear();
         foreach (var e in FixtureData.Events)
         {
@@ -127,6 +146,40 @@ internal static class ClusterTabScenarios
 
         tab.InspectorTabs.Add(detail);
         tab.SelectedInspectorTab = detail;
+        return tab;
+    }
+
+    /// <summary>
+    /// Helm release browser. The sidebar's Helm section only exists on clusters
+    /// that store releases, so the fixture adds it the same way
+    /// <c>AddHelmSectionIfPresentAsync</c> would after a successful probe.
+    /// </summary>
+    public static ClusterTabViewModel HelmReleases()
+    {
+        var tab = BaseTab();
+
+        var helmSection = new SidebarSectionViewModel(SidebarGrouping.HelmSection);
+        var helmKind = new SidebarKindViewModel(
+            SidebarGrouping.HelmReleaseDescriptor, SidebarGrouping.IconKeyFor(SidebarGrouping.HelmSection));
+        helmSection.Kinds.Add(helmKind);
+        tab.SidebarSections.Add(helmSection);
+
+        foreach (var kind in tab.SidebarSections.SelectMany(s => s.Kinds))
+        {
+            kind.IsSelected = ReferenceEquals(kind, helmKind);
+        }
+
+        tab.SelectedKind = helmKind;
+        tab.IsHelmView = true;
+        tab.AreMetricsVisible = false;
+
+        foreach (var release in FixtureData.HelmReleases)
+        {
+            tab.HelmReleases.Add(new HelmReleaseRowViewModel(release));
+        }
+
+        tab.SelectedHelmRelease = tab.HelmReleases.FirstOrDefault();
+        tab.IsHelmEmpty = tab.HelmReleases.Count == 0;
         return tab;
     }
 

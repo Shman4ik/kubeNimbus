@@ -45,6 +45,28 @@ public sealed record ResourceDescriptor(
         Group: "", Version: "v1", Kind: "Event", Plural: "events", SingularName: "event",
         Namespaced: true, ShortNames: ["ev"], Categories: []);
 
+    /// <summary>Well-known descriptor for core/v1 Secrets — used to read Helm release records.</summary>
+    public static readonly ResourceDescriptor Secrets = new(
+        Group: "", Version: "v1", Kind: "Secret", Plural: "secrets", SingularName: "secret",
+        Namespaced: true, ShortNames: [], Categories: []);
+
+    /// <summary>Well-known RBAC descriptors — used by the access-review panel to trace a subject's bindings.</summary>
+    public static readonly ResourceDescriptor RoleBindings = new(
+        Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "RoleBinding", Plural: "rolebindings",
+        SingularName: "rolebinding", Namespaced: true, ShortNames: [], Categories: []);
+
+    public static readonly ResourceDescriptor ClusterRoleBindings = new(
+        Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRoleBinding", Plural: "clusterrolebindings",
+        SingularName: "clusterrolebinding", Namespaced: false, ShortNames: [], Categories: []);
+
+    public static readonly ResourceDescriptor Roles = new(
+        Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role", Plural: "roles",
+        SingularName: "role", Namespaced: true, ShortNames: [], Categories: []);
+
+    public static readonly ResourceDescriptor ClusterRoles = new(
+        Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "ClusterRole", Plural: "clusterroles",
+        SingularName: "clusterrole", Namespaced: false, ShortNames: [], Categories: []);
+
     /// <summary>Well-known descriptor for core/v1 Namespaces — used to populate the namespace selector.</summary>
     public static readonly ResourceDescriptor Namespaces = new(
         Group: "", Version: "v1", Kind: "Namespace", Plural: "namespaces", SingularName: "namespace",

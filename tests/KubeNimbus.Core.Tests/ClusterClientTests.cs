@@ -74,6 +74,60 @@ public class ClusterClientTests
 
     [Test]
     [Timeout(60_000)]
+    public async Task PodMetrics_report_usage_when_the_cluster_has_metrics_server(CancellationToken ct)
+    {
+        using var client = await ConnectAsync();
+        if (client is null)
+        {
+            return;
+        }
+
+        // k3s ships metrics-server; a sandbox without it (plain kind) should
+        // still pass — the point is that absence is reported, never thrown as
+        // an unexpected error.
+        if (!await client.IsMetricsApiAvailableAsync(ct))
+        {
+            var reportedUnavailable = false;
+            try
+            {
+                await client.GetPodMetricsAsync("kube-system", ct);
+            }
+            catch (MetricsUnavailableException)
+            {
+                reportedUnavailable = true;
+            }
+
+            await Assert.That(reportedUnavailable).IsTrue();
+            return;
+        }
+
+        IReadOnlyList<PodMetrics> metrics;
+        try
+        {
+            metrics = await client.GetPodMetricsAsync("kube-system", ct);
+        }
+        catch (MetricsUnavailableException)
+        {
+            return; // API registered but metrics-server isn't serving yet
+        }
+
+        // Freshly started clusters can report an empty list until the first
+        // scrape window closes; when there is data it must be shaped correctly.
+        foreach (var pod in metrics)
+        {
+            await Assert.That(pod.Name).IsNotEmpty();
+            await Assert.That(pod.Namespace).IsEqualTo("kube-system");
+            foreach (var container in pod.Containers)
+            {
+                await Assert.That(container.Name).IsNotEmpty();
+                await Assert.That(container.CpuNanocores).IsNotNull();
+                await Assert.That(container.MemoryBytes).IsNotNull();
+            }
+        }
+    }
+
+    [Test]
+    [Timeout(60_000)]
     public async Task StreamPodLogs_returns_lines_and_honors_cancellation(CancellationToken ct)
     {
         using var client = await ConnectAsync();
