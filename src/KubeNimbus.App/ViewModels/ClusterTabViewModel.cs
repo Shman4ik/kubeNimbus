@@ -16,9 +16,12 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 {
     public const string AllNamespaces = "All namespaces";
 
+    /// <summary>metrics.k8s.io aggregates over a ~30s window, so polling faster than this buys nothing.</summary>
+    private static readonly TimeSpan MetricsPollInterval = TimeSpan.FromSeconds(15);
+
     private readonly Dictionary<string, ResourceRowViewModel> _rowsByKey = new(StringComparer.Ordinal);
     private CancellationTokenSource? _watchCts;
-    private DispatcherTimer? _metricsTimer;
+    private bool _metricsApiAvailable;
 
     public ClusterContext Context { get; }
 
@@ -37,11 +40,6 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     [ObservableProperty]
     private string? _connectionWarning;
-
-    /// <summary>Whether metrics.k8s.io is present on this cluster — gates the pod list's CPU/Mem column
-    /// and pod detail's usage readout, since metrics-server is an optional addon, not guaranteed.</summary>
-    [ObservableProperty]
-    private bool _isMetricsAvailable;
 
     public ObservableCollection<SidebarSectionViewModel> SidebarSections { get; } = [];
 
@@ -76,10 +74,52 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [ObservableProperty]
     private ResourceRowViewModel? _selectedRow;
 
+    /// <summary>
+    /// True when the CPU/Memory columns have anything to say: the cluster runs
+    /// metrics-server *and* the selected kind is one metrics.k8s.io reports on
+    /// (pods, nodes). The columns are shown/hidden from
+    /// <see cref="Views.ClusterTabView"/>'s code-behind — DataGridColumn lives
+    /// outside the visual tree, so it can't bind to the DataContext.
+    /// </summary>
+    [ObservableProperty]
+    private bool _areMetricsVisible;
+
+    /// <summary>
+    /// True while the Helm entry is selected: the content area swaps the generic
+    /// resource list for the release browser. Helm releases aren't an API kind,
+    /// so there's nothing to watch — they're read from their storage Secrets.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isHelmView;
+
+    public ObservableCollection<HelmReleaseRowViewModel> HelmReleases { get; } = [];
+
+    [ObservableProperty]
+    private HelmReleaseRowViewModel? _selectedHelmRelease;
+
+    [ObservableProperty]
+    private bool _isHelmLoading;
+
+    [ObservableProperty]
+    private bool _isHelmEmpty;
+
     public ObservableCollection<InspectorTabViewModelBase> InspectorTabs { get; } = [];
 
     [ObservableProperty]
     private InspectorTabViewModelBase? _selectedInspectorTab;
+
+    partial void OnSelectedInspectorTabChanged(InspectorTabViewModelBase? oldValue, InspectorTabViewModelBase? newValue)
+    {
+        if (oldValue is not null)
+        {
+            oldValue.IsActive = false;
+        }
+
+        if (newValue is not null)
+        {
+            newValue.IsActive = true;
+        }
+    }
 
     /// <summary>Expands the inspector to fill the content area (list hidden) — the
     /// fixed ~440px sidecar is too cramped for YAML editing or an exec terminal.</summary>
@@ -112,12 +152,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
             await BuildSidebarAsync();
             await RefreshNamespacesAsync();
-
-            IsMetricsAvailable = await client.IsMetricsApiAvailableAsync();
-            if (IsMetricsAvailable)
-            {
-                StartMetricsTimer();
-            }
+            await DetectMetricsApiAsync();
 
             var defaultKind = SidebarSections
                 .FirstOrDefault(s => s.Title == "Workloads")?.Kinds
@@ -168,7 +203,43 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             }
         }
 
+        SidebarGrouping.LabelAmbiguousKinds(SidebarSections);
+        await AddHelmSectionIfPresentAsync();
         ApplySidebarFilter();
+    }
+
+    /// <summary>
+    /// Adds the Helm section only when the cluster actually stores releases —
+    /// a Helm entry on a cluster that has never seen Helm is exactly the kind of
+    /// always-visible control the UI rules say to default to "no". The probe is
+    /// one field-selected Secret page of one item at connect time (never a full
+    /// decode); a release installed later in the session shows up on the next
+    /// connect/reconnect.
+    /// </summary>
+    private async Task AddHelmSectionIfPresentAsync()
+    {
+        if (Client is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (!await Client.HasHelmReleasesAsync())
+            {
+                return;
+            }
+
+            var section = new SidebarSectionViewModel(SidebarGrouping.HelmSection);
+            section.Kinds.Add(new SidebarKindViewModel(
+                SidebarGrouping.HelmReleaseDescriptor, SidebarGrouping.IconKeyFor(SidebarGrouping.HelmSection)));
+            SidebarSections.Add(section);
+        }
+        catch (Exception)
+        {
+            // No permission to list Secrets (a perfectly normal RBAC setup) —
+            // then there's no Helm browsing to offer, and that's not an error.
+        }
     }
 
     partial void OnSidebarFilterChanged(string value) => ApplySidebarFilter();
@@ -251,19 +322,127 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
 
         SelectedKind = kind;
+
+        if (kind.IsHelmReleases)
+        {
+            StopWatch();
+            IsHelmView = true;
+            AreMetricsVisible = false;
+            _ = RefreshHelmReleasesAsync();
+            return;
+        }
+
+        IsHelmView = false;
         RestartWatch();
     }
 
-    partial void OnSelectedNamespaceChanged(string value) => RestartWatch();
+    /// <summary>Reloads the Helm release list for the selected namespace.</summary>
+    [RelayCommand]
+    private async Task RefreshHelmReleasesAsync()
+    {
+        if (Client is null)
+        {
+            return;
+        }
+
+        IsHelmLoading = true;
+        IsHelmEmpty = false;
+        HelmReleases.Clear();
+        try
+        {
+            var @namespace = SelectedNamespace == AllNamespaces ? null : SelectedNamespace;
+            foreach (var release in await Client.ListHelmReleasesAsync(@namespace))
+            {
+                HelmReleases.Add(new HelmReleaseRowViewModel(release));
+            }
+
+            SelectedHelmRelease = HelmReleases.FirstOrDefault();
+        }
+        catch (Exception ex)
+        {
+            ConnectionWarning = $"Could not read Helm releases: {ex.Message}";
+        }
+        finally
+        {
+            IsHelmLoading = false;
+            IsHelmEmpty = HelmReleases.Count == 0;
+        }
+    }
+
+    /// <summary>Double-click / Enter on a release row: opens its values/manifest/notes/history tab.</summary>
+    [RelayCommand]
+    private void OpenSelectedHelmRelease()
+    {
+        if (SelectedHelmRelease is not { } row || Client is null)
+        {
+            return;
+        }
+
+        var key = $"helm:{row.Namespace}/{row.Name}";
+        var existing = InspectorTabs.FirstOrDefault(t => t.Key == key);
+        if (existing is not null)
+        {
+            existing.IsPreview = false;
+            SelectedInspectorTab = existing;
+            return;
+        }
+
+        AddInspectorTab(new HelmReleaseTabViewModel(Client, row.Release), replacePreview: false);
+    }
+
+    /// <summary>
+    /// Plenty of clusters run without metrics-server. Probing once at connect
+    /// (off the cached discovery catalog) keeps the usage columns out of the way
+    /// entirely on those clusters instead of showing a column full of dashes.
+    /// </summary>
+    private async Task DetectMetricsApiAsync()
+    {
+        try
+        {
+            _metricsApiAvailable = Client is not null && await Client.IsMetricsApiAvailableAsync();
+        }
+        catch (Exception)
+        {
+            _metricsApiAvailable = false; // usage is supplementary; never fail the connect over it
+        }
+    }
+
+    partial void OnSelectedNamespaceChanged(string value)
+    {
+        if (IsHelmView)
+        {
+            _ = RefreshHelmReleasesAsync();
+        }
+        else
+        {
+            RestartWatch();
+        }
+    }
 
     [RelayCommand]
-    private void Refresh() => RestartWatch();
+    private void Refresh()
+    {
+        if (IsHelmView)
+        {
+            _ = RefreshHelmReleasesAsync();
+        }
+        else
+        {
+            RestartWatch();
+        }
+    }
 
-    private void RestartWatch()
+    /// <summary>Cancels the current list watch (and the metrics poll riding on its token).</summary>
+    private void StopWatch()
     {
         _watchCts?.Cancel();
         _watchCts?.Dispose();
         _watchCts = null;
+    }
+
+    private void RestartWatch()
+    {
+        StopWatch();
 
         Rows.Clear();
         _rowsByKey.Clear();
@@ -272,16 +451,13 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         if (Client is null || SelectedKind is null)
         {
+            AreMetricsVisible = false;
             return;
         }
 
         var descriptor = SelectedKind.Descriptor;
+        AreMetricsVisible = _metricsApiAvailable && IsMeteredKind(descriptor);
         var @namespace = descriptor.Namespaced && SelectedNamespace != AllNamespaces ? SelectedNamespace : null;
-
-        if (descriptor.Kind == "Pod" && IsMetricsAvailable)
-        {
-            _ = RefreshPodMetricsAsync();
-        }
 
         _watchCts = new CancellationTokenSource();
         var token = _watchCts.Token;
@@ -308,6 +484,88 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 Dispatcher.UIThread.Post(() => Status = $"Watch ended: {ex.Message}");
             }
         }, token);
+
+        StartMetricsPolling(descriptor, @namespace, token);
+    }
+
+    /// <summary>Kinds metrics.k8s.io reports on. Everything else has no usage to show.</summary>
+    private static bool IsMeteredKind(ResourceDescriptor descriptor) =>
+        string.IsNullOrEmpty(descriptor.Group) && descriptor.Kind is "Pod" or "Node";
+
+    /// <summary>
+    /// Polls usage for the visible list alongside its watch, on the same
+    /// cancellation token — switching kind or namespace tears both down together.
+    /// The metrics API has no watch endpoint (it's a point-in-time aggregate),
+    /// so this is the one place the app polls rather than streams.
+    /// </summary>
+    private void StartMetricsPolling(ResourceDescriptor descriptor, string? @namespace, CancellationToken token)
+    {
+        if (!AreMetricsVisible || Client is not { } client)
+        {
+            return;
+        }
+
+        var pods = descriptor.Kind == "Pod";
+
+        _ = Task.Run(async () =>
+        {
+            using var timer = new PeriodicTimer(MetricsPollInterval);
+            try
+            {
+                while (!token.IsCancellationRequested)
+                {
+                    try
+                    {
+                        var samples = pods
+                            ? (await client.GetPodMetricsAsync(@namespace, token))
+                                .Select(m => (Key: m.Key, Cpu: m.CpuNanocores, Memory: m.MemoryBytes))
+                            : (await client.GetNodeMetricsAsync(token))
+                                .Select(m => (Key: $"/{m.Name}", Cpu: m.CpuNanocores, Memory: m.MemoryBytes));
+
+                        var byKey = samples.ToDictionary(s => s.Key, StringComparer.Ordinal);
+                        await Dispatcher.UIThread.InvokeAsync(() => ApplyUsage(byKey));
+                    }
+                    catch (MetricsUnavailableException)
+                    {
+                        // Registered but not serving (metrics-server down): stop
+                        // asking and take the columns away for this connection.
+                        await Dispatcher.UIThread.InvokeAsync(() =>
+                        {
+                            _metricsApiAvailable = false;
+                            AreMetricsVisible = false;
+                        });
+                        return;
+                    }
+                    catch (Exception) when (!token.IsCancellationRequested)
+                    {
+                        // Transient (throttling, a restarting metrics-server):
+                        // keep the last sample on screen and retry next tick.
+                    }
+
+                    await timer.WaitForNextTickAsync(token);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // normal on kind/namespace switch or disconnect
+            }
+        }, token);
+    }
+
+    /// <summary>Pushes one poll's samples onto the matching rows; rows with no sample fall back to "—".</summary>
+    private void ApplyUsage(Dictionary<string, (string Key, long? Cpu, long? Memory)> byKey)
+    {
+        foreach (var (key, row) in _rowsByKey)
+        {
+            if (byKey.TryGetValue(key, out var sample))
+            {
+                row.ApplyUsage(sample.Cpu, sample.Memory);
+            }
+            else
+            {
+                row.ClearUsage();
+            }
+        }
     }
 
     private void Apply(ResourceEvent<DynamicResource> evt)
@@ -346,41 +604,6 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
 
         RecomputeListEmpty();
-    }
-
-    /// <summary>
-    /// The metrics API is poll-only (no watch verb), so a timer is the whole
-    /// story here — refreshes only matter while the Pods kind is selected,
-    /// <see cref="RefreshPodMetricsAsync"/> is a no-op otherwise.
-    /// </summary>
-    private void StartMetricsTimer()
-    {
-        _metricsTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
-        _metricsTimer.Tick += (_, _) => _ = RefreshPodMetricsAsync();
-        _metricsTimer.Start();
-    }
-
-    private async Task RefreshPodMetricsAsync()
-    {
-        if (Client is null || !IsMetricsAvailable || SelectedKind?.Descriptor.Kind != "Pod")
-        {
-            return;
-        }
-
-        var @namespace = SelectedNamespace != AllNamespaces ? SelectedNamespace : null;
-        try
-        {
-            var metrics = await Client.GetPodMetricsAsync(@namespace);
-            var byKey = metrics.ToDictionary(m => m.Key, StringComparer.Ordinal);
-            foreach (var row in Rows)
-            {
-                row.UpdateMetrics(byKey.TryGetValue(row.Key, out var m) ? m : null);
-            }
-        }
-        catch (Exception)
-        {
-            // Metrics are supplementary; a transient failure shouldn't disrupt the list.
-        }
     }
 
     /// <summary>Double-click / Enter: promotes (or opens) a permanent tab. Pod → detail; anything else → YAML.</summary>
@@ -490,6 +713,45 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         AddInspectorTab(tab, replacePreview: false);
     }
 
+    /// <summary>
+    /// Opens the access-review tab. With no subject it answers "what may I do in
+    /// this namespace?" straight from the API server; with one (a selected
+    /// ServiceAccount) it also traces where that subject's access comes from.
+    /// </summary>
+    [RelayCommand]
+    private void OpenAccessReview(SubjectRef? subject)
+    {
+        if (Client is null)
+        {
+            return;
+        }
+
+        var @namespace = SelectedNamespace == AllNamespaces ? "default" : SelectedNamespace;
+        var key = subject is null
+            ? $"rbac:{@namespace}"
+            : $"rbac:{subject.Kind}/{subject.Namespace}/{subject.Name}";
+
+        var existing = InspectorTabs.FirstOrDefault(t => t.Key == key);
+        if (existing is not null)
+        {
+            existing.IsPreview = false;
+            SelectedInspectorTab = existing;
+            return;
+        }
+
+        AddInspectorTab(new RbacTabViewModel(Client, @namespace, subject), replacePreview: false);
+    }
+
+    /// <summary>
+    /// The selected row as an RBAC subject, when it is one — only ServiceAccounts
+    /// exist as objects (Users and Groups are just strings in a binding), so
+    /// that's the one kind that can seed a subject review from the list.
+    /// </summary>
+    public SubjectRef? SelectedRowAsSubject =>
+        SelectedKind?.Descriptor is { Group: "", Kind: "ServiceAccount" } && SelectedRow is { } row
+            ? new SubjectRef("ServiceAccount", row.Name, row.Namespace)
+            : null;
+
     [RelayCommand]
     private void SelectInspectorTab(InspectorTabViewModelBase tab) => SelectedInspectorTab = tab;
 
@@ -514,8 +776,6 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     public async ValueTask DisposeAsync()
     {
-        _metricsTimer?.Stop();
-
         if (_watchCts is not null)
         {
             await _watchCts.CancelAsync();

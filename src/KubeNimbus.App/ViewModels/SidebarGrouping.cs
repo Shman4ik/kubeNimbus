@@ -54,8 +54,48 @@ public static class SidebarGrouping
 
     public static readonly string[] SectionOrder = ["Workloads", "Network", "Config", "Storage", "CRDs"];
 
+    /// <summary>Sidebar section for Helm releases — appended after the discovery-driven ones.</summary>
+    public const string HelmSection = "Helm";
+
+    /// <summary>
+    /// Synthetic descriptor for the Helm sidebar entry. Helm releases are NOT an
+    /// API kind (they're Secrets of type helm.sh/release.v1), so discovery will
+    /// never produce this; it exists so the Helm entry can reuse
+    /// <see cref="SidebarKindViewModel"/> like every other row. The bogus group
+    /// is what <see cref="SidebarKindViewModel.IsHelmReleases"/> keys off, and it
+    /// can never collide with a real one (Kubernetes API groups are DNS names,
+    /// and no server serves "helm.sh").
+    /// </summary>
+    public static readonly ResourceDescriptor HelmReleaseDescriptor =
+        new("helm.sh", "v1", "Release", "releases", "release", Namespaced: true, ShortNames: [], Categories: []);
+
+    /// <summary>
+    /// Labels same-named kinds within a section with their API group. On a real
+    /// cluster the CRDs section routinely holds several kinds sharing a name
+    /// (Backup from velero.io and from postgresql.cnpg.io; Cluster from
+    /// cluster.x-k8s.io and from postgresql.cnpg.io) — without this they render
+    /// as identical rows that select different resources. Unambiguous kinds keep
+    /// an empty label so the common case stays uncluttered.
+    /// </summary>
+    public static void LabelAmbiguousKinds(IEnumerable<SidebarSectionViewModel> sections)
+    {
+        foreach (var section in sections)
+        {
+            foreach (var duplicates in section.Kinds
+                .GroupBy(k => k.Descriptor.Kind, StringComparer.Ordinal)
+                .Where(g => g.Count() > 1))
+            {
+                foreach (var kind in duplicates)
+                {
+                    kind.GroupLabel = kind.Descriptor.Group.Length > 0 ? kind.Descriptor.Group : "core";
+                }
+            }
+        }
+    }
+
     public static string IconKeyFor(string section) => section switch
     {
+        HelmSection => "LayersIconGeometry",
         "Workloads" => "CubeOutlineIconGeometry",
         "Network" => "LinkIconGeometry",
         "Config" => "TuneIconGeometry",

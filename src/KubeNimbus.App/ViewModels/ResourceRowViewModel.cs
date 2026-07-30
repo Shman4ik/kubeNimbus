@@ -31,10 +31,17 @@ public sealed partial class ResourceRowViewModel : ObservableObject
     [ObservableProperty]
     private DateTimeOffset? _createdAt;
 
-    /// <summary>Live "120m · 84Mi" usage readout from metrics.k8s.io — empty when unavailable or (for
-    /// non-Pod kinds/most rows before the first refresh tick) simply not populated.</summary>
+    /// <summary>
+    /// Measured CPU/memory for this row, when the kind has any (pods and nodes)
+    /// and the cluster runs metrics-server. Rendered as text because the columns
+    /// are display-only; "—" is the deliberate stand-in for "not reported yet",
+    /// which is different from zero.
+    /// </summary>
     [ObservableProperty]
-    private string _usageDisplay = "";
+    private string _cpuText = "—";
+
+    [ObservableProperty]
+    private string _memoryText = "—";
 
     public ResourceRowViewModel(DynamicResource resource)
     {
@@ -55,8 +62,17 @@ public sealed partial class ResourceRowViewModel : ObservableObject
         (Status, StatusHealth) = ResourceStatusSummary.Summarize(resource);
     }
 
-    /// <summary>Applies a metrics.k8s.io snapshot for this pod (see <see cref="ClusterTabViewModel"/>'s
-    /// poll timer), or clears the readout when metrics briefly have no entry for it.</summary>
-    public void UpdateMetrics(DynamicResource? podMetrics) =>
-        UsageDisplay = podMetrics is null ? "" : ResourceFormat.Combined(podMetrics.TotalCpuCores(), podMetrics.TotalMemoryBytes());
+    /// <summary>Applies one metrics.k8s.io sample; nulls render as "—".</summary>
+    public void ApplyUsage(long? cpuNanocores, long? memoryBytes)
+    {
+        CpuText = Quantity.FormatCpu(cpuNanocores);
+        MemoryText = Quantity.FormatMemory(memoryBytes);
+    }
+
+    /// <summary>Clears usage back to "—" (kind switched away from a metered kind, or metrics went away).</summary>
+    public void ClearUsage()
+    {
+        CpuText = "—";
+        MemoryText = "—";
+    }
 }

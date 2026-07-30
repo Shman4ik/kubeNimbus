@@ -154,13 +154,34 @@ public sealed partial class MainWindowViewModel : ObservableObject
             yield return new PaletteItem($"Open new tab: {ctx.Name}", "Connect", "PlusIconGeometry", () => _ = AddTabAsync(ctx));
         }
 
+        if (SelectedTab is { IsConnected: true } connected)
+        {
+            yield return new PaletteItem(
+                "Access review — my permissions",
+                $"RBAC · {connected.SelectedNamespace}", "AccountMultipleIconGeometry",
+                () => connected.OpenAccessReviewCommand.Execute(null));
+
+            if (connected.SelectedRowAsSubject is { } subject)
+            {
+                yield return new PaletteItem(
+                    $"Access review: {subject.Name}",
+                    "RBAC · ServiceAccount bindings", "AccountMultipleIconGeometry",
+                    () => connected.OpenAccessReviewCommand.Execute(subject));
+            }
+        }
+
         if (SelectedTab is { } current)
         {
             foreach (var section in current.SidebarSections)
             {
                 foreach (var kind in section.Kinds)
                 {
-                    yield return new PaletteItem(kind.DisplayName, $"{section.Title} · {current.Header}", section.IconKey,
+                    // Same-named kinds from different API groups carry their group
+                    // here too, or the palette shows two identical-looking entries.
+                    var subtitle = kind.HasGroupLabel
+                        ? $"{section.Title} · {kind.GroupLabel} · {current.Header}"
+                        : $"{section.Title} · {current.Header}";
+                    yield return new PaletteItem(kind.DisplayName, subtitle, section.IconKey,
                         () => current.SelectKindCommand.Execute(kind));
                 }
             }

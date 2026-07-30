@@ -48,13 +48,13 @@
         </ListBox.ItemsPanel>
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:ContainerViewModel">
-            <StackPanel Orientation="Horizontal" Spacing="6">
+            <StackPanel Orientation="Horizontal" Spacing="6" ToolTip.Tip="{Binding ResourcesTooltip}">
               <Ellipse Classes="statusDot" Classes.ok="{Binding Ready}" Classes.warn="{Binding !Ready}" />
               <TextBlock Text="{Binding Name}" FontSize="12.5" VerticalAlignment="Center" />
               <TextBlock Text="{Binding RestartCount, StringFormat='↻{0}'}" Opacity="0.6" FontSize="11"
                          VerticalAlignment="Center" IsVisible="{Binding RestartCount, Converter={x:Static conv:CountToBoolConverter.Instance}}" />
-              <TextBlock Text="{Binding UsageDisplay}" FontSize="11" Opacity="0.55" VerticalAlignment="Center"
-                         IsVisible="{Binding UsageDisplay, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}" />
+              <TextBlock Text="{Binding UsageSummary}" FontSize="11" Opacity="0.55" VerticalAlignment="Center"
+                         IsVisible="{Binding HasUsage}" />
             </StackPanel>
           </DataTemplate>
         </ListBox.ItemTemplate>

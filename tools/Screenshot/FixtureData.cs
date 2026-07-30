@@ -40,6 +40,25 @@ internal static class FixtureData
 
     public static readonly string[] Namespaces = ["default", "kube-system", "monitoring", "payments"];
 
+    /// <summary>
+    /// Helm releases as they'd come back from decoding release Secrets — built as
+    /// records rather than fixture JSON, since the decoding itself is covered by
+    /// unit tests and what this feeds is only the list rendering.
+    /// </summary>
+    public static IReadOnlyList<HelmRelease> HelmReleases { get; } =
+    [
+        new("checkout", "payments", 7, "deployed", "checkout", "1.4.2", "2.14.3",
+            new DateTimeOffset(2026, 7, 20, 8, 41, 2, TimeSpan.Zero), "Upgrade complete"),
+        new("payments-db", "payments", 3, "deployed", "postgresql", "15.5.1", "16.2.0",
+            new DateTimeOffset(2026, 7, 14, 17, 3, 44, TimeSpan.Zero), "Upgrade complete"),
+        new("ingress-nginx", "payments", 2, "failed", "ingress-nginx", "4.11.0", "1.11.1",
+            new DateTimeOffset(2026, 7, 11, 9, 22, 10, TimeSpan.Zero), "timed out waiting for the condition"),
+        new("kube-prometheus-stack", "payments", 12, "pending-upgrade", "kube-prometheus-stack", "62.3.0", "0.75.1",
+            new DateTimeOffset(2026, 7, 9, 12, 0, 5, TimeSpan.Zero), "Preparing upgrade"),
+        new("cert-manager", "payments", 4, "superseded", "cert-manager", "1.15.2", "1.15.2",
+            new DateTimeOffset(2026, 6, 28, 6, 15, 41, TimeSpan.Zero), "Superseded by revision 5"),
+    ];
+
     /// <summary>A realistic full catalog: built-ins across all four core sections plus ~70 CRD kinds.</summary>
     public static IReadOnlyList<ResourceDescriptor> BuildCatalog()
     {
@@ -119,6 +138,11 @@ internal static class FixtureData
             sections[title].Kinds.Add(new SidebarKindViewModel(descriptor, SidebarGrouping.IconKeyFor(descriptor, title)));
         }
 
-        return [.. SidebarGrouping.SectionOrder.Select(t => sections[t]).Where(s => s.Kinds.Count > 0)];
+        var result = SidebarGrouping.SectionOrder.Select(t => sections[t]).Where(s => s.Kinds.Count > 0).ToArray();
+
+        // Same step ClusterTabViewModel.BuildSidebarAsync runs — the CRD catalog
+        // fixture deliberately contains same-named kinds from different groups.
+        SidebarGrouping.LabelAmbiguousKinds(result);
+        return result;
     }
 }

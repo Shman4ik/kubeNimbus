@@ -53,6 +53,18 @@ internal static class ClusterTabScenarios
             }
 
             tab.SelectedRow = tab.Rows.FirstOrDefault();
+
+            // metrics-server can't be reached from an offline fixture client, so
+            // stand in for one poll's samples — otherwise the CPU/Memory columns
+            // never appear in a screenshot. Deterministic per row, not random,
+            // so screenshots stay diffable.
+            tab.AreMetricsVisible = true;
+            for (var i = 0; i < tab.Rows.Count; i++)
+            {
+                tab.Rows[i].ApplyUsage(
+                    cpuNanocores: (3 + i * 17) * 1_000_000L,
+                    memoryBytes: (48 + i * 37) * 1024L * 1024L);
+            }
         }
 
         // Setting SelectedNamespace above triggers the real RestartWatch(), which
@@ -78,12 +90,52 @@ internal static class ClusterTabScenarios
 
     private static void ApplyMetrics(ClusterTabViewModel tab)
     {
-        tab.IsMetricsAvailable = true;
+        tab.AreMetricsVisible = true;
         var byKey = FixtureData.PodMetrics.ToDictionary(m => m.Key, StringComparer.Ordinal);
         foreach (var row in tab.Rows)
         {
-            row.UpdateMetrics(byKey.TryGetValue(row.Key, out var m) ? m : null);
+            if (byKey.TryGetValue(row.Key, out var m))
+            {
+                var (cpu, memory) = SumContainerUsage(m);
+                row.ApplyUsage(cpu, memory);
+            }
+            else
+            {
+                row.ClearUsage();
+            }
         }
+    }
+
+    private static (long? Cpu, long? Memory) SumContainerUsage(DynamicResource podMetrics)
+    {
+        if (!podMetrics.Raw.TryGetProperty("containers", out var containers) || containers.ValueKind != System.Text.Json.JsonValueKind.Array)
+        {
+            return (null, null);
+        }
+
+        long cpu = 0, memory = 0;
+        var any = false;
+        foreach (var c in containers.EnumerateArray())
+        {
+            if (!c.TryGetProperty("usage", out var usage) || usage.ValueKind != System.Text.Json.JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            if (usage.TryGetProperty("cpu", out var cpuEl) && Quantity.ParseCpuNanocores(cpuEl.GetString()) is { } c1)
+            {
+                cpu += c1;
+                any = true;
+            }
+
+            if (usage.TryGetProperty("memory", out var memEl) && Quantity.ParseBytes(memEl.GetString()) is { } m1)
+            {
+                memory += m1;
+                any = true;
+            }
+        }
+
+        return any ? (cpu, memory) : (null, null);
     }
 
     /// <summary>Namespace/cluster-wide Events browsing — selecting the Events kind in the sidebar
@@ -167,24 +219,17 @@ internal static class ClusterTabScenarios
 
         detail.IsFollowingLogs = true;
 
+        // Same reasoning as the list rows: no live metrics API behind the fixture,
+        // so the per-container usage line gets a stand-in sample.
+        for (var i = 0; i < detail.Containers.Count; i++)
+        {
+            detail.Containers[i].ApplyUsage((11 + i * 23) * 1_000_000L, (64 + i * 55) * 1024L * 1024L);
+        }
+
         detail.Events.Clear();
         foreach (var e in FixtureData.Events)
         {
             detail.Events.Add(new EventRowViewModel(e));
-        }
-
-        detail.IsMetricsAvailable = true;
-        var metrics = FixtureData.PodMetrics.FirstOrDefault(m => m.Name == row.Name);
-        if (metrics is not null)
-        {
-            var usageByContainer = metrics.ContainerUsage().ToDictionary(c => c.Name, StringComparer.Ordinal);
-            foreach (var container in detail.Containers)
-            {
-                if (usageByContainer.TryGetValue(container.Name, out var usage))
-                {
-                    container.UsageDisplay = ResourceFormat.Combined(usage.CpuCores, usage.MemoryBytes);
-                }
-            }
         }
 
         tab.InspectorTabs.Add(detail);
@@ -219,6 +264,40 @@ internal static class ClusterTabScenarios
             detail.SelectedDetailTabIndex = 2;
         }
 
+        return tab;
+    }
+
+    /// <summary>
+    /// Helm release browser. The sidebar's Helm section only exists on clusters
+    /// that store releases, so the fixture adds it the same way
+    /// <c>AddHelmSectionIfPresentAsync</c> would after a successful probe.
+    /// </summary>
+    public static ClusterTabViewModel HelmReleases()
+    {
+        var tab = BaseTab();
+
+        var helmSection = new SidebarSectionViewModel(SidebarGrouping.HelmSection);
+        var helmKind = new SidebarKindViewModel(
+            SidebarGrouping.HelmReleaseDescriptor, SidebarGrouping.IconKeyFor(SidebarGrouping.HelmSection));
+        helmSection.Kinds.Add(helmKind);
+        tab.SidebarSections.Add(helmSection);
+
+        foreach (var kind in tab.SidebarSections.SelectMany(s => s.Kinds))
+        {
+            kind.IsSelected = ReferenceEquals(kind, helmKind);
+        }
+
+        tab.SelectedKind = helmKind;
+        tab.IsHelmView = true;
+        tab.AreMetricsVisible = false;
+
+        foreach (var release in FixtureData.HelmReleases)
+        {
+            tab.HelmReleases.Add(new HelmReleaseRowViewModel(release));
+        }
+
+        tab.SelectedHelmRelease = tab.HelmReleases.FirstOrDefault();
+        tab.IsHelmEmpty = tab.HelmReleases.Count == 0;
         return tab;
     }
 

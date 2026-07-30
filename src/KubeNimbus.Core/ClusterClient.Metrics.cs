@@ -1,154 +1,216 @@
 using System.Text.Json;
-using k8s.Models;
 
 namespace KubeNimbus.Core;
 
 /// <summary>
-/// metrics.k8s.io client (PodMetrics/NodeMetrics). This is a separate
-/// aggregated API group only present when metrics-server (or a compatible
-/// implementation) is installed, so every entry point here degrades
-/// gracefully — an empty list / null / false — instead of throwing when the
-/// group is absent, rather than crash a cluster that simply doesn't have it.
-/// The metrics API is poll-only (no watch verb), so callers re-call this on a
-/// timer instead of getting a live stream — see <c>ClusterTabViewModel</c>'s
-/// and <c>PodDetailTabViewModel</c>'s metrics refresh timers in the App layer.
+/// Live CPU/memory usage from the <c>metrics.k8s.io</c> aggregated API
+/// (metrics-server / OpenShift metrics). Reported per container for pods and
+/// per node, in whatever quantity strings the API server sends — parsed with
+/// <see cref="Quantity"/>.
 /// </summary>
+/// <remarks>
+/// The metrics API is optional: plenty of clusters run without metrics-server,
+/// and the aggregated API can also be registered but unavailable (backing
+/// deployment down). Both cases surface as
+/// <see cref="MetricsUnavailableException"/> rather than a hard failure, so the
+/// UI can hide the columns instead of showing an error. The group's version is
+/// taken from discovery instead of being hardcoded to v1beta1 — same principle
+/// as the rest of the app: nothing about the server's API surface is assumed.
+/// Responses are read with raw <see cref="JsonDocument"/> (as with discovery and
+/// watch frames); the shape is three fields deep and needs no source-gen model.
+/// </remarks>
 public sealed partial class ClusterClient
 {
-    private bool? _metricsApiAvailable;
-    private readonly SemaphoreSlim _metricsAvailabilityLock = new(1, 1);
+    private const string MetricsGroup = "metrics.k8s.io";
 
     /// <summary>
-    /// Whether metrics.k8s.io is registered on this cluster — checked via the
-    /// same discovery catalog every other resource kind uses (so no extra
-    /// round trip beyond the first call), cached for the life of the connection.
+    /// Discovery-reported version of the metrics API, or null when the cluster
+    /// has none. Cached with the catalog, so this is one cheap lookup after the
+    /// first call.
     /// </summary>
-    public async Task<bool> IsMetricsApiAvailableAsync(CancellationToken cancellationToken = default)
+    public async Task<string?> GetMetricsApiVersionAsync(CancellationToken cancellationToken = default)
     {
-        if (_metricsApiAvailable is { } cached)
-        {
-            return cached;
-        }
+        var catalog = await GetResourceCatalogAsync(cancellationToken).ConfigureAwait(false);
+        return catalog.FirstOrDefault(d => string.Equals(d.Group, MetricsGroup, StringComparison.Ordinal))?.Version;
+    }
 
-        await _metricsAvailabilityLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+    /// <summary>True when the cluster exposes <c>metrics.k8s.io</c> at all.</summary>
+    public async Task<bool> IsMetricsApiAvailableAsync(CancellationToken cancellationToken = default) =>
+        await GetMetricsApiVersionAsync(cancellationToken).ConfigureAwait(false) is not null;
+
+    /// <summary>
+    /// Per-container usage for every pod in a namespace (or all namespaces when
+    /// <paramref name="namespace"/> is null).
+    /// </summary>
+    public async Task<IReadOnlyList<PodMetrics>> GetPodMetricsAsync(
+        string? @namespace = null, CancellationToken cancellationToken = default)
+    {
+        var version = await RequireMetricsVersionAsync(cancellationToken).ConfigureAwait(false);
+        var path = @namespace is null
+            ? $"apis/{MetricsGroup}/{version}/pods"
+            : $"apis/{MetricsGroup}/{version}/namespaces/{Uri.EscapeDataString(@namespace)}/pods";
+
+        using var doc = await GetMetricsDocumentAsync(path, cancellationToken).ConfigureAwait(false);
+        var result = new List<PodMetrics>();
+        if (doc.RootElement.TryGetProperty("items", out var items) && items.ValueKind == JsonValueKind.Array)
         {
-            if (_metricsApiAvailable is { } cached2)
+            foreach (var item in items.EnumerateArray())
             {
-                return cached2;
+                result.Add(ReadPodMetrics(item));
             }
-
-            var catalog = await GetResourceCatalogAsync(cancellationToken).ConfigureAwait(false);
-            _metricsApiAvailable = catalog.Any(d => string.Equals(d.Group, ResourceDescriptor.PodMetrics.Group, StringComparison.Ordinal));
-            return _metricsApiAvailable.Value;
-        }
-        finally
-        {
-            _metricsAvailabilityLock.Release();
-        }
-    }
-
-    /// <summary>Current usage snapshot for every pod in a namespace (or all namespaces when null). Empty when metrics.k8s.io isn't present.</summary>
-    public async Task<IReadOnlyList<DynamicResource>> GetPodMetricsAsync(string? @namespace = null, CancellationToken cancellationToken = default)
-    {
-        if (!await IsMetricsApiAvailableAsync(cancellationToken).ConfigureAwait(false))
-        {
-            return [];
-        }
-
-        try
-        {
-            return await ListResourceOnceAsync(ResourceDescriptor.PodMetrics, @namespace, cancellationToken: cancellationToken).ConfigureAwait(false);
-        }
-        catch (HttpRequestException)
-        {
-            // The APIService can be registered but its backing metrics-server pod
-            // down/unreachable; treat that the same as "not installed".
-            return [];
-        }
-    }
-
-    /// <summary>Current usage snapshot for one pod, or null when unavailable (no metrics.k8s.io, or the pod has none yet).</summary>
-    public async Task<DynamicResource?> GetPodMetricsAsync(string @namespace, string name, CancellationToken cancellationToken = default)
-    {
-        if (!await IsMetricsApiAvailableAsync(cancellationToken).ConfigureAwait(false))
-        {
-            return null;
-        }
-
-        try
-        {
-            return await ReadResourceAsync(ResourceDescriptor.PodMetrics, @namespace, name, cancellationToken).ConfigureAwait(false);
-        }
-        catch (HttpRequestException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>Current usage snapshot for every node. Empty when metrics.k8s.io isn't present.</summary>
-    public async Task<IReadOnlyList<DynamicResource>> GetNodeMetricsAsync(CancellationToken cancellationToken = default)
-    {
-        if (!await IsMetricsApiAvailableAsync(cancellationToken).ConfigureAwait(false))
-        {
-            return [];
-        }
-
-        try
-        {
-            return await ListResourceOnceAsync(ResourceDescriptor.NodeMetrics, cancellationToken: cancellationToken).ConfigureAwait(false);
-        }
-        catch (HttpRequestException)
-        {
-            return [];
-        }
-    }
-}
-
-/// <summary>Field readers for PodMetrics/NodeMetrics objects fetched as <see cref="DynamicResource"/>.</summary>
-public static class MetricsFields
-{
-    /// <summary>Per-container (name, cpu cores, memory bytes) usage, parsed with the official client's <see cref="ResourceQuantity"/> parser.</summary>
-    public static IReadOnlyList<(string Name, double CpuCores, long MemoryBytes)> ContainerUsage(this DynamicResource podMetrics)
-    {
-        if (!podMetrics.Raw.TryGetProperty("containers", out var containers) || containers.ValueKind != JsonValueKind.Array)
-        {
-            return [];
-        }
-
-        var result = new List<(string, double, long)>();
-        foreach (var c in containers.EnumerateArray())
-        {
-            var name = c.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
-            var (cpu, mem) = ReadUsage(c);
-            result.Add((name, cpu, mem));
         }
 
         return result;
     }
 
-    /// <summary>Sum of every container's CPU usage, in cores.</summary>
-    public static double TotalCpuCores(this DynamicResource podMetrics) => podMetrics.ContainerUsage().Sum(c => c.CpuCores);
-
-    /// <summary>Sum of every container's memory usage, in bytes.</summary>
-    public static long TotalMemoryBytes(this DynamicResource podMetrics) => podMetrics.ContainerUsage().Sum(c => c.MemoryBytes);
-
-    /// <summary>Node-level (cpu cores, memory bytes) usage.</summary>
-    public static (double CpuCores, long MemoryBytes) NodeUsage(this DynamicResource nodeMetrics) => ReadUsage(nodeMetrics.Raw);
-
-    private static (double CpuCores, long MemoryBytes) ReadUsage(JsonElement withUsage)
+    /// <summary>Usage for one pod, or null when metrics for it aren't available yet (just-started pods).</summary>
+    public async Task<PodMetrics?> GetPodMetricsAsync(
+        string @namespace, string podName, CancellationToken cancellationToken = default)
     {
-        if (!withUsage.TryGetProperty("usage", out var usage) || usage.ValueKind != JsonValueKind.Object)
+        var version = await RequireMetricsVersionAsync(cancellationToken).ConfigureAwait(false);
+        var path = $"apis/{MetricsGroup}/{version}/namespaces/{Uri.EscapeDataString(@namespace)}/pods/{Uri.EscapeDataString(podName)}";
+
+        using var response = await SendRequestAsync(
+            HttpMethod.Get, path, content: null, HttpCompletionOption.ResponseContentRead, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (response.StatusCode is System.Net.HttpStatusCode.NotFound)
         {
-            return (0, 0);
+            return null;
         }
 
-        var cpu = usage.TryGetProperty("cpu", out var c) && c.ValueKind == JsonValueKind.String
-            ? new ResourceQuantity(c.GetString()!).ToDouble()
-            : 0;
-        var memory = usage.TryGetProperty("memory", out var m) && m.ValueKind == JsonValueKind.String
-            ? (long)new ResourceQuantity(m.GetString()!).ToDouble()
-            : 0L;
+        EnsureMetricsSuccess(response);
+        var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+        return ReadPodMetrics(doc.RootElement);
+    }
+
+    /// <summary>Usage for every node.</summary>
+    public async Task<IReadOnlyList<NodeMetrics>> GetNodeMetricsAsync(CancellationToken cancellationToken = default)
+    {
+        var version = await RequireMetricsVersionAsync(cancellationToken).ConfigureAwait(false);
+
+        using var doc = await GetMetricsDocumentAsync($"apis/{MetricsGroup}/{version}/nodes", cancellationToken).ConfigureAwait(false);
+        var result = new List<NodeMetrics>();
+        if (doc.RootElement.TryGetProperty("items", out var items) && items.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in items.EnumerateArray())
+            {
+                var usage = ReadUsage(item);
+                result.Add(new NodeMetrics(ReadName(item), usage.Cpu, usage.Memory));
+            }
+        }
+
+        return result;
+    }
+
+    private async Task<string> RequireMetricsVersionAsync(CancellationToken ct) =>
+        await GetMetricsApiVersionAsync(ct).ConfigureAwait(false)
+        ?? throw new MetricsUnavailableException(
+            "This cluster does not expose metrics.k8s.io — install metrics-server to see CPU/memory usage.");
+
+    private async Task<JsonDocument> GetMetricsDocumentAsync(string path, CancellationToken ct)
+    {
+        using var response = await SendRequestAsync(
+            HttpMethod.Get, path, content: null, HttpCompletionOption.ResponseContentRead, ct).ConfigureAwait(false);
+        EnsureMetricsSuccess(response);
+        var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        return await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// A registered-but-broken metrics API answers 503 (no backing endpoints)
+    /// — that's "unavailable", not a crash, so it maps to the same exception as
+    /// a cluster with no metrics API at all.
+    /// </summary>
+    private static void EnsureMetricsSuccess(HttpResponseMessage response)
+    {
+        if (response.StatusCode is System.Net.HttpStatusCode.ServiceUnavailable
+            or System.Net.HttpStatusCode.NotFound)
+        {
+            throw new MetricsUnavailableException(
+                $"The metrics API is registered but not serving ({(int)response.StatusCode}); is metrics-server healthy?");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    private static PodMetrics ReadPodMetrics(JsonElement item)
+    {
+        var containers = new List<ContainerMetrics>();
+        if (item.TryGetProperty("containers", out var cs) && cs.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var c in cs.EnumerateArray())
+            {
+                var usage = ReadUsage(c);
+                containers.Add(new ContainerMetrics(ReadName(c), usage.Cpu, usage.Memory));
+            }
+        }
+
+        return new PodMetrics(ReadNamespace(item), ReadName(item), containers);
+    }
+
+    private static string ReadName(JsonElement item) =>
+        item.TryGetProperty("name", out var direct) && direct.ValueKind == JsonValueKind.String
+            ? direct.GetString() ?? ""
+            : item.TryGetProperty("metadata", out var meta) && meta.TryGetProperty("name", out var n)
+                ? n.GetString() ?? ""
+                : "";
+
+    private static string? ReadNamespace(JsonElement item) =>
+        item.TryGetProperty("metadata", out var meta) && meta.TryGetProperty("namespace", out var ns)
+            ? ns.GetString()
+            : null;
+
+    private static (long? Cpu, long? Memory) ReadUsage(JsonElement owner)
+    {
+        if (!owner.TryGetProperty("usage", out var usage) || usage.ValueKind != JsonValueKind.Object)
+        {
+            return (null, null);
+        }
+
+        var cpu = usage.TryGetProperty("cpu", out var c) ? Quantity.ParseCpuNanocores(c.GetString()) : null;
+        var memory = usage.TryGetProperty("memory", out var m) ? Quantity.ParseBytes(m.GetString()) : null;
         return (cpu, memory);
     }
 }
+
+/// <summary>Measured usage of one container, in nanocores and bytes (null when the API omitted it).</summary>
+public sealed record ContainerMetrics(string Name, long? CpuNanocores, long? MemoryBytes);
+
+/// <summary>Measured usage of one pod — the API reports per container, the pod total is the sum.</summary>
+public sealed record PodMetrics(string? Namespace, string Name, IReadOnlyList<ContainerMetrics> Containers)
+{
+    public string Key => $"{Namespace}/{Name}";
+
+    /// <summary>Sum across containers, null only when no container reported a value.</summary>
+    public long? CpuNanocores => Sum(c => c.CpuNanocores);
+
+    public long? MemoryBytes => Sum(c => c.MemoryBytes);
+
+    private long? Sum(Func<ContainerMetrics, long?> select)
+    {
+        long total = 0;
+        var any = false;
+        foreach (var container in Containers)
+        {
+            if (select(container) is { } value)
+            {
+                total += value;
+                any = true;
+            }
+        }
+
+        return any ? total : null;
+    }
+}
+
+/// <summary>Measured usage of one node.</summary>
+public sealed record NodeMetrics(string Name, long? CpuNanocores, long? MemoryBytes);
+
+/// <summary>
+/// Raised when the cluster has no usable <c>metrics.k8s.io</c> — either not
+/// registered at all, or registered with no healthy backend. Callers hide the
+/// usage UI rather than treating it as an error.
+/// </summary>
+public sealed class MetricsUnavailableException(string message) : Exception(message);

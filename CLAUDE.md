@@ -54,9 +54,9 @@ choice must be AOT/trimming-compatible from day one.
    through server-side apply with a field manager, showing conflicts. Events,
    `metrics.k8s.io`, and owner-reference navigation (pod → replicaset →
    deployment) are core, not afterthoughts — **shipped**: `ClusterClient.Metrics.cs`
-   queries `metrics.k8s.io/v1beta1` through the same generic list/get path as
-   any other resource kind, gated by `IsMetricsApiAvailableAsync` (checked via
-   the discovery catalog, same as any API group) so a cluster without
+   queries `metrics.k8s.io` with the version read from **discovery** (never
+   hardcoded to `v1beta1`), raised as `MetricsUnavailableException` when the
+   group is absent or registered-but-unhealthy, so a cluster without
    metrics-server degrades to no CPU/Mem column rather than an error.
 4. **No credentials ever persisted by the app.** Kubeconfig is the single source
    of truth (all `$KUBECONFIG` entries + `~/.kube/config`); exec-plugin auth
@@ -81,11 +81,16 @@ choice must be AOT/trimming-compatible from day one.
    sidebar's filter box + collapsible sections (CRDs collapsed by default,
    `SidebarSectionViewModel.IsExpanded`) are load-bearing UX, not optional
    polish — any new sidebar content must stay filterable and collapsible.
-7. **The inspector panel is responsive-width, not a fixed pixel sidecar,**
-   and any inspector tab kind (pod detail, YAML, exec, port-forward) can be
-   maximized to fill the content area (`ClusterTabViewModel.IsInspectorMaximized`)
-   — YAML editing and an exec terminal both need more room than a quick
-   pod-detail glance does.
+7. **The inspector docks along the bottom (Lens-style), not in a side sidecar.**
+   The resource list fills the content area's width; opening a resource docks a
+   detail/logs/exec/YAML tab under it, full-width, so logs and terminals read on
+   long lines instead of wrapping in a cramped column. A draggable `GridSplitter`
+   resizes the dock and any inspector tab kind can be maximized to fill the
+   content area (`ClusterTabViewModel.IsInspectorMaximized`). The three dock
+   states (hidden / split / maximized) are driven from `ClusterTabView`'s
+   code-behind `ApplyDockState` by mutating the content grid's row heights —
+   a `GridSplitter` mutates `RowDefinition.Height` directly and would fight a
+   one-way height binding, which is why this is code-behind, not XAML.
 8. **Every list/panel state gets an explicit visual** — loading, empty,
    disconnected, conflict, delete-confirm — never a blank rectangle that
    looks like a bug. `ClusterTabViewModel.IsListLoading`/`IsListEmpty` is the
@@ -152,6 +157,73 @@ the App layer.
   websocket port-forward channel framing doesn't support multiplexing several
   local clients over one upstream connection) and pumps bytes with the
   channel-byte-prefix framing by hand.
+
+## Metrics (metrics.k8s.io)
+
+`ClusterClient.Metrics.cs` reads the aggregated metrics API for pod (per
+container) and node usage. Three things are deliberate:
+
+- **The API version comes from discovery**, not a hardcoded `v1beta1` — same
+  rule as everywhere else: nothing about the server's API surface is assumed.
+- **Absence is a first-class outcome.** No metrics-server (group missing) and a
+  registered-but-dead metrics API (503/404) both raise
+  `MetricsUnavailableException`; the UI hides the CPU/Memory columns instead of
+  showing an error or a column full of dashes.
+- **This is the one thing the app polls** (15s). The metrics API is a
+  point-in-time aggregate over a ~30s window with no watch endpoint, so there is
+  nothing to stream; polling is scoped to the current list's `CancellationToken`
+  so it dies with the watch when the kind/namespace changes.
+
+Quantity strings (`"100m"`, `"128Mi"`, `"12345n"`, `"129e6"`) are parsed by
+`Quantity.cs` — a small AOT-safe reader, since `ResourceQuantity` from the k8s
+client only covers typed models and metrics/CRD objects arrive as raw JSON.
+The CPU/Memory `DataGridColumn`s are shown/hidden from `ClusterTabView`
+code-behind: a `DataGridColumn` isn't in the visual tree, so it never inherits
+the DataContext and cannot bind its `IsVisible`.
+
+## Helm release browsing (read-only)
+
+`ClusterClient.Helm.cs` reads Helm 3 releases **straight off the cluster** — no
+Helm binary, nothing shelled out. Helm stores each revision in a Secret of type
+`helm.sh/release.v1`, whose `release` value is base64(gzip(JSON)) with
+Kubernetes' own base64 on top: reading one means undoing two base64 layers and a
+gzip (`TryReadReleaseRecord`). A record that doesn't unwrap is skipped, never
+thrown — one broken release must not take out the list. The encoding is pinned
+by `HelmReleaseTests` (no cluster needed), because getting a layer wrong fails
+silently as "no releases".
+
+In the App layer the Helm entry is a **synthetic sidebar kind**
+(`SidebarGrouping.HelmReleaseDescriptor`, group `helm.sh` — no server serves
+that, so it can't collide with a discovered kind). Selecting it stops the watch
+and swaps the content area to the release list (`ClusterTabViewModel.IsHelmView`)
+rather than starting a watch, since releases aren't an API kind. The section is
+added at connect time **only when the cluster actually stores releases** (UI rule
+1) — a release installed later in the session appears after a reconnect. Opening
+a release docks a tab with its values, rendered manifest, notes and revision
+history; double-clicking a history row loads that revision. Everything is
+read-only: install/upgrade/rollback stays Helm's job.
+
+## RBAC access review
+
+`ClusterClient.Rbac.cs` answers two different questions two different ways, and
+the split matters:
+
+- **"What may I do here?"** goes to the API server's own
+  `SelfSubjectRulesReview`. Never re-implement RBAC evaluation locally — a local
+  evaluator silently disagrees with the server as soon as webhook authorizers,
+  aggregation or impersonation are in play. When the server reports
+  `incomplete`, the UI says so; a permissions list quietly missing entries is
+  worse than no list.
+- **"Where does this subject's access come from?"** has no server endpoint, so
+  it's assembled from (Cluster)RoleBindings whose subjects match, each binding's
+  role resolved to its rules. That's provenance, not an authorization decision —
+  and a binding whose role is gone is still listed, since a dangling binding is
+  exactly what you open this view to find.
+
+Entry points are command-palette only (UI rule 1): "Access review — my
+permissions" always, plus a subject review when the selected row is a
+ServiceAccount (the only RBAC subject that exists as an object — Users and
+Groups are just strings inside a binding).
 
 ## Sandbox cluster bootstrap (how tests get a real cluster)
 
@@ -305,10 +377,10 @@ note in the PR which screenshots were fixture-only.
 - [x] pgNimbus visual design system ported (Theme.axaml, two-tone shell,
       brand-blue accent, MDI icon vectors).
 
-**Later phases (do NOT build now, but don't paint into a corner):** Helm release
-browsing, metrics *graphs/sparklines/history* (a one-shot poll-refreshed CPU/Mem
-readout shipped this session — see Current status; time-series charting is
-still later-phase), RBAC inspection, multi-cluster aggregated views.
+**Later phases (do NOT build now, but don't paint into a corner):** multi-cluster
+aggregated views. (Resource metrics, read-only Helm release browsing and RBAC
+access review shipped — see the sections above; usage graphs over time and
+"who can do X across the cluster" are still open.)
 
 **Non-goals forever:** cluster provisioning, in-cluster agents, telemetry.
 
@@ -348,9 +420,16 @@ but reworked the structure for a resource browser rather than a query tool:
   warn as a merely-Pending pod; explicit loading/empty states
   (`IsListLoading`/`IsListEmpty`) and an inline disconnected-watch banner
   replace what used to be an undifferentiated blank rectangle.
-- Inspector panel is now a responsive-width split (not a fixed 440px) with a
-  maximize toggle that fills the content area — YAML editing and the exec
-  terminal both needed more room than a pod-detail glance.
+- Inspector panel was reworked from a cramped right-side sidecar into a
+  Lens-style **bottom dock**: the resource list spans the full content width and
+  detail/logs/exec/YAML tabs dock beneath it, so logs and the exec terminal read
+  on full-width lines instead of a narrow column. A draggable `GridSplitter`
+  resizes the dock (floored so it can't collapse to a sliver) and the maximize
+  toggle still fills the whole content area. Row heights for the hidden/split/
+  maximized states live in `ClusterTabView.ApplyDockState` (code-behind, since a
+  `GridSplitter` fights a one-way height binding). Dock tab headers show an
+  active-tab highlight (`InspectorTabViewModelBase.IsActive`); Fluent's oversized
+  24px `TabItem` headers were pulled down to body scale in `Theme.axaml`.
 - YAML editor gained syntax highlighting (hand-written `.xshd`, AvaloniaEdit
   ships none for YAML) — see `Editing/YamlSyntaxHighlighting.cs`.
 - A keyboard-shortcuts cheat sheet (F1 / the command bar's `?` button)
@@ -368,7 +447,7 @@ but reworked the structure for a resource browser rather than a query tool:
   surface (real CRD status shapes, real watch reconnect behavior under the
   new empty/loading states, actual terminal ANSI output from a real shell).
 
-**Logs/events/telemetry/env-secrets pass (this session):** closed the gaps
+**Logs/events/telemetry/env-secrets pass:** closed the gaps
 called out at the end of the UX polish pass — logs, events, and telemetry
 were half-built or missing entirely; this pass filled them in and added
 Kubernetes' other classic on-call surface (env vars/secrets):
@@ -450,14 +529,16 @@ Kubernetes' other classic on-call surface (env vars/secrets):
   A real-cluster pass — ideally once with metrics-server, once without — is
   still worth doing before/soon after merge.
 
-Not yet built (see "Later phases" above): Helm release browsing, metrics
-graphs/history, RBAC inspection, multi-cluster aggregated views. The UX pass
-and this session's logs/events/telemetry/env-secrets pass are both not
-exhaustive — there's no finish line here, just diminishing returns;
-candidates for a follow-up iteration: coalescing duplicate CRD `Kind`s across
-API groups in the sidebar (e.g. `Backup` from both velero.io and
-postgresql.cnpg.io currently renders as two identical-looking rows), a
-"recently used kinds" section, transition/hover animation polish, a proper
-win-x64 NativeAOT pass (still only linux-x64 has ever been verified), a live
-k3s pass for this session's changes, and node-level CPU/Mem (only pod-level
-shipped).
+Not yet built (see "Later phases" above): metrics graphs/history,
+multi-cluster aggregated views. The UX pass and the logs/events/telemetry/
+env-secrets pass are both not exhaustive — there's no finish line here, just
+diminishing returns; candidates for a follow-up iteration: coalescing
+duplicate CRD `Kind`s across API groups in the sidebar (e.g. `Backup` from
+both velero.io and postgresql.cnpg.io currently renders as two
+identical-looking rows — though same-named kinds within a single section
+now carry a disambiguating group label, see "Sidebar: same-named kinds"
+above), a "recently used kinds" section, transition/hover animation polish,
+a proper win-x64 NativeAOT pass (still only linux-x64 has ever been
+verified), a live k3s pass, and node-level CPU/Mem (only pod-level shipped
+by the logs/events/telemetry pass; node-level was added separately by the
+Helm/RBAC/metrics pass above — see "Live CPU/memory from metrics.k8s.io").
