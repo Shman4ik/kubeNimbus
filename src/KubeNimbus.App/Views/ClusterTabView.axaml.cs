@@ -153,6 +153,9 @@ public partial class ClusterTabView : UserControl
 
     private void OnRowDoubleTapped(object? sender, TappedEventArgs e) => Vm?.OpenSelectedCommand.Execute(null);
 
+    private void OnHelmRowDoubleTapped(object? sender, TappedEventArgs e) =>
+        Vm?.OpenSelectedHelmReleaseCommand.Execute(null);
+
     private void OnGridKeyDown(object? sender, KeyEventArgs e)
     {
         if (Vm is not { } vm)

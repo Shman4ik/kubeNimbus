@@ -24,6 +24,9 @@
     <DataTemplate DataType="vm:YamlEditorTabViewModel">
       <views:YamlEditorView />
     </DataTemplate>
+    <DataTemplate DataType="vm:HelmReleaseTabViewModel">
+      <views:HelmReleaseView />
+    </DataTemplate>
     <DataTemplate DataType="vm:ExecTabViewModel">
       <views:ExecView />
     </DataTemplate>

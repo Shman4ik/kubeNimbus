@@ -149,6 +149,40 @@ internal static class ClusterTabScenarios
         return tab;
     }
 
+    /// <summary>
+    /// Helm release browser. The sidebar's Helm section only exists on clusters
+    /// that store releases, so the fixture adds it the same way
+    /// <c>AddHelmSectionIfPresentAsync</c> would after a successful probe.
+    /// </summary>
+    public static ClusterTabViewModel HelmReleases()
+    {
+        var tab = BaseTab();
+
+        var helmSection = new SidebarSectionViewModel(SidebarGrouping.HelmSection);
+        var helmKind = new SidebarKindViewModel(
+            SidebarGrouping.HelmReleaseDescriptor, SidebarGrouping.IconKeyFor(SidebarGrouping.HelmSection));
+        helmSection.Kinds.Add(helmKind);
+        tab.SidebarSections.Add(helmSection);
+
+        foreach (var kind in tab.SidebarSections.SelectMany(s => s.Kinds))
+        {
+            kind.IsSelected = ReferenceEquals(kind, helmKind);
+        }
+
+        tab.SelectedKind = helmKind;
+        tab.IsHelmView = true;
+        tab.AreMetricsVisible = false;
+
+        foreach (var release in FixtureData.HelmReleases)
+        {
+            tab.HelmReleases.Add(new HelmReleaseRowViewModel(release));
+        }
+
+        tab.SelectedHelmRelease = tab.HelmReleases.FirstOrDefault();
+        tab.IsHelmEmpty = tab.HelmReleases.Count == 0;
+        return tab;
+    }
+
     public static ClusterTabViewModel YamlEditor()
     {
         var tab = BaseTab();

@@ -54,8 +54,24 @@ public static class SidebarGrouping
 
     public static readonly string[] SectionOrder = ["Workloads", "Network", "Config", "Storage", "CRDs"];
 
+    /// <summary>Sidebar section for Helm releases — appended after the discovery-driven ones.</summary>
+    public const string HelmSection = "Helm";
+
+    /// <summary>
+    /// Synthetic descriptor for the Helm sidebar entry. Helm releases are NOT an
+    /// API kind (they're Secrets of type helm.sh/release.v1), so discovery will
+    /// never produce this; it exists so the Helm entry can reuse
+    /// <see cref="SidebarKindViewModel"/> like every other row. The bogus group
+    /// is what <see cref="SidebarKindViewModel.IsHelmReleases"/> keys off, and it
+    /// can never collide with a real one (Kubernetes API groups are DNS names,
+    /// and no server serves "helm.sh").
+    /// </summary>
+    public static readonly ResourceDescriptor HelmReleaseDescriptor =
+        new("helm.sh", "v1", "Release", "releases", "release", Namespaced: true, ShortNames: [], Categories: []);
+
     public static string IconKeyFor(string section) => section switch
     {
+        HelmSection => "LayersIconGeometry",
         "Workloads" => "CubeOutlineIconGeometry",
         "Network" => "LinkIconGeometry",
         "Config" => "TuneIconGeometry",

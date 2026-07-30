@@ -49,6 +49,13 @@ public sealed partial class SidebarKindViewModel(ResourceDescriptor descriptor, 
 
     public string DisplayName { get; } = Pluralize(descriptor.Kind);
 
+    /// <summary>
+    /// True for the synthetic Helm entry, which switches the content area to the
+    /// release browser instead of starting a watch (Helm releases aren't an API
+    /// kind — see <see cref="SidebarGrouping.HelmReleaseDescriptor"/>).
+    /// </summary>
+    public bool IsHelmReleases => ReferenceEquals(Descriptor, SidebarGrouping.HelmReleaseDescriptor);
+
     [ObservableProperty]
     private bool _isSelected;
 

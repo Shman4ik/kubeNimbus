@@ -84,6 +84,25 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [ObservableProperty]
     private bool _areMetricsVisible;
 
+    /// <summary>
+    /// True while the Helm entry is selected: the content area swaps the generic
+    /// resource list for the release browser. Helm releases aren't an API kind,
+    /// so there's nothing to watch — they're read from their storage Secrets.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isHelmView;
+
+    public ObservableCollection<HelmReleaseRowViewModel> HelmReleases { get; } = [];
+
+    [ObservableProperty]
+    private HelmReleaseRowViewModel? _selectedHelmRelease;
+
+    [ObservableProperty]
+    private bool _isHelmLoading;
+
+    [ObservableProperty]
+    private bool _isHelmEmpty;
+
     public ObservableCollection<InspectorTabViewModelBase> InspectorTabs { get; } = [];
 
     [ObservableProperty]
@@ -184,7 +203,42 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             }
         }
 
+        await AddHelmSectionIfPresentAsync();
         ApplySidebarFilter();
+    }
+
+    /// <summary>
+    /// Adds the Helm section only when the cluster actually stores releases —
+    /// a Helm entry on a cluster that has never seen Helm is exactly the kind of
+    /// always-visible control the UI rules say to default to "no". The probe is
+    /// one field-selected Secret list at connect time; a release installed later
+    /// in the session shows up on the next connect/reconnect.
+    /// </summary>
+    private async Task AddHelmSectionIfPresentAsync()
+    {
+        if (Client is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var releases = await Client.ListHelmReleasesAsync();
+            if (releases.Count == 0)
+            {
+                return;
+            }
+
+            var section = new SidebarSectionViewModel(SidebarGrouping.HelmSection);
+            section.Kinds.Add(new SidebarKindViewModel(
+                SidebarGrouping.HelmReleaseDescriptor, SidebarGrouping.IconKeyFor(SidebarGrouping.HelmSection)));
+            SidebarSections.Add(section);
+        }
+        catch (Exception)
+        {
+            // No permission to list Secrets (a perfectly normal RBAC setup) —
+            // then there's no Helm browsing to offer, and that's not an error.
+        }
     }
 
     partial void OnSidebarFilterChanged(string value) => ApplySidebarFilter();
@@ -267,7 +321,72 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
 
         SelectedKind = kind;
+
+        if (kind.IsHelmReleases)
+        {
+            StopWatch();
+            IsHelmView = true;
+            AreMetricsVisible = false;
+            _ = RefreshHelmReleasesAsync();
+            return;
+        }
+
+        IsHelmView = false;
         RestartWatch();
+    }
+
+    /// <summary>Reloads the Helm release list for the selected namespace.</summary>
+    [RelayCommand]
+    private async Task RefreshHelmReleasesAsync()
+    {
+        if (Client is null)
+        {
+            return;
+        }
+
+        IsHelmLoading = true;
+        IsHelmEmpty = false;
+        HelmReleases.Clear();
+        try
+        {
+            var @namespace = SelectedNamespace == AllNamespaces ? null : SelectedNamespace;
+            foreach (var release in await Client.ListHelmReleasesAsync(@namespace))
+            {
+                HelmReleases.Add(new HelmReleaseRowViewModel(release));
+            }
+
+            SelectedHelmRelease = HelmReleases.FirstOrDefault();
+        }
+        catch (Exception ex)
+        {
+            ConnectionWarning = $"Could not read Helm releases: {ex.Message}";
+        }
+        finally
+        {
+            IsHelmLoading = false;
+            IsHelmEmpty = HelmReleases.Count == 0;
+        }
+    }
+
+    /// <summary>Double-click / Enter on a release row: opens its values/manifest/notes/history tab.</summary>
+    [RelayCommand]
+    private void OpenSelectedHelmRelease()
+    {
+        if (SelectedHelmRelease is not { } row || Client is null)
+        {
+            return;
+        }
+
+        var key = $"helm:{row.Namespace}/{row.Name}";
+        var existing = InspectorTabs.FirstOrDefault(t => t.Key == key);
+        if (existing is not null)
+        {
+            existing.IsPreview = false;
+            SelectedInspectorTab = existing;
+            return;
+        }
+
+        AddInspectorTab(new HelmReleaseTabViewModel(Client, row.Release), replacePreview: false);
     }
 
     /// <summary>
@@ -287,16 +406,42 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
     }
 
-    partial void OnSelectedNamespaceChanged(string value) => RestartWatch();
+    partial void OnSelectedNamespaceChanged(string value)
+    {
+        if (IsHelmView)
+        {
+            _ = RefreshHelmReleasesAsync();
+        }
+        else
+        {
+            RestartWatch();
+        }
+    }
 
     [RelayCommand]
-    private void Refresh() => RestartWatch();
+    private void Refresh()
+    {
+        if (IsHelmView)
+        {
+            _ = RefreshHelmReleasesAsync();
+        }
+        else
+        {
+            RestartWatch();
+        }
+    }
 
-    private void RestartWatch()
+    /// <summary>Cancels the current list watch (and the metrics poll riding on its token).</summary>
+    private void StopWatch()
     {
         _watchCts?.Cancel();
         _watchCts?.Dispose();
         _watchCts = null;
+    }
+
+    private void RestartWatch()
+    {
+        StopWatch();
 
         Rows.Clear();
         _rowsByKey.Clear();
