@@ -1,0 +1,43 @@
+{
+  "name": "checkout",
+  "namespace": "demo-shop",
+  "version": __REVISION__,
+  "info": {
+    "first_deployed": "__FIRST_DEPLOYED__",
+    "last_deployed": "__LAST_DEPLOYED__",
+    "status": "__STATUS__",
+    "description": "__DESCRIPTION__",
+    "notes": "checkout has been installed into the demo-shop namespace.\n\nThis is a synthetic release record created by the kubeNimbus sandbox script.\nNo chart was ever rendered and nothing was installed by Helm.\n\nGet the application URL:\n  kubectl -n demo-shop port-forward svc/shop-web 8080:80\n  open http://127.0.0.1:8080\n"
+  },
+  "chart": {
+    "metadata": {
+      "name": "checkout",
+      "version": "__CHART_VERSION__",
+      "appVersion": "__APP_VERSION__",
+      "description": "Sandbox chart used to exercise kubeNimbus's read-only Helm release browser.",
+      "apiVersion": "v2",
+      "type": "application"
+    }
+  },
+  "config": {
+    "replicaCount": __REPLICAS__,
+    "image": {
+      "repository": "nginx",
+      "tag": "1.27-alpine",
+      "pullPolicy": "IfNotPresent"
+    },
+    "service": {
+      "type": "ClusterIP",
+      "port": 80
+    },
+    "resources": {
+      "requests": { "cpu": "10m", "memory": "24Mi" },
+      "limits": { "cpu": "200m", "memory": "128Mi" }
+    },
+    "ingress": {
+      "enabled": true,
+      "host": "checkout.sandbox.local"
+    }
+  },
+  "manifest": "---\napiVersion: v1\nkind: Service\nmetadata:\n  name: checkout\n  namespace: demo-shop\n  labels:\n    app.kubernetes.io/name: checkout\nspec:\n  type: ClusterIP\n  ports:\n    - port: 80\n      targetPort: http\n      name: http\n  selector:\n    app.kubernetes.io/name: checkout\n---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: checkout\n  namespace: demo-shop\n  labels:\n    app.kubernetes.io/name: checkout\nspec:\n  replicas: __REPLICAS__\n  selector:\n    matchLabels:\n      app.kubernetes.io/name: checkout\n  template:\n    metadata:\n      labels:\n        app.kubernetes.io/name: checkout\n    spec:\n      containers:\n        - name: checkout\n          image: \"nginx:1.27-alpine\"\n          ports:\n            - name: http\n              containerPort: 80\n          resources:\n            requests:\n              cpu: 10m\n              memory: 24Mi\n            limits:\n              cpu: 200m\n              memory: 128Mi\n"
+}

@@ -76,7 +76,8 @@
               </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <ComboBox ItemsSource="{Binding AvailableContexts}" SelectedItem="{Binding NewTabContext}" MinWidth="150" Margin="8,0,0,0">
+            <ComboBox ItemsSource="{Binding AvailableContexts}" SelectedItem="{Binding NewTabContext}" MinWidth="150" Margin="8,0,0,0"
+                      PlaceholderText="No kubeconfig contexts">
               <ComboBox.ItemTemplate>
                 <DataTemplate x:DataType="core:ClusterContext">
                   <TextBlock Text="{Binding Name}" />
@@ -113,7 +114,12 @@
 
       <Border DockPanel.Dock="Bottom" Classes="statusBar">
         <Grid ColumnDefinitions="*,Auto">
-          <TextBlock Grid.Column="0" Classes="statusText" Text="{Binding SelectedTab.Status}" />
+          <!-- With no tab open there is no SelectedTab.Status to show, and that is
+               exactly when the shell's own status (kubeconfig load result) matters. -->
+          <TextBlock Grid.Column="0" Classes="statusText" Text="{Binding SelectedTab.Status}"
+                     IsVisible="{Binding SelectedTab, Converter={x:Static aconv:ObjectConverters.IsNotNull}}" />
+          <TextBlock Grid.Column="0" Classes="statusText" Text="{Binding Status}"
+                     IsVisible="{Binding SelectedTab, Converter={x:Static aconv:ObjectConverters.IsNull}}" />
           <TextBlock Grid.Column="1" Classes="statusText warn" Text="{Binding SelectedTab.ConnectionWarning}"
                      IsVisible="{Binding SelectedTab.ConnectionWarning, Converter={x:Static aconv:ObjectConverters.IsNotNull}}" />
         </Grid>
@@ -123,8 +129,35 @@
         <ContentControl Content="{Binding SelectedTab}" IsVisible="{Binding SelectedTab, Converter={x:Static aconv:ObjectConverters.IsNotNull}}" />
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10"
                     IsVisible="{Binding SelectedTab, Converter={x:Static aconv:ObjectConverters.IsNull}}">
-          <TextBlock Text="No cluster tab open." Opacity="0.6" HorizontalAlignment="Center" />
-          <Button Classes="accent" Content="Open a tab" Command="{Binding AddNewTabCommand}" HorizontalAlignment="Center" />
+
+          <!-- Contexts exist, none opened yet. -->
+          <StackPanel Spacing="10" IsVisible="{Binding HasContexts}">
+            <TextBlock Text="No cluster tab open." Opacity="0.6" HorizontalAlignment="Center" />
+            <Button Classes="accent" Content="Open a tab" Command="{Binding AddNewTabCommand}" HorizontalAlignment="Center" />
+          </StackPanel>
+
+          <!-- No kubeconfig at all: say so, say where we looked, and say how to fix
+               it. An "Open a tab" button here would be a button that cannot work. -->
+          <Border Classes="card" Padding="20" MaxWidth="640" IsVisible="{Binding !HasContexts}">
+            <StackPanel Spacing="12">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <PathIcon Data="{StaticResource AlertCircleIconGeometry}" Width="15" Height="15" VerticalAlignment="Center"
+                          Foreground="{StaticResource WarnBrush}" />
+                <TextBlock Text="{Binding Status}" FontWeight="SemiBold" VerticalAlignment="Center" />
+              </StackPanel>
+
+              <TextBlock TextWrapping="Wrap" Opacity="0.75" FontSize="12"
+                         Text="kubeNimbus never stores credentials — it reads clusters from your kubeconfig: every entry of $KUBECONFIG, then the default location. Searched:" />
+              <TextBlock Text="{Binding KubeconfigSearchPaths}" FontFamily="Cascadia Mono,Consolas,monospace"
+                         FontSize="11.5" Opacity="0.85" TextWrapping="Wrap" />
+
+              <TextBlock TextWrapping="Wrap" Opacity="0.75" FontSize="12"
+                         Text="Point $KUBECONFIG at a config file (and restart the app so it inherits the variable), or drop one at the default location and press Rescan. To spin up a throwaway local cluster, run scripts/sandbox-up from the repo." />
+
+              <Button Classes="accent" Content="Rescan kubeconfig" Command="{Binding ReloadContextsCommand}"
+                      HorizontalAlignment="Left" />
+            </StackPanel>
+          </Border>
         </StackPanel>
       </Grid>
     </DockPanel>

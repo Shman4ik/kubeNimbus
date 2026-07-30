@@ -1,0 +1,95 @@
+# CRDs are first-class in kubeNimbus (discovery-driven sidebar, not a hardcoded
+# list), so the sandbox ships some. Two of them share the Kind name "Widget" in
+# different API groups on purpose: that collision is exactly what the sidebar's
+# group label and group-aware filter exist for.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: widgets.shop.kubenimbus.io
+spec:
+  group: shop.kubenimbus.io
+  scope: Namespaced
+  names:
+    plural: widgets
+    singular: widget
+    kind: Widget
+    shortNames: ["wdg"]
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                sku: { type: string }
+                price: { type: integer }
+                inStock: { type: boolean }
+            status:
+              type: object
+              properties:
+                phase: { type: string }
+      additionalPrinterColumns:
+        - name: SKU
+          type: string
+          jsonPath: .spec.sku
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+      subresources:
+        status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: widgets.factory.kubenimbus.io
+spec:
+  group: factory.kubenimbus.io
+  scope: Namespaced
+  names:
+    plural: widgets
+    singular: widget
+    kind: Widget
+    shortNames: ["fwdg"]
+  versions:
+    - name: v1beta1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                line: { type: string }
+                throughput: { type: integer }
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: backups.demo.kubenimbus.io
+spec:
+  group: demo.kubenimbus.io
+  scope: Cluster
+  names:
+    plural: backups
+    singular: backup
+    kind: Backup
+    shortNames: ["bkp"]
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                schedule: { type: string }
+                destination: { type: string }

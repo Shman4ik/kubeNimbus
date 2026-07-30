@@ -99,7 +99,15 @@ choice must be AOT/trimming-compatible from day one.
 8. **Every list/panel state gets an explicit visual** — loading, empty,
    disconnected, conflict, delete-confirm — never a blank rectangle that
    looks like a bug. `ClusterTabViewModel.IsListLoading`/`IsListEmpty` is the
-   pattern to extend for new list-backed views.
+   pattern to extend for new list-backed views. This includes the **shell's
+   own** empty state: with no kubeconfig, `MainWindowViewModel.HasContexts`
+   is false and the content area explains what was searched
+   (`Kubeconfig.CandidatePaths()` reports missing paths too, which is the
+   whole reason it exists alongside `DiscoverPaths()`) and offers a rescan —
+   because `$KUBECONFIG` is not inherited by a GUI launched from Explorer/VS,
+   and "empty dropdown, dead + button" is the most likely first-run
+   experience there. Any command that cannot run must be disabled
+   (`AddNewTabCommand`'s `CanExecute`), never silently no-op.
 
 ## Repository layout
 
@@ -313,25 +321,50 @@ The suite auto-discovers `./.sandbox/kubeconfig.yaml` (git-ignored — it holds
 cluster CA + client certs) or `$KUBENIMBUS_TEST_KUBECONFIG`. Tests **skip
 cleanly** (return) when no cluster is reachable, so CI without one stays green.
 
-**Recipe (k3s in Docker — used to develop this repo; Docker Desktop required):**
+**Use the script** (`scripts/sandbox-up.ps1`, or `scripts/sandbox-up.sh` on
+Linux/macOS — Docker required). It starts single-node k3s in Docker, writes
+`.sandbox/kubeconfig.yaml` pointed at the published host port with the context
+renamed from k3s's `default`, and applies the demo workloads:
 
-```bash
-# 1. Start a single-node k3s cluster, API on localhost:6550.
-docker run -d --name kubenimbus-sandbox --privileged -p 6550:6443 \
-  rancher/k3s:v1.33.4-k3s1 server --tls-san 127.0.0.1
-
-# 2. Export its kubeconfig into the repo (git-ignored) and point it at :6550.
-mkdir -p .sandbox
-docker exec kubenimbus-sandbox cat /etc/rancher/k3s/k3s.yaml > .sandbox/kubeconfig.yaml
-#   then replace  https://127.0.0.1:6443  with  https://127.0.0.1:6550  in that file.
-
-# 3. Verify.
-KUBECONFIG=.sandbox/kubeconfig.yaml kubectl get pods -A
+```powershell
+./scripts/sandbox-up.ps1            # add -Recreate to start from scratch
+./scripts/sandbox-down.ps1
 ```
 
+Re-running reuses a live container and re-applies the manifests. `-Name`/`-Port`/
+`-Kubeconfig` bring up a **second** cluster, which is the only way to exercise
+the fleet views for real. See [`scripts/README.md`](scripts/README.md) for the
+full flag table.
+
+`-InstallKubeconfig` additionally copies it to `~/.kube/config`. That matters
+because `$KUBECONFIG` only reaches processes started from a shell that has it
+set — an app launched from Explorer, a shortcut or Visual Studio sees nothing
+and lands on the empty-state screen. The copy goes stale on `-Recreate` (new CA
+and client certs), so it refuses to overwrite an existing config without
+`-Force` and keeps a timestamped backup; `$KUBECONFIG` remains the
+non-staling option for terminal launches.
+
+The manifests in `scripts/manifests/` are not a demo for its own sake — each one
+exists to make some app surface non-empty, and that is the bar for adding to
+them: multi-container pods that log continuously (log follow, severity coloring,
+container picker), env vars of every ref kind (Environment tab + Reveal), a
+StatefulSet with PVCs (Storage), a CronJob firing every minute (a visibly live
+watch), a whole `demo-broken` namespace of CrashLoopBackOff/ImagePullBackOff/
+unschedulable/never-Ready pods (the status pills and empty/error states of UI
+rule 8), three CRDs **two of which share the Kind `Widget` in different API
+groups** (the sidebar's group-aware filter), RBAC subjects including a dangling
+binding (the access review), and a synthetic three-revision Helm release
+(history paging — k3s's own traefik releases are real but sit at revision 1).
+Metrics need nothing: k3s ships metrics-server, so `metrics.k8s.io` is live;
+delete that Deployment to test the *absent*-metrics degradation path.
+
+If a feature grows a state that nothing in the sandbox produces, add a workload
+for it here rather than relying on the screenshot fixtures alone.
+
 `kind` works equally well if you prefer it (`kind create cluster`, then
-`kind get kubeconfig > .sandbox/kubeconfig.yaml`). Tear down k3s with
-`docker rm -f kubenimbus-sandbox`.
+`kind get kubeconfig > .sandbox/kubeconfig.yaml`); the demo manifests apply to
+any cluster with `kubectl apply -f scripts/manifests/`, minus the Helm release
+seeding, which is inline in the scripts.
 
 ## Verification workflow
 
