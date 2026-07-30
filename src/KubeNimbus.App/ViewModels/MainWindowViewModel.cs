@@ -20,10 +20,23 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private ClusterTabViewModel? _selectedTab;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(AddNewTabCommand))]
     private ClusterContext? _newTabContext;
 
     [ObservableProperty]
     private string _status = "Loading kubeconfig…";
+
+    /// <summary>
+    /// False when the kubeconfig search turned up nothing. The empty state has to
+    /// explain that case rather than offering an "Open a tab" button that can't
+    /// do anything (UI rule 8) — with no kubeconfig there is no context to open.
+    /// </summary>
+    [ObservableProperty]
+    private bool _hasContexts;
+
+    /// <summary>Where the search looked, listed so a miss is diagnosable without a debugger.</summary>
+    [ObservableProperty]
+    private string _kubeconfigSearchPaths = "";
 
     public CommandPaletteViewModel Palette { get; }
 
@@ -44,6 +57,20 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     private async Task InitializeAsync()
     {
+        if (await LoadContextsAsync())
+        {
+            await RestoreWorkspaceAsync();
+        }
+    }
+
+    /// <summary>
+    /// (Re)reads the kubeconfig chain. Separate from <see cref="InitializeAsync"/> so
+    /// the empty state can offer a rescan: dropping a file into ~/.kube/config while
+    /// the app is open is a normal first-run flow, and it shouldn't need a restart.
+    /// Returns false when the read failed outright.
+    /// </summary>
+    private async Task<bool> LoadContextsAsync()
+    {
         try
         {
             var contexts = await Kubeconfig.LoadContextsAsync();
@@ -54,15 +81,30 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
 
             NewTabContext = AvailableContexts.FirstOrDefault();
-            Status = AvailableContexts.Count == 0
-                ? "No kubeconfig contexts found."
-                : $"{AvailableContexts.Count} context(s) available.";
-
-            await RestoreWorkspaceAsync();
+            HasContexts = AvailableContexts.Count > 0;
+            KubeconfigSearchPaths = string.Join(
+                Environment.NewLine,
+                Kubeconfig.CandidatePaths().Select(c =>
+                    $"{(c.Exists ? "found  " : "missing")}  {c.Path}   ({c.Source})"));
+            Status = HasContexts
+                ? $"{AvailableContexts.Count} context(s) available."
+                : "No kubeconfig contexts found.";
+            AddNewTabCommand.NotifyCanExecuteChanged();
+            return true;
         }
         catch (Exception ex)
         {
             Status = $"Failed to read kubeconfig: {ex.Message}";
+            return false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task ReloadContextsAsync()
+    {
+        if (await LoadContextsAsync() && Tabs.Count == 0 && AvailableContexts.Count > 0)
+        {
+            await AddTabAsync(AvailableContexts[0]);
         }
     }
 
@@ -85,7 +127,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanAddNewTab))]
     private async Task AddNewTabAsync()
     {
         if (NewTabContext is { } context)
@@ -93,6 +135,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
             await AddTabAsync(context);
         }
     }
+
+    private bool CanAddNewTab() => NewTabContext is not null;
 
     private async Task AddTabAsync(ClusterContext context)
     {

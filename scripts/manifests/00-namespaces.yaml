@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo-shop
+  labels:
+    app.kubernetes.io/part-of: kubenimbus-sandbox
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo-data
+  labels:
+    app.kubernetes.io/part-of: kubenimbus-sandbox
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo-batch
+  labels:
+    app.kubernetes.io/part-of: kubenimbus-sandbox
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo-broken
+  labels:
+    app.kubernetes.io/part-of: kubenimbus-sandbox

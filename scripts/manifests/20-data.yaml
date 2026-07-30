@@ -1,0 +1,87 @@
+# Stateful side: a StatefulSet with PVCs (k3s ships the local-path provisioner,
+# so these actually bind), a headless Service, and a DaemonSet — so Storage and
+# the non-Deployment workload kinds in the sidebar are not empty.
+apiVersion: v1
+kind: Service
+metadata:
+  name: cache
+  namespace: demo-data
+spec:
+  clusterIP: None
+  selector:
+    app: cache
+  ports:
+    - name: redis
+      port: 6379
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: cache
+  namespace: demo-data
+spec:
+  serviceName: cache
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cache
+  template:
+    metadata:
+      labels:
+        app: cache
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          args: ["--save", "60", "1", "--loglevel", "notice"]
+          ports:
+            - containerPort: 6379
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 250m, memory: 192Mi }
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 128Mi
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-agent
+  namespace: demo-data
+spec:
+  selector:
+    matchLabels:
+      app: node-agent
+  template:
+    metadata:
+      labels:
+        app: node-agent
+    spec:
+      containers:
+        - name: agent
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - 'while true; do echo "$(date -Iseconds) INFO  node-agent tick on $(hostname)"; sleep 10; done'
+          resources:
+            requests: { cpu: 5m, memory: 8Mi }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: uploads
+  namespace: demo-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 64Mi

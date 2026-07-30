@@ -76,8 +76,22 @@ dotnet build KubeNimbus.slnx
 dotnet run --project src/KubeNimbus.App
 ```
 
-To develop against a throwaway local cluster and run the integration tests, see
-the sandbox bootstrap recipe (k3s or kind) in [CLAUDE.md](CLAUDE.md#sandbox-cluster-bootstrap-how-tests-get-a-real-cluster).
+### A cluster to try it against
+
+`scripts/sandbox-up` spins up a throwaway single-node k3s cluster in Docker,
+pre-loaded with demo workloads picked to light up every part of the UI — healthy
+and deliberately-broken pods, CRDs, Helm releases, RBAC subjects, PVCs, and jobs
+that keep firing so the live watch is visibly live:
+
+```powershell
+./scripts/sandbox-up.ps1                    # sandbox-up.sh on Linux/macOS
+$env:KUBECONFIG = ".sandbox/kubeconfig.yaml"
+dotnet run --project src/KubeNimbus.App
+```
+
+The same kubeconfig is what the integration tests auto-discover. Details and
+flags (second cluster for the fleet views, custom port, bare cluster) are in
+[scripts/README.md](scripts/README.md); tear down with `./scripts/sandbox-down.ps1`.
 
 ## License
 

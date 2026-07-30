@@ -1,0 +1,83 @@
+# Subjects for the RBAC access review. A ServiceAccount is the only RBAC subject
+# that exists as an object, so it is the one the "where does this access come
+# from?" review can be opened on from a list row.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: shop-reader
+  namespace: demo-shop
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pod-reader
+  namespace: demo-shop
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "configmaps", "services"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: shop-reader-pod-reader
+  namespace: demo-shop
+subjects:
+  - kind: ServiceAccount
+    name: shop-reader
+    namespace: demo-shop
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pod-reader
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fleet-operator
+  namespace: demo-data
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sandbox-widget-operator
+rules:
+  - apiGroups: ["shop.kubenimbus.io", "factory.kubenimbus.io"]
+    resources: ["widgets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fleet-operator-widgets
+subjects:
+  - kind: ServiceAccount
+    name: fleet-operator
+    namespace: demo-data
+  - kind: Group
+    name: sandbox:operators
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: sandbox-widget-operator
+---
+# A dangling binding: its Role does not exist. The provenance view lists it
+# anyway on purpose — a dangling binding is exactly what you open that view
+# to find.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: shop-reader-ghost-role
+  namespace: demo-shop
+subjects:
+  - kind: ServiceAccount
+    name: shop-reader
+    namespace: demo-shop
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: role-that-was-deleted

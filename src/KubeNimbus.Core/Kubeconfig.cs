@@ -12,25 +12,35 @@ public static class Kubeconfig
     /// Kubeconfig file paths in precedence order: every entry of $KUBECONFIG,
     /// then ~/.kube/config. Only existing files are returned.
     /// </summary>
-    public static IReadOnlyList<string> DiscoverPaths()
+    public static IReadOnlyList<string> DiscoverPaths() =>
+        [.. CandidatePaths().Where(c => c.Exists).Select(c => c.Path).Distinct()];
+
+    /// <summary>
+    /// The same search, including paths that don't exist — so a UI with no
+    /// contexts can say *where* it looked instead of just "none found".
+    /// </summary>
+    public static IReadOnlyList<KubeconfigCandidate> CandidatePaths()
     {
-        var paths = new List<string>();
+        var candidates = new List<KubeconfigCandidate>();
 
         var env = Environment.GetEnvironmentVariable("KUBECONFIG");
         if (!string.IsNullOrWhiteSpace(env))
         {
-            paths.AddRange(env
-                .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+            foreach (var path in env.Split(
+                Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                candidates.Add(new KubeconfigCandidate(path, File.Exists(path), "$KUBECONFIG"));
+            }
         }
 
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         var defaultPath = Path.Combine(home, ".kube", "config");
-        if (!paths.Contains(defaultPath))
+        if (!candidates.Any(c => string.Equals(c.Path, defaultPath, StringComparison.OrdinalIgnoreCase)))
         {
-            paths.Add(defaultPath);
+            candidates.Add(new KubeconfigCandidate(defaultPath, File.Exists(defaultPath), "default location"));
         }
 
-        return paths.Where(File.Exists).Distinct().ToList();
+        return candidates;
     }
 
     /// <summary>
@@ -76,3 +86,6 @@ public static class Kubeconfig
             kubeconfigPath: context.KubeconfigPath,
             currentContext: context.Name);
 }
+
+/// <summary>One place the kubeconfig search looked, and whether anything was there.</summary>
+public sealed record KubeconfigCandidate(string Path, bool Exists, string Source);

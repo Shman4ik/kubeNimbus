@@ -1,0 +1,38 @@
+# Instances of the sandbox CRDs. Applied after the CRDs are Established
+# (sandbox-up waits), otherwise the API server has no endpoint for them yet.
+apiVersion: shop.kubenimbus.io/v1
+kind: Widget
+metadata:
+  name: blue-widget
+  namespace: demo-shop
+spec:
+  sku: WDG-0001
+  price: 1299
+  inStock: true
+---
+apiVersion: shop.kubenimbus.io/v1
+kind: Widget
+metadata:
+  name: red-widget
+  namespace: demo-shop
+spec:
+  sku: WDG-0002
+  price: 899
+  inStock: false
+---
+apiVersion: factory.kubenimbus.io/v1beta1
+kind: Widget
+metadata:
+  name: line-a
+  namespace: demo-data
+spec:
+  line: assembly-a
+  throughput: 240
+---
+apiVersion: demo.kubenimbus.io/v1
+kind: Backup
+metadata:
+  name: nightly
+spec:
+  schedule: "0 2 * * *"
+  destination: s3://sandbox-backups/nightly
