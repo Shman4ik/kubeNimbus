@@ -702,6 +702,45 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         AddInspectorTab(tab, replacePreview: false);
     }
 
+    /// <summary>
+    /// Opens the access-review tab. With no subject it answers "what may I do in
+    /// this namespace?" straight from the API server; with one (a selected
+    /// ServiceAccount) it also traces where that subject's access comes from.
+    /// </summary>
+    [RelayCommand]
+    private void OpenAccessReview(SubjectRef? subject)
+    {
+        if (Client is null)
+        {
+            return;
+        }
+
+        var @namespace = SelectedNamespace == AllNamespaces ? "default" : SelectedNamespace;
+        var key = subject is null
+            ? $"rbac:{@namespace}"
+            : $"rbac:{subject.Kind}/{subject.Namespace}/{subject.Name}";
+
+        var existing = InspectorTabs.FirstOrDefault(t => t.Key == key);
+        if (existing is not null)
+        {
+            existing.IsPreview = false;
+            SelectedInspectorTab = existing;
+            return;
+        }
+
+        AddInspectorTab(new RbacTabViewModel(Client, @namespace, subject), replacePreview: false);
+    }
+
+    /// <summary>
+    /// The selected row as an RBAC subject, when it is one — only ServiceAccounts
+    /// exist as objects (Users and Groups are just strings in a binding), so
+    /// that's the one kind that can seed a subject review from the list.
+    /// </summary>
+    public SubjectRef? SelectedRowAsSubject =>
+        SelectedKind?.Descriptor is { Group: "", Kind: "ServiceAccount" } && SelectedRow is { } row
+            ? new SubjectRef("ServiceAccount", row.Name, row.Namespace)
+            : null;
+
     [RelayCommand]
     private void SelectInspectorTab(InspectorTabViewModelBase tab) => SelectedInspectorTab = tab;
 

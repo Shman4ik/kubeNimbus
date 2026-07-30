@@ -12,19 +12,32 @@ A fast, open-source Kubernetes desktop client. The Kubernetes sibling of
 
 ## Status
 
-Early foundation. Working today:
+Phase-1 MVP shipped, plus a UX pass and the first post-MVP features. Working
+today:
 
 - Kubeconfig context discovery (`$KUBECONFIG` chain + `~/.kube/config`), with
   exec-plugin auth (EKS/GKE/AKS) resolved through the kubeconfig at connect time.
-- A streaming `ClusterClient`: informer-style **list + watch** of pods exposed as
+- A streaming `ClusterClient`: informer-style **list + watch** exposed as
   `IAsyncEnumerable`, auto-reconnect with resourceVersion resume + relist on 410
-  Gone, and cancellable pod-log streaming with follow mode.
-- A minimal Avalonia 12 desktop shell: context picker → connected state showing a
-  **live-updating pod list**.
-- Verified **NativeAOT** publish end-to-end.
+  Gone, and cancellable log streaming with follow mode.
+- **Discovery-driven sidebar** — built-ins *and* CRDs, filterable and
+  collapsible; namespace-scoped live lists for any kind.
+- **Pod detail**: containers, live logs, events, owner-chain navigation.
+  **Exec** into a container and **port-forward**, both over websockets.
+- **YAML view/edit** with server-side apply (conflicts surfaced, force-apply
+  offered) and two-step delete.
+- **Live CPU/memory** from `metrics.k8s.io` in the list and per container, on
+  clusters that run metrics-server.
+- **Helm releases**, read-only: values, rendered manifest, notes and revision
+  history — read straight from release Secrets, no Helm binary.
+- **RBAC access review**: your effective permissions in a namespace (via the
+  API server's own `SelfSubjectRulesReview`), and where a ServiceAccount's
+  access comes from.
+- Multi-cluster tabs (drag-reorder, workspace restore), Ctrl/Cmd+K command
+  palette, light/dark theme, and a verified **NativeAOT** publish.
 
-See [the MVP roadmap](CLAUDE.md#mvp-scope-phase-1--build-toward-this-dont-scaffold-beyond-it)
-for what's next.
+Still open: usage graphs over time, multi-cluster aggregated views. See
+[CLAUDE.md](CLAUDE.md) for the full picture.
 
 ## Tech stack
 

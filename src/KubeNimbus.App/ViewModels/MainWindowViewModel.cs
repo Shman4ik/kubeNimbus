@@ -154,6 +154,22 @@ public sealed partial class MainWindowViewModel : ObservableObject
             yield return new PaletteItem($"Open new tab: {ctx.Name}", "Connect", "PlusIconGeometry", () => _ = AddTabAsync(ctx));
         }
 
+        if (SelectedTab is { IsConnected: true } connected)
+        {
+            yield return new PaletteItem(
+                "Access review — my permissions",
+                $"RBAC · {connected.SelectedNamespace}", "AccountMultipleIconGeometry",
+                () => connected.OpenAccessReviewCommand.Execute(null));
+
+            if (connected.SelectedRowAsSubject is { } subject)
+            {
+                yield return new PaletteItem(
+                    $"Access review: {subject.Name}",
+                    $"RBAC · ServiceAccount bindings", "AccountMultipleIconGeometry",
+                    () => connected.OpenAccessReviewCommand.Execute(subject));
+            }
+        }
+
         if (SelectedTab is { } current)
         {
             foreach (var section in current.SidebarSections)

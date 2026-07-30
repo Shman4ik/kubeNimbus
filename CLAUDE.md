@@ -199,6 +199,28 @@ a release docks a tab with its values, rendered manifest, notes and revision
 history; double-clicking a history row loads that revision. Everything is
 read-only: install/upgrade/rollback stays Helm's job.
 
+## RBAC access review
+
+`ClusterClient.Rbac.cs` answers two different questions two different ways, and
+the split matters:
+
+- **"What may I do here?"** goes to the API server's own
+  `SelfSubjectRulesReview`. Never re-implement RBAC evaluation locally — a local
+  evaluator silently disagrees with the server as soon as webhook authorizers,
+  aggregation or impersonation are in play. When the server reports
+  `incomplete`, the UI says so; a permissions list quietly missing entries is
+  worse than no list.
+- **"Where does this subject's access come from?"** has no server endpoint, so
+  it's assembled from (Cluster)RoleBindings whose subjects match, each binding's
+  role resolved to its rules. That's provenance, not an authorization decision —
+  and a binding whose role is gone is still listed, since a dangling binding is
+  exactly what you open this view to find.
+
+Entry points are command-palette only (UI rule 1): "Access review — my
+permissions" always, plus a subject review when the selected row is a
+ServiceAccount (the only RBAC subject that exists as an object — Users and
+Groups are just strings inside a binding).
+
 ## Sandbox cluster bootstrap (how tests get a real cluster)
 
 Integration tests run against a **real local Kubernetes cluster**, not mocks.
@@ -348,10 +370,10 @@ note in the PR which screenshots were fixture-only.
 - [x] pgNimbus visual design system ported (Theme.axaml, two-tone shell,
       brand-blue accent, MDI icon vectors).
 
-**Later phases (do NOT build now, but don't paint into a corner):** RBAC
-inspection, multi-cluster aggregated views. (Resource metrics and read-only Helm
-release browsing shipped — see the sections above; usage graphs over time are
-still open.)
+**Later phases (do NOT build now, but don't paint into a corner):** multi-cluster
+aggregated views. (Resource metrics, read-only Helm release browsing and RBAC
+access review shipped — see the sections above; usage graphs over time and
+"who can do X across the cluster" are still open.)
 
 **Non-goals forever:** cluster provisioning, in-cluster agents, telemetry.
 
