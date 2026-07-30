@@ -10,6 +10,12 @@ on:
 permissions:
   contents: read
 
+# A push supersedes whatever was still running for the same ref — no point
+# burning runners on a commit nobody will look at again.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: Build & test
