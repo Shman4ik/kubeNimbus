@@ -165,7 +165,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             {
                 yield return new PaletteItem(
                     $"Access review: {subject.Name}",
-                    $"RBAC · ServiceAccount bindings", "AccountMultipleIconGeometry",
+                    "RBAC · ServiceAccount bindings", "AccountMultipleIconGeometry",
                     () => connected.OpenAccessReviewCommand.Execute(subject));
             }
         }
