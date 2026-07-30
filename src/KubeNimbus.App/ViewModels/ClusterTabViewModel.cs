@@ -212,8 +212,9 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// Adds the Helm section only when the cluster actually stores releases —
     /// a Helm entry on a cluster that has never seen Helm is exactly the kind of
     /// always-visible control the UI rules say to default to "no". The probe is
-    /// one field-selected Secret list at connect time; a release installed later
-    /// in the session shows up on the next connect/reconnect.
+    /// one field-selected Secret page of one item at connect time (never a full
+    /// decode); a release installed later in the session shows up on the next
+    /// connect/reconnect.
     /// </summary>
     private async Task AddHelmSectionIfPresentAsync()
     {
@@ -224,8 +225,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         try
         {
-            var releases = await Client.ListHelmReleasesAsync();
-            if (releases.Count == 0)
+            if (!await Client.HasHelmReleasesAsync())
             {
                 return;
             }

@@ -36,6 +36,22 @@ public sealed partial class ClusterClient
             .OrderByDescending(r => r.Updated ?? DateTimeOffset.MinValue)];
     }
 
+    /// <summary>
+    /// Cheap "does this cluster use Helm at all?" probe — one page of one item,
+    /// rather than decoding every release just to decide whether to show the
+    /// Helm sidebar section at connect time.
+    /// </summary>
+    public async Task<bool> HasHelmReleasesAsync(CancellationToken cancellationToken = default)
+    {
+        var query = $"?limit=1&fieldSelector={Uri.EscapeDataString($"type={HelmReleaseSecretType}")}";
+        using var doc = await GetJsonDocumentAsync(
+            ResourceDescriptor.Secrets.CollectionPath(null) + query, cancellationToken).ConfigureAwait(false);
+
+        return doc.RootElement.TryGetProperty("items", out var items)
+            && items.ValueKind == JsonValueKind.Array
+            && items.GetArrayLength() > 0;
+    }
+
     /// <summary>Every stored revision of one release, newest first (Helm keeps 10 by default).</summary>
     public async Task<IReadOnlyList<HelmRelease>> GetHelmReleaseHistoryAsync(
         string @namespace, string name, CancellationToken cancellationToken = default)
