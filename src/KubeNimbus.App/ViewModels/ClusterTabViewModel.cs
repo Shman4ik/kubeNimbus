@@ -203,6 +203,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             }
         }
 
+        SidebarGrouping.LabelAmbiguousKinds(SidebarSections);
         await AddHelmSectionIfPresentAsync();
         ApplySidebarFilter();
     }

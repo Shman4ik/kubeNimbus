@@ -53,6 +53,10 @@
                           <PathIcon Data="{Binding IconKey, Converter={x:Static conv:IconKeyToGeometryConverter.Instance}}"
                                     Width="13" Height="13" VerticalAlignment="Center" Opacity="0.8" />
                           <TextBlock Text="{Binding DisplayName}" FontSize="12" VerticalAlignment="Center" />
+                          <!-- Only set when another kind in this section shares the name. -->
+                          <TextBlock Text="{Binding GroupLabel}" IsVisible="{Binding HasGroupLabel}"
+                                     FontSize="10.5" Opacity="0.45" VerticalAlignment="Center"
+                                     TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding GroupLabel}" />
                         </StackPanel>
                       </ListBoxItem>
                     </DataTemplate>

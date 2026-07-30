@@ -63,6 +63,19 @@ public sealed partial class SidebarKindViewModel(ResourceDescriptor descriptor, 
     [ObservableProperty]
     private bool _isVisible = true;
 
+    /// <summary>
+    /// API group shown beside the name, set only when another kind in the same
+    /// section has the same <c>Kind</c> — "Backup" from velero.io and from
+    /// postgresql.cnpg.io are different resources and must not render as two
+    /// identical rows. Empty (and hidden) for unambiguous kinds, so the common
+    /// case stays clean.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasGroupLabel))]
+    private string _groupLabel = "";
+
+    public bool HasGroupLabel => GroupLabel.Length > 0;
+
     private static string Pluralize(string kind) =>
         kind.EndsWith('s') || kind.EndsWith('x') ? kind + "es" : kind + "s";
 }

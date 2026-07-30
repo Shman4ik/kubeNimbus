@@ -443,8 +443,6 @@ but reworked the structure for a resource browser rather than a query tool:
 Not yet built (see "Later phases" above): Helm release browsing, resource
 metrics/graphs, RBAC inspection, multi-cluster aggregated views. The UX pass
 above is also not exhaustive — there's no finish line here, just diminishing
-returns; candidates for a follow-up iteration: coalescing duplicate CRD
-`Kind`s across API groups in the sidebar (e.g. `Backup` from both velero.io
-and postgresql.cnpg.io currently renders as two identical-looking rows),
+returns; candidates for a follow-up iteration:
 a "recently used kinds" section, transition/hover animation polish, and a
 proper win-x64 NativeAOT pass (this session could only verify linux-x64).

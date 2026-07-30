@@ -128,6 +128,11 @@ internal static class FixtureData
             sections[title].Kinds.Add(new SidebarKindViewModel(descriptor, SidebarGrouping.IconKeyFor(title)));
         }
 
-        return [.. SidebarGrouping.SectionOrder.Select(t => sections[t]).Where(s => s.Kinds.Count > 0)];
+        var result = SidebarGrouping.SectionOrder.Select(t => sections[t]).Where(s => s.Kinds.Count > 0).ToArray();
+
+        // Same step ClusterTabViewModel.BuildSidebarAsync runs — the CRD catalog
+        // fixture deliberately contains same-named kinds from different groups.
+        SidebarGrouping.LabelAmbiguousKinds(result);
+        return result;
     }
 }

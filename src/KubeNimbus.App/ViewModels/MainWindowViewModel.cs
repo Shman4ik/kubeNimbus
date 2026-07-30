@@ -176,7 +176,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
             {
                 foreach (var kind in section.Kinds)
                 {
-                    yield return new PaletteItem(kind.DisplayName, $"{section.Title} · {current.Header}", section.IconKey,
+                    // Same-named kinds from different API groups carry their group
+                    // here too, or the palette shows two identical-looking entries.
+                    var subtitle = kind.HasGroupLabel
+                        ? $"{section.Title} · {kind.GroupLabel} · {current.Header}"
+                        : $"{section.Title} · {current.Header}";
+                    yield return new PaletteItem(kind.DisplayName, subtitle, section.IconKey,
                         () => current.SelectKindCommand.Execute(kind));
                 }
             }

@@ -69,6 +69,30 @@ public static class SidebarGrouping
     public static readonly ResourceDescriptor HelmReleaseDescriptor =
         new("helm.sh", "v1", "Release", "releases", "release", Namespaced: true, ShortNames: [], Categories: []);
 
+    /// <summary>
+    /// Labels same-named kinds within a section with their API group. On a real
+    /// cluster the CRDs section routinely holds several kinds sharing a name
+    /// (Backup from velero.io and from postgresql.cnpg.io; Cluster from
+    /// cluster.x-k8s.io and from postgresql.cnpg.io) — without this they render
+    /// as identical rows that select different resources. Unambiguous kinds keep
+    /// an empty label so the common case stays uncluttered.
+    /// </summary>
+    public static void LabelAmbiguousKinds(IEnumerable<SidebarSectionViewModel> sections)
+    {
+        foreach (var section in sections)
+        {
+            foreach (var duplicates in section.Kinds
+                .GroupBy(k => k.Descriptor.Kind, StringComparer.Ordinal)
+                .Where(g => g.Count() > 1))
+            {
+                foreach (var kind in duplicates)
+                {
+                    kind.GroupLabel = kind.Descriptor.Group.Length > 0 ? kind.Descriptor.Group : "core";
+                }
+            }
+        }
+    }
+
     public static string IconKeyFor(string section) => section switch
     {
         HelmSection => "LayersIconGeometry",
