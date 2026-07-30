@@ -309,7 +309,13 @@ public sealed partial class ClusterClient : IDisposable
     /// <summary>
     /// Streams pod log lines. With follow=true the stream stays open until the
     /// pod goes away or <paramref name="cancellationToken"/> fires — cancellation
-    /// is honored mid-stream, not just between lines.
+    /// is honored mid-stream, not just between lines. <paramref name="previous"/>
+    /// fetches the prior (crashed/restarted) container instance's logs instead
+    /// of the current one — the API server rejects follow=true with previous=true,
+    /// so callers should pass follow=false alongside it. <paramref name="timestamps"/>
+    /// asks the server to prefix each line with an RFC3339 timestamp; the caller
+    /// decides whether to display it (a client-side toggle can strip the prefix
+    /// without needing to re-stream).
     /// </summary>
     public async IAsyncEnumerable<string> StreamPodLogsAsync(
         string @namespace,
@@ -317,6 +323,8 @@ public sealed partial class ClusterClient : IDisposable
         string? container = null,
         bool follow = true,
         int? tailLines = null,
+        bool previous = false,
+        bool timestamps = false,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var path = $"api/v1/namespaces/{Uri.EscapeDataString(@namespace)}/pods/{Uri.EscapeDataString(podName)}/log";
@@ -329,6 +337,16 @@ public sealed partial class ClusterClient : IDisposable
         if (tailLines is { } tail)
         {
             query += $"&tailLines={tail}";
+        }
+
+        if (previous)
+        {
+            query += "&previous=true";
+        }
+
+        if (timestamps)
+        {
+            query += "&timestamps=true";
         }
 
         using var response = await SendStreamingGetAsync(path + query, cancellationToken).ConfigureAwait(false);

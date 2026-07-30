@@ -14,4 +14,13 @@ public sealed class EventRowViewModel(DynamicResource e)
     public int Count { get; } = e.Count();
 
     public DateTimeOffset? LastSeen { get; } = e.LastTimestamp();
+
+    /// <summary>Warning/Normal → warn/ok, for the same statusPill/statusDot visual the resource list uses.</summary>
+    public string Health { get; } = string.Equals(e.Type(), "Warning", StringComparison.OrdinalIgnoreCase) ? "warn" : "ok";
+
+    public OwnerRef? InvolvedObject { get; } = e.InvolvedObject();
+
+    public string? InvolvedObjectNamespace { get; } = e.InvolvedObjectNamespace();
+
+    public bool HasInvolvedObject => InvolvedObject is not null;
 }

@@ -45,7 +45,7 @@ public sealed record ResourceDescriptor(
         Group: "", Version: "v1", Kind: "Event", Plural: "events", SingularName: "event",
         Namespaced: true, ShortNames: ["ev"], Categories: []);
 
-    /// <summary>Well-known descriptor for core/v1 Secrets — used to read Helm release records.</summary>
+    /// <summary>Well-known descriptor for core/v1 Secrets — used to read Helm release records and by the env-var reveal path.</summary>
     public static readonly ResourceDescriptor Secrets = new(
         Group: "", Version: "v1", Kind: "Secret", Plural: "secrets", SingularName: "secret",
         Namespaced: true, ShortNames: [], Categories: []);
@@ -71,4 +71,9 @@ public sealed record ResourceDescriptor(
     public static readonly ResourceDescriptor Namespaces = new(
         Group: "", Version: "v1", Kind: "Namespace", Plural: "namespaces", SingularName: "namespace",
         Namespaced: false, ShortNames: ["ns"], Categories: []);
+
+    /// <summary>Well-known descriptor for core/v1 ConfigMaps — used by the env-var reveal path.</summary>
+    public static readonly ResourceDescriptor ConfigMaps = new(
+        Group: "", Version: "v1", Kind: "ConfigMap", Plural: "configmaps", SingularName: "configmap",
+        Namespaced: true, ShortNames: [], Categories: []);
 }

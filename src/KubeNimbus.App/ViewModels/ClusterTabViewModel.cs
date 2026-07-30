@@ -191,7 +191,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         foreach (var descriptor in catalog.OrderBy(d => d.Kind, StringComparer.OrdinalIgnoreCase))
         {
             var title = SidebarGrouping.SectionFor(descriptor);
-            sections[title].Kinds.Add(new SidebarKindViewModel(descriptor, SidebarGrouping.IconKeyFor(title)));
+            sections[title].Kinds.Add(new SidebarKindViewModel(descriptor, SidebarGrouping.IconKeyFor(descriptor, title)));
         }
 
         SidebarSections.Clear();
@@ -618,6 +618,16 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     {
         if (row is null || Client is null || SelectedKind is null)
         {
+            return;
+        }
+
+        // Events aren't independently editable/useful objects to browse — jumping
+        // straight to what the event is about (the same navigation owner-chips use)
+        // is the more useful default action here, matching CLAUDE.md's "double-click
+        // = default action" rule.
+        if (SelectedKind.Descriptor is { Kind: "Event", Group: "" } && row.Resource.InvolvedObject() is { } involved)
+        {
+            await OpenOwnerAsync(involved, row.Resource.InvolvedObjectNamespace() ?? row.Namespace);
             return;
         }
 

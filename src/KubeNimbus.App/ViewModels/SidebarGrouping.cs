@@ -103,4 +103,16 @@ public static class SidebarGrouping
         "CRDs" => "PuzzleIconGeometry",
         _ => "TagIconGeometry",
     };
+
+    /// <summary>
+    /// Per-kind icon override for a handful of built-ins that read better with
+    /// their own glyph than their section's generic one — core/v1 Event falls
+    /// into the Config bucket by group but a bell reads as "events" far better
+    /// than Config's generic tune icon. Everything else keeps the section icon.
+    /// </summary>
+    public static string IconKeyFor(ResourceDescriptor descriptor, string section) => descriptor switch
+    {
+        { Group: "", Kind: "Event" } => "BellIconGeometry",
+        _ => IconKeyFor(section),
+    };
 }

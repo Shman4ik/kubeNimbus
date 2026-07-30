@@ -1,0 +1,43 @@
+[
+  {
+    "kind": "PodMetrics",
+    "apiVersion": "metrics.k8s.io/v1beta1",
+    "metadata": { "name": "payment-service-report-generator-7f9c8d6bcd-x7k2m", "namespace": "payments" },
+    "timestamp": "2026-07-20T08:45:00Z",
+    "window": "20s",
+    "containers": [
+      { "name": "app", "usage": { "cpu": "45m", "memory": "134217728" } },
+      { "name": "envoy-sidecar", "usage": { "cpu": "8m", "memory": "33554432" } }
+    ]
+  },
+  {
+    "kind": "PodMetrics",
+    "apiVersion": "metrics.k8s.io/v1beta1",
+    "metadata": { "name": "checkout-worker-5d8f7b9c4-qz9pl", "namespace": "payments" },
+    "timestamp": "2026-07-20T08:45:00Z",
+    "window": "20s",
+    "containers": [
+      { "name": "worker", "usage": { "cpu": "3m", "memory": "67108864" } }
+    ]
+  },
+  {
+    "kind": "PodMetrics",
+    "apiVersion": "metrics.k8s.io/v1beta1",
+    "metadata": { "name": "redis-cache-0", "namespace": "payments" },
+    "timestamp": "2026-07-20T08:45:00Z",
+    "window": "20s",
+    "containers": [
+      { "name": "redis", "usage": { "cpu": "12m", "memory": "268435456" } }
+    ]
+  },
+  {
+    "kind": "PodMetrics",
+    "apiVersion": "metrics.k8s.io/v1beta1",
+    "metadata": { "name": "notification-dispatcher-8b6f5d7c9-k9m3q", "namespace": "payments" },
+    "timestamp": "2026-07-20T08:45:00Z",
+    "window": "20s",
+    "containers": [
+      { "name": "dispatcher", "usage": { "cpu": "20m", "memory": "100663296" } }
+    ]
+  }
+]

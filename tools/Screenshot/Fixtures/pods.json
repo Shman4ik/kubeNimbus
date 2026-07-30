@@ -14,7 +14,20 @@
     },
     "spec": {
       "containers": [
-        { "name": "app", "image": "registry.internal/payments/report-generator:2.14.3", "ports": [{ "containerPort": 8080, "protocol": "TCP" }] },
+        {
+          "name": "app", "image": "registry.internal/payments/report-generator:2.14.3", "ports": [{ "containerPort": 8080, "protocol": "TCP" }],
+          "env": [
+            { "name": "LOG_LEVEL", "value": "info" },
+            { "name": "REPORT_CACHE_DIR", "value": "/var/cache/reports" },
+            { "name": "DB_PASSWORD", "valueFrom": { "secretKeyRef": { "name": "payments-db-creds", "key": "password" } } },
+            { "name": "DB_USERNAME", "valueFrom": { "secretKeyRef": { "name": "payments-db-creds", "key": "username" } } },
+            { "name": "FEATURE_FLAGS", "valueFrom": { "configMapKeyRef": { "name": "report-generator-config", "key": "flags" } } },
+            { "name": "POD_NAME", "valueFrom": { "fieldRef": { "fieldPath": "metadata.name" } } }
+          ],
+          "envFrom": [
+            { "configMapRef": { "name": "report-generator-common-config" } }
+          ]
+        },
         { "name": "envoy-sidecar", "image": "envoyproxy/envoy:v1.29.2", "ports": [{ "containerPort": 15000, "protocol": "TCP" }] }
       ]
     },

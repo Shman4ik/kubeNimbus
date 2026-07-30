@@ -53,7 +53,11 @@ choice must be AOT/trimming-compatible from day one.
    browsable resources (discovery API, not a hardcoded list). YAML edits go
    through server-side apply with a field manager, showing conflicts. Events,
    `metrics.k8s.io`, and owner-reference navigation (pod → replicaset →
-   deployment) are core, not afterthoughts.
+   deployment) are core, not afterthoughts — **shipped**: `ClusterClient.Metrics.cs`
+   queries `metrics.k8s.io` with the version read from **discovery** (never
+   hardcoded to `v1beta1`), raised as `MetricsUnavailableException` when the
+   group is absent or registered-but-unhealthy, so a cluster without
+   metrics-server degrades to no CPU/Mem column rather than an error.
 4. **No credentials ever persisted by the app.** Kubeconfig is the single source
    of truth (all `$KUBECONFIG` entries + `~/.kube/config`); exec-plugin auth
    (`aws eks get-token`, `gke-gcloud-auth-plugin`, `azure kubelogin`) must work.
@@ -361,7 +365,10 @@ note in the PR which screenshots were fixture-only.
 - [x] Sidebar tree (Workloads/Network/Config/Storage/CRDs via discovery),
       namespace-scoped, live list views.
 - [x] Pod detail: containers, status, live log streaming (follow, container
-      picker, cancel), events.
+      picker, cancel, previous-container, search/filter, ERROR/WARN/INFO
+      coloring, timestamps/wrap toggles, copy/download), environment variables
+      (literal + Secret/ConfigMap refs with on-demand reveal), live CPU/Mem
+      usage (metrics.k8s.io, when present), events.
 - [x] YAML view/edit for any resource → server-side apply; delete with confirm.
 - [x] Exec into a pod container (interactive terminal) and port-forward.
 - [x] Command palette (Ctrl/Cmd+K); light/dark theme.
@@ -440,9 +447,98 @@ but reworked the structure for a resource browser rather than a query tool:
   surface (real CRD status shapes, real watch reconnect behavior under the
   new empty/loading states, actual terminal ANSI output from a real shell).
 
-Not yet built (see "Later phases" above): Helm release browsing, resource
-metrics/graphs, RBAC inspection, multi-cluster aggregated views. The UX pass
-above is also not exhaustive — there's no finish line here, just diminishing
-returns; candidates for a follow-up iteration:
-a "recently used kinds" section, transition/hover animation polish, and a
-proper win-x64 NativeAOT pass (this session could only verify linux-x64).
+**Logs/events/telemetry/env-secrets pass:** closed the gaps
+called out at the end of the UX polish pass — logs, events, and telemetry
+were half-built or missing entirely; this pass filled them in and added
+Kubernetes' other classic on-call surface (env vars/secrets):
+- **Logs** (`PodDetailTabViewModel`, `LogLineViewModel`): in-buffer search/filter
+  (matches against the message, not the raw line, so filtering doesn't fight
+  the timestamp toggle), ERROR/WARN/INFO color coding via a lightweight text
+  heuristic, a timestamps toggle (`StreamPodLogsAsync` now always requests
+  `timestamps=true`; the toggle is a pure display concern — no re-stream
+  needed), a wrap toggle, copy/download (Avalonia clipboard/`IStorageProvider`,
+  reached via the desktop `IClassicDesktopStyleApplicationLifetime`), and a
+  previous-container toggle (`StreamPodLogsAsync(..., previous: true,
+  follow: false)`, a one-shot fetch, not a follow).
+- **Events**: `ResourceStatusSummary` special-cases core/v1 Event so the
+  generic list shows Reason/Count with Warning/Normal-driven pill color
+  instead of a meaningless Status column; `SidebarGrouping.IconKeyFor` gives
+  Event its own bell icon within the Config section (no new top-level
+  section — the sidebar stays the five fixed sections) rather than an
+  unlabeled group of the same Config icon everything else uses; double-click
+  on an Event row now navigates to its `involvedObject` (via the same
+  `OwnerRef`-typed resolve-and-open path owner-chip navigation already used)
+  instead of opening the event's own not-very-useful YAML; pod-detail's
+  Events tab gained the same Type color coding and an "open involved object"
+  chevron per row.
+- **Telemetry** (`ClusterClient.Metrics.cs`, new): queries `metrics.k8s.io`
+  PodMetrics/NodeMetrics through the same generic `ResourceDescriptor`/
+  `ListResourceOnceAsync`/`ReadResourceAsync` path every other resource kind
+  uses — no bespoke parsing code. `IsMetricsApiAvailableAsync` checks the
+  discovery catalog (already fetched for the sidebar) for the `metrics.k8s.io`
+  group, so a cluster without metrics-server shows no CPU/Mem column/readout
+  instead of erroring. The metrics API doesn't support watch, so
+  `ClusterTabViewModel` and `PodDetailTabViewModel` each run their own
+  20-second `DispatcherTimer` poll rather than a new watch path — CPU/Mem
+  shows in the pod list (a column, metrics-gated) and pod detail (per-container
+  readout next to Ready/RestartCount).
+- **Env vars & Secrets**: pod detail gained an Environment tab
+  (`spec.containers[].env`/`envFrom`) — literal values show inline;
+  `secretKeyRef`/`configMapKeyRef` show only the reference (`Secret/name ·
+  key=x`) until an explicit per-row "Reveal" fetches and decodes on demand
+  (cached per Secret/ConfigMap name within the tab so revealing several keys
+  from the same object doesn't refetch; RBAC/network failures surface inline,
+  never crash the tab); `envFrom` sources are reference-only (no per-key
+  reveal — the pod spec doesn't declare individual keys for those). The YAML
+  editor gained a Secret-only "Reveal values" toggle: `data` stays base64 in
+  the editable text (matching kubectl), the toggle only adds a separate
+  read-only decoded-values panel computed from whatever the editor currently
+  holds via the existing `YamlJson` YAML→JSON conversion — masked by default,
+  nothing decoded until asked.
+- **Pod-detail layout redesign** (mid-session correction, screenshot-driven):
+  the first pass kept `PodDetailView`'s original fixed-width left CONTAINERS
+  column and a DataGrid for Events, and at the panel's default (non-maximized)
+  width that was unusable — Type/Reason/Message/Count/LastSeen had no room in
+  a DataGrid, and Logs/Env/Events tab headers wrapped onto separate lines. Fix:
+  the container picker moved from a fixed side column into a horizontal
+  `WrapPanel`-backed `ListBox` strip above the tabs (chips: status dot, name,
+  restart count, usage — Exec/port-forward buttons alongside it), which alone
+  frees most of the panel's width for the tabs; Events became a card feed
+  (`ItemsControl` of Border "card"s: color pill + reason, wrapped message,
+  count/timestamp, "open involved object" chevron) instead of a DataGrid,
+  since five columns were never going to fit an inspector-width panel and a
+  scannable feed reads better for events anyway; the Environment tab's env-var
+  rows are a vertical stack (name, then value/reference+Reveal button, then
+  revealed value) rather than a fixed-column grid, for the same reason.
+- Fixture-only this session (see below): `tools/Screenshot/Fixtures/pod-metrics.json`
+  (obviously-fake usage numbers), `secret.json` (obviously-fake base64,
+  flagged in the file itself), and `events.json` gained `involvedObject` on
+  every entry. `pods.json`'s report-generator container gained a realistic
+  `env`/`envFrom` block to exercise the new tab.
+- **Not live-verified this session**: this environment's Docker daemon could
+  be started (unlike the prior session), but pulling `rancher/k3s` from
+  Docker Hub was blocked by this session's egress policy (confirmed via the
+  agent-proxy status endpoint — a `production.cloudfront.docker.com` CONNECT
+  was denied), so the sandbox recipe below still couldn't run here. Everything
+  in this pass was verified via `tools/Screenshot` (both themes) plus the
+  linux-x64 NativeAOT publish check; the metrics-API-*absent* degradation path
+  (`IsMetricsApiAvailableAsync` returning false, hiding the CPU/Mem UI
+  entirely) is exercised by construction (fixtures never set
+  `IsMetricsAvailable`/never populate metrics on the default scenarios) but
+  not against a real cluster either with or without metrics-server installed.
+  A real-cluster pass — ideally once with metrics-server, once without — is
+  still worth doing before/soon after merge.
+
+Not yet built (see "Later phases" above): metrics graphs/history,
+multi-cluster aggregated views. The UX pass and the logs/events/telemetry/
+env-secrets pass are both not exhaustive — there's no finish line here, just
+diminishing returns; candidates for a follow-up iteration: coalescing
+duplicate CRD `Kind`s across API groups in the sidebar (e.g. `Backup` from
+both velero.io and postgresql.cnpg.io currently renders as two
+identical-looking rows — though same-named kinds within a single section
+now carry a disambiguating group label, see "Sidebar: same-named kinds"
+above), a "recently used kinds" section, transition/hover animation polish,
+a proper win-x64 NativeAOT pass (still only linux-x64 has ever been
+verified), a live k3s pass, and node-level CPU/Mem (only pod-level shipped
+by the logs/events/telemetry pass; node-level was added separately by the
+Helm/RBAC/metrics pass above — see "Live CPU/memory from metrics.k8s.io").
