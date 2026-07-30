@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore KubeNimbus.slnx
+
+      - name: Build
+        run: dotnet build KubeNimbus.slnx -c Release --no-restore
+
+      # Integration tests skip themselves when no sandbox cluster is reachable
+      # (see SandboxCluster.TryGetContextAsync), so this stays green without one.
+      - name: Test
+        run: dotnet test tests/KubeNimbus.Core.Tests/KubeNimbus.Core.Tests.csproj -c Release --no-build
+
+  aot:
+    name: NativeAOT publish (linux-x64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # ILCompiler links with clang against zlib; the hosted image doesn't
+      # guarantee the dev headers.
+      - name: Install AOT toolchain prerequisites
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+
+      # Not the shipping binary (that's win-x64), but it runs the same
+      # IL-trimming/AOT analysis, so a new non-trim-safe dependency or
+      # reflection call fails here instead of at release time.
+      - name: Publish
+        run: dotnet publish src/KubeNimbus.App -c Release -r linux-x64 -p:PublishAot=true -o publish/app
