@@ -45,7 +45,7 @@ public sealed record ResourceDescriptor(
         Group: "", Version: "v1", Kind: "Event", Plural: "events", SingularName: "event",
         Namespaced: true, ShortNames: ["ev"], Categories: []);
 
-    /// <summary>Well-known descriptor for core/v1 Secrets — used to read Helm release records.</summary>
+    /// <summary>Well-known descriptor for core/v1 Secrets — used to read Helm release records and by the env-var reveal path.</summary>
     public static readonly ResourceDescriptor Secrets = new(
         Group: "", Version: "v1", Kind: "Secret", Plural: "secrets", SingularName: "secret",
         Namespaced: true, ShortNames: [], Categories: []);
@@ -72,29 +72,8 @@ public sealed record ResourceDescriptor(
         Group: "", Version: "v1", Kind: "Namespace", Plural: "namespaces", SingularName: "namespace",
         Namespaced: false, ShortNames: ["ns"], Categories: []);
 
-    /// <summary>Well-known descriptor for core/v1 Secrets — used by the env-var reveal path.</summary>
-    public static readonly ResourceDescriptor Secrets = new(
-        Group: "", Version: "v1", Kind: "Secret", Plural: "secrets", SingularName: "secret",
-        Namespaced: true, ShortNames: [], Categories: []);
-
     /// <summary>Well-known descriptor for core/v1 ConfigMaps — used by the env-var reveal path.</summary>
     public static readonly ResourceDescriptor ConfigMaps = new(
         Group: "", Version: "v1", Kind: "ConfigMap", Plural: "configmaps", SingularName: "configmap",
         Namespaced: true, ShortNames: [], Categories: []);
-
-    /// <summary>
-    /// Well-known descriptor for metrics.k8s.io/v1beta1 PodMetrics — an aggregated
-    /// API only present when metrics-server (or similar) is installed. Shaped
-    /// like any other listable/gettable resource, so it goes through the same
-    /// generic list/get path as everything else; callers must check
-    /// <see cref="ClusterClient.IsMetricsApiAvailableAsync"/> first.
-    /// </summary>
-    public static readonly ResourceDescriptor PodMetrics = new(
-        Group: "metrics.k8s.io", Version: "v1beta1", Kind: "PodMetrics", Plural: "pods", SingularName: "podmetrics",
-        Namespaced: true, ShortNames: [], Categories: []);
-
-    /// <summary>Well-known descriptor for metrics.k8s.io/v1beta1 NodeMetrics (cluster-scoped).</summary>
-    public static readonly ResourceDescriptor NodeMetrics = new(
-        Group: "metrics.k8s.io", Version: "v1beta1", Kind: "NodeMetrics", Plural: "nodes", SingularName: "nodemetrics",
-        Namespaced: false, ShortNames: [], Categories: []);
 }
