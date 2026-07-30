@@ -58,6 +58,15 @@ public static class SidebarGrouping
     public const string HelmSection = "Helm";
 
     /// <summary>
+    /// Recently selected kinds, pinned above the discovery-driven sections. Not part
+    /// of <see cref="SectionOrder"/>: nothing is ever classified *into* it — it holds
+    /// second instances of kinds that also live in their real section, inserted at the
+    /// top of the sidebar so a 100+ kind catalog doesn't have to be re-navigated to get
+    /// back to the three kinds you're actually working with.
+    /// </summary>
+    public const string RecentSection = "Recent";
+
+    /// <summary>
     /// Synthetic descriptor for the Helm sidebar entry. Helm releases are NOT an
     /// API kind (they're Secrets of type helm.sh/release.v1), so discovery will
     /// never produce this; it exists so the Helm entry can reuse
@@ -96,6 +105,7 @@ public static class SidebarGrouping
     public static string IconKeyFor(string section) => section switch
     {
         HelmSection => "LayersIconGeometry",
+        RecentSection => "ClockOutlineIconGeometry",
         "Workloads" => "CubeOutlineIconGeometry",
         "Network" => "LinkIconGeometry",
         "Config" => "TuneIconGeometry",

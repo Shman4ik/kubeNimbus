@@ -56,15 +56,31 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
 
     public ObservableCollection<SecretValuePreviewViewModel> DecodedSecretValues { get; } = [];
 
-    public YamlEditorTabViewModel(ClusterClient client, ResourceDescriptor descriptor, string? @namespace, string name, string initialYaml)
-        : base($"{descriptor.Kind}/{name}")
+    /// <summary>Cluster this object came from in an aggregated fleet list; empty otherwise.</summary>
+    public string ClusterName { get; }
+
+    /// <summary>
+    /// Tab identity, qualified by cluster when the object came from an aggregated fleet
+    /// list — the same namespace/name exists on every cluster in a fleet, and this key
+    /// is what decides whether an open tab gets reused.
+    /// </summary>
+    public static string KeyFor(string clusterName, ResourceDescriptor descriptor, string? @namespace, string name) =>
+        clusterName.Length == 0
+            ? $"yaml:{descriptor.ApiVersion}/{descriptor.Kind}:{@namespace}/{name}"
+            : $"yaml@{clusterName}:{descriptor.ApiVersion}/{descriptor.Kind}:{@namespace}/{name}";
+
+    public YamlEditorTabViewModel(
+        ClusterClient client, ResourceDescriptor descriptor, string? @namespace, string name, string initialYaml,
+        string clusterName = "")
+        : base(clusterName.Length == 0 ? $"{descriptor.Kind}/{name}" : $"{descriptor.Kind}/{name} · {clusterName}")
     {
         _client = client;
         _descriptor = descriptor;
         _namespace = @namespace;
         _name = name;
         _yamlText = initialYaml;
-        Key = $"yaml:{descriptor.ApiVersion}/{descriptor.Kind}:{@namespace}/{name}";
+        ClusterName = clusterName;
+        Key = KeyFor(clusterName, descriptor, @namespace, name);
     }
 
     partial void OnYamlTextChanged(string value)

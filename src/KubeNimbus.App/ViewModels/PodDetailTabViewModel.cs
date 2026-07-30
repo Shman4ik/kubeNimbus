@@ -17,8 +17,8 @@ namespace KubeNimbus.App.ViewModels;
 /// <summary>
 /// Pod detail: containers, live status, live log streaming (follow/container
 /// picker/previous/search/timestamps/wrap/copy/download), environment
-/// variables (with on-demand Secret/ConfigMap reveal), live CPU/Mem usage
-/// (metrics.k8s.io, when present) and events. Tracks the same
+/// variables (with on-demand Secret/ConfigMap reveal), live CPU/Mem usage plus
+/// its over-time graphs (metrics.k8s.io, when present) and events. Tracks the same
 /// <see cref="ResourceRowViewModel"/> instance the live list uses, so
 /// container status stays current without a second watch.
 /// </summary>
@@ -43,6 +43,9 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     public string PodNamespace { get; }
 
     public string PodName { get; }
+
+    /// <summary>Cluster this pod came from in an aggregated fleet list; empty otherwise.</summary>
+    public string ClusterName { get; }
 
     public ObservableCollection<ContainerViewModel> Containers { get; } = [];
 
@@ -80,16 +83,76 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
 
     public IReadOnlyList<OwnerRef> Owners => _row.Resource.OwnerReferences;
 
-    /// <summary>Which of the Logs/Environment/Events tabs is showing — lets the screenshot harness (and any future deep link) pick a specific tab.</summary>
+    /// <summary>
+    /// Whole-pod usage over time (sum across containers), behind the Usage tab's two
+    /// headline charts. The per-container windows hang off each
+    /// <see cref="ContainerViewModel"/>.
+    /// </summary>
+    public UsageHistory PodHistory { get; } = new();
+
+    [ObservableProperty]
+    private IReadOnlyList<double?> _podCpuSeries = [];
+
+    [ObservableProperty]
+    private IReadOnlyList<double?> _podMemorySeries = [];
+
+    [ObservableProperty]
+    private string _podCpuText = "—";
+
+    [ObservableProperty]
+    private string _podMemoryText = "—";
+
+    [ObservableProperty]
+    private string _podPeakCpuText = "—";
+
+    [ObservableProperty]
+    private string _podPeakMemoryText = "—";
+
+    [ObservableProperty]
+    private string _podCpuTooltip = "";
+
+    [ObservableProperty]
+    private string _podMemoryTooltip = "";
+
+    /// <summary>Caption under the charts: how far back the graph goes ("last 7 min · 28 samples").</summary>
+    [ObservableProperty]
+    private string _usageWindowCaption = "collecting…";
+
+    /// <summary>True once at least one poll landed — the Usage tab shows a "collecting" state until then (UI rule 8).</summary>
+    [ObservableProperty]
+    private bool _hasUsageSamples;
+
+    /// <summary>
+    /// True when this cluster has no usable metrics.k8s.io. Distinguishes "no
+    /// metrics-server here" from "samples haven't arrived yet", which look
+    /// identical otherwise and lead to very different next steps.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isMetricsUnavailable;
+
+    public string UsagePollHint =>
+        $"metrics.k8s.io has no watch endpoint, so usage is polled every {MetricsPollInterval.TotalSeconds:0}s. "
+        + "History is kept for this session only — kubeNimbus is a viewer, not a time-series store.";
+
+    /// <summary>Which of the Logs/Env/Events/Usage tabs is showing — lets the screenshot harness (and any future deep link) pick a specific tab.</summary>
     [ObservableProperty]
     private int _selectedDetailTabIndex;
+
+    /// <summary>
+    /// Tab identity, qualified by cluster when the row came from an aggregated fleet
+    /// list: two clusters routinely hold a pod with the same namespace/name, and
+    /// without the qualifier the second one would reuse the first one's tab.
+    /// </summary>
+    public static string KeyFor(string clusterName, string? @namespace, string name) =>
+        clusterName.Length == 0 ? $"pod:{@namespace}/{name}" : $"pod@{clusterName}:{@namespace}/{name}";
 
     public PodDetailTabViewModel(
         ClusterClient client,
         ResourceRowViewModel row,
         Action<InspectorTabViewModelBase> openTab,
-        Func<OwnerRef, string?, Task> openOwner)
-        : base($"Pod/{row.Name}")
+        Func<OwnerRef, string?, Task> openOwner,
+        string clusterName = "")
+        : base(clusterName.Length == 0 ? $"Pod/{row.Name}" : $"Pod/{row.Name} · {clusterName}")
     {
         _client = client;
         _row = row;
@@ -97,7 +160,8 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         _openOwner = openOwner;
         PodNamespace = row.Namespace;
         PodName = row.Name;
-        Key = $"pod:{PodNamespace}/{PodName}";
+        ClusterName = clusterName;
+        Key = KeyFor(clusterName, PodNamespace, PodName);
 
         _row.PropertyChanged += OnRowChanged;
         RefreshFromRow();
@@ -126,7 +190,11 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
                 }
                 catch (MetricsUnavailableException)
                 {
-                    return; // no metrics API on this cluster; stop asking
+                    // No metrics API on this cluster (or it is registered but dead):
+                    // stop asking, and say so in the Usage tab rather than leaving it
+                    // looking like samples are still on the way.
+                    await Dispatcher.UIThread.InvokeAsync(() => IsMetricsUnavailable = true);
+                    return;
                 }
                 catch (Exception) when (!token.IsCancellationRequested)
                 {
@@ -142,12 +210,34 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         }
     }
 
-    private void ApplyMetrics(PodMetrics metrics)
+    /// <summary>
+    /// Folds one poll's reading into the per-container and whole-pod windows. Public
+    /// because it is the single entry point for a sample — the screenshot harness
+    /// feeds it fixture <see cref="PodMetrics"/> rather than re-deriving the chart
+    /// state, so what gets rendered offline is what a real poll would produce.
+    /// </summary>
+    public void ApplyMetrics(PodMetrics metrics, DateTimeOffset? at = null)
     {
-        foreach (var sample in metrics.Containers)
+        foreach (var container in Containers)
         {
-            Containers.FirstOrDefault(c => c.Name == sample.Name)?.ApplyUsage(sample.CpuNanocores, sample.MemoryBytes);
+            // A container the response didn't mention (init containers, or one that
+            // hasn't been aggregated yet) records a gap, so every container's series
+            // stays index-aligned with the same poll ticks.
+            var sample = metrics.Containers.FirstOrDefault(c => c.Name == container.Name);
+            container.ApplyUsage(sample?.CpuNanocores, sample?.MemoryBytes, at);
         }
+
+        PodHistory.Add(metrics.CpuNanocores, metrics.MemoryBytes, at);
+        PodCpuSeries = PodHistory.CpuSeries();
+        PodMemorySeries = PodHistory.MemorySeries();
+        PodCpuText = Quantity.FormatCpu(metrics.CpuNanocores);
+        PodMemoryText = Quantity.FormatMemory(metrics.MemoryBytes);
+        PodPeakCpuText = Quantity.FormatCpu(PodHistory.PeakCpuNanocores);
+        PodPeakMemoryText = Quantity.FormatMemory(PodHistory.PeakMemoryBytes);
+        PodCpuTooltip = UsageFormat.Tooltip("Pod CPU", PodCpuText, PodPeakCpuText, PodHistory);
+        PodMemoryTooltip = UsageFormat.Tooltip("Pod Mem", PodMemoryText, PodPeakMemoryText, PodHistory);
+        UsageWindowCaption = UsageFormat.WindowCaption(PodHistory);
+        HasUsageSamples = true;
     }
 
     private void OnRowChanged(object? sender, PropertyChangedEventArgs e)

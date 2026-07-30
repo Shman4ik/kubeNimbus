@@ -47,6 +47,7 @@ public partial class ClusterTabView : UserControl
 
         ApplyDockState();
         ApplyMetricsColumns();
+        ApplyFleetColumn();
     }
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -58,6 +59,10 @@ public partial class ClusterTabView : UserControl
         else if (e.PropertyName == nameof(ClusterTabViewModel.AreMetricsVisible))
         {
             ApplyMetricsColumns();
+        }
+        else if (e.PropertyName == nameof(ClusterTabViewModel.IsFleetView))
+        {
+            ApplyFleetColumn();
         }
     }
 
@@ -75,6 +80,22 @@ public partial class ClusterTabView : UserControl
         foreach (var column in ResourceGrid.Columns)
         {
             if (column.Header is "CPU" or "Memory")
+            {
+                column.IsVisible = visible;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Shows the Cluster column only while the list is aggregating across clusters —
+    /// same code-behind reason as the usage columns above.
+    /// </summary>
+    private void ApplyFleetColumn()
+    {
+        var visible = Vm?.IsFleetView == true;
+        foreach (var column in ResourceGrid.Columns)
+        {
+            if (column.Header is "Cluster")
             {
                 column.IsVisible = visible;
             }

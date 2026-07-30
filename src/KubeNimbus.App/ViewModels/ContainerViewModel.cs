@@ -52,6 +52,32 @@ public sealed partial class ContainerViewModel(string name, string image) : Obse
     [NotifyPropertyChangedFor(nameof(ResourcesTooltip))]
     private long? _memoryLimitBytes;
 
+    /// <summary>
+    /// This container's rolling usage window, behind the per-container charts in
+    /// pod detail's Usage tab. Same lifetime as the container row itself.
+    /// </summary>
+    public UsageHistory History { get; } = new();
+
+    /// <summary>Chart series, republished per poll (a mutated ring buffer raises no notification).</summary>
+    [ObservableProperty]
+    private IReadOnlyList<double?> _cpuSeries = [];
+
+    [ObservableProperty]
+    private IReadOnlyList<double?> _memorySeries = [];
+
+    [ObservableProperty]
+    private string _cpuChartTooltip = "";
+
+    [ObservableProperty]
+    private string _memoryChartTooltip = "";
+
+    /// <summary>Peak over the window — the number a usage graph is actually read for.</summary>
+    [ObservableProperty]
+    private string _peakCpuText = "—";
+
+    [ObservableProperty]
+    private string _peakMemoryText = "—";
+
     public bool HasUsage => CpuNanocores is not null || MemoryBytes is not null;
 
     /// <summary>Compact one-liner under the container name: "12m · 45 MiB".</summary>
@@ -69,9 +95,18 @@ public sealed partial class ContainerViewModel(string name, string image) : Obse
         return percentOfLimit is { } percent ? $"{text} — {percent:0}% of limit" : text;
     }
 
-    public void ApplyUsage(long? cpuNanocores, long? memoryBytes)
+    /// <summary><paramref name="at"/> defaults to now; only the screenshot harness stamps samples explicitly.</summary>
+    public void ApplyUsage(long? cpuNanocores, long? memoryBytes, DateTimeOffset? at = null)
     {
         CpuNanocores = cpuNanocores;
         MemoryBytes = memoryBytes;
+
+        History.Add(cpuNanocores, memoryBytes, at);
+        CpuSeries = History.CpuSeries();
+        MemorySeries = History.MemorySeries();
+        PeakCpuText = Quantity.FormatCpu(History.PeakCpuNanocores);
+        PeakMemoryText = Quantity.FormatMemory(History.PeakMemoryBytes);
+        CpuChartTooltip = UsageFormat.Tooltip($"{Name} CPU", Quantity.FormatCpu(cpuNanocores), PeakCpuText, History);
+        MemoryChartTooltip = UsageFormat.Tooltip($"{Name} Mem", Quantity.FormatMemory(memoryBytes), PeakMemoryText, History);
     }
 }

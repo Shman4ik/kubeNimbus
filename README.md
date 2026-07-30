@@ -20,23 +20,32 @@ today:
 - A streaming `ClusterClient`: informer-style **list + watch** exposed as
   `IAsyncEnumerable`, auto-reconnect with resourceVersion resume + relist on 410
   Gone, and cancellable log streaming with follow mode.
-- **Discovery-driven sidebar** — built-ins *and* CRDs, filterable and
-  collapsible; namespace-scoped live lists for any kind.
+- **Discovery-driven sidebar** — built-ins *and* CRDs, collapsible and filterable
+  by kind, API group or `kubectl` short name (`svc`, `po`), with a pinned
+  **Recent** section; namespace-scoped live lists for any kind.
 - **Pod detail**: containers, live logs, events, owner-chain navigation.
   **Exec** into a container and **port-forward**, both over websockets.
 - **YAML view/edit** with server-side apply (conflicts surfaced, force-apply
   offered) and two-step delete.
 - **Live CPU/memory** from `metrics.k8s.io` in the list and per container, on
-  clusters that run metrics-server.
+  clusters that run metrics-server — with **usage graphs over time**: a
+  sparkline beside each list number and a Usage tab in pod detail (whole-pod and
+  per-container charts) over the session's rolling 30-minute window.
 - **Helm releases**, read-only: values, rendered manifest, notes and revision
   history — read straight from release Secrets, no Helm binary.
 - **RBAC access review**: your effective permissions in a namespace (via the
   API server's own `SelfSubjectRulesReview`), and where a ServiceAccount's
   access comes from.
-- Multi-cluster tabs (drag-reorder, workspace restore), Ctrl/Cmd+K command
-  palette, light/dark theme, and a verified **NativeAOT** publish.
+- Multi-cluster tabs (drag-reorder, workspace restore), plus an **"All clusters"
+  toggle** that aggregates any kind across every connected cluster in one list —
+  with a Cluster column, per-cluster reconnect handling, and an honest
+  "n of m clusters" when a kind isn't served everywhere.
+- Ctrl/Cmd+K command palette, light/dark theme, and a verified **NativeAOT**
+  publish.
 
-Still open: usage graphs over time, multi-cluster aggregated views. See
+Still open: "who can do X across the cluster" (the cluster-wide direction of the
+RBAC review). Long-range metrics history is a non-goal — kubeNimbus graphs what
+the session has observed and leaves the time series to Prometheus. See
 [CLAUDE.md](CLAUDE.md) for the full picture.
 
 ## Tech stack

@@ -4,6 +4,7 @@
              xmlns:core="using:KubeNimbus.Core"
              xmlns:sys="using:System"
              xmlns:conv="using:KubeNimbus.App.Converters"
+             xmlns:controls="using:KubeNimbus.App.Controls"
              xmlns:aconv="using:Avalonia.Data.Converters"
              x:Class="KubeNimbus.App.Views.PodDetailView"
              x:DataType="vm:PodDetailTabViewModel">
@@ -161,6 +162,7 @@
         </Grid>
       </TabItem>
 
+
       <TabItem Header="Events">
         <Grid RowDefinitions="Auto,*">
           <Button Grid.Row="0" Classes="toolbar" Command="{Binding RefreshEventsCommand}" HorizontalAlignment="Right" Padding="6">
@@ -200,6 +202,120 @@
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
+          </ScrollViewer>
+        </Grid>
+      </TabItem>
+
+      <!-- Usage over time. Appended after Events so the existing tab indices
+           (Logs=0, Env=1, Events=2) stay stable for the screenshot harness and
+           any future deep link. -->
+      <TabItem Header="Usage">
+        <Grid RowDefinitions="Auto,*">
+          <TextBlock Grid.Row="0" Classes="sectionHeader" Margin="2,0,0,8">
+            <Run Text="USAGE" />
+            <Run Text=" · " />
+            <Run Text="{Binding UsageWindowCaption}" />
+          </TextBlock>
+
+          <!-- No metrics API at all: say so, instead of a chart area that looks stuck loading. -->
+          <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8" MaxWidth="380"
+                      IsVisible="{Binding IsMetricsUnavailable}">
+            <PathIcon Data="{StaticResource AlertCircleIconGeometry}" Width="24" Height="24" Opacity="0.3" HorizontalAlignment="Center" />
+            <TextBlock Text="No usage data on this cluster" FontWeight="SemiBold" FontSize="13" HorizontalAlignment="Center" Opacity="0.75" />
+            <TextBlock Text="metrics.k8s.io isn't served here — install metrics-server to see CPU and memory."
+                       FontSize="12" Opacity="0.55" TextWrapping="Wrap" TextAlignment="Center" />
+          </StackPanel>
+
+          <!-- Metrics exist but the first poll hasn't landed yet. -->
+          <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8" MaxWidth="380"
+                      IsVisible="{Binding !HasUsageSamples}">
+            <TextBlock Text="Collecting samples…" FontWeight="SemiBold" FontSize="13" HorizontalAlignment="Center" Opacity="0.7"
+                       IsVisible="{Binding !IsMetricsUnavailable}" />
+            <TextBlock Text="{Binding UsagePollHint}" FontSize="11.5" Opacity="0.5" TextWrapping="Wrap" TextAlignment="Center"
+                       IsVisible="{Binding !IsMetricsUnavailable}" />
+          </StackPanel>
+
+          <ScrollViewer Grid.Row="1" IsVisible="{Binding HasUsageSamples}">
+            <StackPanel Spacing="8">
+              <!-- Whole-pod totals, full width: the two numbers an on-call read starts from. -->
+              <Border Classes="card" Padding="12" ToolTip.Tip="{Binding PodCpuTooltip}">
+                <Grid RowDefinitions="Auto,Auto">
+                  <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+                    <TextBlock Grid.Column="0" Text="CPU — pod total" FontSize="12" FontWeight="SemiBold" Opacity="0.8" />
+                    <TextBlock Grid.Column="1" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" Opacity="0.8">
+                      <Run Text="{Binding PodCpuText}" />
+                      <Run Text="  · peak " />
+                      <Run Text="{Binding PodPeakCpuText}" />
+                    </TextBlock>
+                  </Grid>
+                  <controls:Sparkline Grid.Row="1" Height="72" Values="{Binding PodCpuSeries}"
+                                      Stroke="{StaticResource UsageCpuStrokeBrush}"
+                                      AreaFill="{StaticResource UsageCpuAreaBrush}"
+                                      BaselineBrush="{StaticResource ChartBaselineBrush}"
+                                      StrokeThickness="1.6" />
+                </Grid>
+              </Border>
+
+              <Border Classes="card" Padding="12" ToolTip.Tip="{Binding PodMemoryTooltip}">
+                <Grid RowDefinitions="Auto,Auto">
+                  <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+                    <TextBlock Grid.Column="0" Text="Memory — pod total" FontSize="12" FontWeight="SemiBold" Opacity="0.8" />
+                    <TextBlock Grid.Column="1" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" Opacity="0.8">
+                      <Run Text="{Binding PodMemoryText}" />
+                      <Run Text="  · peak " />
+                      <Run Text="{Binding PodPeakMemoryText}" />
+                    </TextBlock>
+                  </Grid>
+                  <controls:Sparkline Grid.Row="1" Height="72" Values="{Binding PodMemorySeries}"
+                                      Stroke="{StaticResource UsageMemoryStrokeBrush}"
+                                      AreaFill="{StaticResource UsageMemoryAreaBrush}"
+                                      BaselineBrush="{StaticResource ChartBaselineBrush}"
+                                      StrokeThickness="1.6" />
+                </Grid>
+              </Border>
+
+              <!-- Per container: which one is actually spending the pod's budget.
+                   CPU and Memory side by side, since a container row is a comparison,
+                   not a headline. -->
+              <TextBlock Classes="sectionHeader" Text="BY CONTAINER" Margin="2,4,0,0" />
+              <ItemsControl ItemsSource="{Binding Containers}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ContainerViewModel">
+                    <Border Classes="card" Padding="12" Margin="0,0,0,6">
+                      <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,*">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Text="{Binding Name}"
+                                   FontSize="12" FontWeight="SemiBold" Opacity="0.8" Margin="0,0,0,6"
+                                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ResourcesTooltip}" />
+                        <StackPanel Grid.Row="1" Grid.Column="0" Spacing="4" Margin="0,0,6,0"
+                                    ToolTip.Tip="{Binding CpuChartTooltip}">
+                          <TextBlock FontSize="11" Opacity="0.6" FontFamily="Cascadia Mono,Consolas,monospace">
+                            <Run Text="CPU " />
+                            <Run Text="{Binding PeakCpuText}" />
+                            <Run Text=" peak" />
+                          </TextBlock>
+                          <controls:Sparkline Height="40" Values="{Binding CpuSeries}"
+                                              Stroke="{StaticResource UsageCpuStrokeBrush}"
+                                              AreaFill="{StaticResource UsageCpuAreaBrush}"
+                                              BaselineBrush="{StaticResource ChartBaselineBrush}" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4" Margin="6,0,0,0"
+                                    ToolTip.Tip="{Binding MemoryChartTooltip}">
+                          <TextBlock FontSize="11" Opacity="0.6" FontFamily="Cascadia Mono,Consolas,monospace">
+                            <Run Text="MEM " />
+                            <Run Text="{Binding PeakMemoryText}" />
+                            <Run Text=" peak" />
+                          </TextBlock>
+                          <controls:Sparkline Height="40" Values="{Binding MemorySeries}"
+                                              Stroke="{StaticResource UsageMemoryStrokeBrush}"
+                                              AreaFill="{StaticResource UsageMemoryAreaBrush}"
+                                              BaselineBrush="{StaticResource ChartBaselineBrush}" />
+                        </StackPanel>
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
           </ScrollViewer>
         </Grid>
       </TabItem>

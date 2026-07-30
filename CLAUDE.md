@@ -81,6 +81,11 @@ choice must be AOT/trimming-compatible from day one.
    sidebar's filter box + collapsible sections (CRDs collapsed by default,
    `SidebarSectionViewModel.IsExpanded`) are load-bearing UX, not optional
    polish — any new sidebar content must stay filterable and collapsible.
+   The filter matches display name, **API group and short names**
+   (`SidebarKindViewModel.Matches`), because the group is the only thing
+   telling two same-named CRD kinds apart and "svc"/"po" is how people think.
+   A pinned **Recent** section (top, max 5, session-scoped) holds the kinds
+   most recently selected.
 7. **The inspector docks along the bottom (Lens-style), not in a side sidecar.**
    The resource list fills the content area's width; opening a resource docks a
    detail/logs/exec/YAML tab under it, full-width, so logs and terminals read on
@@ -181,6 +186,39 @@ The CPU/Memory `DataGridColumn`s are shown/hidden from `ClusterTabView`
 code-behind: a `DataGridColumn` isn't in the visual tree, so it never inherits
 the DataContext and cannot bind its `IsVisible`.
 
+### Usage over time (graphs)
+
+A single usage number can't tell a spike from a steady state, so every polled
+sample also lands in a rolling window and gets drawn:
+
+- **`UsageHistory` (Core)** is a fixed-capacity ring of
+  `UsageSample(At, CpuNanocores, MemoryBytes)` — 120 samples, i.e. 30 min at the
+  15s cadence. It lives in Core because it's engine state with no UI dependency
+  (a CLI would want the same window), and it is **deliberately bounded and never
+  persisted**: `metrics.k8s.io` has no history endpoint, so anything shown
+  over time is only what this session observed. A cluster-wide time series is
+  Prometheus's job, not kubeNimbus's — do not grow this into a store.
+- **A missing reading is recorded as a gap, not a zero.** `ResourceRowViewModel
+  .ClearUsage()` appends an all-null sample, and `Sparkline` breaks the line
+  across nulls: a pod that stopped reporting must not read as a pod that went
+  idle. `UsageHistoryTests` pins both that and the ring's wrap-around, because
+  either bug draws a plausible-looking but wrong chart.
+- **`Controls/Sparkline.cs`** is a hand-rolled `Control` (area + polyline via
+  `DrawingContext`/`StreamGeometry`, auto-scaled to the series peak with 12%
+  headroom). Hand-rolled on purpose: the Avalonia charting packages bring
+  reflection-based binding/theming, which NativeAOT is exactly what this repo
+  can't accept. No reflection, no templates.
+- Series are re-published as fresh arrays per poll — a ring buffer mutated in
+  place raises no change notification, and 120 doubles is cheaper than any
+  observable-collection plumbing.
+- Where it shows: a sparkline beside the number in the list's CPU/Memory cells,
+  and pod detail's **Usage** tab (whole-pod CPU and memory charts plus a
+  per-container pair). The tab is appended *after* Events so the existing
+  `SelectedDetailTabIndex` values (Logs=0, Env=1, Events=2) stay stable.
+- The Usage tab distinguishes its three states explicitly (UI rule 8):
+  no metrics API on this cluster / samples not collected yet / charts. The
+  first two look identical otherwise and lead to very different next steps.
+
 ## Helm release browsing (read-only)
 
 `ClusterClient.Helm.cs` reads Helm 3 releases **straight off the cluster** — no
@@ -224,6 +262,49 @@ Entry points are command-palette only (UI rule 1): "Access review — my
 permissions" always, plus a subject review when the selected row is a
 ServiceAccount (the only RBAC subject that exists as an object — Users and
 Groups are just strings inside a binding).
+
+## Multi-cluster aggregated (fleet) views
+
+`ClusterFleet.cs` + `AsyncMerge.cs` (Core) fan one resource query out across every
+connected cluster and interleave the results. Four things are load-bearing:
+
+- **Each cluster resolves its own descriptor.** `ClusterFleet.ResolveAsync` looks
+  the requested `(group, kind)` up in *that member's* discovery catalog — the
+  same CRD kind is routinely served at `v1beta1` on one cluster and `v1` on
+  another, and reusing one cluster's descriptor elsewhere would query a path
+  that doesn't exist there.
+- **A `Reset` is scoped to the cluster that sent it.** Watches relist on 410
+  Gone, and `ClusterTabViewModel.ApplyFleet` therefore clears only that
+  cluster's rows. Treating a fleet Reset like a single-cluster one would wipe
+  four healthy clusters because the fifth reconnected.
+- **Partial is normal, and is always stated.** A kind missing from a cluster, or
+  a cluster that can't be reached, never fails the view: the header shows
+  "n of m clusters serve X" and unreachable members surface in the inline
+  warning. `AsyncMerge` reports per-source failures and keeps the rest flowing
+  for the same reason.
+- **Rows, tab keys and metrics keys are all cluster-qualified.** The same
+  namespace/name exists on every cluster in a fleet, so
+  `ResourceRowViewModel.KeyFor`, `PodDetailTabViewModel.KeyFor` and
+  `YamlEditorTabViewModel.KeyFor` all fold the cluster name in — otherwise the
+  second cluster's pod silently reuses the first one's row and inspector tab.
+  Opening a row uses **its own** cluster's client and descriptor
+  (`ClusterTabViewModel.ClientFor`/`DescriptorFor`), or a YAML apply would land
+  on the wrong cluster; owner-chain navigation stays pinned to the same cluster.
+
+Why a channel-based merge (`AsyncMerge`): the sources are long-lived watch
+streams that each block indefinitely, so a sequential `await foreach` over them
+would starve every cluster but the first. `AsyncMergeTests` pins exactly that,
+plus per-source failure isolation and teardown-on-abandon.
+
+UI-wise this is a **toggle on the existing list**, not a new view: the sidebar,
+namespace picker, filter and inspector are all unchanged, the list gains a
+Cluster column (shown/hidden from code-behind, same DataGridColumn reason as the
+usage columns), and the toggle only appears with more than one cluster connected
+— a fleet of one is the tab you are already looking at (UI rule 1). The command
+palette carries the same toggle. `MainWindowViewModel` owns the member list and
+makes cluster names unique (two tabs on one context would otherwise merge into
+one apparent cluster) and re-fans active aggregated watches when a tab opens or
+closes, so no tab keeps watching a disposed client.
 
 ## Sandbox cluster bootstrap (how tests get a real cluster)
 
@@ -377,10 +458,11 @@ note in the PR which screenshots were fixture-only.
 - [x] pgNimbus visual design system ported (Theme.axaml, two-tone shell,
       brand-blue accent, MDI icon vectors).
 
-**Later phases (do NOT build now, but don't paint into a corner):** multi-cluster
-aggregated views. (Resource metrics, read-only Helm release browsing and RBAC
-access review shipped — see the sections above; usage graphs over time and
-"who can do X across the cluster" are still open.)
+**Later phases:** all shipped. Resource metrics, session-window usage graphs,
+read-only Helm release browsing, RBAC access review and multi-cluster aggregated
+views each have a section above. Still open: "who can do X across the cluster"
+(the cluster-wide direction of the RBAC review). Long-range metrics history is a
+**non-goal**, see "Usage over time" above.
 
 **Non-goals forever:** cluster provisioning, in-cluster agents, telemetry.
 
@@ -529,16 +611,60 @@ Kubernetes' other classic on-call surface (env vars/secrets):
   A real-cluster pass — ideally once with metrics-server, once without — is
   still worth doing before/soon after merge.
 
-Not yet built (see "Later phases" above): metrics graphs/history,
-multi-cluster aggregated views. The UX pass and the logs/events/telemetry/
+**Usage-graphs pass:** closed the "usage graphs over time" item — see
+"Usage over time (graphs)" above for the design rules. New in this pass:
+`UsageHistory` (Core, bounded session-only ring + `UsageHistoryTests`),
+`Controls/Sparkline.cs` (hand-rolled AOT-safe area/line chart), a sparkline
+beside the number in the list's CPU/Memory cells, and pod detail's **Usage**
+tab (pod-total CPU/memory charts + per-container pair, with explicit
+no-metrics-server and still-collecting states). The screenshot fixtures now
+replay 24 stamped poll ticks through the *real* `ApplyUsage`/`ApplyMetrics`
+entry points (`ClusterTabScenarios.SeedUsage`/`SeedPodUsage`) rather than
+setting chart state directly, so what renders offline is what a real poll
+produces; `ApplyUsage`/`ApplyMetrics` take an optional sample timestamp for
+exactly that reason (production passes none and uses now).
+**Not verified this session at all:** the container had no .NET SDK and this
+session's egress policy blocks every .NET install host
+(`builds.dotnet.microsoft.com`, `aka.ms`, `download.visualstudio.microsoft.com`
+all answer 403 through the agent proxy; only nuget.org and github.com are
+reachable), so `dotnet build`, the TUnit suite, `tools/Screenshot` and the
+linux-x64 NativeAOT check could none of them run. Everything in this pass is
+code-reviewed only — a build + test + screenshot pass is the first thing to do
+on a machine with an SDK.
+
+**Fleet pass:** closed the last "later phase" item — multi-cluster aggregated
+views, see "Multi-cluster aggregated (fleet) views" above for the rules. New:
+`ClusterFleet.cs` and `AsyncMerge.cs` in Core (+ `AsyncMergeTests`), an
+"All clusters" toggle and Cluster column on the existing list, cluster-qualified
+row/tab/metrics keys, per-row client+descriptor resolution so an apply can't land
+on the wrong cluster, and `MainWindowViewModel` ownership of the member list
+(unique cluster names, re-fan on tab open/close). Screenshot scenarios
+`cluster-tab-fleet-list` and `-partial` populate rows directly, since a real
+aggregated watch needs several live clusters. Same verification gap as the
+usage-graphs pass: no SDK in that session either, so CI (build + TUnit +
+linux-x64 AOT publish) is the only thing that has looked at it.
+
+The UX pass and the logs/events/telemetry/
 env-secrets pass are both not exhaustive — there's no finish line here, just
 diminishing returns; candidates for a follow-up iteration: coalescing
-duplicate CRD `Kind`s across API groups in the sidebar (e.g. `Backup` from
-both velero.io and postgresql.cnpg.io currently renders as two
-identical-looking rows — though same-named kinds within a single section
-now carry a disambiguating group label, see "Sidebar: same-named kinds"
-above), a "recently used kinds" section, transition/hover animation polish,
-a proper win-x64 NativeAOT pass (still only linux-x64 has ever been
-verified), a live k3s pass, and node-level CPU/Mem (only pod-level shipped
-by the logs/events/telemetry pass; node-level was added separately by the
-Helm/RBAC/metrics pass above — see "Live CPU/memory from metrics.k8s.io").
+transition/hover animation polish, a proper win-x64 NativeAOT pass (still
+only linux-x64 has ever been verified), a live k3s pass, and node-level
+CPU/Mem (only pod-level shipped by the logs/events/telemetry pass;
+node-level was added separately by the Helm/RBAC/metrics pass above — see
+"Live CPU/memory from metrics.k8s.io").
+
+**Sidebar navigation pass** (small, alongside the fleet pass): the two
+sidebar follow-ups are closed, though not the way they were originally
+phrased. *Coalescing* same-named CRD kinds into one row was rejected —
+nesting rows inside a section that is already 100+ kinds deep costs more
+than it buys, and the group label added earlier already tells `Backup`
+(velero.io) from `Backup` (postgresql.cnpg.io). What was actually missing
+is that you could not **filter** by the thing the row displays:
+`SidebarKindViewModel.Matches` now matches the API group and the server's
+short names as well as the display name, so "velero" or "svc" find what
+you would expect. And a pinned **Recent** section (top of the sidebar, max
+5, `ClusterTabViewModel.RecordRecentKind`) holds second instances of the
+kinds most recently selected — session-scoped and reset on reconnect,
+since the entries hold descriptor instances from the catalog being
+replaced. Persisting it across restarts would need a `WorkspaceSettings`
+schema change and is deliberately not done yet.

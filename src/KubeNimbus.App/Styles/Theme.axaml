@@ -31,6 +31,16 @@
             <SolidColorBrush x:Key="ActiveDotBrush" Color="#46A758" />
             <SolidColorBrush x:Key="ErrorBrush" Color="IndianRed" />
 
+            <!-- Usage charts (metrics.k8s.io history, see Controls/Sparkline.cs). Fixed
+                 hues so they read the same on both themes, and deliberately NOT the
+                 ok/warn/error status colors: a CPU line is a measurement, not a verdict.
+                 CPU reuses the brand accent; memory gets a distinct teal. -->
+            <SolidColorBrush x:Key="UsageCpuStrokeBrush" Color="#2D7FF9" />
+            <SolidColorBrush x:Key="UsageCpuAreaBrush" Color="#382D7FF9" />
+            <SolidColorBrush x:Key="UsageMemoryStrokeBrush" Color="#12A594" />
+            <SolidColorBrush x:Key="UsageMemoryAreaBrush" Color="#3812A594" />
+            <SolidColorBrush x:Key="ChartBaselineBrush" Color="#38808080" />
+
             <CornerRadius x:Key="CardCornerRadius">8</CornerRadius>
             <CornerRadius x:Key="ControlCornerRadius">6</CornerRadius>
             <CornerRadius x:Key="PillCornerRadius">16</CornerRadius>

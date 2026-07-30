@@ -16,7 +16,19 @@ internal static class ClusterTabScenarios
     private static readonly ResourceDescriptor SecretDescriptor =
         new("", "v1", "Secret", "secrets", "secret", true, [], []);
 
-    private static ClusterTabViewModel BaseTab(bool populateRows = true)
+    /// <summary>
+    /// How many poll ticks of fake history the fixtures build. 24 ticks at the app's
+    /// real 15s cadence is six minutes — enough for a sparkline to actually have a
+    /// shape, which a single stand-in sample never does.
+    /// </summary>
+    private const int FixtureSampleCount = 24;
+
+    private static readonly TimeSpan FixturePollInterval = TimeSpan.FromSeconds(15);
+
+    /// <summary>Fixed "now" so every screenshot's time axis (and its captions) is diffable.</summary>
+    private static readonly DateTimeOffset FixtureNow = new(2026, 7, 30, 8, 45, 0, TimeSpan.Zero);
+
+    private static ClusterTabViewModel BaseTab(bool populateRows = true, bool seedUsage = true)
     {
         var context = new ClusterContext("prod-payments", "prod-payments-cluster", "payments", "fake-user", "fixture");
         var tab = new ClusterTabViewModel(context)
@@ -55,15 +67,17 @@ internal static class ClusterTabScenarios
             tab.SelectedRow = tab.Rows.FirstOrDefault();
 
             // metrics-server can't be reached from an offline fixture client, so
-            // stand in for one poll's samples — otherwise the CPU/Memory columns
-            // never appear in a screenshot. Deterministic per row, not random,
-            // so screenshots stay diffable.
-            tab.AreMetricsVisible = true;
-            for (var i = 0; i < tab.Rows.Count; i++)
+            // stand in for a session's worth of polls — otherwise the CPU/Memory
+            // columns never appear in a screenshot and their sparklines have
+            // nothing to draw. Deterministic per row, not random, so screenshots
+            // stay diffable.
+            if (seedUsage)
             {
-                tab.Rows[i].ApplyUsage(
-                    cpuNanocores: (3 + i * 17) * 1_000_000L,
-                    memoryBytes: (48 + i * 37) * 1024L * 1024L);
+                tab.AreMetricsVisible = true;
+                for (var i = 0; i < tab.Rows.Count; i++)
+                {
+                    SeedUsage(tab.Rows[i], i, (3 + i * 17) * 1_000_000L, (48 + i * 37) * 1024L * 1024L);
+                }
             }
         }
 
@@ -83,7 +97,7 @@ internal static class ClusterTabScenarios
     /// <summary>Same pod list, with the CPU/Mem column populated — demonstrates the metrics.k8s.io-present path.</summary>
     public static ClusterTabViewModel WorkloadsListWithMetrics()
     {
-        var tab = BaseTab();
+        var tab = BaseTab(seedUsage: false);
         ApplyMetrics(tab);
         return tab;
     }
@@ -92,18 +106,64 @@ internal static class ClusterTabScenarios
     {
         tab.AreMetricsVisible = true;
         var byKey = FixtureData.PodMetrics.ToDictionary(m => m.Key, StringComparer.Ordinal);
-        foreach (var row in tab.Rows)
+        for (var i = 0; i < tab.Rows.Count; i++)
         {
+            var row = tab.Rows[i];
             if (byKey.TryGetValue(row.Key, out var m))
             {
                 var (cpu, memory) = SumContainerUsage(m);
-                row.ApplyUsage(cpu, memory);
+                SeedUsage(row, i, cpu, memory);
             }
             else
             {
-                row.ClearUsage();
+                // A pod with no entry in the metrics response — the "—" column state,
+                // and a gap-only (so empty) sparkline.
+                for (var tick = 0; tick < FixtureSampleCount; tick++)
+                {
+                    row.ClearUsage(TickAt(tick));
+                }
             }
         }
+    }
+
+    /// <summary>
+    /// Replays <see cref="FixtureSampleCount"/> polls into a row's usage history,
+    /// landing exactly on <paramref name="cpu"/>/<paramref name="memory"/> on the
+    /// last tick — so the sparkline has a shape while the CPU/Memory text still
+    /// matches the fixture's own numbers.
+    /// </summary>
+    private static void SeedUsage(ResourceRowViewModel row, int seed, long? cpu, long? memory)
+    {
+        for (var tick = 0; tick < FixtureSampleCount; tick++)
+        {
+            var final = tick == FixtureSampleCount - 1;
+            row.ApplyUsage(Ripple(cpu, seed, tick, final), Ripple(memory, seed + 5, tick, final), TickAt(tick));
+        }
+    }
+
+    private static DateTimeOffset TickAt(int tick) =>
+        FixtureNow - FixturePollInterval * (FixtureSampleCount - 1 - tick);
+
+    /// <summary>
+    /// A deterministic 0.5–1.1× wobble around the fixture's reading. Two sines of
+    /// different periods, so the series reads like a real workload rather than a
+    /// textbook sine wave — and identically on every run, which is what keeps the
+    /// screenshots diffable.
+    /// </summary>
+    private static long? Ripple(long? value, int seed, int tick, bool final)
+    {
+        if (value is not { } v)
+        {
+            return null;
+        }
+
+        if (final)
+        {
+            return v;
+        }
+
+        var factor = 0.8 + 0.22 * Math.Sin((tick + seed * 3) * 0.55) + 0.08 * Math.Cos((tick + seed) * 1.31);
+        return (long)(v * Math.Clamp(factor, 0.35, 1.25));
     }
 
     private static (long? Cpu, long? Memory) SumContainerUsage(DynamicResource podMetrics)
@@ -157,10 +217,110 @@ internal static class ClusterTabScenarios
         return tab;
     }
 
+    /// <summary>
+    /// The aggregated fleet list: one kind across three connected clusters, with the
+    /// Cluster column shown and the "n of m clusters" summary in the header.
+    /// </summary>
+    /// <remarks>
+    /// Rows are added directly rather than through <c>ClusterFleet.WatchAsync</c> —
+    /// that needs several live clusters, which no offline fixture can provide. Note the
+    /// ordering: <c>IsFleetView</c> is set first because it triggers the real
+    /// <c>RestartWatch()</c>, which clears <c>Rows</c>; populating before it would
+    /// leave an empty list (same class of gotcha as <c>SelectedNamespace</c>, see
+    /// <see cref="BaseTab"/>).
+    /// </remarks>
+    public static ClusterTabViewModel FleetList()
+    {
+        var tab = BaseTab(populateRows: false);
+        tab.IsFleetViewAvailable = true;
+        tab.IsFleetView = true;
+        tab.FleetSummary = "3 of 3 clusters serve Pod";
+
+        var seed = 0;
+        foreach (var cluster in new[] { "prod-payments", "prod-ledger", "staging-eu" })
+        {
+            foreach (var pod in FixtureData.Pods)
+            {
+                var row = new ResourceRowViewModel(pod, cluster);
+                tab.Rows.Add(row);
+                SeedUsage(row, seed, (4 + seed * 13) * 1_000_000L, (52 + seed * 29) * 1024L * 1024L);
+                seed++;
+            }
+        }
+
+        tab.AreMetricsVisible = true;
+        tab.SelectedRow = tab.Rows.FirstOrDefault();
+        tab.IsListLoading = false;
+        tab.IsListEmpty = tab.Rows.Count == 0;
+        return tab;
+    }
+
+    /// <summary>
+    /// A partial fleet — the honest common case: the kind isn't served everywhere (or a
+    /// cluster is unreachable), which the header states rather than leaving the user to
+    /// infer from the rows.
+    /// </summary>
+    public static ClusterTabViewModel FleetListPartial()
+    {
+        var tab = FleetList();
+        tab.FleetSummary = "2 of 3 clusters serve Pod";
+        tab.ConnectionWarning = "staging-eu: connection refused (127.0.0.1:6550)";
+        foreach (var row in tab.Rows.Where(r => r.ClusterName == "staging-eu").ToArray())
+        {
+            tab.Rows.Remove(row);
+        }
+
+        return tab;
+    }
+
     public static ClusterTabViewModel SidebarFiltered()
     {
         var tab = BaseTab();
         tab.SidebarFilter = "route";
+        return tab;
+    }
+
+    /// <summary>
+    /// Filtering by API group rather than by kind name — the case that makes the CRDs
+    /// section navigable when several groups ship a same-named kind.
+    /// </summary>
+    public static ClusterTabViewModel SidebarFilteredByGroup()
+    {
+        var tab = BaseTab();
+        tab.SidebarFilter = "cert-manager";
+        return tab;
+    }
+
+    /// <summary>
+    /// The pinned Recent section, built by selecting a few kinds through the real
+    /// <c>SelectKindCommand</c> — the same path a click takes.
+    /// </summary>
+    public static ClusterTabViewModel SidebarRecentKinds()
+    {
+        var tab = BaseTab();
+
+        // Whatever the fixture catalog actually holds in these sections, rather than
+        // named kinds — a scenario shouldn't break because a fixture changed.
+        foreach (var title in new[] { "Config", "Network", "Storage" })
+        {
+            if (tab.SidebarSections.FirstOrDefault(s => s.Title == title)?.Kinds.FirstOrDefault() is { } entry)
+            {
+                tab.SelectKindCommand.Execute(entry);
+            }
+        }
+
+        // Back to Pods, and re-populate: each SelectKind ran the real RestartWatch,
+        // which clears Rows and (with no live client behind the fixture) can't refill them.
+        var pods = tab.SidebarSections.First(s => s.Title == "Workloads").Kinds.First(k => k.Descriptor.Kind == "Pod");
+        tab.SelectKindCommand.Execute(pods);
+        foreach (var pod in FixtureData.Pods)
+        {
+            tab.Rows.Add(new ResourceRowViewModel(pod));
+        }
+
+        tab.SelectedRow = tab.Rows.FirstOrDefault();
+        tab.IsListLoading = false;
+        tab.IsListEmpty = tab.Rows.Count == 0;
         return tab;
     }
 
@@ -194,7 +354,7 @@ internal static class ClusterTabScenarios
         return tab;
     }
 
-    public static ClusterTabViewModel PodDetail()
+    public static ClusterTabViewModel PodDetail(bool seedUsage = true)
     {
         var tab = BaseTab();
         var row = tab.Rows.First(r => r.Name.StartsWith("payment-service-report-generator", StringComparison.Ordinal));
@@ -220,10 +380,12 @@ internal static class ClusterTabScenarios
         detail.IsFollowingLogs = true;
 
         // Same reasoning as the list rows: no live metrics API behind the fixture,
-        // so the per-container usage line gets a stand-in sample.
-        for (var i = 0; i < detail.Containers.Count; i++)
+        // so replay a session's worth of stand-in polls through the tab's real
+        // ApplyMetrics — that populates the container usage chips *and* the Usage
+        // tab's charts from production code rather than from a second code path.
+        if (seedUsage)
         {
-            detail.Containers[i].ApplyUsage((11 + i * 23) * 1_000_000L, (64 + i * 55) * 1024L * 1024L);
+            SeedPodUsage(detail);
         }
 
         detail.Events.Clear();
@@ -250,6 +412,61 @@ internal static class ClusterTabScenarios
             {
                 revealed.RevealedValue = "payments_svc";
             }
+        }
+
+        return tab;
+    }
+
+    /// <summary>
+    /// Replays fixture polls into a pod detail tab through its real
+    /// <see cref="PodDetailTabViewModel.ApplyMetrics"/>, so the per-container chips,
+    /// the whole-pod charts and the window caption all come out of production code.
+    /// </summary>
+    private static void SeedPodUsage(PodDetailTabViewModel detail)
+    {
+        var bases = detail.Containers
+            .Select((c, i) => (c.Name, Cpu: (11 + i * 23) * 1_000_000L, Memory: (64 + i * 55) * 1024L * 1024L))
+            .ToArray();
+
+        for (var tick = 0; tick < FixtureSampleCount; tick++)
+        {
+            var final = tick == FixtureSampleCount - 1;
+            var containers = new List<ContainerMetrics>(bases.Length);
+            for (var i = 0; i < bases.Length; i++)
+            {
+                containers.Add(new ContainerMetrics(
+                    bases[i].Name,
+                    Ripple(bases[i].Cpu, i, tick, final),
+                    Ripple(bases[i].Memory, i + 5, tick, final)));
+            }
+
+            detail.ApplyMetrics(new PodMetrics(detail.PodNamespace, detail.PodName, containers), TickAt(tick));
+        }
+    }
+
+    /// <summary>Pod detail's Usage tab — CPU/memory over the session's poll window, pod total plus per container.</summary>
+    public static ClusterTabViewModel PodDetailUsage()
+    {
+        var tab = PodDetail();
+        if (tab.SelectedInspectorTab is PodDetailTabViewModel detail)
+        {
+            detail.SelectedDetailTabIndex = 3;
+        }
+
+        return tab;
+    }
+
+    /// <summary>
+    /// The Usage tab on a cluster with no metrics-server — the degradation path that
+    /// has to read as "nothing to show here", not as a chart still loading.
+    /// </summary>
+    public static ClusterTabViewModel PodDetailUsageUnavailable()
+    {
+        var tab = PodDetail(seedUsage: false);
+        if (tab.SelectedInspectorTab is PodDetailTabViewModel detail)
+        {
+            detail.SelectedDetailTabIndex = 3;
+            detail.IsMetricsUnavailable = true;
         }
 
         return tab;

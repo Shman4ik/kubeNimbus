@@ -20,6 +20,14 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     private static readonly TimeSpan MetricsPollInterval = TimeSpan.FromSeconds(15);
 
     private readonly Dictionary<string, ResourceRowViewModel> _rowsByKey = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Which cluster served each row, in fleet mode — a row's client and descriptor
+    /// have to come from its own cluster, not from this tab's, or opening a row from
+    /// cluster B would apply YAML to cluster A. Empty outside fleet mode.
+    /// </summary>
+    private readonly Dictionary<string, FleetTarget> _fleetTargets = new(StringComparer.Ordinal);
+
     private CancellationTokenSource? _watchCts;
     private bool _metricsApiAvailable;
 
@@ -91,6 +99,64 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// </summary>
     [ObservableProperty]
     private bool _isHelmView;
+
+    /// <summary>
+    /// Supplies every connected cluster for the aggregated (fleet) view — set by
+    /// <see cref="MainWindowViewModel"/>, which owns the tab list. A tab doesn't
+    /// know about its siblings otherwise, and shouldn't.
+    /// </summary>
+    public Func<IReadOnlyList<FleetMember>>? FleetMembersProvider { get; set; }
+
+    /// <summary>
+    /// True when there is more than one connected cluster, i.e. when aggregating
+    /// would actually show something a single tab doesn't. The toggle stays out of
+    /// the way entirely otherwise (UI rule 1) — a "fleet" of one is just this tab.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsFleetToggleVisible))]
+    private bool _isFleetViewAvailable;
+
+    /// <summary>
+    /// True while the list aggregates the selected kind across every connected
+    /// cluster instead of just this tab's. The sidebar, namespace picker, filter and
+    /// inspector are unchanged — only the source of rows and one extra column differ,
+    /// which is why this is a toggle on the existing list rather than a new view.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isFleetView;
+
+    /// <summary>Hidden for Helm (releases aren't an API kind, so there's nothing to fan out).</summary>
+    public bool IsFleetToggleVisible => IsFleetViewAvailable && !IsHelmView;
+
+    partial void OnIsHelmViewChanged(bool value) => OnPropertyChanged(nameof(IsFleetToggleVisible));
+
+    /// <summary>
+    /// "4 of 5 clusters · payments" — how many clusters are actually behind the rows
+    /// on screen. A partial fleet is the normal state (a kind can be missing from a
+    /// cluster, a cluster can be unreachable), so the count is always stated rather
+    /// than left for the user to infer from the rows.
+    /// </summary>
+    [ObservableProperty]
+    private string? _fleetSummary;
+
+    partial void OnIsFleetViewChanged(bool value)
+    {
+        FleetSummary = null;
+        RestartWatch();
+    }
+
+    /// <summary>
+    /// Re-fans the aggregated watch after a cluster tab is opened or closed. Called by
+    /// <see cref="MainWindowViewModel"/>; a no-op unless this tab is aggregating, since
+    /// otherwise its own watch is unaffected by what the other tabs are doing.
+    /// </summary>
+    public void RefreshFleetMembership()
+    {
+        if (IsFleetView)
+        {
+            RestartWatch();
+        }
+    }
 
     public ObservableCollection<HelmReleaseRowViewModel> HelmReleases { get; } = [];
 
@@ -195,6 +261,11 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
 
         SidebarSections.Clear();
+
+        // The Recent entries hold descriptor instances from the catalog being replaced,
+        // so a reconnect starts the history over rather than pointing at stale ones.
+        _recentKinds.Clear();
+
         foreach (var title in SidebarGrouping.SectionOrder)
         {
             if (sections[title].Kinds.Count > 0)
@@ -242,6 +313,74 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
     }
 
+    /// <summary>
+    /// How many kinds the Recent section keeps. Small on purpose: it's a shortcut back
+    /// to what you're working on right now, and a long list is just the sidebar again.
+    /// </summary>
+    private const int MaxRecentKinds = 5;
+
+    /// <summary>Most-recent-first, deduplicated by (group, kind). Session-scoped — not persisted.</summary>
+    private readonly List<ResourceDescriptor> _recentKinds = [];
+
+    /// <summary>
+    /// Pushes a kind to the top of the Recent section. Selecting a recent entry itself
+    /// is ignored: reordering the list under the pointer that just clicked it makes the
+    /// section unusable.
+    /// </summary>
+    private void RecordRecentKind(SidebarKindViewModel kind)
+    {
+        if (kind.IsRecentEntry)
+        {
+            return;
+        }
+
+        _recentKinds.RemoveAll(d =>
+            string.Equals(d.Group, kind.Descriptor.Group, StringComparison.Ordinal)
+            && string.Equals(d.Kind, kind.Descriptor.Kind, StringComparison.Ordinal));
+        _recentKinds.Insert(0, kind.Descriptor);
+        while (_recentKinds.Count > MaxRecentKinds)
+        {
+            _recentKinds.RemoveAt(_recentKinds.Count - 1);
+        }
+
+        RebuildRecentSection();
+    }
+
+    /// <summary>
+    /// Rebuilds the pinned Recent section from <see cref="_recentKinds"/>. The entries
+    /// are second <see cref="SidebarKindViewModel"/> instances over the same descriptors
+    /// — including the synthetic Helm one, whose <c>IsHelmReleases</c> check is by
+    /// descriptor reference and so keeps working from a copy.
+    /// </summary>
+    private void RebuildRecentSection()
+    {
+        var section = SidebarSections.FirstOrDefault(s => s.Title == SidebarGrouping.RecentSection);
+        if (section is null)
+        {
+            section = new SidebarSectionViewModel(SidebarGrouping.RecentSection);
+            SidebarSections.Insert(0, section);
+        }
+
+        section.Kinds.Clear();
+        foreach (var descriptor in _recentKinds)
+        {
+            var iconKey = ReferenceEquals(descriptor, SidebarGrouping.HelmReleaseDescriptor)
+                ? SidebarGrouping.IconKeyFor(SidebarGrouping.HelmSection)
+                : SidebarGrouping.IconKeyFor(descriptor, SidebarGrouping.SectionFor(descriptor));
+
+            section.Kinds.Add(new SidebarKindViewModel(descriptor, iconKey)
+            {
+                IsRecentEntry = true,
+                // Same-named kinds from different groups are exactly what this section
+                // is most likely to hold two of, so always carry the group here.
+                GroupLabel = descriptor.Group.Length > 0 ? descriptor.Group : "core",
+            });
+        }
+
+        // A rebuild replaces the instances the filter had already classified.
+        ApplySidebarFilter();
+    }
+
     partial void OnSidebarFilterChanged(string value) => ApplySidebarFilter();
 
     [RelayCommand]
@@ -265,7 +404,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             var anyMatch = false;
             foreach (var kind in section.Kinds)
             {
-                var match = !filtering || kind.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase);
+                var match = !filtering || kind.Matches(query);
                 kind.IsVisible = match;
                 anyMatch |= match;
             }
@@ -312,6 +451,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         {
             return;
         }
+
+        RecordRecentKind(kind);
 
         foreach (var section in SidebarSections)
         {
@@ -446,6 +587,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         Rows.Clear();
         _rowsByKey.Clear();
+        _fleetTargets.Clear();
         IsListLoading = Client is not null && SelectedKind is not null;
         RecomputeListEmpty();
 
@@ -456,12 +598,23 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
 
         var descriptor = SelectedKind.Descriptor;
-        AreMetricsVisible = _metricsApiAvailable && IsMeteredKind(descriptor);
         var @namespace = descriptor.Namespaced && SelectedNamespace != AllNamespaces ? SelectedNamespace : null;
 
         _watchCts = new CancellationTokenSource();
         var token = _watchCts.Token;
         var client = Client;
+
+        if (IsFleetView && FleetMembersProvider?.Invoke() is { Count: > 0 } members)
+        {
+            // In fleet mode metrics availability is per cluster and unknown up front,
+            // so the columns go on for a metered kind and the poll takes them away
+            // again if no cluster in scope actually serves metrics.k8s.io.
+            AreMetricsVisible = IsMeteredKind(descriptor);
+            StartFleetWatch(descriptor, members, @namespace, token);
+            return;
+        }
+
+        AreMetricsVisible = _metricsApiAvailable && IsMeteredKind(descriptor);
 
         _ = Task.Run(async () =>
         {
@@ -485,12 +638,94 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             }
         }, token);
 
-        StartMetricsPolling(descriptor, @namespace, token);
+        StartMetricsPolling(descriptor, [("", client)], @namespace, token);
+    }
+
+    /// <summary>
+    /// Fleet mode: resolve the selected kind against every connected cluster's own
+    /// discovery, then run one list+watch per cluster merged into this list.
+    /// </summary>
+    private void StartFleetWatch(
+        ResourceDescriptor descriptor, IReadOnlyList<FleetMember> members, string? @namespace, CancellationToken token)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var targets = await ClusterFleet.ResolveAsync(
+                    members, descriptor.Group, descriptor.Kind,
+                    memberUnavailable: (member, ex) => Dispatcher.UIThread.Post(
+                        () => ConnectionWarning = $"{member.ClusterName}: {ex.Message}"),
+                    cancellationToken: token);
+
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    _fleetTargets.Clear();
+                    foreach (var target in targets)
+                    {
+                        _fleetTargets[target.Member.ClusterName] = target;
+                    }
+
+                    FleetSummary = $"{targets.Count} of {members.Count} clusters serve {descriptor.Kind}";
+                    if (targets.Count == 0)
+                    {
+                        IsListLoading = false;
+                        RecomputeListEmpty();
+                    }
+                });
+
+                if (targets.Count == 0)
+                {
+                    return;
+                }
+
+                StartMetricsPolling(
+                    descriptor,
+                    targets.Select(t => (t.Member.ClusterName, t.Member.Client)).ToArray(),
+                    @namespace,
+                    token);
+
+                await foreach (var evt in ClusterFleet.WatchAsync(
+                    targets, @namespace,
+                    connectionLost: (member, ex) => Dispatcher.UIThread.Post(
+                        () => ConnectionWarning = $"{member.ClusterName}: {ex.Message}"),
+                    cancellationToken: token))
+                {
+                    await Dispatcher.UIThread.InvokeAsync(() => ApplyFleet(evt));
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // normal when switching kind/namespace, leaving fleet mode, or disconnecting
+            }
+            catch (Exception ex)
+            {
+                Dispatcher.UIThread.Post(() => Status = $"Fleet watch ended: {ex.Message}");
+            }
+        }, token);
     }
 
     /// <summary>Kinds metrics.k8s.io reports on. Everything else has no usage to show.</summary>
     private static bool IsMeteredKind(ResourceDescriptor descriptor) =>
         string.IsNullOrEmpty(descriptor.Group) && descriptor.Kind is "Pod" or "Node";
+
+    /// <summary>The client that owns a row — its own cluster's in fleet mode, this tab's otherwise.</summary>
+    private ClusterClient? ClientFor(ResourceRowViewModel row) => ClientForCluster(row.ClusterName);
+
+    private ClusterClient? ClientForCluster(string clusterName) =>
+        clusterName.Length > 0 && _fleetTargets.TryGetValue(clusterName, out var target)
+            ? target.Member.Client
+            : Client;
+
+    /// <summary>
+    /// The descriptor to use for a row. Resolved per cluster in fleet mode: the same
+    /// CRD kind can be served at different versions on different clusters, and this
+    /// descriptor is what an apply/delete builds its path from.
+    /// </summary>
+    private ResourceDescriptor? DescriptorFor(ResourceRowViewModel row) =>
+        row.ClusterName.Length > 0 && _fleetTargets.TryGetValue(row.ClusterName, out var target)
+            ? target.Descriptor
+            : SelectedKind?.Descriptor;
 
     /// <summary>
     /// Polls usage for the visible list alongside its watch, on the same
@@ -498,9 +733,13 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// The metrics API has no watch endpoint (it's a point-in-time aggregate),
     /// so this is the one place the app polls rather than streams.
     /// </summary>
-    private void StartMetricsPolling(ResourceDescriptor descriptor, string? @namespace, CancellationToken token)
+    private void StartMetricsPolling(
+        ResourceDescriptor descriptor,
+        IReadOnlyList<(string ClusterName, ClusterClient Client)> sources,
+        string? @namespace,
+        CancellationToken token)
     {
-        if (!AreMetricsVisible || Client is not { } client)
+        if (!AreMetricsVisible || sources.Count == 0)
         {
             return;
         }
@@ -514,21 +753,48 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             {
                 while (!token.IsCancellationRequested)
                 {
-                    try
-                    {
-                        var samples = pods
-                            ? (await client.GetPodMetricsAsync(@namespace, token))
-                                .Select(m => (Key: m.Key, Cpu: m.CpuNanocores, Memory: m.MemoryBytes))
-                            : (await client.GetNodeMetricsAsync(token))
-                                .Select(m => (Key: $"/{m.Name}", Cpu: m.CpuNanocores, Memory: m.MemoryBytes));
+                    var byKey = new Dictionary<string, (long? Cpu, long? Memory)>(StringComparer.Ordinal);
+                    var unavailable = 0;
 
-                        var byKey = samples.ToDictionary(s => s.Key, StringComparer.Ordinal);
-                        await Dispatcher.UIThread.InvokeAsync(() => ApplyUsage(byKey));
-                    }
-                    catch (MetricsUnavailableException)
+                    // One request per cluster in scope (exactly one outside fleet mode).
+                    // Keys are cluster-qualified the same way the rows are, so a pod
+                    // with the same namespace/name on two clusters stays two rows.
+                    foreach (var (clusterName, client) in sources)
                     {
-                        // Registered but not serving (metrics-server down): stop
-                        // asking and take the columns away for this connection.
+                        try
+                        {
+                            if (pods)
+                            {
+                                foreach (var m in await client.GetPodMetricsAsync(@namespace, token))
+                                {
+                                    byKey[ResourceRowViewModel.KeyFor(clusterName, m.Key)] = (m.CpuNanocores, m.MemoryBytes);
+                                }
+                            }
+                            else
+                            {
+                                foreach (var m in await client.GetNodeMetricsAsync(token))
+                                {
+                                    byKey[ResourceRowViewModel.KeyFor(clusterName, $"/{m.Name}")] = (m.CpuNanocores, m.MemoryBytes);
+                                }
+                            }
+                        }
+                        catch (MetricsUnavailableException)
+                        {
+                            // Registered but not serving (metrics-server down), or absent
+                            // entirely on this cluster.
+                            unavailable++;
+                        }
+                        catch (Exception) when (!token.IsCancellationRequested)
+                        {
+                            // Transient (throttling, a restarting metrics-server):
+                            // keep the last sample on screen and retry next tick.
+                        }
+                    }
+
+                    if (unavailable == sources.Count)
+                    {
+                        // No cluster in scope has a usable metrics API: stop asking and
+                        // take the columns away rather than polling into the void.
                         await Dispatcher.UIThread.InvokeAsync(() =>
                         {
                             _metricsApiAvailable = false;
@@ -536,12 +802,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                         });
                         return;
                     }
-                    catch (Exception) when (!token.IsCancellationRequested)
-                    {
-                        // Transient (throttling, a restarting metrics-server):
-                        // keep the last sample on screen and retry next tick.
-                    }
 
+                    await Dispatcher.UIThread.InvokeAsync(() => ApplyUsage(byKey));
                     await timer.WaitForNextTickAsync(token);
                 }
             }
@@ -553,7 +815,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     }
 
     /// <summary>Pushes one poll's samples onto the matching rows; rows with no sample fall back to "—".</summary>
-    private void ApplyUsage(Dictionary<string, (string Key, long? Cpu, long? Memory)> byKey)
+    private void ApplyUsage(Dictionary<string, (long? Cpu, long? Memory)> byKey)
     {
         foreach (var (key, row) in _rowsByKey)
         {
@@ -606,6 +868,61 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         RecomputeListEmpty();
     }
 
+    /// <summary>
+    /// Fleet-mode counterpart of <see cref="Apply"/>. The one thing it must not do is
+    /// treat a Reset as "clear the list": a Reset is scoped to the cluster that sent it
+    /// (initial sync, or a relist after 410 Gone), so clearing everything would wipe
+    /// four healthy clusters because the fifth reconnected.
+    /// </summary>
+    private void ApplyFleet(FleetResourceEvent tagged)
+    {
+        IsListLoading = false;
+        var cluster = tagged.ClusterName;
+
+        switch (tagged.Event.Type)
+        {
+            case ResourceEventType.Reset:
+                foreach (var key in _rowsByKey
+                    .Where(entry => string.Equals(entry.Value.ClusterName, cluster, StringComparison.Ordinal))
+                    .Select(entry => entry.Key)
+                    .ToArray())
+                {
+                    if (_rowsByKey.Remove(key, out var stale))
+                    {
+                        Rows.Remove(stale);
+                    }
+                }
+
+                ConnectionWarning = null;
+                break;
+
+            case ResourceEventType.Added or ResourceEventType.Modified when tagged.Event.Resource is { } added:
+                var addedKey = ResourceRowViewModel.KeyFor(cluster, added.Key);
+                if (_rowsByKey.TryGetValue(addedKey, out var existing))
+                {
+                    existing.Update(added);
+                }
+                else
+                {
+                    var row = new ResourceRowViewModel(added, cluster);
+                    _rowsByKey[addedKey] = row;
+                    Rows.Add(row);
+                }
+
+                break;
+
+            case ResourceEventType.Deleted when tagged.Event.Resource is { } deleted:
+                if (_rowsByKey.Remove(ResourceRowViewModel.KeyFor(cluster, deleted.Key), out var gone))
+                {
+                    Rows.Remove(gone);
+                }
+
+                break;
+        }
+
+        RecomputeListEmpty();
+    }
+
     /// <summary>Double-click / Enter: promotes (or opens) a permanent tab. Pod → detail; anything else → YAML.</summary>
     [RelayCommand]
     private async Task OpenSelectedAsync() => await OpenRowAsync(SelectedRow, preview: false);
@@ -616,7 +933,9 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     private async Task OpenRowAsync(ResourceRowViewModel? row, bool preview)
     {
-        if (row is null || Client is null || SelectedKind is null)
+        // In fleet mode the row's own cluster owns it — using this tab's client here
+        // would open (and later apply/delete) against the wrong cluster.
+        if (row is null || ClientFor(row) is not { } client || DescriptorFor(row) is not { } descriptor)
         {
             return;
         }
@@ -625,13 +944,16 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         // straight to what the event is about (the same navigation owner-chips use)
         // is the more useful default action here, matching CLAUDE.md's "double-click
         // = default action" rule.
-        if (SelectedKind.Descriptor is { Kind: "Event", Group: "" } && row.Resource.InvolvedObject() is { } involved)
+        if (descriptor is { Kind: "Event", Group: "" } && row.Resource.InvolvedObject() is { } involved)
         {
             await OpenOwnerAsync(involved, row.Resource.InvolvedObjectNamespace() ?? row.Namespace);
             return;
         }
 
-        var key = SelectedKind.Descriptor.Kind == "Pod" ? $"pod:{row.Namespace}/{row.Name}" : $"yaml:{SelectedKind.Descriptor.ApiVersion}/{SelectedKind.Descriptor.Kind}:{row.Namespace}/{row.Name}";
+        var isPod = descriptor.Kind == "Pod";
+        var key = isPod
+            ? PodDetailTabViewModel.KeyFor(row.ClusterName, row.Namespace, row.Name)
+            : YamlEditorTabViewModel.KeyFor(row.ClusterName, descriptor, row.Namespace, row.Name);
         var existing = InspectorTabs.FirstOrDefault(t => t.Key == key);
         if (existing is not null)
         {
@@ -644,16 +966,13 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             return;
         }
 
-        InspectorTabViewModelBase tab;
-        if (SelectedKind.Descriptor.Kind == "Pod")
-        {
-            tab = new PodDetailTabViewModel(Client, row, AddInspectorTab, OpenOwnerAsync);
-        }
-        else
-        {
-            var yaml = row.Resource.ToYaml();
-            tab = new YamlEditorTabViewModel(Client, SelectedKind.Descriptor, row.Namespace, row.Name, yaml);
-        }
+        InspectorTabViewModelBase tab = isPod
+            ? new PodDetailTabViewModel(
+                client, row, AddInspectorTab,
+                // Bound to this row's cluster so owner navigation stays on it.
+                (owner, namespaceHint) => OpenOwnerAsync(owner, namespaceHint, row.ClusterName),
+                row.ClusterName)
+            : new YamlEditorTabViewModel(client, descriptor, row.Namespace, row.Name, row.Resource.ToYaml(), row.ClusterName);
 
         tab.IsPreview = preview;
         AddInspectorTab(tab, replacePreview: preview);
@@ -676,22 +995,27 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         SelectedInspectorTab = tab;
     }
 
-    /// <summary>Resolves an ownerReference (pod → replicaset → deployment, etc.) and opens its YAML.</summary>
-    private async Task OpenOwnerAsync(OwnerRef owner, string? namespaceHint)
+    /// <summary>
+    /// Resolves an ownerReference (pod → replicaset → deployment, etc.) and opens its
+    /// YAML. <paramref name="clusterName"/> keeps the whole chain on the cluster the
+    /// starting object came from when navigating out of an aggregated fleet row —
+    /// an owner chain that hopped clusters mid-way would be nonsense.
+    /// </summary>
+    private async Task OpenOwnerAsync(OwnerRef owner, string? namespaceHint, string clusterName = "")
     {
-        if (Client is null)
+        if (ClientForCluster(clusterName) is not { } client)
         {
             return;
         }
 
-        var resolved = await Client.ResolveOwnerAsync(owner, namespaceHint);
+        var resolved = await client.ResolveOwnerAsync(owner, namespaceHint);
         if (resolved is null)
         {
             ConnectionWarning = $"Owner {owner.Kind}/{owner.Name} could not be resolved (deleted?).";
             return;
         }
 
-        var catalog = await Client.GetResourceCatalogAsync();
+        var catalog = await client.GetResourceCatalogAsync();
         var descriptor = catalog.FirstOrDefault(d =>
             d.ApiVersion == owner.ApiVersion && d.Kind == owner.Kind);
         if (descriptor is null)
@@ -700,8 +1024,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
 
         var key = descriptor.Kind == "Pod"
-            ? $"pod:{resolved.Namespace}/{resolved.Name}"
-            : $"yaml:{descriptor.ApiVersion}/{descriptor.Kind}:{resolved.Namespace}/{resolved.Name}";
+            ? PodDetailTabViewModel.KeyFor(clusterName, resolved.Namespace, resolved.Name)
+            : YamlEditorTabViewModel.KeyFor(clusterName, descriptor, resolved.Namespace, resolved.Name);
         var existing = InspectorTabs.FirstOrDefault(t => t.Key == key);
         if (existing is not null)
         {
@@ -709,7 +1033,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             return;
         }
 
-        var tab = new YamlEditorTabViewModel(Client, descriptor, resolved.Namespace, resolved.Name, resolved.ToYaml());
+        var tab = new YamlEditorTabViewModel(
+            client, descriptor, resolved.Namespace, resolved.Name, resolved.ToYaml(), clusterName);
         AddInspectorTab(tab, replacePreview: false);
     }
 

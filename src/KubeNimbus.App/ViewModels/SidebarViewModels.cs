@@ -76,6 +76,26 @@ public sealed partial class SidebarKindViewModel(ResourceDescriptor descriptor, 
 
     public bool HasGroupLabel => GroupLabel.Length > 0;
 
+    /// <summary>
+    /// True for the copy of a kind that sits in the Recent section. The real sections
+    /// hold the canonical instances; selecting a recent entry must not re-record it and
+    /// churn the list it was clicked from.
+    /// </summary>
+    public bool IsRecentEntry { get; init; }
+
+    /// <summary>
+    /// Matches the sidebar filter against the display name, the API group and the
+    /// server's short names. Group matters because two sections routinely show
+    /// same-named kinds (Backup from velero.io and from postgresql.cnpg.io) and the
+    /// group is the only thing that tells them apart — filtering by the label the row
+    /// already displays has to work. Short names cover kubectl muscle memory: "svc",
+    /// "po", "deploy".
+    /// </summary>
+    public bool Matches(string query) =>
+        DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase)
+        || Descriptor.Group.Contains(query, StringComparison.OrdinalIgnoreCase)
+        || Descriptor.ShortNames.Any(s => s.Contains(query, StringComparison.OrdinalIgnoreCase));
+
     private static string Pluralize(string kind) =>
         kind.EndsWith('s') || kind.EndsWith('x') ? kind + "es" : kind + "s";
 }

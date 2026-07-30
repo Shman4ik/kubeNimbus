@@ -13,6 +13,13 @@ public sealed partial class ResourceRowViewModel : ObservableObject
 {
     public string Key { get; }
 
+    /// <summary>
+    /// Which cluster served this row, in the aggregated fleet view; empty for an
+    /// ordinary single-cluster list. Also part of <see cref="Key"/>, because the same
+    /// namespace/name exists on every cluster in a fleet and two of those are two rows.
+    /// </summary>
+    public string ClusterName { get; }
+
     [ObservableProperty]
     private DynamicResource _resource;
 
@@ -43,15 +50,50 @@ public sealed partial class ResourceRowViewModel : ObservableObject
     [ObservableProperty]
     private string _memoryText = "—";
 
-    public ResourceRowViewModel(DynamicResource resource)
+    /// <summary>
+    /// This row's rolling usage window (30 min at the 15s poll cadence), behind the
+    /// sparkline drawn in the CPU/Memory cells. Lives per row so it survives watch
+    /// events (which update the row in place) and dies with the row when the kind or
+    /// namespace changes — exactly the lifetime the graph should have.
+    /// </summary>
+    public UsageHistory History { get; } = new();
+
+    /// <summary>
+    /// Chart series, re-published as a fresh array on each poll: the chart binds to
+    /// the property, and a ring buffer mutated in place raises no change
+    /// notification. 120 doubles per row per poll is cheaper than any observable
+    /// collection plumbing would be.
+    /// </summary>
+    [ObservableProperty]
+    private IReadOnlyList<double?> _cpuSeries = [];
+
+    [ObservableProperty]
+    private IReadOnlyList<double?> _memorySeries = [];
+
+    [ObservableProperty]
+    private string _cpuTooltip = "No CPU samples yet.";
+
+    [ObservableProperty]
+    private string _memoryTooltip = "No memory samples yet.";
+
+    public ResourceRowViewModel(DynamicResource resource, string clusterName = "")
     {
-        Key = resource.Key;
+        ClusterName = clusterName;
+        Key = KeyFor(clusterName, resource.Key);
         _resource = resource;
         _namespace = resource.Namespace ?? "";
         _name = resource.Name;
         _status = "";
         Update(resource);
     }
+
+    /// <summary>
+    /// Row identity: the resource's own <c>namespace/name</c> key, qualified by cluster
+    /// when there is one. Shared with the metrics poll so its samples land on the right
+    /// rows in fleet mode.
+    /// </summary>
+    public static string KeyFor(string clusterName, string resourceKey) =>
+        clusterName.Length == 0 ? resourceKey : $"{clusterName}/{resourceKey}";
 
     public void Update(DynamicResource resource)
     {
@@ -62,17 +104,38 @@ public sealed partial class ResourceRowViewModel : ObservableObject
         (Status, StatusHealth) = ResourceStatusSummary.Summarize(resource);
     }
 
-    /// <summary>Applies one metrics.k8s.io sample; nulls render as "—".</summary>
-    public void ApplyUsage(long? cpuNanocores, long? memoryBytes)
+    /// <summary>
+    /// Applies one metrics.k8s.io sample; nulls render as "—". <paramref name="at"/>
+    /// defaults to now — it is only passed explicitly by the screenshot harness,
+    /// which needs a realistic time axis without waiting out real poll intervals.
+    /// </summary>
+    public void ApplyUsage(long? cpuNanocores, long? memoryBytes, DateTimeOffset? at = null)
     {
+        History.Add(cpuNanocores, memoryBytes, at);
         CpuText = Quantity.FormatCpu(cpuNanocores);
         MemoryText = Quantity.FormatMemory(memoryBytes);
+        RefreshSeries();
     }
 
-    /// <summary>Clears usage back to "—" (kind switched away from a metered kind, or metrics went away).</summary>
-    public void ClearUsage()
+    /// <summary>
+    /// Records that this poll had no sample for the row (the pod is too young to be
+    /// aggregated, or it vanished from the metrics response). The reading goes into
+    /// the history as a gap rather than a zero, and rather than being dropped — a
+    /// subject that stopped reporting should break the line, not shift the graph.
+    /// </summary>
+    public void ClearUsage(DateTimeOffset? at = null)
     {
+        History.Add(null, null, at);
         CpuText = "—";
         MemoryText = "—";
+        RefreshSeries();
+    }
+
+    private void RefreshSeries()
+    {
+        CpuSeries = History.CpuSeries();
+        MemorySeries = History.MemorySeries();
+        CpuTooltip = UsageFormat.Tooltip("CPU", CpuText, Quantity.FormatCpu(History.PeakCpuNanocores), History);
+        MemoryTooltip = UsageFormat.Tooltip("Mem", MemoryText, Quantity.FormatMemory(History.PeakMemoryBytes), History);
     }
 }
