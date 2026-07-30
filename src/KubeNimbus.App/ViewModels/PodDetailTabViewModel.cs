@@ -18,11 +18,15 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
 {
     private const int MaxLogLines = 4000;
 
+    /// <summary>Same cadence as the list view — metrics.k8s.io aggregates over ~30s.</summary>
+    private static readonly TimeSpan MetricsPollInterval = TimeSpan.FromSeconds(15);
+
     private readonly ClusterClient _client;
     private readonly ResourceRowViewModel _row;
     private readonly Action<InspectorTabViewModelBase> _openTab;
     private readonly Func<OwnerRef, string?, Task> _openOwner;
     private CancellationTokenSource? _logCts;
+    private readonly CancellationTokenSource _metricsCts = new();
 
     public override string Key { get; }
 
@@ -62,6 +66,52 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         _row.PropertyChanged += OnRowChanged;
         RefreshFromRow();
         _ = RefreshEventsAsync();
+        _ = Task.Run(() => PollMetricsAsync(_metricsCts.Token), _metricsCts.Token);
+    }
+
+    /// <summary>
+    /// Polls this pod's per-container usage. Silently does nothing on clusters
+    /// without metrics-server — the container rows just don't show a usage line.
+    /// </summary>
+    private async Task PollMetricsAsync(CancellationToken token)
+    {
+        using var timer = new PeriodicTimer(MetricsPollInterval);
+        try
+        {
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    var metrics = await _client.GetPodMetricsAsync(PodNamespace, PodName, token);
+                    if (metrics is not null)
+                    {
+                        await Dispatcher.UIThread.InvokeAsync(() => ApplyMetrics(metrics));
+                    }
+                }
+                catch (MetricsUnavailableException)
+                {
+                    return; // no metrics API on this cluster; stop asking
+                }
+                catch (Exception) when (!token.IsCancellationRequested)
+                {
+                    // transient — keep the last sample and retry on the next tick
+                }
+
+                await timer.WaitForNextTickAsync(token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // normal when the tab closes
+        }
+    }
+
+    private void ApplyMetrics(PodMetrics metrics)
+    {
+        foreach (var sample in metrics.Containers)
+        {
+            Containers.FirstOrDefault(c => c.Name == sample.Name)?.ApplyUsage(sample.CpuNanocores, sample.MemoryBytes);
+        }
     }
 
     private void OnRowChanged(object? sender, PropertyChangedEventArgs e)
@@ -132,6 +182,18 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
             }
 
             existing.TcpPorts = ports;
+
+            // Requests/limits give the usage numbers a scale to be read against.
+            if (c.TryGetProperty("resources", out var resources) && resources.ValueKind == JsonValueKind.Object)
+            {
+                var (cpuRequest, memoryRequest) = ReadResourceList(resources, "requests");
+                var (cpuLimit, memoryLimit) = ReadResourceList(resources, "limits");
+                existing.CpuRequestNanocores = cpuRequest;
+                existing.MemoryRequestBytes = memoryRequest;
+                existing.CpuLimitNanocores = cpuLimit;
+                existing.MemoryLimitBytes = memoryLimit;
+            }
+
             if (statuses.TryGetValue(name, out var st))
             {
                 existing.Ready = st.Ready;
@@ -141,6 +203,19 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         }
 
         SelectedContainer ??= Containers.FirstOrDefault();
+    }
+
+    /// <summary>Reads spec.containers[].resources.{requests|limits} as (nanocores, bytes).</summary>
+    private static (long? Cpu, long? Memory) ReadResourceList(JsonElement resources, string listName)
+    {
+        if (!resources.TryGetProperty(listName, out var list) || list.ValueKind != JsonValueKind.Object)
+        {
+            return (null, null);
+        }
+
+        var cpu = list.TryGetProperty("cpu", out var c) ? Quantity.ParseCpuNanocores(c.GetString()) : null;
+        var memory = list.TryGetProperty("memory", out var m) ? Quantity.ParseBytes(m.GetString()) : null;
+        return (cpu, memory);
     }
 
     private async Task RefreshEventsAsync()
@@ -254,10 +329,11 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     [RelayCommand]
     private Task OpenOwner(OwnerRef owner) => _openOwner(owner, PodNamespace);
 
-    public override Task OnClosingAsync()
+    public override async Task OnClosingAsync()
     {
         _row.PropertyChanged -= OnRowChanged;
         StopLogs();
-        return Task.CompletedTask;
+        await _metricsCts.CancelAsync();
+        _metricsCts.Dispose();
     }
 }

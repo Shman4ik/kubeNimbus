@@ -16,8 +16,12 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 {
     public const string AllNamespaces = "All namespaces";
 
+    /// <summary>metrics.k8s.io aggregates over a ~30s window, so polling faster than this buys nothing.</summary>
+    private static readonly TimeSpan MetricsPollInterval = TimeSpan.FromSeconds(15);
+
     private readonly Dictionary<string, ResourceRowViewModel> _rowsByKey = new(StringComparer.Ordinal);
     private CancellationTokenSource? _watchCts;
+    private bool _metricsApiAvailable;
 
     public ClusterContext Context { get; }
 
@@ -70,6 +74,16 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [ObservableProperty]
     private ResourceRowViewModel? _selectedRow;
 
+    /// <summary>
+    /// True when the CPU/Memory columns have anything to say: the cluster runs
+    /// metrics-server *and* the selected kind is one metrics.k8s.io reports on
+    /// (pods, nodes). The columns are shown/hidden from
+    /// <see cref="Views.ClusterTabView"/>'s code-behind — DataGridColumn lives
+    /// outside the visual tree, so it can't bind to the DataContext.
+    /// </summary>
+    [ObservableProperty]
+    private bool _areMetricsVisible;
+
     public ObservableCollection<InspectorTabViewModelBase> InspectorTabs { get; } = [];
 
     [ObservableProperty]
@@ -119,6 +133,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
             await BuildSidebarAsync();
             await RefreshNamespacesAsync();
+            await DetectMetricsApiAsync();
 
             var defaultKind = SidebarSections
                 .FirstOrDefault(s => s.Title == "Workloads")?.Kinds
@@ -255,6 +270,23 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         RestartWatch();
     }
 
+    /// <summary>
+    /// Plenty of clusters run without metrics-server. Probing once at connect
+    /// (off the cached discovery catalog) keeps the usage columns out of the way
+    /// entirely on those clusters instead of showing a column full of dashes.
+    /// </summary>
+    private async Task DetectMetricsApiAsync()
+    {
+        try
+        {
+            _metricsApiAvailable = Client is not null && await Client.IsMetricsApiAvailableAsync();
+        }
+        catch (Exception)
+        {
+            _metricsApiAvailable = false; // usage is supplementary; never fail the connect over it
+        }
+    }
+
     partial void OnSelectedNamespaceChanged(string value) => RestartWatch();
 
     [RelayCommand]
@@ -273,10 +305,12 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         if (Client is null || SelectedKind is null)
         {
+            AreMetricsVisible = false;
             return;
         }
 
         var descriptor = SelectedKind.Descriptor;
+        AreMetricsVisible = _metricsApiAvailable && IsMeteredKind(descriptor);
         var @namespace = descriptor.Namespaced && SelectedNamespace != AllNamespaces ? SelectedNamespace : null;
 
         _watchCts = new CancellationTokenSource();
@@ -304,6 +338,88 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 Dispatcher.UIThread.Post(() => Status = $"Watch ended: {ex.Message}");
             }
         }, token);
+
+        StartMetricsPolling(descriptor, @namespace, token);
+    }
+
+    /// <summary>Kinds metrics.k8s.io reports on. Everything else has no usage to show.</summary>
+    private static bool IsMeteredKind(ResourceDescriptor descriptor) =>
+        string.IsNullOrEmpty(descriptor.Group) && descriptor.Kind is "Pod" or "Node";
+
+    /// <summary>
+    /// Polls usage for the visible list alongside its watch, on the same
+    /// cancellation token — switching kind or namespace tears both down together.
+    /// The metrics API has no watch endpoint (it's a point-in-time aggregate),
+    /// so this is the one place the app polls rather than streams.
+    /// </summary>
+    private void StartMetricsPolling(ResourceDescriptor descriptor, string? @namespace, CancellationToken token)
+    {
+        if (!AreMetricsVisible || Client is not { } client)
+        {
+            return;
+        }
+
+        var pods = descriptor.Kind == "Pod";
+
+        _ = Task.Run(async () =>
+        {
+            using var timer = new PeriodicTimer(MetricsPollInterval);
+            try
+            {
+                while (!token.IsCancellationRequested)
+                {
+                    try
+                    {
+                        var samples = pods
+                            ? (await client.GetPodMetricsAsync(@namespace, token))
+                                .Select(m => (Key: m.Key, Cpu: m.CpuNanocores, Memory: m.MemoryBytes))
+                            : (await client.GetNodeMetricsAsync(token))
+                                .Select(m => (Key: $"/{m.Name}", Cpu: m.CpuNanocores, Memory: m.MemoryBytes));
+
+                        var byKey = samples.ToDictionary(s => s.Key, StringComparer.Ordinal);
+                        await Dispatcher.UIThread.InvokeAsync(() => ApplyUsage(byKey));
+                    }
+                    catch (MetricsUnavailableException)
+                    {
+                        // Registered but not serving (metrics-server down): stop
+                        // asking and take the columns away for this connection.
+                        await Dispatcher.UIThread.InvokeAsync(() =>
+                        {
+                            _metricsApiAvailable = false;
+                            AreMetricsVisible = false;
+                        });
+                        return;
+                    }
+                    catch (Exception) when (!token.IsCancellationRequested)
+                    {
+                        // Transient (throttling, a restarting metrics-server):
+                        // keep the last sample on screen and retry next tick.
+                    }
+
+                    await timer.WaitForNextTickAsync(token);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // normal on kind/namespace switch or disconnect
+            }
+        }, token);
+    }
+
+    /// <summary>Pushes one poll's samples onto the matching rows; rows with no sample fall back to "—".</summary>
+    private void ApplyUsage(Dictionary<string, (string Key, long? Cpu, long? Memory)> byKey)
+    {
+        foreach (var (key, row) in _rowsByKey)
+        {
+            if (byKey.TryGetValue(key, out var sample))
+            {
+                row.ApplyUsage(sample.Cpu, sample.Memory);
+            }
+            else
+            {
+                row.ClearUsage();
+            }
+        }
     }
 
     private void Apply(ResourceEvent<DynamicResource> evt)

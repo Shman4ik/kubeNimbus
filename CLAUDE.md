@@ -154,6 +154,29 @@ the App layer.
   local clients over one upstream connection) and pumps bytes with the
   channel-byte-prefix framing by hand.
 
+## Metrics (metrics.k8s.io)
+
+`ClusterClient.Metrics.cs` reads the aggregated metrics API for pod (per
+container) and node usage. Three things are deliberate:
+
+- **The API version comes from discovery**, not a hardcoded `v1beta1` — same
+  rule as everywhere else: nothing about the server's API surface is assumed.
+- **Absence is a first-class outcome.** No metrics-server (group missing) and a
+  registered-but-dead metrics API (503/404) both raise
+  `MetricsUnavailableException`; the UI hides the CPU/Memory columns instead of
+  showing an error or a column full of dashes.
+- **This is the one thing the app polls** (15s). The metrics API is a
+  point-in-time aggregate over a ~30s window with no watch endpoint, so there is
+  nothing to stream; polling is scoped to the current list's `CancellationToken`
+  so it dies with the watch when the kind/namespace changes.
+
+Quantity strings (`"100m"`, `"128Mi"`, `"12345n"`, `"129e6"`) are parsed by
+`Quantity.cs` — a small AOT-safe reader, since `ResourceQuantity` from the k8s
+client only covers typed models and metrics/CRD objects arrive as raw JSON.
+The CPU/Memory `DataGridColumn`s are shown/hidden from `ClusterTabView`
+code-behind: a `DataGridColumn` isn't in the visual tree, so it never inherits
+the DataContext and cannot bind its `IsVisible`.
+
 ## Sandbox cluster bootstrap (how tests get a real cluster)
 
 Integration tests run against a **real local Kubernetes cluster**, not mocks.
@@ -304,8 +327,8 @@ note in the PR which screenshots were fixture-only.
       brand-blue accent, MDI icon vectors).
 
 **Later phases (do NOT build now, but don't paint into a corner):** Helm release
-browsing, resource metrics/graphs, RBAC inspection, multi-cluster aggregated
-views.
+browsing, RBAC inspection, multi-cluster aggregated views. (Resource metrics
+shipped — see "Metrics" above; graphs over time are still open.)
 
 **Non-goals forever:** cluster provisioning, in-cluster agents, telemetry.
 

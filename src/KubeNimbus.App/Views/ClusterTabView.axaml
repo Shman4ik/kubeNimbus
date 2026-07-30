@@ -137,6 +137,26 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
+              <!-- Usage columns: only meaningful for pods/nodes on a cluster with
+                   metrics-server, so ClusterTabView.ApplyMetricsColumns shows and
+                   hides them (a DataGridColumn isn't in the visual tree and can't
+                   bind to the DataContext). -->
+              <DataGridTemplateColumn Header="CPU" Width="Auto" MinWidth="70" IsVisible="False">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                    <TextBlock Text="{Binding CpuText}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                               FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Memory" Width="Auto" MinWidth="80" IsVisible="False">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                    <TextBlock Text="{Binding MemoryText}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                               FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
             </DataGrid.Columns>
           </DataGrid>
 
