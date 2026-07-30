@@ -261,6 +261,11 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
 
         SidebarSections.Clear();
+
+        // The Recent entries hold descriptor instances from the catalog being replaced,
+        // so a reconnect starts the history over rather than pointing at stale ones.
+        _recentKinds.Clear();
+
         foreach (var title in SidebarGrouping.SectionOrder)
         {
             if (sections[title].Kinds.Count > 0)
@@ -308,6 +313,74 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
     }
 
+    /// <summary>
+    /// How many kinds the Recent section keeps. Small on purpose: it's a shortcut back
+    /// to what you're working on right now, and a long list is just the sidebar again.
+    /// </summary>
+    private const int MaxRecentKinds = 5;
+
+    /// <summary>Most-recent-first, deduplicated by (group, kind). Session-scoped — not persisted.</summary>
+    private readonly List<ResourceDescriptor> _recentKinds = [];
+
+    /// <summary>
+    /// Pushes a kind to the top of the Recent section. Selecting a recent entry itself
+    /// is ignored: reordering the list under the pointer that just clicked it makes the
+    /// section unusable.
+    /// </summary>
+    private void RecordRecentKind(SidebarKindViewModel kind)
+    {
+        if (kind.IsRecentEntry)
+        {
+            return;
+        }
+
+        _recentKinds.RemoveAll(d =>
+            string.Equals(d.Group, kind.Descriptor.Group, StringComparison.Ordinal)
+            && string.Equals(d.Kind, kind.Descriptor.Kind, StringComparison.Ordinal));
+        _recentKinds.Insert(0, kind.Descriptor);
+        while (_recentKinds.Count > MaxRecentKinds)
+        {
+            _recentKinds.RemoveAt(_recentKinds.Count - 1);
+        }
+
+        RebuildRecentSection();
+    }
+
+    /// <summary>
+    /// Rebuilds the pinned Recent section from <see cref="_recentKinds"/>. The entries
+    /// are second <see cref="SidebarKindViewModel"/> instances over the same descriptors
+    /// — including the synthetic Helm one, whose <c>IsHelmReleases</c> check is by
+    /// descriptor reference and so keeps working from a copy.
+    /// </summary>
+    private void RebuildRecentSection()
+    {
+        var section = SidebarSections.FirstOrDefault(s => s.Title == SidebarGrouping.RecentSection);
+        if (section is null)
+        {
+            section = new SidebarSectionViewModel(SidebarGrouping.RecentSection);
+            SidebarSections.Insert(0, section);
+        }
+
+        section.Kinds.Clear();
+        foreach (var descriptor in _recentKinds)
+        {
+            var iconKey = ReferenceEquals(descriptor, SidebarGrouping.HelmReleaseDescriptor)
+                ? SidebarGrouping.IconKeyFor(SidebarGrouping.HelmSection)
+                : SidebarGrouping.IconKeyFor(descriptor, SidebarGrouping.SectionFor(descriptor));
+
+            section.Kinds.Add(new SidebarKindViewModel(descriptor, iconKey)
+            {
+                IsRecentEntry = true,
+                // Same-named kinds from different groups are exactly what this section
+                // is most likely to hold two of, so always carry the group here.
+                GroupLabel = descriptor.Group.Length > 0 ? descriptor.Group : "core",
+            });
+        }
+
+        // A rebuild replaces the instances the filter had already classified.
+        ApplySidebarFilter();
+    }
+
     partial void OnSidebarFilterChanged(string value) => ApplySidebarFilter();
 
     [RelayCommand]
@@ -331,7 +404,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             var anyMatch = false;
             foreach (var kind in section.Kinds)
             {
-                var match = !filtering || kind.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase);
+                var match = !filtering || kind.Matches(query);
                 kind.IsVisible = match;
                 anyMatch |= match;
             }
@@ -378,6 +451,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         {
             return;
         }
+
+        RecordRecentKind(kind);
 
         foreach (var section in SidebarSections)
         {

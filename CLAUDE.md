@@ -81,6 +81,11 @@ choice must be AOT/trimming-compatible from day one.
    sidebar's filter box + collapsible sections (CRDs collapsed by default,
    `SidebarSectionViewModel.IsExpanded`) are load-bearing UX, not optional
    polish — any new sidebar content must stay filterable and collapsible.
+   The filter matches display name, **API group and short names**
+   (`SidebarKindViewModel.Matches`), because the group is the only thing
+   telling two same-named CRD kinds apart and "svc"/"po" is how people think.
+   A pinned **Recent** section (top, max 5, session-scoped) holds the kinds
+   most recently selected.
 7. **The inspector docks along the bottom (Lens-style), not in a side sidecar.**
    The resource list fills the content area's width; opening a resource docks a
    detail/logs/exec/YAML tab under it, full-width, so logs and terminals read on
@@ -642,12 +647,24 @@ linux-x64 AOT publish) is the only thing that has looked at it.
 The UX pass and the logs/events/telemetry/
 env-secrets pass are both not exhaustive — there's no finish line here, just
 diminishing returns; candidates for a follow-up iteration: coalescing
-duplicate CRD `Kind`s across API groups in the sidebar (e.g. `Backup` from
-both velero.io and postgresql.cnpg.io currently renders as two
-identical-looking rows — though same-named kinds within a single section
-now carry a disambiguating group label, see "Sidebar: same-named kinds"
-above), a "recently used kinds" section, transition/hover animation polish,
-a proper win-x64 NativeAOT pass (still only linux-x64 has ever been
-verified), a live k3s pass, and node-level CPU/Mem (only pod-level shipped
-by the logs/events/telemetry pass; node-level was added separately by the
-Helm/RBAC/metrics pass above — see "Live CPU/memory from metrics.k8s.io").
+transition/hover animation polish, a proper win-x64 NativeAOT pass (still
+only linux-x64 has ever been verified), a live k3s pass, and node-level
+CPU/Mem (only pod-level shipped by the logs/events/telemetry pass;
+node-level was added separately by the Helm/RBAC/metrics pass above — see
+"Live CPU/memory from metrics.k8s.io").
+
+**Sidebar navigation pass** (small, alongside the fleet pass): the two
+sidebar follow-ups are closed, though not the way they were originally
+phrased. *Coalescing* same-named CRD kinds into one row was rejected —
+nesting rows inside a section that is already 100+ kinds deep costs more
+than it buys, and the group label added earlier already tells `Backup`
+(velero.io) from `Backup` (postgresql.cnpg.io). What was actually missing
+is that you could not **filter** by the thing the row displays:
+`SidebarKindViewModel.Matches` now matches the API group and the server's
+short names as well as the display name, so "velero" or "svc" find what
+you would expect. And a pinned **Recent** section (top of the sidebar, max
+5, `ClusterTabViewModel.RecordRecentKind`) holds second instances of the
+kinds most recently selected — session-scoped and reset on reconnect,
+since the entries hold descriptor instances from the catalog being
+replaced. Persisting it across restarts would need a `WorkspaceSettings`
+schema change and is deliberately not done yet.

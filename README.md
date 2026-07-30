@@ -20,8 +20,9 @@ today:
 - A streaming `ClusterClient`: informer-style **list + watch** exposed as
   `IAsyncEnumerable`, auto-reconnect with resourceVersion resume + relist on 410
   Gone, and cancellable log streaming with follow mode.
-- **Discovery-driven sidebar** — built-ins *and* CRDs, filterable and
-  collapsible; namespace-scoped live lists for any kind.
+- **Discovery-driven sidebar** — built-ins *and* CRDs, collapsible and filterable
+  by kind, API group or `kubectl` short name (`svc`, `po`), with a pinned
+  **Recent** section; namespace-scoped live lists for any kind.
 - **Pod detail**: containers, live logs, events, owner-chain navigation.
   **Exec** into a container and **port-forward**, both over websockets.
 - **YAML view/edit** with server-side apply (conflicts surfaced, force-apply

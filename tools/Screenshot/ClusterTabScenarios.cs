@@ -280,6 +280,50 @@ internal static class ClusterTabScenarios
         return tab;
     }
 
+    /// <summary>
+    /// Filtering by API group rather than by kind name — the case that makes the CRDs
+    /// section navigable when several groups ship a same-named kind.
+    /// </summary>
+    public static ClusterTabViewModel SidebarFilteredByGroup()
+    {
+        var tab = BaseTab();
+        tab.SidebarFilter = "cert-manager";
+        return tab;
+    }
+
+    /// <summary>
+    /// The pinned Recent section, built by selecting a few kinds through the real
+    /// <c>SelectKindCommand</c> — the same path a click takes.
+    /// </summary>
+    public static ClusterTabViewModel SidebarRecentKinds()
+    {
+        var tab = BaseTab();
+
+        // Whatever the fixture catalog actually holds in these sections, rather than
+        // named kinds — a scenario shouldn't break because a fixture changed.
+        foreach (var title in new[] { "Config", "Network", "Storage" })
+        {
+            if (tab.SidebarSections.FirstOrDefault(s => s.Title == title)?.Kinds.FirstOrDefault() is { } entry)
+            {
+                tab.SelectKindCommand.Execute(entry);
+            }
+        }
+
+        // Back to Pods, and re-populate: each SelectKind ran the real RestartWatch,
+        // which clears Rows and (with no live client behind the fixture) can't refill them.
+        var pods = tab.SidebarSections.First(s => s.Title == "Workloads").Kinds.First(k => k.Descriptor.Kind == "Pod");
+        tab.SelectKindCommand.Execute(pods);
+        foreach (var pod in FixtureData.Pods)
+        {
+            tab.Rows.Add(new ResourceRowViewModel(pod));
+        }
+
+        tab.SelectedRow = tab.Rows.FirstOrDefault();
+        tab.IsListLoading = false;
+        tab.IsListEmpty = tab.Rows.Count == 0;
+        return tab;
+    }
+
     public static ClusterTabViewModel SidebarCrdsExpanded()
     {
         var tab = BaseTab();
