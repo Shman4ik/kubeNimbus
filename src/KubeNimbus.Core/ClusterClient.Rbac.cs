@@ -31,9 +31,11 @@ public sealed partial class ClusterClient
     public async Task<SelfSubjectRules> GetSelfSubjectRulesAsync(
         string @namespace, CancellationToken cancellationToken = default)
     {
-        var body = $$"""
-            {"apiVersion":"authorization.k8s.io/v1","kind":"SelfSubjectRulesReview","spec":{"namespace":{{JsonSerializer.Serialize(@namespace)}}}}
-            """;
+        // Built by hand rather than serialized: JsonSerializer.Serialize on an
+        // untyped value is the reflection path, which isn't trim/AOT-safe.
+        // JsonEncodedText does the escaping without any of that.
+        var body = "{\"apiVersion\":\"authorization.k8s.io/v1\",\"kind\":\"SelfSubjectRulesReview\","
+            + "\"spec\":{\"namespace\":\"" + JsonEncodedText.Encode(@namespace) + "\"}}";
 
         using var content = new StringContent(body, Encoding.UTF8, "application/json");
         using var response = await SendRequestAsync(
