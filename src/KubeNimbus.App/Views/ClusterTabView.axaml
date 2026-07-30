@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:KubeNimbus.App.ViewModels"
              xmlns:conv="using:KubeNimbus.App.Converters"
+             xmlns:controls="using:KubeNimbus.App.Controls"
              xmlns:aconv="using:Avalonia.Data.Converters"
              x:Class="KubeNimbus.App.Views.ClusterTabView"
              x:DataType="vm:ClusterTabViewModel">
@@ -145,19 +146,36 @@
                    metrics-server, so ClusterTabView.ApplyMetricsColumns shows and
                    hides them (a DataGridColumn isn't in the visual tree and can't
                    bind to the DataContext). -->
-              <DataGridTemplateColumn Header="CPU" Width="Auto" MinWidth="70" IsVisible="False">
+              <DataGridTemplateColumn Header="CPU" Width="Auto" MinWidth="130" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
-                    <TextBlock Text="{Binding CpuText}" HorizontalAlignment="Right" VerticalAlignment="Center"
-                               FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" />
+                    <!-- Sparkline + current value: the number answers "how much now",
+                         the line answers "is this a spike or its normal level" —
+                         which one number alone can never say. -->
+                    <Grid ColumnDefinitions="*,Auto" ToolTip.Tip="{Binding CpuTooltip}">
+                      <controls:Sparkline Grid.Column="0" Values="{Binding CpuSeries}" Height="16" MinWidth="44"
+                                          Margin="0,0,6,0" VerticalAlignment="Center"
+                                          Stroke="{StaticResource UsageCpuStrokeBrush}"
+                                          AreaFill="{StaticResource UsageCpuAreaBrush}"
+                                          BaselineBrush="{StaticResource ChartBaselineBrush}" />
+                      <TextBlock Grid.Column="1" Text="{Binding CpuText}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                 FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" />
+                    </Grid>
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Memory" Width="Auto" MinWidth="80" IsVisible="False">
+              <DataGridTemplateColumn Header="Memory" Width="Auto" MinWidth="140" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
-                    <TextBlock Text="{Binding MemoryText}" HorizontalAlignment="Right" VerticalAlignment="Center"
-                               FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" />
+                    <Grid ColumnDefinitions="*,Auto" ToolTip.Tip="{Binding MemoryTooltip}">
+                      <controls:Sparkline Grid.Column="0" Values="{Binding MemorySeries}" Height="16" MinWidth="44"
+                                          Margin="0,0,6,0" VerticalAlignment="Center"
+                                          Stroke="{StaticResource UsageMemoryStrokeBrush}"
+                                          AreaFill="{StaticResource UsageMemoryAreaBrush}"
+                                          BaselineBrush="{StaticResource ChartBaselineBrush}" />
+                      <TextBlock Grid.Column="1" Text="{Binding MemoryText}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                 FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" />
+                    </Grid>
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>

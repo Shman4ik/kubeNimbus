@@ -27,7 +27,9 @@ today:
 - **YAML view/edit** with server-side apply (conflicts surfaced, force-apply
   offered) and two-step delete.
 - **Live CPU/memory** from `metrics.k8s.io` in the list and per container, on
-  clusters that run metrics-server.
+  clusters that run metrics-server — with **usage graphs over time**: a
+  sparkline beside each list number and a Usage tab in pod detail (whole-pod and
+  per-container charts) over the session's rolling 30-minute window.
 - **Helm releases**, read-only: values, rendered manifest, notes and revision
   history — read straight from release Secrets, no Helm binary.
 - **RBAC access review**: your effective permissions in a namespace (via the
@@ -36,8 +38,9 @@ today:
 - Multi-cluster tabs (drag-reorder, workspace restore), Ctrl/Cmd+K command
   palette, light/dark theme, and a verified **NativeAOT** publish.
 
-Still open: usage graphs over time, multi-cluster aggregated views. See
-[CLAUDE.md](CLAUDE.md) for the full picture.
+Still open: multi-cluster aggregated views. Long-range metrics history is a
+non-goal — kubeNimbus graphs what the session has observed and leaves the time
+series to Prometheus. See [CLAUDE.md](CLAUDE.md) for the full picture.
 
 ## Tech stack
 
