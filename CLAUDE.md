@@ -258,6 +258,49 @@ permissions" always, plus a subject review when the selected row is a
 ServiceAccount (the only RBAC subject that exists as an object — Users and
 Groups are just strings inside a binding).
 
+## Multi-cluster aggregated (fleet) views
+
+`ClusterFleet.cs` + `AsyncMerge.cs` (Core) fan one resource query out across every
+connected cluster and interleave the results. Four things are load-bearing:
+
+- **Each cluster resolves its own descriptor.** `ClusterFleet.ResolveAsync` looks
+  the requested `(group, kind)` up in *that member's* discovery catalog — the
+  same CRD kind is routinely served at `v1beta1` on one cluster and `v1` on
+  another, and reusing one cluster's descriptor elsewhere would query a path
+  that doesn't exist there.
+- **A `Reset` is scoped to the cluster that sent it.** Watches relist on 410
+  Gone, and `ClusterTabViewModel.ApplyFleet` therefore clears only that
+  cluster's rows. Treating a fleet Reset like a single-cluster one would wipe
+  four healthy clusters because the fifth reconnected.
+- **Partial is normal, and is always stated.** A kind missing from a cluster, or
+  a cluster that can't be reached, never fails the view: the header shows
+  "n of m clusters serve X" and unreachable members surface in the inline
+  warning. `AsyncMerge` reports per-source failures and keeps the rest flowing
+  for the same reason.
+- **Rows, tab keys and metrics keys are all cluster-qualified.** The same
+  namespace/name exists on every cluster in a fleet, so
+  `ResourceRowViewModel.KeyFor`, `PodDetailTabViewModel.KeyFor` and
+  `YamlEditorTabViewModel.KeyFor` all fold the cluster name in — otherwise the
+  second cluster's pod silently reuses the first one's row and inspector tab.
+  Opening a row uses **its own** cluster's client and descriptor
+  (`ClusterTabViewModel.ClientFor`/`DescriptorFor`), or a YAML apply would land
+  on the wrong cluster; owner-chain navigation stays pinned to the same cluster.
+
+Why a channel-based merge (`AsyncMerge`): the sources are long-lived watch
+streams that each block indefinitely, so a sequential `await foreach` over them
+would starve every cluster but the first. `AsyncMergeTests` pins exactly that,
+plus per-source failure isolation and teardown-on-abandon.
+
+UI-wise this is a **toggle on the existing list**, not a new view: the sidebar,
+namespace picker, filter and inspector are all unchanged, the list gains a
+Cluster column (shown/hidden from code-behind, same DataGridColumn reason as the
+usage columns), and the toggle only appears with more than one cluster connected
+— a fleet of one is the tab you are already looking at (UI rule 1). The command
+palette carries the same toggle. `MainWindowViewModel` owns the member list and
+makes cluster names unique (two tabs on one context would otherwise merge into
+one apparent cluster) and re-fans active aggregated watches when a tab opens or
+closes, so no tab keeps watching a disposed client.
+
 ## Sandbox cluster bootstrap (how tests get a real cluster)
 
 Integration tests run against a **real local Kubernetes cluster**, not mocks.
@@ -410,11 +453,11 @@ note in the PR which screenshots were fixture-only.
 - [x] pgNimbus visual design system ported (Theme.axaml, two-tone shell,
       brand-blue accent, MDI icon vectors).
 
-**Later phases (do NOT build now, but don't paint into a corner):** multi-cluster
-aggregated views. (Resource metrics, session-window usage graphs, read-only Helm
-release browsing and RBAC access review shipped — see the sections above;
-"who can do X across the cluster" is still open. Long-range metrics history is a
-**non-goal**, see "Usage over time" above.)
+**Later phases:** all shipped. Resource metrics, session-window usage graphs,
+read-only Helm release browsing, RBAC access review and multi-cluster aggregated
+views each have a section above. Still open: "who can do X across the cluster"
+(the cluster-wide direction of the RBAC review). Long-range metrics history is a
+**non-goal**, see "Usage over time" above.
 
 **Non-goals forever:** cluster provisioning, in-cluster agents, telemetry.
 
@@ -584,7 +627,18 @@ linux-x64 NativeAOT check could none of them run. Everything in this pass is
 code-reviewed only — a build + test + screenshot pass is the first thing to do
 on a machine with an SDK.
 
-Not yet built (see "Later phases" above): multi-cluster aggregated views.
+**Fleet pass:** closed the last "later phase" item — multi-cluster aggregated
+views, see "Multi-cluster aggregated (fleet) views" above for the rules. New:
+`ClusterFleet.cs` and `AsyncMerge.cs` in Core (+ `AsyncMergeTests`), an
+"All clusters" toggle and Cluster column on the existing list, cluster-qualified
+row/tab/metrics keys, per-row client+descriptor resolution so an apply can't land
+on the wrong cluster, and `MainWindowViewModel` ownership of the member list
+(unique cluster names, re-fan on tab open/close). Screenshot scenarios
+`cluster-tab-fleet-list` and `-partial` populate rows directly, since a real
+aggregated watch needs several live clusters. Same verification gap as the
+usage-graphs pass: no SDK in that session either, so CI (build + TUnit +
+linux-x64 AOT publish) is the only thing that has looked at it.
+
 The UX pass and the logs/events/telemetry/
 env-secrets pass are both not exhaustive — there's no finish line here, just
 diminishing returns; candidates for a follow-up iteration: coalescing

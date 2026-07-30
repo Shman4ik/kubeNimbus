@@ -83,19 +83,34 @@
           <RowDefinition Height="0" MinHeight="0" />
         </Grid.RowDefinitions>
 
-        <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,*,Auto" Margin="0,0,0,10">
+        <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,Auto,*,Auto" Margin="0,0,0,10">
           <TextBlock Grid.Column="0" Text="{Binding SelectedKind.DisplayName}" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" />
           <ComboBox Grid.Column="1" ItemsSource="{Binding NamespaceOptions}" SelectedItem="{Binding SelectedNamespace}"
                      Margin="12,0,0,0" MinWidth="170"
                      IsEnabled="{Binding SelectedKind.Descriptor.Namespaced}" />
-          <Border Grid.Column="2" Classes="inlineWarning" Margin="12,0,0,0" HorizontalAlignment="Left"
+          <!-- Fleet toggle: only offered with more than one cluster connected, since
+               aggregating one cluster is just this list (UI rule 1). -->
+          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" Margin="12,0,0,0" VerticalAlignment="Center"
+                      IsVisible="{Binding IsFleetToggleVisible}">
+            <ToggleButton Classes="chip" Padding="8,3" FontSize="11.5" IsChecked="{Binding IsFleetView}"
+                          ToolTip.Tip="Aggregate this kind across every connected cluster">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <PathIcon Data="{StaticResource LayersIconGeometry}" Width="12" Height="12" />
+                <TextBlock Text="All clusters" VerticalAlignment="Center" />
+              </StackPanel>
+            </ToggleButton>
+            <TextBlock Text="{Binding FleetSummary}" FontSize="11" Opacity="0.55" VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding FleetSummary}"
+                       IsVisible="{Binding IsFleetView}" />
+          </StackPanel>
+          <Border Grid.Column="3" Classes="inlineWarning" Margin="12,0,0,0" HorizontalAlignment="Left"
                   IsVisible="{Binding ConnectionWarning, Converter={x:Static aconv:ObjectConverters.IsNotNull}}">
             <StackPanel Orientation="Horizontal" Spacing="6">
               <PathIcon Data="{StaticResource AlertCircleIconGeometry}" Width="12" Height="12" />
               <TextBlock Text="{Binding ConnectionWarning}" FontSize="12" TextTrimming="CharacterEllipsis" />
             </StackPanel>
           </Border>
-          <Button Grid.Column="3" Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="Refresh" Padding="6">
+          <Button Grid.Column="4" Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="Refresh" Padding="6">
             <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="14" Height="14" />
           </Button>
         </Grid>
@@ -112,6 +127,17 @@
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <Ellipse Classes="statusDot" Fill="{Binding StatusHealth, Converter={x:Static conv:HealthToBrushConverter.Instance}}"
                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <!-- Cluster: only meaningful in the aggregated fleet view, so
+                   ClusterTabView.ApplyFleetColumn shows and hides it (same reason as
+                   the usage columns — a DataGridColumn can't bind to the DataContext). -->
+              <DataGridTemplateColumn Header="Cluster" Width="Auto" MinWidth="120" IsVisible="False">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                    <TextBlock Text="{Binding ClusterName}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ClusterName}"
+                               FontWeight="SemiBold" Opacity="0.85" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>

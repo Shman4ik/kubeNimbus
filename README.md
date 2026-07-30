@@ -35,12 +35,17 @@ today:
 - **RBAC access review**: your effective permissions in a namespace (via the
   API server's own `SelfSubjectRulesReview`), and where a ServiceAccount's
   access comes from.
-- Multi-cluster tabs (drag-reorder, workspace restore), Ctrl/Cmd+K command
-  palette, light/dark theme, and a verified **NativeAOT** publish.
+- Multi-cluster tabs (drag-reorder, workspace restore), plus an **"All clusters"
+  toggle** that aggregates any kind across every connected cluster in one list —
+  with a Cluster column, per-cluster reconnect handling, and an honest
+  "n of m clusters" when a kind isn't served everywhere.
+- Ctrl/Cmd+K command palette, light/dark theme, and a verified **NativeAOT**
+  publish.
 
-Still open: multi-cluster aggregated views. Long-range metrics history is a
-non-goal — kubeNimbus graphs what the session has observed and leaves the time
-series to Prometheus. See [CLAUDE.md](CLAUDE.md) for the full picture.
+Still open: "who can do X across the cluster" (the cluster-wide direction of the
+RBAC review). Long-range metrics history is a non-goal — kubeNimbus graphs what
+the session has observed and leaves the time series to Prometheus. See
+[CLAUDE.md](CLAUDE.md) for the full picture.
 
 ## Tech stack
 

@@ -217,6 +217,62 @@ internal static class ClusterTabScenarios
         return tab;
     }
 
+    /// <summary>
+    /// The aggregated fleet list: one kind across three connected clusters, with the
+    /// Cluster column shown and the "n of m clusters" summary in the header.
+    /// </summary>
+    /// <remarks>
+    /// Rows are added directly rather than through <c>ClusterFleet.WatchAsync</c> —
+    /// that needs several live clusters, which no offline fixture can provide. Note the
+    /// ordering: <c>IsFleetView</c> is set first because it triggers the real
+    /// <c>RestartWatch()</c>, which clears <c>Rows</c>; populating before it would
+    /// leave an empty list (same class of gotcha as <c>SelectedNamespace</c>, see
+    /// <see cref="BaseTab"/>).
+    /// </remarks>
+    public static ClusterTabViewModel FleetList()
+    {
+        var tab = BaseTab(populateRows: false);
+        tab.IsFleetViewAvailable = true;
+        tab.IsFleetView = true;
+        tab.FleetSummary = "3 of 3 clusters serve Pod";
+
+        var seed = 0;
+        foreach (var cluster in new[] { "prod-payments", "prod-ledger", "staging-eu" })
+        {
+            foreach (var pod in FixtureData.Pods)
+            {
+                var row = new ResourceRowViewModel(pod, cluster);
+                tab.Rows.Add(row);
+                SeedUsage(row, seed, (4 + seed * 13) * 1_000_000L, (52 + seed * 29) * 1024L * 1024L);
+                seed++;
+            }
+        }
+
+        tab.AreMetricsVisible = true;
+        tab.SelectedRow = tab.Rows.FirstOrDefault();
+        tab.IsListLoading = false;
+        tab.IsListEmpty = tab.Rows.Count == 0;
+        return tab;
+    }
+
+    /// <summary>
+    /// A partial fleet — the honest common case: the kind isn't served everywhere (or a
+    /// cluster is unreachable), which the header states rather than leaving the user to
+    /// infer from the rows.
+    /// </summary>
+    public static ClusterTabViewModel FleetListPartial()
+    {
+        var tab = FleetList();
+        tab.FleetSummary = "2 of 3 clusters serve Pod";
+        tab.ConnectionWarning = "staging-eu: connection refused (127.0.0.1:6550)";
+        foreach (var row in tab.Rows.Where(r => r.ClusterName == "staging-eu").ToArray())
+        {
+            tab.Rows.Remove(row);
+        }
+
+        return tab;
+    }
+
     public static ClusterTabViewModel SidebarFiltered()
     {
         var tab = BaseTab();

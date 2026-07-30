@@ -96,11 +96,65 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     private async Task AddTabAsync(ClusterContext context)
     {
-        var tab = new ClusterTabViewModel(context);
+        var tab = new ClusterTabViewModel(context) { FleetMembersProvider = FleetMembers };
         Tabs.Add(tab);
         SelectedTab = tab;
         SaveWorkspace();
         await tab.ConnectCommand.ExecuteAsync(null);
+        RefreshFleetMembership();
+    }
+
+    /// <summary>
+    /// Every connected cluster, for the aggregated fleet views. Names are made unique
+    /// because fleet row keys are built from them — two tabs on the same context would
+    /// otherwise merge into one apparent cluster.
+    /// </summary>
+    private IReadOnlyList<FleetMember> FleetMembers()
+    {
+        var members = new List<FleetMember>();
+        var used = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var tab in Tabs)
+        {
+            if (tab.Client is not { } client)
+            {
+                continue;
+            }
+
+            var name = tab.Header;
+            var suffix = 2;
+            while (!used.Add(name))
+            {
+                name = $"{tab.Header} ({suffix++})";
+            }
+
+            members.Add(new FleetMember(name, client));
+        }
+
+        return members;
+    }
+
+    /// <summary>
+    /// Re-offers (or withdraws) the fleet toggle and re-fans any active aggregated
+    /// watch after the set of connected clusters changes. A fleet of one is just the
+    /// tab you're already looking at, so the toggle disappears below two clusters —
+    /// and any tab left in fleet mode drops back to its own cluster rather than
+    /// holding a watch on a client that has been disposed.
+    /// </summary>
+    private void RefreshFleetMembership()
+    {
+        var connected = Tabs.Count(t => t.Client is not null);
+        foreach (var tab in Tabs)
+        {
+            tab.IsFleetViewAvailable = connected > 1;
+            if (connected <= 1)
+            {
+                tab.IsFleetView = false;
+            }
+            else
+            {
+                tab.RefreshFleetMembership();
+            }
+        }
     }
 
     [RelayCommand]
@@ -108,6 +162,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         var index = Tabs.IndexOf(tab);
         Tabs.Remove(tab);
+        RefreshFleetMembership();
         await tab.DisposeAsync();
         if (SelectedTab == tab)
         {
@@ -152,6 +207,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
         foreach (var ctx in AvailableContexts)
         {
             yield return new PaletteItem($"Open new tab: {ctx.Name}", "Connect", "PlusIconGeometry", () => _ = AddTabAsync(ctx));
+        }
+
+        if (SelectedTab is { IsFleetViewAvailable: true } fleetable)
+        {
+            yield return new PaletteItem(
+                fleetable.IsFleetView ? "Fleet view: back to this cluster only" : "Fleet view: aggregate across all clusters",
+                $"{Tabs.Count(t => t.Client is not null)} connected clusters", "LayersIconGeometry",
+                () => fleetable.IsFleetView = !fleetable.IsFleetView);
         }
 
         if (SelectedTab is { IsConnected: true } connected)

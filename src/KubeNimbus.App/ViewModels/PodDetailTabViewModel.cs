@@ -44,6 +44,9 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
 
     public string PodName { get; }
 
+    /// <summary>Cluster this pod came from in an aggregated fleet list; empty otherwise.</summary>
+    public string ClusterName { get; }
+
     public ObservableCollection<ContainerViewModel> Containers { get; } = [];
 
     [ObservableProperty]
@@ -135,12 +138,21 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     [ObservableProperty]
     private int _selectedDetailTabIndex;
 
+    /// <summary>
+    /// Tab identity, qualified by cluster when the row came from an aggregated fleet
+    /// list: two clusters routinely hold a pod with the same namespace/name, and
+    /// without the qualifier the second one would reuse the first one's tab.
+    /// </summary>
+    public static string KeyFor(string clusterName, string? @namespace, string name) =>
+        clusterName.Length == 0 ? $"pod:{@namespace}/{name}" : $"pod@{clusterName}:{@namespace}/{name}";
+
     public PodDetailTabViewModel(
         ClusterClient client,
         ResourceRowViewModel row,
         Action<InspectorTabViewModelBase> openTab,
-        Func<OwnerRef, string?, Task> openOwner)
-        : base($"Pod/{row.Name}")
+        Func<OwnerRef, string?, Task> openOwner,
+        string clusterName = "")
+        : base(clusterName.Length == 0 ? $"Pod/{row.Name}" : $"Pod/{row.Name} · {clusterName}")
     {
         _client = client;
         _row = row;
@@ -148,7 +160,8 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         _openOwner = openOwner;
         PodNamespace = row.Namespace;
         PodName = row.Name;
-        Key = $"pod:{PodNamespace}/{PodName}";
+        ClusterName = clusterName;
+        Key = KeyFor(clusterName, PodNamespace, PodName);
 
         _row.PropertyChanged += OnRowChanged;
         RefreshFromRow();

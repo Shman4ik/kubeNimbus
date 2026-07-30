@@ -13,6 +13,13 @@ public sealed partial class ResourceRowViewModel : ObservableObject
 {
     public string Key { get; }
 
+    /// <summary>
+    /// Which cluster served this row, in the aggregated fleet view; empty for an
+    /// ordinary single-cluster list. Also part of <see cref="Key"/>, because the same
+    /// namespace/name exists on every cluster in a fleet and two of those are two rows.
+    /// </summary>
+    public string ClusterName { get; }
+
     [ObservableProperty]
     private DynamicResource _resource;
 
@@ -69,15 +76,24 @@ public sealed partial class ResourceRowViewModel : ObservableObject
     [ObservableProperty]
     private string _memoryTooltip = "No memory samples yet.";
 
-    public ResourceRowViewModel(DynamicResource resource)
+    public ResourceRowViewModel(DynamicResource resource, string clusterName = "")
     {
-        Key = resource.Key;
+        ClusterName = clusterName;
+        Key = KeyFor(clusterName, resource.Key);
         _resource = resource;
         _namespace = resource.Namespace ?? "";
         _name = resource.Name;
         _status = "";
         Update(resource);
     }
+
+    /// <summary>
+    /// Row identity: the resource's own <c>namespace/name</c> key, qualified by cluster
+    /// when there is one. Shared with the metrics poll so its samples land on the right
+    /// rows in fleet mode.
+    /// </summary>
+    public static string KeyFor(string clusterName, string resourceKey) =>
+        clusterName.Length == 0 ? resourceKey : $"{clusterName}/{resourceKey}";
 
     public void Update(DynamicResource resource)
     {
