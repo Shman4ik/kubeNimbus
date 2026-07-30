@@ -214,8 +214,20 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTextColumn Header="App" Binding="{Binding AppVersion}" Width="Auto" MinWidth="70" />
-              <DataGridTextColumn Header="Rev" Binding="{Binding Revision}" Width="Auto" MinWidth="50" />
+              <DataGridTemplateColumn Header="App" Width="Auto" MinWidth="70">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
+                    <TextBlock Text="{Binding AppVersion}" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Rev" Width="Auto" MinWidth="50">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
+                    <TextBlock Text="{Binding Revision}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
               <DataGridTemplateColumn Header="Status" Width="Auto" MinWidth="110">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
@@ -228,7 +240,13 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTextColumn Header="Updated" Binding="{Binding Updated}" Width="Auto" MinWidth="140" />
+              <DataGridTemplateColumn Header="Updated" Width="Auto" MinWidth="150">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
+                    <TextBlock Text="{Binding Updated}" Opacity="0.75" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
             </DataGrid.Columns>
           </DataGrid>
 
