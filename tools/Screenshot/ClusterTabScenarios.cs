@@ -554,6 +554,10 @@ internal static class ClusterTabScenarios
 
         tab.InspectorTabs.Add(rbacTab);
         tab.SelectedInspectorTab = rbacTab;
+
+        // The answer is a list of subjects with their granting rules nested under each —
+        // it needs the whole content area, not the split dock's default sliver.
+        tab.IsInspectorMaximized = true;
         return tab;
     }
 

@@ -750,11 +750,25 @@ palette entry that opens straight onto it; `WhoCanRowViewModel` in the App layer
 shapes nothing else produced (a `resourceNames`-narrowed rule, a ClusterRole bound
 by a RoleBinding). Also fixed in passing: a failed `SelfSubjectRulesReview` used to
 blank the whole access-review pane, and now renders inside "My permissions" only.
-**Not verified this session at all** — same environment gap as the usage-graphs and
-fleet passes, and worse: no .NET SDK is installed and every install host is blocked
-by this session's egress policy (`builds.dotnet.microsoft.com`, `aka.ms`,
-`dot.net` all 403 through the agent proxy), and Docker's daemon isn't running, so
-`dotnet build`, the TUnit suite, `tools/Screenshot` and the linux-x64 AOT check
-could none of them run. This pass is code-reviewed only; CI is the first thing that
-will have looked at it, and a build + test + screenshot pass is the first thing to
-do on a machine with an SDK.
+**Verified this session** (build, 80/80 TUnit, both-theme screenshots, linux-x64
+NativeAOT publish with no new warnings beyond the known DataGrid ones). Getting an
+SDK took a detour worth writing down, since the last two passes gave up at this
+point: **`builds.dotnet.microsoft.com`, `aka.ms`, `dot.net` and the Launchpad PPAs
+are all 403 through the agent proxy, but `archive.ubuntu.com` is not** — and Ubuntu
+24.04's own `noble-updates/main` carries `dotnet-sdk-10.0` (plus
+`dotnet-sdk-aot-10.0`, which is what makes the AOT publish work). So:
+
+```bash
+apt-get update && apt-get install -y dotnet-sdk-10.0 dotnet-sdk-aot-10.0
+```
+
+Blocked PPAs in `/etc/apt/sources.list.d/` (deadsnakes, ondrej, docker) fail the
+`apt-get update` — move them aside first. Do **not** reach for the dotnet-install
+script in this environment; it only ever hits the blocked hosts.
+
+Still unverified: the live-cluster half. Docker's daemon starts here, but pulling
+`rancher/k3s` still dies on a policy denial for Docker Hub's blob CDN
+(`production.cloudfront.docker.com`, 403 on the layer fetch after the manifest
+succeeds), so the sandbox can't come up and the RBAC integration tests — including
+the three new who-can ones — skipped rather than ran. A real-cluster pass remains
+the outstanding item.
