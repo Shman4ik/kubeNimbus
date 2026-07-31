@@ -1044,11 +1044,27 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// ServiceAccount) it also traces where that subject's access comes from.
     /// </summary>
     [RelayCommand]
-    private void OpenAccessReview(SubjectRef? subject)
+    private void OpenAccessReview(SubjectRef? subject) => ShowAccessReview(subject);
+
+    /// <summary>
+    /// Opens the access review straight onto "Who can do X?" — the cluster-wide direction,
+    /// which has no row to start from (the answer is a set of subjects, not a property of
+    /// the selected object), so the palette is where it belongs.
+    /// </summary>
+    [RelayCommand]
+    private void OpenWhoCan()
+    {
+        if (ShowAccessReview(null) is { } tab)
+        {
+            tab.SelectedTabIndex = RbacTabViewModel.WhoCanTabIndex;
+        }
+    }
+
+    private RbacTabViewModel? ShowAccessReview(SubjectRef? subject)
     {
         if (Client is null)
         {
-            return;
+            return null;
         }
 
         var @namespace = SelectedNamespace == AllNamespaces ? "default" : SelectedNamespace;
@@ -1056,15 +1072,16 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             ? $"rbac:{@namespace}"
             : $"rbac:{subject.Kind}/{subject.Namespace}/{subject.Name}";
 
-        var existing = InspectorTabs.FirstOrDefault(t => t.Key == key);
-        if (existing is not null)
+        if (InspectorTabs.FirstOrDefault(t => t.Key == key) is RbacTabViewModel existing)
         {
             existing.IsPreview = false;
             SelectedInspectorTab = existing;
-            return;
+            return existing;
         }
 
-        AddInspectorTab(new RbacTabViewModel(Client, @namespace, subject), replacePreview: false);
+        var tab = new RbacTabViewModel(Client, @namespace, subject);
+        AddInspectorTab(tab, replacePreview: false);
+        return tab;
     }
 
     /// <summary>

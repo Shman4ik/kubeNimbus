@@ -268,6 +268,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 $"RBAC · {connected.SelectedNamespace}", "AccountMultipleIconGeometry",
                 () => connected.OpenAccessReviewCommand.Execute(null));
 
+            yield return new PaletteItem(
+                "Access review — who can do X?",
+                "RBAC · scan every subject", "AccountMultipleIconGeometry",
+                () => connected.OpenWhoCanCommand.Execute(null));
+
             if (connected.SelectedRowAsSubject is { } subject)
             {
                 yield return new PaletteItem(

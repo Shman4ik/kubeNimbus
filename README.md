@@ -33,9 +33,11 @@ today:
   per-container charts) over the session's rolling 30-minute window.
 - **Helm releases**, read-only: values, rendered manifest, notes and revision
   history — read straight from release Secrets, no Helm binary.
-- **RBAC access review**: your effective permissions in a namespace (via the
-  API server's own `SelfSubjectRulesReview`), and where a ServiceAccount's
-  access comes from.
+- **RBAC access review**, in all three directions: your effective permissions in
+  a namespace (via the API server's own `SelfSubjectRulesReview`), where a
+  ServiceAccount's access comes from, and **who can do X** — every subject a
+  binding grants a verb on a resource, with the granting rules shown and a
+  one-click `SubjectAccessReview` to confirm any of them against the API server.
 - Multi-cluster tabs (drag-reorder, workspace restore), plus an **"All clusters"
   toggle** that aggregates any kind across every connected cluster in one list —
   with a Cluster column, per-cluster reconnect handling, and an honest
@@ -43,10 +45,9 @@ today:
 - Ctrl/Cmd+K command palette, light/dark theme, and a verified **NativeAOT**
   publish.
 
-Still open: "who can do X across the cluster" (the cluster-wide direction of the
-RBAC review). Long-range metrics history is a non-goal — kubeNimbus graphs what
-the session has observed and leaves the time series to Prometheus. See
-[CLAUDE.md](CLAUDE.md) for the full picture.
+The phase-1 MVP and every planned post-MVP feature are shipped. Long-range metrics
+history is a non-goal — kubeNimbus graphs what the session has observed and leaves
+the time series to Prometheus. See [CLAUDE.md](CLAUDE.md) for the full picture.
 
 ## Tech stack
 
