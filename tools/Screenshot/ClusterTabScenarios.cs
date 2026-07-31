@@ -518,6 +518,69 @@ internal static class ClusterTabScenarios
         return tab;
     }
 
+    /// <summary>
+    /// The cluster-wide access review ("who can do X?"). The scan needs a real cluster's
+    /// RBAC objects, so the fixture populates the results the same way
+    /// <c>RunWhoCanAsync</c> would from a <see cref="WhoCanResult"/>.
+    /// </summary>
+    public static ClusterTabViewModel RbacWhoCan(bool empty = false)
+    {
+        var tab = BaseTab();
+        var client = FixtureData.CreateOfflineClient();
+        var query = new AccessQuery("delete", "pods", Namespace: "payments");
+
+        var rbacTab = new RbacTabViewModel(client, "payments")
+        {
+            IsPreview = false,
+            SelectedTabIndex = RbacTabViewModel.WhoCanTabIndex,
+            WhoCanVerb = query.Verb,
+            WhoCanResource = query.Resource,
+            HasWhoCanRun = true,
+            IsWhoCanRunning = false,
+            WhoCanQueryText = query.Text,
+        };
+
+        if (empty)
+        {
+            rbacTab.IsWhoCanEmpty = true;
+        }
+        else
+        {
+            foreach (var access in WhoCanFixture())
+            {
+                rbacTab.WhoCanResults.Add(new WhoCanRowViewModel(client, query, access, CancellationToken.None));
+            }
+        }
+
+        tab.InspectorTabs.Add(rbacTab);
+        tab.SelectedInspectorTab = rbacTab;
+        return tab;
+    }
+
+    /// <summary>
+    /// Deliberately mixed: a cluster-wide wildcard grant, a narrow namespaced one, and a
+    /// rule restricted to named objects — the three shapes that must read differently.
+    /// </summary>
+    private static SubjectAccess[] WhoCanFixture()
+    {
+        var wildcard = new PolicyRule(["*"], ["*"], ["*"], [], []);
+        var podWrite = new PolicyRule(["get", "list", "delete"], [""], ["pods"], [], []);
+        var namedPods = new PolicyRule(["delete"], [""], ["pods"], ["checkout-worker-0"], []);
+
+        return
+        [
+            new SubjectAccess(
+                new SubjectRef("Group", "system:masters", null),
+                [new SubjectBinding("ClusterRoleBinding", "cluster-admin", null, "ClusterRole", "cluster-admin", [wildcard])]),
+            new SubjectAccess(
+                new SubjectRef("ServiceAccount", "deploy-bot", "payments"),
+                [new SubjectBinding("RoleBinding", "payments-deployers", "payments", "Role", "pod-manager", [podWrite])]),
+            new SubjectAccess(
+                new SubjectRef("User", "oncall@example.com", null),
+                [new SubjectBinding("RoleBinding", "oncall-restart", "payments", "ClusterRole", "pod-restarter", [namedPods])]),
+        ];
+    }
+
     public static ClusterTabViewModel YamlEditor()
     {
         var tab = BaseTab();

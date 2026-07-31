@@ -81,3 +81,45 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: role-that-was-deleted
+---
+# Two shapes the cluster-wide "who can do X?" review has to render differently,
+# and neither of which anything else in the sandbox produces:
+#
+#  1. a rule narrowed by resourceNames — it grants far less than it looks, so the
+#     view must show *which* objects rather than an unqualified "can edit configmaps";
+#  2. a ClusterRole bound by a RoleBinding — a distinct scan branch, since that
+#     binding confines the cluster role to its own namespace.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: shop-config-editor
+  namespace: demo-shop
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sandbox-named-configmap-editor
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    # A stable object that actually exists in demo-shop, so the "only: …" the view
+    # renders points at something you can go and look at.
+    resourceNames: ["shop-config"]
+    verbs: ["update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: shop-config-editor-named
+  namespace: demo-shop
+subjects:
+  - kind: ServiceAccount
+    name: shop-config-editor
+    namespace: demo-shop
+  - kind: User
+    name: oncall@sandbox.local
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: sandbox-named-configmap-editor

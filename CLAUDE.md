@@ -251,8 +251,8 @@ read-only: install/upgrade/rollback stays Helm's job.
 
 ## RBAC access review
 
-`ClusterClient.Rbac.cs` answers two different questions two different ways, and
-the split matters:
+`ClusterClient.Rbac.cs` and `ClusterClient.WhoCan.cs` answer three different
+questions three different ways, and the split matters:
 
 - **"What may I do here?"** goes to the API server's own
   `SelfSubjectRulesReview`. Never re-implement RBAC evaluation locally — a local
@@ -266,10 +266,44 @@ the split matters:
   and a binding whose role is gone is still listed, since a dangling binding is
   exactly what you open this view to find.
 
+- **"Who can do X?"** (`ClusterClient.WhoCan.cs`) is the cluster-wide direction,
+  and it is the one question Kubernetes serves *no* endpoint for:
+  `SelfSubjectRulesReview` only answers for the caller, `SubjectAccessReview`
+  only for a subject you already named — neither enumerates subjects. So
+  `WhoCanAsync` scans the RBAC objects and matches their rules, `kubectl-who-can`
+  style. Four things are deliberate:
+  - **It is provenance, not an authorization decision**, and the UI says so
+    in-panel. A local scan cannot see webhook/node authorizers or impersonation,
+    so it can both miss access and list access another authorizer denies. The
+    honest counterpart is per-subject: `CheckAccessAsync` posts a real
+    `SubjectAccessReview`, and the Verify button on each row is what turns a
+    scanned row into the server's own verdict (which is also why the row shows a
+    "denied" that contradicts the scan rather than hiding it).
+  - **Rule matching mirrors the API server's** (`pkg/registry/rbac/validation`):
+    verb/group/resource each match exactly or via `*`, the resource compared as
+    the combined `resource/subresource`. RBAC has **no partial wildcards** —
+    `pods/*` is a literal that matches nothing, and a rule for `pods` does not
+    cover `pods/log`. `WhoCanMatchingTests` pins every one of those, because a
+    glob implementation here would invent access that doesn't exist.
+  - **A cluster-scoped query never consults RoleBindings.** A RoleBinding
+    confines even a ClusterRole to its namespace, where a cluster-scoped object
+    does not exist; the namespaced/cluster-scoped flag comes from *discovery*
+    (`AccessQuery.ClusterScopedResource`), never guessed.
+  - **A rule narrowed by `resourceNames` is kept, with the names shown.** It
+    genuinely grants the verb — on those objects — so dropping it hides real
+    access, and showing it unqualified overstates it.
+  Rules that could not be read (403 on Roles, say) become warnings on the result:
+  `WhoCanResult.IsPartial`, surfaced inline. A short list that doesn't say it's
+  short is the failure mode this whole surface exists to avoid.
+
 Entry points are command-palette only (UI rule 1): "Access review — my
-permissions" always, plus a subject review when the selected row is a
-ServiceAccount (the only RBAC subject that exists as an object — Users and
-Groups are just strings inside a binding).
+permissions" always, "Access review — who can do X?" (opens the same tab
+straight onto its Who-can section via `RbacTabViewModel.WhoCanTabIndex`), plus a
+subject review when the selected row is a ServiceAccount (the only RBAC subject
+that exists as an object — Users and Groups are just strings inside a binding).
+The pane's three sections are independent: a failed `SelfSubjectRulesReview`
+renders its error *inside* "My permissions" rather than blanking the TabControl,
+since the other two directions don't use that call at all.
 
 ## Multi-cluster aggregated (fleet) views
 
@@ -353,7 +387,8 @@ watch), a whole `demo-broken` namespace of CrashLoopBackOff/ImagePullBackOff/
 unschedulable/never-Ready pods (the status pills and empty/error states of UI
 rule 8), three CRDs **two of which share the Kind `Widget` in different API
 groups** (the sidebar's group-aware filter), RBAC subjects including a dangling
-binding (the access review), and a synthetic three-revision Helm release
+binding, a `resourceNames`-narrowed rule and a ClusterRole bound by a *RoleBinding*
+(the access review, both directions), and a synthetic three-revision Helm release
 (history paging — k3s's own traefik releases are real but sit at revision 1).
 Metrics need nothing: k3s ships metrics-server, so `metrics.k8s.io` is live;
 delete that Deployment to test the *absent*-metrics degradation path.
@@ -491,11 +526,11 @@ note in the PR which screenshots were fixture-only.
 - [x] pgNimbus visual design system ported (Theme.axaml, two-tone shell,
       brand-blue accent, MDI icon vectors).
 
-**Later phases:** all shipped. Resource metrics, session-window usage graphs,
-read-only Helm release browsing, RBAC access review and multi-cluster aggregated
-views each have a section above. Still open: "who can do X across the cluster"
-(the cluster-wide direction of the RBAC review). Long-range metrics history is a
-**non-goal**, see "Usage over time" above.
+**Later phases:** all shipped, including the cluster-wide "who can do X" direction
+of the RBAC review. Resource metrics, session-window usage graphs, read-only Helm
+release browsing, RBAC access review and multi-cluster aggregated views each have
+a section above. Long-range metrics history is a **non-goal**, see "Usage over
+time" above.
 
 **Non-goals forever:** cluster provisioning, in-cluster agents, telemetry.
 
@@ -701,3 +736,25 @@ kinds most recently selected — session-scoped and reset on reconnect,
 since the entries hold descriptor instances from the catalog being
 replaced. Persisting it across restarts would need a `WorkspaceSettings`
 schema change and is deliberately not done yet.
+
+**"Who can do X" pass:** the last open roadmap item is closed — the cluster-wide
+direction of the RBAC review, see "RBAC access review" above for the rules. New:
+`ClusterClient.WhoCan.cs` in Core (`WhoCanAsync` rule scan, `CheckAccessAsync`
+SubjectAccessReview, `AccessQuery`/`WhoCanResult`/`SubjectAccess`/`AccessDecision`)
+plus `WhoCanMatchingTests` pinning the API server's matching semantics and three
+sandbox-gated integration tests; a "Who can…" section in the existing access-review
+pane (verb picker, kubectl-style resource box resolved through the discovery
+catalog, optional object name, all-namespaces toggle, per-subject Verify) and a
+palette entry that opens straight onto it; `WhoCanRowViewModel` in the App layer;
+`cluster-tab-rbac-who-can{,-empty}` screenshot scenarios; and two sandbox RBAC
+shapes nothing else produced (a `resourceNames`-narrowed rule, a ClusterRole bound
+by a RoleBinding). Also fixed in passing: a failed `SelfSubjectRulesReview` used to
+blank the whole access-review pane, and now renders inside "My permissions" only.
+**Not verified this session at all** — same environment gap as the usage-graphs and
+fleet passes, and worse: no .NET SDK is installed and every install host is blocked
+by this session's egress policy (`builds.dotnet.microsoft.com`, `aka.ms`,
+`dot.net` all 403 through the agent proxy), and Docker's daemon isn't running, so
+`dotnet build`, the TUnit suite, `tools/Screenshot` and the linux-x64 AOT check
+could none of them run. This pass is code-reviewed only; CI is the first thing that
+will have looked at it, and a build + test + screenshot pass is the first thing to
+do on a machine with an SDK.

@@ -3,6 +3,7 @@
              xmlns:vm="using:KubeNimbus.App.ViewModels"
              xmlns:core="using:KubeNimbus.Core"
              xmlns:aconv="using:Avalonia.Data.Converters"
+             xmlns:conv="using:KubeNimbus.App.Converters"
              x:Class="KubeNimbus.App.Views.RbacView"
              x:DataType="vm:RbacTabViewModel">
 
@@ -33,15 +34,20 @@
       </StackPanel>
     </Border>
 
-    <Border Grid.Row="2" Classes="card" Padding="10"
-            IsVisible="{Binding ErrorMessage, Converter={x:Static aconv:ObjectConverters.IsNotNull}}">
-      <TextBlock Text="{Binding ErrorMessage}" Classes="statusText warn" TextWrapping="Wrap" />
-    </Border>
-
-    <TabControl Grid.Row="2" IsVisible="{Binding ErrorMessage, Converter={x:Static aconv:ObjectConverters.IsNull}}">
+    <!-- The TabControl stays up even when the self-review failed: that error belongs to
+         "My permissions" alone, and blanking the pane would take the other two directions
+         (which don't use that call at all) down with it. -->
+    <TabControl Grid.Row="2" SelectedIndex="{Binding SelectedTabIndex}">
 
       <TabItem Header="My permissions">
-        <DataGrid ItemsSource="{Binding MyRules}" IsReadOnly="True" GridLinesVisibility="Horizontal" CanUserResizeColumns="True">
+        <Grid RowDefinitions="Auto,*">
+
+        <Border Grid.Row="0" Classes="card" Padding="10" Margin="0,0,0,8"
+                IsVisible="{Binding ErrorMessage, Converter={x:Static aconv:ObjectConverters.IsNotNull}}">
+          <TextBlock Text="{Binding ErrorMessage}" Classes="statusText warn" TextWrapping="Wrap" />
+        </Border>
+
+        <DataGrid Grid.Row="1" ItemsSource="{Binding MyRules}" IsReadOnly="True" GridLinesVisibility="Horizontal" CanUserResizeColumns="True">
           <DataGrid.Columns>
             <DataGridTemplateColumn Header="Verbs" Width="Auto" MinWidth="160">
               <DataGridTemplateColumn.CellTemplate>
@@ -69,6 +75,7 @@
             </DataGridTemplateColumn>
           </DataGrid.Columns>
         </DataGrid>
+        </Grid>
       </TabItem>
 
       <TabItem Header="Bindings" IsVisible="{Binding HasSubject}">
@@ -108,6 +115,137 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
         </ScrollViewer>
+      </TabItem>
+
+      <!-- The cluster-wide direction: "who can do X?". No server endpoint answers this,
+           so it is a scan of RBAC objects — which the note below states plainly, and the
+           per-subject Verify button turns into the API server's own verdict. -->
+      <TabItem Header="Who can…">
+        <Grid RowDefinitions="Auto,Auto,Auto,*">
+
+          <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="0,0,0,8">
+            <ComboBox Grid.Column="0" ItemsSource="{Binding VerbOptions}" SelectedItem="{Binding WhoCanVerb}"
+                      MinWidth="140" ToolTip.Tip="RBAC verb" />
+            <TextBox Grid.Column="1" Text="{Binding WhoCanResource}" Margin="8,0,0,0"
+                     PlaceholderText="pods · deployments.apps · pods/log"
+                     ToolTip.Tip="Resource, kubectl-style: a plural, singular or short name, optionally .group and /subresource" />
+            <TextBox Grid.Column="2" Text="{Binding WhoCanResourceName}" Margin="8,0,0,0" MinWidth="150"
+                     PlaceholderText="object name (optional)"
+                     ToolTip.Tip="Narrow the question to one object, matching rules that use resourceNames" />
+            <CheckBox Grid.Column="3" IsChecked="{Binding WhoCanAllNamespaces}" Margin="12,0,0,0"
+                      Content="All namespaces"
+                      ToolTip.Tip="Ask across every namespace instead of this tab's namespace" />
+            <Button Grid.Column="4" Classes="accent" Content="Find" Margin="8,0,0,0"
+                    Command="{Binding RunWhoCanCommand}" IsEnabled="{Binding !IsWhoCanRunning}" />
+          </Grid>
+
+          <!-- Never let this read as an authorization decision. -->
+          <TextBlock Grid.Row="1" FontSize="11.5" Opacity="0.6" TextWrapping="Wrap" Margin="0,0,0,8"
+                     Text="Scanned from this cluster's Roles, ClusterRoles and their bindings. Other authorizers (webhook, node) aren't visible here — use Verify on a subject for the API server's own verdict." />
+
+          <Border Grid.Row="2" Classes="inlineWarning" Margin="0,0,0,8" HorizontalAlignment="Left"
+                  IsVisible="{Binding WhoCanWarning, Converter={x:Static aconv:ObjectConverters.IsNotNull}}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <PathIcon Data="{StaticResource AlertCircleIconGeometry}" Width="12" Height="12" />
+              <TextBlock Text="{Binding WhoCanWarning}" FontSize="12" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+
+          <!-- Every state gets its own visual (UI rule 8): not asked yet, scanning,
+               nobody, failed — none of them a blank rectangle. -->
+          <TextBlock Grid.Row="3" Text="Scanning RBAC…" Opacity="0.55" FontSize="12"
+                     IsVisible="{Binding IsWhoCanRunning}" />
+
+          <Border Grid.Row="3" Classes="card" Padding="10" VerticalAlignment="Top"
+                  IsVisible="{Binding WhoCanError, Converter={x:Static aconv:ObjectConverters.IsNotNull}}">
+            <TextBlock Text="{Binding WhoCanError}" Classes="statusText warn" TextWrapping="Wrap" />
+          </Border>
+
+          <TextBlock Grid.Row="3" Opacity="0.55" FontSize="12" TextWrapping="Wrap"
+                     Text="Pick a verb and a resource, then Find — for example “delete pods”."
+                     IsVisible="{Binding !HasWhoCanRun}" />
+
+          <StackPanel Grid.Row="3" Spacing="4" IsVisible="{Binding IsWhoCanEmpty}">
+            <TextBlock Text="Nobody." FontWeight="SemiBold" FontSize="12.5" />
+            <TextBlock FontSize="11.5" Opacity="0.6" TextWrapping="Wrap"
+                       Text="{Binding WhoCanQueryText, StringFormat='No RoleBinding or ClusterRoleBinding on this cluster grants: {0}'}" />
+          </StackPanel>
+
+          <ScrollViewer Grid.Row="3" IsVisible="{Binding WhoCanResults.Count, Converter={x:Static conv:CountToBoolConverter.Instance}}">
+            <ItemsControl ItemsSource="{Binding WhoCanResults}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:WhoCanRowViewModel">
+                  <Border Classes="card" Margin="0,0,0,8" Padding="10">
+                    <StackPanel Spacing="6">
+                      <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                          <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" FontSize="12.5"
+                                     VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                     ToolTip.Tip="{Binding DisplayName}" />
+                          <Border Classes="statusPill">
+                            <TextBlock Text="{Binding ScopeText}" FontSize="11" />
+                          </Border>
+                          <Border Classes="statusPill" IsVisible="{Binding ViaWildcard}"
+                                  ToolTip.Tip="Granted by a rule that hands out every verb on every resource">
+                            <TextBlock Text="wildcard" FontSize="11" />
+                          </Border>
+                        </StackPanel>
+                        <Button Grid.Column="1" Classes="chip" Padding="8,3" FontSize="11.5"
+                                Content="Verify" Command="{Binding VerifyCommand}"
+                                IsEnabled="{Binding !IsVerifying}"
+                                ToolTip.Tip="Ask the API server directly (SubjectAccessReview)" />
+                      </Grid>
+
+                      <StackPanel Spacing="2"
+                                  IsVisible="{Binding Verdict, Converter={x:Static aconv:ObjectConverters.IsNotNull}}">
+                        <TextBlock Text="{Binding Verdict}" FontSize="11.5" FontWeight="SemiBold"
+                                   Classes="statusText" Classes.warn="{Binding IsVerdictUnexpected}" />
+                        <TextBlock Text="{Binding VerdictDetail}" FontSize="11" Opacity="0.6" TextWrapping="Wrap"
+                                   IsVisible="{Binding VerdictDetail, Converter={x:Static aconv:ObjectConverters.IsNotNull}}" />
+                      </StackPanel>
+
+                      <ItemsControl ItemsSource="{Binding Bindings}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="core:SubjectBinding">
+                            <StackPanel Spacing="2" Margin="0,4,0,0">
+                              <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="{Binding BindingKind}" FontSize="11" Opacity="0.55" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding BindingName}" FontSize="11.5" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding BindingName}" />
+                                <TextBlock Text="→" FontSize="11" Opacity="0.45" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding RoleText}" FontSize="11.5" Opacity="0.75" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding RoleText}" />
+                              </StackPanel>
+                              <ItemsControl ItemsSource="{Binding Rules}">
+                                <ItemsControl.ItemTemplate>
+                                  <DataTemplate x:DataType="core:PolicyRule">
+                                    <Grid ColumnDefinitions="180,*,Auto" Margin="0,1">
+                                      <TextBlock Grid.Column="0" Text="{Binding VerbsText}" FontSize="11"
+                                                 FontFamily="Cascadia Mono,Consolas,monospace" TextTrimming="CharacterEllipsis"
+                                                 ToolTip.Tip="{Binding VerbsText}" />
+                                      <TextBlock Grid.Column="1" Text="{Binding ResourcesText}" FontSize="11" Opacity="0.8"
+                                                 FontFamily="Cascadia Mono,Consolas,monospace" TextTrimming="CharacterEllipsis"
+                                                 ToolTip.Tip="{Binding ResourcesText}" />
+                                      <!-- A rule narrowed to named objects grants far less than it looks:
+                                           show which names, or the row overstates the access. -->
+                                      <TextBlock Grid.Column="2" Text="{Binding ResourceNamesText, StringFormat='only: {0}'}"
+                                                 FontSize="11" Opacity="0.6" Margin="8,0,0,0"
+                                                 IsVisible="{Binding ResourceNamesText, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}" />
+                                    </Grid>
+                                  </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                              </ItemsControl>
+                            </StackPanel>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </Grid>
       </TabItem>
     </TabControl>
   </Grid>
