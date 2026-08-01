@@ -115,7 +115,39 @@ choice must be AOT/trimming-compatible from day one.
 src/KubeNimbus.Core        Engine: kubeconfig, ClusterClient (watch/logs). No UI.
 src/KubeNimbus.App         Avalonia 12 desktop shell.
 tests/KubeNimbus.Core.Tests  TUnit integration tests against a live cluster.
+design/                    Logo sources (SVG) + generated masters/store images.
+scripts/                   Sandbox cluster bootstrap + the icon/logo pipeline.
 ```
+
+## App icon / logo assets
+
+Full reference: [`design/LOGO-ASSETS.md`](design/LOGO-ASSETS.md) (pipeline,
+every file, every consumer); [`design/LOGO.md`](design/LOGO.md) covers how the
+mark's geometry was derived. Three rules matter here:
+
+1. **Only `design/*.svg` is hand-edited.** Everything under `design/masters/`,
+   `design/store/` and `src/KubeNimbus.App/Assets/*.ico|Msix/**` is generated
+   and checked in. Fix art in the SVG, then re-run the scripts:
+
+   ```powershell
+   pwsh scripts/design/make-masters.ps1        # design/masters/**
+   pwsh scripts/windows/make-app-icons.ps1     # src/KubeNimbus.App/Assets/**
+   pwsh scripts/windows/make-store-logos.ps1   # design/store/**  (only if the mark changed)
+   ```
+
+2. **There are three marks, not one, and that is deliberate.** `logo.svg` (full
+   mark) is rendered at 32px and up; at 24px its eight helm spokes land ~1px
+   apart and at 16px the helm reads as a filled circle, so `logo-small.svg`
+   (24px, six rays) and `logo-micro.svg` (16px, four rays) exist as simplified
+   marks in the same 1024 grid. Rendering every size from `logo.svg` is the
+   specific bug this split prevents — don't "simplify" it away. **All three
+   carry the broom**: dropping it at small sizes turns the taskbar icon into a
+   generic ship's wheel, which is the one place identity matters most.
+3. **`Msix/**` is packaging-time-only.** The csproj marks `Assets/*.ico` as
+   `AvaloniaResource` and nothing else, so the tile PNGs stay source-tree
+   inputs for a future MSIX pack step and never enter the binary. `app.ico` is
+   both the exe icon (`ApplicationIcon`) and the runtime window icon
+   (`MainWindow.axaml`'s `Icon="/Assets/app.ico"`).
 
 ## The AOT watch/log implementation (important, non-obvious)
 

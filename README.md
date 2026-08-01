@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="design/masters/logo/wordmark-dark.png">
+    <img src="design/masters/logo/wordmark-light.png" alt="kubeNimbus logo: a ship's helm riding a broom" width="360">
+  </picture>
+</p>
+
 # kubeNimbus
 
 A fast, open-source Kubernetes desktop client. The Kubernetes sibling of

@@ -9,6 +9,7 @@
         x:Class="KubeNimbus.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="kubeNimbus"
+        Icon="/Assets/app.ico"
         Width="1280" Height="800" MinWidth="960" MinHeight="600"
         FontFamily="{StaticResource InterFontFamily}"
         Background="Transparent"
@@ -46,8 +47,11 @@
               BorderThickness="0,0,0,1" BorderBrush="{StaticResource CardBorderBrush}">
         <Grid ColumnDefinitions="Auto,*,Auto">
           <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Spacing="4">
-            <PathIcon Data="{StaticResource HexagonIconGeometry}" Width="16" Height="16" Foreground="{StaticResource AppAccentBrush}" Margin="4,0,6,0" />
-            <TextBlock Text="kubeNimbus" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" Margin="0,0,16,0" />
+            <!-- Wordmark only: the mark itself is the window icon (title bar,
+                 taskbar, Alt+Tab), so repeating it here was two logos 30px
+                 apart — and the glyph that used to sit here was a placeholder
+                 hexagon, not the real mark. -->
+            <TextBlock Text="kubeNimbus" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" Margin="4,0,16,0" />
 
             <ItemsControl Name="TabStrip" ItemsSource="{Binding Tabs}">
               <ItemsControl.ItemsPanel>

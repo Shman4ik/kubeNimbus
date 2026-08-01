@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="logo-micro-dark-title">
+  <title id="logo-micro-dark-title">kubeNimbus</title>
+
+  <!-- ============================================================
+       kubeNimbus logo - SIMPLIFIED MICRO MASTER (16 px).
+
+       The third and last master (see design/LOGO-ASSETS.md). At
+       16px the disc is 16 pixels wide and the helm gets about 11
+       of them: logo-small.svg's six rays land ~1px apart there and
+       merge into a grey blob. This one drops to four rays on the
+       cardinal axes and widens every stroke again.
+
+       The broom stays. 16px is where it costs the most - it eats
+       roughly a third of the tile and crowds the helm - but a
+       kubeNimbus icon without the Nimbus broom is a generic
+       ship's-wheel icon, and that trade is not worth the extra
+       clarity. If a size ever has to give the broom up, document
+       it here rather than doing it silently.
+
+       Same four-class colour contract as logo-small.svg;
+       logo-micro-dark.svg is the same bytes with the two values
+       exchanged.
+
+       Geometry in the 1024 grid:
+         disc          r 512  at (512,512), full bleed
+         light field   r 440  at (512,512)
+         helm          at (420,400): rim r 196 stroke 88, hub r 92,
+                       four rays stroke 84, four handles stroke 66
+         broom handle  (420,700) -> (860,372), stroke 72,
+                       clearance stroke 180
+         bristles      wedge, clearance stroke 56
+       ============================================================ -->
+
+  <style>
+    .ink     { fill: #F5F7FA }
+    .paper   { fill: #242B36 }
+    .ink-s   { stroke: #F5F7FA }
+    .paper-s { stroke: #242B36 }
+  </style>
+
+  <circle class="ink"   fill="#F5F7FA" cx="512" cy="512" r="512"/>
+  <circle class="paper" fill="#242B36" cx="512" cy="512" r="440"/>
+
+  <g class="ink-s" stroke="#F5F7FA" stroke-linecap="butt" fill="none">
+    <!-- rim -->
+    <circle cx="420" cy="400" r="196" stroke-width="88"/>
+    <!-- four rays -->
+    <g stroke-width="84">
+      <path d="M420 240 L420 560"/>
+      <path d="M260 400 L580 400"/>
+    </g>
+    <!-- four handles, on the rays' axes -->
+    <g stroke-width="66">
+      <path d="M420 240 L420 148"/>
+      <path d="M420 560 L420 652"/>
+      <path d="M260 400 L168 400"/>
+      <path d="M580 400 L672 400"/>
+    </g>
+  </g>
+  <circle class="ink" fill="#F5F7FA" cx="420" cy="400" r="92"/>
+
+  <!-- broom handle: clearance stroke first, so it cuts the helm -->
+  <path class="paper-s" stroke="#242B36" stroke-width="180" stroke-linecap="round" fill="none" d="M420 700 L860 372"/>
+  <path class="ink-s"   stroke="#F5F7FA" stroke-width="72"  stroke-linecap="round" fill="none" d="M420 700 L860 372"/>
+  <!-- bristles: a flared wedge, same clearance-then-ink order -->
+  <path class="paper paper-s" fill="#242B36" stroke="#242B36" stroke-width="56" stroke-linejoin="round" d="M452 774 L356 646 L207 698 L361 902 Z"/>
+  <path class="ink ink-s"     fill="#F5F7FA" stroke="#F5F7FA" stroke-width="8"  stroke-linejoin="round" d="M452 774 L356 646 L207 698 L361 902 Z"/>
+</svg>
