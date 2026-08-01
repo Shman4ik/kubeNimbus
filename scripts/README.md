@@ -1,4 +1,16 @@
-# Sandbox scripts
+# Scripts
+
+`sandbox-*` bring up a throwaway Kubernetes cluster to develop and test
+against (below). The other two directories are the logo/icon pipeline, which
+is documented in full in [`design/LOGO-ASSETS.md`](../design/LOGO-ASSETS.md):
+
+| Script | Rebuilds |
+|---|---|
+| `design/make-masters.ps1` | `design/masters/**` from `design/logo*.svg` (needs Inkscape) |
+| `windows/make-app-icons.ps1` | `src/KubeNimbus.App/Assets/**` — `app.ico`, window icons, MSIX tiles |
+| `windows/make-store-logos.ps1` | `design/store/**` — Partner Center listing images |
+
+## Sandbox scripts
 
 One command to get a throwaway Kubernetes cluster, pre-loaded with demo
 workloads, that kubeNimbus and the integration tests can be pointed at.

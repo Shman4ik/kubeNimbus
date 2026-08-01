@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="logo-small-title">
+  <title id="logo-small-title">kubeNimbus</title>
+
+  <!-- ============================================================
+       kubeNimbus logo - SIMPLIFIED SMALL MASTER (24 px).
+
+       Not a downscale of logo.svg: at 24px the traced cloud field
+       and the helm's eight thin spokes fall under one pixel and
+       collapse into mud (see design/LOGO-ASSETS.md, "Why there
+       are three masters"). This master keeps the same two things
+       the full mark is made of - the helm and the Nimbus broom -
+       and redraws them chunky enough to survive: six rays instead
+       of eight, a heavy rim, a fat hub, and the broom reduced to
+       one thick handle and a flared bristle wedge.
+
+       The broom is NOT optional. It is the mark shared across the
+       Nimbus family, and dropping it at small sizes (as an
+       earlier revision of this file did) is what makes the
+       taskbar icon stop looking like kubeNimbus.
+
+       Composition mirrors the full mark: helm up-left, broom
+       sweeping lower-left to upper-right across the helm's
+       lower-right, cut free by a .paper clearance stroke drawn
+       under the ink one - the same trick logo.svg bakes into its
+       geometry as #broom-clearance.
+
+       Colour is four classes over two values, .ink / .paper as
+       fill and .ink-s / .paper-s as stroke, with the literal
+       repeated in an attribute so tools that ignore <style> still
+       render. logo-small-dark.svg is the same bytes with the two
+       values exchanged.
+
+       Geometry in the 1024 grid:
+         disc          r 512  at (512,512), full bleed
+         light field   r 430  at (512,512)
+         helm          at (430,400): rim r 180 stroke 68, hub r 72,
+                       six rays stroke 60, six handles stroke 46
+         broom handle  (400,690) -> (840,365), stroke 54,
+                       clearance stroke 150
+         bristles      wedge, clearance stroke 46
+       ============================================================ -->
+
+  <style>
+    .ink     { fill: #242B36 }
+    .paper   { fill: #F5F7FA }
+    .ink-s   { stroke: #242B36 }
+    .paper-s { stroke: #F5F7FA }
+  </style>
+
+  <circle class="ink"   fill="#242B36" cx="512" cy="512" r="512"/>
+  <circle class="paper" fill="#F5F7FA" cx="512" cy="512" r="430"/>
+
+  <g class="ink-s" stroke="#242B36" stroke-linecap="butt" fill="none">
+    <!-- rim -->
+    <circle cx="430" cy="400" r="180" stroke-width="68"/>
+    <!-- six rays -->
+    <g stroke-width="60">
+      <path d="M430 400 L430 220"/>
+      <path d="M430 400 L585.9 490"/>
+      <path d="M430 400 L585.9 310"/>
+      <path d="M430 400 L430 580"/>
+      <path d="M430 400 L274.1 310"/>
+      <path d="M430 400 L274.1 490"/>
+    </g>
+    <!-- six handles, on the rays' axes -->
+    <g stroke-width="46">
+      <path d="M430 186 L430 138"/>
+      <path d="M615.4 507 L657 531"/>
+      <path d="M615.4 293 L657 269"/>
+      <path d="M430 614 L430 662"/>
+      <path d="M244.6 293 L203 269"/>
+      <path d="M244.6 507 L203 531"/>
+    </g>
+  </g>
+  <circle class="ink" fill="#242B36" cx="430" cy="400" r="72"/>
+
+  <!-- broom handle: clearance stroke first, so it cuts the helm -->
+  <path class="paper-s" stroke="#F5F7FA" stroke-width="150" stroke-linecap="round" fill="none" d="M400 690 L840 365"/>
+  <path class="ink-s"   stroke="#242B36" stroke-width="54"  stroke-linecap="round" fill="none" d="M400 690 L840 365"/>
+  <!-- bristles: a flared wedge, same clearance-then-ink order -->
+  <path class="paper paper-s" fill="#F5F7FA" stroke="#F5F7FA" stroke-width="46" stroke-linejoin="round" d="M438 764 L342 636 L193 688 L347 892 Z"/>
+  <path class="ink ink-s"     fill="#242B36" stroke="#242B36" stroke-width="8"  stroke-linejoin="round" d="M438 764 L342 636 L193 688 L347 892 Z"/>
+</svg>

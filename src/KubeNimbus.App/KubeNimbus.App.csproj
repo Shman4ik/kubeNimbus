@@ -4,6 +4,7 @@
     <OutputType>WinExe</OutputType>
     <RootNamespace>KubeNimbus.App</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
 
     <!-- Compiled bindings only: no reflection-based XAML bindings anywhere. -->
@@ -35,6 +36,11 @@
   <ItemGroup>
     <!-- Hand-written YAML highlighting definition (AvaloniaEdit doesn't bundle one) — see Editing/YamlSyntaxHighlighting.cs. -->
     <EmbeddedResource Include="Assets\Yaml-Mode.xshd" LogicalName="Yaml-Mode.xshd" />
+    <!-- Icons, all generated — see design/LOGO-ASSETS.md. Assets\Msix\** are
+         packaging-time-only tile images: they are read by a future MSIX pack
+         step from the source tree, never loaded at runtime, so they must not
+         be embedded into the binary. -->
+    <AvaloniaResource Include="Assets\*.ico" />
   </ItemGroup>
 
 </Project>

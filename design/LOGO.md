@@ -1,36 +1,35 @@
 # How the kubeNimbus logo is built
 
-> **Status: `logo.svg` / `logo-dark.svg` are now a flattened, hand-maintained
-> master and are NOT what `build-logo.js` currently emits.** They were taken
-> through Inkscape: every `<mask>`, `<use>`, `transform` and `var()` baked out,
-> each module reduced to plain paths in the root coordinate system, and three
-> trace artifacts cut out by hand (see "The flattening pass" below). Re-running
-> `build-logo.js` would overwrite that work. Either fold the flattening into the
-> generator or retire the generator — do not run it blind.
+> This file is about the **mark's geometry** — how `logo.svg` was derived from
+> the source raster. For the asset pipeline built on top of it (which SVG feeds
+> which icon size, what ships where, which scripts to re-run), see
+> [`LOGO-ASSETS.md`](LOGO-ASSETS.md).
 
-The rest of this file describes how the geometry was originally derived; it is
-still the reference for the numbers, the helm rebuild and the dead ends.
-Everything here was reproducible from the source raster:
+> **Status: `logo.svg` / `logo-dark.svg` are the master. The generator that
+> produced their first draft is gone.** The mark was originally traced out of a
+> raster by a dependency-free Node toolchain (a PNG decoder, a marching-squares
+> tracer, a Schneider curve fitter, a measurement pass), then taken through
+> Inkscape: every `<mask>`, `<use>`, `transform` and `var()` baked out, each
+> module reduced to plain paths in the root coordinate system, and three trace
+> artifacts cut out by hand (see "The flattening pass" below). That made
+> re-running the generator *destructive* — it would have overwritten the
+> flattening — so the generator, the source raster and the raster-diff harness
+> were retired and deleted rather than left as a loaded gun. They are in this
+> branch's history if they are ever wanted back.
+>
+> **Practical consequence: `logo.svg` is now edited by hand, in a vector
+> editor.** Nothing regenerates it. What the scripts in
+> [`LOGO-ASSETS.md`](LOGO-ASSETS.md) regenerate is everything *downstream* of it.
 
-```bash
-node design/tools/measure.js      # print every number the build hard-codes
-node design/tools/build-logo.js   # rewrite logo.svg + logo-dark.svg
-```
-
-Both scripts are dependency-free Node (a PNG decoder, a contour tracer and a
-curve fitter, all in `design/tools/`). Re-running `build-logo.js` reproduces the
-committed files byte for byte.
+The rest of this file is why the geometry is what it is: the numbers, the helm
+rebuild, the crossing, and the dead ends — the things a future edit needs to
+know and cannot recover by looking at the paths.
 
 | File | What it is |
 |---|---|
-| `Gemini_Generated_Image_bju2ipbju2ipbju2.png` | the source raster, the single source of truth for shape |
 | `logo.svg` | the mark, ~9.6 KB, `viewBox="0 0 1024 1024"` |
-| `logo-dark.svg` | same geometry, `--ink`/`--paper` swapped |
-| `tools/png.js` | minimal PNG decoder (zlib + unfilter → luminance) |
-| `tools/trace.js` | marching squares, Ramer-Douglas-Peucker, Schneider curve fit |
-| `tools/measure.js` | prints the measurements; run this first for a new mark |
-| `tools/build-logo.js` | emits the SVGs |
-| `check.html` | side-by-side / difference comparison against the raster |
+| `logo-dark.svg` | same geometry, `.ink`/`.paper` swapped |
+| `logo-small.svg`, `logo-micro.svg` (+ `-dark`) | the 24px and 16px marks — separate geometry, see [`LOGO-ASSETS.md`](LOGO-ASSETS.md) Part 0 |
 
 ## The shape of the file
 
@@ -65,17 +64,22 @@ breathing room, add it outside the file (CSS padding), not inside.
 
 **The helm is not traced.** See below.
 
-## Pipeline
+## How it was derived (historical)
 
-1. **Decode** the PNG to luminance (`png.js`). The source is cleanly two-tone —
+The steps below produced the first draft of `logo.svg`. They no longer run —
+the tooling and the raster are deleted (see Status above) — but they are what
+the numbers in the next section mean, and they are the recipe to follow if this
+mark ever has to be re-derived from a fresh raster.
+
+1. **Decode** the PNG to luminance. The source was cleanly two-tone —
    two luminance clusters at ~32 and ~240 — so a 128 threshold is unambiguous.
 
-2. **Measure** (`measure.js`). Rays are cast from a centroid seed; the disc
+2. **Measure.** Rays are cast from a centroid seed; the disc
    radius is the *median* over 720 angles with an inlier filter, so the broom
    sticking out past the disc cannot drag the fit. The centre is a grid search
    minimising the residual.
 
-3. **Trace** (`trace.js`). Marching squares at the 128 iso-level **with linear
+3. **Trace.** Marching squares at the 128 iso-level **with linear
    interpolation on the grayscale**, not on a binary mask — that is what makes
    the contours sub-pixel and smooth instead of stair-stepped. Contours are then
    simplified (RDP, 0.3px) and fitted with cubic Béziers (Schneider, max
@@ -195,30 +199,26 @@ three are the *mask's*. A boolean cut at a shallow angle produces needles, and
 real slivers. If the clearance geometry is ever re-derived, re-check these four
 places first.
 
-## Reusing this for pgNimbus
+## If a sibling mark ever needs the same treatment
 
-Generic, reuse as-is: `png.js`, `trace.js`, and in `build-logo.js` the tracing,
-the colour-by-winding rule, the outermost-first ordering, the full-bleed
-transform, and the mask construction.
+The reusable parts of the retired toolchain were: the PNG decode, the
+marching-squares trace with grayscale interpolation, the colour-by-winding rule,
+the outermost-first ordering, the full-bleed transform and the clearance-mask
+construction. The per-mark parts that had to be re-derived every time were the
+disc centre and radii, the contour classification (area > 200000 → base, the
+mascot's bbox → dropped and rebuilt, everything else → emblem) and the mascot
+parameters.
 
-Per-mark, must be re-derived — run `measure.js` first and copy its output into
-the constants block at the top of `build-logo.js`:
+Two warnings survive the tooling:
 
-- `CX`, `CY`, `R_OUT`, `R_IN`;
-- the contour classification. Currently three predicates: area > 200000 → base,
-  the mascot's bbox → dropped and rebuilt, everything else → emblem. For another
-  mark these are different bboxes; `measure.js` prints the component list to
-  pick them from.
-- the mascot parameters, if its mascot also needs rebuilding. pgNimbus's
-  elephant is line art, not a mechanism — it has no symmetry to enforce, so it
-  should almost certainly be **traced, not rebuilt**. The helm is the exception
-  here, not the pattern.
-
-**The pgNimbus master is a different kind of file and this pipeline does not
-apply to it.** `pgNimbus/design/masters/logo/logo.svg` is one compound path where
-the broom and the elephant are *negative space* carved out of the disc, and the
-white showing through is the page. It is already vector; do not rasterise it to
-feed this pipeline.
+- **Rebuild the mascot only when it is a mechanism.** The helm is one — it has
+  symmetry to enforce, and the generated raster got it wrong. pgNimbus's
+  elephant is line art with no symmetry to enforce, and should be **traced, not
+  rebuilt**. The helm is the exception, not the pattern.
+- **The pgNimbus master is a different kind of file and none of this applies to
+  it.** It is one compound path where the broom and the elephant are *negative
+  space* carved out of the disc, and the white showing through is the page. It
+  is already vector; do not rasterise it to feed a tracer.
 
 ## Dead ends — do not retry
 
@@ -245,12 +245,11 @@ disc behind it or an ink outline of its own.
 what is genuinely a raster.
 
 **Naive least-squares circle fit.** Returned `NaN` on this data. The robust
-median-radius grid search in `measure.js` is what works.
+median-radius grid search that replaced it is what works.
 
 **Grid searches that stop at their own boundary.** Hit three separate times
 (disc centre, helm centre, rim radii — the "fit" was just the edge of the search
-range). Always check the optimum is interior; `measure.js` widens and re-centres
-until it is.
+range). Always check the optimum is interior: widen and re-centre until it is.
 
 **`mask` and `transform` on the same element.** The mask is resolved in the
 element's own user space, so the transform moves the mask with it — the helm
@@ -261,8 +260,8 @@ browser. Bit once, via a `--css-variable` name mentioned in a comment.
 
 ## Deliberate departures from the raster
 
-The mark is otherwise pixel-faithful (verify with `check.html`: the difference
-blend is black except for antialiasing hairlines).
+The mark was otherwise pixel-faithful to the raster it came from (verified with
+a difference blend: black except for antialiasing hairlines).
 
 - **7 spokes and 7 handles**, five of them on an exact 45° grid and two placed
   inside the broom's shadow — see "The lower spokes" above. The raster has 7
