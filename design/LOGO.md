@@ -1,7 +1,16 @@
 # How the kubeNimbus logo is built
 
-`logo.svg` and `logo-dark.svg` are **generated**, not hand-drawn. Everything here
-is reproducible from the source raster:
+> **Status: `logo.svg` / `logo-dark.svg` are now a flattened, hand-maintained
+> master and are NOT what `build-logo.js` currently emits.** They were taken
+> through Inkscape: every `<mask>`, `<use>`, `transform` and `var()` baked out,
+> each module reduced to plain paths in the root coordinate system, and three
+> trace artifacts cut out by hand (see "The flattening pass" below). Re-running
+> `build-logo.js` would overwrite that work. Either fold the flattening into the
+> generator or retire the generator — do not run it blind.
+
+The rest of this file describes how the geometry was originally derived; it is
+still the reference for the numbers, the helm rebuild and the dead ends.
+Everything here was reproducible from the source raster:
 
 ```bash
 node design/tools/measure.js      # print every number the build hard-codes
@@ -148,6 +157,43 @@ what they read as matters more here than what they are.
 
 Re-derive the table for any other mark — the broom's angle relative to the
 mascot is what decides which positions are free.
+
+## The flattening pass
+
+Done directly in Inkscape (1.4, CLI `--actions`), not in Node. Two goals: make
+the file survive tools that are not a browser, and get rid of what the trace and
+the clearance mask left behind.
+
+**Portability.** `var(--ink)` / `var(--paper)` are the single worst thing you can
+put in a logo master: Inkscape logs `Ignoring CSS variable` and renders the whole
+mark black, and Illustrator does the same. Colour is now two classes, `.ink` /
+`.paper`, with the value repeated in a `fill` attribute — CSS wins where it is
+honoured, the attribute carries everywhere else. `logo-dark.svg` is still the
+same bytes with the two values exchanged.
+
+**Flattening.** `#broom-clearance` is baked in: the 13 stroked copies of the
+broom outline were `object-stroke-to-path` + `path-union`ed into one shape and
+`path-difference`d out of the helm, so the helm is now one plain path with the
+gap already cut. `<use>`, the `rotate()`ed arms, the stroked rim circle and the
+`translate()` on the helm group are all gone the same way. Each of the three
+groups is now liftable into a sibling mark by copy-paste, which is the whole
+point.
+
+**Artifacts removed** (all three visible only above ~4x zoom, all three
+generation debris rather than drawing):
+
+| Where | What it was | Fix |
+|---|---|---|
+| ~(363, 618) | a degenerate self-intersecting loop in the traced light field, rendering as a hairline crack across the bristle halo's tip | subpath deleted, the cusp it left healed with one curve |
+| ~(465, 586) | the 150° spoke clipped by the clearance at a shallow angle, leaving a needle ~3px wide and 23px long | needle dropped; rim curve now runs straight into the spoke edge, a clean 60° corner |
+| ~(403, 657) | the 210° handle's tip surviving the clearance as a detached 27×28 island | subpath deleted |
+| ~(644, 466) | the rim tapering to a point where the clearance runs nearly tangent to it — the "arrowhead" on the right | both edges truncated to a 10.5px blunt end |
+
+Note the shape of that list: one artifact is the *tracer's* (a curve-fit loop),
+three are the *mask's*. A boolean cut at a shallow angle produces needles, and
+`path-union` does not remove them — they are not self-intersections, they are
+real slivers. If the clearance geometry is ever re-derived, re-check these four
+places first.
 
 ## Reusing this for pgNimbus
 

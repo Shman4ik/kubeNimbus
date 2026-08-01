@@ -1,9 +1,14 @@
-// Build the kubeNimbus logo from its source raster. See ../LOGO.md.
+// Build the kubeNimbus logo. See ../LOGO.md.
 //   node design/tools/build-logo.js [source.png] [outDir]
+//
+// The disc and the helm are measured off the source raster; the broom is not
+// traced at all - it is lifted out of the pgNimbus master (./broom.js), so the
+// two marks carry the same broom rather than two drawings of one.
 const fs = require('fs');
 const path = require('path');
 const { decode } = require('./png');
 const { contours, rdp, fitClosed, toPath, area, bbox } = require('./trace');
+const { build: buildBroom } = require('./broom');
 
 const HERE = path.join(__dirname, '..');
 const SRC = process.argv[2] || path.join(HERE, 'Gemini_Generated_Image_bju2ipbju2ipbju2.png');
@@ -110,68 +115,66 @@ tips.sort((a, b) => b - a);
 const hmax = tips.length ? tips[Math.floor(tips.length * 0.15)] : st.outer + 55;
 console.log('handle tip r=%s  (from %d samples)', hmax.toFixed(1), tips.length);
 
-// ---- shaft (the broom where it crosses the disc), for the clearance mask ----
-const lum2 = new Uint8Array(w * h).fill(255);
-for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-  const i = y * w + x;
-  if (lab[i] === ringC.id && Math.hypot(x - CX, y - CY) < R_IN - 2) lum2[i] = lum[i];
-}
-const shaftPath = contours(lum2, w, h)
-  .map(p => ({ p, a: Math.abs(area(p)) })).sort((a, b) => b.a - a.a)[0];
-const shaftD = toPath(fitClosed(rdp(TP(shaftPath.p), 0.45), 1.1));
-console.log('shaft contour pts=%d area=%d', shaftPath.p.length, Math.round(shaftPath.a));
+// ---- the broom, lifted out of the pgNimbus master --------------------
+// broom.js works in the master's own 1024 space; T maps raster pixels to the
+// same place, which is only legitimate because the two frames coincide - the
+// assertion below is what proves it, and what will catch a re-generated raster
+// that no longer lines up.
+const { part: BROOM, diag: BD } = buildBroom((x, y) => T([x, y]));
 
-// The broom hides the wheel completely on its far side, so the clearance is
-// not just a band: everything beyond the broom has to go, or a clipped handle
-// is left floating. Fit the broom's axis (PCA over the shaft pixels near the
-// wheel) and cut the half-plane past it.
-const sp = [];
-for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-  const i = y * w + x;
-  if (lab[i] === ringC.id && Math.hypot(x - CX, y - CY) < R_IN - 2
-    && Math.hypot(x - 510.5, y - 459) < 235) sp.push([x, y]);
-}
-let mx = 0, my = 0;
-for (const [x, y] of sp) { mx += x; my += y; } mx /= sp.length; my /= sp.length;
-let sxx = 0, syy = 0, sxy = 0;
-for (const [x, y] of sp) { const a = x - mx, b = y - my; sxx += a * a; syy += b * b; sxy += a * b; }
-const theta = 0.5 * Math.atan2(2 * sxy, sxx - syy);          // principal axis
-const nx = -Math.sin(theta), ny = Math.cos(theta);           // unit normal
-// The half-plane has to meet the widened outline seamlessly, so take the
-// NARROWEST far edge along the broom (per slice), not the widest - otherwise a
-// sliver of wheel survives between the two.
-const GAP = s(17), STEP = s(36), COPIES = 12;                // shadow: ~430px, ample
-const shadow = [];
-for (let k = 1; k <= COPIES; k++)
-  shadow.push(`        <use href="#broom-edge" transform="translate(${(nx * STEP * k).toFixed(1)} ${(ny * STEP * k).toFixed(1)})"/>`);
-const AXIS_DEG = +(theta * 180 / Math.PI).toFixed(2);
-console.log('broom axis %s deg through %s,%s ; shadow normal %s,%s',
-  AXIS_DEG, mx.toFixed(1), my.toFixed(1), nx.toFixed(3), ny.toFixed(3));
-
-// ---- traced base + broom (the wheel component's contours are dropped) ----
+// ---- base + the frame check (the wheel component's contours are dropped) ----
 const items = contours(lum, w, h).map(pts => {
   const a = area(pts), b = bbox(pts);
   return { pts, a, abs: Math.abs(a), b, ink: a < 0 };
 }).sort((x, y) => y.abs - x.abs);
 const isWheel = it => it.b.x0 > 280 && it.b.x1 < 700 && it.b.y0 > 220 && it.b.y1 < 600;
-const base = [], broom = [];
-for (const it of items) {
-  if (isWheel(it)) continue;
-  (it.abs > 200000 ? base : broom).push(it);
+const base = items.filter(it => !isWheel(it) && it.abs > 200000);
+const tracedFan = items.filter(it => !isWheel(it) && it.abs <= 200000)[0];
+const mFan = BD.parts.find(p => p.name === 'fan').box;
+const drift = Math.max(Math.abs(tracedFan.b.x0 - mFan.x0), Math.abs(tracedFan.b.y0 - mFan.y0),
+  Math.abs(tracedFan.b.x1 - mFan.x1), Math.abs(tracedFan.b.y1 - mFan.y1));
+console.log('bristle fan: raster %s vs master %s  -> frames agree to %s px',
+  [tracedFan.b.x0, tracedFan.b.y0, tracedFan.b.x1, tracedFan.b.y1].map(v => v.toFixed(0)).join(','),
+  [mFan.x0, mFan.y0, mFan.x1, mFan.y1].map(v => v.toFixed(0)).join(','), drift.toFixed(1));
+if (drift > 3) throw new Error(
+  'the raster and the pgNimbus master no longer share a coordinate frame ' +
+  `(bristle fan is ${drift.toFixed(1)}px out) - re-derive the broom placement`);
+
+// Both base contours are circles: the disc, and the light field inside the
+// ring. The field's traced contour also carries the raster's own broom notch,
+// which is exactly what this build replaces, so take the robust radius (the
+// median over the contour) and emit a clean circle.
+// Both circles come from measure.js's ray fits (R_OUT, R_IN), not from these
+// contours: the field's traced outline carries the raster's own broom notch and
+// wanders +/-15px, so anything fitted to it lands somewhere arbitrary inside
+// that spread. The contour is only used to check the fit.
+const RF = s(R_IN);
+const circles = [{ r: 512, ink: true }, { r: RF, ink: false }];
+for (const it of base) {
+  const rs = TP(it.pts).map(([x, y]) => Math.hypot(x - 512, y - 512)).sort((a, b) => a - b);
+  const want = it.ink ? 512 : RF;
+  const inl = rs.filter(r => Math.abs(r - want) < 6).length;
+  console.log('base circle r=%s %s : traced contour spans %s..%s, %s%% within 6px',
+    want.toFixed(1), it.ink ? 'ink  ' : 'paper', rs[0].toFixed(0),
+    rs[rs.length - 1].toFixed(0), (100 * inl / rs.length).toFixed(0));
 }
-function circularity(pts) {                       // about the canvas centre
-  const rs = pts.map(([x, y]) => Math.hypot(x - 512, y - 512));
-  const m = rs.reduce((a, v) => a + v, 0) / rs.length;
-  let mx = 0; for (const r of rs) mx = Math.max(mx, Math.abs(r - m));
-  return { r: m, dev: mx };
-}
-const el = it => {
-  const pts = TP(it.pts);
-  const c = circularity(pts);
-  const fill = it.ink ? 'var(--ink)' : 'var(--paper)';
-  if (c.dev < 1.4) return `    <circle cx="512" cy="512" r="${c.r.toFixed(1)}" fill="${fill}"/>`;
-  return `    <path fill="${fill}" d="${toPath(fitClosed(rdp(pts, 0.3), 0.8))}"/>`;
-};
+const el = c => `    <circle cx="512" cy="512" r="${c.r}" fill="${c.ink ? 'var(--ink)' : 'var(--paper)'}"/>`;
+
+// ---- the clearance mask ---------------------------------------------
+// The broom hides the wheel completely on its far side, so the clearance is
+// not just a band: everything beyond the broom has to go, or a clipped handle
+// is left floating out there. The far side is the broom's own outline stepped
+// along the shaft's normal, so the cut follows the broom's curve instead of a
+// straight line.
+const AXIS_DEG = +BD.axis.deg.toFixed(2);
+const th = BD.axis.deg * Math.PI / 180;
+const nx = -Math.sin(th), ny = Math.cos(th);                 // unit normal, away from the wheel
+const GAP = s(17), STEP = s(36), COPIES = 12;                // shadow: ~430px, ample
+const shadow = [];
+for (let k = 1; k <= COPIES; k++)
+  shadow.push(`        <use href="#broom-body" transform="translate(${(nx * STEP * k).toFixed(1)} ${(ny * STEP * k).toFixed(1)})"/>`);
+console.log('broom axis %s deg ; shadow normal %s,%s ; gap %s',
+  AXIS_DEG, nx.toFixed(3), ny.toFixed(3), GAP);
 
 // ---- the rebuilt wheel ----------------------------------------------
 const RO = s(outer.med), RI = s(inner.med);
@@ -194,12 +197,18 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" rol
   <!-- ============================================================
        kubeNimbus logo.
 
-       #base and #brand-broom are traced from
-       design/Gemini_Generated_Image_bju2ipbju2ipbju2.png at the 128
-       iso-level (sub-pixel marching squares, cubic-Bezier fit to within
-       0.75px), so they are the source artwork's own geometry.
+       #base is measured off design/Gemini_Generated_Image_bju2ipbju2ipbju2.png:
+       two concentric circles, the ring and the light field it encloses.
 
-       #mascot-helm is NOT traced: the generated wheel had 7 spokes at
+       #brand-broom is NOT traced - it is the pgNimbus broom itself, lifted out
+       of design/pgnimbus-master.svg, so the two marks in the family carry one
+       broom rather than two drawings of one. Bristle fan, collar, ferrule and
+       glint are that file's own Beziers, verbatim; only the shaft is rebuilt
+       (in the master the elephant grips it, so a third of the channel's edge is
+       elephant, not broom) as a ${BD.width.toFixed(1)}-wide band on the measured
+       centreline. See ../LOGO.md.
+
+       #mascot-helm is NOT traced either: the generated wheel had 7 spokes at
        44-60deg spacing and only half its handles, so it is rebuilt from
        the measured radii (rim ${RI}-${RO}, handles to ${HAND_TIP}, centre
        ${WC[0].toFixed(0)},${WC[1].toFixed(0)}) on an exact 45deg grid -
@@ -227,8 +236,22 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" rol
       <rect x="${-SPOKE / 2}" y="${-RIM_MID}" width="${SPOKE}" height="${RIM_MID - HUB + 6}" rx="${SPOKE / 2}"/>
       <rect x="${-HAND_W / 2}" y="${-HAND_TIP}" width="${HAND_W}" height="${HAND_TIP - RO + 10}" rx="${HAND_W / 2}"/>
     </g>
-    <!-- the broom where it crosses the disc -->
-    <path id="broom-edge" d="${shaftD}"/>
+
+    <!-- The broom, in two layers. The body is what the broom IS; the accents
+         are the marks on it, and they always carry the opposite colour, which
+         is what lets one drawing read on the light field and on the dark ring.
+         The three body parts overlap on purpose - same fill, so they merge
+         without needing a boolean. -->
+    <g id="broom-body">
+      <path d="${BROOM.shaft}"/>
+      <path d="${BROOM.fan}"/>
+      <path d="${BROOM.ferrule}"/>
+    </g>
+    <g id="broom-accents">
+      <path d="${BROOM.collar}"/>
+      <path d="${BROOM.glint}"/>
+    </g>
+    <clipPath id="light-field"><circle cx="512" cy="512" r="${RF}"/></clipPath>
 
     <!-- Where the wheel must not paint: the broom itself widened by the ${GAP}px
          gap measured off the source, plus everything behind it - the broom hides
@@ -239,7 +262,7 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" rol
     <mask id="broom-clearance">
       <rect width="1024" height="1024" fill="#fff"/>
       <g fill="#000" stroke="#000" stroke-width="${GAP * 2}" stroke-linejoin="round">
-        <use href="#broom-edge"/>
+        <use href="#broom-body"/>
 ${shadow.join('\n')}
       </g>
     </mask>
@@ -247,7 +270,7 @@ ${shadow.join('\n')}
 
   <!-- Base: the ring and the light field it encloses. -->
   <g id="base">
-${base.map(el).join('\n')}
+${circles.map(el).join('\n')}
   </g>
 
   <!-- Product mascot: the ship's helm (pgNimbus uses an elephant here). -->
@@ -265,9 +288,18 @@ ${arms.join('\n')}
     </g>
   </g>
 
-  <!-- Brand emblem: the Nimbus broom, shared across the family. -->
+  <!-- Brand emblem: the Nimbus broom, shared across the family.
+       Painted twice. The first pass is the broom as it reads on the dark ring
+       (light body, dark accents); the second repaints it inverted, clipped to
+       the light field. The broom crosses that boundary twice, and this is what
+       carries it across - the same geometry, both polarities, no seam. -->
   <g id="brand-broom">
-${broom.map(el).join('\n')}
+    <g fill="var(--paper)"><use href="#broom-body"/></g>
+    <g fill="var(--ink)"><use href="#broom-accents"/></g>
+    <g clip-path="url(#light-field)">
+      <g fill="var(--ink)"><use href="#broom-body"/></g>
+      <g fill="var(--paper)"><use href="#broom-accents"/></g>
+    </g>
   </g>
 </svg>
 `;
