@@ -74,9 +74,11 @@ breathing room, add it outside the file (CSS padding), not inside.
    becomes 72 curves.
 
 4. **Rebuild the helm.** Dropped from the trace and re-emitted from the measured
-   radii as one arm (`<g id="helm-arm">`: spoke + handle) instanced eight times
-   at `rotate(45°·k)`. Symmetric by construction rather than by hand-placed
-   nodes. The hub uses `fill-rule="evenodd"` so its bore is a real hole.
+   radii as one arm (`<g id="helm-arm">`: spoke + handle) instanced at the
+   angles in `ARM_DEG` — the 45° grid everywhere the broom does not cut, see
+   "The lower spokes" below. Symmetric by construction rather than by
+   hand-placed nodes. The hub uses `fill-rule="evenodd"` so its bore is a real
+   hole.
 
 5. **Composite the crossing.** The broom passes in front of the helm with a
    light gap, so `#mascot-helm` is masked by `#broom-clearance` (below).
@@ -120,6 +122,32 @@ The mask that keeps the helm behind the broom. Two parts:
 The far side is the broom's own outline **stepped 12 times along its normal**
 (36px each), not a half-plane — the broom is curved, and a straight cut leaves a
 sliver where the curve pulls away from the line.
+
+### The lower spokes
+
+`ARM_DEG` is `[0, 45, 90, 150, 210, 270, 315]`. Outside the broom's shadow the
+arms are exactly on the 45° grid; inside it **180° is dropped and 135°/225° are
+pulled in to 150°/210°**, so the wedge the broom cuts carries two spokes instead
+of three.
+
+Why those three and not others: march out from the helm centre along each grid
+direction and stop at `#broom-clearance`, and the surviving arm lengths are
+
+| 0° | 45° | 90° | 135° | 180° | 225° | 270° | 315° |
+|---|---|---|---|---|---|---|---|
+| full | full | 160 | 112 | 117 | full | full | full |
+
+against a rim of 137.8–172.8. Only 135° and 180° are pure stubs — cut well
+inside the rim, ending in mid-air — so they are the only two whose exact angle
+is a free choice, and three of them in a 45° fan read as debris rather than as
+spokes going behind something. Two, spaced 60°, read as spokes.
+
+This is a departure from a real ship's helm, which has evenly spaced spokes; it
+is taken knowingly, because the arms in question are three-quarters hidden and
+what they read as matters more here than what they are.
+
+Re-derive the table for any other mark — the broom's angle relative to the
+mascot is what decides which positions are free.
 
 ## Reusing this for pgNimbus
 
@@ -190,9 +218,10 @@ browser. Bit once, via a `--css-variable` name mentioned in a comment.
 The mark is otherwise pixel-faithful (verify with `check.html`: the difference
 blend is black except for antialiasing hairlines).
 
-- **8 spokes and 8 handles**, evenly spaced. The raster has 7 irregular spokes
-  and partial handles. This is the point of the rebuild; reverting it brings the
-  asymmetry back.
+- **7 spokes and 7 handles**, five of them on an exact 45° grid and two placed
+  inside the broom's shadow — see "The lower spokes" above. The raster has 7
+  irregular spokes at 44°–60° and partial handles; the rebuild is the point,
+  and reverting it brings that asymmetry back.
 - **Full bleed**, no margin — the raster has 51px of it.
 - The **light gap around the broom is uniform** at 17px, where the generated one
   varies.

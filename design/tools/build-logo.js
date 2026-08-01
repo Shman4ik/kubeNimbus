@@ -178,8 +178,15 @@ const RO = s(outer.med), RI = s(inner.med);
 const RIM_MID = +((RO + RI) / 2).toFixed(1), RIM_W = +(RO - RI).toFixed(1);
 const HUB = s(45), BORE = s(23), SPOKE = s(30), HAND_W = s(30), HAND_TIP = s(hmax);
 const WC = T([C.x, C.y]);
-const arms = [];
-for (let k = 0; k < 8; k++) arms.push(`      <use href="#helm-arm" transform="rotate(${k * 45})"/>`);
+// The 45deg grid, except in the broom's shadow: 180deg is dropped and its two
+// neighbours are pulled in towards it (135 -> 150, 225 -> 210), so the wedge
+// the broom cuts holds two spokes instead of three. Everything the eye reads as
+// the wheel - 0/45/90/270/315 - stays exactly on the grid; only the arms that
+// are already truncated by #broom-clearance move, and they move closer
+// together, which is what stops the stubs from reading as debris. Deliberately
+// not a true helm any more; see LOGO.md, "The lower spokes".
+const ARM_DEG = [0, 45, 90, 150, 210, 270, 315];
+const arms = ARM_DEG.map(a => `      <use href="#helm-arm" transform="rotate(${a})"/>`);
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="t">
   <title id="t">kubeNimbus</title>
@@ -195,8 +202,13 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" rol
        #mascot-helm is NOT traced: the generated wheel had 7 spokes at
        44-60deg spacing and only half its handles, so it is rebuilt from
        the measured radii (rim ${RI}-${RO}, handles to ${HAND_TIP}, centre
-       ${WC[0].toFixed(0)},${WC[1].toFixed(0)}) as 8 arms instanced at 45deg -
+       ${WC[0].toFixed(0)},${WC[1].toFixed(0)}) on an exact 45deg grid -
        symmetric by construction rather than by hand-placed nodes.
+
+       Arms sit at ${ARM_DEG.join(', ')}deg. Everything outside the broom's
+       shadow is on the exact 45deg grid; inside it the 180deg arm is dropped
+       and its neighbours pulled together (135->150, 225->210) so the wedge the
+       broom cuts carries two spokes rather than three stubs.
 
        The whole mark is scaled ${SCALE.toFixed(3)}x off the source so the disc
        runs edge to edge: cx=cy=r=512, no margin.

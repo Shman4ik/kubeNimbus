@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "inkscape-mcp": {
+      "command": "C:\\Users\\shman\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python313\\Scripts\\inkscape-mcp.exe",
+      "env": {
+        "INKSCAPE_PATH": "C:\\Program Files\\Inkscape\\bin\\inkscape.exe",
+        "INKS_WORKSPACE": "./design",
+        "INKS_MAX_FILE": "52428800",
+        "INKS_TIMEOUT": "120",
+        "INKS_MAX_CONC": "8"
+      }
+    }
+  }
+}

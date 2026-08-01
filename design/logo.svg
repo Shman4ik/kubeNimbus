@@ -12,8 +12,13 @@
        #mascot-helm is NOT traced: the generated wheel had 7 spokes at
        44-60deg spacing and only half its handles, so it is rebuilt from
        the measured radii (rim 137.8-172.8, handles to 237.8, centre
-       511,454) as 8 arms instanced at 45deg -
+       511,454) on an exact 45deg grid -
        symmetric by construction rather than by hand-placed nodes.
+
+       Arms sit at 0, 45, 90, 150, 210, 270, 315deg. Everything outside the broom's
+       shadow is on the exact 45deg grid; inside it the 180deg arm is dropped
+       and its neighbours pulled together (135->150, 225->210) so the wedge the
+       broom cuts carries two spokes rather than three stubs.
 
        The whole mark is scaled 1.111x off the source so the disc
        runs edge to edge: cx=cy=r=512, no margin.
@@ -77,9 +82,8 @@
       <use href="#helm-arm" transform="rotate(0)"/>
       <use href="#helm-arm" transform="rotate(45)"/>
       <use href="#helm-arm" transform="rotate(90)"/>
-      <use href="#helm-arm" transform="rotate(135)"/>
-      <use href="#helm-arm" transform="rotate(180)"/>
-      <use href="#helm-arm" transform="rotate(225)"/>
+      <use href="#helm-arm" transform="rotate(150)"/>
+      <use href="#helm-arm" transform="rotate(210)"/>
       <use href="#helm-arm" transform="rotate(270)"/>
       <use href="#helm-arm" transform="rotate(315)"/>
       </g>
