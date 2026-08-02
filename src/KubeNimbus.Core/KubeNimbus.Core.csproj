@@ -10,10 +10,18 @@
          Never swap for the reflection-based "KubernetesClient" package. -->
     <PackageReference Include="KubernetesClient.Aot" Version="19.0.2" />
     <!-- Already a transitive dependency of KubernetesClient.Aot (kubeconfig YAML
-         parsing); pinned to the same major version. Used ONLY via its structural
-         RepresentationModel (YamlNode tree) in YamlJson.cs — never the
-         attribute/reflection-based serializer, which isn't AOT/trim-safe. -->
-    <PackageReference Include="YamlDotNet" Version="18.1.0" />
+         parsing); pinned to EXACTLY the version KubernetesClient.Aot 19.0.2 was
+         source-generated against (16.3.0). Bumping past it (tried in #15, reverted)
+         breaks at runtime: KubernetesClient.Aot ships a precompiled
+         k8s.KubeConfigModels.StaticTypeInspector generated against YamlDotNet
+         16.3.0's ITypeInspector shape, and a newer YamlDotNet's interface no
+         longer matches it, throwing TypeLoadException on first kubeconfig load.
+         Used ONLY via its structural RepresentationModel (YamlNode tree) in
+         YamlJson.cs — never the attribute/reflection-based serializer, which
+         isn't AOT/trim-safe. Only bump this in lockstep with a KubernetesClient.Aot
+         upgrade that itself moves to a newer YamlDotNet, and verify with
+         tools/Screenshot (it loads a kubeconfig and would have caught #15). -->
+    <PackageReference Include="YamlDotNet" Version="16.3.0" />
   </ItemGroup>
 
   <ItemGroup>
