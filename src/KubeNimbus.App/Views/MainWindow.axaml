@@ -43,78 +43,148 @@
     <!-- Two-tone shell: chrome-tinted base; content pane is a raised "layer" (see Theme.axaml). -->
     <DockPanel Name="ShellBase" Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}">
 
-      <Border DockPanel.Dock="Top" Name="CommandBar" Height="44" Padding="12,0"
-              BorderThickness="0,0,0,1" BorderBrush="{StaticResource CardBorderBrush}">
-        <Grid ColumnDefinitions="Auto,*,Auto">
-          <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Spacing="4">
-            <!-- Wordmark only: the mark itself is the window icon (title bar,
-                 taskbar, Alt+Tab), so repeating it here was two logos 30px
-                 apart — and the glyph that used to sit here was a placeholder
-                 hexagon, not the real mark. -->
-            <TextBlock Text="kubeNimbus" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" Margin="4,0,16,0" />
+      <!-- Command bar. Column layout is deliberate: the TAB STRIP gets the flexible
+           column, because that's the thing whose width is driven by how many
+           clusters the user opened. In the old layout the strip sat in an Auto
+           column next to a fixed dropdown, so a handful of tabs pushed the palette
+           and the theme toggle off the right edge. -->
+      <StackPanel DockPanel.Dock="Top">
+        <Border Name="CommandBar" Height="44" Padding="12,0"
+                BorderThickness="0,0,0,1" BorderBrush="{StaticResource CardBorderBrush}">
+          <Grid ColumnDefinitions="Auto,*,Auto">
+            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Spacing="6">
+              <!-- Wordmark only: the mark itself is the window icon (title bar,
+                   taskbar, Alt+Tab), so repeating it here was two logos 30px
+                   apart — and the glyph that used to sit here was a placeholder
+                   hexagon, not the real mark. -->
+              <TextBlock Text="kubeNimbus" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" Margin="4,0,10,0" />
 
-            <ItemsControl Name="TabStrip" ItemsSource="{Binding Tabs}">
-              <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                  <StackPanel Orientation="Horizontal" Spacing="2" />
-                </ItemsPanelTemplate>
-              </ItemsControl.ItemsPanel>
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="vm:ClusterTabViewModel">
-                  <Border Classes="card" Padding="10,6" Margin="0,0,2,0" CornerRadius="6"
-                          Tapped="OnTabHeaderTapped"
-                          PointerPressed="OnTabHeaderPointerPressed"
-                          PointerMoved="OnTabHeaderPointerMoved"
-                          PointerReleased="OnTabHeaderPointerReleased">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                      <Ellipse Classes="statusDot" Classes.ok="{Binding IsConnected}" Classes.idle="{Binding !IsConnected}" VerticalAlignment="Center" />
-                      <TextBlock Text="{Binding Header}" FontSize="12" VerticalAlignment="Center" />
-                      <Button Classes="chip" Padding="0" MinWidth="14" MinHeight="14"
-                              Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).CloseTabCommand}"
-                              CommandParameter="{Binding}">
-                        <PathIcon Data="{StaticResource CloseIconGeometry}" Width="9" Height="9" />
-                      </Button>
-                    </StackPanel>
-                  </Border>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
+              <!-- The switcher entry point. This replaced a ComboBox + "+" pair that
+                   between them could neither search nor switch: the dropdown only
+                   chose what "+" would open, so reaching an already-open cluster was
+                   a different gesture, and a list of managed-cluster context names
+                   was unreadable at 150px. One button, one popup, both jobs. -->
+              <Button Name="SwitcherButton" Classes="chip" Padding="8,5" Click="OnSwitcherButtonClick"
+                      IsEnabled="{Binding HasContexts}">
+                <ToolTip.Tip>
+                  <TextBlock Text="{Binding SwitcherTooltip}" />
+                </ToolTip.Tip>
+                <StackPanel Orientation="Horizontal" Spacing="7">
+                  <Ellipse Width="7" Height="7" VerticalAlignment="Center"
+                           Fill="{Binding SelectedTab.Environment, Converter={x:Static conv:EnvironmentToBrushConverter.Instance}}" />
+                  <TextBlock Text="{Binding SwitcherLabel}" FontSize="12" VerticalAlignment="Center"
+                             MaxWidth="200" TextTrimming="CharacterEllipsis" />
+                  <PathIcon Data="{StaticResource ChevronDownIconGeometry}" Width="9" Height="9" Opacity="0.5" VerticalAlignment="Center" />
+                </StackPanel>
+              </Button>
 
-            <ComboBox ItemsSource="{Binding AvailableContexts}" SelectedItem="{Binding NewTabContext}" MinWidth="150" Margin="8,0,0,0"
-                      PlaceholderText="No kubeconfig contexts">
-              <ComboBox.ItemTemplate>
-                <DataTemplate x:DataType="core:ClusterContext">
-                  <TextBlock Text="{Binding Name}" />
-                </DataTemplate>
-              </ComboBox.ItemTemplate>
-            </ComboBox>
-            <Button Classes="chip" Padding="5" Margin="4,0,0,0" Command="{Binding AddNewTabCommand}" ToolTip.Tip="Open new cluster tab">
-              <PathIcon Data="{StaticResource PlusIconGeometry}" Width="13" Height="13" />
-            </Button>
-          </StackPanel>
+              <!-- The switcher button and a cluster tab are the same size and shape;
+                   without a divider the button reads as just another tab. -->
+              <Rectangle Width="1" Height="18" Margin="4,0,0,0" VerticalAlignment="Center"
+                         Fill="{StaticResource CardBorderBrush}"
+                         IsVisible="{Binding Tabs.Count, Converter={x:Static conv:CountToBoolConverter.Instance}}" />
+            </StackPanel>
 
-          <Button Grid.Column="1" Name="PaletteButton" Classes="searchpill"
-                  MaxWidth="340" HorizontalAlignment="Stretch" VerticalAlignment="Center" Margin="16,0"
-                  Click="OnPaletteButtonClick">
-            <Grid ColumnDefinitions="Auto,*,Auto">
-              <PathIcon Grid.Column="0" Data="{StaticResource MagnifyIconGeometry}" Width="11" Height="11" Opacity="0.55" VerticalAlignment="Center" />
-              <TextBlock Grid.Column="1" Text="Search clusters, resources, actions…" FontSize="12" Opacity="0.55"
-                         Margin="7,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-              <TextBlock Grid.Column="2" Name="PaletteShortcutLabel" FontSize="11" Opacity="0.4" VerticalAlignment="Center" />
-            </Grid>
-          </Button>
+            <!-- Tabs scroll rather than squeeze: past a handful of clusters the
+                 switcher (Ctrl/Cmd+P) is the way to reach one, and shrinking every
+                 tab until no name is legible helps nobody. -->
+            <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                          Margin="10,0" VerticalAlignment="Center">
+              <ItemsControl Name="TabStrip" ItemsSource="{Binding Tabs}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" Spacing="3" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ClusterTabViewModel">
+                    <Border Classes="clusterTab" Classes.active="{Binding IsSelected}"
+                            Tapped="OnTabHeaderTapped"
+                            PointerPressed="OnTabHeaderPointerPressed"
+                            PointerMoved="OnTabHeaderPointerMoved"
+                            PointerReleased="OnTabHeaderPointerReleased">
+                      <ToolTip.Tip>
+                        <TextBlock Text="{Binding Header}" />
+                      </ToolTip.Tip>
 
-          <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Spacing="2">
-            <Button Classes="chip" Padding="5" Command="{Binding ToggleShortcutsCommand}"
-                    ToolTip.Tip="Keyboard shortcuts (F1)">
-              <PathIcon Data="{StaticResource HelpCircleIconGeometry}" Width="15" Height="15" />
-            </Button>
-            <Button Name="ThemeToggleButton" Classes="chip" Padding="5" Click="OnToggleThemeClick" ToolTip.Tip="Toggle light/dark theme">
-              <PathIcon Name="ThemeIcon" Data="{StaticResource WeatherNightIconGeometry}" Width="14" Height="14" />
-            </Button>
-          </StackPanel>
-        </Grid>
-      </Border>
+                      <!-- Correcting the environment guess. Right-click rather than a
+                           visible control (UI rule 1): the guess is right most of the
+                           time, and this is the rare corrective action. It has to
+                           exist though — a colour nobody can fix is a colour people
+                           learn to distrust. -->
+                      <Border.ContextMenu>
+                        <ContextMenu>
+                          <MenuItem Header="Production" Click="OnSetEnvironmentClick" Tag="Production"
+                                    ToggleType="Radio"
+                                    IsChecked="{Binding Environment, Mode=OneWay, Converter={x:Static conv:EnvironmentEqualsConverter.Instance}, ConverterParameter=Production}" />
+                          <MenuItem Header="Staging" Click="OnSetEnvironmentClick" Tag="Staging"
+                                    ToggleType="Radio"
+                                    IsChecked="{Binding Environment, Mode=OneWay, Converter={x:Static conv:EnvironmentEqualsConverter.Instance}, ConverterParameter=Staging}" />
+                          <MenuItem Header="Development" Click="OnSetEnvironmentClick" Tag="Development"
+                                    ToggleType="Radio"
+                                    IsChecked="{Binding Environment, Mode=OneWay, Converter={x:Static conv:EnvironmentEqualsConverter.Instance}, ConverterParameter=Development}" />
+                          <MenuItem Header="Not specified" Click="OnSetEnvironmentClick" Tag="Unknown"
+                                    ToggleType="Radio"
+                                    IsChecked="{Binding Environment, Mode=OneWay, Converter={x:Static conv:EnvironmentEqualsConverter.Instance}, ConverterParameter=Unknown}" />
+                          <Separator />
+                          <MenuItem Header="Reset to name guess" Click="OnSetEnvironmentClick" Tag="" />
+                        </ContextMenu>
+                      </Border.ContextMenu>
+
+                      <StackPanel Orientation="Horizontal" Spacing="7">
+                        <!-- Environment as a left edge, connection as a dot: two
+                             independent facts, so two marks. Collapsing them would
+                             make a disconnected prod cluster indistinguishable
+                             from a connected dev one. -->
+                        <Border Classes="envEdge" Height="15" VerticalAlignment="Center"
+                                Background="{Binding Environment, Converter={x:Static conv:EnvironmentToBrushConverter.Instance}}"
+                                IsVisible="{Binding HasEnvironmentLabel}" />
+                        <Ellipse Classes="statusDot" Classes.ok="{Binding IsConnected}"
+                                 Classes.warn="{Binding IsConnecting}" Classes.idle="{Binding IsIdle}"
+                                 VerticalAlignment="Center">
+                          <ToolTip.Tip>
+                            <TextBlock Text="{Binding Status}" />
+                          </ToolTip.Tip>
+                        </Ellipse>
+                        <TextBlock Text="{Binding Header}" FontSize="12" VerticalAlignment="Center"
+                                   MaxWidth="170" TextTrimming="CharacterEllipsis" />
+                        <Button Classes="chip" Padding="0" MinWidth="14" MinHeight="14"
+                                Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).CloseTabCommand}"
+                                CommandParameter="{Binding}">
+                          <PathIcon Data="{StaticResource CloseIconGeometry}" Width="9" Height="9" />
+                        </Button>
+                      </StackPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+
+            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Spacing="2">
+              <Button Name="PaletteButton" Classes="searchpill" Width="190" VerticalAlignment="Center" Margin="0,0,6,0"
+                      Click="OnPaletteButtonClick">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                  <PathIcon Grid.Column="0" Data="{StaticResource MagnifyIconGeometry}" Width="11" Height="11" Opacity="0.55" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="1" Text="Search actions…" FontSize="12" Opacity="0.55"
+                             Margin="7,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="2" Name="PaletteShortcutLabel" FontSize="11" Opacity="0.4" VerticalAlignment="Center" />
+                </Grid>
+              </Button>
+              <Button Classes="chip" Padding="5" Command="{Binding ToggleShortcutsCommand}"
+                      ToolTip.Tip="Keyboard shortcuts (F1)">
+                <PathIcon Data="{StaticResource HelpCircleIconGeometry}" Width="15" Height="15" />
+              </Button>
+              <Button Name="ThemeToggleButton" Classes="chip" Padding="5" Click="OnToggleThemeClick" ToolTip.Tip="Toggle light/dark theme">
+                <PathIcon Name="ThemeIcon" Data="{StaticResource WeatherNightIconGeometry}" Width="14" Height="14" />
+              </Button>
+            </StackPanel>
+          </Grid>
+        </Border>
+
+        <!-- Production band. Present only when the selected cluster is production,
+             so it costs no chrome the rest of the time (UI rule 1). -->
+        <Border Classes="envBand" IsVisible="{Binding SelectedTab.IsProduction, FallbackValue=False}" />
+      </StackPanel>
 
       <Border DockPanel.Dock="Bottom" Classes="statusBar">
         <Grid ColumnDefinitions="*,Auto">
@@ -165,6 +235,89 @@
         </StackPanel>
       </Grid>
     </DockPanel>
+
+    <!-- Cluster switcher overlay (Ctrl/Cmd+P, or the top bar's cluster button).
+         Deliberately the same overlay shape as the command palette: the two answer
+         different questions ("where do I want to be" vs "what do I want to do") but
+         behave identically — type, arrow, Enter — so neither needs to be learned
+         twice. Rows are wider than the palette's because context names run long. -->
+    <Border Background="#80000000" IsVisible="{Binding Switcher.IsOpen}" PointerPressed="OnSwitcherBackdropPressed">
+      <Border Classes="layer" Width="640" MaxHeight="480" VerticalAlignment="Top" Margin="0,80,0,0"
+              HorizontalAlignment="Center" Padding="0">
+        <Grid RowDefinitions="Auto,*,Auto">
+          <TextBox Grid.Row="0" Name="SwitcherQueryBox" Text="{Binding Switcher.Query}"
+                   PlaceholderText="Search clusters — name, cluster or kubeconfig…" Margin="10" FontSize="14"
+                   KeyDown="OnSwitcherKeyDown" />
+
+          <!-- Tapped is handled on the ListBox, not on the item template's root
+               panel. A Panel with no Background is not hit-testable in Avalonia, and
+               the ListBoxItem's own padding sits outside the template entirely — so a
+               handler on the row's content only fires on the text itself, leaving the
+               rest of the row selecting-but-not-opening. Handling it here catches the
+               tap wherever in the row it landed. -->
+          <ListBox Grid.Row="1" Name="SwitcherList" Classes="switcherList" Margin="4,0"
+                   ItemsSource="{Binding Switcher.Ordered}"
+                   SelectedItem="{Binding Switcher.SelectedItem, Mode=TwoWay}"
+                   Tapped="OnSwitcherListTapped"
+                   Background="Transparent" BorderThickness="0">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:ClusterSwitcherItemViewModel">
+                <StackPanel>
+                  <!-- Group heading rides on the first row of its group; see
+                       ClusterSwitcherItemViewModel.SectionHeader for why the list
+                       is flat rather than a nested ItemsControl per section. -->
+                  <TextBlock Text="{Binding SectionHeader}" Classes="sectionHeader" Margin="10,4,0,4"
+                             IsVisible="{Binding HasSectionHeader}" />
+
+                  <Border Classes="switcherRowBody">
+                    <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                      <Ellipse Grid.Column="0" Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,10,0"
+                               Fill="{Binding Environment, Converter={x:Static conv:EnvironmentToBrushConverter.Instance}}" />
+
+                      <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Name}" FontSize="13" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding Subtitle}" FontSize="11" Opacity="0.55" TextTrimming="CharacterEllipsis" />
+                      </StackPanel>
+
+                      <Border Grid.Column="2" Classes="envPill" Margin="8,0"
+                              Classes.production="{Binding Environment, Converter={x:Static conv:EnvironmentEqualsConverter.Instance}, ConverterParameter=Production}"
+                              Classes.staging="{Binding Environment, Converter={x:Static conv:EnvironmentEqualsConverter.Instance}, ConverterParameter=Staging}"
+                              Classes.development="{Binding Environment, Converter={x:Static conv:EnvironmentEqualsConverter.Instance}, ConverterParameter=Development}"
+                              IsVisible="{Binding HasEnvironmentLabel}">
+                        <TextBlock Text="{Binding EnvironmentLabel}" />
+                      </Border>
+
+                      <!-- Pin toggle. Pinning is what makes a 200-context kubeconfig
+                           usable without typing: the four you actually work in sit at
+                           the top, every session. -->
+                      <Button Grid.Column="3" Classes="chip" Padding="4" MinWidth="22" MinHeight="22"
+                              Click="OnSwitcherPinClick"
+                              ToolTip.Tip="Pin to the top of the switcher">
+                        <PathIcon Width="12" Height="12"
+                                  Opacity="{Binding IsPinned, Converter={x:Static conv:PinnedToOpacityConverter.Instance}}"
+                                  Data="{Binding IsPinned, Converter={x:Static conv:PinnedToIconConverter.Instance}}" />
+                      </Button>
+                    </Grid>
+                  </Border>
+                </StackPanel>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+
+          <!-- Explicit empty state (UI rule 8): "no context matches that" and "this
+               kubeconfig has no contexts" look identical as a blank list and mean
+               very different things. -->
+          <TextBlock Grid.Row="1" IsVisible="{Binding Switcher.IsEmpty}" Margin="20,28"
+                     HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
+                     TextWrapping="Wrap" Opacity="0.6" FontSize="12.5"
+                     Text="No cluster matches that. Contexts are matched on name, cluster and kubeconfig file." />
+
+          <Border Grid.Row="2" Padding="12,7" BorderThickness="0,1,0,0" BorderBrush="{StaticResource CardBorderBrush}">
+            <TextBlock Name="SwitcherHintLabel" FontSize="11" Opacity="0.45" />
+          </Border>
+        </Grid>
+      </Border>
+    </Border>
 
     <!-- Command palette overlay -->
     <Border Background="#80000000" IsVisible="{Binding Palette.IsOpen}" PointerPressed="OnPaletteBackdropPressed">

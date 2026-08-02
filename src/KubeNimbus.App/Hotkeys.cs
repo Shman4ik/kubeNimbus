@@ -16,7 +16,18 @@ public static class Hotkeys
 
     public static readonly KeyGesture CommandPalette = new(Key.K, Primary);
 
+    /// <summary>
+    /// Cluster switcher. Separate from the palette on purpose: switching cluster is
+    /// the single most frequent navigation in a multi-cluster session, and every
+    /// comparable tool gives it its own gesture (k9s <c>:ctx</c>, kubectx) rather
+    /// than burying it among every other command.
+    /// </summary>
+    public static readonly KeyGesture ClusterSwitcher = new(Key.P, Primary);
+
     public static readonly KeyGesture ShortcutsHelp = new(Key.F1);
+
+    /// <summary>"Cmd" on macOS, "Ctrl" elsewhere — for describing chords built by hand.</summary>
+    public static string PrimaryLabel { get; } = Primary.HasFlag(KeyModifiers.Meta) ? "Cmd" : "Ctrl";
 
     /// <summary>Human-readable label for a gesture, for palette rows and the cheat sheet.</summary>
     public static string Describe(KeyGesture gesture)
@@ -34,6 +45,8 @@ public static class Hotkeys
     /// app, not aspirational documentation.</summary>
     public static readonly IReadOnlyList<ShortcutEntry> CheatSheet =
     [
+        new("Switch or open a cluster", Describe(ClusterSwitcher)),
+        new("Jump to cluster tab 1–9", $"{PrimaryLabel}+1…9"),
         new("Open the command palette", Describe(CommandPalette)),
         new("Show this cheat sheet", Describe(ShortcutsHelp)),
         new("Open the selected resource", "Enter"),

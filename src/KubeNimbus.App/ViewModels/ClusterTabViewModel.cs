@@ -35,13 +35,50 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     public string Header => Context.Name;
 
+    /// <summary>
+    /// Which environment this cluster is treated as — set by
+    /// <see cref="MainWindowViewModel"/>, which owns the user's overrides. Drives the
+    /// tab's colour and the production band under the command bar; the whole point
+    /// is that a production cluster is distinguishable from a sandbox at a glance,
+    /// before anything is clicked.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(EnvironmentLabel))]
+    [NotifyPropertyChangedFor(nameof(HasEnvironmentLabel))]
+    [NotifyPropertyChangedFor(nameof(IsProduction))]
+    private ClusterEnvironment _environment;
+
+    public string? EnvironmentLabel => Environment.Label();
+
+    public bool HasEnvironmentLabel => EnvironmentLabel is not null;
+
+    /// <summary>Drives the one piece of always-visible chrome the colour scheme adds.</summary>
+    public bool IsProduction => Environment == ClusterEnvironment.Production;
+
+    /// <summary>
+    /// True while this is the shell's selected tab. Kept on the tab rather than
+    /// compared in the view because the strip is an ItemsControl, not a Selector —
+    /// there is no built-in selected state to style against.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isSelected;
+
     public ClusterClient? Client { get; private set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsIdle))]
     private bool _isConnecting;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsIdle))]
     private bool _isConnected;
+
+    /// <summary>
+    /// Neither connected nor connecting. The tab's status dot needs three states, not
+    /// two: opening a cluster that is still dialling looked identical to one that
+    /// failed, so picking a cluster appeared to do nothing until it finished.
+    /// </summary>
+    public bool IsIdle => !IsConnected && !IsConnecting;
 
     [ObservableProperty]
     private string _status = "Not connected.";

@@ -47,6 +47,10 @@
     <td width="50%"><img src="design/screenshots/rbac-who-can.dark.png" alt="RBAC access review showing which subjects can perform a verb"><br><sub><b>Who can do X?</b> — every subject a binding grants a verb, verifiable against the API server.</sub></td>
     <td width="50%"><img src="design/screenshots/fleet-list.dark.png" alt="One list aggregating a resource kind across several clusters"><br><sub><b>All clusters</b> — one list across the whole fleet, honest about partial coverage.</sub></td>
   </tr>
+  <tr>
+    <td width="50%"><img src="design/screenshots/cluster-switcher.dark.png" alt="Searchable cluster switcher with pinned clusters and environment labels"><br><sub><b>Cluster switcher</b> (Ctrl/Cmd+P) — fuzzy search over every context, pinned favourites, and prod/staging/dev colour so you always know where you are.</sub></td>
+    <td width="50%"></td>
+  </tr>
 </table>
 
 <sub>Rendered from the repo's own headless harness (`tools/Screenshot`) against
@@ -123,7 +127,7 @@ Then point it at a cluster — kubeNimbus reads your `$KUBECONFIG` chain and
 
 > **Note on `$KUBECONFIG`:** an app launched from Explorer, Finder or a
 > shortcut doesn't inherit environment variables set in your shell. If the
-> context picker comes up empty, either launch from a terminal or use the
+> cluster switcher comes up empty, either launch from a terminal or use the
 > standard `~/.kube/config` path. kubeNimbus tells you exactly which paths it
 > searched.
 
@@ -164,6 +168,13 @@ confirmation.
 **Fleet** — an "All clusters" toggle aggregating any kind across every
 connected cluster into one list, with a Cluster column and an honest
 "n of m clusters serve X" when a kind isn't available everywhere.
+
+**Switch** — a Ctrl/Cmd+P cluster switcher that fuzzy-searches every context by
+name, cluster or kubeconfig file, so a 200-entry kubeconfig full of generated
+EKS ARNs is three keystrokes away rather than a scroll. Pin the clusters you
+live in. Every cluster is colour-coded prod / staging / dev — a red band sits
+under the command bar whenever you're pointed at production, and you can correct
+the guess by right-clicking a tab.
 
 Plus a Ctrl/Cmd+K command palette, an F1 shortcut cheat sheet, and light/dark
 themes.

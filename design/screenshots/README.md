@@ -21,6 +21,7 @@ then copy the ones the README uses:
 | `yaml-editor.dark.png` | `cluster-tab-yaml-editor-maximized` |
 | `rbac-who-can.dark.png` | `cluster-tab-rbac-who-can` |
 | `fleet-list.dark.png` | `cluster-tab-fleet-list` |
+| `cluster-switcher.dark.png` | `main-window-switcher` |
 
 Only the hero image is checked in for both themes — GitHub's `<picture>` element
 switches it with the reader's theme. The gallery below it is dark-only, to keep

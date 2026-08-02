@@ -21,6 +21,14 @@ var outDir = args.Length > 0 ? args[0] : "screenshots";
 var filter = args.Length > 1 ? args[1] : null;
 Directory.CreateDirectory(outDir);
 
+// Scenarios construct real MainWindowViewModels, which read the workspace on
+// construction and save it whenever a cluster is pinned. Point that at a scratch
+// directory so rendering fixtures can't read — or clobber — the developer's own
+// open tabs, pins and theme.
+WorkspaceStore.DirectoryOverride = Path.Combine(Path.GetTempPath(), "kubenimbus-screenshot-workspace");
+Directory.CreateDirectory(WorkspaceStore.DirectoryOverride);
+File.Delete(Path.Combine(WorkspaceStore.DirectoryOverride, "workspace.json"));
+
 BuildAvaloniaApp().SetupWithoutStarting();
 
 var scenarios = new (string Name, Func<Control> Build)[]
@@ -56,6 +64,10 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-disconnected", () => HostInMainWindow(ClusterTabScenarios.Disconnected())),
     ("main-window", () => BuildMainWindowContent()),
     ("main-window-shortcuts", () => BuildMainWindowContent(openShortcuts: true)),
+    ("main-window-switcher", () => BuildSwitcherContent()),
+    // "pro" is a subsequence of several of these and a prefix of others — the
+    // ranking (prefix > contiguous > subsequence) is the point of the shot.
+    ("main-window-switcher-search", () => BuildSwitcherContent("pro")),
 };
 
 foreach (var (name, build) in scenarios)
@@ -117,26 +129,37 @@ static Control HostInMainWindow(ClusterTabViewModel tab, int height = 800)
     return window;
 }
 
-// Without this the command bar's context picker reads "No kubeconfig contexts"
-// in every screenshot — the fixture kubeconfig points at an address nothing
-// listens on, so LoadContextsAsync finds nothing. That is a real state (it's
-// what `cluster-tab-*` would show on a machine with no kubeconfig) but it is
-// not the state these scenarios are about, and it makes every shot look like a
-// failed connection.
+// Without this the command bar's cluster switcher reads "No clusters" in every
+// screenshot — the fixture kubeconfig points at an address nothing listens on,
+// so LoadContextsAsync finds nothing. That is a real state (it's what
+// `cluster-tab-*` would show on a machine with no kubeconfig) but it is not the
+// state these scenarios are about, and it makes every shot look like a failed
+// connection.
+//
+// The set is deliberately messier than three tidy names: it spans every
+// environment class, includes the auto-generated GKE/EKS shapes that are the
+// reason the switcher searches instead of listing, and is long enough that the
+// grouped/filtered popup has something to actually do.
 static void SeedContexts(MainWindowViewModel vm)
 {
     vm.AvailableContexts.Clear();
-    foreach (var (name, ns) in new[]
+    foreach (var (name, cluster, ns) in new[]
              {
-                 ("prod-payments", "payments"),
-                 ("prod-ledger", "ledger"),
-                 ("staging-eu", "default"),
+                 ("prod-payments", "payments-prod-euw1", "payments"),
+                 ("prod-ledger", "ledger-prod-use1", "ledger"),
+                 ("staging-eu", "staging-eu-west", "default"),
+                 ("preprod-payments", "payments-preprod-euw1", "payments"),
+                 ("qa-integration", "qa-int-cluster", "default"),
+                 ("gke_acme-corp_europe-west4-a_analytics-prod", "analytics-prod", "analytics"),
+                 ("arn:aws:eks:us-east-1:481516234298:cluster/search-staging", "search-staging", "search"),
+                 ("kind-kubenimbus", "kind-kubenimbus", "default"),
+                 ("docker-desktop", "docker-desktop", "default"),
+                 ("minikube", "minikube", "default"),
              })
     {
-        vm.AvailableContexts.Add(new ClusterContext(name, $"{name}-cluster", ns, "fixture-user", "fixture"));
+        vm.AvailableContexts.Add(new ClusterContext(name, cluster, ns, "fixture-user", "/home/fixture/.kube/config"));
     }
 
-    vm.NewTabContext = vm.AvailableContexts[0];
     vm.HasContexts = true;
     vm.Status = $"{vm.AvailableContexts.Count} context(s) available.";
 }
@@ -157,6 +180,36 @@ static Control BuildMainWindowContent(bool openShortcuts = false)
     vm.Tabs.Add(tabB);
     vm.SelectedTab = tabB;
     vm.IsShortcutsOpen = openShortcuts;
+
+    return window;
+}
+
+// The cluster switcher, open. `query` renders the searching state — one flat
+// ranked list — against the grouped Open/Pinned/All layout of the empty query.
+static Control BuildSwitcherContent(string? query = null)
+{
+    var window = new MainWindow();
+    var vm = new MainWindowViewModel();
+    window.DataContext = vm;
+    window.Width = 1280;
+    window.Height = 800;
+    SeedContexts(vm);
+
+    vm.Tabs.Clear();
+    var tab = ClusterTabScenarios.WorkloadsList();
+    vm.Tabs.Add(tab);
+    vm.SelectedTab = tab;
+
+    // Pinning is the feature that makes a long kubeconfig usable without typing,
+    // so at least one pinned row has to be in the shot.
+    vm.SetPinned("staging-eu", true);
+    vm.SetPinned("gke_acme-corp_europe-west4-a_analytics-prod", true);
+
+    vm.Switcher.Open();
+    if (query is not null)
+    {
+        vm.Switcher.Query = query;
+    }
 
     return window;
 }

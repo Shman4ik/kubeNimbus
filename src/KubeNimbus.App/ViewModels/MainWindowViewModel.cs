@@ -19,9 +19,38 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private ClusterTabViewModel? _selectedTab;
 
-    [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(AddNewTabCommand))]
-    private ClusterContext? _newTabContext;
+    partial void OnSelectedTabChanged(ClusterTabViewModel? oldValue, ClusterTabViewModel? newValue)
+    {
+        if (oldValue is not null)
+        {
+            oldValue.IsSelected = false;
+        }
+
+        if (newValue is not null)
+        {
+            newValue.IsSelected = true;
+        }
+
+        OnPropertyChanged(nameof(SwitcherLabel));
+        OnPropertyChanged(nameof(SwitcherTooltip));
+
+        // The switcher marks the current tab so it isn't offered as the top hit.
+        if (Switcher.IsOpen)
+        {
+            Switcher.Refresh();
+        }
+    }
+
+    /// <summary>
+    /// What the switcher button reads. It names the cluster you are looking at, not
+    /// "select a context" — the top bar's job is to answer "which cluster am I in?"
+    /// without being asked, which is the single most-cited multi-cluster complaint.
+    /// </summary>
+    public string SwitcherLabel => SelectedTab?.Header ?? (HasContexts ? "Select a cluster" : "No clusters");
+
+    public string SwitcherTooltip => HasContexts
+        ? $"Switch or open a cluster  ({Hotkeys.Describe(Hotkeys.ClusterSwitcher)})"
+        : "No kubeconfig contexts found";
 
     [ObservableProperty]
     private string _status = "Loading kubeconfig…";
@@ -40,6 +69,22 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     public CommandPaletteViewModel Palette { get; }
 
+    /// <summary>
+    /// The cluster switcher popup that replaced the top bar's context ComboBox —
+    /// see <see cref="ClusterSwitcherViewModel"/> for why a dropdown was the wrong
+    /// primitive here.
+    /// </summary>
+    public ClusterSwitcherViewModel Switcher { get; }
+
+    /// <summary>Pinned context names, in user order. Persisted.</summary>
+    private readonly List<string> _pinned = [];
+
+    /// <summary>Recently opened context names, newest first. Persisted.</summary>
+    private readonly List<string> _recent = [];
+
+    /// <summary>Context name → user-assigned environment, overriding the name guess. Persisted.</summary>
+    private readonly Dictionary<string, ClusterEnvironment> _environmentOverrides = new(StringComparer.Ordinal);
+
     [ObservableProperty]
     private bool _isShortcutsOpen;
 
@@ -52,7 +97,179 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public MainWindowViewModel()
     {
         Palette = new CommandPaletteViewModel(BuildPaletteItems);
+        Switcher = new ClusterSwitcherViewModel(BuildSwitcherItems) { Activate = ActivateSwitcherItem };
+
+        LoadPreferences();
+
+        // Stamp the environment on every tab that enters the strip, wherever it came
+        // from. Doing it here rather than in AddTabAsync means a tab built outside the
+        // normal path — the screenshot harness does exactly that — still carries its
+        // colour, and there is one place where the override is applied.
+        Tabs.CollectionChanged += (_, e) =>
+        {
+            foreach (var tab in e.NewItems?.OfType<ClusterTabViewModel>() ?? [])
+            {
+                tab.Environment = EnvironmentFor(tab.Context);
+            }
+        };
+
         _ = InitializeAsync();
+    }
+
+    /// <summary>
+    /// Reads the parts of the workspace that aren't tabs — pins, recents and
+    /// environment overrides. Separate from <see cref="RestoreWorkspaceAsync"/>
+    /// because these have to be in place *before* the first tab opens: the
+    /// environment colour is read as each tab is constructed.
+    /// </summary>
+    private void LoadPreferences()
+    {
+        var settings = WorkspaceStore.Load();
+
+        _pinned.Clear();
+        _pinned.AddRange(settings.PinnedContexts ?? []);
+
+        _recent.Clear();
+        _recent.AddRange(settings.RecentContexts ?? []);
+
+        _environmentOverrides.Clear();
+        foreach (var (name, value) in settings.EnvironmentOverrides ?? [])
+        {
+            // An unparseable value means a hand-edited or newer file; drop it rather
+            // than throwing away the whole workspace.
+            if (Enum.TryParse<ClusterEnvironment>(value, ignoreCase: true, out var environment))
+            {
+                _environmentOverrides[name] = environment;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The environment a context is treated as: the user's assignment if there is
+    /// one, otherwise the name guess. Everything that colours a cluster goes
+    /// through here so the override applies uniformly.
+    /// </summary>
+    public ClusterEnvironment EnvironmentFor(ClusterContext context) =>
+        _environmentOverrides.TryGetValue(context.Name, out var assigned)
+            ? assigned
+            : ClusterEnvironments.Classify(context.Name, context.ClusterName);
+
+    public bool IsEnvironmentAssigned(ClusterContext context) => _environmentOverrides.ContainsKey(context.Name);
+
+    /// <summary>
+    /// Assigns (or, with null, clears back to the guess) a context's environment.
+    /// Applied to every open tab on that context immediately — the colour is a
+    /// safety signal, and a stale one is worse than none.
+    /// </summary>
+    public void SetEnvironment(ClusterContext context, ClusterEnvironment? environment)
+    {
+        if (environment is { } value)
+        {
+            _environmentOverrides[context.Name] = value;
+        }
+        else
+        {
+            _environmentOverrides.Remove(context.Name);
+        }
+
+        foreach (var tab in Tabs.Where(t => t.Context.Name == context.Name))
+        {
+            tab.Environment = EnvironmentFor(tab.Context);
+        }
+
+        SaveWorkspace();
+        Switcher.Refresh();
+    }
+
+    public bool IsPinned(string contextName) => _pinned.Contains(contextName, StringComparer.Ordinal);
+
+    public void SetPinned(string contextName, bool pinned)
+    {
+        if (pinned && !IsPinned(contextName))
+        {
+            _pinned.Add(contextName);
+        }
+        else if (!pinned)
+        {
+            _pinned.RemoveAll(n => string.Equals(n, contextName, StringComparison.Ordinal));
+        }
+
+        SaveWorkspace();
+        Switcher.Refresh();
+    }
+
+    private void RecordRecent(string contextName)
+    {
+        _recent.RemoveAll(n => string.Equals(n, contextName, StringComparison.Ordinal));
+        _recent.Insert(0, contextName);
+        if (_recent.Count > WorkspaceStore.MaxRecentContexts)
+        {
+            _recent.RemoveRange(WorkspaceStore.MaxRecentContexts, _recent.Count - WorkspaceStore.MaxRecentContexts);
+        }
+    }
+
+    /// <summary>
+    /// Rows for the switcher, bucketed. A context that is already open appears
+    /// only under "Open" — the same cluster listed twice is the confusion the old
+    /// two-control arrangement created in the first place.
+    /// </summary>
+    private IEnumerable<ClusterSwitcherItemViewModel> BuildSwitcherItems()
+    {
+        var openByName = Tabs.ToLookup(t => t.Context.Name, StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var tab in Tabs)
+        {
+            yield return new ClusterSwitcherItemViewModel(
+                tab.Context, ClusterSwitcherGroup.Open, EnvironmentFor(tab.Context), tab,
+                IsPinned(tab.Context.Name), ReferenceEquals(tab, SelectedTab));
+            seen.Add(tab.Context.Name);
+        }
+
+        foreach (var context in AvailableContexts)
+        {
+            if (openByName.Contains(context.Name) || !seen.Add(context.Name))
+            {
+                continue;
+            }
+
+            var group = IsPinned(context.Name) ? ClusterSwitcherGroup.Pinned
+                : _recent.Contains(context.Name, StringComparer.Ordinal) ? ClusterSwitcherGroup.Recent
+                : ClusterSwitcherGroup.All;
+
+            yield return new ClusterSwitcherItemViewModel(
+                context, group, EnvironmentFor(context), openTab: null, IsPinned(context.Name), isCurrent: false);
+        }
+    }
+
+    private void ActivateSwitcherItem(ClusterSwitcherItemViewModel item)
+    {
+        if (item.OpenTab is { } tab)
+        {
+            SelectedTab = tab;
+        }
+        else
+        {
+            _ = AddTabAsync(item.Context);
+        }
+    }
+
+    [RelayCommand]
+    private void OpenSwitcher() => Switcher.Open();
+
+    /// <summary>
+    /// Jump to the nth open tab (Ctrl/Cmd+1…9), the gesture every tabbed app has
+    /// and the fastest path once you know where a cluster sits in the strip.
+    /// 9 means "last", matching browser convention.
+    /// </summary>
+    public void SelectTabByOrdinal(int ordinal)
+    {
+        if (Tabs.Count == 0)
+        {
+            return;
+        }
+
+        SelectedTab = ordinal >= 9 ? Tabs[^1] : Tabs[Math.Min(ordinal - 1, Tabs.Count - 1)];
     }
 
     private async Task InitializeAsync()
@@ -80,7 +297,6 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 AvailableContexts.Add(ctx);
             }
 
-            NewTabContext = AvailableContexts.FirstOrDefault();
             HasContexts = AvailableContexts.Count > 0;
             KubeconfigSearchPaths = string.Join(
                 Environment.NewLine,
@@ -127,22 +343,29 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// "Add a cluster" now means "open the switcher" rather than "open whatever the
+    /// dropdown happens to be showing" — the picking happens in the searchable
+    /// popup, where a long context list is actually navigable.
+    /// </summary>
     [RelayCommand(CanExecute = nameof(CanAddNewTab))]
-    private async Task AddNewTabAsync()
-    {
-        if (NewTabContext is { } context)
-        {
-            await AddTabAsync(context);
-        }
-    }
+    private void AddNewTab() => Switcher.Open();
 
-    private bool CanAddNewTab() => NewTabContext is not null;
+    private bool CanAddNewTab() => HasContexts;
+
+    partial void OnHasContextsChanged(bool value)
+    {
+        AddNewTabCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(SwitcherLabel));
+        OnPropertyChanged(nameof(SwitcherTooltip));
+    }
 
     private async Task AddTabAsync(ClusterContext context)
     {
         var tab = new ClusterTabViewModel(context) { FleetMembersProvider = FleetMembers };
         Tabs.Add(tab);
         SelectedTab = tab;
+        RecordRecent(context.Name);
         SaveWorkspace();
         await tab.ConnectCommand.ExecuteAsync(null);
         RefreshFleetMembership();
@@ -232,7 +455,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         var settings = WorkspaceStore.Load();
         var tabs = Tabs.Select(t => new TabSnapshot(t.Context.Name, t.Context.KubeconfigPath)).ToList();
-        WorkspaceStore.Save(settings with { Tabs = tabs });
+        WorkspaceStore.Save(settings with
+        {
+            Tabs = tabs,
+            PinnedContexts = [.. _pinned],
+            RecentContexts = [.. _recent],
+            EnvironmentOverrides = _environmentOverrides.ToDictionary(kv => kv.Key, kv => kv.Value.ToString()),
+        });
     }
 
     public void PersistTheme(string? theme)
@@ -243,14 +472,20 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     private IEnumerable<PaletteItem> BuildPaletteItems()
     {
+        // The switcher, not the palette, is where a large context list is navigated:
+        // enumerating every kubeconfig context here would bury every other command
+        // under hundreds of "open cluster" rows on a real estate. Open tabs stay,
+        // because there are only ever a handful and they're a genuine destination.
+        yield return new PaletteItem(
+            "Switch cluster…", $"{AvailableContexts.Count} contexts · {Hotkeys.Describe(Hotkeys.ClusterSwitcher)}",
+            "SwapHorizontalIconGeometry", Switcher.Open);
+
         foreach (var tab in Tabs)
         {
-            yield return new PaletteItem($"Switch to {tab.Header}", "Cluster tab", "SwapHorizontalIconGeometry", () => SelectedTab = tab);
-        }
-
-        foreach (var ctx in AvailableContexts)
-        {
-            yield return new PaletteItem($"Open new tab: {ctx.Name}", "Connect", "PlusIconGeometry", () => _ = AddTabAsync(ctx));
+            yield return new PaletteItem(
+                $"Switch to {tab.Header}",
+                tab.Environment.Label() is { } env ? $"Cluster tab · {env}" : "Cluster tab",
+                "SwapHorizontalIconGeometry", () => SelectedTab = tab);
         }
 
         if (SelectedTab is { IsFleetViewAvailable: true } fleetable)

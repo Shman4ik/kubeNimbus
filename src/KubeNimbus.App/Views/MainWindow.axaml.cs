@@ -5,6 +5,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using KubeNimbus.App.ViewModels;
 
 namespace KubeNimbus.App.Views;
@@ -15,6 +16,13 @@ public partial class MainWindow : Window
     private Point _dragStart;
     private bool _dragging;
 
+    /// <summary>
+    /// The tab header currently held down, so its "pressed" class can be cleared on
+    /// release. Tracked rather than re-resolved from the release event because a drag
+    /// can end over a different tab than it started on.
+    /// </summary>
+    private Border? _pressedTab;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -22,7 +30,26 @@ public partial class MainWindow : Window
         KeyBindings.Add(new KeyBinding { Gesture = Hotkeys.CommandPalette, Command = new RelayOpenPaletteCommand(this) });
         PaletteShortcutLabel.Text = Hotkeys.Describe(Hotkeys.CommandPalette);
 
+        KeyBindings.Add(new KeyBinding { Gesture = Hotkeys.ClusterSwitcher, Command = new RelayOpenSwitcherCommand(this) });
+        // Says "click" explicitly: with both a hovered and a selected row visible,
+        // whether the mouse needs one click or two is a real question, and a popup
+        // that answers it costs one line.
+        SwitcherHintLabel.Text =
+            $"Click or Enter to open · ↑↓ navigate · Esc close · {Hotkeys.PrimaryLabel}+1…9 jump to tab";
+
         KeyBindings.Add(new KeyBinding { Gesture = Hotkeys.ShortcutsHelp, Command = new RelayToggleShortcutsCommand(this) });
+
+        // Ctrl/Cmd+1…9 jumps straight to a tab. Registered in a loop rather than
+        // nine XAML KeyBindings so the modifier still comes from Hotkeys.Primary
+        // (UI rule 4 — no hardcoded Ctrl gestures).
+        for (var ordinal = 1; ordinal <= 9; ordinal++)
+        {
+            KeyBindings.Add(new KeyBinding
+            {
+                Gesture = new KeyGesture(Key.D0 + ordinal, Hotkeys.Primary),
+                Command = new RelaySelectTabCommand(this, ordinal),
+            });
+        }
 
         Opened += (_, _) =>
         {
@@ -102,6 +129,115 @@ public partial class MainWindow : Window
 
     private void OnPaletteItemTapped(object? sender, TappedEventArgs e) => Vm?.Palette.ExecuteSelected();
 
+    /// <summary>
+    /// Cluster tab context menu → environment assignment. An empty Tag clears the
+    /// override so the name guess applies again; anything else is a
+    /// <see cref="KubeNimbus.Core.ClusterEnvironment"/> name.
+    /// </summary>
+    private void OnSetEnvironmentClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { DataContext: ClusterTabViewModel tab, Tag: string tag } || Vm is not { } vm)
+        {
+            return;
+        }
+
+        vm.SetEnvironment(
+            tab.Context,
+            Enum.TryParse<KubeNimbus.Core.ClusterEnvironment>(tag, out var environment) ? environment : null);
+    }
+
+    private void OnSwitcherButtonClick(object? sender, RoutedEventArgs e) => OpenSwitcher();
+
+    internal void OpenSwitcher()
+    {
+        if (Vm is not { HasContexts: true } vm)
+        {
+            return;
+        }
+
+        vm.Switcher.Open();
+        SwitcherQueryBox.Focus();
+    }
+
+    private void OnSwitcherBackdropPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.Source == sender)
+        {
+            Vm?.Switcher.Close();
+        }
+    }
+
+    /// <summary>
+    /// Opens the tapped switcher row. Resolving the row from the event source rather
+    /// than acting on <c>SelectedItem</c> alone matters twice: a tap on the ListBox's
+    /// empty area below the last row must do nothing, and the row that opens must be
+    /// the row under the cursor even if selection hasn't caught up.
+    /// </summary>
+    private void OnSwitcherListTapped(object? sender, TappedEventArgs e)
+    {
+        if (e.Source is not Visual source
+            || source.FindAncestorOfType<ListBoxItem>(includeSelf: true) is not { DataContext: ClusterSwitcherItemViewModel item })
+        {
+            return;
+        }
+
+        Vm?.Switcher.ActivateItem(item);
+    }
+
+    private void OnSwitcherPinClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: ClusterSwitcherItemViewModel item } && Vm is { } vm)
+        {
+            vm.SetPinned(item.Context.Name, !item.IsPinned);
+        }
+
+        e.Handled = true;
+    }
+
+    private void OnSwitcherKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (Vm?.Switcher is not { } switcher)
+        {
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case Key.Escape:
+                switcher.Close();
+                e.Handled = true;
+                break;
+            case Key.Enter:
+                switcher.ActivateSelected();
+                e.Handled = true;
+                break;
+            case Key.Down:
+                switcher.MoveSelection(1);
+                ScrollSwitcherSelectionIntoView();
+                e.Handled = true;
+                break;
+            case Key.Up:
+                switcher.MoveSelection(-1);
+                ScrollSwitcherSelectionIntoView();
+                e.Handled = true;
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Keyboard focus stays in the query box while arrows move the selection, so
+    /// the ListBox never scrolls itself — it only does that for its own focused
+    /// navigation. Without this, arrowing past the visible rows silently moves the
+    /// selection off-screen.
+    /// </summary>
+    private void ScrollSwitcherSelectionIntoView()
+    {
+        if (Vm?.Switcher.SelectedItem is { } selected)
+        {
+            SwitcherList.ScrollIntoView(selected);
+        }
+    }
+
     private void OnPaletteKeyDown(object? sender, KeyEventArgs e)
     {
         var palette = Vm?.Palette;
@@ -151,6 +287,8 @@ public partial class MainWindow : Window
             _draggingTab = tab;
             _dragStart = e.GetPosition(TabStrip);
             _dragging = false;
+            _pressedTab = border;
+            border.Classes.Add("pressed");
             e.Pointer.Capture(border);
         }
     }
@@ -194,6 +332,8 @@ public partial class MainWindow : Window
     private void OnTabHeaderPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
         e.Pointer.Capture(null);
+        _pressedTab?.Classes.Remove("pressed");
+        _pressedTab = null;
         _draggingTab = null;
         // Deferred so the Tapped gesture (which fires after PointerReleased) still sees the flag.
         Dispatcher.UIThread.Post(() => _dragging = false);
@@ -208,6 +348,27 @@ internal sealed class RelayOpenPaletteCommand(MainWindow window) : System.Window
     public bool CanExecute(object? parameter) => true;
 
     public void Execute(object? parameter) => window.OpenPalette();
+}
+
+/// <summary>Trivial ICommand so the cluster-switcher gesture can live in a KeyBinding.</summary>
+internal sealed class RelayOpenSwitcherCommand(MainWindow window) : System.Windows.Input.ICommand
+{
+    public event EventHandler? CanExecuteChanged { add { } remove { } }
+
+    public bool CanExecute(object? parameter) => true;
+
+    public void Execute(object? parameter) => window.OpenSwitcher();
+}
+
+/// <summary>Trivial ICommand backing one Ctrl/Cmd+N tab jump.</summary>
+internal sealed class RelaySelectTabCommand(MainWindow window, int ordinal) : System.Windows.Input.ICommand
+{
+    public event EventHandler? CanExecuteChanged { add { } remove { } }
+
+    public bool CanExecute(object? parameter) => true;
+
+    public void Execute(object? parameter) =>
+        (window.DataContext as ViewModels.MainWindowViewModel)?.SelectTabByOrdinal(ordinal);
 }
 
 /// <summary>Trivial ICommand so the F1 gesture can live in a KeyBinding without a ViewModel round-trip.</summary>
