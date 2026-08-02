@@ -60,9 +60,15 @@ function Export-Png([string]$Svg, [string]$Png, [int]$Size) {
 # Which master feeds which size is the whole point of having three marks: the
 # full traced mark below 32px is mud (see LOGO-ASSETS.md "Why there are three
 # masters"), so 24 and 16 come from the simplified ones instead of a downscale.
+#
+# These tiles are PLATED - they end up in app.ico, and app.ico is the one icon
+# Windows hands the taskbar, Alt+Tab and the title bar through a single
+# WM_SETICON slot, so it cannot be theme-aware. Unplated dark line art vanishes
+# on a dark taskbar, which is the default, so every size keeps the disc. The
+# disc-less logo-small/micro.svg feed the surfaces that ARE theme-aware, below.
 $iconPlan = @(
-    @{ Size = 16;   Src = 'logo-micro.svg' },
-    @{ Size = 24;   Src = 'logo-small.svg' },
+    @{ Size = 16;   Src = 'logo-micro-plated.svg' },
+    @{ Size = 24;   Src = 'logo-small-plated.svg' },
     @{ Size = 32;   Src = 'logo.svg' },
     @{ Size = 48;   Src = 'logo.svg' },
     @{ Size = 256;  Src = 'logo.svg' },
@@ -91,6 +97,23 @@ foreach ($pair in @(
     $glyph = Join-Path $tmpDir ("glyph-" + $pair.Dst + ".svg")
     New-GlyphSvg (Join-Path $designDir $pair.Src) $glyph
     Export-Png $glyph (Join-Path $winDir $pair.Dst) 256
+}
+
+# 24 and 16 get their own window masters rather than a downscale of the 256:
+# that is the same "the full mark is mud down here" rule as the icon tiles, and
+# these small unplated tiles are exactly what the disc-less simplified marks
+# were drawn for.
+#
+# Note the colour mapping INVERTS relative to the 256 above, and that is not a
+# typo. Stripping the disc from the full mark leaves its light *field* as the
+# glyph's body, so logo-dark.svg is what suits a light surface. The simplified
+# marks have no field at all - the glyph is the ink itself - so a light surface
+# wants the dark-inked logo-small.svg, and a dark surface wants -dark.
+foreach ($e in @(
+        @{ Size = 24; Light = 'logo-small.svg'; Dark = 'logo-small-dark.svg' },
+        @{ Size = 16; Light = 'logo-micro.svg'; Dark = 'logo-micro-dark.svg' })) {
+    Export-Png (Join-Path $designDir $e.Light) (Join-Path $winDir "window-light-$($e.Size).png") $e.Size
+    Export-Png (Join-Path $designDir $e.Dark)  (Join-Path $winDir "window-dark-$($e.Size).png")  $e.Size
 }
 
 # ------------------------------------------------------------------ wordmark

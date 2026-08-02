@@ -55,6 +55,16 @@ function Get-Tile([int]$size, [int]$fromSize) {
     return $bmp
 }
 
+# Picks the window-glyph master for a size: an exact-size one when it exists
+# (24 and 16 have their own, drawn from the simplified marks), else the 256 to
+# downscale from. Same rule as the plated tiles - never resample the small,
+# legibility-critical sizes out of a master drawn for a bigger one.
+function Resolve-WindowMaster([string]$theme, [int]$size) {
+    $exact = Join-Path $winDir "window-$theme-$size.png"
+    if (Test-Path $exact) { return $exact }
+    return (Join-Path $winDir "window-$theme-256.png")
+}
+
 # Alpha-preserving downscale of a transparent master. Used for the unplated
 # MSIX taskbar/Alt+Tab icons, sourced from the window-glyph masters.
 function Get-TransparentTile([string]$masterPath, [int]$size) {
@@ -155,12 +165,12 @@ New-Item -ItemType Directory -Force -Path $msixDir | Out-Null
 #     silently fails to apply to the title bar/taskbar on some Windows 11 builds.
 $windowIconSizes = 16, 24, 32, 48, 256
 foreach ($pair in @(
-        @{ Src = 'window-light-256.png'; Dst = 'window-icon-light.ico' },
-        @{ Src = 'window-dark-256.png';  Dst = 'window-icon-dark.ico' })) {
-    $s = Join-Path $winDir $pair.Src
+        @{ Theme = 'light'; Dst = 'window-icon-light.ico' },
+        @{ Theme = 'dark';  Dst = 'window-icon-dark.ico' })) {
+    $s = Resolve-WindowMaster $pair.Theme 256
     if (-not (Test-Path $s)) { throw "Missing window master: $s (run scripts/design/make-masters.ps1)" }
     $entries = foreach ($size in $windowIconSizes) {
-        $t = Get-TransparentTile $s $size
+        $t = Get-TransparentTile (Resolve-WindowMaster $pair.Theme $size) $size
         $bytes = Get-PngBytes $t
         $t.Dispose()
         @{ Size = $size; Bytes = $bytes }
@@ -218,11 +228,12 @@ foreach ($logo in @(
 #     light-theme (altform-lightunplated) uses the dark-drawn window-light one.
 $unplatedSizes = 16, 24, 32, 48, 256
 foreach ($pair in @(
-        @{ Src = Join-Path $winDir 'window-dark-256.png';  Suffix = 'altform-unplated' },
-        @{ Src = Join-Path $winDir 'window-light-256.png'; Suffix = 'altform-lightunplated' })) {
-    if (-not (Test-Path $pair.Src)) { throw "Missing window master: $($pair.Src)" }
+        @{ Theme = 'dark';  Suffix = 'altform-unplated' },
+        @{ Theme = 'light'; Suffix = 'altform-lightunplated' })) {
     foreach ($size in $unplatedSizes) {
-        $t = Get-TransparentTile $pair.Src $size
+        $src = Resolve-WindowMaster $pair.Theme $size
+        if (-not (Test-Path $src)) { throw "Missing window master: $src" }
+        $t = Get-TransparentTile $src $size
         $name = "Square44x44Logo.targetsize-${size}_$($pair.Suffix).png"
         [System.IO.File]::WriteAllBytes((Join-Path $msixDir $name), (Get-PngBytes $t))
         $t.Dispose()
