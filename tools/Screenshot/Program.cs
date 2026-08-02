@@ -8,6 +8,7 @@ using Avalonia.Threading;
 using KubeNimbus.App;
 using KubeNimbus.App.ViewModels;
 using KubeNimbus.App.Views;
+using KubeNimbus.Core;
 using KubeNimbus.Screenshot;
 
 // Usage: dotnet run --project tools/Screenshot -- <outputDir> [scenario-substring]
@@ -33,7 +34,9 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-sidebar-filtered-by-group", () => HostInMainWindow(ClusterTabScenarios.SidebarFilteredByGroup())),
     ("cluster-tab-sidebar-recent", () => HostInMainWindow(ClusterTabScenarios.SidebarRecentKinds())),
     ("cluster-tab-sidebar-crds-expanded", () => HostInMainWindow(ClusterTabScenarios.SidebarCrdsExpanded(), height: 1500)),
-    ("cluster-tab-pod-detail", () => HostInMainWindow(ClusterTabScenarios.PodDetail())),
+    // Taller than the default: at 800 the dock's log pane is clipped by the
+    // window edge, which is the one thing this scenario exists to show.
+    ("cluster-tab-pod-detail", () => HostInMainWindow(ClusterTabScenarios.PodDetail(), height: 1000)),
     ("cluster-tab-pod-detail-environment", () => HostInMainWindow(ClusterTabScenarios.PodDetailEnvironment())),
     ("cluster-tab-pod-detail-events", () => HostInMainWindow(ClusterTabScenarios.PodDetailEvents())),
     ("cluster-tab-pod-detail-usage", () => HostInMainWindow(ClusterTabScenarios.PodDetailUsage(), height: 1000)),
@@ -107,10 +110,35 @@ static Control HostInMainWindow(ClusterTabViewModel tab, int height = 800)
     var window = new MainWindow { Width = 1280, Height = height };
     var vm = new MainWindowViewModel();
     window.DataContext = vm;
+    SeedContexts(vm);
     vm.Tabs.Clear();
     vm.Tabs.Add(tab);
     vm.SelectedTab = tab;
     return window;
+}
+
+// Without this the command bar's context picker reads "No kubeconfig contexts"
+// in every screenshot — the fixture kubeconfig points at an address nothing
+// listens on, so LoadContextsAsync finds nothing. That is a real state (it's
+// what `cluster-tab-*` would show on a machine with no kubeconfig) but it is
+// not the state these scenarios are about, and it makes every shot look like a
+// failed connection.
+static void SeedContexts(MainWindowViewModel vm)
+{
+    vm.AvailableContexts.Clear();
+    foreach (var (name, ns) in new[]
+             {
+                 ("prod-payments", "payments"),
+                 ("prod-ledger", "ledger"),
+                 ("staging-eu", "default"),
+             })
+    {
+        vm.AvailableContexts.Add(new ClusterContext(name, $"{name}-cluster", ns, "fixture-user", "fixture"));
+    }
+
+    vm.NewTabContext = vm.AvailableContexts[0];
+    vm.HasContexts = true;
+    vm.Status = $"{vm.AvailableContexts.Count} context(s) available.";
 }
 
 static Control BuildMainWindowContent(bool openShortcuts = false)
@@ -120,6 +148,7 @@ static Control BuildMainWindowContent(bool openShortcuts = false)
     window.DataContext = vm;
     window.Width = 1280;
     window.Height = 800;
+    SeedContexts(vm);
 
     vm.Tabs.Clear();
     var tabA = ClusterTabScenarios.WorkloadsList();

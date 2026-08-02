@@ -1,0 +1,59 @@
+name: Feature request
+description: Suggest something kubeNimbus should do.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before writing: kubeNimbus has **permanent non-goals** — cluster
+        provisioning, in-cluster agents, telemetry, and long-range metrics
+        history (that's Prometheus's job; kubeNimbus graphs only what the
+        current session observed). Requests in those areas will be closed, so
+        it's worth a look at [CLAUDE.md](https://github.com/Shman4ik/kubeNimbus/blob/main/CLAUDE.md)
+        first.
+
+        The UI is also deliberately minimalist: every always-visible control has
+        to earn its place, and the default answer for a new one is no. Secondary
+        actions belong in the command palette (Ctrl/Cmd+K) or a context menu.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's the problem?
+      description: >-
+        Describe the situation you're in, not the solution you have in mind.
+        What are you trying to find out or do, and what makes it awkward today?
+      placeholder: >-
+        When a deployment stops rolling out I have to leave kubeNimbus and run
+        `kubectl rollout status` to find out which replica set is stuck.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like it to do?
+      description: If you have a specific shape in mind, describe it here.
+    validations:
+      required: false
+
+  - type: input
+    id: prior-art
+    attributes:
+      label: Prior art
+      description: >-
+        Does Lens, k9s, Aptakube, Headlamp or `kubectl` already solve this? How?
+        Knowing what already works well is genuinely useful.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: contribute
+    attributes:
+      label: Would you be interested in implementing it?
+      options:
+        - "Maybe, with some guidance"
+        - "Yes"
+        - "No — just suggesting"
+    validations:
+      required: false

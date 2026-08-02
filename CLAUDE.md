@@ -115,9 +115,21 @@ choice must be AOT/trimming-compatible from day one.
 src/KubeNimbus.Core        Engine: kubeconfig, ClusterClient (watch/logs). No UI.
 src/KubeNimbus.App         Avalonia 12 desktop shell.
 tests/KubeNimbus.Core.Tests  TUnit integration tests against a live cluster.
-design/                    Logo sources (SVG) + generated masters/store images.
+tools/Screenshot           Headless visual-verification harness. Dev-only.
+design/                    Logo sources (SVG) + generated masters/store/screenshots.
 scripts/                   Sandbox cluster bootstrap + the icon/logo pipeline.
 ```
+
+Public-facing docs, each with one job — don't duplicate content between them:
+
+| File | Audience |
+|---|---|
+| `README.md` | Someone deciding whether to download it. Screenshots, download/install, what it does, limitations. |
+| `CONTRIBUTING.md` | Someone opening a PR. Setup, verification, PR expectations, the release procedure. |
+| `SECURITY.md` | Reporting a vulnerability, plus the **security model** the app claims to hold (no persisted credentials, no telemetry, exec plugins run external programs). |
+| `CHANGELOG.md` | Release history — and machine-read: the release workflow lifts the section matching a tag out of it verbatim. |
+| `CODE_OF_CONDUCT.md` | Contributor Covenant 2.1, unmodified apart from the contact address. |
+| `CLAUDE.md` (this file) | Whoever is changing the code. The engineering contract and the *why* behind every rule. |
 
 ## App icon / logo assets
 
@@ -126,8 +138,11 @@ every file, every consumer); [`design/LOGO.md`](design/LOGO.md) covers how the
 mark's geometry was derived. Three rules matter here:
 
 1. **Only `design/*.svg` is hand-edited.** Everything under `design/masters/`,
-   `design/store/` and `src/KubeNimbus.App/Assets/*.ico|Msix/**` is generated
-   and checked in. Fix art in the SVG, then re-run the scripts:
+   `design/store/`, `design/screenshots/` and
+   `src/KubeNimbus.App/Assets/*.ico|Msix/**` is generated and checked in.
+   (`design/screenshots/` comes out of `tools/Screenshot`, not the logo
+   pipeline — see [`design/screenshots/README.md`](design/screenshots/README.md)
+   for the scenario→file mapping.) Fix art in the SVG, then re-run the scripts:
 
    ```powershell
    pwsh scripts/design/make-masters.ps1        # design/masters/**
@@ -440,7 +455,12 @@ seeding, which is inline in the scripts.
 dotnet build KubeNimbus.slnx
 
 # Run Core tests against the sandbox cluster (skips if none).
-dotnet test tests/KubeNimbus.Core.Tests/KubeNimbus.Core.Tests.csproj
+# `--project` is MANDATORY: under the .NET 10 Microsoft.Testing.Platform runner
+# (pinned in global.json) a positional csproj prints "Specifying a project for
+# 'dotnet test' should be via '--project'" and exits 0 having run NOTHING. That
+# silently passed for a while in CI — if a change to the suite looks suspiciously
+# green, check the invocation first.
+dotnet test --project tests/KubeNimbus.Core.Tests/KubeNimbus.Core.Tests.csproj
 
 # Run the app against the sandbox during development.
 $env:KUBECONFIG = ".sandbox/kubeconfig.yaml"
@@ -538,6 +558,58 @@ When Docker is available (unlike this session — `docker version` succeeds but
 `dockerd` isn't running here), prefer driving the harness against a real
 k3s sandbox (see below) instead of fixtures for a final verification pass;
 note in the PR which screenshots were fixture-only.
+
+The harness is also **CI's XAML smoke test**. A build that compiles can still
+fail to load XAML at runtime — a stale `avares://` URI, a missing embedded
+resource, a `DataTemplate` that stops resolving — and rendering every View is
+the only check that catches that without a display. `SeedContexts` in
+`Program.cs` fills `MainWindowViewModel.AvailableContexts` so the command bar
+reads a real context name rather than "No kubeconfig contexts"; that is a real
+state, but it is not what these scenarios are about and it makes every shot
+look like a failed connection.
+
+## Releasing
+
+Tag-driven, `.github/workflows/release.yml`. The procedure is written for
+humans in [CONTRIBUTING.md](CONTRIBUTING.md#cutting-a-release-maintainers); the
+design decisions behind it are here.
+
+- **The version lives in exactly one place**, `<VersionPrefix>` in
+  `Directory.Build.props`, and a tagged build overrides it with
+  `-p:Version=<tag>`. A tag and the checked-in value disagreeing therefore
+  cannot produce a mislabelled binary — the tag always wins.
+- **`CHANGELOG.md` is machine-read.** The workflow lifts the section whose
+  heading matches the tag (`## [0.1.0]` ↔ `v0.1.0`) and uses it verbatim as the
+  release body, stopping at the next `## ` heading *or* at the link-reference
+  block the file ends with. A release therefore cannot claim something the
+  repository doesn't say. A missing section degrades to `--generate-notes`
+  with a warning rather than failing the release.
+- **NativeAOT cannot cross-compile**, which is the entire reason the build job
+  is a matrix of four runners rather than four `-r` flags on one. `win-x64` is
+  the shipping target; `linux-x64`, `linux-arm64` and `osx-arm64` ship too.
+  `fail-fast: false` — knowing that only one RID broke is the useful outcome.
+- **Everything `0.x` or with a pre-release suffix ships flagged as a
+  pre-release.** kubeNimbus is pre-1.0 and the release page should say so.
+- **Binaries are unsigned** (no certificates), so every release body repeats
+  the SmartScreen/Gatekeeper workaround. Don't drop that footer.
+- `workflow_dispatch` with `dry_run: true` builds and archives all four RIDs
+  without creating anything public — use it after touching the workflow.
+
+### The app's assembly name is `kubeNimbus`, not `KubeNimbus.App`
+
+The shipped executable is the product name, because that is what a user
+downloads and pins to a taskbar. Three things are coupled to it and must move
+together, or the app builds fine and dies at startup:
+
+1. `<AssemblyName>` in `KubeNimbus.App.csproj`,
+2. `App.axaml`'s `avares://kubeNimbus/Styles/Theme.axaml` — `avares://`
+   authority *is* the assembly name,
+3. `app.manifest`'s `assemblyIdentity name`.
+
+The `Yaml-Mode.xshd` resource is safe: it is included with an explicit
+`LogicalName`, so `GetManifestResourceStream("Yaml-Mode.xshd")` doesn't depend
+on the assembly name. Root namespace and `x:Class` values are unchanged and
+unaffected.
 
 ## MVP scope (phase 1 — shipped, see Current status below)
 
@@ -804,3 +876,47 @@ Still unverified: the live-cluster half. Docker's daemon starts here, but pullin
 succeeds), so the sandbox can't come up and the RBAC integration tests — including
 the three new who-can ones — skipped rather than ran. A real-cluster pass remains
 the outstanding item.
+
+**Public-release prep pass (v0.1.0):** the repository is now shaped for a public
+audience and a tagged release. See "Releasing" above for the design rules. New:
+
+- **Release plumbing.** `Directory.Build.props` carries the single
+  `<VersionPrefix>` plus product/author/copyright/repo metadata;
+  `.github/workflows/release.yml` publishes NativeAOT for win-x64, linux-x64,
+  linux-arm64 and osx-arm64 on a `v*.*.*` tag, archives each with LICENSE/
+  README/CHANGELOG, emits `SHA256SUMS.txt`, and creates the release with the
+  matching `CHANGELOG.md` section as its body. `CHANGELOG.md` itself is new
+  (Keep a Changelog, 0.1.0 covering everything shipped to date).
+- **The shipped executable is now `kubeNimbus`**, not `KubeNimbus.App` — see
+  the three coupled places under "Releasing" above.
+- **Community health files**: `CONTRIBUTING.md`, `SECURITY.md` (which states
+  the security model, not just a reporting address), `CODE_OF_CONDUCT.md`,
+  issue templates that ask for cluster distribution and sandbox-reproducibility
+  because those are what make a Kubernetes-client bug tractable, a PR template
+  whose checklist is this file's rules, and `dependabot.yml` with Avalonia
+  grouped so a bump arrives as one buildable PR rather than six.
+- **README rewritten for someone deciding whether to download it**: badges,
+  a screenshot gallery from `design/screenshots/` (generated — see
+  `design/screenshots/README.md`), per-platform install including the unsigned-
+  binary workarounds, and an explicit known-limitations section.
+- **Two real bugs fixed in passing**, both of which had been quietly wrong:
+  - **CI never ran the tests.** `dotnet test <csproj>` positionally is a no-op
+    under the .NET 10 MTP runner — it prints a hint and exits 0. Every "green"
+    CI run since the workflow landed tested nothing. Now `--project`, and
+    called out in the Verification workflow section above so it can't recur.
+  - The screenshot harness rendered every scenario with "No kubeconfig
+    contexts" in the command bar, which reads as a failed connection in a
+    README image; `SeedContexts` fixes it, and `cluster-tab-pod-detail` renders
+    at 1000px so the log pane isn't clipped by the window edge.
+- **CI also renders the screenshot harness now** as a XAML smoke test, and
+  uploads the PNGs as an artifact — the assembly rename above is exactly the
+  class of change that compiles cleanly and dies at startup.
+- **Verified this session**: build, **80/80 TUnit** (with `--project`; they
+  skip the cluster-gated ones — no sandbox here), all 58 screenshots in both
+  themes, and the linux-x64 NativeAOT publish. Audited tree *and* git history
+  for credentials — clean; every hit is obviously-synthetic fixture or sandbox
+  data.
+- **Still unverified**, and the first things to do on a real machine: the
+  win-x64 NativeAOT publish (only linux-x64 has ever run), the macOS and Linux
+  release binaries actually launching, and the live-cluster half — the sandbox
+  still can't come up here (Docker Hub blob CDN blocked by egress policy).

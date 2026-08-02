@@ -1,0 +1,237 @@
+name: Release
+
+# Tag-driven. Everything a release needs is derived from the tag: the version
+# stamped into the binaries, the archive names, and the CHANGELOG section used
+# as the release body. See CONTRIBUTING.md, "Cutting a release".
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build, without the leading v (e.g. 0.1.0)'
+        required: true
+      dry_run:
+        description: 'Build and archive everything, but do not create a release'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: ${{ matrix.rid }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      # One failed RID must not cancel the others: knowing that only osx-arm64
+      # broke is the useful outcome, and the rest are still worth inspecting.
+      fail-fast: false
+      matrix:
+        include:
+          # NativeAOT cannot cross-compile — each RID needs a runner of its own
+          # architecture and OS, which is what this matrix is.
+          - { os: windows-latest,  rid: win-x64,     archive: zip }
+          - { os: ubuntu-latest,   rid: linux-x64,   archive: tar }
+          # Free for public repositories; see CONTRIBUTING.md if this label ever
+          # stops resolving.
+          - { os: ubuntu-24.04-arm, rid: linux-arm64, archive: tar }
+          - { os: macos-latest,    rid: osx-arm64,   archive: tar }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # ILCompiler links with clang against zlib; the hosted images don't
+      # guarantee the dev headers.
+      - name: Install AOT toolchain prerequisites (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version='${{ inputs.version }}'
+          else
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          # A malformed version would otherwise surface as an unusable archive
+          # name three jobs later.
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::'$version' is not a valid semantic version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "name=kubeNimbus-$version-${{ matrix.rid }}" >> "$GITHUB_OUTPUT"
+
+      # -p:Version overrides Directory.Build.props's VersionPrefix, so the tag —
+      # not the checked-in value — is what ends up stamped in the binary.
+      - name: Publish (NativeAOT)
+        shell: bash
+        run: >-
+          dotnet publish src/KubeNimbus.App
+          -c Release
+          -r ${{ matrix.rid }}
+          -p:PublishAot=true
+          -p:Version=${{ steps.version.outputs.version }}
+          -o publish/${{ matrix.rid }}
+
+      # The AOT output carries .pdb/.dbg sidecars that quadruple the download
+      # and are of no use to anyone who isn't debugging a stripped binary.
+      - name: Stage archive contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          staging="staging/${{ steps.version.outputs.name }}"
+          mkdir -p "$staging"
+          cp -r publish/${{ matrix.rid }}/. "$staging/"
+          # win-x64 emits .pdb, linux-* a .dbg (108 MB against a 46 MB binary),
+          # osx-* a .dsym bundle. Case varies by toolchain, hence both spellings.
+          rm -f "$staging"/*.pdb "$staging"/*.dbg "$staging"/*.dwarf
+          rm -rf "$staging"/*.dsym "$staging"/*.dSYM
+          cp LICENSE README.md CHANGELOG.md "$staging/"
+          ls -la "$staging"
+
+      - name: Archive (zip)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "staging/${{ steps.version.outputs.name }}" `
+                           -DestinationPath "dist/${{ steps.version.outputs.name }}.zip" `
+                           -CompressionLevel Optimal
+
+      - name: Archive (tar.gz)
+        if: matrix.archive == 'tar'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          tar -czf "dist/${{ steps.version.outputs.name }}.tar.gz" \
+              -C staging "${{ steps.version.outputs.name }}"
+
+      - name: Checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          for f in *; do
+            if command -v sha256sum >/dev/null; then
+              sha256sum "$f" >> "$f.sha256"
+            else
+              shasum -a 256 "$f" >> "$f.sha256"
+            fi
+          done
+          cat ./*.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.version.outputs.name }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Skipped for a dry run, so the workflow can be exercised end to end without
+    # creating anything public.
+    if: github.event_name == 'push' || inputs.dry_run == false
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version='${{ inputs.version }}'
+          else
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          # Anything with a pre-release suffix, and every 0.x, ships flagged as
+          # a pre-release: kubeNimbus is pre-1.0 and shouldn't claim otherwise.
+          if printf '%s' "$version" | grep -Eq '^0\.|-'; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      # One SHA256SUMS.txt beside the archives, rather than a .sha256 per file:
+      # it's what `sha256sum -c` expects and what people look for.
+      - name: Collect checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd artifacts
+          cat ./*.sha256 | sort -k2 > SHA256SUMS.txt
+          rm -f ./*.sha256
+          cat SHA256SUMS.txt
+          ls -la
+
+      # The CHANGELOG is the source of truth for release notes, so a release
+      # can't say something the repository doesn't.
+      - name: Extract release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          version='${{ steps.version.outputs.version }}'
+          # Stops at the next `## ` heading, and at the link-reference block the
+          # file ends with — the last section would otherwise swallow it.
+          if awk -v v="$version" '
+                $0 ~ "^## \\[" v "\\]" { found = 1; next }
+                found && /^## / { exit }
+                found && /^\[[^]]+\]: / { exit }
+                found { print }
+              ' CHANGELOG.md > notes.md && [ -s notes.md ]; then
+            echo "Found CHANGELOG section for $version"
+          else
+            # Degrade rather than fail: the binaries are already built, and a
+            # thin release body is a doc fix, not a reason to lose the run.
+            echo "::warning::No '## [$version]' section in CHANGELOG.md — release body will be the footer only"
+            printf 'See [CHANGELOG.md](https://github.com/%s/blob/main/CHANGELOG.md) for changes.\n' \
+              "$GITHUB_REPOSITORY" > notes.md
+          fi
+          {
+            echo
+            echo '---'
+            echo
+            echo '**Binaries are unsigned.** Windows shows a SmartScreen prompt; macOS quarantines the app (`xattr -dr com.apple.quarantine <path>`). See the [README](https://github.com/Shman4ik/kubeNimbus#download) for per-platform instructions and verifying `SHA256SUMS.txt`.'
+          } >> notes.md
+          cat notes.md
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create '${{ steps.version.outputs.tag }}' \
+            --title 'kubeNimbus ${{ steps.version.outputs.version }}' \
+            --notes-file notes.md \
+            ${{ steps.version.outputs.prerelease == 'true' && '--prerelease' || '' }} \
+            artifacts/*

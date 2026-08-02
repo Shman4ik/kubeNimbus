@@ -39,8 +39,29 @@ jobs:
 
       # Integration tests skip themselves when no sandbox cluster is reachable
       # (see SandboxCluster.TryGetContextAsync), so this stays green without one.
+      #
+      # `--project` is REQUIRED, not stylistic. Under the .NET 10 Microsoft
+      # .Testing.Platform runner (pinned in global.json), passing the csproj
+      # positionally prints "Specifying a project for 'dotnet test' should be
+      # via '--project'" and exits 0 WITHOUT RUNNING ANYTHING — a green job that
+      # tested nothing.
       - name: Test
-        run: dotnet test tests/KubeNimbus.Core.Tests/KubeNimbus.Core.Tests.csproj -c Release --no-build
+        run: dotnet test --project tests/KubeNimbus.Core.Tests/KubeNimbus.Core.Tests.csproj -c Release --no-build
+
+      # Renders every real View headlessly. A compiling build can still fail to
+      # load XAML at runtime — a bad `avares://` URI, a missing resource, a
+      # DataTemplate that no longer resolves — and this is the only check that
+      # catches that without a display.
+      - name: Render screenshots (XAML smoke test)
+        run: dotnet run --project tools/Screenshot -c Release --no-build -- "${{ runner.temp }}/screenshots"
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: ${{ runner.temp }}/screenshots
+          if-no-files-found: error
+          retention-days: 7
 
   aot:
     name: NativeAOT publish (linux-x64)

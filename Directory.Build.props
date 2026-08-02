@@ -12,4 +12,20 @@
     <AccelerateBuildsInVisualStudio>true</AccelerateBuildsInVisualStudio>
   </PropertyGroup>
 
+  <!-- Release identity. VersionPrefix is the one place the version is written;
+       the release workflow passes -p:Version=<tag> to override it for a tagged
+       build, so a tag and this file disagreeing can't produce a mislabelled
+       binary. Bump it in the same commit that dates the CHANGELOG section
+       (see CONTRIBUTING.md, "Cutting a release"). -->
+  <PropertyGroup>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <Product>kubeNimbus</Product>
+    <Authors>Shman4ik</Authors>
+    <Copyright>Copyright (c) 2026 Shman4ik</Copyright>
+    <RepositoryUrl>https://github.com/Shman4ik/kubeNimbus</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/Shman4ik/kubeNimbus</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+
 </Project>
