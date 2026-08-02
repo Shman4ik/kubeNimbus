@@ -66,10 +66,19 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     public ClusterClient? Client { get; private set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsIdle))]
     private bool _isConnecting;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsIdle))]
     private bool _isConnected;
+
+    /// <summary>
+    /// Neither connected nor connecting. The tab's status dot needs three states, not
+    /// two: opening a cluster that is still dialling looked identical to one that
+    /// failed, so picking a cluster appeared to do nothing until it finished.
+    /// </summary>
+    public bool IsIdle => !IsConnected && !IsConnecting;
 
     [ObservableProperty]
     private string _status = "Not connected.";

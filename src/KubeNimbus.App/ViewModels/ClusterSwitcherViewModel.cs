@@ -273,9 +273,20 @@ public sealed partial class ClusterSwitcherViewModel(Func<IEnumerable<ClusterSwi
     {
         if (SelectedItem is { } item)
         {
-            Close();
-            Activate?.Invoke(item);
+            ActivateItem(item);
         }
+    }
+
+    /// <summary>
+    /// Opens (or switches to) a specific row. The mouse path goes through here rather
+    /// than <see cref="ActivateSelected"/> so the row that opens is the one that was
+    /// clicked, not whatever selection happened to be current.
+    /// </summary>
+    public void ActivateItem(ClusterSwitcherItemViewModel item)
+    {
+        SelectedItem = item;
+        Close();
+        Activate?.Invoke(item);
     }
 
     public void MoveSelection(int delta)

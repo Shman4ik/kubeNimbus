@@ -139,7 +139,13 @@
                         <Border Classes="envEdge" Height="15" VerticalAlignment="Center"
                                 Background="{Binding Environment, Converter={x:Static conv:EnvironmentToBrushConverter.Instance}}"
                                 IsVisible="{Binding HasEnvironmentLabel}" />
-                        <Ellipse Classes="statusDot" Classes.ok="{Binding IsConnected}" Classes.idle="{Binding !IsConnected}" VerticalAlignment="Center" />
+                        <Ellipse Classes="statusDot" Classes.ok="{Binding IsConnected}"
+                                 Classes.warn="{Binding IsConnecting}" Classes.idle="{Binding IsIdle}"
+                                 VerticalAlignment="Center">
+                          <ToolTip.Tip>
+                            <TextBlock Text="{Binding Status}" />
+                          </ToolTip.Tip>
+                        </Ellipse>
                         <TextBlock Text="{Binding Header}" FontSize="12" VerticalAlignment="Center"
                                    MaxWidth="170" TextTrimming="CharacterEllipsis" />
                         <Button Classes="chip" Padding="0" MinWidth="14" MinHeight="14"
@@ -243,47 +249,56 @@
                    PlaceholderText="Search clusters — name, cluster or kubeconfig…" Margin="10" FontSize="14"
                    KeyDown="OnSwitcherKeyDown" />
 
+          <!-- Tapped is handled on the ListBox, not on the item template's root
+               panel. A Panel with no Background is not hit-testable in Avalonia, and
+               the ListBoxItem's own padding sits outside the template entirely — so a
+               handler on the row's content only fires on the text itself, leaving the
+               rest of the row selecting-but-not-opening. Handling it here catches the
+               tap wherever in the row it landed. -->
           <ListBox Grid.Row="1" Name="SwitcherList" Classes="switcherList" Margin="4,0"
                    ItemsSource="{Binding Switcher.Ordered}"
                    SelectedItem="{Binding Switcher.SelectedItem, Mode=TwoWay}"
+                   Tapped="OnSwitcherListTapped"
                    Background="Transparent" BorderThickness="0">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:ClusterSwitcherItemViewModel">
-                <StackPanel Tapped="OnSwitcherItemTapped">
+                <StackPanel>
                   <!-- Group heading rides on the first row of its group; see
                        ClusterSwitcherItemViewModel.SectionHeader for why the list
                        is flat rather than a nested ItemsControl per section. -->
-                  <TextBlock Text="{Binding SectionHeader}" Classes="sectionHeader" Margin="0,2,0,6"
+                  <TextBlock Text="{Binding SectionHeader}" Classes="sectionHeader" Margin="10,4,0,4"
                              IsVisible="{Binding HasSectionHeader}" />
 
-                  <Grid ColumnDefinitions="Auto,*,Auto,Auto">
-                    <Ellipse Grid.Column="0" Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,10,0"
-                             Fill="{Binding Environment, Converter={x:Static conv:EnvironmentToBrushConverter.Instance}}" />
+                  <Border Classes="switcherRowBody">
+                    <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                      <Ellipse Grid.Column="0" Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,10,0"
+                               Fill="{Binding Environment, Converter={x:Static conv:EnvironmentToBrushConverter.Instance}}" />
 
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                      <TextBlock Text="{Binding Name}" FontSize="13" TextTrimming="CharacterEllipsis" />
-                      <TextBlock Text="{Binding Subtitle}" FontSize="11" Opacity="0.55" TextTrimming="CharacterEllipsis" />
-                    </StackPanel>
+                      <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Name}" FontSize="13" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding Subtitle}" FontSize="11" Opacity="0.55" TextTrimming="CharacterEllipsis" />
+                      </StackPanel>
 
-                    <Border Grid.Column="2" Classes="envPill" Margin="8,0"
-                            Classes.production="{Binding Environment, Converter={x:Static conv:EnvironmentEqualsConverter.Instance}, ConverterParameter=Production}"
-                            Classes.staging="{Binding Environment, Converter={x:Static conv:EnvironmentEqualsConverter.Instance}, ConverterParameter=Staging}"
-                            Classes.development="{Binding Environment, Converter={x:Static conv:EnvironmentEqualsConverter.Instance}, ConverterParameter=Development}"
-                            IsVisible="{Binding HasEnvironmentLabel}">
-                      <TextBlock Text="{Binding EnvironmentLabel}" />
-                    </Border>
+                      <Border Grid.Column="2" Classes="envPill" Margin="8,0"
+                              Classes.production="{Binding Environment, Converter={x:Static conv:EnvironmentEqualsConverter.Instance}, ConverterParameter=Production}"
+                              Classes.staging="{Binding Environment, Converter={x:Static conv:EnvironmentEqualsConverter.Instance}, ConverterParameter=Staging}"
+                              Classes.development="{Binding Environment, Converter={x:Static conv:EnvironmentEqualsConverter.Instance}, ConverterParameter=Development}"
+                              IsVisible="{Binding HasEnvironmentLabel}">
+                        <TextBlock Text="{Binding EnvironmentLabel}" />
+                      </Border>
 
-                    <!-- Pin toggle. Pinning is what makes a 200-context kubeconfig
-                         usable without typing: the four you actually work in sit at
-                         the top, every session. -->
-                    <Button Grid.Column="3" Classes="chip" Padding="4" MinWidth="22" MinHeight="22"
-                            Click="OnSwitcherPinClick"
-                            ToolTip.Tip="Pin to the top of the switcher">
-                      <PathIcon Width="12" Height="12"
-                                Opacity="{Binding IsPinned, Converter={x:Static conv:PinnedToOpacityConverter.Instance}}"
-                                Data="{Binding IsPinned, Converter={x:Static conv:PinnedToIconConverter.Instance}}" />
-                    </Button>
-                  </Grid>
+                      <!-- Pin toggle. Pinning is what makes a 200-context kubeconfig
+                           usable without typing: the four you actually work in sit at
+                           the top, every session. -->
+                      <Button Grid.Column="3" Classes="chip" Padding="4" MinWidth="22" MinHeight="22"
+                              Click="OnSwitcherPinClick"
+                              ToolTip.Tip="Pin to the top of the switcher">
+                        <PathIcon Width="12" Height="12"
+                                  Opacity="{Binding IsPinned, Converter={x:Static conv:PinnedToOpacityConverter.Instance}}"
+                                  Data="{Binding IsPinned, Converter={x:Static conv:PinnedToIconConverter.Instance}}" />
+                      </Button>
+                    </Grid>
+                  </Border>
                 </StackPanel>
               </DataTemplate>
             </ListBox.ItemTemplate>

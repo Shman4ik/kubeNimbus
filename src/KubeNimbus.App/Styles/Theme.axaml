@@ -318,6 +318,7 @@
         <Setter Property="Opacity" Value="0.6" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
     </Style>
     <Style Selector="Button.chip:pointerover, ToggleButton.chip:pointerover">
         <Setter Property="Background" Value="{StaticResource HoverBackgroundBrush}" />
@@ -339,6 +340,7 @@
         <Setter Property="MinHeight" Value="24" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
     </Style>
     <Style Selector="Button.searchpill:pointerover /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{StaticResource HoverBackgroundBrush}" />
@@ -459,9 +461,24 @@
         <Setter Property="Background" Value="{StaticResource CardBackgroundBrush}" />
         <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
+        <!-- Everything clickable says so before it's clicked. Without this a tab
+             looks exactly like a label, which is half of "did that do anything?". -->
+        <Setter Property="Cursor" Value="Hand" />
     </Style>
     <Style Selector="Border.clusterTab:pointerover">
         <Setter Property="Background" Value="{StaticResource HoverBackgroundBrush}" />
+    </Style>
+    <!-- Press feedback. A click with no pressed state gives nothing back between
+         button-down and whatever happens next, and when "whatever happens next" is
+         switching to the cluster you were already on, that's the entire feedback
+         budget spent on nothing.
+         A real class, not the `:pressed` pseudo-class — that one is set by
+         button-like controls (Button/ToggleButton/ComboBox), never by a plain
+         Border, so the pseudo-class form compiles fine and silently never matches.
+         MainWindow's tab pointer handlers toggle this. -->
+    <Style Selector="Border.clusterTab.pressed">
+        <Setter Property="Background" Value="{StaticResource AppSelectionBrush}" />
+        <Setter Property="RenderTransform" Value="scale(0.97)" />
     </Style>
     <Style Selector="Border.clusterTab.active">
         <Setter Property="Background" Value="{StaticResource AppSelectionBrush}" />
@@ -475,15 +492,35 @@
     <!-- Switcher popup rows. Selected on the ListBox's own class and applied to its
          item containers, because a ListBoxItem's Classes can't be set from a Style
          setter (Classes is not an AvaloniaProperty) and the containers are generated. -->
+    <!-- The item container carries no padding or highlight of its own: a group's
+         title rides inside the first row of that group, and highlighting the
+         container would draw the selection around the heading too. The row body
+         below is the thing that lights up. -->
     <Style Selector="ListBox.switcherList ListBoxItem">
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="ListBox.switcherList ListBoxItem /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.switcherRowBody">
         <Setter Property="Padding" Value="10,7" />
         <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <!-- Transparent, but set: a Border with a null Background does not hit-test,
+             which is what made most of each row unclickable in the first place. -->
+        <Setter Property="Background" Value="Transparent" />
     </Style>
-    <Style Selector="ListBox.switcherList ListBoxItem:pointerover /template/ ContentPresenter">
+    <Style Selector="ListBox.switcherList ListBoxItem:pointerover Border.switcherRowBody">
         <Setter Property="Background" Value="{StaticResource HoverBackgroundBrush}" />
     </Style>
-    <Style Selector="ListBox.switcherList ListBoxItem:selected /template/ ContentPresenter">
+    <!-- The keyboard's highlighted row has to outrank a merely-hovered one, or Enter
+         and the cursor appear to disagree about which row is "the" row — so selected
+         gets an accent outline on top of the fill that hover also uses. -->
+    <Style Selector="ListBox.switcherList ListBoxItem:selected Border.switcherRowBody">
         <Setter Property="Background" Value="{StaticResource AppSelectionBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource AppAccentBrush}" />
     </Style>
 
     <!-- Inline "connection lost" banner — CommandBar row, next to the namespace picker. -->

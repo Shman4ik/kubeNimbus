@@ -40,6 +40,21 @@ it as the GitHub Release body, so headings must match tags exactly
 - The command palette no longer lists every kubeconfig context; it offers the
   switcher instead, so a large kubeconfig can't bury every other command.
 
+### Fixed
+
+- Clicking a cluster in the switcher only worked when the click landed on the
+  cluster's name. A pointer handler sat on the row's content panel, which in
+  Avalonia doesn't receive clicks where no child covers it — so most of each
+  row, and the row's own padding, selected the cluster without opening it. Taps
+  are now handled on the list itself and resolved to the row underneath.
+- Cluster tabs and switcher rows had no pressed state and no hand cursor, so a
+  click gave nothing back until whatever it did became visible — and switching
+  to the cluster you were already on gave nothing back at all.
+- A cluster tab's status dot showed the same grey for "connecting" and "not
+  connected", so opening a cluster looked like it had failed until it finished.
+  Connecting is now amber, and the dot carries the connection status as a
+  tooltip.
+
 ## [0.1.0] - 2026-08-02
 
 First public release. Everything below is new.

@@ -100,7 +100,20 @@ choice must be AOT/trimming-compatible from day one.
    code-behind `ApplyDockState` by mutating the content grid's row heights —
    a `GridSplitter` mutates `RowDefinition.Height` directly and would fight a
    one-way height binding, which is why this is code-behind, not XAML.
-8. **Every list/panel state gets an explicit visual** — loading, empty,
+8. **A click target must hit-test across its whole area, and say it is one.**
+   In Avalonia a `Panel` or `Border` with a **null** `Background` does not
+   hit-test where no child covers it, and a container's own `Padding` lies
+   outside its content template entirely. A pointer handler on an item
+   template's root panel therefore fires on the text and nowhere else — the
+   row highlights on click but does nothing, which reads as "is this one click
+   or two, or is it broken?". Handle taps on the **items control** and resolve
+   the row from the event source (`OnSwitcherListTapped`), or give the target an
+   explicit `Background="Transparent"`. Anything clickable also gets
+   `Cursor="Hand"` and a pressed state — and `:pressed` is a pseudo-class only
+   button-like controls set, so on a `Border` it must be a real class toggled
+   from the pointer handlers (`Border.clusterTab.pressed`), never
+   `Border.clusterTab:pressed`, which compiles and silently never matches.
+9. **Every list/panel state gets an explicit visual** — loading, empty,
    disconnected, conflict, delete-confirm — never a blank rectangle that
    looks like a bug. `ClusterTabViewModel.IsListLoading`/`IsListEmpty` is the
    pattern to extend for new list-backed views. This includes the **shell's
@@ -141,9 +154,13 @@ a file moves). Notes for anyone changing it:
   row of each group (`ClusterSwitcherItemViewModel.SectionHeader`). A nested
   ItemsControl-of-ListBoxes gives every section its own selection, and they clear
   each other's the moment they share a `SelectedItem`; flat also keeps arrow-key
-  scroll-into-view working.
+  scroll-into-view working. The selection highlight therefore lives on an inner
+  `Border.switcherRowBody`, not on the `ListBoxItem` — the container spans the
+  group heading too, and highlighting it draws the selection around the title.
 - **Never preselect the current tab.** The first Enter has to go somewhere.
 - A context that is already open appears **only** under Open, never twice.
+- **Row activation is handled on the ListBox, not in the item template.** See the
+  hit-testing rule below — this one shipped broken once already.
 
 **Environment colours** (`ClusterEnvironment` / `ClusterEnvironments.Classify`,
 Core) are the other half. "One wrong kubectl command in the wrong context can
@@ -342,7 +359,7 @@ sample also lands in a rolling window and gets drawn:
   and pod detail's **Usage** tab (whole-pod CPU and memory charts plus a
   per-container pair). The tab is appended *after* Events so the existing
   `SelectedDetailTabIndex` values (Logs=0, Env=1, Events=2) stay stable.
-- The Usage tab distinguishes its three states explicitly (UI rule 8):
+- The Usage tab distinguishes its three states explicitly (UI rule 9):
   no metrics API on this cluster / samples not collected yet / charts. The
   first two look identical otherwise and lead to very different next steps.
 
@@ -504,7 +521,7 @@ container picker), env vars of every ref kind (Environment tab + Reveal), a
 StatefulSet with PVCs (Storage), a CronJob firing every minute (a visibly live
 watch), a whole `demo-broken` namespace of CrashLoopBackOff/ImagePullBackOff/
 unschedulable/never-Ready pods (the status pills and empty/error states of UI
-rule 8), three CRDs **two of which share the Kind `Widget` in different API
+rule 9), three CRDs **two of which share the Kind `Widget` in different API
 groups** (the sidebar's group-aware filter), RBAC subjects including a dangling
 binding, a `resourceNames`-narrowed rule and a ClusterRole bound by a *RoleBinding*
 (the access review, both directions), and a synthetic three-revision Helm release

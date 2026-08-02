@@ -5,6 +5,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using KubeNimbus.App.ViewModels;
 
 namespace KubeNimbus.App.Views;
@@ -15,6 +16,13 @@ public partial class MainWindow : Window
     private Point _dragStart;
     private bool _dragging;
 
+    /// <summary>
+    /// The tab header currently held down, so its "pressed" class can be cleared on
+    /// release. Tracked rather than re-resolved from the release event because a drag
+    /// can end over a different tab than it started on.
+    /// </summary>
+    private Border? _pressedTab;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -23,7 +31,11 @@ public partial class MainWindow : Window
         PaletteShortcutLabel.Text = Hotkeys.Describe(Hotkeys.CommandPalette);
 
         KeyBindings.Add(new KeyBinding { Gesture = Hotkeys.ClusterSwitcher, Command = new RelayOpenSwitcherCommand(this) });
-        SwitcherHintLabel.Text = $"↑↓ navigate · Enter open or switch · Esc close · {Hotkeys.PrimaryLabel}+1…9 jump to tab";
+        // Says "click" explicitly: with both a hovered and a selected row visible,
+        // whether the mouse needs one click or two is a real question, and a popup
+        // that answers it costs one line.
+        SwitcherHintLabel.Text =
+            $"Click or Enter to open · ↑↓ navigate · Esc close · {Hotkeys.PrimaryLabel}+1…9 jump to tab";
 
         KeyBindings.Add(new KeyBinding { Gesture = Hotkeys.ShortcutsHelp, Command = new RelayToggleShortcutsCommand(this) });
 
@@ -155,14 +167,21 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnSwitcherItemTapped(object? sender, TappedEventArgs e)
+    /// <summary>
+    /// Opens the tapped switcher row. Resolving the row from the event source rather
+    /// than acting on <c>SelectedItem</c> alone matters twice: a tap on the ListBox's
+    /// empty area below the last row must do nothing, and the row that opens must be
+    /// the row under the cursor even if selection hasn't caught up.
+    /// </summary>
+    private void OnSwitcherListTapped(object? sender, TappedEventArgs e)
     {
-        // The pin button lives inside the row; a tap that started there has already
-        // been handled and must not also activate the row.
-        if (!e.Handled)
+        if (e.Source is not Visual source
+            || source.FindAncestorOfType<ListBoxItem>(includeSelf: true) is not { DataContext: ClusterSwitcherItemViewModel item })
         {
-            Vm?.Switcher.ActivateSelected();
+            return;
         }
+
+        Vm?.Switcher.ActivateItem(item);
     }
 
     private void OnSwitcherPinClick(object? sender, RoutedEventArgs e)
@@ -268,6 +287,8 @@ public partial class MainWindow : Window
             _draggingTab = tab;
             _dragStart = e.GetPosition(TabStrip);
             _dragging = false;
+            _pressedTab = border;
+            border.Classes.Add("pressed");
             e.Pointer.Capture(border);
         }
     }
@@ -311,6 +332,8 @@ public partial class MainWindow : Window
     private void OnTabHeaderPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
         e.Pointer.Capture(null);
+        _pressedTab?.Classes.Remove("pressed");
+        _pressedTab = null;
         _draggingTab = null;
         // Deferred so the Tapped gesture (which fires after PointerReleased) still sees the flag.
         Dispatcher.UIThread.Post(() => _dragging = false);
