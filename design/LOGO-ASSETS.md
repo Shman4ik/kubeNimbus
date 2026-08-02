@@ -37,12 +37,34 @@ subtle:
 So the small sizes get their own marks, drawn in the same 1024 grid so they
 stay on-brand and stay re-renderable:
 
-- **`logo-small.svg`** (24px) — plain round light field, a bold helm (six rays,
-  heavy rim, fat hub, six stub handles) and the broom reduced to one thick
-  handle plus a flared bristle wedge, crossing the helm's lower-right exactly
-  as the full mark does.
-- **`logo-micro.svg`** (16px) — four rays on the cardinal axes, every stroke
-  wider again, same broom.
+- **`logo-small.svg`** (24px) — a bold helm (six rays, heavy rim, fat hub, six
+  stub pegs) beside the broom, filling the whole tile.
+- **`logo-micro.svg`** (16px) — four rays on the cardinal axes, no pegs, every
+  stroke wider again, same broom.
+
+Two rules separate them from the full mark, and both are deliberate:
+
+**No disc.** The full mark's disc is a plate, and a plate costs ~20% of the
+tile in each direction at every size. At 24px that is the difference between
+six readable spokes and a grey ring. The small masters are one colour on
+transparency and get the whole tile instead — which is also what the unplated
+Windows and MSIX icon slots want in the first place. The cost is that they no
+longer carry their own background: on a surface the ink cannot survive, the
+`-dark` twin is not optional, it is the asset.
+
+**The broom is `logo.svg`'s own geometry**, not a redrawn wedge — the same
+`#broom-bristles` and `#broom-handle` paths, scaled. That became possible only
+once the full mark's broom stopped being negative space cut out of the light
+field (see [`LOGO.md`](LOGO.md)); before that there was no handle to lift. Two
+concessions to the pixel grid, neither a redesign: the paths are fattened by a
+stroke so the hairline gaps around the ferrule fuse instead of turning to mud,
+and the ferrule notch is replaced by a plain tapered tip.
+
+And one thing that is *not* carried over: the full mark cuts the helm where the
+broom crosses it. The small masters keep the helm **whole** and place the broom
+at the closest distance that leaves every spoke, peg and rim arc intact. At
+these sizes a chopped spoke does not read as depth, it reads as a rendering
+fault.
 
 **The broom stays at every size, and that is the rule.** An earlier revision
 dropped it below 32px on legibility grounds and the result was a generic
@@ -67,18 +89,48 @@ The **only** hand-edited art. Everything else in this document is generated.
 |---|---|
 | `logo.svg` | the full mark, `viewBox="0 0 1024 1024"`, flattened plain paths — see [`LOGO.md`](LOGO.md) |
 | `logo-dark.svg` | same bytes, `.ink`/`.paper` exchanged |
-| `logo-small.svg` / `-dark` | simplified mark for 24px |
-| `logo-micro.svg` / `-dark` | simplified mark for 16px |
+| `logo-small.svg` / `-dark` | simplified mark for 24px, no disc, transparent |
+| `logo-micro.svg` / `-dark` | simplified mark for 16px, no disc, transparent |
+| `logo-small-plated.svg` | the 24px mark on the full mark's disc — `app.ico` only |
+| `logo-micro-plated.svg` | the 16px mark on the full mark's disc — `app.ico` only |
 
-All six share one colour contract: two classes, `.ink` `#242B36` and `.paper`
-`#F5F7FA`, with the literal value repeated in a `fill`/`stroke` attribute so
-tools that ignore `<style>` still render. A `*-dark.svg` is its light twin with
-the two values exchanged and nothing else changed — if you edit geometry, edit
-both (or regenerate the dark twin with the same two-way swap).
+**Why the plated pair exists.** Windows hands the taskbar, Alt+Tab and the
+title bar a single `WM_SETICON` slot, so `app.ico` cannot be theme-aware — and
+unplated dark line art disappears on a dark taskbar, which is the default. So
+`app.ico` keeps the disc at every size, and the disc-less masters feed the
+surfaces that genuinely are theme-aware (`window-icon-{light,dark}.ico`, the
+MSIX `altform-unplated` / `-lightunplated` tiles). The plate costs what a plate
+costs: the mark inside it is smaller. That is the trade, not a bug — and it is
+why removing the disc from the theme-aware assets is worth doing separately.
 
-Nothing generates these six files: `logo.svg` was traced from a raster once and
-then hand-finished, and the tracer was retired rather than left able to
-overwrite that work — see [`LOGO.md`](LOGO.md). Edit them in a vector editor.
+All six share one colour contract: `.ink` `#242B36` and `.paper` `#F5F7FA`
+(plus `.ink-s`/`.paper-s` where the value is a stroke), with the literal value
+repeated in a `fill`/`stroke` attribute so tools that ignore `<style>` still
+render. A `*-dark.svg` is its light twin with the two values exchanged and
+nothing else changed — if you edit geometry, edit both (or regenerate the dark
+twin with the same two-way swap). The small and micro masters use only `.ink`
+and `.ink-s`: with the disc gone there is no paper left in them.
+
+`logo.svg` and `logo-dark.svg` are hand-edited — traced from a raster once and
+then hand-finished, with the tracer retired rather than left able to overwrite
+that work (see [`LOGO.md`](LOGO.md)). Edit them in a vector editor.
+
+The **six small/micro files are generated**, by
+[`scripts/design/make-small-masters.py`](../scripts/design/make-small-masters.py),
+from `logo.svg`. Do not hand-edit them; re-run the script:
+
+```bash
+python scripts/design/make-small-masters.py
+```
+
+They used to be hand-drawn approximations of the broom — a straight stroke and
+a four-point wedge — because the full mark had no broom to copy: its handle was
+negative space cut out of the light field, not an object. Once `#brand-broom`
+became self-contained the small marks could lift the real `#broom-bristles` and
+`#broom-handle` paths, and "the small icon looks like the logo" stopped being
+something you eyeball and became something you re-run. The helm stays
+parametric, because eight thin spokes cannot survive 16px whatever you do to
+them.
 
 ---
 
@@ -91,8 +143,8 @@ icon scripts, a Partner Center upload) never need Inkscape.
 
 | File | Size | Rendered from | Feeds |
 |---|---|---|---|
-| `icon-16.png` | 16² | `logo-micro.svg` | `app.ico` 16, MSIX targetsize-16 |
-| `icon-24.png` | 24² | `logo-small.svg` | `app.ico` 24 |
+| `icon-16.png` | 16² | `logo-micro-plated.svg` | `app.ico` 16 |
+| `icon-24.png` | 24² | `logo-small-plated.svg` | `app.ico` 24 |
 | `icon-32.png` | 32² | `logo.svg` | `app.ico` 32 |
 | `icon-48.png` | 48² | `logo.svg` | `app.ico` 48, MSIX 44 & 50 |
 | `icon-256.png` | 256² | `logo.svg` | `app.ico` 64/128/256, MSIX 150 |
@@ -100,14 +152,27 @@ icon scripts, a Partner Center upload) never need Inkscape.
 
 ### `window/` — in-app / unplated icons (**transparent** two-tone glyph)
 
-The same mark with the full-bleed disc stripped out, so what remains is the
-glyph on transparency. The name is **the theme it is used on**, not the colour
-it is drawn in.
+The mark on transparency. The name is **the theme it is used on**, not the
+colour it is drawn in.
 
 | File | Rendered from | Feeds |
 |---|---|---|
 | `window-light-256.png` | `logo-dark.svg` minus the disc (dark field) | `window-icon-light.ico`, MSIX `altform-lightunplated` |
 | `window-dark-256.png` | `logo.svg` minus the disc (light field) | `window-icon-dark.ico`, MSIX `altform-unplated` |
+| `window-light-{24,16}.png` | `logo-small.svg` / `logo-micro.svg` | same, at those sizes |
+| `window-dark-{24,16}.png` | `logo-small-dark.svg` / `logo-micro-dark.svg` | same, at those sizes |
+
+24 and 16 get their own masters rather than a downscale of the 256 — the same
+"the full mark is mud down here" rule as the icon tiles, and these small
+unplated tiles are precisely what the disc-less simplified marks were drawn
+for. `make-app-icons.ps1` prefers an exact-size window master when one exists
+(`Resolve-WindowMaster`) and only falls back to resampling the 256.
+
+**The colour mapping inverts between the two rows above, and that is not a
+typo.** Stripping the disc from the full mark leaves its light *field* as the
+glyph's body, so `logo-dark.svg` is what suits a light surface. The simplified
+marks have no field at all — the glyph is the ink itself — so a light surface
+wants the dark-inked `logo-small.svg` and a dark surface wants `-dark`.
 
 ### `logo/` — website / marketing
 
@@ -172,16 +237,32 @@ alone don't do anything either: a pack step has to compile them into
 
 ## Part 4 — The scripts (source → output)
 
+### `scripts/design/make-small-masters.py` (Python 3.8+, stdlib only)
+Derives the 24px and 16px marks from `logo.svg`. Run after any change to the
+full mark's broom, **before** `make-masters.ps1`.
+
+```
+logo.svg #broom-bristles + #broom-handle ─┬─► logo-small.svg  + -dark  + -plated
+   + a parametric helm, fitted to the tile └─► logo-micro.svg  + -dark  + -plated
+```
+
+The knobs at the bottom of the script (ray count, helm scale, fattening stroke,
+clearance) were chosen by rendering candidates at actual 16 and 24 px and
+comparing them, not by taste. If you change them, do that again — a value that
+looks right at 1024 tells you nothing about what it does to a 16px tile.
+
 ### `scripts/design/make-masters.ps1` (Inkscape + System.Drawing)
 Rebuilds everything in `design/masters/`. Run after editing any
 `design/logo*.svg`.
 
 ```
-logo-micro.svg ─ render 16 ──────────────────► masters/icon/icon-16.png
-logo-small.svg ─ render 24 ──────────────────► masters/icon/icon-24.png
+logo-micro-plated.svg ─ render 16 ───────────► masters/icon/icon-16.png
+logo-small-plated.svg ─ render 24 ───────────► masters/icon/icon-24.png
 logo.svg ────── render 32,48,256,1024 ───────► masters/icon/icon-{32,48,256,1024}.png
 logo-dark.svg ─ strip disc, render 256 ──────► masters/window/window-light-256.png
 logo.svg ────── strip disc, render 256 ──────► masters/window/window-dark-256.png
+logo-{small,micro}.svg ─ render 24,16 ───────► masters/window/window-light-{24,16}.png
+logo-{small,micro}-dark.svg ─ render 24,16 ──► masters/window/window-dark-{24,16}.png
 logo{,-dark}.svg + <text> ─ text→path, tight viewBox, 2× png
                                              ► masters/logo/wordmark-{light,dark}.{svg,png}
 wordmark-dark.png on #242B36, 1280×640 ──────► masters/logo/social-preview.png
@@ -199,8 +280,9 @@ Assembles the shipped icons. Copies exact-size masters verbatim, derives only
 larger sizes:
 
 ```
-window/window-light-256.png ── resize to 16/24/32/48/256 ──► Assets/window-icon-light.ico
-window/window-dark-256.png  ── resize to 16/24/32/48/256 ──► Assets/window-icon-dark.ico
+window/window-light-{16,24,256}.png ── exact where present, else resize
+                                            ──► Assets/window-icon-light.ico
+window/window-dark-{16,24,256}.png  ── same  ──► Assets/window-icon-dark.ico
 icon/icon-{16,24,32,48}.png ── copy (as-is) ─┐
 icon/icon-256.png ── downscale → 64,128 ─────┼─► Assets/app.ico  (7 entries)
 icon/icon-48.png   ── → 44,55,66 ────────────► Assets/Msix/Square44x44Logo.scale-{100,125,150}.png
@@ -209,8 +291,8 @@ icon/icon-48.png   ── → 50,63,75 ────────────► A
 icon/icon-1024.png ── → 100,200 ─────────────► Assets/Msix/StoreLogo.scale-{200,400}.png
 icon/icon-256.png  ── → 150,188,225 ─────────► Assets/Msix/Square150x150Logo.scale-{100,125,150}.png
 icon/icon-1024.png ── → 300,600 ─────────────► Assets/Msix/Square150x150Logo.scale-{200,400}.png
-window/window-dark-256.png  ── → 16,24,32,48,256 ► Assets/Msix/Square44x44Logo.targetsize-*_altform-unplated.png
-window/window-light-256.png ── → 16,24,32,48,256 ► Assets/Msix/Square44x44Logo.targetsize-*_altform-lightunplated.png
+window/window-dark-{16,24,256}.png  ── → 16,24,32,48,256 ► Assets/Msix/Square44x44Logo.targetsize-*_altform-unplated.png
+window/window-light-{16,24,256}.png ── → 16,24,32,48,256 ► Assets/Msix/Square44x44Logo.targetsize-*_altform-lightunplated.png
 ```
 
 (scale-200/400 fall back to the 1024 master instead of upscaling the small
@@ -226,10 +308,15 @@ one-off. Not wired into any build; the Partner Center upload is manual.
 ### The full refresh
 
 ```powershell
+python scripts/design/make-small-masters.py # design/logo-{small,micro}*.svg
 pwsh scripts/design/make-masters.ps1        # design/masters/**
 pwsh scripts/windows/make-app-icons.ps1     # src/KubeNimbus.App/Assets/**
 pwsh scripts/windows/make-store-logos.ps1   # design/store/**
 ```
+
+The first step is only needed when `logo.svg`'s broom changed; the other three
+after any `design/logo*.svg` edit. They must run in that order — each one eats
+the previous one's output.
 
 There is no macOS `.icns` step yet — kubeNimbus has no `.app`/`.dmg` packaging.
 When it gets one, the masters already cover every iconset slot (16/32/256 exact,

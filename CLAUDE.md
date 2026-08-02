@@ -226,14 +226,18 @@ Full reference: [`design/LOGO-ASSETS.md`](design/LOGO-ASSETS.md) (pipeline,
 every file, every consumer); [`design/LOGO.md`](design/LOGO.md) covers how the
 mark's geometry was derived. Three rules matter here:
 
-1. **Only `design/*.svg` is hand-edited.** Everything under `design/masters/`,
-   `design/store/`, `design/screenshots/` and
+1. **Only `design/logo.svg` and `design/logo-dark.svg` are hand-edited.** The
+   six small/micro SVGs are *generated from `logo.svg`* by
+   `scripts/design/make-small-masters.py`, and everything under
+   `design/masters/`, `design/store/`, `design/screenshots/` and
    `src/KubeNimbus.App/Assets/*.ico|Msix/**` is generated and checked in.
    (`design/screenshots/` comes out of `tools/Screenshot`, not the logo
    pipeline — see [`design/screenshots/README.md`](design/screenshots/README.md)
-   for the scenario→file mapping.) Fix art in the SVG, then re-run the scripts:
+   for the scenario→file mapping.) Fix art in the SVG, then re-run the scripts,
+   **in this order** — each eats the previous one's output:
 
    ```powershell
+   python scripts/design/make-small-masters.py # design/logo-{small,micro}*.svg (only if the broom changed)
    pwsh scripts/design/make-masters.ps1        # design/masters/**
    pwsh scripts/windows/make-app-icons.ps1     # src/KubeNimbus.App/Assets/**
    pwsh scripts/windows/make-store-logos.ps1   # design/store/**  (only if the mark changed)
@@ -246,7 +250,18 @@ mark's geometry was derived. Three rules matter here:
    marks in the same 1024 grid. Rendering every size from `logo.svg` is the
    specific bug this split prevents — don't "simplify" it away. **All three
    carry the broom**: dropping it at small sizes turns the taskbar icon into a
-   generic ship's wheel, which is the one place identity matters most.
+   generic ship's wheel, which is the one place identity matters most. The
+   small marks use `logo.svg`'s *own* broom paths, which is only possible
+   because `#brand-broom` is self-contained — so a change to the full mark's
+   broom is a re-run of the generator, not a redraw.
+2b. **The small marks have no disc; `app.ico` still does.** Dropping the plate
+   gives the mark ~40% more pixels at 16-24px and is what the unplated
+   Windows/MSIX slots want. But Windows gives the taskbar, Alt+Tab and the
+   title bar a *single* `WM_SETICON` slot, so `app.ico` cannot be theme-aware
+   and unplated dark line art vanishes on a dark taskbar (the default). Hence
+   `logo-{small,micro}-plated.svg`, which exist for `app.ico` alone. Don't
+   "unify" the two — that regression is invisible until someone looks at
+   their taskbar.
 3. **`Msix/**` is packaging-time-only.** The csproj marks `Assets/*.ico` as
    `AvaloniaResource` and nothing else, so the tile PNGs stay source-tree
    inputs for a future MSIX pack step and never enter the binary. `app.ico` is
