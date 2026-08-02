@@ -13,7 +13,7 @@
          parsing); pinned to the same major version. Used ONLY via its structural
          RepresentationModel (YamlNode tree) in YamlJson.cs — never the
          attribute/reflection-based serializer, which isn't AOT/trim-safe. -->
-    <PackageReference Include="YamlDotNet" Version="16.3.0" />
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
 
   <ItemGroup>
