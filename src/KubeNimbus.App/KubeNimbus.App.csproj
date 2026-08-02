@@ -3,6 +3,14 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <RootNamespace>KubeNimbus.App</RootNamespace>
+    <!-- The shipped executable is the product name, not the project name — this
+         is what a user downloads and pins to a taskbar. Note that the assembly
+         name is also the authority for `avares://` URIs (App.axaml references
+         avares://kubeNimbus/Styles/Theme.axaml) and for app.manifest's
+         assemblyIdentity: all three must move together. -->
+    <AssemblyName>kubeNimbus</AssemblyName>
+    <AssemblyTitle>kubeNimbus</AssemblyTitle>
+    <Description>A fast, open-source Kubernetes desktop client.</Description>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
