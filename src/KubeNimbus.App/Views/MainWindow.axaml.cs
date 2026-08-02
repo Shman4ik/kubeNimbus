@@ -22,7 +22,22 @@ public partial class MainWindow : Window
         KeyBindings.Add(new KeyBinding { Gesture = Hotkeys.CommandPalette, Command = new RelayOpenPaletteCommand(this) });
         PaletteShortcutLabel.Text = Hotkeys.Describe(Hotkeys.CommandPalette);
 
+        KeyBindings.Add(new KeyBinding { Gesture = Hotkeys.ClusterSwitcher, Command = new RelayOpenSwitcherCommand(this) });
+        SwitcherHintLabel.Text = $"↑↓ navigate · Enter open or switch · Esc close · {Hotkeys.PrimaryLabel}+1…9 jump to tab";
+
         KeyBindings.Add(new KeyBinding { Gesture = Hotkeys.ShortcutsHelp, Command = new RelayToggleShortcutsCommand(this) });
+
+        // Ctrl/Cmd+1…9 jumps straight to a tab. Registered in a loop rather than
+        // nine XAML KeyBindings so the modifier still comes from Hotkeys.Primary
+        // (UI rule 4 — no hardcoded Ctrl gestures).
+        for (var ordinal = 1; ordinal <= 9; ordinal++)
+        {
+            KeyBindings.Add(new KeyBinding
+            {
+                Gesture = new KeyGesture(Key.D0 + ordinal, Hotkeys.Primary),
+                Command = new RelaySelectTabCommand(this, ordinal),
+            });
+        }
 
         Opened += (_, _) =>
         {
@@ -101,6 +116,108 @@ public partial class MainWindow : Window
     }
 
     private void OnPaletteItemTapped(object? sender, TappedEventArgs e) => Vm?.Palette.ExecuteSelected();
+
+    /// <summary>
+    /// Cluster tab context menu → environment assignment. An empty Tag clears the
+    /// override so the name guess applies again; anything else is a
+    /// <see cref="KubeNimbus.Core.ClusterEnvironment"/> name.
+    /// </summary>
+    private void OnSetEnvironmentClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { DataContext: ClusterTabViewModel tab, Tag: string tag } || Vm is not { } vm)
+        {
+            return;
+        }
+
+        vm.SetEnvironment(
+            tab.Context,
+            Enum.TryParse<KubeNimbus.Core.ClusterEnvironment>(tag, out var environment) ? environment : null);
+    }
+
+    private void OnSwitcherButtonClick(object? sender, RoutedEventArgs e) => OpenSwitcher();
+
+    internal void OpenSwitcher()
+    {
+        if (Vm is not { HasContexts: true } vm)
+        {
+            return;
+        }
+
+        vm.Switcher.Open();
+        SwitcherQueryBox.Focus();
+    }
+
+    private void OnSwitcherBackdropPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.Source == sender)
+        {
+            Vm?.Switcher.Close();
+        }
+    }
+
+    private void OnSwitcherItemTapped(object? sender, TappedEventArgs e)
+    {
+        // The pin button lives inside the row; a tap that started there has already
+        // been handled and must not also activate the row.
+        if (!e.Handled)
+        {
+            Vm?.Switcher.ActivateSelected();
+        }
+    }
+
+    private void OnSwitcherPinClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: ClusterSwitcherItemViewModel item } && Vm is { } vm)
+        {
+            vm.SetPinned(item.Context.Name, !item.IsPinned);
+        }
+
+        e.Handled = true;
+    }
+
+    private void OnSwitcherKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (Vm?.Switcher is not { } switcher)
+        {
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case Key.Escape:
+                switcher.Close();
+                e.Handled = true;
+                break;
+            case Key.Enter:
+                switcher.ActivateSelected();
+                e.Handled = true;
+                break;
+            case Key.Down:
+                switcher.MoveSelection(1);
+                ScrollSwitcherSelectionIntoView();
+                e.Handled = true;
+                break;
+            case Key.Up:
+                switcher.MoveSelection(-1);
+                ScrollSwitcherSelectionIntoView();
+                e.Handled = true;
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Keyboard focus stays in the query box while arrows move the selection, so
+    /// the ListBox never scrolls itself — it only does that for its own focused
+    /// navigation. Without this, arrowing past the visible rows silently moves the
+    /// selection off-screen.
+    /// </summary>
+    private void ScrollSwitcherSelectionIntoView()
+    {
+        if (Vm?.Switcher.SelectedItem is { } selected)
+        {
+            SwitcherList.ScrollIntoView(selected);
+        }
+    }
 
     private void OnPaletteKeyDown(object? sender, KeyEventArgs e)
     {
@@ -208,6 +325,27 @@ internal sealed class RelayOpenPaletteCommand(MainWindow window) : System.Window
     public bool CanExecute(object? parameter) => true;
 
     public void Execute(object? parameter) => window.OpenPalette();
+}
+
+/// <summary>Trivial ICommand so the cluster-switcher gesture can live in a KeyBinding.</summary>
+internal sealed class RelayOpenSwitcherCommand(MainWindow window) : System.Windows.Input.ICommand
+{
+    public event EventHandler? CanExecuteChanged { add { } remove { } }
+
+    public bool CanExecute(object? parameter) => true;
+
+    public void Execute(object? parameter) => window.OpenSwitcher();
+}
+
+/// <summary>Trivial ICommand backing one Ctrl/Cmd+N tab jump.</summary>
+internal sealed class RelaySelectTabCommand(MainWindow window, int ordinal) : System.Windows.Input.ICommand
+{
+    public event EventHandler? CanExecuteChanged { add { } remove { } }
+
+    public bool CanExecute(object? parameter) => true;
+
+    public void Execute(object? parameter) =>
+        (window.DataContext as ViewModels.MainWindowViewModel)?.SelectTabByOrdinal(ordinal);
 }
 
 /// <summary>Trivial ICommand so the F1 gesture can live in a KeyBinding without a ViewModel round-trip.</summary>

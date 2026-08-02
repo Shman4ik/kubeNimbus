@@ -12,6 +12,34 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+### Added
+
+- **Cluster switcher** (`Ctrl`/`Cmd`+`P`, or the cluster button in the top bar):
+  one fuzzy-searchable list over both open cluster tabs and unopened kubeconfig
+  contexts, grouped Open / Pinned / Recent / All. Matches on context name,
+  cluster name and kubeconfig path, so `ppr` finds `payments-prod` and an
+  opaque EKS ARN is still reachable by the cluster behind it.
+- **Pinned clusters.** The handful you actually work in sit at the top of the
+  switcher, every session. Persisted in the workspace.
+- **Environment colours.** Clusters are classified production / staging /
+  development from their context and cluster names and coloured accordingly —
+  a dot on the switcher button, a left edge on each cluster tab, a pill in the
+  switcher, and a red band under the command bar while a production cluster is
+  selected. Right-click a cluster tab to correct the guess; the assignment is
+  remembered.
+- **`Ctrl`/`Cmd`+`1`…`9`** jumps straight to a cluster tab (9 = last).
+
+### Changed
+
+- The top bar's context dropdown is gone. It could not search, truncated the
+  long auto-generated names managed Kubernetes hands out, and only chose what
+  the `+` button would open — switching to an already-open cluster was a
+  separate gesture. The switcher does both jobs.
+- Cluster tabs scroll instead of squeezing the rest of the command bar off the
+  right edge, and show an active-tab highlight.
+- The command palette no longer lists every kubeconfig context; it offers the
+  switcher instead, so a large kubeconfig can't bury every other command.
+
 ## [0.1.0] - 2026-08-02
 
 First public release. Everything below is new.
