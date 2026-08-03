@@ -5,9 +5,11 @@ namespace KubeNimbus.App.ViewModels;
 
 /// <summary>
 /// One row in the generic live list view — works for any resource kind (built-in
-/// or CRD), updated in place as watch events arrive. Columns stay the same
-/// across kinds (Namespace/Name/Status/Age); <see cref="Status"/> is a best-effort
-/// summary read from whatever status shape the object actually has.
+/// or CRD), updated in place as watch events arrive. The columns are the ones
+/// kubectl shows (Namespace/Name/Ready/Status/Restarts/Age, plus a kind-specific
+/// Details); which of them apply to the selected kind is decided by
+/// <see cref="ResourceStatusSummary"/> and applied in
+/// <see cref="Views.ClusterTabView"/>'s code-behind.
 /// </summary>
 public sealed partial class ResourceRowViewModel : ObservableObject
 {
@@ -33,10 +35,46 @@ public sealed partial class ResourceRowViewModel : ObservableObject
     private string _status;
 
     [ObservableProperty]
-    private string _statusHealth = "idle"; // ok | warn | error | idle -> Ellipse.statusDot class
+    private string _statusHealth = ResourceHealth.Idle; // -> Ellipse.statusDot / Border.statusPill class
+
+    /// <summary>kubectl's READY column ("2/3") — empty for kinds with no readiness notion.</summary>
+    [ObservableProperty]
+    private string _readyText = "";
+
+    /// <summary>
+    /// kubectl's RESTARTS column, including its "(43m ago)" suffix. A restart count
+    /// with no age is nearly useless: 200 restarts that stopped yesterday and 200
+    /// still accumulating are the same number and completely different problems.
+    /// </summary>
+    [ObservableProperty]
+    private string _restartsText = "0";
+
+    /// <summary>
+    /// What kubectl shows in place of a status for kinds that have none — a Service's
+    /// type/cluster-IP/ports, a ConfigMap's key count. Empty (and its column hidden)
+    /// for kinds whose Status column already carries the story.
+    /// </summary>
+    [ObservableProperty]
+    private string _details = "";
 
     [ObservableProperty]
     private DateTimeOffset? _createdAt;
+
+    /// <summary>
+    /// Compact age ("5m", "2h", "3d", "21d"). Recomputed by
+    /// <see cref="RefreshTimes"/> off the list view's shared clock rather than
+    /// stored, because age changes with no watch event to trigger it.
+    /// </summary>
+    [ObservableProperty]
+    private string _ageText = "";
+
+    /// <summary>The exact creation timestamp, for the Age cell's tooltip — the
+    /// compact form is for scanning, but "when exactly" is a real question.</summary>
+    [ObservableProperty]
+    private string _ageTooltip = "";
+
+    private int _restarts;
+    private DateTimeOffset? _lastRestartAt;
 
     /// <summary>
     /// Measured CPU/memory for this row, when the kind has any (pods and nodes)
@@ -101,7 +139,37 @@ public sealed partial class ResourceRowViewModel : ObservableObject
         Namespace = resource.Namespace ?? "";
         Name = resource.Name;
         CreatedAt = resource.CreationTimestamp;
-        (Status, StatusHealth) = ResourceStatusSummary.Summarize(resource);
+        AgeTooltip = resource.CreationTimestamp is { } created
+            ? $"Created {created.ToLocalTime():yyyy-MM-dd HH:mm:ss}"
+            : "";
+
+        var summary = ResourceStatusSummary.Summarize(resource);
+        Status = summary.Status;
+        StatusHealth = summary.Health;
+        ReadyText = summary.Ready;
+        Details = summary.Details;
+        _restarts = summary.Restarts;
+        _lastRestartAt = summary.LastRestartAt;
+        RefreshTimes();
+    }
+
+    /// <summary>
+    /// Recomputes the two cells whose text is a function of wall-clock rather than of
+    /// the object — Age, and the "(43m ago)" on Restarts. Driven by one shared timer
+    /// in <see cref="Views.ClusterTabView"/>: a timer per row would mean thousands of
+    /// them on a busy cluster. Assignments are no-ops when the rendered string hasn't
+    /// changed (<c>ObservableObject.SetProperty</c> compares first), so a tick over a
+    /// list of day-old pods raises no change notifications at all.
+    /// </summary>
+    public void RefreshTimes()
+    {
+        var now = DateTimeOffset.UtcNow;
+        AgeText = CreatedAt is { } created ? RelativeTime.Compact(now - created) : "";
+        RestartsText = _restarts == 0
+            ? "0"
+            : _lastRestartAt is { } last
+                ? $"{_restarts} ({RelativeTime.Compact(now - last)} ago)"
+                : $"{_restarts}";
     }
 
     /// <summary>
@@ -137,5 +205,34 @@ public sealed partial class ResourceRowViewModel : ObservableObject
         MemorySeries = History.MemorySeries();
         CpuTooltip = UsageFormat.Tooltip("CPU", CpuText, Quantity.FormatCpu(History.PeakCpuNanocores), History);
         MemoryTooltip = UsageFormat.Tooltip("Mem", MemoryText, Quantity.FormatMemory(History.PeakMemoryBytes), History);
+    }
+}
+
+/// <summary>
+/// kubectl's AGE column, at one unit instead of two. kubectl's own
+/// <c>duration.HumanDuration</c> mixes units below its thresholds ("3d2h",
+/// "5m30s"); in a list two hundred rows deep that trailing unit is noise that
+/// differs on every row and stops the column lining up, and the exact timestamp
+/// is one tooltip away. If exact kubectl parity ever matters more than that,
+/// this is the one function to change.
+/// </summary>
+internal static class RelativeTime
+{
+    public static string Compact(TimeSpan elapsed)
+    {
+        // Clock skew, or a creationTimestamp in the future: "0s", never "-3s".
+        if (elapsed.Ticks <= 0)
+        {
+            return "0s";
+        }
+
+        return elapsed switch
+        {
+            { TotalSeconds: < 60 } => $"{(int)elapsed.TotalSeconds}s",
+            { TotalMinutes: < 60 } => $"{(int)elapsed.TotalMinutes}m",
+            { TotalHours: < 24 } => $"{(int)elapsed.TotalHours}h",
+            { TotalDays: < 365 } => $"{(int)elapsed.TotalDays}d",
+            _ => $"{(int)(elapsed.TotalDays / 365)}y",
+        };
     }
 }

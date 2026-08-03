@@ -127,7 +127,69 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// outside the visual tree, so it can't bind to the DataContext.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AreUsageColumnsVisible))]
     private bool _areMetricsVisible;
+
+    /// <summary>
+    /// The one global "advanced view" switch, mirrored onto every tab by
+    /// <see cref="MainWindowViewModel"/> (which owns it and persists it). Off — the
+    /// default — hides the controls only a fraction of sessions need; on restores
+    /// today's surface exactly. It is a *display* switch and nothing more: flipping
+    /// it must never restart a watch, refetch anything, or lose list/inspector
+    /// state, which is why every consumer below is a derived property rather than
+    /// something that re-runs <see cref="RestartWatch"/>.
+    ///
+    /// Bind this two-way and nothing else. A <c>ToggleButton</c> given BOTH an
+    /// <c>IsChecked</c> binding and a toggling <c>Command</c> flips the property in
+    /// <c>OnClick()</c> before the command runs, so an inverting command lands back
+    /// on the original value — a guaranteed no-op, and a bug this repo has shipped
+    /// before.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AreUsageColumnsVisible))]
+    [NotifyPropertyChangedFor(nameof(IsUsageTabVisible))]
+    [NotifyPropertyChangedFor(nameof(AreLogToolsVisible))]
+    [NotifyPropertyChangedFor(nameof(IsExecSendVisible))]
+    [NotifyPropertyChangedFor(nameof(IsForceApplyVisible))]
+    [NotifyPropertyChangedFor(nameof(IsFleetToggleVisible))]
+    private bool _isAdvancedView;
+
+    /// <summary>
+    /// Write-back for the sidebar's advanced-view chip, set by
+    /// <see cref="MainWindowViewModel"/> as each tab enters the strip. The switch is
+    /// global but is toggled from a per-tab control, so the tab has to tell the shell
+    /// — which then persists it and mirrors it onto the other tabs. Same shape as
+    /// <see cref="FleetMembersProvider"/>: a tab still knows nothing about its
+    /// siblings.
+    /// </summary>
+    public Action<bool>? AdvancedViewChanged { get; set; }
+
+    partial void OnIsAdvancedViewChanged(bool value)
+    {
+        ApplySidebarChrome();
+        AdvancedViewChanged?.Invoke(value);
+    }
+
+    /// <summary>
+    /// The list's CPU/Memory columns (number + sparkline). Two conditions, not one:
+    /// the cluster has to actually serve metrics.k8s.io for the metered kind
+    /// (<see cref="AreMetricsVisible"/>), *and* the user has to have asked for the
+    /// busier layout. Read by <see cref="Views.ClusterTabView"/>'s code-behind —
+    /// a DataGridColumn is outside the visual tree and can't bind.
+    /// </summary>
+    public bool AreUsageColumnsVisible => AreMetricsVisible && IsAdvancedView;
+
+    /// <summary>Pod detail's Usage tab (session-window CPU/memory charts).</summary>
+    public bool IsUsageTabVisible => IsAdvancedView;
+
+    /// <summary>The log toolbar's Wrap/Copy/Download buttons and the redundant "Following …" caption.</summary>
+    public bool AreLogToolsVisible => IsAdvancedView;
+
+    /// <summary>The exec pane's Send button (Enter already sends).</summary>
+    public bool IsExecSendVisible => IsAdvancedView;
+
+    /// <summary>The YAML editor's force-apply escape hatch for a server-side apply conflict.</summary>
+    public bool IsForceApplyVisible => IsAdvancedView;
 
     /// <summary>
     /// True while the Helm entry is selected: the content area swaps the generic
@@ -162,8 +224,15 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [ObservableProperty]
     private bool _isFleetView;
 
-    /// <summary>Hidden for Helm (releases aren't an API kind, so there's nothing to fan out).</summary>
-    public bool IsFleetToggleVisible => IsFleetViewAvailable && !IsHelmView;
+    /// <summary>
+    /// Hidden for Helm (releases aren't an API kind, so there's nothing to fan out)
+    /// and outside the advanced view — but never while aggregation is actually on.
+    /// Turning the advanced view off must not strand a tab in fleet mode with no
+    /// control to leave it: the exit stays on screen as long as there is something
+    /// to exit from, which also keeps the toggle a pure display switch (dropping
+    /// out of fleet mode would restart the watch).
+    /// </summary>
+    public bool IsFleetToggleVisible => IsFleetViewAvailable && !IsHelmView && (IsAdvancedView || IsFleetView);
 
     partial void OnIsHelmViewChanged(bool value) => OnPropertyChanged(nameof(IsFleetToggleVisible));
 
@@ -178,6 +247,9 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     partial void OnIsFleetViewChanged(bool value)
     {
+        // The toggle's own visibility depends on this (see IsFleetToggleVisible) —
+        // it has to survive the advanced view being switched off mid-aggregation.
+        OnPropertyChanged(nameof(IsFleetToggleVisible));
         FleetSummary = null;
         RestartWatch();
     }
@@ -313,7 +385,22 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         SidebarGrouping.LabelAmbiguousKinds(SidebarSections);
         await AddHelmSectionIfPresentAsync();
+        ApplySidebarChrome();
         ApplySidebarFilter();
+    }
+
+    /// <summary>
+    /// Re-derives the per-section display state that comes from the tab rather than
+    /// from discovery — today just the kind-count badge. Called wherever the set of
+    /// sections changes (sidebar rebuild, Recent rebuild) and when the advanced view
+    /// is toggled, because a freshly constructed section defaults to the plain layout.
+    /// </summary>
+    private void ApplySidebarChrome()
+    {
+        foreach (var section in SidebarSections)
+        {
+            section.ShowKindCount = IsAdvancedView;
+        }
     }
 
     /// <summary>
@@ -414,7 +501,10 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             });
         }
 
-        // A rebuild replaces the instances the filter had already classified.
+        // A rebuild replaces the instances the filter had already classified — and,
+        // the first time round, inserts a section that has never seen the tab's
+        // display state.
+        ApplySidebarChrome();
         ApplySidebarFilter();
     }
 

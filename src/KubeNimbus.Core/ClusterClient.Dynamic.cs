@@ -22,7 +22,10 @@ public sealed partial class ClusterClient
         WatchAsync(
             listPath: descriptor.CollectionPath(descriptor.Namespaced ? @namespace : null),
             listPage: (continueToken, ct) => ListResourcePageAsync(descriptor, @namespace, continueToken, ct),
-            deserialize: static el => new DynamicResource(el.Clone()),
+            // Watch frames do carry kind/apiVersion, so this is a clone in
+            // practice — routing both sources through one factory is what keeps
+            // "came from the list" and "came from the watch" indistinguishable.
+            deserialize: el => DynamicResource.FromListItem(el, descriptor),
             resourceVersionOf: static r => r.ResourceVersion,
             connectionLost: connectionLost,
             cancellationToken: cancellationToken);
@@ -70,7 +73,10 @@ public sealed partial class ClusterClient
         {
             foreach (var item in itemsEl.EnumerateArray())
             {
-                items.Add(new DynamicResource(item.Clone()));
+                // A list's items carry no kind/apiVersion (the enclosing
+                // PodList implies them); the descriptor supplies them so a
+                // list-seeded row behaves exactly like a watch-seeded one.
+                items.Add(DynamicResource.FromListItem(item, descriptor));
             }
         }
 
@@ -105,10 +111,14 @@ public sealed partial class ClusterClient
             return null;
         }
 
-        response.EnsureSuccessStatusCode();
+        // Not EnsureSuccessStatusCode: a 403 here is a full sentence from the
+        // API server ("secrets \"db-creds\" is forbidden: User \"x\" cannot get
+        // resource \"secrets\" in namespace \"y\"") and that sentence is the
+        // whole diagnosis — see EnsureSuccessAsync.
+        await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
         var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
-        return new DynamicResource(doc.RootElement.Clone());
+        return DynamicResource.FromListItem(doc.RootElement, descriptor);
     }
 
     /// <summary>
@@ -143,11 +153,11 @@ public sealed partial class ClusterClient
 
         if (!response.IsSuccessStatusCode)
         {
-            throw new HttpRequestException($"Apply failed ({(int)response.StatusCode} {response.StatusCode}): {ExtractStatusMessage(body)}");
+            throw KubernetesApiException.From(response.StatusCode, response.ReasonPhrase, body);
         }
 
         using var doc = JsonDocument.Parse(body);
-        return new DynamicResource(doc.RootElement.Clone());
+        return DynamicResource.FromListItem(doc.RootElement, descriptor);
     }
 
     /// <summary>Deletes one object; treats "already gone" (404) as success.</summary>
@@ -163,21 +173,12 @@ public sealed partial class ClusterClient
             return;
         }
 
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
     }
 
-    private static string ExtractStatusMessage(string body)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(body);
-            return doc.RootElement.TryGetProperty("message", out var m) ? m.GetString() ?? body : body;
-        }
-        catch (JsonException)
-        {
-            return body;
-        }
-    }
+    /// <summary>The Status <c>message</c>, or the body verbatim when it isn't one.</summary>
+    private static string ExtractStatusMessage(string body) =>
+        KubernetesApiException.ReadStatusMessage(body) ?? body;
 }
 
 /// <summary>

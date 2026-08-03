@@ -92,14 +92,39 @@ internal static class ClusterTabScenarios
         return tab;
     }
 
+    /// <summary>
+    /// The default layout: advanced view off, which is what a fresh install opens on.
+    /// The usage data is seeded all the same — the columns are hidden by the switch,
+    /// not absent — so this and <see cref="AdvancedView"/> are a true before/after.
+    /// </summary>
     public static ClusterTabViewModel WorkloadsList() => BaseTab();
 
-    /// <summary>Same pod list, with the CPU/Mem column populated — demonstrates the metrics.k8s.io-present path.</summary>
+    /// <summary>
+    /// The same tab with the advanced view on: usage columns and their sparklines
+    /// back, sidebar kind-count badges back. Turning it on must restore today's
+    /// surface exactly — it is a hide/show switch, not a second layout.
+    /// </summary>
+    public static ClusterTabViewModel AdvancedView() => Advanced(BaseTab());
+
+    /// <summary>
+    /// Flips a fixture tab into the advanced view. Set *after* the sections and rows
+    /// are in place: the real <c>OnIsAdvancedViewChanged</c> is what pushes the
+    /// count badges onto the sections, so a tab that was already advanced before it
+    /// had any sections would render without them.
+    /// </summary>
+    private static ClusterTabViewModel Advanced(ClusterTabViewModel tab)
+    {
+        tab.IsAdvancedView = true;
+        return tab;
+    }
+
+    /// <summary>Same pod list, with the CPU/Mem column populated — demonstrates the metrics.k8s.io-present path.
+    /// Advanced, because that is the only place those columns exist.</summary>
     public static ClusterTabViewModel WorkloadsListWithMetrics()
     {
         var tab = BaseTab(seedUsage: false);
         ApplyMetrics(tab);
-        return tab;
+        return Advanced(tab);
     }
 
     private static void ApplyMetrics(ClusterTabViewModel tab)
@@ -203,7 +228,14 @@ internal static class ClusterTabScenarios
     public static ClusterTabViewModel EventsList()
     {
         var tab = BaseTab(populateRows: false);
-        var eventsKind = tab.SidebarSections.First(s => s.Title == "Config").Kinds.First(k => k.Descriptor.Kind == "Event");
+        var config = tab.SidebarSections.First(s => s.Title == "Config");
+
+        // Config now starts collapsed (it is no longer the catalog's junk drawer, but
+        // it is still not what a session opens on), and this shot is about the row
+        // that's selected in it.
+        config.IsExpanded = true;
+
+        var eventsKind = config.Kinds.First(k => k.Descriptor.Kind == "Event");
         eventsKind.IsSelected = true;
         tab.SelectedKind = eventsKind;
 
@@ -252,7 +284,10 @@ internal static class ClusterTabScenarios
         tab.SelectedRow = tab.Rows.FirstOrDefault();
         tab.IsListLoading = false;
         tab.IsListEmpty = tab.Rows.Count == 0;
-        return tab;
+
+        // Aggregation is only reachable from the advanced view, so that is the state
+        // this shot has to be in for the toggle and the Cluster column to read right.
+        return Advanced(tab);
     }
 
     /// <summary>
@@ -444,10 +479,11 @@ internal static class ClusterTabScenarios
         }
     }
 
-    /// <summary>Pod detail's Usage tab — CPU/memory over the session's poll window, pod total plus per container.</summary>
+    /// <summary>Pod detail's Usage tab — CPU/memory over the session's poll window, pod total plus per container.
+    /// Advanced, since the Usage tab only exists there.</summary>
     public static ClusterTabViewModel PodDetailUsage()
     {
-        var tab = PodDetail();
+        var tab = Advanced(PodDetail());
         if (tab.SelectedInspectorTab is PodDetailTabViewModel detail)
         {
             detail.SelectedDetailTabIndex = 3;
@@ -462,7 +498,7 @@ internal static class ClusterTabScenarios
     /// </summary>
     public static ClusterTabViewModel PodDetailUsageUnavailable()
     {
-        var tab = PodDetail(seedUsage: false);
+        var tab = Advanced(PodDetail(seedUsage: false));
         if (tab.SelectedInspectorTab is PodDetailTabViewModel detail)
         {
             detail.SelectedDetailTabIndex = 3;
@@ -558,7 +594,10 @@ internal static class ClusterTabScenarios
         // The answer is a list of subjects with their granting rules nested under each —
         // it needs the whole content area, not the split dock's default sliver.
         tab.IsInspectorMaximized = true;
-        return tab;
+
+        // The only way into this pane is the palette's access-review entries, which
+        // are advanced-view only.
+        return Advanced(tab);
     }
 
     /// <summary>
@@ -607,9 +646,11 @@ internal static class ClusterTabScenarios
         return tab;
     }
 
+    /// <summary>A server-side apply conflict. Advanced, because force-apply — the only
+    /// thing that resolves one from inside the app — is an advanced-view control.</summary>
     public static ClusterTabViewModel YamlEditorConflict()
     {
-        var tab = YamlEditor();
+        var tab = Advanced(YamlEditor());
         if (tab.SelectedInspectorTab is YamlEditorTabViewModel yaml)
         {
             yaml.ConflictDetails = "Field .spec.replicas is owned by field manager \"kubectl-scale\" (apply conflicts with your changes).";

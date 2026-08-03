@@ -182,7 +182,7 @@ public sealed partial class ClusterClient : IDisposable
                 catch (Exception ex)
                 {
                     connectionLost?.Invoke(new WatchConnectionException(
-                        $"Watch connection lost ({ex.GetType().Name}); retrying in {backoff.TotalSeconds:0}s.", ex));
+                        $"Watch connection lost ({Describe(ex)}); retrying in {backoff.TotalSeconds:0}s.", ex));
                     await Task.Delay(backoff, ct).ConfigureAwait(false);
                     backoff = backoff * 2 > MaxBackoff ? MaxBackoff : backoff * 2;
                 }
@@ -200,6 +200,14 @@ public sealed partial class ClusterClient : IDisposable
             writer.Complete(ex);
         }
     }
+
+    /// <summary>
+    /// What to put in the disconnected banner. The API server's own sentence
+    /// when we have one ("pods is forbidden: …"); a bare exception type name
+    /// otherwise, which is all a transport failure can honestly offer.
+    /// </summary>
+    private static string Describe(Exception ex) =>
+        ex is KubernetesApiException { ServerMessage: { } serverMessage } ? serverMessage : ex.GetType().Name;
 
     private static async Task<string?> ListAndEmitAsync<T>(
         Func<string?, CancellationToken, Task<(IList<T> Items, string? Continue, string? ResourceVersion)>> listPage,
@@ -350,7 +358,13 @@ public sealed partial class ClusterClient : IDisposable
         }
 
         using var response = await SendStreamingGetAsync(path + query, cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
+
+        // The two most common log failures on call — "previous terminated
+        // container \"app\" in pod \"x\" not found" and "container \"app\" is
+        // waiting to start: ContainerCreating" — are both plain 400s whose only
+        // distinguishing content is the Status body. EnsureSuccessStatusCode
+        // throws before reading it and leaves the user with "400 (Bad Request)".
+        await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         using var reader = new StreamReader(stream);
@@ -399,10 +413,122 @@ public sealed partial class ClusterClient : IDisposable
     {
         using var response = await SendRequestAsync(
             HttpMethod.Get, relativePath, content: null, HttpCompletionOption.ResponseContentRead, ct).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
         var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
         return await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Throws <see cref="KubernetesApiException"/> carrying the API server's own
+    /// <c>message</c> when <paramref name="response"/> failed.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="HttpResponseMessage.EnsureSuccessStatusCode"/> throws *before*
+    /// the body is read, so everything the server said about why is discarded:
+    /// the user gets "Response status code does not indicate success: 403
+    /// (Forbidden)" instead of <c>secrets "db-creds" is forbidden: User "x"
+    /// cannot get resource "secrets" in namespace "y"</c>, which names the
+    /// object, the subject and the fix. Every failure the API server produces
+    /// carries a <c>Status</c> body; it is parsed with <see cref="JsonDocument"/>
+    /// for the same reason watch frames are — AOT-safe, and the shape is one
+    /// field deep. Success is left untouched: the body may be a stream this
+    /// method must not consume.
+    /// </remarks>
+    internal static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken ct)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        string body;
+        try
+        {
+            body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // An unreadable error body must not replace the status code with a
+            // different, less useful exception.
+            body = "";
+        }
+
+        throw KubernetesApiException.From(response.StatusCode, response.ReasonPhrase, body);
+    }
+
     public void Dispose() => _client.Dispose();
+}
+
+/// <summary>
+/// A non-success response from the API server, carrying the <c>message</c> out
+/// of its <c>Status</c> body in <see cref="Exception.Message"/> and
+/// <see cref="ServerMessage"/>.
+/// </summary>
+/// <remarks>
+/// It derives from <see cref="HttpRequestException"/> deliberately: the informer
+/// loop's 410-Gone relist branch and discovery's "this group vanished mid-walk"
+/// guard both key off that type and its <see cref="HttpRequestException.StatusCode"/>,
+/// and so do the App layer's generic catches — this must be strictly more
+/// informative than what it replaced, never a new type they miss.
+/// </remarks>
+public sealed class KubernetesApiException : HttpRequestException
+{
+    private KubernetesApiException(
+        string message, System.Net.HttpStatusCode statusCode, string? serverMessage, string body)
+        : base(message, inner: null, statusCode)
+    {
+        ServerMessage = serverMessage;
+        Body = body;
+    }
+
+    /// <summary>The server's own explanation, or null when the body wasn't a Status.</summary>
+    public string? ServerMessage { get; }
+
+    /// <summary>The raw response body, for a details view. Empty when it couldn't be read.</summary>
+    public string Body { get; }
+
+    internal static KubernetesApiException From(System.Net.HttpStatusCode statusCode, string? reasonPhrase, string body)
+    {
+        var serverMessage = ReadStatusMessage(body);
+        var statusText = $"{(int)statusCode} {reasonPhrase ?? statusCode.ToString()}";
+
+        // Server message first: it is the sentence a user acts on, and the code
+        // is context, not the headline.
+        return new KubernetesApiException(
+            serverMessage is null ? statusText : $"{serverMessage} ({statusText})",
+            statusCode,
+            serverMessage,
+            body);
+    }
+
+    /// <summary>
+    /// Pulls <c>message</c> out of a Kubernetes <c>Status</c> body. A body that
+    /// isn't JSON (a proxy's HTML error page, say) is still worth showing, but
+    /// only its head — an unbounded blob in an exception message is unreadable.
+    /// </summary>
+    internal static string? ReadStatusMessage(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            return doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("message", out var message)
+                && message.ValueKind == JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(message.GetString())
+                    ? message.GetString()
+                    : null;
+        }
+        catch (JsonException)
+        {
+            var trimmed = body.Trim();
+            return trimmed.Length <= MaxNonJsonBodyChars ? trimmed : trimmed[..MaxNonJsonBodyChars] + "…";
+        }
+    }
+
+    private const int MaxNonJsonBodyChars = 500;
 }
