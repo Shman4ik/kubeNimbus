@@ -1,3 +1,4 @@
+using Avalonia.Threading;
 using KubeNimbus.App.ViewModels;
 using KubeNimbus.Core;
 
@@ -551,6 +552,70 @@ internal static class ClusterTabScenarios
 
         tab.SelectedHelmRelease = tab.HelmReleases.FirstOrDefault();
         tab.IsHelmEmpty = tab.HelmReleases.Count == 0;
+        return tab;
+    }
+
+    /// <summary>
+    /// One Helm release's detail panel. Until this existed <c>HelmReleaseView</c> was the
+    /// only inspector view the harness never rendered, so nothing checked its XAML loaded
+    /// — which is precisely what this harness is CI's smoke test for.
+    ///
+    /// The tab's constructor starts a load that fails fast against the offline client, and
+    /// its continuation lands on the dispatcher — the same <c>RunJobs()</c> the capture
+    /// pumps just before rendering, which is late enough to overwrite anything the fixture
+    /// set first. So the load is drained here, and the fixture text is written afterwards,
+    /// leaving the tab exactly as a successful <c>LoadAsync</c> would have.
+    /// </summary>
+    public static ClusterTabViewModel HelmReleaseDetail()
+    {
+        var tab = HelmReleases();
+        var client = FixtureData.CreateOfflineClient();
+        var release = FixtureData.HelmReleases[0];
+
+        var helmTab = new HelmReleaseTabViewModel(client, release);
+
+        for (var i = 0; i < 100 && helmTab.IsLoading; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(10);
+        }
+
+        helmTab.IsPreview = false;
+        helmTab.ValuesYaml = """
+                replicaCount: 3
+                image:
+                  repository: registry.internal/payments/checkout
+                  tag: "9.0.1"
+                resources:
+                  requests:
+                    cpu: 250m
+                    memory: 256Mi
+                ingress:
+                  enabled: true
+                  host: checkout.payments.internal
+                """;
+        helmTab.Manifest = """
+                # Source: checkout/templates/deployment.yaml
+                apiVersion: apps/v1
+                kind: Deployment
+                metadata:
+                  name: checkout-worker
+                  namespace: payments
+                spec:
+                  replicas: 3
+                """;
+        helmTab.Notes = "checkout has been installed.\n\nGet the application URL:\n  kubectl -n payments port-forward svc/checkout 8080:80";
+
+        foreach (var revision in FixtureData.HelmReleases)
+        {
+            helmTab.History.Add(new HelmReleaseRowViewModel(revision));
+        }
+
+        helmTab.SelectedRevision = helmTab.History.FirstOrDefault();
+        helmTab.ErrorMessage = null;
+
+        tab.InspectorTabs.Add(helmTab);
+        tab.SelectedInspectorTab = helmTab;
         return tab;
     }
 

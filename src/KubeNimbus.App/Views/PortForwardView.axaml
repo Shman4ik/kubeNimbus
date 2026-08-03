@@ -6,7 +6,7 @@
              x:Class="KubeNimbus.App.Views.PortForwardView"
              x:DataType="vm:PortForwardTabViewModel">
 
-  <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" Margin="16" MaxWidth="440" HorizontalAlignment="Left">
+  <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" Margin="12,10,12,12" MaxWidth="440" HorizontalAlignment="Left">
     <TextBlock Grid.Row="0" Classes="sectionHeader" Text="PORT FORWARD" Margin="0,0,0,12" />
 
     <!-- The pod's own declared ports, with their names. They were read off the spec

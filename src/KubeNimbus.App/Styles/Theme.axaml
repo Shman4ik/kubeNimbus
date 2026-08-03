@@ -194,6 +194,57 @@
         <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
     </Style>
 
+    <!-- Headerless TabControl: the tab strip is drawn by a `ListBox.segmented`
+         alongside the panel's own tools instead, so the two share one row.
+         A TabControl cannot host anything but tabs on its header row, and in a
+         ~300px bottom dock every stacked row of chrome comes straight out of the
+         content: pod detail spent four of them (owners, containers, tab strip, log
+         toolbar) before the first log line. The TabControl itself stays because
+         nothing else gives lazily-realized content plus an index that survives a
+         hidden tab (Usage rides the Advanced view) — only its strip goes. -->
+    <Style Selector="TabControl.headerless /template/ ItemsPresenter#PART_ItemsPresenter">
+        <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="TabControl.headerless">
+        <Setter Property="Padding" Value="0" />
+    </Style>
+
+    <!-- Segmented tab strip: the header half of a `TabControl.headerless`. Selection
+         is by index, so it stays aligned with the TabControl's own SelectedIndex —
+         including for a tab hidden by the Advanced view, which both count. -->
+    <Style Selector="ListBox.segmented">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="ItemsPanel">
+            <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" Spacing="2" />
+            </ItemsPanelTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="ListBox.segmented ListBoxItem">
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
+        <Setter Property="Padding" Value="10,4" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="ListBox.segmented ListBoxItem:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource HoverBackgroundBrush}" />
+    </Style>
+    <Style Selector="ListBox.segmented ListBoxItem:selected /template/ ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource AppSelectionBrush}" />
+    </Style>
+
+    <!-- Divider between the tab strip and the tools sharing its row. -->
+    <Style Selector="Rectangle.toolSeparator">
+        <Setter Property="Width" Value="1" />
+        <Setter Property="Height" Value="14" />
+        <Setter Property="Fill" Value="{StaticResource CardBorderBrush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Margin" Value="4,0" />
+    </Style>
+
     <!-- Row splitter between the resource list and the bottom dock. -->
     <Style Selector="GridSplitter.dock">
         <Setter Property="Background" Value="Transparent" />

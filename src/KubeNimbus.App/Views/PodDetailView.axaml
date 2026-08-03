@@ -9,13 +9,48 @@
              x:Class="KubeNimbus.App.Views.PodDetailView"
              x:DataType="vm:PodDetailTabViewModel">
 
-  <Grid RowDefinitions="Auto,Auto,*" Margin="12">
+  <!-- Two rows of chrome above the content, not four. This panel lives in a bottom
+       dock that is ~300px tall by default, and it used to spend an owner row, a
+       container row, a tab strip and a per-tab toolbar (plus, on Logs, a filter box
+       and a "Following …" caption) before the first line of content — roughly 200px
+       of a 300px dock. The owner chips now ride the container row, and every tab's
+       tools ride the tab strip's row (see `ListBox.segmented` /
+       `TabControl.headerless` in Theme.axaml). -->
+  <Grid RowDefinitions="Auto,Auto,*" Margin="10,8,10,10">
 
-    <!-- Owner chain -->
-    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="0,0,0,8"
-                IsVisible="{Binding Owners.Count, Converter={x:Static conv:CountToBoolConverter.Instance}}">
-      <TextBlock Text="Owned by" Opacity="0.6" FontSize="12" VerticalAlignment="Center" />
-      <ItemsControl ItemsSource="{Binding Owners}">
+    <!-- Identity row: which container you are looking at, what owns the pod, and the
+         two things you do to a container. The container picker is a single
+         horizontally-scrolling strip rather than a WrapPanel, so a pod with eight
+         containers costs the dock the same height as a pod with one. -->
+    <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,6">
+      <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+        <ListBox Classes="segmented" ItemsSource="{Binding Containers}" SelectedItem="{Binding SelectedContainer}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ContainerViewModel">
+              <StackPanel Orientation="Horizontal" Spacing="6" ToolTip.Tip="{Binding ResourcesTooltip}">
+                <Ellipse Classes="statusDot" Classes.ok="{Binding Ready}" Classes.warn="{Binding !Ready}" />
+                <TextBlock Text="{Binding Name}" FontSize="12.5" VerticalAlignment="Center" />
+                <!-- init / debug: without this an init container that will not start is
+                     indistinguishable from an app container that is merely not ready. -->
+                <TextBlock Text="{Binding RoleLabel}" FontSize="10" Opacity="0.5" VerticalAlignment="Center"
+                           IsVisible="{Binding HasRoleLabel}" />
+                <!-- The live state ("CrashLoopBackOff"), which is what sends you to Previous. -->
+                <TextBlock Text="{Binding State}" FontSize="10.5" Opacity="0.7" VerticalAlignment="Center"
+                           IsVisible="{Binding HasStateLabel}" />
+                <TextBlock Text="{Binding RestartCount, StringFormat='↻{0}'}" Opacity="0.6" FontSize="11"
+                           VerticalAlignment="Center" IsVisible="{Binding RestartCount, Converter={x:Static conv:CountToBoolConverter.Instance}}" />
+                <TextBlock Text="{Binding UsageSummary}" FontSize="11" Opacity="0.55" VerticalAlignment="Center"
+                           IsVisible="{Binding HasUsage}" />
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </ScrollViewer>
+
+      <!-- Owner chain. The "Owned by" label is gone: the chips say `ReplicaSet/x`
+           themselves, and the label cost a row's worth of width for no information. -->
+      <ItemsControl Grid.Column="1" ItemsSource="{Binding Owners}" Margin="8,0,0,0" VerticalAlignment="Center"
+                    IsVisible="{Binding Owners.Count, Converter={x:Static conv:CountToBoolConverter.Instance}}">
         <ItemsControl.ItemsPanel>
           <ItemsPanelTemplate>
             <StackPanel Orientation="Horizontal" Spacing="4" />
@@ -23,10 +58,14 @@
         </ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="core:OwnerRef">
-            <Button Classes="chip" Padding="8,3" Opacity="1"
+            <!-- A border, because an owner chip is the one clickable thing on this row
+                 that isn't obviously a control (UI rule 8). -->
+            <Button Classes="chip" Padding="8,3" Opacity="1" MaxWidth="220"
+                    BorderThickness="1" BorderBrush="{StaticResource CardBorderBrush}"
+                    ToolTip.Tip="Open the owning object"
                     Command="{Binding $parent[UserControl].((vm:PodDetailTabViewModel)DataContext).OpenOwnerCommand}"
                     CommandParameter="{Binding}">
-              <TextBlock FontSize="12">
+              <TextBlock FontSize="12" TextTrimming="CharacterEllipsis">
                 <Run Text="{Binding Kind}" FontWeight="SemiBold" />
                 <Run Text="/" />
                 <Run Text="{Binding Name}" />
@@ -35,39 +74,8 @@
           </DataTemplate>
         </ItemsControl.ItemTemplate>
       </ItemsControl>
-    </StackPanel>
 
-    <!-- Container picker: a horizontal strip, not a fixed-width side column — with only 2-4
-         containers on a typical pod this reads fine as a row of chips and leaves the tabs the
-         panel's full width, which logs/events/env vars all need far more than a container list. -->
-    <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,0,0,10">
-      <ListBox Grid.Column="0" ItemsSource="{Binding Containers}" SelectedItem="{Binding SelectedContainer}" Padding="0">
-        <ListBox.ItemsPanel>
-          <ItemsPanelTemplate>
-            <WrapPanel Orientation="Horizontal" />
-          </ItemsPanelTemplate>
-        </ListBox.ItemsPanel>
-        <ListBox.ItemTemplate>
-          <DataTemplate x:DataType="vm:ContainerViewModel">
-            <StackPanel Orientation="Horizontal" Spacing="6" ToolTip.Tip="{Binding ResourcesTooltip}">
-              <Ellipse Classes="statusDot" Classes.ok="{Binding Ready}" Classes.warn="{Binding !Ready}" />
-              <TextBlock Text="{Binding Name}" FontSize="12.5" VerticalAlignment="Center" />
-              <!-- init / debug: without this an init container that will not start is
-                   indistinguishable from an app container that is merely not ready. -->
-              <TextBlock Text="{Binding RoleLabel}" FontSize="10" Opacity="0.5" VerticalAlignment="Center"
-                         IsVisible="{Binding HasRoleLabel}" />
-              <!-- The live state ("CrashLoopBackOff"), which is what sends you to Previous. -->
-              <TextBlock Text="{Binding State}" FontSize="10.5" Opacity="0.7" VerticalAlignment="Center"
-                         IsVisible="{Binding HasStateLabel}" />
-              <TextBlock Text="{Binding RestartCount, StringFormat='↻{0}'}" Opacity="0.6" FontSize="11"
-                         VerticalAlignment="Center" IsVisible="{Binding RestartCount, Converter={x:Static conv:CountToBoolConverter.Instance}}" />
-              <TextBlock Text="{Binding UsageSummary}" FontSize="11" Opacity="0.55" VerticalAlignment="Center"
-                         IsVisible="{Binding HasUsage}" />
-            </StackPanel>
-          </DataTemplate>
-        </ListBox.ItemTemplate>
-      </ListBox>
-      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+      <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" Margin="6,0,0,0" VerticalAlignment="Center">
         <Button Classes="toolbar" Command="{Binding ExecCommand}" ToolTip.Tip="Exec into selected container" Padding="6">
           <PathIcon Data="{StaticResource ConsoleIconGeometry}" Width="14" Height="14" />
         </Button>
@@ -77,57 +85,78 @@
       </StackPanel>
     </Grid>
 
-    <TabControl Grid.Row="2" SelectedIndex="{Binding SelectedDetailTabIndex}">
+    <!-- Tab strip + the selected tab's tools, one row. Indices here are the
+         TabControl's below: Logs=0, Env=1, Events=2, Usage=3. -->
+    <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,6">
+      <ListBox Grid.Column="0" Classes="segmented" SelectedIndex="{Binding SelectedDetailTabIndex}">
+        <ListBoxItem Content="Logs" />
+        <ListBoxItem Content="Env" />
+        <ListBoxItem Content="Events" />
+        <ListBoxItem Content="Usage" IsVisible="{Binding IsAdvancedView}" />
+      </ListBox>
+
+      <!-- Logs: the filter takes the row's slack. It was a full-width row of its own,
+           which in a dock this short is a line of logs traded for a text box. -->
+      <TextBox Grid.Column="1" Classes="filterbox" Margin="10,0,0,0" MaxWidth="340" HorizontalAlignment="Left"
+               MinWidth="150" Text="{Binding LogSearchText}" PlaceholderText="Filter logs…"
+               IsVisible="{Binding SelectedDetailTabIndex, Converter={x:Static conv:IndexEqualsConverter.Instance}, ConverterParameter=0}">
+        <TextBox.InnerLeftContent>
+          <PathIcon Data="{StaticResource MagnifyIconGeometry}" Width="11" Height="11" Opacity="0.5" Margin="8,0,0,0" />
+        </TextBox.InnerLeftContent>
+      </TextBox>
+
+      <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+        <!-- NOT ONE of these ToggleButtons carries a Command, and that is the fix, not
+             an omission. ToggleButton.IsChecked is registered two-way and OnClick()
+             flips it BEFORE the Command runs, so a toggling command bound alongside a
+             two-way IsChecked cancels its own click out. Follow and Previous both had
+             exactly that and were guaranteed no-ops — Follow stopped the stream it was
+             meant to start, and Previous started a live follow of the current container.
+             The work happens in the view model's On<Property>Changed hooks. -->
+        <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center"
+                    IsVisible="{Binding SelectedDetailTabIndex, Converter={x:Static conv:IndexEqualsConverter.Instance}, ConverterParameter=0}">
+          <ToggleButton Classes="chip" Padding="6" IsChecked="{Binding IsFollowingLogs}"
+                        ToolTip.Tip="Follow logs (cancels the stream when toggled off)">
+            <PathIcon Data="{StaticResource PlayIconGeometry}" Width="12" Height="12" />
+          </ToggleButton>
+          <ToggleButton Classes="chip" Padding="7,3" FontSize="11"
+                        IsChecked="{Binding IsShowingPreviousLogs}"
+                        ToolTip.Tip="Show the previous (crashed/restarted) container instance's logs — the first thing to read on a CrashLoopBackOff"
+                        Content="Previous" />
+          <ToggleButton Classes="chip" Padding="6" IsChecked="{Binding ShowLogTimestamps}" ToolTip.Tip="Show timestamps">
+            <PathIcon Data="{StaticResource ClockOutlineIconGeometry}" Width="12" Height="12" />
+          </ToggleButton>
+
+          <!-- Advanced-view only: wrap, copy and download are all useful and none of
+               them is what you came here for. -->
+          <ToggleButton Classes="chip" Padding="7,3" FontSize="11" IsVisible="{Binding IsAdvancedView}"
+                        IsChecked="{Binding WrapLogLines}" ToolTip.Tip="Wrap long lines" Content="Wrap" />
+          <Button Classes="toolbar" Command="{Binding CopyLogsCommand}" IsVisible="{Binding IsAdvancedView}"
+                  ToolTip.Tip="Copy the visible lines, with timestamps" Padding="6">
+            <PathIcon Data="{StaticResource ContentCopyIconGeometry}" Width="13" Height="13" />
+          </Button>
+          <Button Classes="toolbar" Command="{Binding DownloadLogsCommand}" IsVisible="{Binding IsAdvancedView}"
+                  ToolTip.Tip="Save the visible lines to a file, with timestamps" Padding="6">
+            <PathIcon Data="{StaticResource DownloadIconGeometry}" Width="13" Height="13" />
+          </Button>
+        </StackPanel>
+
+        <!-- Events: its refresh button had a row to itself inside the tab. -->
+        <Button Classes="toolbar" Command="{Binding RefreshEventsCommand}" Padding="6" ToolTip.Tip="Reload events"
+                IsVisible="{Binding SelectedDetailTabIndex, Converter={x:Static conv:IndexEqualsConverter.Instance}, ConverterParameter=2}">
+          <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="13" Height="13" />
+        </Button>
+
+        <!-- Usage: the window caption ("last 30 min") was a section header row. -->
+        <TextBlock Text="{Binding UsageWindowCaption}" Classes="sectionHeader" VerticalAlignment="Center" Margin="4,0"
+                   IsVisible="{Binding SelectedDetailTabIndex, Converter={x:Static conv:IndexEqualsConverter.Instance}, ConverterParameter=3}" />
+      </StackPanel>
+    </Grid>
+
+    <TabControl Grid.Row="2" Classes="headerless" SelectedIndex="{Binding SelectedDetailTabIndex}">
       <TabItem Header="Logs">
-        <Grid RowDefinitions="Auto,Auto,Auto,*">
-          <!-- NOT ONE of these ToggleButtons carries a Command, and that is the fix, not
-               an omission. ToggleButton.IsChecked is registered two-way and OnClick()
-               flips it BEFORE the Command runs, so a toggling command bound alongside a
-               two-way IsChecked cancels its own click out. Follow and Previous both had
-               exactly that and were guaranteed no-ops — Follow stopped the stream it was
-               meant to start, and Previous started a live follow of the current container.
-               The work happens in the view model's On<Property>Changed hooks. -->
-          <WrapPanel Grid.Row="0" Margin="0,0,0,6">
-            <ToggleButton Classes="chip" Padding="6" Margin="0,0,4,4" IsChecked="{Binding IsFollowingLogs}"
-                          ToolTip.Tip="Follow logs (cancels the stream when toggled off)">
-              <PathIcon Data="{StaticResource PlayIconGeometry}" Width="12" Height="12" />
-            </ToggleButton>
-            <ToggleButton Classes="chip" Padding="7,3" Margin="0,0,4,4" FontSize="11"
-                          IsChecked="{Binding IsShowingPreviousLogs}"
-                          ToolTip.Tip="Show the previous (crashed/restarted) container instance's logs — the first thing to read on a CrashLoopBackOff"
-                          Content="Previous" />
-            <ToggleButton Classes="chip" Padding="6" Margin="0,0,4,4" IsChecked="{Binding ShowLogTimestamps}" ToolTip.Tip="Show timestamps">
-              <PathIcon Data="{StaticResource ClockOutlineIconGeometry}" Width="12" Height="12" />
-            </ToggleButton>
-
-            <!-- Advanced-view only: wrap, copy and download are all useful and none of
-                 them is what you came here for. -->
-            <ToggleButton Classes="chip" Padding="7,3" Margin="0,0,4,4" FontSize="11" IsVisible="{Binding IsAdvancedView}"
-                          IsChecked="{Binding WrapLogLines}" ToolTip.Tip="Wrap long lines" Content="Wrap" />
-            <Button Classes="toolbar" Margin="0,0,4,4" Command="{Binding CopyLogsCommand}" IsVisible="{Binding IsAdvancedView}"
-                    ToolTip.Tip="Copy the visible lines, with timestamps" Padding="6">
-              <PathIcon Data="{StaticResource ContentCopyIconGeometry}" Width="13" Height="13" />
-            </Button>
-            <Button Classes="toolbar" Margin="0,0,4,4" Command="{Binding DownloadLogsCommand}" IsVisible="{Binding IsAdvancedView}"
-                    ToolTip.Tip="Save the visible lines to a file, with timestamps" Padding="6">
-              <PathIcon Data="{StaticResource DownloadIconGeometry}" Width="13" Height="13" />
-            </Button>
-          </WrapPanel>
-          <TextBox Grid.Row="1" Classes="filterbox" Margin="0,0,0,6" Text="{Binding LogSearchText}" PlaceholderText="Filter logs…">
-            <TextBox.InnerLeftContent>
-              <PathIcon Data="{StaticResource MagnifyIconGeometry}" Width="11" Height="11" Opacity="0.5" Margin="8,0,0,0" />
-            </TextBox.InnerLeftContent>
-          </TextBox>
-          <!-- Advanced-view only: the container being read is already named on the
-               selected chip right above, and the stream's state has its own line below. -->
-          <StackPanel Grid.Row="2" IsVisible="{Binding IsAdvancedView}">
-            <TextBlock Text="{Binding SelectedContainer.Name, StringFormat='Following {0}'}" Opacity="0.6" FontSize="12" Margin="0,0,0,6"
-                       IsVisible="{Binding IsFollowingLogs}" />
-            <TextBlock Text="{Binding SelectedContainer.Name, StringFormat='Previous logs for {0}'}" Opacity="0.6" FontSize="12" Margin="0,0,0,6"
-                       IsVisible="{Binding IsShowingPreviousLogs}" />
-          </StackPanel>
-
-          <Border Grid.Row="3" Classes="card" Padding="8">
+        <Grid>
+          <Border Classes="card" Padding="8">
             <Grid>
               <!-- HorizontalScrollBarVisibility defaults to Disabled, which with wrapping
                    off hard-clipped every long line — a stack trace or a JSON log entry
@@ -162,44 +191,59 @@
       </TabItem>
 
       <TabItem Header="Env">
-        <Grid RowDefinitions="Auto,*,Auto">
-          <TextBlock Grid.Row="0" Classes="sectionHeader" Text="{Binding SelectedContainer.Name, StringFormat='ENV — {0}'}" Margin="2,0,0,8" />
-          <Border Grid.Row="1" Classes="card" Padding="10">
+        <!-- No "ENV — <container>" header: the container strip two rows up is the
+             selector for it and already names it. -->
+        <Grid RowDefinitions="*,Auto">
+          <Border Grid.Row="0" Classes="card" Padding="10">
             <ScrollViewer>
               <ItemsControl ItemsSource="{Binding EnvironmentVars}">
                 <ItemsControl.ItemTemplate>
+                  <!-- Name beside the value, not above it. Stacking them was right when the
+                       inspector was a narrow right-hand sidecar; in a full-width bottom dock
+                       it doubled the row count of the longest list in the panel for no gain.
+                       The name column is a fixed width rather than Auto: each row is its own
+                       Grid (Avalonia has no shared-size scope), so Auto would start every
+                       value at a different x and the list would read as a ragged edge. A
+                       name longer than the column wraps inside it. -->
                   <DataTemplate x:DataType="vm:EnvVarViewModel">
-                    <StackPanel Margin="0,5" Spacing="2">
-                      <TextBlock Text="{Binding Name}" FontFamily="Cascadia Mono,Consolas,monospace" FontWeight="SemiBold" FontSize="11.5" TextWrapping="Wrap" />
-                      <!-- Selectable: an env var is read in order to be pasted somewhere. -->
-                      <SelectableTextBlock Text="{Binding DirectValue}" FontSize="11.5" Opacity="0.85" TextWrapping="Wrap"
-                                           IsVisible="{Binding HasDirectValue}" />
-                      <!-- A resolved fieldRef shows the value above and where it came from here,
-                           since it reads like a literal but isn't one. -->
-                      <TextBlock Text="{Binding SourceDescription}" FontSize="10.5" Opacity="0.5" TextWrapping="Wrap"
-                                 IsVisible="{Binding IsDerivedValue}" />
-                      <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsReference}">
-                        <TextBlock Grid.Column="0" Text="{Binding SourceDescription}" FontSize="11" Opacity="0.6" TextWrapping="Wrap"
-                                   VerticalAlignment="Center" Margin="0,0,4,0" />
-                        <Button Grid.Column="1" Classes="chip" Padding="6,2" FontSize="10.5" Content="Reveal" VerticalAlignment="Center"
-                                IsVisible="{Binding CanReveal}" IsEnabled="{Binding !IsRevealing}"
-                                Command="{Binding $parent[UserControl].((vm:PodDetailTabViewModel)DataContext).RevealEnvVarCommand}"
-                                CommandParameter="{Binding}" />
-                      </Grid>
-                      <SelectableTextBlock Text="{Binding RevealedValue}" FontSize="11.5" TextWrapping="Wrap" Foreground="{StaticResource AppAccentBrush}"
-                                           IsVisible="{Binding RevealedValue, Converter={x:Static aconv:ObjectConverters.IsNotNull}}" />
-                      <!-- An `optional: true` ref whose key is absent is normal — the container
-                           just starts without the variable — so it reads dim, not as an error. -->
-                      <TextBlock Text="{Binding RevealError}" FontSize="11" Classes="statusText" TextWrapping="Wrap"
-                                 Classes.warn="{Binding !IsOptionalReference}" Classes.dim="{Binding IsOptionalReference}"
-                                 IsVisible="{Binding RevealError, Converter={x:Static aconv:ObjectConverters.IsNotNull}}" />
-                    </StackPanel>
+                    <Grid ColumnDefinitions="200,*" Margin="0,3">
+                      <TextBlock Grid.Column="0" Text="{Binding Name}" Margin="0,0,12,0"
+                                 FontFamily="Cascadia Mono,Consolas,monospace" FontWeight="SemiBold" FontSize="11.5"
+                                 TextWrapping="Wrap" VerticalAlignment="Top" />
+                      <StackPanel Grid.Column="1" Spacing="2">
+                        <!-- Selectable: an env var is read in order to be pasted somewhere. -->
+                        <SelectableTextBlock Text="{Binding DirectValue}" FontSize="11.5" Opacity="0.85" TextWrapping="Wrap"
+                                             IsVisible="{Binding HasDirectValue}" />
+                        <!-- A resolved fieldRef shows the value above and where it came from here,
+                             since it reads like a literal but isn't one. -->
+                        <TextBlock Text="{Binding SourceDescription}" FontSize="10.5" Opacity="0.5" TextWrapping="Wrap"
+                                   IsVisible="{Binding IsDerivedValue}" />
+                        <!-- Reveal sits next to the reference it reveals, not flung to the
+                             pane's right edge — at full dock width that was half a screen away
+                             from the row it belongs to. -->
+                        <Grid ColumnDefinitions="Auto,Auto" HorizontalAlignment="Left" IsVisible="{Binding IsReference}">
+                          <TextBlock Grid.Column="0" Text="{Binding SourceDescription}" FontSize="11" Opacity="0.6" TextWrapping="Wrap"
+                                     MaxWidth="420" VerticalAlignment="Center" Margin="0,0,8,0" />
+                          <Button Grid.Column="1" Classes="chip" Padding="6,2" FontSize="10.5" Content="Reveal" VerticalAlignment="Center"
+                                  IsVisible="{Binding CanReveal}" IsEnabled="{Binding !IsRevealing}"
+                                  Command="{Binding $parent[UserControl].((vm:PodDetailTabViewModel)DataContext).RevealEnvVarCommand}"
+                                  CommandParameter="{Binding}" />
+                        </Grid>
+                        <SelectableTextBlock Text="{Binding RevealedValue}" FontSize="11.5" TextWrapping="Wrap" Foreground="{StaticResource AppAccentBrush}"
+                                             IsVisible="{Binding RevealedValue, Converter={x:Static aconv:ObjectConverters.IsNotNull}}" />
+                        <!-- An `optional: true` ref whose key is absent is normal — the container
+                             just starts without the variable — so it reads dim, not as an error. -->
+                        <TextBlock Text="{Binding RevealError}" FontSize="11" Classes="statusText" TextWrapping="Wrap"
+                                   Classes.warn="{Binding !IsOptionalReference}" Classes.dim="{Binding IsOptionalReference}"
+                                   IsVisible="{Binding RevealError, Converter={x:Static aconv:ObjectConverters.IsNotNull}}" />
+                      </StackPanel>
+                    </Grid>
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
             </ScrollViewer>
           </Border>
-          <StackPanel Grid.Row="2" Spacing="2" Margin="0,8,0,0" IsVisible="{Binding EnvFromSources.Count, Converter={x:Static conv:CountToBoolConverter.Instance}}">
+          <StackPanel Grid.Row="1" Spacing="2" Margin="0,8,0,0" IsVisible="{Binding EnvFromSources.Count, Converter={x:Static conv:CountToBoolConverter.Instance}}">
             <TextBlock Classes="sectionHeader" Text="ENVFROM" Margin="2,0,0,4" />
             <ItemsControl ItemsSource="{Binding EnvFromSources}">
               <ItemsControl.ItemTemplate>
@@ -226,39 +270,41 @@
 
 
       <TabItem Header="Events">
-        <Grid RowDefinitions="Auto,*">
-          <Button Grid.Row="0" Classes="toolbar" Command="{Binding RefreshEventsCommand}" HorizontalAlignment="Right" Padding="6">
-            <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="13" Height="13" />
-          </Button>
+        <!-- Refresh moved onto the tab strip's row; it had a whole row to itself here. -->
+        <Grid>
           <!-- A card feed, not a grid: Reason/Message/Count/Type never fit five DataGrid columns in
                an inspector-width panel, and a scannable timeline reads better for events anyway. -->
-          <ScrollViewer Grid.Row="1">
+          <ScrollViewer>
             <ItemsControl ItemsSource="{Binding Events}">
               <ItemsControl.ItemTemplate>
+                <!-- Two lines per event, not three: the count and timestamp ride the
+                     reason's line, which is where the eye already is and where there was
+                     always room. At the dock's default height that is the difference
+                     between two events visible and four. -->
                 <DataTemplate x:DataType="vm:EventRowViewModel">
-                  <Border Classes="card" Padding="10" Margin="0,0,0,6">
-                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
-                      <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="8">
-                        <Border Classes="statusPill"
-                                Classes.ok="{Binding Health, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=ok}"
-                                Classes.warn="{Binding Health, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=warn}">
-                          <TextBlock Text="{Binding Type}" FontSize="11" />
-                        </Border>
-                        <TextBlock Text="{Binding Reason}" FontWeight="SemiBold" FontSize="12.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                      </StackPanel>
-                      <Button Grid.Row="0" Grid.Column="1" Classes="toolbar" Padding="4" ToolTip.Tip="Open the object this event is about"
+                  <Border Classes="card" Padding="8,6" Margin="0,0,0,4">
+                    <Grid ColumnDefinitions="Auto,*,Auto,Auto" RowDefinitions="Auto,Auto">
+                      <Border Grid.Row="0" Grid.Column="0" Classes="statusPill" Margin="0,0,8,0"
+                              Classes.ok="{Binding Health, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=ok}"
+                              Classes.warn="{Binding Health, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=warn}">
+                        <TextBlock Text="{Binding Type}" FontSize="11" />
+                      </Border>
+                      <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Reason}" FontWeight="SemiBold" FontSize="12.5"
+                                 VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Grid.Row="0" Grid.Column="2" FontSize="10.5" Opacity="0.5" VerticalAlignment="Center" Margin="8,0,0,0">
+                        <Run Text="{Binding Count, StringFormat='×{0}'}" />
+                        <Run Text=" · " />
+                        <Run Text="{Binding LastSeen}" />
+                      </TextBlock>
+                      <Button Grid.Row="0" Grid.Column="3" Classes="toolbar" Padding="4" Margin="4,0,0,0"
+                              ToolTip.Tip="Open the object this event is about"
                               IsVisible="{Binding HasInvolvedObject}"
                               Command="{Binding $parent[UserControl].((vm:PodDetailTabViewModel)DataContext).OpenEventInvolvedObjectCommand}"
                               CommandParameter="{Binding}">
                         <PathIcon Data="{StaticResource ChevronRightIconGeometry}" Width="12" Height="12" />
                       </Button>
-                      <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Text="{Binding Message}" FontSize="11.5" Opacity="0.75"
-                                 TextWrapping="Wrap" Margin="0,5,0,0" />
-                      <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" FontSize="10.5" Opacity="0.5" Margin="0,5,0,0">
-                        <Run Text="{Binding Count, StringFormat='×{0}'}" />
-                        <Run Text=" · " />
-                        <Run Text="{Binding LastSeen}" />
-                      </TextBlock>
+                      <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4" Text="{Binding Message}" FontSize="11.5" Opacity="0.75"
+                                 TextWrapping="Wrap" Margin="0,3,0,0" />
                     </Grid>
                   </Border>
                 </DataTemplate>
@@ -272,15 +318,11 @@
            (Logs=0, Env=1, Events=2) stay stable for the screenshot harness and
            any future deep link. -->
       <TabItem Header="Usage" IsVisible="{Binding IsAdvancedView}">
-        <Grid RowDefinitions="Auto,*">
-          <TextBlock Grid.Row="0" Classes="sectionHeader" Margin="2,0,0,8">
-            <Run Text="USAGE" />
-            <Run Text=" · " />
-            <Run Text="{Binding UsageWindowCaption}" />
-          </TextBlock>
-
+        <!-- The "USAGE · last 30 min" header is on the tab strip's row: the tab is
+             already labelled Usage, so only the window was ever news. -->
+        <Grid>
           <!-- No metrics API at all: say so, instead of a chart area that looks stuck loading. -->
-          <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8" MaxWidth="380"
+          <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8" MaxWidth="380"
                       IsVisible="{Binding IsMetricsUnavailable}">
             <PathIcon Data="{StaticResource AlertCircleIconGeometry}" Width="24" Height="24" Opacity="0.3" HorizontalAlignment="Center" />
             <TextBlock Text="No usage data on this cluster" FontWeight="SemiBold" FontSize="13" HorizontalAlignment="Center" Opacity="0.75" />
@@ -289,7 +331,7 @@
           </StackPanel>
 
           <!-- Metrics exist but the first poll hasn't landed yet. -->
-          <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8" MaxWidth="380"
+          <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8" MaxWidth="380"
                       IsVisible="{Binding !HasUsageSamples}">
             <TextBlock Text="Collecting samples…" FontWeight="SemiBold" FontSize="13" HorizontalAlignment="Center" Opacity="0.7"
                        IsVisible="{Binding !IsMetricsUnavailable}" />
@@ -297,7 +339,7 @@
                        IsVisible="{Binding !IsMetricsUnavailable}" />
           </StackPanel>
 
-          <ScrollViewer Grid.Row="1" IsVisible="{Binding HasUsageSamples}">
+          <ScrollViewer IsVisible="{Binding HasUsageSamples}">
             <StackPanel Spacing="8">
               <!-- Whole-pod totals, full width: the two numbers an on-call read starts from. -->
               <Border Classes="card" Padding="12" ToolTip.Tip="{Binding PodCpuTooltip}">

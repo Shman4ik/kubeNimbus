@@ -7,17 +7,27 @@
              x:Class="KubeNimbus.App.Views.HelmReleaseView"
              x:DataType="vm:HelmReleaseTabViewModel">
 
-  <Grid RowDefinitions="Auto,*" Margin="12">
+  <!-- One row of chrome, not two: the title row said `ReleaseName` and the dock tab
+       above it already says `Helm/<ReleaseName>`, so only the chart and revision were
+       ever news — and they fit beside the tab strip. -->
+  <Grid RowDefinitions="Auto,*" Margin="10,8,10,10">
 
-    <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,8">
-      <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
-        <TextBlock Text="{Binding ReleaseName}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-        <TextBlock Text="{Binding SelectedRevision.Chart}" Opacity="0.6" FontSize="12" VerticalAlignment="Center" />
+    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,0,0,6">
+      <ListBox Grid.Column="0" Name="HelmTabStrip" Classes="segmented" SelectedIndex="0"
+               IsVisible="{Binding ErrorMessage, Converter={x:Static aconv:ObjectConverters.IsNull}}">
+        <ListBoxItem Content="Values" />
+        <ListBoxItem Content="Manifest" />
+        <ListBoxItem Content="Notes" />
+        <ListBoxItem Content="History" />
+      </ListBox>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="10,0,0,0" VerticalAlignment="Center">
+        <TextBlock Text="{Binding SelectedRevision.Chart}" Opacity="0.6" FontSize="12" VerticalAlignment="Center"
+                   TextTrimming="CharacterEllipsis" />
         <TextBlock Text="{Binding SelectedRevision.Revision, StringFormat='revision {0}'}" Opacity="0.6" FontSize="12" VerticalAlignment="Center" />
       </StackPanel>
-      <TextBlock Grid.Column="1" Text="Loading…" Opacity="0.55" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"
+      <TextBlock Grid.Column="2" Text="Loading…" Opacity="0.55" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"
                  IsVisible="{Binding IsLoading}" />
-      <Button Grid.Column="2" Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="Reload from cluster" Padding="6">
+      <Button Grid.Column="3" Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="Reload from cluster" Padding="6">
         <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="14" Height="14" />
       </Button>
     </Grid>
@@ -27,7 +37,8 @@
       <TextBlock Text="{Binding ErrorMessage}" Classes="statusText warn" TextWrapping="Wrap" />
     </Border>
 
-    <TabControl Grid.Row="1" IsVisible="{Binding ErrorMessage, Converter={x:Static aconv:ObjectConverters.IsNull}}">
+    <TabControl Grid.Row="1" Classes="headerless" SelectedIndex="{Binding #HelmTabStrip.SelectedIndex}"
+                IsVisible="{Binding ErrorMessage, Converter={x:Static aconv:ObjectConverters.IsNull}}">
 
       <TabItem Header="Values">
         <Grid>

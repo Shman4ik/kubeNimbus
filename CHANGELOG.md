@@ -39,6 +39,19 @@ it as the GitHub Release body, so headings must match tags exactly
   right edge, and show an active-tab highlight.
 - The command palette no longer lists every kubeconfig context; it offers the
   switcher instead, so a large kubeconfig can't bury every other command.
+- **Inspector panels give their content the room back.** The bottom dock spent
+  up to four stacked rows of chrome before anything you opened it to read: pod
+  detail had an owner row, a container row, a tab strip and a per-tab toolbar,
+  plus a full-width filter box on Logs. Tabs are now a compact strip that shares
+  its row with the selected tab's tools, the owner chips ride the container row,
+  and the Helm and access-review panels dropped title rows that only repeated
+  their own dock tab. Roughly 100px of a 300px dock handed back, in every panel.
+- Pod detail's environment list puts each variable's name beside its value
+  instead of above it, and its events feed puts the count and timestamp on the
+  reason's line — twice as many rows visible in the same space. "Reveal" now
+  sits next to the reference it reveals rather than at the pane's right edge.
+- Long inspector tab titles (a generated pod name is ~50 characters) trim with
+  a tooltip instead of pushing the dock's tab strip onto a second row.
 
 ### Fixed
 
