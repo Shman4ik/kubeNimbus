@@ -52,8 +52,17 @@ public static class Hotkeys
         new("Open the selected resource", "Enter"),
         new("Quick-peek the selected resource", "Space"),
         new("Default action (pod → logs, resource → YAML, …)", "Double-click"),
+        new("Logs, exec, port-forward, YAML, delete", "Right-click a row"),
+        // Literal "Ctrl", NOT PrimaryLabel — the one place in this file where the
+        // platform rule is deliberately not applied. ^C and ^D are terminal control
+        // characters, and a terminal's interrupt is Control on macOS too; Cmd+C there
+        // is Copy, which is exactly what ExecView leaves it as.
+        new("Interrupt a command in the exec pane", "Ctrl+C"),
+        new("End input / exit the shell", "Ctrl+D"),
+        new("Complete a command in the exec pane", "Tab"),
         new("Reorder cluster tabs", "Drag tab"),
         new("Filter the sidebar's resource kinds", "Type in the filter box"),
+        new("Show or hide the advanced controls", "The sliders icon, top of the sidebar"),
         new("Maximize the inspector over the list", "Inspector's expand icon"),
     ];
 }

@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text.Json;
 
 namespace KubeNimbus.Core;
@@ -16,6 +17,78 @@ public sealed class DynamicResource
     public JsonElement Raw { get; }
 
     public DynamicResource(JsonElement raw) => Raw = raw;
+
+    /// <summary>
+    /// Materializes one object out of a <c>*List</c> response, restoring the
+    /// <c>kind</c>/<c>apiVersion</c> the API server leaves off list items.
+    /// </summary>
+    /// <remarks>
+    /// A list's <c>items[]</c> entries carry no type identity — it is implied by
+    /// the enclosing <c>PodList</c> — while watch frames carry it on every
+    /// object. Left as-is that made a row's origin observable: the pod list's
+    /// Status column fell back to <c>Ready: True</c> because the App's status
+    /// summary gates its Pod branch on <c>Kind == "Pod"</c>, and
+    /// <see cref="ToYaml"/> emitted a document that <c>kubectl apply -f</c>
+    /// refuses. Injecting into <see cref="Raw"/> (rather than papering over it
+    /// in the properties) fixes YAML and every other consumer at once, and the
+    /// two fields lead so the YAML reads the way a manifest is written. Only
+    /// what is missing is filled in: an item that already declares its type is
+    /// cloned untouched, which is both cheaper and keeps the server's own
+    /// property order.
+    /// </remarks>
+    public static DynamicResource FromListItem(JsonElement item, ResourceDescriptor descriptor)
+    {
+        if (item.ValueKind != JsonValueKind.Object
+            || (HasNonEmptyString(item, "kind") && HasNonEmptyString(item, "apiVersion")))
+        {
+            return new DynamicResource(item.Clone());
+        }
+
+        var kind = HasNonEmptyString(item, "kind") ? item.GetProperty("kind").GetString()! : descriptor.Kind;
+        var apiVersion = HasNonEmptyString(item, "apiVersion")
+            ? item.GetProperty("apiVersion").GetString()!
+            : descriptor.ApiVersion;
+
+        // Utf8JsonWriter + JsonElement.WriteTo copies the subtrees verbatim with
+        // no reflection and no intermediate model — this runs per item on pages
+        // of up to 500.
+        var buffer = new ArrayBufferWriter<byte>(RewriteBufferSize);
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("apiVersion", apiVersion);
+            writer.WriteString("kind", kind);
+            foreach (var property in item.EnumerateObject())
+            {
+                if (property.NameEquals("apiVersion") || property.NameEquals("kind"))
+                {
+                    continue;
+                }
+
+                property.WriteTo(writer);
+            }
+
+            writer.WriteEndObject();
+        }
+
+        // Clone() detaches the element from the document backing this buffer —
+        // the same "safe past the JsonDocument that produced it" guarantee the
+        // watch path relies on.
+        using var document = JsonDocument.Parse(buffer.WrittenMemory);
+        return new DynamicResource(document.RootElement.Clone());
+    }
+
+    /// <summary>
+    /// Starting capacity for the rewrite buffer. A typical Kubernetes object is
+    /// a few KB, so this is sized to cover most items in one allocation without
+    /// measuring the source (which would mean materializing its raw text first).
+    /// </summary>
+    private const int RewriteBufferSize = 4096;
+
+    private static bool HasNonEmptyString(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var value)
+        && value.ValueKind == JsonValueKind.String
+        && !string.IsNullOrEmpty(value.GetString());
 
     public string Kind => Raw.TryGetProperty("kind", out var v) ? v.GetString() ?? "" : "";
     public string ApiVersion => Raw.TryGetProperty("apiVersion", out var v) ? v.GetString() ?? "" : "";

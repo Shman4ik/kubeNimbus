@@ -5,19 +5,32 @@ using KubeNimbus.Core;
 
 namespace KubeNimbus.App.ViewModels;
 
-/// <summary>One sidebar section header (Workloads/Network/Config/Storage/CRDs) with its resource kinds.</summary>
-public sealed partial class SidebarSectionViewModel(string title) : ObservableObject
+/// <summary>One sidebar section header (Workloads/Network/Config/Storage/Cluster/CRDs) with its resource kinds.</summary>
+public sealed partial class SidebarSectionViewModel : ObservableObject
 {
-    public string Title { get; } = title;
+    public SidebarSectionViewModel(string title)
+    {
+        Title = title;
+        IconKey = SidebarGrouping.IconKeyFor(title);
+        _isExpanded = SidebarGrouping.IsExpandedByDefault(title);
 
-    public string IconKey { get; } = SidebarGrouping.IconKeyFor(title);
+        // KindCount is computed, so it raises nothing by itself — and the Recent
+        // section is rebuilt in place on every kind selection. Without this the
+        // badge latches whatever the count was when the section was constructed.
+        Kinds.CollectionChanged += (_, _) => OnPropertyChanged(nameof(KindCount));
+    }
+
+    public string Title { get; }
+
+    public string IconKey { get; }
 
     public ObservableCollection<SidebarKindViewModel> Kinds { get; } = [];
 
-    /// <summary>CRDs tends to dwarf the built-in sections (dozens of kinds) — start it
-    /// collapsed so a fresh connection doesn't open on a wall of unfamiliar kinds.</summary>
+    /// <summary>Config, Cluster and CRDs each dwarf the sections you actually browse —
+    /// they start collapsed so a fresh connection doesn't open on a wall of kinds.
+    /// See <see cref="SidebarGrouping.IsExpandedByDefault"/> for the counts behind that.</summary>
     [ObservableProperty]
-    private bool _isExpanded = title != "CRDs";
+    private bool _isExpanded;
 
     /// <summary>True while a sidebar filter is active and this section has a match —
     /// force-expands the section without touching the user's own collapse choice.</summary>
@@ -29,6 +42,17 @@ public sealed partial class SidebarSectionViewModel(string title) : ObservableOb
     private bool _hasVisibleKinds = true;
 
     public int KindCount => Kinds.Count;
+
+    /// <summary>
+    /// Whether the header carries its kind-count badge. Advanced-view only, and
+    /// pushed down from <see cref="ClusterTabViewModel"/> rather than read from a
+    /// global: the badge answers "how much is hiding in here?", which is a question
+    /// you only ask once you're deliberately spelunking the catalog. Defaults to
+    /// false so a section built outside a tab (the screenshot harness) matches the
+    /// app's own default rather than the advanced layout.
+    /// </summary>
+    [ObservableProperty]
+    private bool _showKindCount;
 
     public bool ShowKinds => IsExpanded || IsForceExpanded;
 
@@ -47,7 +71,7 @@ public sealed partial class SidebarKindViewModel(ResourceDescriptor descriptor, 
 
     public string IconKey { get; } = iconKey;
 
-    public string DisplayName { get; } = Pluralize(descriptor.Kind);
+    public string DisplayName { get; } = Pluralize(descriptor);
 
     /// <summary>
     /// True for the synthetic Helm entry, which switches the content area to the
@@ -96,6 +120,22 @@ public sealed partial class SidebarKindViewModel(ResourceDescriptor descriptor, 
         || Descriptor.Group.Contains(query, StringComparison.OrdinalIgnoreCase)
         || Descriptor.ShortNames.Any(s => s.Contains(query, StringComparison.OrdinalIgnoreCase));
 
-    private static string Pluralize(string kind) =>
-        kind.EndsWith('s') || kind.EndsWith('x') ? kind + "es" : kind + "s";
+    /// <summary>
+    /// The sidebar label. The <b>server</b> decides whether a Kind is already plural,
+    /// not a suffix rule: discovery hands back the plural for every kind, so a Kind
+    /// whose plural is itself lowercased ("Endpoints" → <c>endpoints</c>) needs no
+    /// suffix. The naive rule rendered that one "Endpointses", and would do the same
+    /// to any CRD Kind that is already plural — which nothing in a hardcoded list of
+    /// exceptions could ever cover, since the kinds come from the cluster.
+    /// </summary>
+    private static string Pluralize(ResourceDescriptor descriptor)
+    {
+        var kind = descriptor.Kind;
+        if (string.Equals(descriptor.Plural, kind, StringComparison.OrdinalIgnoreCase))
+        {
+            return kind;
+        }
+
+        return kind.EndsWith('s') || kind.EndsWith('x') ? kind + "es" : kind + "s";
+    }
 }

@@ -27,7 +27,22 @@ public sealed record WorkspaceSettings(
     List<string>? RecentContexts = null,
     /// <summary>Context name → <see cref="KubeNimbus.Core.ClusterEnvironment"/> name, where
     /// the user has corrected (or supplied) the guess. Always wins over the heuristic.</summary>
-    Dictionary<string, string>? EnvironmentOverrides = null);
+    Dictionary<string, string>? EnvironmentOverrides = null,
+    /// <summary>
+    /// The single global "advanced view" switch: off (the default) hides the
+    /// controls that only a fraction of sessions ever need — usage columns, the
+    /// fleet toggle, the log toolbar's wrap/copy/download, exec's Send, YAML
+    /// force-apply, the sidebar's count badges and the Helm/RBAC palette entries.
+    /// One boolean rather than a preferences page of them, because the complaint
+    /// it answers ("too much stuff for every Kubernetes type") is about the whole
+    /// surface, not about any one control.
+    ///
+    /// Nullable with a null default like everything else added after
+    /// <c>(Theme, Tabs)</c>: a workspace.json written before this shipped simply
+    /// has no such property, and <see cref="WorkspaceStore.Normalize"/> settles it
+    /// on <c>false</c> rather than letting the JSON layer decide.
+    /// </summary>
+    bool? IsAdvancedView = null);
 
 [JsonSerializable(typeof(WorkspaceSettings))]
 internal sealed partial class WorkspaceJsonContext : JsonSerializerContext;
@@ -42,7 +57,7 @@ public static class WorkspaceStore
     /// <summary>Recents past this are noise — the switcher's search covers the long tail.</summary>
     public const int MaxRecentContexts = 8;
 
-    private static WorkspaceSettings Empty => new(null, [], [], [], []);
+    private static WorkspaceSettings Empty => new(null, [], [], [], [], false);
 
     /// <summary>
     /// Overrides where the workspace is read from and written to. Set by the
@@ -77,7 +92,7 @@ public static class WorkspaceStore
     }
 
     /// <summary>
-    /// Fills in the collections a file written by an older build has no property
+    /// Fills in the properties a file written by an older build has no entry
     /// for. <see cref="WorkspaceSettings.Tabs"/> is non-nullable in the record but
     /// still deserializes to null from such a file, so it is normalized too.
     /// </summary>
@@ -87,6 +102,10 @@ public static class WorkspaceStore
         PinnedContexts = settings.PinnedContexts ?? [],
         RecentContexts = settings.RecentContexts ?? [],
         EnvironmentOverrides = settings.EnvironmentOverrides ?? [],
+
+        // Off is the default and the whole point: an existing workspace must not
+        // silently opt into the busy layout just because it predates the switch.
+        IsAdvancedView = settings.IsAdvancedView ?? false,
     };
 
     public static void Save(WorkspaceSettings settings)

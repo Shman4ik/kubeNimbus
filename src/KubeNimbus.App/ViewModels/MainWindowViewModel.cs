@@ -85,6 +85,50 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// <summary>Context name → user-assigned environment, overriding the name guess. Persisted.</summary>
     private readonly Dictionary<string, ClusterEnvironment> _environmentOverrides = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// The one global "advanced view" switch — persisted, default off. Off hides the
+    /// controls only a fraction of sessions need (usage columns, the fleet toggle, the
+    /// log toolbar's wrap/copy/download, exec's Send, YAML force-apply, the sidebar's
+    /// count badges, the Helm/RBAC palette entries); on restores the full surface. One
+    /// boolean rather than a page of them, because the complaint it answers is about
+    /// the whole surface, not any one control.
+    ///
+    /// Every cluster tab carries a mirror of this (see
+    /// <see cref="ClusterTabViewModel.IsAdvancedView"/>) so the list and sidebar can
+    /// bind it with compiled bindings against their own DataContext; this property is
+    /// the shell's copy, for the top bar and the palette.
+    ///
+    /// Bind two-way, and never alongside a toggling <c>Command</c> on the same
+    /// control — see the note on the tab's copy for why that combination silently
+    /// does nothing.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isAdvancedView;
+
+    partial void OnIsAdvancedViewChanged(bool value)
+    {
+        PersistAdvancedView(value);
+
+        // Broadcast, like RefreshFleetMembership: tabs already open have to follow the
+        // switch live. Assigning an unchanged bool raises nothing, so the tab that
+        // originated the toggle (via AdvancedViewChanged) doesn't echo back here.
+        foreach (var tab in Tabs)
+        {
+            tab.IsAdvancedView = value;
+        }
+    }
+
+    /// <summary>
+    /// Sets the advanced view to an explicit value. Deliberately not an inverting
+    /// "toggle" command: a <c>ToggleButton</c> flips its own <c>IsChecked</c> — and
+    /// therefore the two-way-bound property — in <c>OnClick()</c> *before* its
+    /// <c>Command</c> runs, so an inverting command bound next to <c>IsChecked</c>
+    /// lands back where it started. A control that knows the value it wants can't
+    /// hit that.
+    /// </summary>
+    [RelayCommand]
+    private void SetAdvancedView(bool value) => IsAdvancedView = value;
+
     [ObservableProperty]
     private bool _isShortcutsOpen;
 
@@ -110,6 +154,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
             foreach (var tab in e.NewItems?.OfType<ClusterTabViewModel>() ?? [])
             {
                 tab.Environment = EnvironmentFor(tab.Context);
+
+                // Same seam, same reason: the advanced view is global, so a tab from
+                // anywhere — including one the screenshot harness built by hand —
+                // has to arrive carrying it. Value first, then the write-back, so
+                // stamping never round-trips through the shell.
+                tab.IsAdvancedView = IsAdvancedView;
+                tab.AdvancedViewChanged = value => IsAdvancedView = value;
             }
         };
 
@@ -131,6 +182,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         _recent.Clear();
         _recent.AddRange(settings.RecentContexts ?? []);
+
+        // Straight to the backing field: this runs during construction, before any
+        // binding or tab exists, and going through the property would only persist
+        // the value that was just read back over itself. MVVMTK0034 is the analyzer
+        // asking "did you mean the property?" — here, no.
+#pragma warning disable MVVMTK0034
+        _isAdvancedView = settings.IsAdvancedView ?? false;
+#pragma warning restore MVVMTK0034
 
         _environmentOverrides.Clear();
         foreach (var (name, value) in settings.EnvironmentOverrides ?? [])
@@ -470,6 +529,18 @@ public sealed partial class MainWindowViewModel : ObservableObject
         WorkspaceStore.Save(settings with { Theme = theme });
     }
 
+    /// <summary>
+    /// Read-modify-write, same shape as <see cref="PersistTheme"/> — the workspace
+    /// file also holds tabs, pins, recents and environment overrides, and rewriting
+    /// it from this view model's fields alone would drop whatever another write
+    /// landed in the meantime.
+    /// </summary>
+    private static void PersistAdvancedView(bool value)
+    {
+        var settings = WorkspaceStore.Load();
+        WorkspaceStore.Save(settings with { IsAdvancedView = value });
+    }
+
     private IEnumerable<PaletteItem> BuildPaletteItems()
     {
         // The switcher, not the palette, is where a large context list is navigated:
@@ -488,15 +559,67 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 "SwapHorizontalIconGeometry", () => SelectedTab = tab);
         }
 
-        if (SelectedTab is { IsFleetViewAvailable: true } fleetable)
+        // The switch's own entry, and the reason hiding controls by default is safe:
+        // everything the advanced view hides is one Ctrl/Cmd+K away, and the entry
+        // states what it does rather than naming a mode nobody has seen yet. The
+        // target value is captured now, not inverted when the action runs, so it can
+        // never race whatever else has touched the flag since the palette opened.
+        var advancedTarget = !IsAdvancedView;
+        yield return new PaletteItem(
+            advancedTarget ? "Advanced view: show every control" : "Advanced view: hide advanced controls",
+            advancedTarget
+                ? "Usage columns, fleet view, log tools, force-apply, Helm & RBAC"
+                : "Back to the minimal layout",
+            "TuneIconGeometry",
+            () => IsAdvancedView = advancedTarget);
+
+        // Gated on the toggle's own visibility rather than on IsFleetViewAvailable, so
+        // the palette offers exactly what the command bar does — including the way out
+        // of an aggregation left running when the advanced view was switched off.
+        if (SelectedTab is { IsFleetToggleVisible: true } fleetable)
         {
+            var fleetTarget = !fleetable.IsFleetView;
             yield return new PaletteItem(
-                fleetable.IsFleetView ? "Fleet view: back to this cluster only" : "Fleet view: aggregate across all clusters",
+                fleetTarget ? "Fleet view: aggregate across all clusters" : "Fleet view: back to this cluster only",
                 $"{Tabs.Count(t => t.Client is not null)} connected clusters", "LayersIconGeometry",
-                () => fleetable.IsFleetView = !fleetable.IsFleetView);
+                () => fleetable.IsFleetView = fleetTarget);
         }
 
-        if (SelectedTab is { IsConnected: true } connected)
+        // Access review is a deliberate errand, not something you stumble into — it
+        // rides the advanced view along with the rest of the specialist surface.
+        // The selected row's actions, mirroring the row context menu. The palette had
+        // no logs, exec or port-forward entry at all — the three things the app exists
+        // to do — so the only route to any of them was opening a pod's detail pane and
+        // finding the buttons on its container strip. Offered only when they apply,
+        // rather than listed-and-disabled: a palette is a search, and an entry that
+        // matches your query and then refuses to run is worse than no match.
+        if (SelectedTab is { SelectedRow: { } row } rowTab)
+        {
+            var where = $"{row.Namespace}/{row.Name}";
+
+            if (rowTab.IsPodRowSelected)
+            {
+                yield return new PaletteItem("Logs", where, "PlayIconGeometry",
+                    () => rowTab.OpenLogsCommand.Execute(null));
+
+                yield return new PaletteItem("Previous logs", $"{where} · the crashed instance", "PlayIconGeometry",
+                    () => rowTab.OpenPreviousLogsCommand.Execute(null));
+
+                yield return new PaletteItem("Exec into container", where, "ConsoleIconGeometry",
+                    () => rowTab.ExecIntoSelectedCommand.Execute(null));
+
+                yield return new PaletteItem("Port-forward", where, "SwapHorizontalIconGeometry",
+                    () => rowTab.PortForwardSelectedCommand.Execute(null));
+            }
+
+            yield return new PaletteItem("Edit YAML", where, "CodeBracesIconGeometry",
+                () => rowTab.EditSelectedYamlCommand.Execute(null));
+
+            yield return new PaletteItem("Delete…", $"{where} · asks to confirm", "DeleteIconGeometry",
+                () => rowTab.DeleteSelectedCommand.Execute(null));
+        }
+
+        if (IsAdvancedView && SelectedTab is { IsConnected: true } connected)
         {
             yield return new PaletteItem(
                 "Access review — my permissions",
@@ -521,6 +644,16 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             foreach (var section in current.SidebarSections)
             {
+                // Helm reaches the palette through the sidebar catalog like every
+                // other kind, so this is where its entry is gated. The sidebar
+                // section itself stays — it only exists on clusters that actually
+                // store releases, which is already the "is this worth showing?"
+                // test UI rule 1 asks for.
+                if (!IsAdvancedView && section.Title == SidebarGrouping.HelmSection)
+                {
+                    continue;
+                }
+
                 foreach (var kind in section.Kinds)
                 {
                     // Same-named kinds from different API groups carry their group

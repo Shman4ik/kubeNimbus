@@ -1,14 +1,29 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:KubeNimbus.App.ViewModels"
+             xmlns:conv="using:KubeNimbus.App.Converters"
              x:Class="KubeNimbus.App.Views.ExecView"
              x:DataType="vm:ExecTabViewModel">
 
   <Grid RowDefinitions="Auto,*,Auto" Margin="12">
-    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
-      <Ellipse Classes="statusDot" Classes.ok="{Binding IsConnected}" Classes.idle="{Binding !IsConnected}" VerticalAlignment="Center" />
-      <TextBlock Text="{Binding StatusMessage}" Opacity="0.75" FontSize="12" VerticalAlignment="Center" />
-    </StackPanel>
+    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,8">
+      <Ellipse Grid.Column="0" Classes="statusDot" Classes.ok="{Binding IsConnected}" Classes.idle="{Binding !IsConnected}"
+               VerticalAlignment="Center" Margin="0,0,8,0" />
+      <TextBlock Grid.Column="1" Text="{Binding StatusMessage}" Opacity="0.75" FontSize="12" VerticalAlignment="Center"
+                 TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding StatusMessage}" />
+
+      <!-- Shell box + reconnect. /bin/sh was hardcoded, so a bash-only or distroless
+           image gave a connected-looking blank terminal with no way to try anything
+           else. Empty means "try bash, then sh, then ash". -->
+      <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+        <TextBox Text="{Binding ShellCommand}" Width="130" FontSize="11.5" PlaceholderText="auto (bash/sh/ash)"
+                 FontFamily="Cascadia Mono,Consolas,monospace"
+                 ToolTip.Tip="Shell to exec. Leave empty to try /bin/bash, /bin/sh, then /bin/ash." />
+        <Button Classes="toolbar" Padding="6" Command="{Binding ReconnectCommand}" ToolTip.Tip="Reconnect with this shell">
+          <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="14" Height="14" />
+        </Button>
+      </StackPanel>
+    </Grid>
 
     <Border Grid.Row="1" Classes="card" Padding="4">
       <TextBox Name="OutputBox" Text="{Binding OutputText}" IsReadOnly="True" AcceptsReturn="True"
@@ -16,10 +31,27 @@
                FontFamily="Cascadia Mono,Consolas,monospace" FontSize="12" />
     </Border>
 
-    <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="0,8,0,0">
-      <TextBox Grid.Column="0" Name="InputBox" Text="{Binding InputText}"
-               PlaceholderText="Type a command and press Enter" FontFamily="Cascadia Mono,Consolas,monospace" />
-      <Button Grid.Column="1" Classes="accent" Content="Send" Command="{Binding SendCommand}" Margin="8,0,0,0" />
+    <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto" Margin="0,8,0,0">
+      <!-- Control keys. Without them the pane was one-way: `tail -f` or `top` could be
+           started and never stopped, wedging the session until the tab was closed.
+           Ctrl+C / Ctrl+D / Tab on the input box do the same thing — these are the
+           discoverable copy of a gesture nobody would guess a text box supports. -->
+      <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4" Margin="0,0,8,0" VerticalAlignment="Center">
+        <Button Classes="chip" Padding="7,3" FontSize="11" Content="^C" IsEnabled="{Binding IsConnected}"
+                ToolTip.Tip="Interrupt the running command (Ctrl+C)"
+                Command="{Binding SendControlCommand}" CommandParameter="C" />
+        <Button Classes="chip" Padding="7,3" FontSize="11" Content="^D" IsEnabled="{Binding IsConnected}"
+                ToolTip.Tip="End of input — exits the shell (Ctrl+D)"
+                Command="{Binding SendControlCommand}" CommandParameter="D" />
+      </StackPanel>
+
+      <TextBox Grid.Column="1" Name="InputBox" Text="{Binding InputText}"
+               PlaceholderText="Type a command and press Enter · Ctrl+C interrupts · Tab completes"
+               FontFamily="Cascadia Mono,Consolas,monospace" />
+
+      <!-- Advanced-view only: Enter already sends, and the button restates it. -->
+      <Button Grid.Column="2" Classes="accent" Content="Send" Command="{Binding SendCommand}" Margin="8,0,0,0"
+              IsVisible="{Binding IsAdvancedView}" />
     </Grid>
   </Grid>
 </UserControl>

@@ -59,7 +59,14 @@ internal static class FixtureData
             new DateTimeOffset(2026, 6, 28, 6, 15, 41, TimeSpan.Zero), "Superseded by revision 5"),
     ];
 
-    /// <summary>A realistic full catalog: built-ins across all four core sections plus ~70 CRD kinds.</summary>
+    /// <summary>
+    /// A realistic full catalog: built-ins across all five discovery-driven sections
+    /// plus ~70 CRD kinds. The cluster-administration half is as complete as a bare
+    /// cluster's really is — that is the whole point of the fixture. A handful of
+    /// tidy built-ins hid the fact that <c>SidebarGrouping</c> was dumping APIServices,
+    /// CSRs, flowcontrol and admission webhooks into Config, which is what a live
+    /// k3s (Workloads 8, Network 6, Config 33) made obvious the moment it was counted.
+    /// </summary>
     public static IReadOnlyList<ResourceDescriptor> BuildCatalog()
     {
         var result = new List<ResourceDescriptor>
@@ -72,18 +79,44 @@ internal static class FixtureData
             Descriptor("apps", "v1", "DaemonSet", "daemonsets", true),
             Descriptor("batch", "v1", "Job", "jobs", true),
             Descriptor("batch", "v1", "CronJob", "cronjobs", true),
+            Descriptor("autoscaling", "v2", "HorizontalPodAutoscaler", "horizontalpodautoscalers", true),
             Descriptor("", "v1", "Endpoints", "endpoints", true),
+            Descriptor("discovery.k8s.io", "v1", "EndpointSlice", "endpointslices", true),
             Descriptor("networking.k8s.io", "v1", "Ingress", "ingresses", true),
+            Descriptor("networking.k8s.io", "v1", "IngressClass", "ingressclasses", false),
             Descriptor("networking.k8s.io", "v1", "NetworkPolicy", "networkpolicies", true),
             Descriptor("", "v1", "ConfigMap", "configmaps", true),
             Descriptor("", "v1", "Secret", "secrets", true),
             Descriptor("", "v1", "Event", "events", true),
             Descriptor("", "v1", "ServiceAccount", "serviceaccounts", true),
-            Descriptor("rbac.authorization.k8s.io", "v1", "Role", "roles", true),
-            Descriptor("rbac.authorization.k8s.io", "v1", "RoleBinding", "rolebindings", true),
+            Descriptor("", "v1", "LimitRange", "limitranges", true),
+            Descriptor("", "v1", "ResourceQuota", "resourcequotas", true),
+            Descriptor("policy", "v1", "PodDisruptionBudget", "poddisruptionbudgets", true),
             Descriptor("", "v1", "PersistentVolumeClaim", "persistentvolumeclaims", true),
             Descriptor("", "v1", "PersistentVolume", "persistentvolumes", false),
             Descriptor("storage.k8s.io", "v1", "StorageClass", "storageclasses", false),
+            Descriptor("storage.k8s.io", "v1", "CSIDriver", "csidrivers", false),
+            Descriptor("storage.k8s.io", "v1", "VolumeAttachment", "volumeattachments", false),
+
+            // Cluster administration — the section that exists so Config doesn't
+            // have to hold this.
+            Descriptor("", "v1", "Node", "nodes", false),
+            Descriptor("", "v1", "Namespace", "namespaces", false),
+            Descriptor("rbac.authorization.k8s.io", "v1", "Role", "roles", true),
+            Descriptor("rbac.authorization.k8s.io", "v1", "RoleBinding", "rolebindings", true),
+            Descriptor("rbac.authorization.k8s.io", "v1", "ClusterRole", "clusterroles", false),
+            Descriptor("rbac.authorization.k8s.io", "v1", "ClusterRoleBinding", "clusterrolebindings", false),
+            Descriptor("apiregistration.k8s.io", "v1", "APIService", "apiservices", false),
+            Descriptor("apiextensions.k8s.io", "v1", "CustomResourceDefinition", "customresourcedefinitions", false),
+            Descriptor("admissionregistration.k8s.io", "v1", "ValidatingWebhookConfiguration", "validatingwebhookconfigurations", false),
+            Descriptor("admissionregistration.k8s.io", "v1", "MutatingWebhookConfiguration", "mutatingwebhookconfigurations", false),
+            Descriptor("admissionregistration.k8s.io", "v1", "ValidatingAdmissionPolicy", "validatingadmissionpolicies", false),
+            Descriptor("certificates.k8s.io", "v1", "CertificateSigningRequest", "certificatesigningrequests", false),
+            Descriptor("coordination.k8s.io", "v1", "Lease", "leases", true),
+            Descriptor("flowcontrol.apiserver.k8s.io", "v1", "FlowSchema", "flowschemas", false),
+            Descriptor("flowcontrol.apiserver.k8s.io", "v1", "PriorityLevelConfiguration", "prioritylevelconfigurations", false),
+            Descriptor("scheduling.k8s.io", "v1", "PriorityClass", "priorityclasses", false),
+            Descriptor("node.k8s.io", "v1", "RuntimeClass", "runtimeclasses", false),
         };
 
         foreach (var crd in LoadCrdCatalog())

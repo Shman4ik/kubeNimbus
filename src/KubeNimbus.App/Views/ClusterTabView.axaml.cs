@@ -1,8 +1,11 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
 using KubeNimbus.App.ViewModels;
 
 namespace KubeNimbus.App.Views;
@@ -23,6 +26,12 @@ public partial class ClusterTabView : UserControl
         // before a bubble-routed instance handler on the same element would ever
         // see it, so this has to run in the Tunnel phase to win.
         ResourceGrid.AddHandler(KeyDownEvent, OnGridKeyDown, RoutingStrategies.Tunnel);
+
+        // A DataGrid selects on left-click only, so without this the row context menu
+        // would act on whatever was selected *before* the right-click — i.e. usually
+        // not the row the menu opened over, which is the worst possible behaviour for
+        // a menu whose last item is Delete.
+        ResourceGrid.AddHandler(PointerPressedEvent, OnGridPointerPressed, RoutingStrategies.Tunnel);
 
         DataContextChanged += OnDataContextChanged;
     }
@@ -48,6 +57,56 @@ public partial class ClusterTabView : UserControl
         ApplyDockState();
         ApplyMetricsColumns();
         ApplyFleetColumn();
+        ApplySummaryColumns();
+    }
+
+    /// <summary>
+    /// One timer for the whole list, driving every row's Age and the "(43m ago)" on
+    /// Restarts. Both are functions of wall-clock rather than of the object, so no
+    /// watch event ever makes them change — a five-minute-old pod would read "5m"
+    /// until something else about it happened. A timer per row would mean thousands of
+    /// them on a busy cluster; a slower tick than this would let the seconds column of
+    /// a young pod visibly lag.
+    /// </summary>
+    private static readonly TimeSpan AgeTickInterval = TimeSpan.FromSeconds(5);
+
+    private DispatcherTimer? _ageTimer;
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        _ageTimer ??= CreateAgeTimer();
+        _ageTimer.Start();
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        // Stopped off-screen: a background tab's rows are not being looked at, and a
+        // DispatcherTimer keeps running (and keeps this view alive) until it is told not to.
+        _ageTimer?.Stop();
+        base.OnDetachedFromVisualTree(e);
+    }
+
+    private DispatcherTimer CreateAgeTimer()
+    {
+        var timer = new DispatcherTimer { Interval = AgeTickInterval };
+        timer.Tick += (_, _) =>
+        {
+            if (Vm is not { } vm)
+            {
+                return;
+            }
+
+            // Each RefreshTimes assignment is a no-op when the rendered string hasn't
+            // changed (SetProperty compares first), so a tick over a list of day-old
+            // pods raises no change notifications at all.
+            foreach (var row in vm.Rows)
+            {
+                row.RefreshTimes();
+            }
+        };
+
+        return timer;
     }
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -56,7 +115,9 @@ public partial class ClusterTabView : UserControl
         {
             ApplyDockState();
         }
-        else if (e.PropertyName == nameof(ClusterTabViewModel.AreMetricsVisible))
+        else if (e.PropertyName is nameof(ClusterTabViewModel.AreMetricsVisible)
+                 or nameof(ClusterTabViewModel.AreUsageColumnsVisible)
+                 or nameof(ClusterTabViewModel.IsAdvancedView))
         {
             ApplyMetricsColumns();
         }
@@ -64,25 +125,55 @@ public partial class ClusterTabView : UserControl
         {
             ApplyFleetColumn();
         }
+        else if (e.PropertyName == nameof(ClusterTabViewModel.SelectedKind))
+        {
+            ApplySummaryColumns();
+        }
     }
 
     /// <summary>
     /// Shows the CPU/Memory columns only for kinds metrics.k8s.io reports on, on
-    /// clusters that actually run metrics-server. Code-behind because a
-    /// DataGridColumn isn't part of the visual tree: it never inherits the
+    /// clusters that actually run metrics-server, and only in the advanced view —
+    /// which is what <c>AreUsageColumnsVisible</c> folds together. Code-behind because
+    /// a DataGridColumn isn't part of the visual tree: it never inherits the
     /// DataContext, so <c>IsVisible="{Binding …}"</c> on a column can't work.
     /// Matched on header text rather than index so reordering the columns in
     /// XAML doesn't silently hide the wrong one.
     /// </summary>
     private void ApplyMetricsColumns()
     {
-        var visible = Vm?.AreMetricsVisible == true;
+        var visible = Vm?.AreUsageColumnsVisible == true;
         foreach (var column in ResourceGrid.Columns)
         {
             if (column.Header is "CPU" or "Memory")
             {
                 column.IsVisible = visible;
             }
+        }
+    }
+
+    /// <summary>
+    /// Shows Ready / Status / Restarts / Details according to what the selected kind
+    /// actually reports — <see cref="ResourceStatusSummary"/> owns those answers, since
+    /// they are a property of the kind and not of the view. Without this every
+    /// ConfigMap list carried an empty 150px Status column and a grey dot, and no pod
+    /// list carried READY or RESTARTS at all, which are two of the five columns anyone
+    /// running <c>kubectl get pods</c> is actually looking at.
+    /// Same code-behind reason as the usage columns above.
+    /// </summary>
+    private void ApplySummaryColumns()
+    {
+        var descriptor = Vm?.SelectedKind?.Descriptor;
+        foreach (var column in ResourceGrid.Columns)
+        {
+            column.IsVisible = column.Header switch
+            {
+                "Ready" => ResourceStatusSummary.ShowsReady(descriptor),
+                "Restarts" => ResourceStatusSummary.ShowsRestarts(descriptor),
+                "Details" => ResourceStatusSummary.ShowsDetails(descriptor),
+                "Status" or "" => ResourceStatusSummary.ShowsStatus(descriptor),
+                _ => column.IsVisible,
+            };
         }
     }
 
@@ -98,6 +189,31 @@ public partial class ClusterTabView : UserControl
             if (column.Header is "Cluster")
             {
                 column.IsVisible = visible;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Makes a right-click select the row under the cursor before the context flyout
+    /// opens. Not handled (<c>e.Handled</c> stays false) so the flyout still opens
+    /// normally — this only fixes which row it is about.
+    /// </summary>
+    private void OnGridPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(ResourceGrid).Properties.IsRightButtonPressed)
+        {
+            return;
+        }
+
+        // Resolved from the event source rather than from a handler on the row
+        // template: a DataGridRow's own padding lies outside its cell content, so a
+        // handler in the template misses the gaps between cells entirely.
+        for (var element = e.Source as Visual; element is not null; element = element.GetVisualParent())
+        {
+            if (element is DataGridRow { DataContext: ResourceRowViewModel row })
+            {
+                ResourceGrid.SelectedItem = row;
+                return;
             }
         }
     }

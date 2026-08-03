@@ -34,6 +34,10 @@ BuildAvaloniaApp().SetupWithoutStarting();
 var scenarios = new (string Name, Func<Control> Build)[]
 {
     ("cluster-tab-workloads-list", () => HostInMainWindow(ClusterTabScenarios.WorkloadsList())),
+    // The before/after pair for the advanced view. Same tab, same seeded usage data —
+    // the only difference is the switch, which is the claim being made: it hides and
+    // shows, it does not build a second layout.
+    ("cluster-tab-advanced-view", () => HostInMainWindow(ClusterTabScenarios.AdvancedView())),
     ("cluster-tab-workloads-list-metrics", () => HostInMainWindow(ClusterTabScenarios.WorkloadsListWithMetrics())),
     ("cluster-tab-events-list", () => HostInMainWindow(ClusterTabScenarios.EventsList())),
     ("cluster-tab-fleet-list", () => HostInMainWindow(ClusterTabScenarios.FleetList(), height: 1000)),
@@ -123,9 +127,18 @@ static Control HostInMainWindow(ClusterTabViewModel tab, int height = 800)
     var vm = new MainWindowViewModel();
     window.DataContext = vm;
     SeedContexts(vm);
+
+    // Read the scenario's choice before adding the tab, because adding it is what
+    // makes the shell stamp its own (persisted, default-off) value onto the tab —
+    // the same seam production uses so a tab opened from anywhere arrives carrying
+    // the global switch. The shell owns the flag, so the scenario has to set it here
+    // rather than on the tab, or every advanced scenario silently renders plain.
+    var advanced = tab.IsAdvancedView;
+
     vm.Tabs.Clear();
     vm.Tabs.Add(tab);
     vm.SelectedTab = tab;
+    vm.IsAdvancedView = advanced;
     return window;
 }
 

@@ -1,6 +1,7 @@
 using System.Collections.Specialized;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Threading;
 using KubeNimbus.App.ViewModels;
 
 namespace KubeNimbus.App.Views;
@@ -60,11 +61,31 @@ public partial class PodDetailView : UserControl
         }
     }
 
+    /// <summary>
+    /// How close to the bottom still counts as "at the bottom". A couple of lines of
+    /// slack, so a stray wheel notch doesn't silently detach the follow.
+    /// </summary>
+    private const double ScrollLockSlack = 24;
+
     private void OnLogLinesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        if (_vm?.IsFollowingLogs == true)
+        if (_vm?.IsFollowingLogs != true || !IsScrolledToBottom())
         {
-            LogScroll.ScrollToEnd();
+            return;
         }
+
+        // Posted rather than called inline: this runs *inside* the collection-changed
+        // notification, before the new item has been measured, so scrolling here
+        // reached the previous extent and left the pane one line behind forever.
+        Dispatcher.UIThread.Post(LogScroll.ScrollToEnd, DispatcherPriority.Background);
     }
+
+    /// <summary>
+    /// The scroll lock. Auto-scrolling unconditionally means the moment you scroll up
+    /// to read something on a chatty pod, the next line yanks you back to the bottom —
+    /// so following only pins the view while the view is already at the bottom, which
+    /// is what every terminal pager and log viewer does.
+    /// </summary>
+    private bool IsScrolledToBottom() =>
+        LogScroll.Offset.Y >= LogScroll.Extent.Height - LogScroll.Viewport.Height - ScrollLockSlack;
 }

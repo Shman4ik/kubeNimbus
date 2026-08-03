@@ -117,6 +117,14 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     private void RecomputeListEmpty() => IsListEmpty = Rows.Count == 0 && !IsListLoading;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsPodRowSelected))]
+    [NotifyPropertyChangedFor(nameof(HasSelectedRow))]
+    [NotifyCanExecuteChangedFor(nameof(OpenLogsCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenPreviousLogsCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ExecIntoSelectedCommand))]
+    [NotifyCanExecuteChangedFor(nameof(PortForwardSelectedCommand))]
+    [NotifyCanExecuteChangedFor(nameof(EditSelectedYamlCommand))]
+    [NotifyCanExecuteChangedFor(nameof(DeleteSelectedCommand))]
     private ResourceRowViewModel? _selectedRow;
 
     /// <summary>
@@ -127,7 +135,61 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// outside the visual tree, so it can't bind to the DataContext.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AreUsageColumnsVisible))]
     private bool _areMetricsVisible;
+
+    /// <summary>
+    /// The one global "advanced view" switch, mirrored onto every tab by
+    /// <see cref="MainWindowViewModel"/> (which owns it and persists it). Off — the
+    /// default — hides the controls only a fraction of sessions need; on restores
+    /// today's surface exactly. It is a *display* switch and nothing more: flipping
+    /// it must never restart a watch, refetch anything, or lose list/inspector
+    /// state, which is why every consumer below is a derived property rather than
+    /// something that re-runs <see cref="RestartWatch"/>.
+    ///
+    /// Bind this two-way and nothing else. A <c>ToggleButton</c> given BOTH an
+    /// <c>IsChecked</c> binding and a toggling <c>Command</c> flips the property in
+    /// <c>OnClick()</c> before the command runs, so an inverting command lands back
+    /// on the original value — a guaranteed no-op, and a bug this repo has shipped
+    /// before.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AreUsageColumnsVisible))]
+    [NotifyPropertyChangedFor(nameof(IsFleetToggleVisible))]
+    private bool _isAdvancedView;
+
+    /// <summary>
+    /// Write-back for the sidebar's advanced-view chip, set by
+    /// <see cref="MainWindowViewModel"/> as each tab enters the strip. The switch is
+    /// global but is toggled from a per-tab control, so the tab has to tell the shell
+    /// — which then persists it and mirrors it onto the other tabs. Same shape as
+    /// <see cref="FleetMembersProvider"/>: a tab still knows nothing about its
+    /// siblings.
+    /// </summary>
+    public Action<bool>? AdvancedViewChanged { get; set; }
+
+    partial void OnIsAdvancedViewChanged(bool value)
+    {
+        ApplySidebarChrome();
+
+        // Tabs already open have to follow the switch live — the alternative is a
+        // force-apply button that stays on screen until the tab is reopened.
+        foreach (var tab in InspectorTabs)
+        {
+            tab.IsAdvancedView = value;
+        }
+
+        AdvancedViewChanged?.Invoke(value);
+    }
+
+    /// <summary>
+    /// The list's CPU/Memory columns (number + sparkline). Two conditions, not one:
+    /// the cluster has to actually serve metrics.k8s.io for the metered kind
+    /// (<see cref="AreMetricsVisible"/>), *and* the user has to have asked for the
+    /// busier layout. Read by <see cref="Views.ClusterTabView"/>'s code-behind —
+    /// a DataGridColumn is outside the visual tree and can't bind.
+    /// </summary>
+    public bool AreUsageColumnsVisible => AreMetricsVisible && IsAdvancedView;
 
     /// <summary>
     /// True while the Helm entry is selected: the content area swaps the generic
@@ -162,8 +224,15 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [ObservableProperty]
     private bool _isFleetView;
 
-    /// <summary>Hidden for Helm (releases aren't an API kind, so there's nothing to fan out).</summary>
-    public bool IsFleetToggleVisible => IsFleetViewAvailable && !IsHelmView;
+    /// <summary>
+    /// Hidden for Helm (releases aren't an API kind, so there's nothing to fan out)
+    /// and outside the advanced view — but never while aggregation is actually on.
+    /// Turning the advanced view off must not strand a tab in fleet mode with no
+    /// control to leave it: the exit stays on screen as long as there is something
+    /// to exit from, which also keeps the toggle a pure display switch (dropping
+    /// out of fleet mode would restart the watch).
+    /// </summary>
+    public bool IsFleetToggleVisible => IsFleetViewAvailable && !IsHelmView && (IsAdvancedView || IsFleetView);
 
     partial void OnIsHelmViewChanged(bool value) => OnPropertyChanged(nameof(IsFleetToggleVisible));
 
@@ -178,6 +247,9 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     partial void OnIsFleetViewChanged(bool value)
     {
+        // The toggle's own visibility depends on this (see IsFleetToggleVisible) —
+        // it has to survive the advanced view being switched off mid-aggregation.
+        OnPropertyChanged(nameof(IsFleetToggleVisible));
         FleetSummary = null;
         RestartWatch();
     }
@@ -313,7 +385,22 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         SidebarGrouping.LabelAmbiguousKinds(SidebarSections);
         await AddHelmSectionIfPresentAsync();
+        ApplySidebarChrome();
         ApplySidebarFilter();
+    }
+
+    /// <summary>
+    /// Re-derives the per-section display state that comes from the tab rather than
+    /// from discovery — today just the kind-count badge. Called wherever the set of
+    /// sections changes (sidebar rebuild, Recent rebuild) and when the advanced view
+    /// is toggled, because a freshly constructed section defaults to the plain layout.
+    /// </summary>
+    private void ApplySidebarChrome()
+    {
+        foreach (var section in SidebarSections)
+        {
+            section.ShowKindCount = IsAdvancedView;
+        }
     }
 
     /// <summary>
@@ -414,7 +501,10 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             });
         }
 
-        // A rebuild replaces the instances the filter had already classified.
+        // A rebuild replaces the instances the filter had already classified — and,
+        // the first time round, inserts a section that has never seen the tab's
+        // display state.
+        ApplySidebarChrome();
         ApplySidebarFilter();
     }
 
@@ -968,6 +1058,166 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [RelayCommand]
     private async Task PeekSelectedAsync() => await OpenRowAsync(SelectedRow, preview: true);
 
+    // --------------------------------------------------------- row actions
+    //
+    // Right-clicking a resource did nothing — the app had exactly one context menu
+    // anywhere (the cluster tab's environment override), and none of logs / exec /
+    // port-forward was reachable from the list at all: you had to open a pod's detail
+    // tab first and find the buttons on its container strip. These commands back both
+    // the row's ContextFlyout and the matching palette entries, so the same six
+    // actions are reachable by mouse and by keyboard.
+
+    /// <summary>True when the selected row is a pod — the only kind logs/exec/forward apply to.</summary>
+    public bool IsPodRowSelected => SelectedRow is { } row && DescriptorFor(row) is { Kind: "Pod", Group: "" };
+
+    /// <summary>True whenever a row is selected at all (YAML and delete work for any kind).</summary>
+    public bool HasSelectedRow => SelectedRow is not null;
+
+    /// <summary>
+    /// Opens pod detail on the Logs tab. Same tab-reuse path as a double-click, so
+    /// this never opens a second tab for a pod that already has one.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(IsPodRowSelected))]
+    private async Task OpenLogsAsync() => await OpenPodDetailAsync(previous: false);
+
+    /// <summary>
+    /// Opens pod detail on the Logs tab, showing the crashed instance. This is the
+    /// single most important gesture on a CrashLoopBackOff and it had no entry point
+    /// outside a toggle that didn't work.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(IsPodRowSelected))]
+    private async Task OpenPreviousLogsAsync() => await OpenPodDetailAsync(previous: true);
+
+    private async Task OpenPodDetailAsync(bool previous)
+    {
+        await OpenRowAsync(SelectedRow, preview: false);
+        if (SelectedInspectorTab is not PodDetailTabViewModel detail)
+        {
+            return;
+        }
+
+        detail.SelectedDetailTabIndex = 0;
+        detail.IsShowingPreviousLogs = previous;
+    }
+
+    [RelayCommand(CanExecute = nameof(IsPodRowSelected))]
+    private void ExecIntoSelected()
+    {
+        if (SelectedRow is not { } row || ClientFor(row) is not { } client)
+        {
+            return;
+        }
+
+        AddInspectorTab(new ExecTabViewModel(client, row.Namespace, row.Name, FirstContainerOf(row)));
+    }
+
+    [RelayCommand(CanExecute = nameof(IsPodRowSelected))]
+    private void PortForwardSelected()
+    {
+        if (SelectedRow is not { } row || ClientFor(row) is not { } client)
+        {
+            return;
+        }
+
+        AddInspectorTab(new PortForwardTabViewModel(client, row.Namespace, row.Name, DeclaredPortsOf(row)));
+    }
+
+    /// <summary>
+    /// Always the YAML editor, even for a pod — whose default action is the detail
+    /// pane, leaving no way to reach its manifest from the list.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(HasSelectedRow))]
+    private void EditSelectedYaml()
+    {
+        if (SelectedRow is not { } row
+            || ClientFor(row) is not { } client
+            || DescriptorFor(row) is not { } descriptor)
+        {
+            return;
+        }
+
+        var key = YamlEditorTabViewModel.KeyFor(row.ClusterName, descriptor, row.Namespace, row.Name);
+        if (InspectorTabs.FirstOrDefault(t => t.Key == key) is { } existing)
+        {
+            existing.IsPreview = false;
+            SelectedInspectorTab = existing;
+            return;
+        }
+
+        AddInspectorTab(new YamlEditorTabViewModel(
+            client, descriptor, row.Namespace, row.Name, row.Resource.ToYaml(), row.ClusterName));
+    }
+
+    /// <summary>
+    /// Delete goes through the YAML editor's existing two-step confirm rather than
+    /// deleting from the menu: a context-menu item that destroys an object on one
+    /// click, with the object named nowhere, is not a gesture this app should have.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(HasSelectedRow))]
+    private void DeleteSelected()
+    {
+        EditSelectedYaml();
+        if (SelectedInspectorTab is YamlEditorTabViewModel yaml)
+        {
+            yaml.IsConfirmingDelete = true;
+        }
+    }
+
+    /// <summary>
+    /// The pod's first container, which is what <c>kubectl exec</c> defaults to. The
+    /// pane's own picker is where a different one gets chosen.
+    /// </summary>
+    private static string FirstContainerOf(ResourceRowViewModel row)
+    {
+        if (row.Resource.Raw.TryGetProperty("spec", out var spec)
+            && spec.TryGetProperty("containers", out var containers)
+            && containers.ValueKind == System.Text.Json.JsonValueKind.Array)
+        {
+            foreach (var container in containers.EnumerateArray())
+            {
+                if (container.TryGetProperty("name", out var name) && name.GetString() is { Length: > 0 } text)
+                {
+                    return text;
+                }
+            }
+        }
+
+        return "";
+    }
+
+    /// <summary>Every TCP port every container declares, so the forward pane can offer them.</summary>
+    private static IReadOnlyList<ContainerPort> DeclaredPortsOf(ResourceRowViewModel row)
+    {
+        var ports = new List<ContainerPort>();
+        if (!row.Resource.Raw.TryGetProperty("spec", out var spec)
+            || !spec.TryGetProperty("containers", out var containers)
+            || containers.ValueKind != System.Text.Json.JsonValueKind.Array)
+        {
+            return ports;
+        }
+
+        foreach (var container in containers.EnumerateArray())
+        {
+            if (!container.TryGetProperty("ports", out var portsEl)
+                || portsEl.ValueKind != System.Text.Json.JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            foreach (var port in portsEl.EnumerateArray())
+            {
+                if (port.TryGetProperty("containerPort", out var cp) && cp.TryGetInt32(out var number)
+                    && (!port.TryGetProperty("protocol", out var proto) || proto.GetString() is null or "TCP"))
+                {
+                    var name = port.TryGetProperty("name", out var pn) ? pn.GetString() : null;
+                    ports.Add(new ContainerPort(number, name));
+                }
+            }
+        }
+
+        return ports;
+    }
+
     private async Task OpenRowAsync(ResourceRowViewModel? row, bool preview)
     {
         // In fleet mode the row's own cluster owns it — using this tab's client here
@@ -1027,6 +1277,12 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 _ = CloseInspectorTabAsync(previousPreview);
             }
         }
+
+        // The one funnel every inspector tab enters through, which is why the
+        // advanced-view mirror is stamped here rather than at each construction
+        // site: a tab kind added later inherits the gate instead of quietly
+        // shipping with it open.
+        tab.IsAdvancedView = IsAdvancedView;
 
         InspectorTabs.Add(tab);
         SelectedInspectorTab = tab;

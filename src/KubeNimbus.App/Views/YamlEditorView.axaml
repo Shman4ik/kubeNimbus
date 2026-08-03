@@ -6,24 +6,34 @@
              x:Class="KubeNimbus.App.Views.YamlEditorView"
              x:DataType="vm:YamlEditorTabViewModel">
 
-  <Grid RowDefinitions="Auto,*,Auto,Auto,Auto" Margin="12">
+  <Grid RowDefinitions="Auto,*,Auto,Auto,Auto,Auto" Margin="12">
 
-    <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto,Auto" Margin="0,0,0,8">
+    <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto" Margin="0,0,0,8">
       <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-      <ToggleButton Grid.Column="1" Classes="chip" Padding="7,3" FontSize="11" Margin="0,0,4,0"
-                    IsVisible="{Binding IsSecret}" IsChecked="{Binding IsSecretValuesRevealed}"
-                    Command="{Binding ToggleSecretValuesRevealedCommand}"
-                    ToolTip.Tip="Decode and show this Secret's values (masked by default)"
+
+      <!-- Every in-flight state says so: an editor that silently swaps its text under
+           you is indistinguishable from one that lost your edit (CLAUDE.md UI rule 9). -->
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="0,0,8,0" VerticalAlignment="Center">
+        <TextBlock Text="Reading from server…" Classes="statusText dim" IsVisible="{Binding IsRefreshing}" />
+        <TextBlock Text="Working…" Classes="statusText dim" IsVisible="{Binding IsBusy}" />
+      </StackPanel>
+
+      <!-- A ToggleButton gets EITHER a two-way IsChecked binding OR a toggle Command,
+           never both: OnClick() flips IsChecked before the Command runs, so a command
+           that also flips it cancels the click out. The work happens in the view
+           model's OnIsSecretValuesRevealedChanged hook. -->
+      <ToggleButton Grid.Column="2" Classes="chip" Padding="7,3" FontSize="11" Margin="0,0,4,0"
+                    IsVisible="{Binding CanRevealValues}" IsChecked="{Binding IsSecretValuesRevealed}"
+                    ToolTip.Tip="Decode and show this object's base64 values (masked by default, decoded locally)"
                     Content="Reveal values" />
-      <Button Grid.Column="2" Classes="toolbar" Command="{Binding ReloadCommand}" ToolTip.Tip="Reload from server" Padding="6">
+      <Button Grid.Column="3" Classes="toolbar" Command="{Binding ReloadCommand}" IsEnabled="{Binding !IsBusy}"
+              ToolTip.Tip="Reload from server (discards unapplied edits)" Padding="6">
         <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="14" Height="14" />
       </Button>
-      <Button Grid.Column="3" Classes="accent" Content="Apply" Command="{Binding ApplyCommand}" IsEnabled="{Binding !IsBusy}" Margin="8,0,0,0" />
-      <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6" Margin="8,0,0,0">
-        <Button Content="Delete" Command="{Binding RequestDeleteCommand}" IsVisible="{Binding !IsConfirmingDelete}" />
-        <Button Content="Confirm delete" Command="{Binding ConfirmDeleteCommand}" Foreground="IndianRed" IsVisible="{Binding IsConfirmingDelete}" />
-        <Button Content="Cancel" Command="{Binding CancelDeleteCommand}" IsVisible="{Binding IsConfirmingDelete}" />
-      </StackPanel>
+      <Button Grid.Column="4" Classes="accent" Content="Apply" Command="{Binding ApplyCommand}"
+              IsEnabled="{Binding !IsBusy}" Margin="8,0,0,0" />
+      <Button Grid.Column="5" Content="Delete" Command="{Binding RequestDeleteCommand}" Margin="6,0,0,0"
+              IsVisible="{Binding !IsConfirmingDelete}" IsEnabled="{Binding !IsBusy}" />
     </Grid>
 
     <Border Grid.Row="1" Classes="card" Padding="0">
@@ -31,36 +41,81 @@
                      IsReadOnly="{Binding IsDeleted}" Margin="4" />
     </Border>
 
+    <!-- Decoded values. Height-capped and value-capped on purpose: this sits in a ~300px
+         bottom dock, and a single 1 MiB Secret value would otherwise lay out in full to
+         show one screenful of it. -->
     <Border Grid.Row="2" Classes="card" Padding="10" Margin="0,8,0,0" MaxHeight="160"
             IsVisible="{Binding IsSecretValuesRevealed}">
-      <ScrollViewer>
-        <StackPanel Spacing="4">
-          <TextBlock Text="Decoded values (not sent anywhere — computed locally from the editor's current text)"
-                     FontSize="11" Opacity="0.6" />
-          <ItemsControl ItemsSource="{Binding DecodedSecretValues}">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Top" Text="{Binding RevealCaption}" FontSize="11" Opacity="0.6" TextWrapping="Wrap" />
+        <TextBlock DockPanel.Dock="Top" Text="{Binding RevealNotice}" Classes="statusText" Margin="0,6,0,0" TextWrapping="Wrap"
+                   Classes.warn="{Binding IsRevealNoticeProblem}" Classes.dim="{Binding !IsRevealNoticeProblem}"
+                   IsVisible="{Binding RevealNotice, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+        <ScrollViewer>
+          <ItemsControl ItemsSource="{Binding RevealedValues}">
             <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="vm:SecretValuePreviewViewModel">
-                <Grid ColumnDefinitions="160,*" Margin="0,2">
-                  <TextBlock Grid.Column="0" Text="{Binding Key}" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" TextTrimming="CharacterEllipsis" />
-                  <TextBlock Grid.Column="1" Text="{Binding Value}" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" TextWrapping="Wrap" />
+              <DataTemplate x:DataType="vm:RevealedValueViewModel">
+                <Grid ColumnDefinitions="150,*,Auto" Margin="0,3">
+                  <TextBlock Grid.Column="0" Text="{Binding Key}" FontFamily="Cascadia Mono,Consolas,monospace"
+                             FontSize="11.5" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Key}" />
+                  <StackPanel Grid.Column="1" Spacing="1" Margin="0,0,6,0">
+                    <!-- Selectable, because the whole point of revealing a value is to use it,
+                         and re-typing a password read off a label is nobody's idea of a feature. -->
+                    <SelectableTextBlock Text="{Binding Value}" FontFamily="Cascadia Mono,Consolas,monospace"
+                                         FontSize="11.5" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Detail}" FontSize="10.5" TextWrapping="Wrap" Classes="statusText"
+                               Classes.warn="{Binding IsProblem}" Classes.dim="{Binding !IsProblem}"
+                               IsVisible="{Binding HasDetail}" />
+                  </StackPanel>
+                  <Button Grid.Column="2" Classes="toolbar" Padding="4" VerticalAlignment="Top"
+                          IsVisible="{Binding CanCopy}" ToolTip.Tip="{Binding CopyTooltip}"
+                          Command="{Binding $parent[UserControl].((vm:YamlEditorTabViewModel)DataContext).CopyRevealedValueCommand}"
+                          CommandParameter="{Binding}">
+                    <PathIcon Data="{StaticResource ContentCopyIconGeometry}" Width="12" Height="12" />
+                  </Button>
                 </Grid>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
-        </StackPanel>
-      </ScrollViewer>
+        </ScrollViewer>
+      </DockPanel>
     </Border>
 
-    <Border Grid.Row="3" Classes="card" Padding="10" Margin="0,8,0,0"
+    <!-- Delete step 2. Its own strip rather than a pair of buttons swapped into the
+         header: at dock height the header is a crowded row, and "Confirm delete" has
+         to name what it deletes. -->
+    <Border Grid.Row="3" Classes="card" Padding="10" Margin="0,8,0,0" IsVisible="{Binding IsConfirmingDelete}">
+      <Grid ColumnDefinitions="*,Auto,Auto">
+        <TextBlock Grid.Column="0" Classes="statusText warn" TextWrapping="Wrap" VerticalAlignment="Center"
+                   Text="{Binding DeleteTargetDescription, StringFormat='Delete {0}? This cannot be undone.'}" />
+        <Button Grid.Column="1" Content="Confirm delete" Foreground="IndianRed" Margin="8,0,0,0"
+                IsEnabled="{Binding !IsBusy}" Command="{Binding ConfirmDeleteCommand}" />
+        <Button Grid.Column="2" Content="Cancel" Margin="6,0,0,0" Command="{Binding CancelDeleteCommand}" />
+      </Grid>
+    </Border>
+
+    <Border Grid.Row="4" Classes="card" Padding="10" Margin="0,8,0,0"
             IsVisible="{Binding ConflictDetails, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
       <StackPanel Spacing="6">
         <TextBlock Text="Apply conflict — another field manager owns some of these fields." Classes="statusText warn" />
         <TextBlock Text="{Binding ConflictDetails}" TextWrapping="Wrap" FontSize="11" Opacity="0.8" />
-        <Button Content="Force apply" Command="{Binding ForceApplyCommand}" />
+        <!-- Expert affordance, gated by the shell's global "Advanced view" switch
+             (mirrored onto every inspector tab): force-apply takes those fields away
+             from their owner. -->
+        <Button Content="Force apply" HorizontalAlignment="Left" IsEnabled="{Binding !IsBusy}"
+                IsVisible="{Binding IsAdvancedView}" Command="{Binding ForceApplyCommand}" />
+        <TextBlock Text="Reload and re-apply your change, or enable Advanced view to take ownership of these fields."
+                   FontSize="11" Opacity="0.7" TextWrapping="Wrap" IsVisible="{Binding !IsAdvancedView}" />
       </StackPanel>
     </Border>
 
-    <TextBlock Grid.Row="4" Text="{Binding StatusMessage}" Opacity="0.7" FontSize="12" Margin="0,6,0,0"
-               IsVisible="{Binding ConflictDetails, Converter={x:Static conv:ObjectConverters.IsNull}}" />
+    <StackPanel Grid.Row="5" Spacing="4" Margin="0,6,0,0">
+      <TextBlock Classes="statusText warn" TextWrapping="Wrap" IsVisible="{Binding IsDeleted}"
+                 Text="Deleted from the cluster — this tab is read-only. Reload checks whether it came back." />
+      <TextBlock Classes="statusText warn" TextWrapping="Wrap" Text="{Binding StaleNotice}"
+                 IsVisible="{Binding StaleNotice, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+      <TextBlock Text="{Binding StatusMessage}" Opacity="0.7" FontSize="12" TextWrapping="Wrap"
+                 IsVisible="{Binding ConflictDetails, Converter={x:Static conv:ObjectConverters.IsNull}}" />
+    </StackPanel>
   </Grid>
 </UserControl>

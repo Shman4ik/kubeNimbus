@@ -24,6 +24,20 @@ public abstract partial class InspectorTabViewModelBase(string title) : Observab
     [ObservableProperty]
     private bool _isActive;
 
+    /// <summary>
+    /// Mirror of the shell's global "Advanced view" switch, pushed down by
+    /// <c>ClusterTabViewModel</c> as a tab is opened and again whenever the switch
+    /// moves. It lives on the base class rather than on each tab that happens to
+    /// need it today because the alternative — a bespoke property per tab kind and
+    /// a bespoke assignment per creation site — is exactly how a tab ends up
+    /// shipping with the gate permanently open, which is what the YAML editor's
+    /// force-apply button did before this existed.
+    ///
+    /// Bind it two-way to nothing: it is pushed, never edited from a tab.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isAdvancedView;
+
     /// <summary>Stable identity used to find-and-reuse an already-open tab for the same object.</summary>
     public abstract string Key { get; }
 

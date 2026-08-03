@@ -52,6 +52,13 @@
             <StackPanel Orientation="Horizontal" Spacing="6" ToolTip.Tip="{Binding ResourcesTooltip}">
               <Ellipse Classes="statusDot" Classes.ok="{Binding Ready}" Classes.warn="{Binding !Ready}" />
               <TextBlock Text="{Binding Name}" FontSize="12.5" VerticalAlignment="Center" />
+              <!-- init / debug: without this an init container that will not start is
+                   indistinguishable from an app container that is merely not ready. -->
+              <TextBlock Text="{Binding RoleLabel}" FontSize="10" Opacity="0.5" VerticalAlignment="Center"
+                         IsVisible="{Binding HasRoleLabel}" />
+              <!-- The live state ("CrashLoopBackOff"), which is what sends you to Previous. -->
+              <TextBlock Text="{Binding State}" FontSize="10.5" Opacity="0.7" VerticalAlignment="Center"
+                         IsVisible="{Binding HasStateLabel}" />
               <TextBlock Text="{Binding RestartCount, StringFormat='↻{0}'}" Opacity="0.6" FontSize="11"
                          VerticalAlignment="Center" IsVisible="{Binding RestartCount, Converter={x:Static conv:CountToBoolConverter.Instance}}" />
               <TextBlock Text="{Binding UsageSummary}" FontSize="11" Opacity="0.55" VerticalAlignment="Center"
@@ -73,24 +80,36 @@
     <TabControl Grid.Row="2" SelectedIndex="{Binding SelectedDetailTabIndex}">
       <TabItem Header="Logs">
         <Grid RowDefinitions="Auto,Auto,Auto,*">
+          <!-- NOT ONE of these ToggleButtons carries a Command, and that is the fix, not
+               an omission. ToggleButton.IsChecked is registered two-way and OnClick()
+               flips it BEFORE the Command runs, so a toggling command bound alongside a
+               two-way IsChecked cancels its own click out. Follow and Previous both had
+               exactly that and were guaranteed no-ops — Follow stopped the stream it was
+               meant to start, and Previous started a live follow of the current container.
+               The work happens in the view model's On<Property>Changed hooks. -->
           <WrapPanel Grid.Row="0" Margin="0,0,0,6">
-            <ToggleButton Classes="chip" Padding="6" Margin="0,0,4,4" IsChecked="{Binding IsFollowingLogs}" Command="{Binding ToggleFollowLogsCommand}"
+            <ToggleButton Classes="chip" Padding="6" Margin="0,0,4,4" IsChecked="{Binding IsFollowingLogs}"
                           ToolTip.Tip="Follow logs (cancels the stream when toggled off)">
               <PathIcon Data="{StaticResource PlayIconGeometry}" Width="12" Height="12" />
             </ToggleButton>
             <ToggleButton Classes="chip" Padding="7,3" Margin="0,0,4,4" FontSize="11"
-                          IsChecked="{Binding IsShowingPreviousLogs}" Command="{Binding TogglePreviousLogsCommand}"
-                          ToolTip.Tip="Show the previous (crashed/restarted) container instance's logs"
+                          IsChecked="{Binding IsShowingPreviousLogs}"
+                          ToolTip.Tip="Show the previous (crashed/restarted) container instance's logs — the first thing to read on a CrashLoopBackOff"
                           Content="Previous" />
             <ToggleButton Classes="chip" Padding="6" Margin="0,0,4,4" IsChecked="{Binding ShowLogTimestamps}" ToolTip.Tip="Show timestamps">
               <PathIcon Data="{StaticResource ClockOutlineIconGeometry}" Width="12" Height="12" />
             </ToggleButton>
-            <ToggleButton Classes="chip" Padding="7,3" Margin="0,0,4,4" FontSize="11"
+
+            <!-- Advanced-view only: wrap, copy and download are all useful and none of
+                 them is what you came here for. -->
+            <ToggleButton Classes="chip" Padding="7,3" Margin="0,0,4,4" FontSize="11" IsVisible="{Binding IsAdvancedView}"
                           IsChecked="{Binding WrapLogLines}" ToolTip.Tip="Wrap long lines" Content="Wrap" />
-            <Button Classes="toolbar" Margin="0,0,4,4" Command="{Binding CopyLogsCommand}" ToolTip.Tip="Copy visible logs" Padding="6">
+            <Button Classes="toolbar" Margin="0,0,4,4" Command="{Binding CopyLogsCommand}" IsVisible="{Binding IsAdvancedView}"
+                    ToolTip.Tip="Copy the visible lines, with timestamps" Padding="6">
               <PathIcon Data="{StaticResource ContentCopyIconGeometry}" Width="13" Height="13" />
             </Button>
-            <Button Classes="toolbar" Margin="0,0,4,4" Command="{Binding DownloadLogsCommand}" ToolTip.Tip="Download visible logs" Padding="6">
+            <Button Classes="toolbar" Margin="0,0,4,4" Command="{Binding DownloadLogsCommand}" IsVisible="{Binding IsAdvancedView}"
+                    ToolTip.Tip="Save the visible lines to a file, with timestamps" Padding="6">
               <PathIcon Data="{StaticResource DownloadIconGeometry}" Width="13" Height="13" />
             </Button>
           </WrapPanel>
@@ -99,22 +118,45 @@
               <PathIcon Data="{StaticResource MagnifyIconGeometry}" Width="11" Height="11" Opacity="0.5" Margin="8,0,0,0" />
             </TextBox.InnerLeftContent>
           </TextBox>
-          <TextBlock Grid.Row="2" Text="{Binding SelectedContainer.Name, StringFormat='Following {0}'}" Opacity="0.6" FontSize="12" Margin="0,0,0,6"
-                     IsVisible="{Binding IsFollowingLogs}" />
-          <TextBlock Grid.Row="2" Text="{Binding SelectedContainer.Name, StringFormat='Previous logs for {0}'}" Opacity="0.6" FontSize="12" Margin="0,0,0,6"
-                     IsVisible="{Binding IsShowingPreviousLogs}" />
+          <!-- Advanced-view only: the container being read is already named on the
+               selected chip right above, and the stream's state has its own line below. -->
+          <StackPanel Grid.Row="2" IsVisible="{Binding IsAdvancedView}">
+            <TextBlock Text="{Binding SelectedContainer.Name, StringFormat='Following {0}'}" Opacity="0.6" FontSize="12" Margin="0,0,0,6"
+                       IsVisible="{Binding IsFollowingLogs}" />
+            <TextBlock Text="{Binding SelectedContainer.Name, StringFormat='Previous logs for {0}'}" Opacity="0.6" FontSize="12" Margin="0,0,0,6"
+                       IsVisible="{Binding IsShowingPreviousLogs}" />
+          </StackPanel>
+
           <Border Grid.Row="3" Classes="card" Padding="8">
-            <ScrollViewer Name="LogScroll">
-              <ItemsControl ItemsSource="{Binding LogLines}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="vm:LogLineViewModel">
-                    <TextBlock Text="{Binding DisplayText}" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11"
-                               Foreground="{Binding Severity, Converter={x:Static conv:LogSeverityToBrushConverter.Instance}}"
-                               TextWrapping="{Binding $parent[UserControl].((vm:PodDetailTabViewModel)DataContext).WrapLogLines, Converter={x:Static conv:BoolToTextWrappingConverter.Instance}}" />
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </ScrollViewer>
+            <Grid>
+              <!-- HorizontalScrollBarVisibility defaults to Disabled, which with wrapping
+                   off hard-clipped every long line — a stack trace or a JSON log entry
+                   simply ran off the edge with no way to reach the rest of it. -->
+              <ScrollViewer Name="LogScroll" HorizontalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding LogLines}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:LogLineViewModel">
+                      <!-- Selectable: reading a log usually ends in copying part of it into a
+                           search box or a ticket, and a plain TextBlock made that impossible.
+                           Same control HelmReleaseView already uses. -->
+                      <SelectableTextBlock Text="{Binding DisplayText}" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11"
+                                           Foreground="{Binding Severity, Converter={x:Static conv:LogSeverityToBrushConverter.Instance}}"
+                                           TextWrapping="{Binding $parent[UserControl].((vm:PodDetailTabViewModel)DataContext).WrapLogLines, Converter={x:Static conv:BoolToTextWrappingConverter.Instance}}" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+
+              <!-- Every empty state says which one it is (UI rule 9). Streaming-but-silent,
+                   stopped, ended-with-a-reason and filtered-to-nothing all used to render
+                   as the same blank card, and the pane's most common state — freshly
+                   opened, nothing started — had no message at all. -->
+              <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" MaxWidth="420"
+                          IsVisible="{Binding HasLogPlaceholder}">
+                <TextBlock Text="{Binding LogPlaceholder}" TextWrapping="Wrap" TextAlignment="Center" FontSize="12"
+                           Classes="statusText" Classes.warn="{Binding IsLogStatusProblem}" Classes.dim="{Binding !IsLogStatusProblem}" />
+              </StackPanel>
+            </Grid>
           </Border>
         </Grid>
       </TabItem>
@@ -129,8 +171,13 @@
                   <DataTemplate x:DataType="vm:EnvVarViewModel">
                     <StackPanel Margin="0,5" Spacing="2">
                       <TextBlock Text="{Binding Name}" FontFamily="Cascadia Mono,Consolas,monospace" FontWeight="SemiBold" FontSize="11.5" TextWrapping="Wrap" />
-                      <TextBlock Text="{Binding DirectValue}" FontSize="11.5" Opacity="0.85" TextWrapping="Wrap"
-                                 IsVisible="{Binding IsReference, Converter={x:Static aconv:BoolConverters.Not}}" />
+                      <!-- Selectable: an env var is read in order to be pasted somewhere. -->
+                      <SelectableTextBlock Text="{Binding DirectValue}" FontSize="11.5" Opacity="0.85" TextWrapping="Wrap"
+                                           IsVisible="{Binding HasDirectValue}" />
+                      <!-- A resolved fieldRef shows the value above and where it came from here,
+                           since it reads like a literal but isn't one. -->
+                      <TextBlock Text="{Binding SourceDescription}" FontSize="10.5" Opacity="0.5" TextWrapping="Wrap"
+                                 IsVisible="{Binding IsDerivedValue}" />
                       <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsReference}">
                         <TextBlock Grid.Column="0" Text="{Binding SourceDescription}" FontSize="11" Opacity="0.6" TextWrapping="Wrap"
                                    VerticalAlignment="Center" Margin="0,0,4,0" />
@@ -139,9 +186,12 @@
                                 Command="{Binding $parent[UserControl].((vm:PodDetailTabViewModel)DataContext).RevealEnvVarCommand}"
                                 CommandParameter="{Binding}" />
                       </Grid>
-                      <TextBlock Text="{Binding RevealedValue}" FontSize="11.5" TextWrapping="Wrap" Foreground="{StaticResource AppAccentBrush}"
-                                 IsVisible="{Binding RevealedValue, Converter={x:Static aconv:ObjectConverters.IsNotNull}}" />
-                      <TextBlock Text="{Binding RevealError}" FontSize="11" Classes="statusText warn" TextWrapping="Wrap"
+                      <SelectableTextBlock Text="{Binding RevealedValue}" FontSize="11.5" TextWrapping="Wrap" Foreground="{StaticResource AppAccentBrush}"
+                                           IsVisible="{Binding RevealedValue, Converter={x:Static aconv:ObjectConverters.IsNotNull}}" />
+                      <!-- An `optional: true` ref whose key is absent is normal — the container
+                           just starts without the variable — so it reads dim, not as an error. -->
+                      <TextBlock Text="{Binding RevealError}" FontSize="11" Classes="statusText" TextWrapping="Wrap"
+                                 Classes.warn="{Binding !IsOptionalReference}" Classes.dim="{Binding IsOptionalReference}"
                                  IsVisible="{Binding RevealError, Converter={x:Static aconv:ObjectConverters.IsNotNull}}" />
                     </StackPanel>
                   </DataTemplate>
@@ -153,8 +203,20 @@
             <TextBlock Classes="sectionHeader" Text="ENVFROM" Margin="2,0,0,4" />
             <ItemsControl ItemsSource="{Binding EnvFromSources}">
               <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="sys:String">
-                  <TextBlock Text="{Binding}" FontSize="11.5" Opacity="0.75" Margin="2,2" />
+                <DataTemplate x:DataType="vm:EnvFromSourceViewModel">
+                  <Grid ColumnDefinitions="*,Auto" Margin="2,2">
+                    <TextBlock Grid.Column="0" Text="{Binding Description}" FontSize="11.5" Opacity="0.75"
+                               TextWrapping="Wrap" VerticalAlignment="Center" />
+                    <!-- The one thing this line was always missing: a way through to the
+                         object it names. Which keys it contributes is only knowable by
+                         looking at the Secret/ConfigMap itself. -->
+                    <Button Grid.Column="1" Classes="toolbar" Padding="4" VerticalAlignment="Center"
+                            ToolTip.Tip="Open this object's YAML"
+                            Command="{Binding $parent[UserControl].((vm:PodDetailTabViewModel)DataContext).OpenEnvFromSourceCommand}"
+                            CommandParameter="{Binding}">
+                      <PathIcon Data="{StaticResource ChevronRightIconGeometry}" Width="12" Height="12" />
+                    </Button>
+                  </Grid>
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
@@ -209,7 +271,7 @@
       <!-- Usage over time. Appended after Events so the existing tab indices
            (Logs=0, Env=1, Events=2) stay stable for the screenshot harness and
            any future deep link. -->
-      <TabItem Header="Usage">
+      <TabItem Header="Usage" IsVisible="{Binding IsAdvancedView}">
         <Grid RowDefinitions="Auto,*">
           <TextBlock Grid.Row="0" Classes="sectionHeader" Margin="2,0,0,8">
             <Run Text="USAGE" />
