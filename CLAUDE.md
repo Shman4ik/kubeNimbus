@@ -154,6 +154,24 @@ choice must be AOT/trimming-compatible from day one.
    and "empty dropdown, dead + button" is the most likely first-run
    experience there. Any command that cannot run must be disabled
    (`AddNewTabCommand`'s `CanExecute`), never silently no-op.
+10. **An inspector panel gets two rows of chrome above its content, and the tab
+   strip is one of them.** The dock is ~300px by default and every stacked row
+   comes straight out of the thing you opened the panel to read. Pod detail
+   shipped with four — owners, containers, tab strip, per-tab toolbar, plus a
+   filter box and a "Following …" caption on Logs — which is ~200px of a 300px
+   dock spent before the first log line. A `TabControl` cannot host anything but
+   tabs on its header row, so the pattern is `ListBox.segmented` (the strip) +
+   `TabControl.headerless` (the content) sharing one `Grid` row with the selected
+   tab's tools, gated by `IndexEqualsConverter` on the same index the TabControl
+   binds. The TabControl stays underneath because nothing else gives *both*
+   lazily-realized tab content and an index that survives a hidden tab — pod
+   detail's Usage rides the Advanced view, and `SelectedDetailTabIndex`
+   (Logs=0, Env=1, Events=2, Usage=3) is depended on by
+   `ClusterTabViewModel.OpenLogs` and the screenshot scenarios. A panel-level
+   title row is the other thing to check for: the dock tab above already reads
+   `Pod/<name>` / `Helm/<name>` / `Access/<ns>`, so a row that repeats it is a
+   row spent on nothing (this is why `HelmReleaseView` and `RbacView` no longer
+   have one).
 
 ## The Advanced view
 
@@ -166,9 +184,12 @@ Classes="chip"` docked right of the sidebar's filter box, tooltip carrying the
 explanation), because people who use both should find it where they left it.
 
 Off hides: the CPU/Memory columns and their sparklines, pod detail's Usage tab,
-the fleet toggle and Cluster column, the log toolbar's Wrap/Copy/Download and
-the redundant "Following …" caption, the exec pane's Send button, YAML
-force-apply, the sidebar's kind-count badges, and the Helm/RBAC palette entries.
+the fleet toggle and Cluster column, the log toolbar's Wrap/Copy/Download, the
+exec pane's Send button, YAML force-apply, the sidebar's kind-count badges, and
+the Helm/RBAC palette entries. (The "Following &lt;container&gt;" caption used to
+ride the switch too; it is gone outright — the container strip names the
+container it is streaming and the log pane's own placeholder states say what the
+stream is doing, so it was a row of dock height spent restating both.)
 On restores today's surface exactly — it is a hide/show switch, not a second
 layout, and `cluster-tab-workloads-list` / `cluster-tab-advanced-view` are the
 same fixture tab rendered both ways to keep that honest.
@@ -1180,6 +1201,53 @@ palette entries by actual mouse/keyboard (they were verified by construction,
 not driven), Advanced-view off/on in the *running* app rather than in the
 harness, and the win-x64 NativeAOT publish — still the one build that has never
 run anywhere.
+
+**Inspector density pass:** driven by a screenshot of the running app whose
+complaint was, in three parts, "tabs too big, too much nesting, too little room
+for content" — and measuring the dock proved it: pod detail spent ~200px of a
+~300px dock on chrome. See UI rule 10 above for the rule this pass added; the
+mechanics are `ListBox.segmented` + `TabControl.headerless` +
+`Rectangle.toolSeparator` in `Theme.axaml` and the new
+`Converters/IndexEqualsConverter.cs`. What changed:
+
+- **Pod detail: four chrome rows → two.** Owner chips moved onto the container
+  row (the "Owned by" label went — the chips say `ReplicaSet/x` themselves, and
+  they gained a border so they read as clickable, UI rule 8); the container
+  picker became a horizontally-scrolling strip rather than a `WrapPanel`, so
+  eight containers cost the same height as one; the log filter box, the
+  Follow/Previous/timestamp toggles, Events' refresh and Usage's window caption
+  all moved onto the tab strip's row; Env's `ENV — <container>` header went
+  (the strip two rows up *is* its selector).
+- **Env and Events got denser inside their tabs too.** Env is name-beside-value
+  on a fixed 200px name column — Auto per row would start every value at a
+  different x, since Avalonia has no shared-size scope — and Reveal sits next
+  to its reference instead of flung to the right edge. An event card is two
+  lines, not three (count/timestamp ride the reason). Both roughly double what
+  fits.
+- **Helm and RBAC lost their title rows** and gained the same one-row strip.
+  Their titles duplicated the dock tab (`Helm/checkout`, `Access/payments`)
+  exactly. `HelmReleaseView` binds its TabControl to the strip's `SelectedIndex`
+  by element reference (`#HelmTabStrip`), since that view model has no tab-index
+  property; `RbacView` keeps binding both to `SelectedTabIndex`, which
+  `WhoCanTabIndex` deep-links to.
+- **`cluster-tab-helm-release-detail` is a new screenshot scenario**, because
+  `HelmReleaseView` was the one inspector view the harness never rendered — and
+  the harness is CI's only check that a view's XAML still loads. Its fixture
+  drains the offline load before writing its text: the failed load's
+  continuation lands on the same `RunJobs()` the capture pumps, so anything set
+  before it is overwritten by "Connection refused" (which is exactly what the
+  first run of that scenario rendered).
+
+**Verified this session**: build (0 new warnings), **137/137 TUnit, 0 skipped**,
+all 66 screenshots (33 scenarios × both themes), and the linux-x64 NativeAOT
+publish with no new warnings beyond the known DataGrid IL2104/IL3053. The seven
+generated README screenshots under `design/screenshots/` were regenerated.
+**Not verified**: no live cluster here (Docker Hub's blob CDN is still blocked
+by this session's egress policy), so this pass — like the layout it replaces —
+has only been seen in the harness. The row heights it frees up are worth a look
+in the running app, particularly a pod with many containers (the strip now
+scrolls rather than wrapping) and a filter box narrowed by a small window.
+And win-x64 NativeAOT remains the build that has never run anywhere.
 
 ### `dotnet test --project` is broken on this machine (SDK 10.0.400-preview)
 

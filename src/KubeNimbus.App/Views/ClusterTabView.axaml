@@ -431,7 +431,14 @@
                   <DataTemplate x:DataType="vm:InspectorTabViewModelBase">
                     <Border Classes="dockTab" Classes.active="{Binding IsActive}" Margin="2" Tapped="OnInspectorTabTapped">
                       <StackPanel Orientation="Horizontal" Spacing="6">
+                        <!-- Trimmed: a generated pod name ("Pod/payment-service-report-generator
+                             -7f9c8d6bcd-x7k2m") is 50 characters of which the last few are the
+                             only ones that differ, and at full length two open tabs fill the
+                             strip and push it onto a second row. The full title is on the
+                             tooltip, and the trimming keeps the tail's hash visible for as
+                             long as the width allows. -->
                         <TextBlock Text="{Binding Title}" FontSize="12" VerticalAlignment="Center"
+                                   MaxWidth="240" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}"
                                    Opacity="{Binding IsPreview, Converter={x:Static conv:PreviewToOpacityConverter.Instance}}" />
                         <Button Classes="chip" Padding="0" MinWidth="14" MinHeight="14"
                                 Command="{Binding $parent[UserControl].((vm:ClusterTabViewModel)DataContext).CloseInspectorTabCommand}"
