@@ -87,15 +87,6 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
     [ObservableProperty]
     private bool _isDeleted;
 
-    /// <summary>
-    /// Gate for expert/destructive affordances in this tab — today only force-apply,
-    /// which takes field ownership away from another field manager. Defaults on, so
-    /// behaviour is unchanged until the shell's global "Advanced view" flag drives it;
-    /// everything gated is grouped in the conflict card, so wiring it is one binding.
-    /// </summary>
-    [ObservableProperty]
-    private bool _isAdvancedViewEnabled = true;
-
     /// <summary>Core/v1 Secret — the kind whose <c>data</c> is base64 in the editor.</summary>
     public bool IsSecret => _descriptor is { Kind: "Secret", Group: "" };
 

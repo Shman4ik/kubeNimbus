@@ -50,6 +50,10 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     public ObservableCollection<ContainerViewModel> Containers { get; } = [];
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ExecCommand))]
+    [NotifyCanExecuteChangedFor(nameof(PortForwardCommand))]
+    [NotifyPropertyChangedFor(nameof(LogPlaceholder))]
+    [NotifyPropertyChangedFor(nameof(HasLogPlaceholder))]
     private ContainerViewModel? _selectedContainer;
 
     /// <summary>Filtered (by <see cref="LogSearchText"/>) view over the buffered log lines — this is what's rendered.</summary>
@@ -77,9 +81,13 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     /// unresolved until <see cref="RevealEnvVarCommand"/> is invoked on that row.</summary>
     public ObservableCollection<EnvVarViewModel> EnvironmentVars { get; } = [];
 
-    /// <summary>The selected container's <c>envFrom</c> sources — reference-only, no per-key reveal
-    /// (the pod spec doesn't declare individual keys for these; open the Secret/ConfigMap's own YAML for that).</summary>
-    public ObservableCollection<string> EnvFromSources { get; } = [];
+    /// <summary>
+    /// The selected container's <c>envFrom</c> sources. Still reference-only — the pod
+    /// spec doesn't declare individual keys for these — but each one now opens the
+    /// Secret/ConfigMap it names. It used to be one dead grey line with no way to
+    /// reach the object, which is the only thing anyone wanted from it.
+    /// </summary>
+    public ObservableCollection<EnvFromSourceViewModel> EnvFromSources { get; } = [];
 
     public IReadOnlyList<OwnerRef> Owners => _row.Resource.OwnerReferences;
 
@@ -165,6 +173,13 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
 
         _row.PropertyChanged += OnRowChanged;
         RefreshFromRow();
+
+        // Logs start on open, with no click. Double-click on a pod is documented as
+        // "pod → logs" (it is in the F1 cheat sheet), and what it actually landed on
+        // was a blank card with no message and two toggles that did nothing. Opening
+        // straight into the stream is also what kubectl logs, k9s and Lens all do.
+        StartLogs();
+
         _ = RefreshEventsAsync();
         _ = Task.Run(() => PollMetricsAsync(_metricsCts.Token), _metricsCts.Token);
     }
@@ -248,48 +263,116 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         }
     }
 
-    partial void OnSelectedContainerChanged(ContainerViewModel? value) => RefreshEnvironment();
+    partial void OnSelectedContainerChanged(ContainerViewModel? value)
+    {
+        RefreshEnvironment();
+
+        // The stream follows the picker. It used not to: switching container left the
+        // old container's lines arriving under a header that named the new one, and
+        // Download saved them under the new one's filename. Nothing about the pane
+        // said which container you were actually reading.
+        if (value is null)
+        {
+            StopLogs();
+            return;
+        }
+
+        if (IsShowingPreviousLogs)
+        {
+            LoadPreviousLogs();
+        }
+        else
+        {
+            StartLogs();
+        }
+    }
 
     private void RefreshFromRow()
     {
         var raw = _row.Resource.Raw;
+        var status = raw.TryGetProperty("status", out var s) ? s : default;
+
+        // All three status arrays, because all three kinds of container are listed
+        // below. An init container that will not start is one of the most common
+        // reasons a pod never runs, and its logs were unreachable entirely.
         var statuses = new Dictionary<string, (bool Ready, int Restarts, string State)>(StringComparer.Ordinal);
-        if (raw.TryGetProperty("status", out var status) && status.TryGetProperty("containerStatuses", out var cs)
-            && cs.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var c in cs.EnumerateArray())
-            {
-                var name = c.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
-                var ready = c.TryGetProperty("ready", out var r) && r.ValueKind == JsonValueKind.True;
-                var restarts = c.TryGetProperty("restartCount", out var rc) && rc.TryGetInt32(out var count) ? count : 0;
-                var state = "Unknown";
-                if (c.TryGetProperty("state", out var st) && st.ValueKind == JsonValueKind.Object)
-                {
-                    foreach (var prop in st.EnumerateObject())
-                    {
-                        state = prop.Name;
-                        break;
-                    }
-                }
+        ReadContainerStatuses(status, "containerStatuses", statuses);
+        ReadContainerStatuses(status, "initContainerStatuses", statuses);
+        ReadContainerStatuses(status, "ephemeralContainerStatuses", statuses);
 
-                statuses[name] = (ready, restarts, state);
-            }
-        }
-
-        if (!raw.TryGetProperty("spec", out var spec) || !spec.TryGetProperty("containers", out var containers)
-            || containers.ValueKind != JsonValueKind.Array)
+        if (!raw.TryGetProperty("spec", out var spec) || spec.ValueKind != JsonValueKind.Object)
         {
             return;
         }
 
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        // Order matters: init containers run first and read first. Ephemeral ones are
+        // debug attachments and come last.
+        ReadContainerSpecs(spec, "initContainers", ContainerRole.Init, statuses);
+        ReadContainerSpecs(spec, "containers", ContainerRole.App, statuses);
+        ReadContainerSpecs(spec, "ephemeralContainers", ContainerRole.Ephemeral, statuses);
+
+        // The first *app* container, not the first row: with init containers present
+        // the list starts on one that has already exited, and `kubectl logs` with no
+        // -c picks the first app container for the same reason.
+        SelectedContainer ??= Containers.FirstOrDefault(c => c.Role == ContainerRole.App) ?? Containers.FirstOrDefault();
+
+        RefreshEnvironment();
+    }
+
+    private static void ReadContainerStatuses(
+        JsonElement status, string arrayName, Dictionary<string, (bool Ready, int Restarts, string State)> into)
+    {
+        if (status.ValueKind != JsonValueKind.Object
+            || !status.TryGetProperty(arrayName, out var array) || array.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        foreach (var c in array.EnumerateArray())
+        {
+            var name = c.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+            var ready = c.TryGetProperty("ready", out var r) && r.ValueKind == JsonValueKind.True;
+            var restarts = c.TryGetProperty("restartCount", out var rc) && rc.TryGetInt32(out var count) ? count : 0;
+
+            // state is a one-of: running / waiting / terminated. The waiting reason is
+            // the useful half of it ("CrashLoopBackOff" beats "waiting"), and it is what
+            // points a user at the Previous button.
+            var state = "Unknown";
+            if (c.TryGetProperty("state", out var st) && st.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var prop in st.EnumerateObject())
+                {
+                    state = prop.Value.ValueKind == JsonValueKind.Object
+                        && prop.Value.TryGetProperty("reason", out var reason)
+                        && reason.ValueKind == JsonValueKind.String
+                        && reason.GetString() is { Length: > 0 } reasonText
+                            ? reasonText
+                            : prop.Name;
+                    break;
+                }
+            }
+
+            into[name] = (ready, restarts, state);
+        }
+    }
+
+    private void ReadContainerSpecs(
+        JsonElement spec,
+        string arrayName,
+        ContainerRole role,
+        Dictionary<string, (bool Ready, int Restarts, string State)> statuses)
+    {
+        if (!spec.TryGetProperty(arrayName, out var containers) || containers.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
         foreach (var c in containers.EnumerateArray())
         {
             var name = c.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
             var image = c.TryGetProperty("image", out var img) ? img.GetString() ?? "" : "";
-            seen.Add(name);
 
-            var ports = new List<int>();
+            var ports = new List<ContainerPort>();
             if (c.TryGetProperty("ports", out var portsEl) && portsEl.ValueKind == JsonValueKind.Array)
             {
                 foreach (var p in portsEl.EnumerateArray())
@@ -297,7 +380,8 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
                     if (p.TryGetProperty("containerPort", out var cp) && cp.TryGetInt32(out var port)
                         && (!p.TryGetProperty("protocol", out var proto) || proto.GetString() is null or "TCP"))
                     {
-                        ports.Add(port);
+                        var portName = p.TryGetProperty("name", out var pn) ? pn.GetString() : null;
+                        ports.Add(new ContainerPort(port, portName));
                     }
                 }
             }
@@ -305,11 +389,11 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
             var existing = Containers.FirstOrDefault(x => x.Name == name);
             if (existing is null)
             {
-                existing = new ContainerViewModel(name, image);
+                existing = new ContainerViewModel(name, image) { Role = role };
                 Containers.Add(existing);
             }
 
-            existing.TcpPorts = ports;
+            existing.Ports = ports;
 
             // Requests/limits give the usage numbers a scale to be read against.
             if (c.TryGetProperty("resources", out var resources) && resources.ValueKind == JsonValueKind.Object)
@@ -329,71 +413,125 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
                 existing.State = st.State;
             }
         }
-
-        SelectedContainer ??= Containers.FirstOrDefault();
-        RefreshEnvironment();
     }
 
+    /// <summary>
+    /// Identity of the container currently reflected in <see cref="EnvironmentVars"/>,
+    /// so a watch tick that changed nothing about the env doesn't rebuild it.
+    /// </summary>
+    private (string Container, int SpecHash)? _environmentSignature;
+
+    /// <summary>
+    /// Rebuilds the Environment tab — but only when the selected container's env
+    /// actually changed. This used to run on every watch tick and clear the
+    /// collection unconditionally, so a value you had just revealed disappeared a few
+    /// seconds later with no explanation, which is about the worst possible behaviour
+    /// for a control whose whole job is "show me this once".
+    /// </summary>
     private void RefreshEnvironment()
     {
-        EnvironmentVars.Clear();
-        EnvFromSources.Clear();
-
         if (SelectedContainer is not { } container)
         {
+            EnvironmentVars.Clear();
+            EnvFromSources.Clear();
+            _environmentSignature = null;
             return;
         }
 
         var raw = _row.Resource.Raw;
-        if (!raw.TryGetProperty("spec", out var spec) || !spec.TryGetProperty("containers", out var containers)
-            || containers.ValueKind != JsonValueKind.Array)
+        if (!raw.TryGetProperty("spec", out var spec) || spec.ValueKind != JsonValueKind.Object)
         {
             return;
         }
 
-        JsonElement? containerSpec = null;
-        foreach (var c in containers.EnumerateArray())
-        {
-            if (c.TryGetProperty("name", out var n) && n.GetString() == container.Name)
-            {
-                containerSpec = c;
-                break;
-            }
-        }
-
-        if (containerSpec is not { } spec2)
+        // The container may be an init or ephemeral one — those carry env too, and
+        // looking only in spec.containers left their Environment tab permanently blank.
+        if (FindContainerSpec(spec, container.Name) is not { } containerSpec)
         {
             return;
         }
 
-        if (spec2.TryGetProperty("env", out var env) && env.ValueKind == JsonValueKind.Array)
+        var env = containerSpec.TryGetProperty("env", out var e) && e.ValueKind == JsonValueKind.Array ? e : default;
+        var envFrom = containerSpec.TryGetProperty("envFrom", out var ef) && ef.ValueKind == JsonValueKind.Array ? ef : default;
+
+        // The raw text of both blocks is the signature — a pod object that changed its
+        // status (which is what a watch tick almost always is) hashes identically, and
+        // the rebuild is skipped along with the revealed values it would have thrown away.
+        var signature = (container.Name, HashCode.Combine(
+            env.ValueKind == JsonValueKind.Array ? env.GetRawText() : "",
+            envFrom.ValueKind == JsonValueKind.Array ? envFrom.GetRawText() : ""));
+        if (_environmentSignature == signature)
         {
-            foreach (var e in env.EnumerateArray())
-            {
-                EnvironmentVars.Add(ParseEnvVar(e));
-            }
+            return;
         }
 
-        if (spec2.TryGetProperty("envFrom", out var envFrom) && envFrom.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var ef in envFrom.EnumerateArray())
-            {
-                var prefix = ef.TryGetProperty("prefix", out var p) ? p.GetString() : null;
-                var prefixSuffix = string.IsNullOrEmpty(prefix) ? "" : $" (prefix \"{prefix}\")";
+        _environmentSignature = signature;
+        EnvironmentVars.Clear();
+        EnvFromSources.Clear();
 
-                if (ef.TryGetProperty("secretRef", out var sr) && sr.TryGetProperty("name", out var srName))
-                {
-                    EnvFromSources.Add($"All keys from Secret/{srName.GetString()}{prefixSuffix}");
-                }
-                else if (ef.TryGetProperty("configMapRef", out var cr) && cr.TryGetProperty("name", out var crName))
-                {
-                    EnvFromSources.Add($"All keys from ConfigMap/{crName.GetString()}{prefixSuffix}");
-                }
+        foreach (var item in Elements(env))
+        {
+            EnvironmentVars.Add(ParseEnvVar(item, _row.Resource.Raw));
+        }
+
+        foreach (var source in Elements(envFrom))
+        {
+            var prefix = source.TryGetProperty("prefix", out var p) ? p.GetString() : null;
+            var prefixSuffix = string.IsNullOrEmpty(prefix) ? "" : $" (prefix \"{prefix}\")";
+            var optional = source.TryGetProperty("optional", out var opt) && opt.ValueKind == JsonValueKind.True
+                ? " · optional"
+                : "";
+
+            if (source.TryGetProperty("secretRef", out var sr) && sr.TryGetProperty("name", out var srName))
+            {
+                EnvFromSources.Add(new EnvFromSourceViewModel(
+                    "Secret", srName.GetString() ?? "", $"All keys from Secret/{srName.GetString()}{prefixSuffix}{optional}"));
+            }
+            else if (source.TryGetProperty("configMapRef", out var cr) && cr.TryGetProperty("name", out var crName))
+            {
+                EnvFromSources.Add(new EnvFromSourceViewModel(
+                    "ConfigMap", crName.GetString() ?? "", $"All keys from ConfigMap/{crName.GetString()}{prefixSuffix}{optional}"));
             }
         }
     }
 
-    private static EnvVarViewModel ParseEnvVar(JsonElement e)
+    /// <summary>Finds one container's spec across all three container arrays.</summary>
+    private static JsonElement? FindContainerSpec(JsonElement spec, string name)
+    {
+        foreach (var arrayName in (string[])["containers", "initContainers", "ephemeralContainers"])
+        {
+            if (!spec.TryGetProperty(arrayName, out var array) || array.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            foreach (var c in array.EnumerateArray())
+            {
+                if (c.TryGetProperty("name", out var n) && n.GetString() == name)
+                {
+                    return c;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Enumerating <c>default(JsonElement)</c> throws; a missing array is just empty.</summary>
+    private static IEnumerable<JsonElement> Elements(JsonElement array)
+    {
+        if (array.ValueKind != JsonValueKind.Array)
+        {
+            yield break;
+        }
+
+        foreach (var item in array.EnumerateArray())
+        {
+            yield return item;
+        }
+    }
+
+    private static EnvVarViewModel ParseEnvVar(JsonElement e, JsonElement pod)
     {
         var name = e.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
 
@@ -411,27 +549,103 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         {
             var refName = skr.TryGetProperty("name", out var rn) ? rn.GetString() ?? "" : "";
             var key = skr.TryGetProperty("key", out var rk) ? rk.GetString() ?? "" : "";
-            return new EnvVarViewModel(name, null, $"Secret/{refName} · key={key}", "Secret", refName, key);
+            return new EnvVarViewModel(
+                name, null, $"Secret/{refName} · key={key}{OptionalSuffix(skr)}", "Secret", refName, key)
+            {
+                IsOptionalReference = IsOptional(skr),
+            };
         }
 
         if (valueFrom.TryGetProperty("configMapKeyRef", out var cmkr))
         {
             var refName = cmkr.TryGetProperty("name", out var rn) ? rn.GetString() ?? "" : "";
             var key = cmkr.TryGetProperty("key", out var rk) ? rk.GetString() ?? "" : "";
-            return new EnvVarViewModel(name, null, $"ConfigMap/{refName} · key={key}", "ConfigMap", refName, key);
+            return new EnvVarViewModel(
+                name, null, $"ConfigMap/{refName} · key={key}{OptionalSuffix(cmkr)}", "ConfigMap", refName, key)
+            {
+                IsOptionalReference = IsOptional(cmkr),
+            };
         }
 
+        // fieldRef and resourceFieldRef resolve against the pod object we already hold,
+        // so showing only the path was withholding an answer that was already in hand.
+        // ("fieldRef: status.podIP" tells you nothing; the IP tells you everything.)
         if (valueFrom.TryGetProperty("fieldRef", out var fr) && fr.TryGetProperty("fieldPath", out var fp))
         {
-            return new EnvVarViewModel(name, null, $"fieldRef: {fp.GetString()}", null, null, null);
+            var path = fp.GetString() ?? "";
+            var resolved = ResolveFieldPath(pod, path);
+            return new EnvVarViewModel(name, resolved, $"fieldRef: {path}", null, null, null)
+            {
+                // Resolved from the object rather than typed into the spec — worth
+                // saying, since it is not a literal even though it reads like one.
+                IsDerivedValue = resolved is not null,
+            };
         }
 
         if (valueFrom.TryGetProperty("resourceFieldRef", out var rfr) && rfr.TryGetProperty("resource", out var res))
         {
-            return new EnvVarViewModel(name, null, $"resourceFieldRef: {res.GetString()}", null, null, null);
+            var container = rfr.TryGetProperty("containerName", out var cn) ? cn.GetString() : null;
+            var suffix = container is null ? "" : $" (container {container})";
+            return new EnvVarViewModel(name, null, $"resourceFieldRef: {res.GetString()}{suffix}", null, null, null);
         }
 
         return new EnvVarViewModel(name, "", null, null, null, null);
+    }
+
+    private static bool IsOptional(JsonElement reference) =>
+        reference.TryGetProperty("optional", out var optional) && optional.ValueKind == JsonValueKind.True;
+
+    private static string OptionalSuffix(JsonElement reference) => IsOptional(reference) ? " · optional" : "";
+
+    /// <summary>
+    /// Walks a Downward-API <c>fieldPath</c> ("metadata.name", "status.podIP",
+    /// "metadata.labels['app']") over the pod object. Only the dotted and
+    /// bracket-quoted forms Kubernetes actually accepts here; anything else comes back
+    /// null and the row keeps showing the path, which is what it did before.
+    /// </summary>
+    private static string? ResolveFieldPath(JsonElement pod, string path)
+    {
+        var current = pod;
+        var index = 0;
+        while (index < path.Length)
+        {
+            string segment;
+            if (path[index] == '[')
+            {
+                var close = path.IndexOf(']', index);
+                if (close < 0)
+                {
+                    return null;
+                }
+
+                segment = path[(index + 1)..close].Trim('\'', '"');
+                index = close + 1;
+                if (index < path.Length && path[index] == '.')
+                {
+                    index++;
+                }
+            }
+            else
+            {
+                var next = path.IndexOfAny(['.', '['], index);
+                segment = next < 0 ? path[index..] : path[index..next];
+                index = next < 0 ? path.Length : next < path.Length && path[next] == '.' ? next + 1 : next;
+            }
+
+            if (segment.Length == 0
+                || current.ValueKind != JsonValueKind.Object
+                || !current.TryGetProperty(segment, out current))
+            {
+                return null;
+            }
+        }
+
+        return current.ValueKind switch
+        {
+            JsonValueKind.String => current.GetString(),
+            JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False => current.GetRawText(),
+            _ => null,
+        };
     }
 
     [RelayCommand]
@@ -532,47 +746,155 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     private Task OpenEventInvolvedObject(EventRowViewModel evt) =>
         evt.InvolvedObject is { } involved ? _openOwner(involved, evt.InvolvedObjectNamespace ?? PodNamespace) : Task.CompletedTask;
 
-    [RelayCommand]
-    private void ToggleFollowLogs()
+    // ------------------------------------------------------------------ logs
+    //
+    // Neither of the two log toggles is a Command, deliberately, and this is the one
+    // note to read before touching them. `ToggleButton.IsChecked` is registered
+    // two-way, and `ToggleButton.OnClick()` calls `Toggle()` *before*
+    // `Button.OnClick()` invokes the `Command`. A ToggleButton wired with both a
+    // two-way `IsChecked` binding and a toggling command therefore flips the property
+    // twice per click and lands exactly where it started — a guaranteed no-op. That
+    // is precisely what "Follow" and "Previous" did: Follow read IsFollowingLogs as
+    // already true and called StopLogs(), and Previous started a live follow of the
+    // current container instead of fetching the crashed instance's logs, which made
+    // LoadPreviousLogs unreachable from the UI. The work lives in the generated
+    // On<Property>Changed hooks instead; the view binds IsChecked and nothing else.
+
+    /// <summary>
+    /// Guards the two On<c>*</c>Changed hooks against this class's own writes.
+    /// StartLogs/StopLogs set the flags to describe what they just did, and those
+    /// writes must not re-enter the hook that called them.
+    /// </summary>
+    private bool _applyingLogState;
+
+    /// <summary>
+    /// Bumped by every start/stop. A stream's teardown only writes state when its
+    /// generation is still current — otherwise a stream cancelled a moment ago
+    /// clears the flag belonging to the one that replaced it, and the pane says
+    /// "stopped" over a stream that is very much running.
+    /// </summary>
+    private int _logGeneration;
+
+    /// <summary>What the running stream is reading, so a redundant restart is skipped.</summary>
+    private (string Container, bool Previous)? _streaming;
+
+    /// <summary>
+    /// Why the pane looks the way it does — the reason a stream ended, or null while
+    /// one is healthy. Rendered next to the state line, because "no lines" and "no
+    /// lines because the container has not started yet" need different next steps.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LogPlaceholder))]
+    [NotifyPropertyChangedFor(nameof(HasLogPlaceholder))]
+    private string? _logStatus;
+
+    /// <summary>True when <see cref="LogStatus"/> is a failure rather than an ordinary end.</summary>
+    [ObservableProperty]
+    private bool _isLogStatusProblem;
+
+    /// <summary>
+    /// The explicit empty state for the log pane (UI rule 9). Five distinguishable
+    /// situations used to render as the same blank card: nothing selected, connected
+    /// but silent, stopped, the stream ended with a reason, and a filter that matched
+    /// none of the buffered lines. The last one is the nastiest — a filter typo looks
+    /// exactly like a container that went quiet — so it reports what it filtered out.
+    /// </summary>
+    public string? LogPlaceholder
     {
-        if (IsFollowingLogs)
+        get
         {
-            StopLogs();
+            if (LogLines.Count > 0)
+            {
+                return null;
+            }
+
+            if (SelectedContainer is null)
+            {
+                return "No container selected.";
+            }
+
+            if (_allLogLines.Count > 0)
+            {
+                return LogSearchText.Length == 0
+                    ? null
+                    : $"No lines match “{LogSearchText}” — {_allLogLines.Count:N0} line{(_allLogLines.Count == 1 ? "" : "s")} buffered.";
+            }
+
+            if (LogStatus is { Length: > 0 } status)
+            {
+                return status;
+            }
+
+            return IsShowingPreviousLogs
+                ? $"Fetching the previous instance of {SelectedContainer.Name}…"
+                : IsFollowingLogs
+                    ? $"Connected to {SelectedContainer.Name} — waiting for output. The container hasn't logged anything yet."
+                    : "Log streaming is stopped. Press Follow to start it.";
+        }
+    }
+
+    public bool HasLogPlaceholder => LogPlaceholder is not null;
+
+    partial void OnIsFollowingLogsChanged(bool value)
+    {
+        if (_applyingLogState)
+        {
+            return;
+        }
+
+        if (value)
+        {
+            StartLogs();
         }
         else
         {
-            IsShowingPreviousLogs = false;
+            StopLogs("Log streaming is stopped. Press Follow to start it.", problem: false);
+        }
+    }
+
+    partial void OnIsShowingPreviousLogsChanged(bool value)
+    {
+        if (_applyingLogState)
+        {
+            return;
+        }
+
+        if (value)
+        {
+            LoadPreviousLogs();
+        }
+        else
+        {
             StartLogs();
         }
     }
 
-    [RelayCommand]
-    private void TogglePreviousLogs()
+    /// <summary>Writes a log flag without re-entering its own change hook.</summary>
+    private void SetLogFlags(bool following, bool previous)
     {
-        if (IsShowingPreviousLogs)
-        {
-            IsShowingPreviousLogs = false;
-            StartLogs();
-            return;
-        }
-
-        StopLogs();
-        ClearLogBuffer();
-        IsShowingPreviousLogs = true;
-        LoadPreviousLogs();
+        _applyingLogState = true;
+        IsFollowingLogs = following;
+        IsShowingPreviousLogs = previous;
+        _applyingLogState = false;
+        RaiseLogPlaceholder();
     }
 
     private void LoadPreviousLogs()
     {
         if (SelectedContainer is not { } container)
         {
+            SetLogFlags(following: false, previous: false);
             return;
         }
 
-        _logCts?.Cancel();
-        _logCts?.Dispose();
-        _logCts = new CancellationTokenSource();
-        var token = _logCts.Token;
+        if (_streaming == (container.Name, true))
+        {
+            return;
+        }
+
+        var token = BeginLogStream(container.Name, previous: true);
+        SetLogFlags(following: false, previous: true);
+        var generation = _logGeneration;
 
         _ = Task.Run(async () =>
         {
@@ -582,8 +904,10 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
                     PodNamespace, PodName, container.Name, follow: false, tailLines: 1000,
                     previous: true, timestamps: true, cancellationToken: token))
                 {
-                    await Dispatcher.UIThread.InvokeAsync(() => AppendLogLine(line));
+                    Enqueue(line);
                 }
+
+                await EndLogStreamAsync(generation, "Previous logs loaded — this is a snapshot, not a live stream.", problem: false);
             }
             catch (OperationCanceledException)
             {
@@ -591,7 +915,10 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
             }
             catch (Exception ex)
             {
-                await Dispatcher.UIThread.InvokeAsync(() => AppendLogLine($"[no previous container logs available: {ex.Message}]"));
+                // The API server explains this one properly ("previous terminated
+                // container \"app\" in pod \"x\" not found"), which is why Core stopped
+                // using EnsureSuccessStatusCode — the sentence IS the diagnosis.
+                await EndLogStreamAsync(generation, FirstLine(ex.Message), problem: true);
             }
         }, token);
     }
@@ -600,14 +927,18 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     {
         if (SelectedContainer is not { } container)
         {
+            SetLogFlags(following: false, previous: false);
             return;
         }
 
-        StopLogs();
-        ClearLogBuffer();
-        _logCts = new CancellationTokenSource();
-        var token = _logCts.Token;
-        IsFollowingLogs = true;
+        if (_streaming == (container.Name, false))
+        {
+            return;
+        }
+
+        var token = BeginLogStream(container.Name, previous: false);
+        SetLogFlags(following: true, previous: false);
+        var generation = _logGeneration;
 
         _ = Task.Run(async () =>
         {
@@ -617,8 +948,12 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
                     PodNamespace, PodName, container.Name, follow: true, tailLines: 200,
                     timestamps: true, cancellationToken: token))
                 {
-                    await Dispatcher.UIThread.InvokeAsync(() => AppendLogLine(line));
+                    Enqueue(line);
                 }
+
+                // follow=true returning means the container exited; the API server
+                // closes the stream rather than erroring.
+                await EndLogStreamAsync(generation, $"Stream ended — {container.Name} exited.", problem: false);
             }
             catch (OperationCanceledException)
             {
@@ -626,44 +961,170 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
             }
             catch (Exception ex)
             {
-                await Dispatcher.UIThread.InvokeAsync(() => AppendLogLine($"[log stream ended: {ex.Message}]"));
-            }
-            finally
-            {
-                await Dispatcher.UIThread.InvokeAsync(() => IsFollowingLogs = false);
+                await EndLogStreamAsync(generation, FirstLine(ex.Message), problem: true);
             }
         }, token);
     }
 
-    private void StopLogs()
+    /// <summary>Cancels whatever is running, clears the buffer and opens a new generation.</summary>
+    private CancellationToken BeginLogStream(string container, bool previous)
+    {
+        _logCts?.Cancel();
+        _logCts?.Dispose();
+        _logCts = new CancellationTokenSource();
+        _logGeneration++;
+        _streaming = (container, previous);
+        LogStatus = null;
+        IsLogStatusProblem = false;
+        ClearLogBuffer();
+        StartLogFlushTimer();
+        return _logCts.Token;
+    }
+
+    private async Task EndLogStreamAsync(int generation, string status, bool problem) =>
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            if (generation != _logGeneration)
+            {
+                return;
+            }
+
+            FlushLogLines();
+            StopLogFlushTimer();
+            _streaming = null;
+            LogStatus = status;
+            IsLogStatusProblem = problem;
+            SetLogFlags(following: false, previous: IsShowingPreviousLogs);
+        });
+
+    private void StopLogs(string? status = null, bool problem = false)
     {
         _logCts?.Cancel();
         _logCts?.Dispose();
         _logCts = null;
-        IsFollowingLogs = false;
+        _logGeneration++;
+        _streaming = null;
+        StopLogFlushTimer();
+        FlushLogLines();
+        LogStatus = status;
+        IsLogStatusProblem = problem;
+        SetLogFlags(following: false, previous: false);
     }
 
     private void ClearLogBuffer()
     {
+        lock (_pendingLogLock)
+        {
+            _pendingLogLines.Clear();
+        }
+
         _allLogLines.Clear();
         LogLines.Clear();
+        RaiseLogPlaceholder();
     }
 
-    private void AppendLogLine(string rawLine)
+    // --- throughput -----------------------------------------------------------
+    //
+    // The pump used to await one dispatcher call per line and then remove the oldest
+    // line from the bound collection with an O(n) Remove(item) — a linear scan of
+    // 4000 items plus a collection-changed notification, per line. A pod logging a
+    // few hundred lines a second locked the UI. Now the pump only takes a lock and
+    // appends a string; folding into the view models, filtering and trimming all
+    // happen once per tick on the UI thread, in bulk.
+
+    private static readonly TimeSpan LogFlushInterval = TimeSpan.FromMilliseconds(100);
+
+    private readonly List<string> _pendingLogLines = [];
+    private readonly Lock _pendingLogLock = new();
+    private DispatcherTimer? _logFlushTimer;
+
+    private void Enqueue(string rawLine)
     {
-        var line = new LogLineViewModel(rawLine, ShowLogTimestamps);
-        _allLogLines.Add(line);
-        while (_allLogLines.Count > MaxLogLines)
+        lock (_pendingLogLock)
         {
-            var removed = _allLogLines[0];
-            _allLogLines.RemoveAt(0);
-            LogLines.Remove(removed);
+            _pendingLogLines.Add(rawLine);
+        }
+    }
+
+    private void StartLogFlushTimer()
+    {
+        _logFlushTimer ??= CreateLogFlushTimer();
+        _logFlushTimer.Start();
+    }
+
+    private void StopLogFlushTimer() => _logFlushTimer?.Stop();
+
+    private DispatcherTimer CreateLogFlushTimer()
+    {
+        var timer = new DispatcherTimer { Interval = LogFlushInterval };
+        timer.Tick += (_, _) => FlushLogLines();
+        return timer;
+    }
+
+    private void FlushLogLines()
+    {
+        string[] raw;
+        lock (_pendingLogLock)
+        {
+            if (_pendingLogLines.Count == 0)
+            {
+                return;
+            }
+
+            raw = [.. _pendingLogLines];
+            _pendingLogLines.Clear();
         }
 
-        if (MatchesLogFilter(line))
+        foreach (var rawLine in raw)
         {
-            LogLines.Add(line);
+            var line = new LogLineViewModel(rawLine, ShowLogTimestamps);
+            _allLogLines.Add(line);
+            if (MatchesLogFilter(line))
+            {
+                LogLines.Add(line);
+            }
         }
+
+        TrimLogBuffer();
+        RaiseLogPlaceholder();
+    }
+
+    /// <summary>
+    /// Drops the oldest lines once past the cap, in one RemoveRange rather than a
+    /// scan-and-remove per line. The visible collection is trimmed from the front by
+    /// index for the same reason — the dropped lines are always the oldest, so their
+    /// position is known and there is nothing to search for.
+    /// </summary>
+    private void TrimLogBuffer()
+    {
+        var excess = _allLogLines.Count - MaxLogLines;
+        if (excess <= 0)
+        {
+            return;
+        }
+
+        var dropped = _allLogLines.GetRange(0, excess);
+        _allLogLines.RemoveRange(0, excess);
+
+        var visible = 0;
+        foreach (var line in dropped)
+        {
+            if (MatchesLogFilter(line))
+            {
+                visible++;
+            }
+        }
+
+        for (var i = 0; i < visible && LogLines.Count > 0; i++)
+        {
+            LogLines.RemoveAt(0);
+        }
+    }
+
+    private void RaiseLogPlaceholder()
+    {
+        OnPropertyChanged(nameof(LogPlaceholder));
+        OnPropertyChanged(nameof(HasLogPlaceholder));
     }
 
     private bool MatchesLogFilter(LogLineViewModel line) =>
@@ -681,6 +1142,8 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
                 LogLines.Add(line);
             }
         }
+
+        RaiseLogPlaceholder();
     }
 
     partial void OnShowLogTimestampsChanged(bool value)
@@ -689,6 +1152,13 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         {
             line.ShowTimestamp = value;
         }
+    }
+
+    /// <summary>Parser/HTTP messages can run to several lines; an inline notice gets the first.</summary>
+    private static string FirstLine(string message)
+    {
+        var end = message.IndexOfAny(['\r', '\n']);
+        return end < 0 ? message : message[..end];
     }
 
     [RelayCommand]
@@ -700,8 +1170,17 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
             return;
         }
 
-        await clipboard.SetTextAsync(string.Join(Environment.NewLine, LogLines.Select(l => l.DisplayText)));
+        await clipboard.SetTextAsync(VisibleLogText());
     }
+
+    /// <summary>
+    /// What Copy and Download write: the raw server lines, timestamps included,
+    /// regardless of the display toggle. Both used to write <c>DisplayText</c>, so a
+    /// log saved with timestamps switched off had none — and a log pasted into an
+    /// incident ticket without timestamps is close to useless. The filter still
+    /// applies, because "copy visible logs" is what the buttons say.
+    /// </summary>
+    private string VisibleLogText() => string.Join(Environment.NewLine, LogLines.Select(l => l.RawLine));
 
     [RelayCommand]
     private async Task DownloadLogsAsync()
@@ -726,13 +1205,21 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
 
         await using var stream = await file.OpenWriteAsync();
         await using var writer = new StreamWriter(stream);
-        await writer.WriteAsync(string.Join(Environment.NewLine, LogLines.Select(l => l.DisplayText)));
+        await writer.WriteAsync(VisibleLogText());
     }
 
     private static Window? GetMainWindow() =>
         Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop ? desktop.MainWindow : null;
 
-    [RelayCommand]
+    /// <summary>
+    /// Both buttons need a container. Without a CanExecute they were enabled with
+    /// nothing selected and silently did nothing when pressed, which reads as the app
+    /// being broken rather than as a missing selection (CLAUDE.md UI rule 9's last
+    /// clause: a command that cannot run must be disabled, never a silent no-op).
+    /// </summary>
+    private bool HasSelectedContainer => SelectedContainer is not null;
+
+    [RelayCommand(CanExecute = nameof(HasSelectedContainer))]
     private void Exec()
     {
         if (SelectedContainer is not { } container)
@@ -743,7 +1230,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         _openTab(new ExecTabViewModel(_client, PodNamespace, PodName, container.Name));
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(HasSelectedContainer))]
     private void PortForward()
     {
         if (SelectedContainer is not { } container)
@@ -751,11 +1238,21 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
             return;
         }
 
-        _openTab(new PortForwardTabViewModel(_client, PodNamespace, PodName, container.TcpPorts.FirstOrDefault(8080)));
+        // The pod's own declared ports, not a hardcoded 8080 — see PortForwardTabViewModel.
+        _openTab(new PortForwardTabViewModel(_client, PodNamespace, PodName, container.Ports));
     }
 
     [RelayCommand]
     private Task OpenOwner(OwnerRef owner) => _openOwner(owner, PodNamespace);
+
+    /// <summary>
+    /// Opens the Secret/ConfigMap behind an <c>envFrom</c> entry. Routed through the
+    /// same OwnerRef resolve-and-open path owner chips and event navigation already
+    /// use — it takes a kind and a name, which is exactly what an envFrom source is.
+    /// </summary>
+    [RelayCommand]
+    private Task OpenEnvFromSource(EnvFromSourceViewModel source) =>
+        _openOwner(new OwnerRef("v1", source.Kind, source.Name, Uid: null, Controller: false), PodNamespace);
 
     public override async Task OnClosingAsync()
     {

@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
@@ -259,7 +260,7 @@ public sealed class PortForwardSession(ClusterClient client, string @namespace, 
     {
         var buffer = new byte[BufferSize + 1];
         var portHeaderSeen = new bool[ChannelCount];
-        MemoryStream? errorBytes = null;
+        ArrayBufferWriter<byte>? errorBytes = null;
         byte channel = 0;
         var continuation = false;
 
@@ -307,17 +308,17 @@ public sealed class PortForwardSession(ClusterClient client, string @namespace, 
                     case ErrorChannel:
                         // Accumulated as bytes, decoded once the message ends, so
                         // a multi-byte character split across fragments survives.
-                        (errorBytes ??= new MemoryStream()).Write(buffer, offset, count);
+                        (errorBytes ??= new ArrayBufferWriter<byte>()).Write(buffer.AsSpan(offset, count));
                         break;
                 }
             }
 
-            if (result.EndOfMessage && errorBytes is { Length: > 0 })
+            if (result.EndOfMessage && errorBytes is { WrittenCount: > 0 })
             {
                 // The kubelet says this once and then drops the connection.
                 // Surfacing it is the difference between "connection refused"
                 // and a local port that accepts and answers nothing.
-                throw new PortForwardException(Encoding.UTF8.GetString(errorBytes.ToArray()).Trim());
+                throw new PortForwardException(Encoding.UTF8.GetString(errorBytes.WrittenSpan).Trim());
             }
         }
     }

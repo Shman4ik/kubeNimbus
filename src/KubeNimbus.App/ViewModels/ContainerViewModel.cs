@@ -3,6 +3,31 @@ using KubeNimbus.Core;
 
 namespace KubeNimbus.App.ViewModels;
 
+/// <summary>
+/// One <c>spec.containers[].ports[]</c> entry worth forwarding to. Only TCP appears
+/// here — the port-forward protocol has no UDP.
+/// </summary>
+/// <param name="Number">The container port.</param>
+/// <param name="Name">The port's declared name ("http", "metrics"), or null.</param>
+public sealed record ContainerPort(int Number, string? Name)
+{
+    /// <summary>What the picker shows: "8080 · http", or just the number when unnamed.</summary>
+    public string Display => string.IsNullOrEmpty(Name) ? Number.ToString() : $"{Number} · {Name}";
+}
+
+/// <summary>
+/// Which of a pod's three container lists this one came from. Init and ephemeral
+/// containers used to be invisible in pod detail entirely, so an init container that
+/// would not start — one of the commonest reasons a pod never runs — could not be
+/// inspected at all, and its logs were unreachable.
+/// </summary>
+public enum ContainerRole
+{
+    App,
+    Init,
+    Ephemeral,
+}
+
 /// <summary>One container row in the pod detail view (spec + live status + measured usage merged).</summary>
 public sealed partial class ContainerViewModel(string name, string image) : ObservableObject
 {
@@ -10,17 +35,46 @@ public sealed partial class ContainerViewModel(string name, string image) : Obse
 
     public string Image { get; } = image;
 
+    public ContainerRole Role { get; init; } = ContainerRole.App;
+
+    /// <summary>Badge on the chip: app containers get none, the other two say what they are.</summary>
+    public string RoleLabel => Role switch
+    {
+        ContainerRole.Init => "init",
+        ContainerRole.Ephemeral => "debug",
+        _ => "",
+    };
+
+    public bool HasRoleLabel => Role != ContainerRole.App;
+
     [ObservableProperty]
     private bool _ready;
 
     [ObservableProperty]
     private int _restartCount;
 
+    /// <summary>
+    /// The container's live state, preferring the <c>waiting</c>/<c>terminated</c>
+    /// reason over the bare state name — "CrashLoopBackOff", not "waiting". It was
+    /// parsed and then bound to nothing, so a crash-looping container looked exactly
+    /// like a healthy one apart from a restart count, and nothing on screen pointed at
+    /// the Previous button, which is the only place its actual failure is written down.
+    /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasStateLabel))]
     private string _state = "Unknown";
 
+    /// <summary>Worth showing on the chip? A plainly running container needs no label.</summary>
+    public bool HasStateLabel => State is not ("running" or "Unknown" or "");
+
+    /// <summary>
+    /// The container's declared TCP ports, names included. The name is half the
+    /// information — a pod declaring <c>http 8080</c> and <c>metrics 9090</c> is
+    /// self-documenting, and picking between two bare numbers is not. These used to
+    /// be collected and then thrown away in favour of a hardcoded 8080.
+    /// </summary>
     [ObservableProperty]
-    private IReadOnlyList<int> _tcpPorts = [];
+    private IReadOnlyList<ContainerPort> _ports = [];
 
     /// <summary>Measured usage from metrics.k8s.io; null until the first poll (or forever without metrics-server).</summary>
     [ObservableProperty]

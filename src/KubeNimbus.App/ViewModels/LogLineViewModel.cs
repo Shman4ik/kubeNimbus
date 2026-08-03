@@ -74,6 +74,36 @@ public sealed partial class LogLineViewModel : ObservableObject
         return LogSeverity.None;
     }
 
-    private static bool ContainsToken(string text, string token) =>
-        text.Contains(token, StringComparison.OrdinalIgnoreCase);
+    /// <summary>
+    /// Whether <paramref name="token"/> appears as a whole word. A plain substring test
+    /// is what this used to be, and it coloured <c>GET /api/v1/errors 200</c> red and
+    /// <c>infofmt</c> blue — a severity heuristic that fires on the request path is
+    /// worse than none, because it teaches you to stop trusting the colour.
+    /// The boundary is "not a letter or digit", so <c>[ERROR]</c>, <c>level=error</c>,
+    /// <c>ERROR:</c> and <c>"level":"warn"</c> all still match.
+    /// </summary>
+    private static bool ContainsToken(string text, string token)
+    {
+        var start = 0;
+        while (start <= text.Length - token.Length)
+        {
+            var index = text.IndexOf(token, start, StringComparison.OrdinalIgnoreCase);
+            if (index < 0)
+            {
+                return false;
+            }
+
+            var before = index == 0 || !char.IsLetterOrDigit(text[index - 1]);
+            var afterIndex = index + token.Length;
+            var after = afterIndex == text.Length || !char.IsLetterOrDigit(text[afterIndex]);
+            if (before && after)
+            {
+                return true;
+            }
+
+            start = index + 1;
+        }
+
+        return false;
+    }
 }

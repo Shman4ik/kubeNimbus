@@ -71,7 +71,7 @@ public sealed partial class SidebarKindViewModel(ResourceDescriptor descriptor, 
 
     public string IconKey { get; } = iconKey;
 
-    public string DisplayName { get; } = Pluralize(descriptor.Kind);
+    public string DisplayName { get; } = Pluralize(descriptor);
 
     /// <summary>
     /// True for the synthetic Helm entry, which switches the content area to the
@@ -120,6 +120,22 @@ public sealed partial class SidebarKindViewModel(ResourceDescriptor descriptor, 
         || Descriptor.Group.Contains(query, StringComparison.OrdinalIgnoreCase)
         || Descriptor.ShortNames.Any(s => s.Contains(query, StringComparison.OrdinalIgnoreCase));
 
-    private static string Pluralize(string kind) =>
-        kind.EndsWith('s') || kind.EndsWith('x') ? kind + "es" : kind + "s";
+    /// <summary>
+    /// The sidebar label. The <b>server</b> decides whether a Kind is already plural,
+    /// not a suffix rule: discovery hands back the plural for every kind, so a Kind
+    /// whose plural is itself lowercased ("Endpoints" → <c>endpoints</c>) needs no
+    /// suffix. The naive rule rendered that one "Endpointses", and would do the same
+    /// to any CRD Kind that is already plural — which nothing in a hardcoded list of
+    /// exceptions could ever cover, since the kinds come from the cluster.
+    /// </summary>
+    private static string Pluralize(ResourceDescriptor descriptor)
+    {
+        var kind = descriptor.Kind;
+        if (string.Equals(descriptor.Plural, kind, StringComparison.OrdinalIgnoreCase))
+        {
+            return kind;
+        }
+
+        return kind.EndsWith('s') || kind.EndsWith('x') ? kind + "es" : kind + "s";
+    }
 }

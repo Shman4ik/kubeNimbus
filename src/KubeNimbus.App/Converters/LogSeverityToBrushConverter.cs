@@ -1,4 +1,5 @@
 using System.Globalization;
+using Avalonia;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
 using KubeNimbus.App.ViewModels;
@@ -19,7 +20,15 @@ public sealed class LogSeverityToBrushConverter : IValueConverter
         LogSeverity.Error => Error,
         LogSeverity.Warn => Warn,
         LogSeverity.Info => Info,
-        _ => null, // null Foreground falls back to the TextBlock's inherited (theme) color
+
+        // UnsetValue, emphatically NOT null. Foreground is an inherited property, and a
+        // binding that produces null writes a *local* null which beats inheritance —
+        // then Avalonia's glyph-run draw early-returns on a null brush, so every line
+        // without a severity keyword rendered completely invisible. nginx access logs,
+        // Go's log.Print and any JSON logger produce exactly those lines, which is most
+        // of them. UnsetValue means "no value here", so inheritance wins and the line
+        // takes the theme foreground in both light and dark.
+        _ => AvaloniaProperty.UnsetValue,
     };
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>

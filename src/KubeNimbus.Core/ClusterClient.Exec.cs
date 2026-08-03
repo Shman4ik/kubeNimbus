@@ -124,7 +124,11 @@ public sealed class ExecSession(IStreamDemuxer demuxer, Stream stdIn, Stream std
                 return text;
             }
 
+            // ValueKind is checked before GetString(): it throws on a non-string
+            // element, and that InvalidOperationException would escape the
+            // JsonException catch below and take out the whole exec session.
             if (root.TryGetProperty("status", out var status)
+                && status.ValueKind == JsonValueKind.String
                 && string.Equals(status.GetString(), "Success", StringComparison.Ordinal))
             {
                 return null;

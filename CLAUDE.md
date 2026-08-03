@@ -82,9 +82,21 @@ choice must be AOT/trimming-compatible from day one.
 5. **Opening a resource/YAML never overwrites an active editor tab.**
 6. **The sidebar filters and collapses, it doesn't just scroll.** A cluster's
    resource catalog (built-ins + CRDs) commonly runs past 100 kinds; the
-   sidebar's filter box + collapsible sections (CRDs collapsed by default,
-   `SidebarSectionViewModel.IsExpanded`) are load-bearing UX, not optional
-   polish — any new sidebar content must stay filterable and collapsible.
+   sidebar's filter box + collapsible sections (Config, Cluster and CRDs
+   collapsed by default — `SidebarGrouping.IsExpandedByDefault`) are
+   load-bearing UX, not optional polish — any new sidebar content must stay
+   filterable and collapsible. There are **six** sections, not five: `Cluster`
+   was split out because Config had become the catalog's junk drawer. Measured
+   on a bare k3s the old bucketing gave Workloads 8, Network 6 and **Config
+   33** — APIServices, CSRs, ClusterRoles and the whole of flowcontrol,
+   admissionregistration, apiregistration and coordination, all filed as
+   "configuration", and expanded on connect. The cause was that bucketing was
+   **Kind-first**: it named the kinds it wanted and dropped everything
+   recognized-but-unlisted into Config. It is now **by API group** outside the
+   core group (Kind still decides inside `""`, the one group that holds
+   workloads, networking, storage and machinery at once), which has no such
+   residue — and stops a CRD that happens to be called `Deployment` from being
+   classified as a built-in workload, which the old rule did.
    The filter matches display name, **API group and short names**
    (`SidebarKindViewModel.Matches`), because the group is the only thing
    telling two same-named CRD kinds apart and "svc"/"po" is how people think.
@@ -113,6 +125,23 @@ choice must be AOT/trimming-compatible from day one.
    button-like controls set, so on a `Border` it must be a real class toggled
    from the pointer handlers (`Border.clusterTab.pressed`), never
    `Border.clusterTab:pressed`, which compiles and silently never matches.
+8b. **A `ToggleButton` gets EITHER a two-way `IsChecked` binding OR a toggling
+   `Command` — never both.** `ToggleButton.IsChecked` is registered
+   `defaultBindingMode: TwoWay`, and `ToggleButton.OnClick()` calls `Toggle()`
+   **before** `Button.OnClick()` invokes the `Command`. So a control wired with
+   both flips the property twice per click and lands exactly where it started:
+   a guaranteed no-op that compiles, renders, animates its checked state, and
+   does nothing. This shipped three times — pod detail's **Follow** (which
+   stopped the stream it was meant to start, so logs never streamed at all),
+   pod detail's **Previous** (which started a live follow instead, making
+   `LoadPreviousLogs` unreachable from the UI — the single most important
+   CrashLoopBackOff gesture in the app), and the YAML editor's Secret
+   **Reveal values**. Put the work in the generated `On<Property>Changed`
+   partial; `ShowLogTimestamps`, `WrapLogLines` and `IsFleetView` are the
+   correct precedent. If a command is genuinely needed (the palette, a
+   screenshot fixture), give it an explicit target value rather than an
+   inversion — `MainWindowViewModel.SetAdvancedView(bool)` is the pattern —
+   so it cannot race the control's own toggle.
 9. **Every list/panel state gets an explicit visual** — loading, empty,
    disconnected, conflict, delete-confirm — never a blank rectangle that
    looks like a bug. `ClusterTabViewModel.IsListLoading`/`IsListEmpty` is the
@@ -125,6 +154,45 @@ choice must be AOT/trimming-compatible from day one.
    and "empty dropdown, dead + button" is the most likely first-run
    experience there. Any command that cannot run must be disabled
    (`AddNewTabCommand`'s `CanExecute`), never silently no-op.
+
+## The Advanced view
+
+One global persisted boolean, default **off**, mirrored onto every cluster tab
+and every inspector tab. It answers a complaint about the whole surface ("too
+much stuff for every Kubernetes type"), not about any one control, so it is one
+switch rather than a preferences page of them — the same shape as pgNimbus's
+`ShowAdvancedObjects`, in the same place (an icon-only `ToggleButton
+Classes="chip"` docked right of the sidebar's filter box, tooltip carrying the
+explanation), because people who use both should find it where they left it.
+
+Off hides: the CPU/Memory columns and their sparklines, pod detail's Usage tab,
+the fleet toggle and Cluster column, the log toolbar's Wrap/Copy/Download and
+the redundant "Following …" caption, the exec pane's Send button, YAML
+force-apply, the sidebar's kind-count badges, and the Helm/RBAC palette entries.
+On restores today's surface exactly — it is a hide/show switch, not a second
+layout, and `cluster-tab-workloads-list` / `cluster-tab-advanced-view` are the
+same fixture tab rendered both ways to keep that honest.
+
+Four things are load-bearing:
+
+- **It is a display switch and nothing else.** Flipping it must never restart a
+  watch, refetch anything, or lose list/inspector state — which is why every
+  consumer is a derived property, and why the fleet toggle stays visible while
+  aggregation is *on* even with the switch off (`IsFleetToggleVisible`).
+  Stranding a tab in fleet mode with no way out would mean the switch had
+  changed behaviour, not just visibility.
+- **Nothing it hides becomes unreachable.** Everything has a Ctrl/Cmd+K entry,
+  including the switch itself, which is what makes hiding by default safe.
+- **The shell owns it; tabs carry a mirror.** `MainWindowViewModel` persists it
+  (`WorkspaceSettings.IsAdvancedView`) and broadcasts; `ClusterTabViewModel` and
+  `InspectorTabViewModelBase` hold copies so views can use compiled bindings
+  against their own DataContext. It is stamped in `ClusterTabViewModel
+  .AddInspectorTab` — the one funnel every inspector tab enters through — so a
+  tab kind added later inherits the gate instead of shipping with it open,
+  which is exactly what the YAML editor's force-apply did before that existed.
+- **Adding a tab is what stamps it.** The screenshot harness therefore sets the
+  flag on the *shell* after adding the tab (`HostInMainWindow`), not on the tab;
+  setting it on the tab alone is silently overwritten.
 
 ## The cluster switcher and environment colours
 
@@ -1024,3 +1092,109 @@ audience and a tagged release. See "Releasing" above for the design rules. New:
   win-x64 NativeAOT publish (only linux-x64 has ever run), the macOS and Linux
   release binaries actually launching, and the live-cluster half — the sandbox
   still can't come up here (Docker Hub blob CDN blocked by egress policy).
+
+**Core-scenario + Advanced-view pass:** the first pass driven by hand-testing
+against a live cluster rather than by fixtures, and it found that the app's
+central on-call scenario — open a pod, read logs, exec in, port-forward, look
+at env/secrets — was partly broken end to end. See the Advanced view section
+and UI rule 8b above for the two rules it added. What was wrong, and is not
+any more:
+
+- **Pod logs never streamed.** Two independent causes: the `ToggleButton`
+  `IsChecked`+`Command` double-toggle (UI rule 8b) made Follow a guaranteed
+  no-op and made `LoadPreviousLogs` unreachable, and `StartLogs()` was never
+  called on open — so double-clicking a pod landed on a blank card with no
+  message at all. Logs now start on open, the stream follows the container
+  picker (it used to keep streaming the old container under the new one's
+  name), and the pane has explicit states for streaming-but-silent, stopped,
+  ended-with-a-reason and filter-matched-nothing-of-*n*-buffered.
+- **`LogSeverityToBrushConverter` returned `null` for the default case**, which
+  writes a *local* null `Foreground` that beats inheritance — and Avalonia's
+  glyph-run draw early-returns on a null brush, so every line without a
+  severity keyword rendered **invisible**. That is most lines: nginx access
+  logs, Go `log.Print`, anything JSON. It returns `AvaloniaProperty.UnsetValue`
+  now. It was never caught because every fixture log line contains a keyword.
+- The severity heuristic was substring, not token, so `GET /api/v1/errors`
+  coloured red; it matches whole words now.
+- **Throughput**: the pump awaited one dispatcher round-trip *per line* and did
+  an O(n) `ObservableCollection.Remove` per line past the 4000 cap. Lines are
+  now batched on a 100 ms tick and trimmed with one `RemoveRange`. Auto-scroll
+  is posted (it used to run inside `CollectionChanged`, one line behind) and
+  has a scroll lock.
+- Logs are horizontally scrollable and selectable; Copy/Download write the raw
+  lines *with* timestamps (they wrote `DisplayText`, so a log saved with the
+  timestamp toggle off had none).
+- **Init and ephemeral containers were invisible entirely** — a failing init
+  container could not be inspected at all. All three lists are read now, the
+  chip carries the role and the live state (`CrashLoopBackOff`), and the
+  default selection is the first *app* container, as `kubectl logs` does.
+- `RefreshEnvironment()` ran on every watch tick and cleared `EnvironmentVars`,
+  so a **revealed secret value vanished seconds later**; it is now keyed on a
+  signature of the container's own env block. `fieldRef` resolves against the
+  pod object we already hold, `optional: true` refs read dim rather than as
+  errors, and each `envFrom` line opens the object it names.
+- **Exec**: `/bin/sh` was hardcoded, so a bash-only or distroless image gave a
+  connected-looking blank terminal. It now tries bash → sh → ash, decided by
+  the API server's **error channel** (channel 3 — the only place a missing
+  shell is reported; neither stdout nor stderr carries it). Ctrl+C / Ctrl+D /
+  Tab reach the remote shell, the input box takes focus on open, and
+  `ResizeAsync` finally has a caller so the PTY isn't stuck at 80×24.
+  **Gotcha worth keeping**: `StreamDemuxer`'s per-channel streams do **not**
+  observe a `CancellationToken`, so the shell probe times out via
+  `Task.WhenAny`, not `CancelAfter` — the first live run hung on "Connecting…"
+  forever because of exactly that.
+- **Port-forward** offers the pod's declared ports with their names (they were
+  collected and then discarded for a hardcoded 8080), copies/opens the local
+  URL, locks its inputs while running, titles the tab with the port, and shows
+  the kubelet's own refusal text. A forward whose last connection failed reads
+  warn, not ok — the listener really is still accepting, so "stopped" would be
+  a lie.
+- **The list gained kubectl's columns** — Ready / Restarts (with "(43m ago)") /
+  Age / a kind-specific Details — gated per kind by `ResourceStatusSummary`
+  from `ClusterTabView.ApplySummaryColumns`. Age ticks off one shared timer per
+  list, since no watch event makes wall-clock change.
+- **Right-clicking a resource did nothing**; there is now a row `ContextFlyout`
+  (Logs / Previous logs / Exec / Port-forward / Edit YAML / Delete) with the
+  same six actions mirrored as palette entries, and a `PointerPressed` handler
+  so the menu acts on the row it opened over rather than on the previous
+  selection — which matters when the last item is Delete.
+- Sidebar kinds are labelled from the server's own plural, so `Endpoints` stops
+  rendering as "Endpointses" (and no CRD Kind that is already plural will).
+
+**Verified this session, against the live k3s sandbox**: build (0 warnings),
+**137/137 TUnit with 0 skipped** (so the cluster-gated tests really ran), both
+byte-level repro scripts (`pftest.cs` → `HTTP/1.1 200 OK` with no junk prefix;
+`yamltest.cs` → all string scalars survive), all 32 screenshot scenarios in both
+themes, and a DevTools-driven pass over the running app: the Status/Ready/
+Restarts/Age columns match `kubectl get pods -A` row for row across every
+`demo-*` pod (`bad-image` → ImagePullBackOff, `crashloop` → CrashLoopBackOff
+151 (2m ago), a finished Job pod → Completed and *not* coloured as an error),
+logs stream on open with no click, switching container switches the stream,
+Previous works on `demo-broken/crashloop`, a filter matching nothing says so
+with the buffered count, and exec connects after correctly skipping `/bin/bash`.
+
+**Not verified this session**, in rough priority order: the port-forward pane's
+new UI end to end (Core is proven by `pftest.cs`, the pane is not), the env/
+Secret reveal path against a real Secret, the row context menu and the new
+palette entries by actual mouse/keyboard (they were verified by construction,
+not driven), Advanced-view off/on in the *running* app rather than in the
+harness, and the win-x64 NativeAOT publish — still the one build that has never
+run anywhere.
+
+### `dotnet test --project` is broken on this machine (SDK 10.0.400-preview)
+
+`dotnet test --project tests/KubeNimbus.Core.Tests/KubeNimbus.Core.Tests.csproj`
+reports **"Zero tests ran", exit code 5**, and it does so on a clean checkout of
+the checkpoint commit too — this is the local SDK
+(`10.0.400-preview.0.26322.102`), not a regression in the suite. Running the
+test executable directly works and is what these 137 results come from:
+
+```powershell
+tests/KubeNimbus.Core.Tests/bin/Debug/net10.0/KubeNimbus.Core.Tests.exe
+```
+
+CI pins `10.0.100` via `global.json` and still uses `--project`, so it is
+unaffected — but if a local run ever looks suspiciously green *or* suspiciously
+empty, check the invocation before the code. This is the second distinct way
+`dotnet test` has silently run nothing in this repo; the first (a positional
+csproj, exit 0) is documented under Verification workflow.

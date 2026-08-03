@@ -185,8 +185,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         // Straight to the backing field: this runs during construction, before any
         // binding or tab exists, and going through the property would only persist
-        // the value that was just read back over itself.
+        // the value that was just read back over itself. MVVMTK0034 is the analyzer
+        // asking "did you mean the property?" — here, no.
+#pragma warning disable MVVMTK0034
         _isAdvancedView = settings.IsAdvancedView ?? false;
+#pragma warning restore MVVMTK0034
 
         _environmentOverrides.Clear();
         foreach (var (name, value) in settings.EnvironmentOverrides ?? [])
@@ -584,6 +587,38 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         // Access review is a deliberate errand, not something you stumble into — it
         // rides the advanced view along with the rest of the specialist surface.
+        // The selected row's actions, mirroring the row context menu. The palette had
+        // no logs, exec or port-forward entry at all — the three things the app exists
+        // to do — so the only route to any of them was opening a pod's detail pane and
+        // finding the buttons on its container strip. Offered only when they apply,
+        // rather than listed-and-disabled: a palette is a search, and an entry that
+        // matches your query and then refuses to run is worse than no match.
+        if (SelectedTab is { SelectedRow: { } row } rowTab)
+        {
+            var where = $"{row.Namespace}/{row.Name}";
+
+            if (rowTab.IsPodRowSelected)
+            {
+                yield return new PaletteItem("Logs", where, "PlayIconGeometry",
+                    () => rowTab.OpenLogsCommand.Execute(null));
+
+                yield return new PaletteItem("Previous logs", $"{where} · the crashed instance", "PlayIconGeometry",
+                    () => rowTab.OpenPreviousLogsCommand.Execute(null));
+
+                yield return new PaletteItem("Exec into container", where, "ConsoleIconGeometry",
+                    () => rowTab.ExecIntoSelectedCommand.Execute(null));
+
+                yield return new PaletteItem("Port-forward", where, "SwapHorizontalIconGeometry",
+                    () => rowTab.PortForwardSelectedCommand.Execute(null));
+            }
+
+            yield return new PaletteItem("Edit YAML", where, "CodeBracesIconGeometry",
+                () => rowTab.EditSelectedYamlCommand.Execute(null));
+
+            yield return new PaletteItem("Delete…", $"{where} · asks to confirm", "DeleteIconGeometry",
+                () => rowTab.DeleteSelectedCommand.Execute(null));
+        }
+
         if (IsAdvancedView && SelectedTab is { IsConnected: true } connected)
         {
             yield return new PaletteItem(

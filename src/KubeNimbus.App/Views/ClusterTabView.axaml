@@ -12,20 +12,33 @@
     <!-- Sidebar: sits directly on the shell tone, Files-style — no card chrome. -->
     <Grid Grid.Column="0" RowDefinitions="Auto,*" Margin="0,0,8,0">
 
-      <TextBox Grid.Row="0" Classes="filterbox" Margin="4,0,4,8"
-                Text="{Binding SidebarFilter}" PlaceholderText="Filter resources…">
-        <TextBox.InnerLeftContent>
-          <PathIcon Data="{StaticResource MagnifyIconGeometry}" Width="11" Height="11" Opacity="0.5" Margin="8,0,0,0" />
-        </TextBox.InnerLeftContent>
-        <TextBox.InnerRightContent>
-          <Button Classes="chip" Padding="0" MinWidth="16" MinHeight="16" Margin="0,0,4,0"
-                  IsVisible="{Binding SidebarFilter, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}"
-                  Command="{Binding $parent[UserControl].((vm:ClusterTabViewModel)DataContext).ClearSidebarFilterCommand}"
-                  ToolTip.Tip="Clear filter">
-            <PathIcon Data="{StaticResource CloseIconGeometry}" Width="9" Height="9" />
-          </Button>
-        </TextBox.InnerRightContent>
-      </TextBox>
+      <!-- Filter row, with the advanced-view switch docked right of it — same placement
+           and same shape as pgNimbus's SchemaTreePanel, because it answers the same
+           complaint ("too much of it, all the time") and people who use both should
+           find it in the same place. It is a ToggleButton with a two-way IsChecked and
+           NO Command: the two together cancel each other out (see the note on
+           ClusterTabViewModel.IsAdvancedView). -->
+      <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="4,0,4,8">
+        <TextBox Grid.Column="0" Classes="filterbox"
+                  Text="{Binding SidebarFilter}" PlaceholderText="Filter resources…">
+          <TextBox.InnerLeftContent>
+            <PathIcon Data="{StaticResource MagnifyIconGeometry}" Width="11" Height="11" Opacity="0.5" Margin="8,0,0,0" />
+          </TextBox.InnerLeftContent>
+          <TextBox.InnerRightContent>
+            <Button Classes="chip" Padding="0" MinWidth="16" MinHeight="16" Margin="0,0,4,0"
+                    IsVisible="{Binding SidebarFilter, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}"
+                    Command="{Binding $parent[UserControl].((vm:ClusterTabViewModel)DataContext).ClearSidebarFilterCommand}"
+                    ToolTip.Tip="Clear filter">
+              <PathIcon Data="{StaticResource CloseIconGeometry}" Width="9" Height="9" />
+            </Button>
+          </TextBox.InnerRightContent>
+        </TextBox>
+        <ToggleButton Grid.Column="1" Classes="chip" Padding="5" Margin="6,0,0,0" VerticalAlignment="Center"
+                      IsChecked="{Binding IsAdvancedView}"
+                      ToolTip.Tip="Advanced view — also show CPU/memory columns and graphs, the fleet toggle, log tools, force-apply, and the Helm &amp; RBAC commands">
+          <PathIcon Data="{StaticResource TuneIconGeometry}" Width="14" Height="14" />
+        </ToggleButton>
+      </Grid>
 
       <ScrollViewer Grid.Row="1">
         <ItemsControl ItemsSource="{Binding SidebarSections}">
@@ -42,7 +55,11 @@
                       </PathIcon.RenderTransform>
                     </PathIcon>
                     <TextBlock Grid.Column="1" Classes="sectionHeader" Text="{Binding Title}" VerticalAlignment="Center" />
-                    <TextBlock Grid.Column="2" Classes="sectionHeader" Text="{Binding KindCount}" Opacity="0.4" VerticalAlignment="Center" />
+                    <!-- "How much is hiding in here?" is a spelunking question, so the
+                         badge rides the advanced view (pushed down per section — see
+                         ClusterTabViewModel.ApplySidebarChrome). -->
+                    <TextBlock Grid.Column="2" Classes="sectionHeader" Text="{Binding KindCount}" Opacity="0.4"
+                               VerticalAlignment="Center" IsVisible="{Binding ShowKindCount}" />
                   </Grid>
                 </Border>
                 <ItemsControl ItemsSource="{Binding Kinds}" IsVisible="{Binding ShowKinds}">
@@ -121,6 +138,47 @@
                      ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}"
                      IsReadOnly="True" GridLinesVisibility="Horizontal" CanUserResizeColumns="True"
                      DoubleTapped="OnRowDoubleTapped">
+            <!-- Right-clicking a resource used to do nothing at all: the app had exactly
+                 one context menu anywhere, and logs / exec / port-forward had no entry
+                 point from the list. Bound to SelectedRow, with the grid's own
+                 right-click-selects handler (OnGridRightClick) making sure the row under
+                 the cursor is the row the menu acts on. Pod-only items are disabled
+                 rather than hidden, so the menu doesn't change shape per row —
+                 a menu whose items move is a menu you have to read every time. -->
+            <DataGrid.ContextFlyout>
+              <MenuFlyout>
+                <MenuItem Header="Logs" Command="{Binding OpenLogsCommand}">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource PlayIconGeometry}" Width="13" Height="13" />
+                  </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="Previous logs" Command="{Binding OpenPreviousLogsCommand}"
+                          ToolTip.Tip="The crashed instance's logs — where a CrashLoopBackOff explains itself" />
+                <Separator />
+                <MenuItem Header="Exec" Command="{Binding ExecIntoSelectedCommand}">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource ConsoleIconGeometry}" Width="13" Height="13" />
+                  </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="Port-forward" Command="{Binding PortForwardSelectedCommand}">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource SwapHorizontalIconGeometry}" Width="13" Height="13" />
+                  </MenuItem.Icon>
+                </MenuItem>
+                <Separator />
+                <MenuItem Header="Edit YAML" Command="{Binding EditSelectedYamlCommand}">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource CodeBracesIconGeometry}" Width="13" Height="13" />
+                  </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="Delete…" Command="{Binding DeleteSelectedCommand}"
+                          ToolTip.Tip="Opens the object's YAML with the delete confirmation armed">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource DeleteIconGeometry}" Width="13" Height="13" />
+                  </MenuItem.Icon>
+                </MenuItem>
+              </MenuFlyout>
+            </DataGrid.ContextFlyout>
             <DataGrid.Columns>
               <DataGridTemplateColumn Header="" Width="28">
                 <DataGridTemplateColumn.CellTemplate>
@@ -141,17 +199,31 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Namespace" Width="Auto" MinWidth="90">
+              <DataGridTemplateColumn Header="Namespace" Width="Auto" MinWidth="80">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding Namespace}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Namespace}" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Name" Width="2*" MinWidth="180">
+              <DataGridTemplateColumn Header="Name" Width="2*" MinWidth="150">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <!-- Ready / Status / Restarts / Age / Details are kubectl's own columns, and
+                   which of them apply is a property of the selected kind, not of the app:
+                   ClusterTabView.ApplySummaryColumns asks ResourceStatusSummary and shows
+                   or hides each one. A DataGridColumn is outside the visual tree, so it
+                   inherits no DataContext and cannot bind IsVisible itself — same reason
+                   the Cluster and usage columns are handled there. -->
+              <DataGridTemplateColumn Header="Ready" Width="Auto" MinWidth="64" IsVisible="False">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                    <TextBlock Text="{Binding ReadyText}" VerticalAlignment="Center"
+                               FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
@@ -168,11 +240,31 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
+              <!-- What kubectl shows instead of a status for kinds that have none:
+                   a Service's type/IP/ports, a ConfigMap's key count. -->
+              <DataGridTemplateColumn Header="Details" Width="*" MinWidth="150" IsVisible="False">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                    <TextBlock Text="{Binding Details}" VerticalAlignment="Center" FontSize="11.5"
+                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Details}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Restarts" Width="Auto" MinWidth="88" IsVisible="False">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                    <!-- The count carries "(43m ago)": 200 restarts that stopped yesterday
+                         and 200 still climbing are the same number and different problems. -->
+                    <TextBlock Text="{Binding RestartsText}" VerticalAlignment="Center"
+                               FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
               <!-- Usage columns: only meaningful for pods/nodes on a cluster with
                    metrics-server, so ClusterTabView.ApplyMetricsColumns shows and
                    hides them (a DataGridColumn isn't in the visual tree and can't
                    bind to the DataContext). -->
-              <DataGridTemplateColumn Header="CPU" Width="Auto" MinWidth="130" IsVisible="False">
+              <DataGridTemplateColumn Header="CPU" Width="Auto" MinWidth="112" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <!-- Sparkline + current value: the number answers "how much now",
@@ -190,7 +282,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Memory" Width="Auto" MinWidth="140" IsVisible="False">
+              <DataGridTemplateColumn Header="Memory" Width="Auto" MinWidth="118" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <Grid ColumnDefinitions="*,Auto" ToolTip.Tip="{Binding MemoryTooltip}">
@@ -202,6 +294,17 @@
                       <TextBlock Grid.Column="1" Text="{Binding MemoryText}" HorizontalAlignment="Right" VerticalAlignment="Center"
                                  FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" />
                     </Grid>
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <!-- Age, last, exactly where kubectl puts it. The text is a function of
+                   wall-clock, not of the object, so it is recomputed by the one shared
+                   timer in ClusterTabView — a watch event is not what makes it change. -->
+              <DataGridTemplateColumn Header="Age" Width="Auto" MinWidth="60">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                    <TextBlock Text="{Binding AgeText}" VerticalAlignment="Center" ToolTip.Tip="{Binding AgeTooltip}"
+                               FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" Opacity="0.75" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
@@ -241,7 +344,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Namespace" Width="Auto" MinWidth="90">
+              <DataGridTemplateColumn Header="Namespace" Width="Auto" MinWidth="80">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
                     <TextBlock Text="{Binding Namespace}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Namespace}" VerticalAlignment="Center" />
