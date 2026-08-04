@@ -59,6 +59,9 @@ public static class ClusterEnvironments
     private static readonly string[] DevelopmentMarkers =
     [
         "dev", "develop", "development", "local", "localhost", "sandbox", "sbx", "playground", "scratch",
+        // "demo" covers the app's own built-in demo cluster, which must never read as
+        // production — and a cluster a user has named "demo" isn't one either.
+        "demo",
         // Local-cluster distributions. Nobody runs production on docker-desktop.
         "kind", "k3s", "k3d", "minikube", "microk8s", "dockerdesktop", "rancherdesktop", "colima", "orbstack",
     ];

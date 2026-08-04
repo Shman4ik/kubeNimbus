@@ -14,6 +14,16 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Added
 
+- **Demo cluster.** With no kubeconfig and no cluster, **Explore demo cluster**
+  (in the empty state, in `Ctrl`/`Cmd`+`K`, and in the cluster switcher's own
+  group) opens a full sample workload set that ships inside the binary — pods
+  in every interesting state, live-looking log streams, env vars and secrets,
+  events, usage graphs, Helm releases and a realistic CRD catalog. No cluster,
+  no credentials, no network. It is labelled as sample data throughout (tab
+  name, switcher group, and a banner above the content for the tab's whole
+  life), and the panes that genuinely need an API server — exec, port-forward,
+  YAML apply and delete — say so rather than pretending. The dataset is the
+  same one the screenshot harness renders, so the two cannot drift apart.
 - **Open kubeconfig file…** in the no-kubeconfig empty state. Until now the only
   routes to a cluster were `$KUBECONFIG` — which a GUI launched from Explorer, a
   shortcut or the Microsoft Store never inherits — and dropping a file at
@@ -40,6 +50,10 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Changed
 
+- The cluster switcher and the top bar's cluster button are no longer disabled
+  when no kubeconfig context exists — they always carry at least the demo
+  cluster, and gating them on "has contexts" made them dead on precisely the
+  machine where the demo cluster is the only cluster there is.
 - The no-kubeconfig empty state now leads with the file picker and no longer
   tells you to run `scripts/sandbox-up` — an instruction nobody who installed a
   released build can follow. Setting up a throwaway local cluster is covered in

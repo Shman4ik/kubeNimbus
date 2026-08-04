@@ -64,8 +64,10 @@
                    chose what "+" would open, so reaching an already-open cluster was
                    a different gesture, and a list of managed-cluster context names
                    was unreadable at 150px. One button, one popup, both jobs. -->
-              <Button Name="SwitcherButton" Classes="chip" Padding="8,5" Click="OnSwitcherButtonClick"
-                      IsEnabled="{Binding HasContexts}">
+              <!-- Never disabled: the switcher always offers at least the demo cluster,
+                   and gating this on HasContexts made the button dead on precisely the
+                   machine where the demo cluster is the only thing there is to reach. -->
+              <Button Name="SwitcherButton" Classes="chip" Padding="8,5" Click="OnSwitcherButtonClick">
                 <ToolTip.Tip>
                   <TextBlock Text="{Binding SwitcherTooltip}" />
                 </ToolTip.Tip>
@@ -234,9 +236,25 @@
                          Text="Open a kubeconfig file to add its clusters — kubeNimbus remembers where the file is, not what is in it. If you already have one at the default location, or you have set $KUBECONFIG in a terminal and restarted the app, press Rescan." />
 
               <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Left">
-                <Button Classes="accent" Content="Open kubeconfig file…" Command="{Binding OpenKubeconfigFileCommand}" />
+                <Button Content="Open kubeconfig file…" Command="{Binding OpenKubeconfigFileCommand}" />
                 <Button Content="Rescan" Command="{Binding ReloadContextsCommand}" />
               </StackPanel>
+
+              <Separator Margin="0,2" Opacity="0.25" />
+
+              <!-- The most prominent thing on this screen, deliberately: with no
+                   kubeconfig it is the only button that can do anything at all, and it
+                   is what someone evaluating kubeNimbus — including a Microsoft Store
+                   reviewer on a clean machine — presses to see it work. Not gated on
+                   HasContexts (see OpenDemoClusterCommand). -->
+              <TextBlock TextWrapping="Wrap" Opacity="0.75" FontSize="12"
+                         Text="No cluster to hand? Open the demo cluster: a full sample workload set that ships with the app, so you can look around before connecting anything. It is clearly labelled throughout and nothing in it is real." />
+              <Button Classes="accent" Command="{Binding OpenDemoClusterCommand}" HorizontalAlignment="Left">
+                <StackPanel Orientation="Horizontal" Spacing="7">
+                  <PathIcon Data="{StaticResource LayersIconGeometry}" Width="13" Height="13" VerticalAlignment="Center" />
+                  <TextBlock Text="Explore demo cluster" VerticalAlignment="Center" />
+                </StackPanel>
+              </Button>
             </StackPanel>
           </Border>
         </StackPanel>

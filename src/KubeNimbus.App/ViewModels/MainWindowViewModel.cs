@@ -53,7 +53,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     public string SwitcherTooltip => HasContexts
         ? $"Switch or open a cluster  ({Hotkeys.Describe(Hotkeys.ClusterSwitcher)})"
-        : "No kubeconfig contexts found";
+        : $"No kubeconfig contexts — the demo cluster is still in here  ({Hotkeys.Describe(Hotkeys.ClusterSwitcher)})";
 
     [ObservableProperty]
     private string _status = "Loading kubeconfig…";
@@ -318,6 +318,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
             yield return new ClusterSwitcherItemViewModel(
                 context, group, EnvironmentFor(context), openTab: null, IsPinned(context.Name), isCurrent: false);
         }
+
+        // Its own group, last and labelled, so nobody reaches for it thinking it is one
+        // of their clusters — and so it is still findable on a machine that has none.
+        if (!seen.Contains(ClusterContext.Demo.Name))
+        {
+            yield return new ClusterSwitcherItemViewModel(
+                ClusterContext.Demo, ClusterSwitcherGroup.Demo, EnvironmentFor(ClusterContext.Demo),
+                openTab: null, isPinned: false, isCurrent: false);
+        }
     }
 
     private void ActivateSwitcherItem(ClusterSwitcherItemViewModel item)
@@ -484,6 +493,16 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var settings = WorkspaceStore.Load();
         foreach (var snapshot in settings.Tabs)
         {
+            // The demo cluster is not a kubeconfig context, so it is never in
+            // AvailableContexts and the name+path match below can't find it. The
+            // sentinel path is what identifies it — that is the whole reason it is a
+            // path rather than a new field on TabSnapshot.
+            if (snapshot.KubeconfigPath == ClusterContext.DemoKubeconfigPath)
+            {
+                await AddTabAsync(ClusterContext.Demo);
+                continue;
+            }
+
             var match = AvailableContexts.FirstOrDefault(c =>
                 c.Name == snapshot.ContextName && c.KubeconfigPath == snapshot.KubeconfigPath);
             if (match is not null)
@@ -506,7 +525,33 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanAddNewTab))]
     private void AddNewTab() => Switcher.Open();
 
-    private bool CanAddNewTab() => HasContexts;
+    /// <summary>
+    /// Always true since the demo cluster exists. It used to be <c>HasContexts</c>,
+    /// which was right when an empty kubeconfig meant an empty switcher — but the
+    /// switcher now always carries at least the demo row, and gating on contexts made
+    /// the top bar's cluster button dead on exactly the machine where the demo cluster
+    /// is the only thing to reach. UI rule 9 asks for a command that *cannot* run to be
+    /// disabled; this one can.
+    /// </summary>
+    private static bool CanAddNewTab() => true;
+
+    /// <summary>
+    /// Opens (or switches to) the built-in demo cluster. Deliberately <b>not</b> gated
+    /// on <see cref="HasContexts"/>: no kubeconfig is precisely when this is the only
+    /// thing on screen worth clicking, and it is the button a Microsoft Store reviewer
+    /// on a clean machine presses to see the app do anything at all.
+    /// </summary>
+    [RelayCommand]
+    private async Task OpenDemoClusterAsync()
+    {
+        if (Tabs.FirstOrDefault(t => t.IsDemo) is { } existing)
+        {
+            SelectedTab = existing;
+            return;
+        }
+
+        await AddTabAsync(ClusterContext.Demo);
+    }
 
     partial void OnHasContextsChanged(bool value)
     {
@@ -648,6 +693,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
             "Switch cluster…", $"{AvailableContexts.Count} contexts · {Hotkeys.Describe(Hotkeys.ClusterSwitcher)}",
             "SwapHorizontalIconGeometry", Switcher.Open);
 
+        // Nothing is reachable exactly one way. The empty state's button is the route a
+        // first run finds; this is the route everyone else does, and it stays offered
+        // once a real cluster is open so the demo remains a place to try something out.
+        yield return new PaletteItem(
+            Tabs.Any(t => t.IsDemo) ? "Go to the demo cluster" : "Explore the demo cluster",
+            "Sample data that ships with the app — nothing is connected",
+            "LayersIconGeometry",
+            () => OpenDemoClusterCommand.Execute(null));
+
         foreach (var tab in Tabs)
         {
             yield return new PaletteItem(
@@ -716,7 +770,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 () => rowTab.DeleteSelectedCommand.Execute(null));
         }
 
-        if (IsAdvancedView && SelectedTab is { IsConnected: true } connected)
+        // IsDemo excluded: the access review is three real API-server calls
+        // (SelfSubjectRulesReview, the RBAC object scan, SubjectAccessReview) with no
+        // honest offline stand-in, and a palette entry that matches a search and then
+        // refuses to run is worse than no match.
+        if (IsAdvancedView && SelectedTab is { IsConnected: true, IsDemo: false } connected)
         {
             yield return new PaletteItem(
                 "Access review — my permissions",

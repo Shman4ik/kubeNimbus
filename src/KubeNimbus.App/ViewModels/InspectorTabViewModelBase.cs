@@ -10,10 +10,29 @@ namespace KubeNimbus.App.ViewModels;
 /// CLAUDE.md ("Space = quick-peek" + "opening a resource never overwrites an
 /// active editor tab" — the latter only ever applies to promoted tabs).
 /// </summary>
-public abstract partial class InspectorTabViewModelBase(string title) : ObservableObject
+public abstract partial class InspectorTabViewModelBase : ObservableObject
 {
+    protected InspectorTabViewModelBase(string title, bool isDemo = false)
+    {
+        _title = title;
+        IsDemo = isDemo;
+    }
+
+    /// <summary>
+    /// True when this tab belongs to the built-in demo cluster, which has no
+    /// <c>ClusterClient</c> behind it at all — every derived tab derives this from
+    /// <c>client is null</c>, which is what makes "a demo tab never touches the
+    /// network" an invariant the compiler helps hold rather than a rule to remember.
+    ///
+    /// Panes whose whole function needs a live cluster (exec, port-forward, apply,
+    /// delete) use it to render an explicit "not available in the demo cluster" state
+    /// and to disable their commands. Never a spinner that hangs, never a blank pane,
+    /// never a silent no-op (UI rule 9).
+    /// </summary>
+    public bool IsDemo { get; }
+
     [ObservableProperty]
-    private string _title = title;
+    private string _title;
 
     [ObservableProperty]
     private bool _isPreview;

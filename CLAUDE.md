@@ -219,6 +219,87 @@ which was simultaneously too guarded and not guarded enough:
 The YAML editor's Secret "Reveal values" panel is the other half of this and is
 unchanged: `data` stays base64 in the editable text, matching kubectl.
 
+## The demo cluster
+
+`ClusterContext.Demo` is a built-in cluster with no cluster behind it: a dataset that
+ships inside the binary, browsable with no kubeconfig, no credentials and no network.
+It exists for two audiences at once. **Microsoft Store certification** requires that a
+reviewer on a clean Windows machine — no kubeconfig, no Kubernetes anywhere — can see
+the app function; before this, they landed on an empty state whose only instruction
+was to run a script from a repo they don't have. And **anyone evaluating kubeNimbus**
+can now look around before wiring up credentials, which is the one thing a Kubernetes
+client cannot otherwise demonstrate. Handing out a real cluster to either group is not
+an option (rule #4 forbids the app holding credentials at all), so the sample data
+*is* the demo.
+
+Six rules:
+
+1. **A demo tab is an ordinary `ClusterContext` with a sentinel `KubeconfigPath`**
+   (`ClusterContext.DemoKubeconfigPath`, `"<demo>"`; `IsDemo` reads it). A sentinel
+   rather than a new record field, so `WorkspaceSettings` tab snapshots, the cluster
+   switcher's name+path keying and fleet member naming all keep working untouched —
+   verified against `RestoreWorkspaceAsync` (which needs one explicit branch, because
+   the demo context is not in `AvailableContexts` and so can never match by name+path)
+   and `ClusterSwitcherViewModel` (which needed a `Demo` group and a subtitle that
+   doesn't print the sentinel as a filename). `ClusterEnvironments.Classify` reads it
+   as **Development** — `demo` is a development marker, so it can never come out
+   production and put a red band under a screen of invented pods.
+2. **There is no `ClusterClient`, and that is the mechanism, not a detail.**
+   `ClusterTabViewModel.Client` stays null for a demo tab's whole life, and every
+   inspector tab takes `ClusterClient?` and derives `IsDemo` from `client is null`.
+   "A demo tab never connects, never watches, never touches the network" is therefore
+   something the compiler helps hold: every call site that would have talked to a
+   server had to be branched before it would build. `ConnectDemo` fills in for
+   discovery/namespaces/the metrics probe, and `RestartWatch`'s `if (Client is not { }
+   client)` arm is the list. Do **not** reintroduce an offline `ClusterClient` pointed
+   at a dead port to satisfy a constructor — the screenshot harness still has one
+   (`FixtureData.CreateOfflineClient`, for scenarios that want the *failed-connection*
+   paths), and it is exactly the thing the app must not copy.
+3. **One dataset, not two.** `src/KubeNimbus.App/Demo/` owns it — `DemoData` (objects,
+   catalog, sidebar, Helm), `DemoLogs` (canned streams), `DemoUsage` (replayed metric
+   polls) — and `tools/Screenshot/FixtureData.cs` is now a passthrough to it. What a
+   screenshot shows and what a user clicking "Explore demo cluster" sees cannot drift
+   apart. The JSON is an `EmbeddedResource` with an explicit `LogicalName`
+   (`Demo.<file>.json`), same reasoning as `Yaml-Mode.xshd`: the lookup must not depend
+   on the assembly being called `kubeNimbus`, and a `Fixtures/` directory next to the
+   exe would break the single-file NativeAOT publish. `JsonDocument` only, kept alive
+   for the process lifetime (`DynamicResource` wraps `JsonElement`s that die with their
+   document).
+4. **Everything that can work, works through production code.** Logs go through
+   `Enqueue` on a timer, so batching, trimming, filtering, the timestamp toggle and
+   every placeholder state are the real ones. Usage goes through `ResourceRowViewModel
+   .ApplyUsage` / `PodDetailTabViewModel.ApplyMetrics` with stamped timestamps — which
+   is what those optional `at` parameters have always been for. Env resolves
+   Secret/ConfigMap refs through the same cache and the same base64 decode, against
+   `DemoData.ReadObject` instead of a GET. A kind the dataset has nothing for lands on
+   the real "No &lt;kind&gt; found" empty state, which is most of a 100-kind catalog.
+   `DemoLogs` deliberately carries **lines with no severity keyword** (nginx access
+   logs, JSON, plain prints): every fixture line having one is precisely what hid the
+   `LogSeverityToBrushConverter` null-brush bug, where plain lines rendered invisible.
+5. **What cannot work says so, in place.** Exec, port-forward and YAML apply/delete
+   need a real API server. Each renders a styled `Border.demoUnavailable` (or, for the
+   YAML editor, a `demoBar` above a still-useful read-only editor) naming what it can't
+   do and what to do instead, and each disables its commands via `CanExecute` — never a
+   spinner that hangs, never a blank pane, never a silent no-op (UI rule 9's last
+   clause). The access review is palette-gated on `IsDemo: false` for the same reason:
+   its three API-server calls have no honest offline stand-in, and a palette entry that
+   matches a search and then refuses to run is worse than no match.
+6. **Nobody may mistake it for a real cluster.** The tab reads `Demo cluster`, the
+   switcher lists it under its own "Demo (sample data, not a real cluster)" heading,
+   and a `Border.demoBar` sits above the content area for the tab's entire life. That
+   last one is a deliberate exception to UI rule 1, and the justification is the
+   alternative: someone believing a screen full of invented pods is their own workloads.
+   A notice that appears once and dismisses does not prevent that.
+
+**Reachability.** "Explore demo cluster" is the most prominent control in the
+no-kubeconfig empty state (it is the button a Store reviewer presses), plus a
+Ctrl/Cmd+K entry, plus the switcher's own group. Two silent `HasContexts` gates had to
+go for that to hold — `SwitcherButton.IsEnabled` and, less visibly,
+`MainWindow.OpenSwitcher`'s early return — which between them made the top bar's
+cluster button and Ctrl/Cmd+P dead on exactly the machine where the demo cluster is
+the only cluster there is. `AddNewTabCommand.CanExecute` is now unconditionally true
+for the same reason: the switcher always has at least the demo row in it.
+
 ## The Advanced view
 
 One global persisted boolean, default **off**, mirrored onto every cluster tab
@@ -1419,3 +1500,56 @@ themes rendered. **Not verified**: neither surface has been driven by hand in th
 running app this session — the eye toggle against a real Secret and a real
 forward's start/stop are the two worth clicking. win-x64 NativeAOT remains the
 build that has never run anywhere.
+
+**Store-readiness pass:** the app was unusable for the audience it was about to be
+submitted to. A reviewer on a clean Windows machine — the Microsoft Store's own
+certification scenario — landed on an empty state whose only instruction was to run
+a script from a repository they do not have, with no way to reach a cluster from
+inside the app and nothing to look at without one. Two halves:
+
+- **Kubeconfig discoverability.** `Kubeconfig.CandidatePaths`/`DiscoverPaths`/
+  `LoadContextsAsync` take user-supplied extra paths, reported with a `picked`
+  source label; "Open kubeconfig file…" writes one through `IStorageProvider` and
+  persists the **path only** in `WorkspaceSettings.KubeconfigPaths`. A pick that
+  yields no contexts is deliberately not remembered — otherwise a mis-pick poisons
+  every subsequent start with Rescan re-running the same failure. The empty state's
+  prose leads with the picker; the `scripts/sandbox-up` hint is gone (it lives in
+  CONTRIBUTING.md and the README, where a contributor is already looking).
+- **The demo cluster** — see the "Demo cluster" section above for the design rules.
+
+**Verified this session** (no live cluster; Docker's daemon isn't running here):
+build with 0 new warnings, **145/145 TUnit, 0 skipped** — the cluster-gated tests
+returned early rather than running, so that count is the unit-only subset — all 38
+screenshot scenarios × both themes, the linux-x64 NativeAOT publish with no new
+warnings beyond the known DataGrid IL2104/IL3053, and **a hand-driven pass over the
+real app under Xvfb** (Xvfb + xdotool + ImageMagick `import` substitute for the
+DevTools MCP on a machine with no display; this works well and is worth reaching for
+again). Clicked, with no kubeconfig and `$KUBECONFIG` unset: Explore demo cluster →
+pod list; double-click a pod → logs streaming with plain (keyword-free) lines
+visibly rendering; Env → Secret eye toggle decoding the demo Secret, ConfigMap and
+`fieldRef` resolved in place; Events; the row context menu → Port-forward and Edit
+YAML, both landing on their stated demo states; a kind with no demo data → the real
+empty state; Helm → release list and detail; the advanced-view toggle → usage
+columns with sparklines and gap-only rows; the switcher, both with the demo tab open
+(under "Open") and closed (its own "Demo" group); a restart restoring the demo tab
+from the sentinel path; and the file picker itself — picking a real kubeconfig
+opened its context, and deleting that file and restarting degraded to the empty
+state with the path listed `missing … (picked)`, no exception.
+
+**Found and not fixed: the Linux and macOS release binaries cannot start.** A
+NativeAOT-published `kubeNimbus` dies immediately with
+`FileNotFoundException: The resource /Assets/app.ico could not be found` out of
+`Avalonia.Platform.StandardAssetLoader`, from `MainWindow`'s `Icon`. It is
+**pre-existing** — an AOT publish of the parent commit fails identically — and it is
+not a missing resource: `!AvaloniaResources` and `app.ico` are both present in the
+published managed assembly, and neither normalizing the csproj glob to forward
+slashes nor fully qualifying the URI as `avares://kubeNimbus/Assets/app.ico` changes
+anything, so it is Avalonia's asset registration under NativeAOT rather than
+anything in this repo's item groups. Both experiments were reverted. Removing the
+`Icon` attribute makes the same binary start and run correctly, which is how the
+demo cluster was verified under AOT (embedded `Demo.*.json` read through
+`GetManifestResourceStream` survives trimming intact — sidebar, list, logs, usage
+and Helm all render from the single-file binary). Worth an upstream Avalonia issue;
+until then `.github/workflows/release.yml` ships three RIDs that cannot launch.
+win-x64 NativeAOT still cannot be built here (`Cross-OS native compilation is not
+supported`) and remains the build that has never run anywhere.

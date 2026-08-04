@@ -1,0 +1,49 @@
+[
+  {
+    "kind": "ConfigMap",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "report-generator-config",
+      "namespace": "payments",
+      "uid": "d1111111-1111-1111-1111-111111111111",
+      "creationTimestamp": "2026-06-01T09:00:00Z"
+    },
+    "_comment_demo_only": "Demo dataset — invented configuration, no cluster behind it. Referenced by the report-generator pod's FEATURE_FLAGS configMapKeyRef, which pod detail's Environment tab resolves on open.",
+    "data": {
+      "flags": "checkout_v2=on,receipts_pdf=off",
+      "report.formats": "pdf,csv",
+      "max.concurrent.reports": "4"
+    }
+  },
+  {
+    "kind": "ConfigMap",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "report-generator-common-config",
+      "namespace": "payments",
+      "uid": "d2222222-2222-2222-2222-222222222222",
+      "creationTimestamp": "2026-06-01T09:00:00Z"
+    },
+    "_comment_demo_only": "Demo dataset. Referenced as an envFrom source, which is reference-only by design — the pod spec declares no individual keys for it.",
+    "data": {
+      "REGION": "eu-west-1",
+      "TRACING_ENDPOINT": "http://otel-collector.monitoring:4317",
+      "METRICS_PORT": "9090"
+    }
+  },
+  {
+    "kind": "ConfigMap",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "checkout-worker-config",
+      "namespace": "payments",
+      "uid": "d3333333-3333-3333-3333-333333333333",
+      "creationTimestamp": "2026-06-03T14:22:00Z"
+    },
+    "_comment_demo_only": "Demo dataset.",
+    "data": {
+      "queue.name": "checkout-events",
+      "batch.size": "50"
+    }
+  }
+]

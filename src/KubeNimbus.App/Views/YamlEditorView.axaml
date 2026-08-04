@@ -36,10 +36,29 @@
               IsVisible="{Binding !IsConfirmingDelete}" IsEnabled="{Binding !IsBusy}" />
     </Grid>
 
-    <Border Grid.Row="1" Classes="card" Padding="0">
-      <ae:TextEditor Name="Editor" ShowLineNumbers="True" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="12"
-                     IsReadOnly="{Binding IsDeleted}" Margin="4" />
-    </Border>
+    <!-- Row 1 is the editor's row, and the demo notice rides inside it rather than
+         claiming a row of its own: the grid's later rows (reveal panel, delete confirm,
+         conflict, status) are addressed by index. Viewing is the genuinely useful half
+         and stays — the object renders with full syntax highlighting — but there is no
+         API server to apply to or delete from. Reload/Apply/Delete disable themselves
+         (CanExecute on the view model); this says why, rather than leaving three dead
+         buttons unexplained. -->
+    <DockPanel Grid.Row="1">
+      <Border DockPanel.Dock="Top" Classes="demoBar" Margin="0,0,0,8" IsVisible="{Binding IsDemo}">
+        <!-- DockPanel, not a horizontal StackPanel: a StackPanel measures its children
+             with infinite width, so TextWrapping never fires and the sentence is
+             clipped by the dock's right edge instead of wrapping. -->
+        <DockPanel>
+          <PathIcon DockPanel.Dock="Left" Data="{StaticResource AlertCircleIconGeometry}" Width="12" Height="12"
+                    VerticalAlignment="Top" Margin="0,2,8,0" />
+          <TextBlock Text="{x:Static vm:YamlEditorTabViewModel.DemoNotice}" TextWrapping="Wrap" />
+        </DockPanel>
+      </Border>
+      <Border Classes="card" Padding="0">
+        <ae:TextEditor Name="Editor" ShowLineNumbers="True" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="12"
+                       IsReadOnly="{Binding IsEditorReadOnly}" Margin="4" />
+      </Border>
+    </DockPanel>
 
     <!-- Decoded values. Height-capped and value-capped on purpose: this sits in a ~300px
          bottom dock, and a single 1 MiB Secret value would otherwise lay out in full to

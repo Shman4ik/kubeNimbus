@@ -29,7 +29,8 @@ namespace KubeNimbus.App.ViewModels;
 /// </remarks>
 public sealed partial class PortForwardTabViewModel : InspectorTabViewModelBase
 {
-    private readonly ClusterClient _client;
+    /// <summary>Null on the demo cluster — see <see cref="InspectorTabViewModelBase.IsDemo"/>.</summary>
+    private readonly ClusterClient? _client;
     private readonly string _namespace;
     private readonly string _podName;
     private PortForwardSession? _session;
@@ -113,14 +114,28 @@ public sealed partial class PortForwardTabViewModel : InspectorTabViewModelBase
 
     public bool HasConnectionError => ConnectionError is not null;
 
-    /// <summary>Ports are configuration, not controls — a running forward's inputs are read-only.</summary>
-    public bool CanEditPorts => !IsRunning;
+    /// <summary>
+    /// Ports are configuration, not controls — a running forward's inputs are
+    /// read-only, and so are a demo one's, where Start has nothing to bind to. This
+    /// also gates <see cref="StartCommand"/>, so the demo pane offers a locked form
+    /// and a disabled button rather than a button that silently does nothing.
+    /// </summary>
+    public bool CanEditPorts => !IsRunning && !IsDemo;
+
+    /// <summary>
+    /// Why the demo pane is inert. A forward means binding a local TCP port and
+    /// tunnelling it to a kubelet; there is no kubelet here, and pretending otherwise
+    /// would be the one demo behaviour that could actually mislead someone.
+    /// </summary>
+    public const string DemoNotice =
+        "Port-forwarding opens a real tunnel to a real kubelet, so it is not available in the demo cluster. "
+        + "Open a kubeconfig file to forward a port from a pod on one of your own clusters.";
 
     public string LocalUrl => $"http://127.0.0.1:{LocalPort}";
 
     public PortForwardTabViewModel(
-        ClusterClient client, string @namespace, string podName, IReadOnlyList<ContainerPort> ports)
-        : base($"Forward: {podName}")
+        ClusterClient? client, string @namespace, string podName, IReadOnlyList<ContainerPort> ports)
+        : base($"Forward: {podName}", isDemo: client is null)
     {
         _client = client;
         _namespace = @namespace;
@@ -139,12 +154,14 @@ public sealed partial class PortForwardTabViewModel : InspectorTabViewModelBase
         Key = $"portforward:{@namespace}/{podName}:{Guid.NewGuid():N}";
         // A pane that says nothing on open is indistinguishable from one that failed
         // to load (UI rule 9); the resting state is a sentence, not a blank.
-        StatusMessage = "Not forwarding. Pick a port and press Start.";
+        StatusMessage = client is null
+            ? "Not available in the demo cluster."
+            : "Not forwarding. Pick a port and press Start.";
         UpdateTitle();
     }
 
     /// <summary>Convenience for callers that know only a port number (the command palette / row menu).</summary>
-    public PortForwardTabViewModel(ClusterClient client, string @namespace, string podName, int podPort)
+    public PortForwardTabViewModel(ClusterClient? client, string @namespace, string podName, int podPort)
         : this(client, @namespace, podName, [new ContainerPort(podPort, null)])
     {
     }
@@ -179,7 +196,7 @@ public sealed partial class PortForwardTabViewModel : InspectorTabViewModelBase
     [RelayCommand(CanExecute = nameof(CanEditPorts))]
     private async Task StartAsync()
     {
-        if (IsRunning)
+        if (IsRunning || _client is null)
         {
             return;
         }

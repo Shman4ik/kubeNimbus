@@ -24,7 +24,8 @@ public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
     /// </summary>
     private static readonly TimeSpan OutputFlushInterval = TimeSpan.FromMilliseconds(50);
 
-    private readonly ClusterClient _client;
+    /// <summary>Null on the demo cluster — see <see cref="InspectorTabViewModelBase.IsDemo"/>.</summary>
+    private readonly ClusterClient? _client;
     private readonly string _namespace;
     private readonly string _podName;
     private readonly string _container;
@@ -58,14 +59,34 @@ public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
     [ObservableProperty]
     private string? _statusMessage;
 
-    public ExecTabViewModel(ClusterClient client, string @namespace, string podName, string container)
-        : base($"Exec: {podName}/{container}")
+    /// <summary>
+    /// The one thing a demo cluster genuinely cannot do. Stated in place rather than
+    /// left as a terminal that never connects — an evaluator has no way to tell that
+    /// apart from the feature being broken, which is the impression this whole demo
+    /// exists to avoid.
+    /// </summary>
+    public const string DemoNotice =
+        "Exec needs a real container to run a shell in, so it is not available in the demo cluster. "
+        + "Open a kubeconfig file to exec into a pod on one of your own clusters.";
+
+    /// <summary>False on the demo cluster: there is no session to send anything to.</summary>
+    private bool IsLive => _client is not null;
+
+    public ExecTabViewModel(ClusterClient? client, string @namespace, string podName, string container)
+        : base($"Exec: {podName}/{container}", isDemo: client is null)
     {
         _client = client;
         _namespace = @namespace;
         _podName = podName;
         _container = container;
         Key = $"exec:{@namespace}/{podName}/{container}:{Guid.NewGuid():N}";
+
+        if (client is null)
+        {
+            StatusMessage = "Not available in the demo cluster.";
+            return;
+        }
+
         _ = ConnectAsync();
     }
 
@@ -89,6 +110,11 @@ public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
 
     private async Task ConnectAsync()
     {
+        if (_client is null)
+        {
+            return;
+        }
+
         _cts?.Dispose();
         _cts = new CancellationTokenSource();
         var token = _cts.Token;
@@ -208,7 +234,7 @@ public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
     }
 
     /// <summary>Reconnects, honouring whatever is in <see cref="ShellCommand"/> now.</summary>
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(IsLive))]
     private async Task ReconnectAsync()
     {
         _flushTimer?.Stop();
@@ -327,7 +353,7 @@ public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(IsLive))]
     private async Task SendAsync()
     {
         if (string.IsNullOrEmpty(InputText))
@@ -354,7 +380,7 @@ public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
     /// terminal's line discipline turns ^C into SIGINT, ^D into EOF and ^\ into SIGQUIT.
     /// Tab is sent unpaired so the remote shell's own completion answers.
     /// </remarks>
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(IsLive))]
     private Task SendControlAsync(string? key) => key switch
     {
         // ^C, ^D, ^Z, ^\ — the four a wedged session is reached with.

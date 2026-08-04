@@ -68,6 +68,10 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-empty-namespace", () => HostInMainWindow(ClusterTabScenarios.EmptyNamespace())),
     ("cluster-tab-loading", () => HostInMainWindow(ClusterTabScenarios.Loading())),
     ("cluster-tab-disconnected", () => HostInMainWindow(ClusterTabScenarios.Disconnected())),
+    // The demo cluster, built by running the real ConnectCommand — see ClusterTabScenarios.
+    ("cluster-tab-demo-list", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
+    ("cluster-tab-demo-pod-detail", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetail(), height: 1000)),
+    ("cluster-tab-demo-exec-unavailable", () => HostInMainWindow(ClusterTabScenarios.DemoExecUnavailable())),
     ("main-window", () => BuildMainWindowContent()),
     ("main-window-no-kubeconfig", () => BuildNoKubeconfigContent()),
     ("main-window-shortcuts", () => BuildMainWindowContent(openShortcuts: true)),

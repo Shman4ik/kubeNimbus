@@ -150,7 +150,12 @@ public partial class MainWindow : Window
 
     internal void OpenSwitcher()
     {
-        if (Vm is not { HasContexts: true } vm)
+        // No HasContexts gate. It used to be one, and it was the second of two silent
+        // ones (the button's own IsEnabled was the first): with no kubeconfig the
+        // switcher refused to open, so an open demo cluster could not be reached from
+        // the top bar or from Ctrl/Cmd+P on exactly the machine where it is the only
+        // cluster there is. The switcher always has at least the demo row in it.
+        if (Vm is not { } vm)
         {
             return;
         }
