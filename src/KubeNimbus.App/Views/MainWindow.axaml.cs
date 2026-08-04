@@ -75,6 +75,10 @@ public partial class MainWindow : Window
         {
             UpdateThemeIcon();
             ApplyBackdrop();
+            // The decorations don't exist yet in the constructor, so the reserve's
+            // real value arrives with the first WindowDecorationMargin change. This
+            // is the backstop for a platform that never raises one.
+            ApplyCaptionReserve();
         };
         ActualThemeVariantChanged += (_, _) =>
         {
@@ -146,15 +150,7 @@ public partial class MainWindow : Window
             WindowDecorationsTheme = decorations;
         }
 
-        // Leave the caption buttons their space. Without this the palette pill and the
-        // theme toggle sit under Close on Windows, and the cluster switcher sits under
-        // the traffic lights on macOS.
-        CommandBar.Padding = new Thickness(
-            CommandBarInset + (OperatingSystem.IsMacOS() ? MacTrafficLightsWidth : 0),
-            0,
-            CommandBarInset + (OperatingSystem.IsWindows() ? CaptionButtonsWidth() : 0),
-            0);
-
+        ApplyCaptionReserve();
         ApplyOffScreenMargin();
         PropertyChanged += (_, e) =>
         {
@@ -162,7 +158,40 @@ public partial class MainWindow : Window
             {
                 ApplyOffScreenMargin();
             }
+            else if (e.Property == WindowDecorationMarginProperty)
+            {
+                ApplyCaptionReserve();
+            }
         };
+    }
+
+    /// <summary>
+    /// Leaves the caption buttons their space, and takes it back the moment they are
+    /// not there. Without the reserve the palette pill and the theme toggle sit under
+    /// Close on Windows, and the cluster switcher sits under the traffic lights on
+    /// macOS; without the taking-back, <b>full screen</b> keeps a dead 135px (or 78px)
+    /// gap in a bar that no longer has any buttons in it — and on macOS the green
+    /// traffic light is the ordinary way into full screen, so that is a state people
+    /// reach, not a corner case.
+    /// <para>
+    /// <see cref="Window.WindowDecorationMargin"/> is the honest signal for "is there a
+    /// caption strip over my bar right now", and it is honest on both platforms for
+    /// different reasons: with drawn decorations (Windows) its top is the title bar
+    /// height only while that part is enabled, and full screen disables every part;
+    /// without them (macOS) it is the backend's own extended margin, which that backend
+    /// zeroes in full screen. Zero either way, and zero on Linux, where we never
+    /// extended in the first place.
+    /// </para>
+    /// </summary>
+    private void ApplyCaptionReserve()
+    {
+        var hasCaption = WindowDecorationMargin.Top > 0;
+
+        CommandBar.Padding = new Thickness(
+            CommandBarInset + (hasCaption && OperatingSystem.IsMacOS() ? MacTrafficLightsWidth : 0),
+            0,
+            CommandBarInset + (hasCaption && OperatingSystem.IsWindows() ? CaptionButtonsWidth() : 0),
+            0);
     }
 
     /// <summary>

@@ -220,12 +220,20 @@ choice must be AOT/trimming-compatible from day one.
      `WindowDrawnDecorations.AttachCaptionButtons` finds them by name and
      subscribes `Click`, so a rename is a dead button, not a build error. macOS
      asks for no drawn decorations at all and keeps its traffic lights.
-   - **The caption strip's width is not discoverable.** `WindowDecorationMargin`
-     reports the title bar's *height*, so the reserve that keeps the palette pill
-     out from under Close is derived from the same `CaptionButtonWidth` resource
-     (45) the buttons size themselves from, × 3. macOS's traffic lights are a
-     constant (78) and on the *left*. Both in DIPs, so they survive DPI changes
-     without recomputation.
+   - **The caption strip's width is not discoverable, and its *existence* is not
+     constant.** `WindowDecorationMargin` reports the title bar's *height*, so the
+     reserve that keeps the palette pill out from under Close is derived from the
+     same `CaptionButtonWidth` resource (45) the buttons size themselves from, × 3;
+     macOS's traffic lights are a constant (78) and on the *left*. Both in DIPs, so
+     they survive DPI changes. But the reserve must be **recomputed, not set once**:
+     in full screen there are no buttons to reserve for — Windows because
+     `ComputeDecorationParts` strips every drawn part, macOS because its backend
+     zeroes `ExtendedMargins` and AppKit hides the traffic lights — and a reserve
+     that stayed would be a dead 135px (or 78px) hole in the bar. `WindowDecorationMargin
+     .Top > 0` is the signal, correct on both platforms for those two different
+     reasons, and `ApplyCaptionReserve` runs off its change notification. On macOS
+     this is a state people reach on purpose: the green traffic light *is* the
+     full-screen gesture.
    - **`OffScreenMargin` is not optional here.** A maximized window with an
      extended client area hangs a few pixels off every screen edge; unhonored,
      the thing clipped is now the title bar's own contents.
@@ -1644,11 +1652,26 @@ exactly where the caption strip starts — and no Fluent title bar or title text
 either. The wiring itself is platform-independent (`AttachCaptionButtons` looks the
 `PART_*` names up and subscribes `Click`).
 
+**macOS needs no drawn decorations, and one thing beyond that.** `Avalonia.Native`
+reports `NeedsManagedDecorations = false` and `RequestedDrawnDecorations = None`, so
+AppKit keeps the traffic lights and the theme above is never built there; the height
+hint is forwarded to the native window (`SetExtendTitleBarHeight`), which is what
+lines the lights up with a 40px bar rather than a 30px one. What it *did* need is the
+full-screen case: its backend zeroes `ExtendedMargins` in full screen and the lights
+go away, so a reserve fixed at construction leaves a dead 78px hole — and on macOS
+the green light is the ordinary way in. `ApplyCaptionReserve` now recomputes off
+`WindowDecorationMargin`, which fixes the same hole on Windows (where full screen
+strips every drawn part) for free.
+
 **Still not verified, and it is the half that matters**: no Windows or macOS machine
 has run this. First things to check on a Windows box, in order: that the buttons
 appear and work (close especially — the X11 experimental path hovered but did not
 activate, which may be its own quirk or may not), that 3 × 45 DIPs is the right
 reserve at 100% *and* 150% scaling, that dragging/double-click/Snap Layouts work from
 the empty tab strip, that a maximized window isn't clipped at the top, and that Mica
-still renders now that the bar is inside the extended area. On macOS the equivalent is
-the 78 DIP traffic-light reserve and that the switcher button clears it.
+still renders now that the bar is inside the extended area. On macOS: that the
+switcher button clears the traffic lights at 78 DIP, that the lights sit centred in
+the 40px bar, and that entering full screen with the green button collapses the
+reserve rather than leaving a gap. The full-screen path is the one piece that could
+not be driven even under X11 — Xvfb has no window manager, so `WindowState` changes
+have nothing to honour them.
