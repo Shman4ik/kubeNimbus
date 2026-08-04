@@ -3,34 +3,26 @@
         xmlns:chrome="using:Avalonia.Controls.Chrome">
 
     <!--
-        Ported from pgNimbus's design system (see X:\source\pgNimbus\PgNimbus.App\Styles\Theme.axaml):
-        PowerToys/Files-inspired two-tone shell, fixed brand-blue accent (NOT the
-        OS accent), pill-shaped nav selection, soft rounded cards. Token names
-        and structure are kept identical to pgNimbus on purpose — two Nimbus
-        apps sharing one design vocabulary.
+        kubeNimbus's own styles. Everything both Nimbus apps share — the palette,
+        the radii, the scrollbars, the 26 common icons and 28 style classes —
+        lives in shared/nimbusUi and is merged in below; see
+        shared/nimbusUi/DESIGN.md for the rules and the membership test.
+
+        What stays here is what only a Kubernetes client has: the metrics
+        sparkline colours, the cluster-environment traffic lights, the bottom
+        inspector dock, the segmented tab strip, and this app's own glyphs.
     -->
+
     <Styles.Resources>
         <ResourceDictionary>
-            <ResourceDictionary.ThemeDictionaries>
-                <ResourceDictionary x:Key="Light">
-                    <SolidColorBrush x:Key="ShellBackdropBrush" Color="#E6F3F3F3" />
-                </ResourceDictionary>
-                <ResourceDictionary x:Key="Dark">
-                    <SolidColorBrush x:Key="ShellBackdropBrush" Color="#E6202020" />
-                </ResourceDictionary>
-            </ResourceDictionary.ThemeDictionaries>
-
-            <!-- Fixed brand accent, theme-independent — see CLAUDE.md UI rules: NOT the OS SystemAccentColor. -->
-            <SolidColorBrush x:Key="AppAccentBrush" Color="#2D7FF9" />
-            <SolidColorBrush x:Key="AppAccentHoverBrush" Color="#4A93FA" />
-            <SolidColorBrush x:Key="AppAccentPressedBrush" Color="#1E63D6" />
-            <SolidColorBrush x:Key="AppSelectionBrush" Color="#282D7FF9" />
-            <SolidColorBrush x:Key="AppTextSelectionBrush" Color="#402D7FF9" />
-
-            <!-- Status colors, fixed so they read the same on both themes. -->
-            <SolidColorBrush x:Key="WarnBrush" Color="#D9822B" />
-            <SolidColorBrush x:Key="ActiveDotBrush" Color="#46A758" />
-            <SolidColorBrush x:Key="ErrorBrush" Color="IndianRed" />
+            <ResourceDictionary.MergedDictionaries>
+                <!-- The shared Nimbus design system (shared/nimbusUi). Merged into THIS
+                     file's resources, not just included as a sibling Styles element:
+                     a StaticResource below resolves against this file's own resource
+                     chain, so a shared token has to be reachable from here. -->
+                <ResourceInclude Source="avares://Nimbus.Ui/Theme/Tokens.axaml" />
+                <ResourceInclude Source="avares://Nimbus.Ui/Theme/Icons.axaml" />
+            </ResourceDictionary.MergedDictionaries>
 
             <!-- Usage charts (metrics.k8s.io history, see Controls/Sparkline.cs). Fixed
                  hues so they read the same on both themes, and deliberately NOT the
@@ -46,7 +38,7 @@
                  assignment (red/amber/green for prod/staging/dev) rather than anything
                  house-styled: this is the one signal in the app whose whole value is
                  that it is already familiar from kube-ps1, kubectx wrappers and every
-                 team's shell prompt. Production is NOT ErrorBrush — an environment is
+                 team's shell prompt. Production is NOT AppDangerBrush — an environment is
                  not a failure, and reusing the error color would make every prod
                  cluster look broken. -->
             <SolidColorBrush x:Key="EnvProductionBrush" Color="#E5484D" />
@@ -54,74 +46,6 @@
             <SolidColorBrush x:Key="EnvDevelopmentBrush" Color="#46A758" />
             <SolidColorBrush x:Key="EnvUnknownBrush" Color="#80808080" />
 
-            <CornerRadius x:Key="CardCornerRadius">8</CornerRadius>
-            <CornerRadius x:Key="ControlCornerRadius">6</CornerRadius>
-            <CornerRadius x:Key="PillCornerRadius">16</CornerRadius>
-
-            <SolidColorBrush x:Key="CardBackgroundBrush" Color="#80808080" Opacity="0.06" />
-            <SolidColorBrush x:Key="CardBorderBrush" Color="#80808080" Opacity="0.16" />
-            <SolidColorBrush x:Key="HoverBackgroundBrush" Color="#80808080" Opacity="0.1" />
-
-            <!-- Nav pill highlight for TabItem — see pgNimbus's note: FluentTheme's
-                 TabItem ControlTheme paints these DynamicResource brushes itself,
-                 so overriding the resources (this include loads after FluentTheme)
-                 restyles selection without replacing the control template. -->
-            <StaticResource x:Key="TabItemHeaderBackgroundSelected" ResourceKey="AppSelectionBrush" />
-            <StaticResource x:Key="TabItemHeaderBackgroundSelectedPointerOver" ResourceKey="AppSelectionBrush" />
-            <StaticResource x:Key="TabItemHeaderBackgroundSelectedPressed" ResourceKey="AppSelectionBrush" />
-            <StaticResource x:Key="TabItemHeaderBackgroundUnselectedPointerOver" ResourceKey="HoverBackgroundBrush" />
-            <StaticResource x:Key="TabItemHeaderBackgroundUnselectedPressed" ResourceKey="HoverBackgroundBrush" />
-            <SolidColorBrush x:Key="TabItemHeaderSelectedPipeFill" Color="Transparent" />
-
-            <!-- DataGrid row selection — brand accent instead of the OS accent. -->
-            <StaticResource x:Key="DataGridRowSelectedBackgroundBrush" ResourceKey="AppAccentBrush" />
-            <StaticResource x:Key="DataGridRowSelectedHoveredBackgroundBrush" ResourceKey="AppAccentBrush" />
-            <StaticResource x:Key="DataGridRowSelectedUnfocusedBackgroundBrush" ResourceKey="AppAccentBrush" />
-            <StaticResource x:Key="DataGridRowSelectedHoveredUnfocusedBackgroundBrush" ResourceKey="AppAccentBrush" />
-            <x:Double x:Key="DataGridRowSelectedBackgroundOpacity">0.157</x:Double>
-            <x:Double x:Key="DataGridRowSelectedHoveredBackgroundOpacity">0.235</x:Double>
-            <x:Double x:Key="DataGridRowSelectedUnfocusedBackgroundOpacity">0.157</x:Double>
-            <x:Double x:Key="DataGridRowSelectedHoveredUnfocusedBackgroundOpacity">0.235</x:Double>
-
-            <!-- Slim 10px thumb-only overlay scrollbars, app-wide. -->
-            <x:Double x:Key="ScrollBarSize">10</x:Double>
-            <SolidColorBrush x:Key="ScrollBarTrackFill" Color="Transparent" />
-            <SolidColorBrush x:Key="ScrollBarTrackFillPointerOver" Color="Transparent" />
-            <Color x:Key="ScrollBarThumbBackgroundColor">#66808080</Color>
-            <SolidColorBrush x:Key="ScrollBarThumbFillPointerOver" Color="#99808080" />
-            <SolidColorBrush x:Key="ScrollBarThumbFillPressed" Color="#B3808080" />
-            <SolidColorBrush x:Key="ScrollBarPanningThumbBackground" Color="#66808080" />
-            <SolidColorBrush x:Key="ScrollViewerScrollBarsSeparatorBackground" Color="Transparent" />
-            <TransformOperations x:Key="VerticalSmallScrollThumbScaleTransform">scaleX(0.3) translateX(-2px)</TransformOperations>
-            <TransformOperations x:Key="HorizontalSmallScrollThumbScaleTransform">scaleY(0.3) translateY(-2px)</TransformOperations>
-
-            <!-- Vector icons (Material Design Icons, Apache-2.0, pictogrammers.com) —
-                 general-purpose set ported from pgNimbus plus new Kubernetes-flavored glyphs. -->
-            <StreamGeometry x:Key="MagnifyIconGeometry">M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z</StreamGeometry>
-            <StreamGeometry x:Key="CloseIconGeometry">M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z</StreamGeometry>
-            <StreamGeometry x:Key="RefreshIconGeometry">M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z</StreamGeometry>
-            <StreamGeometry x:Key="ChevronLeftIconGeometry">M15.41,16.58L10.83,12L15.41,7.41L14,6L8,12L14,18L15.41,16.58Z</StreamGeometry>
-            <StreamGeometry x:Key="ChevronRightIconGeometry">M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z</StreamGeometry>
-            <StreamGeometry x:Key="MenuDownIconGeometry">M7,10L12,15L17,10H7Z</StreamGeometry>
-            <StreamGeometry x:Key="MenuIconGeometry">M3,6H21V8H3V6M3,11H21V13H3V11M3,16H21V18H3V16Z</StreamGeometry>
-            <StreamGeometry x:Key="CogIconGeometry">M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.67 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z</StreamGeometry>
-            <StreamGeometry x:Key="TuneIconGeometry">M3,17V19H9V17H3M3,5V7H13V5H3M13,21V19H21V17H13V15H11V21H13M7,9V11H3V13H7V15H9V9H7M21,13V11H11V13H21M15,9H17V7H21V5H17V3H15V9Z</StreamGeometry>
-            <StreamGeometry x:Key="SwapHorizontalIconGeometry">M21,9L17,5V8H10V10H17V13M7,11L3,15L7,19V16H14V14H7V11Z</StreamGeometry>
-            <StreamGeometry x:Key="LayersIconGeometry">M12,16L19.36,10.27L21,9L12,2L3,9L4.63,10.27M12,18.54L4.62,12.81L3,14.07L12,21.07L21,14.07L19.37,12.8L12,18.54Z</StreamGeometry>
-            <StreamGeometry x:Key="TagIconGeometry">M5.5,7A1.5,1.5 0 0,1 4,5.5A1.5,1.5 0 0,1 5.5,4A1.5,1.5 0 0,1 7,5.5A1.5,1.5 0 0,1 5.5,7M21.41,11.58L12.41,2.58C12.05,2.22 11.55,2 11,2H4C2.89,2 2,2.89 2,4V11C2,11.55 2.22,12.05 2.59,12.41L11.58,21.41C11.95,21.77 12.45,22 13,22C13.55,22 14.05,21.77 14.41,21.41L21.41,14.41C21.78,14.05 22,13.55 22,13C22,12.44 21.77,11.94 21.41,11.58Z</StreamGeometry>
-            <StreamGeometry x:Key="LinkIconGeometry">M10.59,13.41C11,13.8 11,14.44 10.59,14.83C10.2,15.22 9.56,15.22 9.17,14.83C7.22,12.88 7.22,9.71 9.17,7.76V7.76L12.71,4.22C14.66,2.27 17.83,2.27 19.78,4.22C21.73,6.17 21.73,9.34 19.78,11.29L18.29,12.78C18.3,11.96 18.17,11.14 17.89,10.36L18.36,9.88C19.54,8.71 19.54,6.81 18.36,5.64C17.19,4.46 15.29,4.46 14.12,5.64L10.59,9.17C9.41,10.34 9.41,12.24 10.59,13.41M13.41,9.17C13.8,8.78 14.44,8.78 14.83,9.17C16.78,11.12 16.78,14.29 14.83,16.24V16.24L11.29,19.78C9.34,21.73 6.17,21.73 4.22,19.78C2.27,17.83 2.27,14.66 4.22,12.71L5.71,11.22C5.7,12.04 5.83,12.86 6.11,13.65L5.64,14.12C4.46,15.29 4.46,17.19 5.64,18.36C6.81,19.54 8.71,19.54 9.88,18.36L13.41,14.83C14.59,13.66 14.59,11.76 13.41,10.59C13,10.2 13,9.56 13.41,9.17Z</StreamGeometry>
-            <StreamGeometry x:Key="PuzzleIconGeometry">M20.5,11H19V7C19,5.89 18.1,5 17,5H13V3.5A2.5,2.5 0 0,0 10.5,1A2.5,2.5 0 0,0 8,3.5V5H4A2,2 0 0,0 2,7V10.8H3.5C5,10.8 6.2,12 6.2,13.5C6.2,15 5,16.2 3.5,16.2H2V20A2,2 0 0,0 4,22H7.8V20.5C7.8,19 9,17.8 10.5,17.8C12,17.8 13.2,19 13.2,20.5V22H17A2,2 0 0,0 19,20V16H20.5A2.5,2.5 0 0,0 23,13.5A2.5,2.5 0 0,0 20.5,11Z</StreamGeometry>
-            <StreamGeometry x:Key="DatabaseIconGeometry">M12,3C7.58,3 4,4.79 4,7C4,9.21 7.58,11 12,11C16.42,11 20,9.21 20,7C20,4.79 16.42,3 12,3M4,9V12C4,14.21 7.58,16 12,16C16.42,16 20,14.21 20,12V9C20,11.21 16.42,13 12,13C7.58,13 4,11.21 4,9M4,14V17C4,19.21 7.58,21 12,21C16.42,21 20,19.21 20,17V14C20,16.21 16.42,18 12,18C7.58,18 4,16.21 4,14Z</StreamGeometry>
-            <StreamGeometry x:Key="BellIconGeometry">M21,19V20H3V19L5,17V11C5,7.9 7.03,5.17 10,4.29C10,4.19 10,4.1 10,4A2,2 0 0,1 12,2A2,2 0 0,1 14,4C14,4.1 14,4.19 14,4.29C16.97,5.17 19,7.9 19,11V17L21,19M14,21A2,2 0 0,1 12,23A2,2 0 0,1 10,21</StreamGeometry>
-            <StreamGeometry x:Key="AccountMultipleIconGeometry">M16,13C15.71,13 15.38,13 15.03,13.05C16.19,13.89 17,15 17,16.5V19H23V16.5C23,14.17 18.33,13 16,13M8,13C5.67,13 1,14.17 1,16.5V19H15V16.5C15,14.17 10.33,13 8,13M8,11A3,3 0 0,0 11,8A3,3 0 0,0 8,5A3,3 0 0,0 5,8A3,3 0 0,0 8,11M16,11A3,3 0 0,0 19,8A3,3 0 0,0 16,5A3,3 0 0,0 13,8A3,3 0 0,0 16,11Z</StreamGeometry>
-            <StreamGeometry x:Key="PlayIconGeometry">M8,5.14V19.14L19,12.14L8,5.14Z</StreamGeometry>
-            <StreamGeometry x:Key="StopIconGeometry">M18,18H6V6H18V18Z</StreamGeometry>
-            <StreamGeometry x:Key="CheckIconGeometry">M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z</StreamGeometry>
-            <StreamGeometry x:Key="WeatherSunnyIconGeometry">M12,7A5,5 0 0,1 17,12A5,5 0 0,1 12,17A5,5 0 0,1 7,12A5,5 0 0,1 12,7M12,9A3,3 0 0,0 9,12A3,3 0 0,0 12,15A3,3 0 0,0 15,12A3,3 0 0,0 12,9M12,2L14.39,5.42C13.65,5.15 12.84,5 12,5C11.16,5 10.35,5.15 9.61,5.42L12,2M3.34,7L7.5,6.65C6.9,7.16 6.36,7.78 5.94,8.5C5.5,9.24 5.25,10 5.11,10.79L3.34,7M3.36,17L5.12,13.23C5.26,14 5.53,14.78 5.95,15.5C6.37,16.24 6.91,16.86 7.5,17.37L3.36,17M20.65,7L18.88,10.79C18.74,10 18.47,9.23 18.05,8.5C17.63,7.78 17.1,7.15 16.5,6.64L20.65,7M20.64,17L16.5,17.36C17.09,16.85 17.62,16.22 18.04,15.5C18.46,14.77 18.73,14 18.87,13.21L20.64,17M12,22L9.59,18.56C10.33,18.83 11.14,19 12,19C12.82,19 13.63,18.85 14.37,18.58L12,22Z</StreamGeometry>
-            <StreamGeometry x:Key="WeatherNightIconGeometry">M17.75,4.09L15.22,6.03L16.13,9.09L13.5,7.28L10.87,9.09L11.78,6.03L9.25,4.09L12.44,4L13.5,1L14.56,4L17.75,4.09M21.25,11L19.61,12.25L20.2,14.23L18.5,13.06L16.8,14.23L17.39,12.25L15.75,11L17.81,10.95L18.5,9L19.19,10.95L21.25,11M18.97,15.95C19.8,15.87 20.69,17.05 20.16,17.8C19.84,18.25 19.5,18.67 19.08,19.07C15.17,23 8.84,23 4.94,19.07C1.03,15.17 1.03,8.83 4.94,4.93C5.34,4.53 5.76,4.17 6.21,3.85C6.96,3.32 8.14,4.21 8.06,5.04C7.79,7.9 8.75,10.87 10.95,13.06C13.14,15.26 16.1,16.22 18.97,15.95Z</StreamGeometry>
-            <StreamGeometry x:Key="SidebarToggleIconGeometry">M5,3C3.9,3 3,3.9 3,5V19C3,20.11 3.9,21 5,21H19C20.11,21 21,20.11 21,19V5C21,3.9 20.11,3 19,3H5M10,5H19V19H10V5Z</StreamGeometry>
-            <StreamGeometry x:Key="SidebarToggleMacIconGeometry">M6,4C3.79,4 2,5.79 2,8V16C2,18.21 3.79,20 6,20H18C20.21,20 22,18.21 22,16V8C22,5.79 20.21,4 18,4H6M9.5,5.5H18C19.38,5.5 20.5,6.62 20.5,8V16C20.5,17.38 19.38,18.5 18,18.5H9.5V5.5Z</StreamGeometry>
-            <StreamGeometry x:Key="PinIconGeometry">M16,12V4H17V2H7V4H8V12L6,14V16H11.2V22H12.8V16H18V14L16,12Z</StreamGeometry>
             <!-- Outline pin for the switcher's un-pinned rows: a filled/outline pair reads
                  as a toggle, where one glyph at two opacities reads as "disabled". -->
             <StreamGeometry x:Key="PinOutlineIconGeometry">M16,12V4H17V2H7V4H8V12L6,14V16H11.2V22H12.8V16H18V14L16,12M10,4H14V12.8L15.2,14H8.8L10,12.8V4Z</StreamGeometry>
@@ -146,104 +70,10 @@
                  and a struck-through glyph, not one glyph at two opacities — the pair
                  reads as a toggle where the single glyph reads as "disabled". -->
             <StreamGeometry x:Key="EyeIconGeometry">M12,9A3,3 0 0,0 9,12A3,3 0 0,0 12,15A3,3 0 0,0 15,12A3,3 0 0,0 12,9M12,17A5,5 0 0,1 7,12A5,5 0 0,1 12,7A5,5 0 0,1 17,12A5,5 0 0,1 12,17M12,4.5C7,4.5 2.73,7.61 1,12C2.73,16.39 7,19.5 12,19.5C17,19.5 21.27,16.39 23,12C21.27,7.61 17,4.5 12,4.5Z</StreamGeometry>
-            <StreamGeometry x:Key="EyeOffIconGeometry">M11.83,9L15,12.16C15,12.11 15,12.05 15,12A3,3 0 0,0 12,9C11.94,9 11.89,9 11.83,9M7.53,9.8L9.08,11.35C9.03,11.56 9,11.77 9,12A3,3 0 0,0 12,15C12.22,15 12.44,14.97 12.65,14.92L14.2,16.47C13.53,16.8 12.79,17 12,17A5,5 0 0,1 7,12C7,11.21 7.2,10.47 7.53,9.8M2,4.27L4.28,6.55L4.73,7C3.08,8.3 1.78,10 1,12C2.73,16.39 7,19.5 12,19.5C13.55,19.5 15.03,19.2 16.38,18.66L16.81,19.08L19.73,22L21,20.73L3.27,3M12,7A5,5 0 0,1 17,12C17,12.64 16.87,13.26 16.64,13.82L19.57,16.75C21.07,15.5 22.27,13.86 23,12C21.27,7.61 17,4.5 12,4.5C10.6,4.5 9.26,4.75 8,5.2L10.17,7.35C10.74,7.13 11.35,7 12,7Z</StreamGeometry>
             <StreamGeometry x:Key="OpenInNewIconGeometry">M14,3V5H17.59L7.76,14.83L9.17,16.24L19,6.41V10H21V3M19,19H5V5H12V3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V12H19V19Z</StreamGeometry>
 
-            <!--
-                The window's caption buttons, for the merged title bar (see UI rule 12
-                and MainWindow.ConfigureWindowChrome). This exists because of what
-                Avalonia 12 actually does on Win32 when the client area is extended:
-                the backend reports `RequestedDrawnDecorations = TitleBar` and calls
-                `DisableCloseButton` on the HWND, so the *system* buttons are switched
-                off and the app is expected to draw its own. That is the opposite of
-                the pre-12 `PreferSystemChrome` behaviour, and it is not optional —
-                without a template there is no way to close the window.
-
-                Fluent's stock decorations template would draw them, but it also draws
-                a full-width title bar panel in `TitleBarBackgroundBrush` and the
-                window title in a `TextBlock` — both on top of the command bar, which
-                would put back the second bar and the wordmark this whole change
-                removes. So: the same buttons it would have drawn — Fluent's own
-                `FluentDrawnCaptionButton` theme and glyph geometries, down to the
-                restore glyph when maximized — and nothing else. No underlay either:
-                Win32 asks only for the title bar part, so the border and shadow
-                parts are never enabled here.
-
-                The PART_ names are load-bearing: `WindowDrawnDecorations` finds the
-                three buttons by name in the template's name scope and wires minimize
-                /maximize/close to them. Rename one and it becomes a dead button.
-            -->
-            <ControlTheme x:Key="CommandBarWindowDecorations" TargetType="chrome:WindowDrawnDecorations">
-                <Setter Property="Template">
-                    <WindowDrawnDecorationsTemplate>
-                        <WindowDrawnDecorationsContent>
-                            <WindowDrawnDecorationsContent.Overlay>
-                                <StackPanel Name="PART_OverlayPanel" Orientation="Horizontal"
-                                            HorizontalAlignment="Right" VerticalAlignment="Top"
-                                            Height="{TemplateBinding TitleBarHeight}"
-                                            IsVisible="{TemplateBinding HasTitleBar}">
-                                    <Button Name="PART_MinimizeButton" Theme="{StaticResource FluentDrawnCaptionButton}"
-                                            chrome:WindowDecorationProperties.ElementRole="MinimizeButton">
-                                        <Viewbox Width="11" Margin="2">
-                                            <Path Stretch="UniformToFill" Fill="{DynamicResource CaptionButtonForeground}"
-                                                  Data="M2048 1229v-205h-2048v205h2048z" />
-                                        </Viewbox>
-                                    </Button>
-                                    <Button Name="PART_MaximizeButton" Theme="{StaticResource FluentDrawnCaptionButton}"
-                                            chrome:WindowDecorationProperties.ElementRole="MaximizeButton">
-                                        <Viewbox Width="11" Margin="2">
-                                            <Path Name="RestoreButtonPath" Stretch="UniformToFill"
-                                                  Fill="{DynamicResource CaptionButtonForeground}"
-                                                  Data="M2048 2048v-2048h-2048v2048h2048zM1843 1843h-1638v-1638h1638v1638z" />
-                                        </Viewbox>
-                                    </Button>
-                                    <Button Name="PART_CloseButton" Theme="{StaticResource FluentDrawnCaptionButton}"
-                                            chrome:WindowDecorationProperties.ElementRole="CloseButton">
-                                        <Viewbox Width="11" Margin="2">
-                                            <Path Stretch="UniformToFill" Fill="{DynamicResource CaptionButtonForeground}"
-                                                  Data="M1169 1024l879 -879l-145 -145l-879 879l-879 -879l-145 145l879 879l-879 879l145 145l879 -879l879 879l145 -145z" />
-                                        </Viewbox>
-                                    </Button>
-                                </StackPanel>
-                            </WindowDrawnDecorationsContent.Overlay>
-                        </WindowDrawnDecorationsContent>
-                    </WindowDrawnDecorationsTemplate>
-                </Setter>
-
-                <!-- Maximize becomes Restore, as it does everywhere in Windows. -->
-                <Style Selector="^:maximized /template/ Path#RestoreButtonPath">
-                    <Setter Property="Data" Value="M2048 410h-410v-410h-1638v1638h410v410h1638v-1638zM1434 1434h-1229v-1229h1229v1229zM1843 1843h-1229v-205h1024v-1024h205v1229z" />
-                </Style>
-                <!-- A window that cannot be minimized or maximized doesn't get a
-                     button for it, rather than a button that refuses (UI rule 9). -->
-                <Style Selector="^:not(:has-minimize) /template/ Button#PART_MinimizeButton">
-                    <Setter Property="IsVisible" Value="False" />
-                </Style>
-                <Style Selector="^:not(:has-maximize) /template/ Button#PART_MaximizeButton">
-                    <Setter Property="IsVisible" Value="False" />
-                </Style>
-            </ControlTheme>
         </ResourceDictionary>
     </Styles.Resources>
-
-    <!-- Scrollbar part tweaks not reachable via resources — see pgNimbus's note. -->
-    <Style Selector="ScrollBar /template/ Thumb">
-        <Setter Property="CornerRadius" Value="5" />
-    </Style>
-    <Style Selector="ScrollBar /template/ RepeatButton#PART_LineUpButton">
-        <Setter Property="IsVisible" Value="False" />
-    </Style>
-    <Style Selector="ScrollBar /template/ RepeatButton#PART_LineDownButton">
-        <Setter Property="IsVisible" Value="False" />
-    </Style>
-
-    <!-- Card container -->
-    <Style Selector="Border.card">
-        <Setter Property="Background" Value="{StaticResource CardBackgroundBrush}" />
-        <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="{StaticResource CardCornerRadius}" />
-    </Style>
 
     <!-- Bottom inspector dock (Lens-style): header tab strip + draggable splitter. -->
     <Style Selector="Grid.dockHeader">
@@ -348,48 +178,6 @@
         <Setter Property="Background" Value="{StaticResource AppSelectionBrush}" />
     </Style>
 
-    <!-- Files-style two-tone shell: chrome-tinted base, content pane as a raised "layer". -->
-    <Style Selector="Border.layer">
-        <Setter Property="Background" Value="{DynamicResource SystemControlPageBackgroundAltHighBrush}" />
-        <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="{StaticResource CardCornerRadius}" />
-        <Setter Property="Padding" Value="12" />
-    </Style>
-
-    <Style Selector="Border.statusBar">
-        <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
-        <Setter Property="BorderThickness" Value="0,1,0,0" />
-        <Setter Property="Padding" Value="12,6" />
-    </Style>
-    <Style Selector="TextBlock.statusText">
-        <Setter Property="FontSize" Value="12" />
-        <Setter Property="Opacity" Value="0.85" />
-    </Style>
-    <Style Selector="TextBlock.statusText.dim">
-        <Setter Property="Opacity" Value="0.6" />
-    </Style>
-    <Style Selector="TextBlock.statusText.error">
-        <Setter Property="Foreground" Value="{StaticResource ErrorBrush}" />
-    </Style>
-    <Style Selector="TextBlock.statusText.warn">
-        <Setter Property="Foreground" Value="{StaticResource WarnBrush}" />
-        <Setter Property="Opacity" Value="1" />
-    </Style>
-    <Style Selector="Rectangle.statusSeparator">
-        <Setter Property="Width" Value="1" />
-        <Setter Property="Height" Value="12" />
-        <Setter Property="Fill" Value="{StaticResource CardBorderBrush}" />
-        <Setter Property="VerticalAlignment" Value="Center" />
-    </Style>
-
-    <Style Selector="TextBlock.sectionHeader">
-        <Setter Property="FontSize" Value="11" />
-        <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Opacity" Value="0.55" />
-        <Setter Property="LetterSpacing" Value="0.8" />
-    </Style>
-
     <!-- Form field caption, Fluent's label-above-the-input pattern (WinUI "Caption"
          at 12px, de-emphasized). Beside-the-input labels are what put "Local port"
          hard against its own text box in the port-forward pane: a label column sized
@@ -445,7 +233,7 @@
         <Setter Property="Opacity" Value="0.85" />
     </Style>
     <Style Selector="Border.demoBar PathIcon">
-        <Setter Property="Foreground" Value="{StaticResource WarnBrush}" />
+        <Setter Property="Foreground" Value="{StaticResource AppWarningBrush}" />
     </Style>
 
     <!-- The "this pane needs a real cluster" state (exec, port-forward, apply/delete).
@@ -485,86 +273,6 @@
         <Setter Property="MinHeight" Value="28" />
     </Style>
 
-    <!-- Buttons -->
-    <Style Selector="Button">
-        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
-        <Setter Property="Padding" Value="14,7" />
-    </Style>
-
-    <Style Selector="Button.accent">
-        <Setter Property="Background" Value="{StaticResource AppAccentBrush}" />
-        <Setter Property="Foreground" Value="White" />
-        <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="BorderThickness" Value="0" />
-    </Style>
-    <Style Selector="Button.accent:pointerover">
-        <Setter Property="Background" Value="{StaticResource AppAccentHoverBrush}" />
-    </Style>
-    <Style Selector="Button.accent:pressed">
-        <Setter Property="Background" Value="{StaticResource AppAccentPressedBrush}" />
-    </Style>
-    <Style Selector="Button.accent:disabled">
-        <Setter Property="Background" Value="{DynamicResource SystemControlDisabledBaseLowBrush}" />
-        <Setter Property="Foreground" Value="{DynamicResource SystemControlDisabledBaseMediumLowBrush}" />
-    </Style>
-
-    <Style Selector="Button.toolbar, ToggleButton.toolbar">
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Padding" Value="10,7" />
-    </Style>
-    <Style Selector="ToggleButton.toolbar:checked /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="{StaticResource AppSelectionBrush}" />
-    </Style>
-    <Style Selector="ToggleButton.toolbar:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="{StaticResource AppSelectionBrush}" />
-    </Style>
-    <Style Selector="ToggleButton.toolbar:checked:pressed /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="{StaticResource AppSelectionBrush}" />
-    </Style>
-    <Style Selector="ToggleButton.toolbar:checked PathIcon">
-        <Setter Property="Foreground" Value="{StaticResource AppAccentBrush}" />
-    </Style>
-
-    <Style Selector="Button.chip, ToggleButton.chip">
-        <Setter Property="CornerRadius" Value="10" />
-        <Setter Property="Padding" Value="4,0" />
-        <Setter Property="MinWidth" Value="18" />
-        <Setter Property="MinHeight" Value="18" />
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Opacity" Value="0.6" />
-        <Setter Property="HorizontalContentAlignment" Value="Center" />
-        <Setter Property="VerticalContentAlignment" Value="Center" />
-        <Setter Property="Cursor" Value="Hand" />
-    </Style>
-    <Style Selector="Button.chip:pointerover, ToggleButton.chip:pointerover">
-        <Setter Property="Background" Value="{StaticResource HoverBackgroundBrush}" />
-        <Setter Property="Opacity" Value="1" />
-    </Style>
-    <Style Selector="ToggleButton.chip:checked">
-        <Setter Property="Opacity" Value="1" />
-    </Style>
-    <Style Selector="ToggleButton.chip:checked /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="{StaticResource AppSelectionBrush}" />
-    </Style>
-
-    <Style Selector="Button.searchpill">
-        <Setter Property="Background" Value="{StaticResource CardBackgroundBrush}" />
-        <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
-        <Setter Property="Padding" Value="10,0" />
-        <Setter Property="MinHeight" Value="24" />
-        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-        <Setter Property="VerticalContentAlignment" Value="Center" />
-        <Setter Property="Cursor" Value="Hand" />
-    </Style>
-    <Style Selector="Button.searchpill:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="{StaticResource HoverBackgroundBrush}" />
-        <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
-    </Style>
-
     <!-- Sidebar tree row: pill selection on the fixed brand accent, hover a quiet neutral wash. -->
     <Style Selector="ListBoxItem.navRow">
         <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
@@ -587,13 +295,13 @@
         <Setter Property="Height" Value="7" />
     </Style>
     <Style Selector="Ellipse.statusDot.ok">
-        <Setter Property="Fill" Value="{StaticResource ActiveDotBrush}" />
+        <Setter Property="Fill" Value="{StaticResource AppSuccessBrush}" />
     </Style>
     <Style Selector="Ellipse.statusDot.warn">
-        <Setter Property="Fill" Value="{StaticResource WarnBrush}" />
+        <Setter Property="Fill" Value="{StaticResource AppWarningBrush}" />
     </Style>
     <Style Selector="Ellipse.statusDot.error">
-        <Setter Property="Fill" Value="{StaticResource ErrorBrush}" />
+        <Setter Property="Fill" Value="{StaticResource AppDangerBrush}" />
     </Style>
     <Style Selector="Ellipse.statusDot.idle">
         <Setter Property="Fill" Value="#80808080" />
@@ -613,19 +321,19 @@
         <Setter Property="Background" Value="#1C46A758" />
     </Style>
     <Style Selector="Border.statusPill.ok TextBlock">
-        <Setter Property="Foreground" Value="{StaticResource ActiveDotBrush}" />
+        <Setter Property="Foreground" Value="{StaticResource AppSuccessBrush}" />
     </Style>
     <Style Selector="Border.statusPill.warn">
         <Setter Property="Background" Value="#1CD9822B" />
     </Style>
     <Style Selector="Border.statusPill.warn TextBlock">
-        <Setter Property="Foreground" Value="{StaticResource WarnBrush}" />
+        <Setter Property="Foreground" Value="{StaticResource AppWarningBrush}" />
     </Style>
     <Style Selector="Border.statusPill.error">
         <Setter Property="Background" Value="#1CCD5C5C" />
     </Style>
     <Style Selector="Border.statusPill.error TextBlock">
-        <Setter Property="Foreground" Value="{StaticResource ErrorBrush}" />
+        <Setter Property="Foreground" Value="{StaticResource AppDangerBrush}" />
     </Style>
 
     <!-- Environment pill (PROD / STAGING / DEV) — same shape as statusPill, but its
@@ -707,9 +415,6 @@
         <Setter Property="CornerRadius" Value="2" />
     </Style>
 
-    <!-- Switcher popup rows. Selected on the ListBox's own class and applied to its
-         item containers, because a ListBoxItem's Classes can't be set from a Style
-         setter (Classes is not an AvaloniaProperty) and the containers are generated. -->
     <!-- The item container carries no padding or highlight of its own: a group's
          title rides inside the first row of that group, and highlighting the
          container would draw the selection around the heading too. The row body
@@ -748,9 +453,9 @@
         <Setter Property="Padding" Value="10,4" />
     </Style>
     <Style Selector="Border.inlineWarning PathIcon">
-        <Setter Property="Foreground" Value="{StaticResource WarnBrush}" />
+        <Setter Property="Foreground" Value="{StaticResource AppWarningBrush}" />
     </Style>
     <Style Selector="Border.inlineWarning TextBlock">
-        <Setter Property="Foreground" Value="{StaticResource WarnBrush}" />
+        <Setter Property="Foreground" Value="{StaticResource AppWarningBrush}" />
     </Style>
 </Styles>
