@@ -187,6 +187,37 @@ choice must be AOT/trimming-compatible from day one.
    a control pair where one half is always disabled is one control — Start and
    Stop are the same slot, swapped on `IsRunning`, not a live button beside a
    dead one.
+12. **The command bar *is* the title bar, and nothing in the window says its own
+   name.** One row of chrome at the top, not two: `MainWindow
+   .ConfigureWindowChrome` sets `ExtendClientAreaToDecorationsHint` on Windows
+   and macOS, and the 40px `CommandBar` carries the caption. The wordmark went
+   with it — the window title and the taskbar/Alt+Tab icon already carry the
+   identity, and the bar was printing the title back at itself 32px lower (the
+   same argument that had already removed the glyph beside it). Four things
+   about this are easy to get wrong:
+   - **Roles, not `BeginMoveDrag`.** Avalonia 12 replaced
+     `ExtendClientAreaChromeHints` with
+     `chrome:WindowDecorationProperties.ElementRole`; `TitleBar` on the bar maps
+     to Win32 `HTCAPTION`, which is what keeps dragging, double-click-to-maximize,
+     the right-click window menu and Win11 Snap Layouts. Hand-rolling the drag
+     reproduces one of those four and silently loses three. Every interactive
+     control in the bar must then opt back in with `User`, or the caption
+     swallows its clicks — the tab strip's `ScrollViewer` deliberately does
+     *not*, because empty strip space is where a browser lets you grab the
+     window (the cost, stated: the overflow scrollbar past ~8 clusters can't be
+     dragged).
+   - **The caption buttons' width is not discoverable.** `WindowDecorationMargin`
+     reports the title bar's *height*, so the reserve that keeps the palette pill
+     out from under Close is a per-platform constant in DIPs (138 Windows, 78
+     macOS traffic lights, which are on the *left*). DIPs, so it survives DPI
+     changes without recomputation.
+   - **`OffScreenMargin` is not optional here.** A maximized window with an
+     extended client area hangs a few pixels off every screen edge; unhonored,
+     the thing clipped is now the title bar's own contents.
+   - **Linux keeps its system decorations.** Extending there means *drawing* the
+     buttons, and CSD that matches GNOME is wrong on KDE and every tiling WM. We
+     ship linux-x64/arm64; ~32px isn't worth that. `ConfigureWindowChrome`
+     returns early and the Linux window is unchanged.
 
 [fluent-basics]: https://learn.microsoft.com/en-us/windows/apps/design/basics/
 
@@ -1553,3 +1584,32 @@ and Helm all render from the single-file binary). Worth an upstream Avalonia iss
 until then `.github/workflows/release.yml` ships three RIDs that cannot launch.
 win-x64 NativeAOT still cannot be built here (`Cross-OS native compilation is not
 supported`) and remains the build that has never run anywhere.
+
+**One-bar chrome pass:** the top of the window carried two bars — the OS title bar
+and our 44px command bar — where every comparable app (VS Code, Chrome, Explorer,
+Lens, Aptakube) carries one. See UI rule 12 above for the rules; the change itself
+is small: `ExtendClientAreaToDecorationsHint` on Windows/macOS, the `TitleBar`
+decoration role on `CommandBar` with `User` on everything clickable inside it,
+`OffScreenMargin` honored on the root layout, the bar down from 44px to 40px, and
+the wordmark deleted. Net ~36px of vertical chrome back, which is ~12% of the
+inspector dock's 300px default — roughly two more log lines, at the top of every
+window, permanently.
+
+**Verified this session**: build (0 warnings), **145/145 TUnit, 0 skipped** (no
+sandbox here, so that is the unit-only subset — the cluster-gated tests returned
+early), all 38 screenshot scenarios × both themes, the linux-x64 NativeAOT publish
+with no new warnings beyond the known DataGrid IL2104/IL3053, and the app running
+under Xvfb on the **Linux** path, which is the path this change deliberately leaves
+alone. The seven generated README screenshots were regenerated.
+
+**Not verified, and it is the half that matters**: no Windows or macOS machine has
+run this. The Linux branch of `ConfigureWindowChrome` returns before touching
+anything, so nothing testable here exercises the extended client area at all. First
+things to check on a Windows box, in order: that Avalonia 12 leaves the caption
+buttons to the system rather than drawing a second title bar of its own
+(`Window.WindowDecorations.HasTitleBar` and `IsExtendedIntoWindowDecorations` at
+runtime say which), that 138 DIPs is the right reserve at 100% *and* 150% scaling,
+that dragging/double-click/Snap Layouts work from the empty tab strip, that a
+maximized window isn't clipped at the top, and that Mica still renders now that the
+bar is inside the extended area. On macOS the equivalent is the 78 DIP traffic-light
+reserve and that the switcher button clears it.

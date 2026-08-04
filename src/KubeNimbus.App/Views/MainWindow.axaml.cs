@@ -12,6 +12,22 @@ namespace KubeNimbus.App.Views;
 
 public partial class MainWindow : Window
 {
+    /// <summary>
+    /// Horizontal room the system's own caption buttons take out of the command bar
+    /// once the client area is extended under them. Avalonia exposes no measurement
+    /// for this — <see cref="Window.WindowDecorationMargin"/> reports the title bar's
+    /// height, not the buttons' width — so these are the platforms' documented metrics
+    /// in device-independent pixels, which is what layout works in: they hold across
+    /// DPI scales without a per-monitor recalculation.
+    /// </summary>
+    private const double WindowsCaptionButtonsWidth = 138; // 3 × 46 (minimize/maximize/close).
+
+    /// <summary>macOS traffic lights, which sit top-<em>left</em>: 3 × 14 plus the standard insets.</summary>
+    private const double MacTrafficLightsWidth = 78;
+
+    /// <summary>The command bar's own left/right breathing room, kept when a caption reserve is added.</summary>
+    private const double CommandBarInset = 12;
+
     private ClusterTabViewModel? _draggingTab;
     private Point _dragStart;
     private bool _dragging;
@@ -26,6 +42,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
+        ConfigureWindowChrome();
 
         KeyBindings.Add(new KeyBinding { Gesture = Hotkeys.CommandPalette, Command = new RelayOpenPaletteCommand(this) });
         PaletteShortcutLabel.Text = Hotkeys.Describe(Hotkeys.CommandPalette);
@@ -66,6 +84,72 @@ public partial class MainWindow : Window
     }
 
     private MainWindowViewModel? Vm => DataContext as MainWindowViewModel;
+
+    /// <summary>
+    /// Merges the command bar into the title bar, so the shell has one bar of chrome
+    /// at the top instead of two. The system title bar carried a window title the
+    /// command bar was printing again 32px lower, three buttons, and ~32px of height
+    /// that the inspector dock — ~300px, holding logs — was paying for.
+    /// <para>
+    /// Windows and macOS only, deliberately. Both have a conventional, OS-drawn place
+    /// for the caption buttons that we can simply leave empty, which is what every
+    /// comparable app does (VS Code, Chrome, Explorer, Lens, Aptakube). Extending the
+    /// client area on Linux means <em>drawing</em> the buttons ourselves, and
+    /// client-side decorations that match GNOME look wrong on KDE and every tiling WM;
+    /// we ship linux-x64/arm64, so that trade isn't worth ~32px. Linux keeps the
+    /// system-decorated window and this method does nothing.
+    /// </para>
+    /// <para>
+    /// The gestures a title bar owes the user — drag, double-click to maximize, the
+    /// right-click window menu, Win11 Snap Layouts — are not reimplemented here. They
+    /// come from the <c>TitleBar</c> decoration role on the bar in XAML, which Win32
+    /// answers as <c>HTCAPTION</c>; hand-rolling them from <c>BeginMoveDrag</c> would
+    /// reproduce the drag and quietly lose the other three. Note that Avalonia 12
+    /// replaced <c>ExtendClientAreaChromeHints</c> with these roles, so pre-12 samples
+    /// found online will not compile.
+    /// </para>
+    /// </summary>
+    private void ConfigureWindowChrome()
+    {
+        if (!OperatingSystem.IsWindows() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        ExtendClientAreaToDecorationsHint = true;
+
+        // Caption region == the bar, so the system buttons sit centred in it rather
+        // than in a 32px strip floating inside a 40px row. Read from the bar itself so
+        // the two cannot drift apart.
+        ExtendClientAreaTitleBarHeightHint = CommandBar.Height;
+
+        // Leave the caption buttons their space. Without this the palette pill and the
+        // theme toggle sit under Close on Windows, and the cluster switcher sits under
+        // the traffic lights on macOS.
+        CommandBar.Padding = new Thickness(
+            CommandBarInset + (OperatingSystem.IsMacOS() ? MacTrafficLightsWidth : 0),
+            0,
+            CommandBarInset + (OperatingSystem.IsWindows() ? WindowsCaptionButtonsWidth : 0),
+            0);
+
+        ApplyOffScreenMargin();
+        PropertyChanged += (_, e) =>
+        {
+            if (e.Property == OffScreenMarginProperty)
+            {
+                ApplyOffScreenMargin();
+            }
+        };
+    }
+
+    /// <summary>
+    /// A maximized window with an extended client area is deliberately sized a few
+    /// pixels larger than the work area on every edge (Windows does this so its own
+    /// resize borders stay grabbable), and Avalonia reports how much in
+    /// <see cref="Window.OffScreenMargin"/>. Not honoring it clips whatever is at the
+    /// window's edge — which, now, is the title bar's own contents.
+    /// </summary>
+    private void ApplyOffScreenMargin() => RootLayout.Margin = OffScreenMargin;
 
     // Windows 11 Mica backdrop: the shell base swaps between the theme-split
     // translucent ShellBackdropBrush (while the material actually renders —

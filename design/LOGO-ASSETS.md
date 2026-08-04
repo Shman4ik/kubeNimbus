@@ -209,7 +209,7 @@ future installer/MSIX manifest can reference them unchanged.
 
 | File | Size(s) | Bg | Consumed by |
 |---|---|---|---|
-| `app.ico` | 16,24,32,48,64,128,256 | disc | exe icon (`ApplicationIcon` in the csproj) **and** the runtime window icon — `MainWindow.axaml` sets `Icon="/Assets/app.ico"` (title bar, taskbar, Alt+Tab) |
+| `app.ico` | 16,24,32,48,64,128,256 | disc | exe icon (`ApplicationIcon` in the csproj) **and** the runtime window icon — `MainWindow.axaml` sets `Icon="/Assets/app.ico"` (taskbar, Alt+Tab — and the title bar on Linux, the one platform that still draws one; Windows and macOS extend the client area over it, see UI rule 12 in [`../CLAUDE.md`](../CLAUDE.md)) |
 | `window-icon-light.ico` | 16,24,32,48,256 | transparent | **nothing right now.** Generated for the same reason pgNimbus keeps its pair: the moment a theme-aware title-bar icon is wanted, the asset exists. Windows gives title bar/taskbar/Alt+Tab a single `WM_SETICON` slot, and unplated line art loses on the taskbar in light theme — which is why the plated `app.ico` is what's actually wired up |
 | `window-icon-dark.ico` | 16,24,32,48,256 | transparent | same as above |
 | `Msix/Square44x44Logo.scale-{100,125,150,200,400}.png` | 44,55,66,88,176 | disc | MSIX small tile |
