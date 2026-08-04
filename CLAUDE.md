@@ -206,18 +206,43 @@ choice must be AOT/trimming-compatible from day one.
      *not*, because empty strip space is where a browser lets you grab the
      window (the cost, stated: the overflow scrollbar past ~8 clusters can't be
      dragged).
-   - **The caption buttons' width is not discoverable.** `WindowDecorationMargin`
+   - **On Windows the caption buttons become ours, and that is not optional.**
+     Avalonia 12's Win32 backend answers an extended client area with
+     `RequestedDrawnDecorations = TitleBar` *and calls `DisableCloseButton` on the
+     HWND* — the system's three buttons are switched off and the app is expected
+     to draw them. (Pre-12 `PreferSystemChrome` did the opposite; every sample
+     online predates this.) Fluent's stock decorations template would supply them,
+     but it also paints a full-width title bar panel and the window title over the
+     command bar, which puts back both the second bar and the wordmark. Hence
+     `CommandBarWindowDecorations` in Theme.axaml: Fluent's own button theme and
+     glyphs, no title bar panel, no title text, no underlay. The `PART_CloseButton`
+     /`PART_MinimizeButton`/`PART_MaximizeButton` names are load-bearing —
+     `WindowDrawnDecorations.AttachCaptionButtons` finds them by name and
+     subscribes `Click`, so a rename is a dead button, not a build error. macOS
+     asks for no drawn decorations at all and keeps its traffic lights.
+   - **The caption strip's width is not discoverable.** `WindowDecorationMargin`
      reports the title bar's *height*, so the reserve that keeps the palette pill
-     out from under Close is a per-platform constant in DIPs (138 Windows, 78
-     macOS traffic lights, which are on the *left*). DIPs, so it survives DPI
-     changes without recomputation.
+     out from under Close is derived from the same `CaptionButtonWidth` resource
+     (45) the buttons size themselves from, × 3. macOS's traffic lights are a
+     constant (78) and on the *left*. Both in DIPs, so they survive DPI changes
+     without recomputation.
    - **`OffScreenMargin` is not optional here.** A maximized window with an
      extended client area hangs a few pixels off every screen edge; unhonored,
      the thing clipped is now the title bar's own contents.
-   - **Linux keeps its system decorations.** Extending there means *drawing* the
-     buttons, and CSD that matches GNOME is wrong on KDE and every tiling WM. We
-     ship linux-x64/arm64; ~32px isn't worth that. `ConfigureWindowChrome`
-     returns early and the Linux window is unchanged.
+   - **Linux keeps its system decorations.** Extending there hands us the whole
+     frame (X11 requests *all four* drawn parts, not just the title bar), and CSD
+     that matches GNOME is wrong on KDE and every tiling WM. It is also gated
+     behind `X11PlatformOptions.EnableDrawnDecorations`, which Avalonia marks
+     experimental "used mostly for testing" — the compiler refuses it without an
+     explicit suppression. We ship linux-x64/arm64; ~36px isn't worth any of that.
+     `ConfigureWindowChrome` returns early and the Linux window is unchanged.
+   - **Nothing here is testable in the screenshot harness**, which is the usual
+     safety net: `HeadlessWindowImpl.NeedsManagedDecorations` is `false`, so the
+     decorations are never built and every scenario renders the bar with no
+     caption strip. Flipping that X11 option on with the platform gate forced open
+     is the one way to see the real thing without a Windows box — it renders the
+     buttons, their hover states and the reserve correctly, and it is how this was
+     verified at all.
 
 [fluent-basics]: https://learn.microsoft.com/en-us/windows/apps/design/basics/
 
@@ -1602,14 +1627,28 @@ with no new warnings beyond the known DataGrid IL2104/IL3053, and the app runnin
 under Xvfb on the **Linux** path, which is the path this change deliberately leaves
 alone. The seven generated README screenshots were regenerated.
 
-**Not verified, and it is the half that matters**: no Windows or macOS machine has
-run this. The Linux branch of `ConfigureWindowChrome` returns before touching
-anything, so nothing testable here exercises the extended client area at all. First
-things to check on a Windows box, in order: that Avalonia 12 leaves the caption
-buttons to the system rather than drawing a second title bar of its own
-(`Window.WindowDecorations.HasTitleBar` and `IsExtendedIntoWindowDecorations` at
-runtime say which), that 138 DIPs is the right reserve at 100% *and* 150% scaling,
-that dragging/double-click/Snap Layouts work from the empty tab strip, that a
-maximized window isn't clipped at the top, and that Mica still renders now that the
-bar is inside the extended area. On macOS the equivalent is the 78 DIP traffic-light
-reserve and that the switcher button clears it.
+**The caption buttons turned out to be ours to draw.** The first cut of this pass
+assumed Windows would keep drawing them, the way pre-12 `PreferSystemChrome` did.
+Reading Avalonia 12's Win32 backend says otherwise — an extended client area reports
+`RequestedDrawnDecorations = TitleBar` and calls `DisableCloseButton` on the HWND —
+so without a decorations template the window would have had **no way to close**, and
+with Fluent's stock one it would have had a second title bar and the window title
+painted over the command bar. `CommandBarWindowDecorations` in Theme.axaml is the
+answer; see UI rule 12.
+
+**Verified for the drawn decorations**, since neither the harness nor a plain Linux
+run builds them: with `X11PlatformOptions.EnableDrawnDecorations` on and the platform
+gate forced open (both reverted), the app renders the three buttons at the right of
+the 40px bar, sized and hovering correctly, with the command bar's controls stopping
+exactly where the caption strip starts — and no Fluent title bar or title text over
+either. The wiring itself is platform-independent (`AttachCaptionButtons` looks the
+`PART_*` names up and subscribes `Click`).
+
+**Still not verified, and it is the half that matters**: no Windows or macOS machine
+has run this. First things to check on a Windows box, in order: that the buttons
+appear and work (close especially — the X11 experimental path hovered but did not
+activate, which may be its own quirk or may not), that 3 × 45 DIPs is the right
+reserve at 100% *and* 150% scaling, that dragging/double-click/Snap Layouts work from
+the empty tab strip, that a maximized window isn't clipped at the top, and that Mica
+still renders now that the bar is inside the extended area. On macOS the equivalent is
+the 78 DIP traffic-light reserve and that the switcher button clears it.
