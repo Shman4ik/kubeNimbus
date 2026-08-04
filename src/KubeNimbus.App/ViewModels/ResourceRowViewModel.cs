@@ -154,6 +154,19 @@ public sealed partial class ResourceRowViewModel : ObservableObject
     }
 
     /// <summary>
+    /// The list's name filter: case-insensitive substring over the fields that
+    /// <em>identify</em> the object — name, namespace, and the cluster in fleet mode.
+    /// Deliberately not the status: "Running" matches most of a healthy list, and what
+    /// people type into a search box is a name they half-remember. Namespace is in
+    /// because "All namespaces" is the default and "demo-shop" is how you narrow it
+    /// without leaving the list.
+    /// </summary>
+    public bool Matches(string query) =>
+        Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+        || Namespace.Contains(query, StringComparison.OrdinalIgnoreCase)
+        || (ClusterName.Length > 0 && ClusterName.Contains(query, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
     /// Recomputes the two cells whose text is a function of wall-clock rather than of
     /// the object — Age, and the "(43m ago)" on Restarts. Driven by one shared timer
     /// in <see cref="Views.ClusterTabView"/>: a timer per row would mean thousands of
