@@ -10,6 +10,7 @@ using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using KubeNimbus.App.Demo;
 using KubeNimbus.Core;
 
 namespace KubeNimbus.App.ViewModels;
@@ -29,7 +30,8 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     /// <summary>Same cadence as the list view — metrics.k8s.io aggregates over ~30s.</summary>
     private static readonly TimeSpan MetricsPollInterval = TimeSpan.FromSeconds(15);
 
-    private readonly ClusterClient _client;
+    /// <summary>Null on the demo cluster — see <see cref="InspectorTabViewModelBase.IsDemo"/>.</summary>
+    private readonly ClusterClient? _client;
     private readonly ResourceRowViewModel _row;
     private readonly Action<InspectorTabViewModelBase> _openTab;
     private readonly Func<OwnerRef, string?, Task> _openOwner;
@@ -155,12 +157,14 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         clusterName.Length == 0 ? $"pod:{@namespace}/{name}" : $"pod@{clusterName}:{@namespace}/{name}";
 
     public PodDetailTabViewModel(
-        ClusterClient client,
+        ClusterClient? client,
         ResourceRowViewModel row,
         Action<InspectorTabViewModelBase> openTab,
         Func<OwnerRef, string?, Task> openOwner,
         string clusterName = "")
-        : base(clusterName.Length == 0 ? $"Pod/{row.Name}" : $"Pod/{row.Name} · {clusterName}")
+        : base(
+            clusterName.Length == 0 ? $"Pod/{row.Name}" : $"Pod/{row.Name} · {clusterName}",
+            isDemo: client is null)
     {
         _client = client;
         _row = row;
@@ -180,8 +184,28 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         // straight into the stream is also what kubectl logs, k9s and Lens all do.
         StartLogs();
 
+        if (client is null)
+        {
+            // No poll and no event fetch on the demo cluster: both usage and events come
+            // straight from the shipped dataset, through the same entry points a real
+            // poll and a real fetch land on.
+            LoadDemoEvents();
+            DemoUsage.SeedPod(this);
+            return;
+        }
+
         _ = RefreshEventsAsync();
         _ = Task.Run(() => PollMetricsAsync(_metricsCts.Token), _metricsCts.Token);
+    }
+
+    /// <summary>Events for this pod, from the demo dataset rather than the API server.</summary>
+    private void LoadDemoEvents()
+    {
+        Events.Clear();
+        foreach (var e in DemoData.Events)
+        {
+            Events.Add(new EventRowViewModel(e));
+        }
     }
 
     /// <summary>
@@ -190,6 +214,11 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     /// </summary>
     private async Task PollMetricsAsync(CancellationToken token)
     {
+        if (_client is null)
+        {
+            return;
+        }
+
         using var timer = new PeriodicTimer(MetricsPollInterval);
         try
         {
@@ -702,7 +731,14 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
             if (!_secretConfigMapCache.TryGetValue(cacheKey, out var fetchTask))
             {
                 var descriptor = kind == "Secret" ? ResourceDescriptor.Secrets : ResourceDescriptor.ConfigMaps;
-                fetchTask = _client.ReadResourceAsync(descriptor, PodNamespace, refName);
+
+                // On the demo cluster the referenced object comes out of the shipped
+                // dataset instead of a GET. It still goes through the same cache and the
+                // same decode below, so the eye toggle, the base64 decode and the
+                // per-row "not found" all behave identically to the live path.
+                fetchTask = _client is null
+                    ? Task.FromResult(DemoData.ReadObject(kind, PodNamespace, refName))
+                    : _client.ReadResourceAsync(descriptor, PodNamespace, refName);
                 _secretConfigMapCache[cacheKey] = fetchTask;
             }
 
@@ -763,6 +799,12 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
 
     private async Task RefreshEventsAsync()
     {
+        if (_client is null)
+        {
+            LoadDemoEvents();
+            return;
+        }
+
         try
         {
             var events = await _client.GetEventsForAsync(_row.Resource);
@@ -935,6 +977,12 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         SetLogFlags(following: false, previous: true);
         var generation = _logGeneration;
 
+        if (_client is null)
+        {
+            _ = ReplayDemoLogsAsync(container.Name, previous: true, generation, token);
+            return;
+        }
+
         _ = Task.Run(async () =>
         {
             try
@@ -979,6 +1027,12 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         SetLogFlags(following: true, previous: false);
         var generation = _logGeneration;
 
+        if (_client is null)
+        {
+            _ = ReplayDemoLogsAsync(container.Name, previous: false, generation, token);
+            return;
+        }
+
         _ = Task.Run(async () =>
         {
             try
@@ -1003,6 +1057,54 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
                 await EndLogStreamAsync(generation, FirstLine(ex.Message), problem: true);
             }
         }, token);
+    }
+
+    /// <summary>
+    /// The demo cluster's stand-in for a log stream: canned lines fed one at a time
+    /// through the same <see cref="Enqueue"/> the socket pump uses, so batching,
+    /// trimming, filtering, the timestamp toggle, auto-scroll and every placeholder
+    /// state are the real ones — only the source of the bytes differs. A stream that
+    /// arrived fully-formed would demonstrate none of that.
+    ///
+    /// It ends with a stated reason rather than going quiet, because a demo pane that
+    /// simply stops is indistinguishable from one that broke.
+    /// </summary>
+    private async Task ReplayDemoLogsAsync(string container, bool previous, int generation, CancellationToken token)
+    {
+        var lines = previous ? DemoLogs.Previous(PodName, container) : DemoLogs.For(PodName, container);
+        if (lines is null)
+        {
+            // Exactly what the API server says when a container has never restarted —
+            // Previous has to be honest about that here too, or the demo teaches the
+            // wrong thing about the most important CrashLoopBackOff gesture in the app.
+            await EndLogStreamAsync(
+                generation,
+                $"previous terminated container \"{container}\" in pod \"{PodName}\" not found",
+                problem: true);
+            return;
+        }
+
+        try
+        {
+            foreach (var line in lines)
+            {
+                await Task.Delay(DemoLogs.Interval, token);
+                Enqueue(line);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            return; // container switched, Follow turned off, or the tab closed
+        }
+
+        await EndLogStreamAsync(
+            generation,
+            previous
+                ? "Previous logs loaded — this is a snapshot, not a live stream."
+                : lines.Count == 0
+                    ? $"{container} has not started yet, so it has produced no logs."
+                    : "Demo cluster: the sample stream has finished. A real cluster would keep following.",
+            problem: false);
     }
 
     /// <summary>Cancels whatever is running, clears the buffer and opens a new generation.</summary>
@@ -1258,7 +1360,14 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     /// </summary>
     private bool HasSelectedContainer => SelectedContainer is not null;
 
-    [RelayCommand(CanExecute = nameof(HasSelectedContainer))]
+    /// <summary>
+    /// Exec and port-forward both need a real cluster behind them. Gated rather than
+    /// left enabled-and-inert, so the demo cluster's container strip says what it can
+    /// and cannot do before anything is clicked (UI rule 9's last clause).
+    /// </summary>
+    private bool CanReachContainer => SelectedContainer is not null && _client is not null;
+
+    [RelayCommand(CanExecute = nameof(CanReachContainer))]
     private void Exec()
     {
         if (SelectedContainer is not { } container)
@@ -1269,7 +1378,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         _openTab(new ExecTabViewModel(_client, PodNamespace, PodName, container.Name));
     }
 
-    [RelayCommand(CanExecute = nameof(HasSelectedContainer))]
+    [RelayCommand(CanExecute = nameof(CanReachContainer))]
     private void PortForward()
     {
         if (SelectedContainer is not { } container)

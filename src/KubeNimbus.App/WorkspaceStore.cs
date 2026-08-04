@@ -42,7 +42,17 @@ public sealed record WorkspaceSettings(
     /// has no such property, and <see cref="WorkspaceStore.Normalize"/> settles it
     /// on <c>false</c> rather than letting the JSON layer decide.
     /// </summary>
-    bool? IsAdvancedView = null);
+    bool? IsAdvancedView = null,
+    /// <summary>
+    /// Kubeconfig files the user pointed the app at through "Open kubeconfig file…",
+    /// so the choice survives a restart. <b>Paths only</b> — never the file's contents
+    /// and never anything read out of it (CLAUDE.md rule #4): the chain is re-resolved
+    /// at load and at connect time exactly as it is for $KUBECONFIG and ~/.kube/config,
+    /// so a rotated cert or an exec plugin keeps working and nothing is copied into app
+    /// storage. A path that has since gone away is reported as missing by
+    /// <c>Kubeconfig.CandidatePaths</c> rather than failing the load.
+    /// </summary>
+    List<string>? KubeconfigPaths = null);
 
 [JsonSerializable(typeof(WorkspaceSettings))]
 internal sealed partial class WorkspaceJsonContext : JsonSerializerContext;
@@ -57,7 +67,7 @@ public static class WorkspaceStore
     /// <summary>Recents past this are noise — the switcher's search covers the long tail.</summary>
     public const int MaxRecentContexts = 8;
 
-    private static WorkspaceSettings Empty => new(null, [], [], [], [], false);
+    private static WorkspaceSettings Empty => new(null, [], [], [], [], false, []);
 
     /// <summary>
     /// Overrides where the workspace is read from and written to. Set by the
@@ -106,6 +116,7 @@ public static class WorkspaceStore
         // Off is the default and the whole point: an existing workspace must not
         // silently opt into the busy layout just because it predates the switch.
         IsAdvancedView = settings.IsAdvancedView ?? false,
+        KubeconfigPaths = settings.KubeconfigPaths ?? [],
     };
 
     public static void Save(WorkspaceSettings settings)

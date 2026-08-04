@@ -339,6 +339,42 @@
         <Setter Property="BorderBrush" Value="#40CD5C5C" />
     </Style>
 
+    <!-- Demo-cluster banner. Persistent for the whole life of a demo tab, which is a
+         deliberate exception to UI rule 1: the thing it prevents is someone believing a
+         screen full of invented pods is their own cluster, and a notice that appears
+         once and goes away does not prevent that. Deliberately low-key — a thin tinted
+         strip, not an alert — because it has to be readable for an entire session
+         without becoming something the eye learns to skip. -->
+    <Style Selector="Border.demoBar">
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="#40D9822B" />
+        <Setter Property="Background" Value="#10D9822B" />
+        <Setter Property="Padding" Value="10,5" />
+    </Style>
+    <Style Selector="Border.demoBar TextBlock">
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="Opacity" Value="0.85" />
+    </Style>
+    <Style Selector="Border.demoBar PathIcon">
+        <Setter Property="Foreground" Value="{StaticResource WarnBrush}" />
+    </Style>
+
+    <!-- The "this pane needs a real cluster" state (exec, port-forward, apply/delete).
+         A card rather than an inline sentence, because it replaces the pane's whole
+         content: those panes have nothing offline to show underneath it, and a blank
+         rectangle with a caption above it is the state UI rule 9 exists to forbid. -->
+    <Style Selector="Border.demoUnavailable">
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
+        <Setter Property="Background" Value="{StaticResource CardBackgroundBrush}" />
+        <Setter Property="Padding" Value="20" />
+        <Setter Property="MaxWidth" Value="520" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
     <!-- Clickable sidebar section header: expand/collapse, hover feedback. -->
     <Style Selector="Border.sectionHeaderRow">
         <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />

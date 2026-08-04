@@ -42,6 +42,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The demo cluster's dataset (Demo/DemoData.cs). Embedded with explicit
+         LogicalNames for the same reason Yaml-Mode.xshd is: the lookup then does
+         not depend on the assembly name, which is `kubeNimbus` and not the
+         project name. Embedded rather than copied next to the exe so the shipped
+         NativeAOT binary stays a single self-contained file. -->
+    <EmbeddedResource Include="Demo\Fixtures\*.json" LogicalName="Demo.%(Filename)%(Extension)" />
     <!-- Hand-written YAML highlighting definition (AvaloniaEdit doesn't bundle one) — see Editing/YamlSyntaxHighlighting.cs. -->
     <EmbeddedResource Include="Assets\Yaml-Mode.xshd" LogicalName="Yaml-Mode.xshd" />
     <!-- Icons, all generated — see design/LOGO-ASSETS.md. Assets\Msix\** are

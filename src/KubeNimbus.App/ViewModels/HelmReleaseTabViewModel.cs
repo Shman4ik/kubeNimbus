@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using KubeNimbus.App.Demo;
 using CommunityToolkit.Mvvm.Input;
 using KubeNimbus.Core;
 
@@ -12,7 +13,8 @@ namespace KubeNimbus.App.ViewModels;
 /// </summary>
 public sealed partial class HelmReleaseTabViewModel : InspectorTabViewModelBase
 {
-    private readonly ClusterClient _client;
+    /// <summary>Null on the demo cluster — see <see cref="InspectorTabViewModelBase.IsDemo"/>.</summary>
+    private readonly ClusterClient? _client;
     private readonly CancellationTokenSource _cts = new();
 
     public override string Key { get; }
@@ -51,19 +53,58 @@ public sealed partial class HelmReleaseTabViewModel : InspectorTabViewModelBase
 
     partial void OnNotesChanged(string value) => OnPropertyChanged(nameof(HasNotes));
 
-    public HelmReleaseTabViewModel(ClusterClient client, HelmRelease release)
-        : base($"Helm/{release.Name}")
+    public HelmReleaseTabViewModel(ClusterClient? client, HelmRelease release)
+        : base($"Helm/{release.Name}", isDemo: client is null)
     {
         _client = client;
         ReleaseNamespace = release.Namespace;
         ReleaseName = release.Name;
         Key = $"helm:{ReleaseNamespace}/{ReleaseName}";
 
+        if (client is null)
+        {
+            // Nothing here needs a cluster: Helm release detail is already read-only,
+            // so the demo cluster shows the real pane with sample content rather than
+            // an "unavailable" card.
+            LoadDemo(release.Revision);
+            return;
+        }
+
         _ = LoadAsync(release.Revision);
+    }
+
+    /// <summary>The demo counterpart of <see cref="LoadAsync"/> — same properties, from the shipped dataset.</summary>
+    private void LoadDemo(int? revision)
+    {
+        var detail = DemoData.HelmDetail(ReleaseName);
+        ValuesYaml = detail.ValuesYaml;
+        Manifest = detail.Manifest;
+        Notes = detail.Notes;
+
+        if (History.Count == 0)
+        {
+            foreach (var row in DemoData.HelmHistory(ReleaseName))
+            {
+                History.Add(new HelmReleaseRowViewModel(row));
+            }
+        }
+
+        foreach (var row in History)
+        {
+            row.IsSelected = row.Revision == revision;
+        }
+
+        SelectedRevision = History.FirstOrDefault(r => r.Revision == revision) ?? History.FirstOrDefault();
     }
 
     private async Task LoadAsync(int? revision)
     {
+        if (_client is null)
+        {
+            LoadDemo(revision);
+            return;
+        }
+
         IsLoading = true;
         ErrorMessage = null;
         try
@@ -81,7 +122,7 @@ public sealed partial class HelmReleaseTabViewModel : InspectorTabViewModelBase
 
             if (History.Count == 0)
             {
-                await LoadHistoryAsync();
+                await LoadHistoryAsync(_client);
             }
 
             foreach (var row in History)
@@ -105,9 +146,9 @@ public sealed partial class HelmReleaseTabViewModel : InspectorTabViewModelBase
         }
     }
 
-    private async Task LoadHistoryAsync()
+    private async Task LoadHistoryAsync(ClusterClient client)
     {
-        var revisions = await _client.GetHelmReleaseHistoryAsync(ReleaseNamespace, ReleaseName, _cts.Token);
+        var revisions = await client.GetHelmReleaseHistoryAsync(ReleaseNamespace, ReleaseName, _cts.Token);
         History.Clear();
         foreach (var revision in revisions)
         {

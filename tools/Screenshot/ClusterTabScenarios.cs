@@ -1,4 +1,5 @@
 using Avalonia.Threading;
+using KubeNimbus.App.Demo;
 using KubeNimbus.App.ViewModels;
 using KubeNimbus.Core;
 
@@ -17,16 +18,8 @@ internal static class ClusterTabScenarios
     private static readonly ResourceDescriptor SecretDescriptor =
         new("", "v1", "Secret", "secrets", "secret", true, [], []);
 
-    /// <summary>
-    /// How many poll ticks of fake history the fixtures build. 24 ticks at the app's
-    /// real 15s cadence is six minutes — enough for a sparkline to actually have a
-    /// shape, which a single stand-in sample never does.
-    /// </summary>
-    private const int FixtureSampleCount = 24;
-
-    private static readonly TimeSpan FixturePollInterval = TimeSpan.FromSeconds(15);
-
-    /// <summary>Fixed "now" so every screenshot's time axis (and its captions) is diffable.</summary>
+    /// <summary>Fixed "now" so every screenshot's time axis (and its captions) is diffable.
+    /// The running demo cluster passes the real clock instead — see <see cref="DemoUsage"/>.</summary>
     private static readonly DateTimeOffset FixtureNow = new(2026, 7, 30, 8, 45, 0, TimeSpan.Zero);
 
     private static ClusterTabViewModel BaseTab(bool populateRows = true, bool seedUsage = true)
@@ -131,97 +124,86 @@ internal static class ClusterTabScenarios
     private static void ApplyMetrics(ClusterTabViewModel tab)
     {
         tab.AreMetricsVisible = true;
-        var byKey = FixtureData.PodMetrics.ToDictionary(m => m.Key, StringComparer.Ordinal);
-        for (var i = 0; i < tab.Rows.Count; i++)
-        {
-            var row = tab.Rows[i];
-            if (byKey.TryGetValue(row.Key, out var m))
-            {
-                var (cpu, memory) = SumContainerUsage(m);
-                SeedUsage(row, i, cpu, memory);
-            }
-            else
-            {
-                // A pod with no entry in the metrics response — the "—" column state,
-                // and a gap-only (so empty) sparkline.
-                for (var tick = 0; tick < FixtureSampleCount; tick++)
-                {
-                    row.ClearUsage(TickAt(tick));
-                }
-            }
-        }
+
+        // The dataset's own PodMetrics, replayed through the real ApplyUsage. A pod with
+        // no entry records a window of gaps, which is the "—" column state and an
+        // empty sparkline rather than a flat line at zero.
+        DemoUsage.SeedRows(tab.Rows, FixtureNow);
     }
 
     /// <summary>
-    /// Replays <see cref="FixtureSampleCount"/> polls into a row's usage history,
-    /// landing exactly on <paramref name="cpu"/>/<paramref name="memory"/> on the
-    /// last tick — so the sparkline has a shape while the CPU/Memory text still
-    /// matches the fixture's own numbers.
+    /// Replays a session's worth of polls into a row through the app's own
+    /// <see cref="DemoUsage"/>, at the fixture clock so the images stay diffable.
+    /// The seeding itself lives with the dataset, in the app: what a screenshot shows
+    /// and what the shipping demo cluster shows have to come out of one code path.
     /// </summary>
-    private static void SeedUsage(ResourceRowViewModel row, int seed, long? cpu, long? memory)
-    {
-        for (var tick = 0; tick < FixtureSampleCount; tick++)
-        {
-            var final = tick == FixtureSampleCount - 1;
-            row.ApplyUsage(Ripple(cpu, seed, tick, final), Ripple(memory, seed + 5, tick, final), TickAt(tick));
-        }
-    }
+    private static void SeedUsage(ResourceRowViewModel row, int seed, long? cpu, long? memory) =>
+        DemoUsage.Seed(row, seed, cpu, memory, FixtureNow);
 
-    private static DateTimeOffset TickAt(int tick) =>
-        FixtureNow - FixturePollInterval * (FixtureSampleCount - 1 - tick);
+    // --------------------------------------------------------- demo cluster
+    //
+    // Unlike every other scenario here, these do NOT hand-build a tab: they run the
+    // real ConnectCommand on a real ClusterContext.Demo. That path needs no cluster —
+    // that is the whole point of it — so the harness can exercise production code end
+    // to end, which also makes these the only scenarios that would catch the demo
+    // cluster's connect breaking.
+
+    private static ClusterTabViewModel DemoTab()
+    {
+        var tab = new ClusterTabViewModel(ClusterContext.Demo);
+        tab.ConnectCommand.Execute(null);
+        return tab;
+    }
 
     /// <summary>
-    /// A deterministic 0.5–1.1× wobble around the fixture's reading. Two sines of
-    /// different periods, so the series reads like a real workload rather than a
-    /// textbook sine wave — and identically on every run, which is what keeps the
-    /// screenshots diffable.
+    /// What "Explore demo cluster" opens on: a populated pod list with the persistent
+    /// sample-data banner above it. The banner is the thing to look at — nobody may
+    /// mistake this screen for their own cluster.
     /// </summary>
-    private static long? Ripple(long? value, int seed, int tick, bool final)
+    public static ClusterTabViewModel DemoList() => DemoTab();
+
+    /// <summary>Demo pod detail — logs, containers and events, all from the shipped dataset.</summary>
+    public static ClusterTabViewModel DemoPodDetail()
     {
-        if (value is not { } v)
-        {
-            return null;
-        }
+        var tab = DemoTab();
+        tab.SelectedRow = tab.Rows.FirstOrDefault(r => r.Name.StartsWith("payment-service-report-generator", StringComparison.Ordinal))
+            ?? tab.Rows.FirstOrDefault();
+        tab.OpenSelectedCommand.Execute(null);
 
-        if (final)
-        {
-            return v;
-        }
-
-        var factor = 0.8 + 0.22 * Math.Sin((tick + seed * 3) * 0.55) + 0.08 * Math.Cos((tick + seed) * 1.31);
-        return (long)(v * Math.Clamp(factor, 0.35, 1.25));
+        // Logs arrive on a timer (DemoLogs.Interval), which the headless harness does
+        // not run in real time — so drain the dispatcher a few times to let the first
+        // lines land rather than capturing the pane's "waiting for output" state.
+        DrainDemoLogs(tab);
+        return tab;
     }
 
-    private static (long? Cpu, long? Memory) SumContainerUsage(DynamicResource podMetrics)
+    /// <summary>
+    /// The inspector state a demo cluster genuinely cannot serve. Exec is the example;
+    /// port-forward and the YAML editor's write half render the same way. This is the
+    /// scenario that pins UI rule 9 for demo mode — "not available" must be a stated,
+    /// styled state, never a spinner or a blank pane.
+    /// </summary>
+    public static ClusterTabViewModel DemoExecUnavailable()
     {
-        if (!podMetrics.Raw.TryGetProperty("containers", out var containers) || containers.ValueKind != System.Text.Json.JsonValueKind.Array)
+        var tab = DemoTab();
+        tab.SelectedRow = tab.Rows.FirstOrDefault();
+        tab.ExecIntoSelectedCommand.Execute(null);
+        return tab;
+    }
+
+    /// <summary>Pumps the dispatcher until the demo log replay has produced something to render.</summary>
+    private static void DrainDemoLogs(ClusterTabViewModel tab)
+    {
+        if (tab.SelectedInspectorTab is not PodDetailTabViewModel detail)
         {
-            return (null, null);
+            return;
         }
 
-        long cpu = 0, memory = 0;
-        var any = false;
-        foreach (var c in containers.EnumerateArray())
+        for (var i = 0; i < 200 && detail.LogLines.Count < 6; i++)
         {
-            if (!c.TryGetProperty("usage", out var usage) || usage.ValueKind != System.Text.Json.JsonValueKind.Object)
-            {
-                continue;
-            }
-
-            if (usage.TryGetProperty("cpu", out var cpuEl) && Quantity.ParseCpuNanocores(cpuEl.GetString()) is { } c1)
-            {
-                cpu += c1;
-                any = true;
-            }
-
-            if (usage.TryGetProperty("memory", out var memEl) && Quantity.ParseBytes(memEl.GetString()) is { } m1)
-            {
-                memory += m1;
-                any = true;
-            }
+            Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(10);
         }
-
-        return any ? (cpu, memory) : (null, null);
     }
 
     /// <summary>Namespace/cluster-wide Events browsing — selecting the Events kind in the sidebar
@@ -483,32 +465,7 @@ internal static class ClusterTabScenarios
         }
     }
 
-    /// <summary>
-    /// Replays fixture polls into a pod detail tab through its real
-    /// <see cref="PodDetailTabViewModel.ApplyMetrics"/>, so the per-container chips,
-    /// the whole-pod charts and the window caption all come out of production code.
-    /// </summary>
-    private static void SeedPodUsage(PodDetailTabViewModel detail)
-    {
-        var bases = detail.Containers
-            .Select((c, i) => (c.Name, Cpu: (11 + i * 23) * 1_000_000L, Memory: (64 + i * 55) * 1024L * 1024L))
-            .ToArray();
-
-        for (var tick = 0; tick < FixtureSampleCount; tick++)
-        {
-            var final = tick == FixtureSampleCount - 1;
-            var containers = new List<ContainerMetrics>(bases.Length);
-            for (var i = 0; i < bases.Length; i++)
-            {
-                containers.Add(new ContainerMetrics(
-                    bases[i].Name,
-                    Ripple(bases[i].Cpu, i, tick, final),
-                    Ripple(bases[i].Memory, i + 5, tick, final)));
-            }
-
-            detail.ApplyMetrics(new PodMetrics(detail.PodNamespace, detail.PodName, containers), TickAt(tick));
-        }
-    }
+    private static void SeedPodUsage(PodDetailTabViewModel detail) => DemoUsage.SeedPod(detail, FixtureNow);
 
     /// <summary>Pod detail's Usage tab — CPU/memory over the session's poll window, pod total plus per container.
     /// Advanced, since the Usage tab only exists there.</summary>

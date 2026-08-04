@@ -37,7 +37,8 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
     /// </summary>
     private static readonly TimeSpan RevealDebounceInterval = TimeSpan.FromMilliseconds(300);
 
-    private readonly ClusterClient _client;
+    /// <summary>Null on the demo cluster — see <see cref="InspectorTabViewModelBase.IsDemo"/>.</summary>
+    private readonly ClusterClient? _client;
     private readonly ResourceDescriptor _descriptor;
     private readonly string? _namespace;
     private readonly string _name;
@@ -85,7 +86,15 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
     private string? _conflictDetails;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsEditorReadOnly))]
     private bool _isDeleted;
+
+    /// <summary>
+    /// The editor is read-only for a deleted object and for the demo cluster. Locking
+    /// the text rather than only disabling Apply matters: an editable buffer that can
+    /// never be applied invites typing into a void.
+    /// </summary>
+    public bool IsEditorReadOnly => IsDeleted || IsDemo;
 
     /// <summary>Core/v1 Secret — the kind whose <c>data</c> is base64 in the editor.</summary>
     public bool IsSecret => _descriptor is { Kind: "Secret", Group: "" };
@@ -136,10 +145,28 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
             ? $"yaml:{descriptor.ApiVersion}/{descriptor.Kind}:{@namespace}/{name}"
             : $"yaml@{clusterName}:{descriptor.ApiVersion}/{descriptor.Kind}:{@namespace}/{name}";
 
+    /// <summary>
+    /// Why the demo pane's write half is inert. Viewing is the genuinely useful part
+    /// and stays — the object renders with full syntax highlighting — but there is no
+    /// API server to apply to or delete from, and a button that appears to change a
+    /// cluster and doesn't is worse than no button.
+    /// </summary>
+    public const string DemoNotice =
+        "This object is sample data, so it can be read but not changed — there is no API server to apply to or delete from. "
+        + "Open a kubeconfig file to edit objects on one of your own clusters.";
+
+    /// <summary>
+    /// False on the demo cluster. Gates every command that talks to the API server,
+    /// so the toolbar disables rather than silently no-ops (UI rule 9's last clause).
+    /// </summary>
+    private bool IsLive => _client is not null;
+
     public YamlEditorTabViewModel(
-        ClusterClient client, ResourceDescriptor descriptor, string? @namespace, string name, string initialYaml,
+        ClusterClient? client, ResourceDescriptor descriptor, string? @namespace, string name, string initialYaml,
         string clusterName = "")
-        : base(clusterName.Length == 0 ? $"{descriptor.Kind}/{name}" : $"{descriptor.Kind}/{name} · {clusterName}")
+        : base(
+            clusterName.Length == 0 ? $"{descriptor.Kind}/{name}" : $"{descriptor.Kind}/{name} · {clusterName}",
+            isDemo: client is null)
     {
         _client = client;
         _descriptor = descriptor;
@@ -157,7 +184,9 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
         // them is rejected by the API server with a message that reads like a server
         // fault. So the read fires exactly when the snapshot can't identify itself,
         // which self-heals that class of bug wherever it comes from.
-        if (!IsSelfDescribing(initialYaml))
+        // Not on the demo cluster: there is nothing to read from, and the dataset's
+        // objects carry apiVersion/kind anyway.
+        if (client is not null && !IsSelfDescribing(initialYaml))
         {
             _ = RefreshFromServerAsync();
         }
@@ -393,14 +422,19 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
             : $"Copied {row.Key} to the clipboard.";
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(IsLive))]
     private async Task ApplyAsync() => await ApplyCoreAsync(force: false);
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(IsLive))]
     private async Task ForceApplyAsync() => await ApplyCoreAsync(force: true);
 
     private async Task ApplyCoreAsync(bool force)
     {
+        if (_client is null)
+        {
+            return;
+        }
+
         // Caught locally because the server's own complaint about a body with no
         // apiVersion/kind ("Object 'Kind' is missing") reads like a cluster problem
         // rather than something the editor can fix.
@@ -436,9 +470,14 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(IsLive))]
     private async Task ReloadAsync()
     {
+        if (_client is null)
+        {
+            return;
+        }
+
         IsBusy = true;
         StatusMessage = null;
         ConflictDetails = null;
@@ -474,6 +513,11 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
     /// </summary>
     private async Task RefreshFromServerAsync()
     {
+        if (_client is null)
+        {
+            return;
+        }
+
         IsRefreshing = true;
         try
         {
@@ -506,15 +550,20 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(IsLive))]
     private void RequestDelete() => IsConfirmingDelete = true;
 
     [RelayCommand]
     private void CancelDelete() => IsConfirmingDelete = false;
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(IsLive))]
     private async Task ConfirmDeleteAsync()
     {
+        if (_client is null)
+        {
+            return;
+        }
+
         IsBusy = true;
         try
         {

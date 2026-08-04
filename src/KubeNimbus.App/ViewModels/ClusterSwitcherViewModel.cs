@@ -11,6 +11,13 @@ public enum ClusterSwitcherGroup
     Pinned,
     Recent,
     All,
+
+    /// <summary>
+    /// The built-in demo cluster. Its own bucket, listed last, so it can never be
+    /// mistaken for one of the user's clusters — which is the single thing the demo
+    /// mode must not do.
+    /// </summary>
+    Demo,
 }
 
 /// <summary>
@@ -101,7 +108,9 @@ public sealed partial class ClusterSwitcherItemViewModel : ObservableObject
                 parts.Add($"ns: {Context.Namespace}");
             }
 
-            parts.Add(Path.GetFileName(Context.KubeconfigPath));
+            // The demo cluster's "kubeconfig path" is a sentinel, so printing its file
+            // name would be gibberish; what belongs here is what the row actually is.
+            parts.Add(Context.IsDemo ? "sample data · nothing is connected" : Path.GetFileName(Context.KubeconfigPath));
             return string.Join("  ·  ", parts);
         }
     }
@@ -242,6 +251,7 @@ public sealed partial class ClusterSwitcherViewModel(Func<IEnumerable<ClusterSwi
                          (ClusterSwitcherGroup.Pinned, "Pinned"),
                          (ClusterSwitcherGroup.Recent, "Recent"),
                          (ClusterSwitcherGroup.All, "All contexts"),
+                         (ClusterSwitcherGroup.Demo, "Demo (sample data, not a real cluster)"),
                      ])
             {
                 AddSection(title, scored.Where(x => x.item.Group == group).Select(x => x.item).ToList());

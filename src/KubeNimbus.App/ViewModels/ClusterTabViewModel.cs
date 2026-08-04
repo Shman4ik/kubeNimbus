@@ -36,6 +36,25 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     public string Header => Context.Name;
 
     /// <summary>
+    /// True for the built-in demo cluster: a normal tab over a dataset that ships with
+    /// the app, with no <see cref="ClusterClient"/> behind it. <see cref="Client"/>
+    /// stays null for the tab's whole life, which is what makes "a demo tab never
+    /// connects, never watches and never touches the network" structural rather than a
+    /// rule to remember — the branches below are the only places that fill in for it.
+    /// See CLAUDE.md's "Demo cluster" section.
+    /// </summary>
+    public bool IsDemo => Context.IsDemo;
+
+    /// <summary>
+    /// The banner the content area carries for the whole life of a demo tab. This is a
+    /// deliberate exception to UI rule 1 ("justify anything always-visible"), and the
+    /// justification is the alternative: a user believing a screen full of invented
+    /// pods is their own cluster.
+    /// </summary>
+    public const string DemoBanner =
+        "Demo cluster — sample data that ships with kubeNimbus. Nothing is connected and none of these objects exist.";
+
+    /// <summary>
     /// Which environment this cluster is treated as — set by
     /// <see cref="MainWindowViewModel"/>, which owns the user's overrides. Drives the
     /// tab's colour and the production band under the command bar; the whole point
@@ -314,6 +333,12 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [RelayCommand(CanExecute = nameof(CanConnect))]
     private async Task ConnectAsync()
     {
+        if (IsDemo)
+        {
+            ConnectDemo();
+            return;
+        }
+
         IsConnecting = true;
         ConnectionWarning = null;
         Status = $"Connecting to {Context.Name}…";
@@ -346,6 +371,64 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         finally
         {
             IsConnecting = false;
+        }
+    }
+
+    /// <summary>
+    /// The demo counterpart of <see cref="ConnectAsync"/>. It fills in for discovery,
+    /// the namespace list and the metrics probe from the shipped dataset, and
+    /// deliberately leaves <see cref="Client"/> null — everything downstream branches
+    /// on that, so nothing here can accidentally acquire a connection later.
+    ///
+    /// Synchronous, because none of it waits on anything: the "connecting…" state
+    /// exists to explain a round trip, and there isn't one.
+    /// </summary>
+    private void ConnectDemo()
+    {
+        IsConnected = true;
+        Status = DemoBanner;
+
+        var catalog = Demo.DemoData.BuildCatalog();
+        SidebarSections.Clear();
+        _recentKinds.Clear();
+        foreach (var section in Demo.DemoData.BuildSidebarSections(catalog))
+        {
+            SidebarSections.Add(section);
+        }
+
+        // The demo cluster stores Helm releases, so the section appears — same
+        // condition AddHelmSectionIfPresentAsync applies to a real cluster.
+        var helm = new SidebarSectionViewModel(SidebarGrouping.HelmSection);
+        helm.Kinds.Add(new SidebarKindViewModel(
+            SidebarGrouping.HelmReleaseDescriptor, SidebarGrouping.IconKeyFor(SidebarGrouping.HelmSection)));
+        SidebarSections.Add(helm);
+
+        SidebarGrouping.LabelAmbiguousKinds(SidebarSections);
+        ApplySidebarChrome();
+        ApplySidebarFilter();
+
+        NamespaceOptions.Clear();
+        NamespaceOptions.Add(AllNamespaces);
+        foreach (var ns in Demo.DemoData.Namespaces)
+        {
+            NamespaceOptions.Add(ns);
+        }
+
+        // Set before the kind, so the single RestartWatch that SelectKind triggers is
+        // the one that populates the rows — assigning it afterwards would clear them
+        // and latch IsListEmpty, the ordering gotcha CLAUDE.md documents for the
+        // screenshot fixtures.
+        SelectedNamespace = "payments";
+
+        _metricsApiAvailable = true;
+
+        var defaultKind = SidebarSections
+            .FirstOrDefault(s => s.Title == "Workloads")?.Kinds
+            .FirstOrDefault(k => k.Descriptor.Kind == "Pod")
+            ?? SidebarSections.SelectMany(s => s.Kinds).FirstOrDefault();
+        if (defaultKind is not null)
+        {
+            SelectKind(defaultKind);
         }
     }
 
@@ -608,7 +691,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [RelayCommand]
     private async Task RefreshHelmReleasesAsync()
     {
-        if (Client is null)
+        if (Client is null && !IsDemo)
         {
             return;
         }
@@ -619,7 +702,10 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         try
         {
             var @namespace = SelectedNamespace == AllNamespaces ? null : SelectedNamespace;
-            foreach (var release in await Client.ListHelmReleasesAsync(@namespace))
+            var releases = Client is null
+                ? Demo.DemoData.HelmReleases.Where(r => @namespace is null || r.Namespace == @namespace)
+                : await Client.ListHelmReleasesAsync(@namespace);
+            foreach (var release in releases)
             {
                 HelmReleases.Add(new HelmReleaseRowViewModel(release));
             }
@@ -641,7 +727,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [RelayCommand]
     private void OpenSelectedHelmRelease()
     {
-        if (SelectedHelmRelease is not { } row || Client is null)
+        if (SelectedHelmRelease is not { } row || (Client is null && !IsDemo))
         {
             return;
         }
@@ -656,6 +742,41 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
 
         AddInspectorTab(new HelmReleaseTabViewModel(Client, row.Release), replacePreview: false);
+    }
+
+    /// <summary>
+    /// Owner-chip and event navigation on the demo cluster. There is no
+    /// <c>ResolveOwnerAsync</c> to call, so the target is looked up in the dataset by
+    /// kind and name. A reference the dataset doesn't carry says so in the same inline
+    /// warning a deleted owner gets on a real cluster — the demo is a sample, not a
+    /// complete cluster, and pretending otherwise would be the one place it lies.
+    /// </summary>
+    private void OpenDemoOwner(OwnerRef owner, string? namespaceHint)
+    {
+        var catalog = Demo.DemoData.BuildCatalog();
+        var descriptor = catalog.FirstOrDefault(d => d.ApiVersion == owner.ApiVersion && d.Kind == owner.Kind);
+        var resolved = descriptor is null
+            ? null
+            : Demo.DemoData.ResourcesFor(descriptor, namespaceHint)
+                .FirstOrDefault(r => string.Equals(r.Name, owner.Name, StringComparison.Ordinal));
+
+        if (descriptor is null || resolved is null)
+        {
+            ConnectionWarning = $"{owner.Kind}/{owner.Name} isn't part of the demo dataset.";
+            return;
+        }
+
+        var key = YamlEditorTabViewModel.KeyFor("", descriptor, resolved.Namespace, resolved.Name);
+        if (InspectorTabs.FirstOrDefault(t => t.Key == key) is { } open)
+        {
+            open.IsPreview = false;
+            SelectedInspectorTab = open;
+            return;
+        }
+
+        AddInspectorTab(
+            new YamlEditorTabViewModel(null, descriptor, resolved.Namespace, resolved.Name, resolved.ToYaml()),
+            replacePreview: false);
     }
 
     /// <summary>
@@ -715,10 +836,10 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         Rows.Clear();
         _rowsByKey.Clear();
         _fleetTargets.Clear();
-        IsListLoading = Client is not null && SelectedKind is not null;
+        IsListLoading = (Client is not null || IsDemo) && SelectedKind is not null;
         RecomputeListEmpty();
 
-        if (Client is null || SelectedKind is null)
+        if ((Client is null && !IsDemo) || SelectedKind is null)
         {
             AreMetricsVisible = false;
             return;
@@ -727,9 +848,17 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         var descriptor = SelectedKind.Descriptor;
         var @namespace = descriptor.Namespaced && SelectedNamespace != AllNamespaces ? SelectedNamespace : null;
 
+        if (Client is not { } client)
+        {
+            // Only reachable on the demo cluster — the guard above returned for every
+            // other tab with no client. Rows come from the shipped dataset; no watch,
+            // no metrics poll, no socket.
+            PopulateDemoRows(descriptor, @namespace);
+            return;
+        }
+
         _watchCts = new CancellationTokenSource();
         var token = _watchCts.Token;
-        var client = Client;
 
         if (IsFleetView && FleetMembersProvider?.Invoke() is { Count: > 0 } members)
         {
@@ -766,6 +895,35 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }, token);
 
         StartMetricsPolling(descriptor, [("", client)], @namespace, token);
+    }
+
+    /// <summary>
+    /// The demo counterpart of a list+watch: rows straight from the shipped dataset,
+    /// no client and no watch. A kind the dataset has nothing for comes back empty and
+    /// lands on the list's real "No &lt;kind&gt; found" state — most of a 100-kind
+    /// catalog is like that, and it has to read as an empty namespace rather than as
+    /// something broken (UI rule 9).
+    /// </summary>
+    private void PopulateDemoRows(ResourceDescriptor descriptor, string? @namespace)
+    {
+        foreach (var resource in Demo.DemoData.ResourcesFor(descriptor, @namespace))
+        {
+            var row = new ResourceRowViewModel(resource);
+            _rowsByKey[resource.Key] = row;
+            Rows.Add(row);
+        }
+
+        AreMetricsVisible = IsMeteredKind(descriptor);
+        if (AreMetricsVisible)
+        {
+            // Through the real ApplyUsage, one stamped sample per simulated poll —
+            // metrics.k8s.io has no history endpoint, so this is the only honest way to
+            // give the sparklines a shape without a second charting code path.
+            Demo.DemoUsage.SeedRows(Rows);
+        }
+
+        IsListLoading = false;
+        RecomputeListEmpty();
     }
 
     /// <summary>
@@ -1103,7 +1261,15 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [RelayCommand(CanExecute = nameof(IsPodRowSelected))]
     private void ExecIntoSelected()
     {
-        if (SelectedRow is not { } row || ClientFor(row) is not { } client)
+        if (SelectedRow is not { } row)
+        {
+            return;
+        }
+
+        // Null in demo mode, which is exactly what the tab reads as "not available
+        // here" — see InspectorTabViewModelBase.IsDemo.
+        var client = ClientFor(row);
+        if (client is null && !IsDemo)
         {
             return;
         }
@@ -1114,7 +1280,13 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [RelayCommand(CanExecute = nameof(IsPodRowSelected))]
     private void PortForwardSelected()
     {
-        if (SelectedRow is not { } row || ClientFor(row) is not { } client)
+        if (SelectedRow is not { } row)
+        {
+            return;
+        }
+
+        var client = ClientFor(row);
+        if (client is null && !IsDemo)
         {
             return;
         }
@@ -1129,9 +1301,13 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [RelayCommand(CanExecute = nameof(HasSelectedRow))]
     private void EditSelectedYaml()
     {
-        if (SelectedRow is not { } row
-            || ClientFor(row) is not { } client
-            || DescriptorFor(row) is not { } descriptor)
+        if (SelectedRow is not { } row || DescriptorFor(row) is not { } descriptor)
+        {
+            return;
+        }
+
+        var client = ClientFor(row);
+        if (client is null && !IsDemo)
         {
             return;
         }
@@ -1222,7 +1398,13 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     {
         // In fleet mode the row's own cluster owns it — using this tab's client here
         // would open (and later apply/delete) against the wrong cluster.
-        if (row is null || ClientFor(row) is not { } client || DescriptorFor(row) is not { } descriptor)
+        if (row is null || DescriptorFor(row) is not { } descriptor)
+        {
+            return;
+        }
+
+        var client = ClientFor(row);
+        if (client is null && !IsDemo)
         {
             return;
         }
@@ -1296,6 +1478,12 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// </summary>
     private async Task OpenOwnerAsync(OwnerRef owner, string? namespaceHint, string clusterName = "")
     {
+        if (IsDemo)
+        {
+            OpenDemoOwner(owner, namespaceHint);
+            return;
+        }
+
         if (ClientForCluster(clusterName) is not { } client)
         {
             return;

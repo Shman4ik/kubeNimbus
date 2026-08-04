@@ -45,7 +45,7 @@ internal static class SandboxCluster
             return null;
         }
 
-        var contexts = await Kubeconfig.LoadContextsAsync([path], ct);
+        var contexts = await Kubeconfig.LoadContextsAsync([path], cancellationToken: ct);
         return contexts.Count > 0 ? contexts[0] : null;
     }
 }

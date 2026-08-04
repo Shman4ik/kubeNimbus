@@ -61,8 +61,26 @@ public class ClusterEnvironmentTests
     [Arguments("kind-kubenimbus")]
     [Arguments("k3s-sandbox")]
     [Arguments("orbstack")]
+    [Arguments("demo")]
     public async Task Reads_development_names_as_development(string name) =>
         await Assert.That(ClusterEnvironments.Classify(name)).IsEqualTo(ClusterEnvironment.Development);
+
+    /// <summary>
+    /// The built-in demo cluster carries sample data and no cluster at all, so the one
+    /// thing it must never be coloured as is production — that would put a red band
+    /// under a screen full of objects that do not exist.
+    /// </summary>
+    [Test]
+    public async Task Demo_cluster_is_not_production() =>
+        await Assert.That(ClusterEnvironments.Classify(ClusterContext.Demo.Name, ClusterContext.Demo.ClusterName))
+            .IsEqualTo(ClusterEnvironment.Development);
+
+    [Test]
+    public async Task Demo_context_is_flagged_as_demo()
+    {
+        await Assert.That(ClusterContext.Demo.IsDemo).IsTrue();
+        await Assert.That(new ClusterContext("prod", "prod", null, null, "/home/u/.kube/config").IsDemo).IsFalse();
+    }
 
     /// <summary>
     /// A marker hiding inside an unrelated word must not fire. These are the

@@ -14,6 +14,25 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Added
 
+- **Demo cluster.** With no kubeconfig and no cluster, **Explore demo cluster**
+  (in the empty state, in `Ctrl`/`Cmd`+`K`, and in the cluster switcher's own
+  group) opens a full sample workload set that ships inside the binary — pods
+  in every interesting state, live-looking log streams, env vars and secrets,
+  events, usage graphs, Helm releases and a realistic CRD catalog. No cluster,
+  no credentials, no network. It is labelled as sample data throughout (tab
+  name, switcher group, and a banner above the content for the tab's whole
+  life), and the panes that genuinely need an API server — exec, port-forward,
+  YAML apply and delete — say so rather than pretending. The dataset is the
+  same one the screenshot harness renders, so the two cannot drift apart.
+- **Open kubeconfig file…** in the no-kubeconfig empty state. Until now the only
+  routes to a cluster were `$KUBECONFIG` — which a GUI launched from Explorer, a
+  shortcut or the Microsoft Store never inherits — and dropping a file at
+  `~/.kube/config` by hand, so a first run on a clean machine had no next step
+  that could be taken from inside the app. Only the **path** is remembered (in
+  the workspace, across restarts); the file is re-read through the normal
+  kubeconfig chain at load and at connect time, so nothing is copied into app
+  storage. A picked file that has since moved is listed as `missing` in the
+  empty state's search list rather than failing the load.
 - **Cluster switcher** (`Ctrl`/`Cmd`+`P`, or the cluster button in the top bar):
   one fuzzy-searchable list over both open cluster tabs and unopened kubeconfig
   contexts, grouped Open / Pinned / Recent / All. Matches on context name,
@@ -31,6 +50,15 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Changed
 
+- The cluster switcher and the top bar's cluster button are no longer disabled
+  when no kubeconfig context exists — they always carry at least the demo
+  cluster, and gating them on "has contexts" made them dead on precisely the
+  machine where the demo cluster is the only cluster there is.
+- The no-kubeconfig empty state now leads with the file picker and no longer
+  tells you to run `scripts/sandbox-up` — an instruction nobody who installed a
+  released build can follow. Setting up a throwaway local cluster is covered in
+  [CONTRIBUTING.md](CONTRIBUTING.md) and the README, where a contributor is
+  already looking.
 - The top bar's context dropdown is gone. It could not search, truncated the
   long auto-generated names managed Kubernetes hands out, and only chose what
   the `+` button would open — switching to an already-open cluster was a

@@ -76,10 +76,15 @@
       </ItemsControl>
 
       <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" Margin="6,0,0,0" VerticalAlignment="Center">
-        <Button Classes="toolbar" Command="{Binding ExecCommand}" ToolTip.Tip="Exec into selected container" Padding="6">
+        <!-- Both disable themselves on the demo cluster (CanExecute), where there is no
+             container to reach — the tooltip is what stops a disabled button reading as
+             a bug. -->
+        <Button Classes="toolbar" Command="{Binding ExecCommand}" Padding="6"
+                ToolTip.Tip="{Binding IsDemo, Converter={x:Static conv:DemoActionTooltipConverter.Exec}}">
           <PathIcon Data="{StaticResource ConsoleIconGeometry}" Width="14" Height="14" />
         </Button>
-        <Button Classes="toolbar" Command="{Binding PortForwardCommand}" ToolTip.Tip="Port-forward selected container" Padding="6">
+        <Button Classes="toolbar" Command="{Binding PortForwardCommand}" Padding="6"
+                ToolTip.Tip="{Binding IsDemo, Converter={x:Static conv:DemoActionTooltipConverter.PortForward}}">
           <PathIcon Data="{StaticResource SwapHorizontalIconGeometry}" Width="14" Height="14" />
         </Button>
       </StackPanel>

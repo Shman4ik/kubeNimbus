@@ -92,6 +92,24 @@
          width instead of a cramped sidecar. Row heights are managed in code-behind
          (ApplyDockState) to support the draggable splitter + maximize + collapse. -->
     <Border Grid.Column="1" Classes="layer">
+      <DockPanel>
+
+        <!-- Demo banner. Present for the whole life of a demo tab and absent entirely
+             otherwise, so it costs no chrome on a real cluster (same shape as the
+             production band above). See ClusterTabViewModel.DemoBanner for why this one
+             always-visible control is justified.
+             Docked outside ContentRows rather than added as a row of it: that grid's row
+             indices are load-bearing — ApplyDockState drives the hidden/split/maximized
+             states by mutating them by position from code-behind. -->
+        <Border DockPanel.Dock="Top" Classes="demoBar" Margin="0,0,0,8" IsVisible="{Binding IsDemo}">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <PathIcon Data="{StaticResource AlertCircleIconGeometry}" Width="12" Height="12" VerticalAlignment="Center" />
+            <TextBlock Text="{x:Static vm:ClusterTabViewModel.DemoBanner}" VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis"
+                       ToolTip.Tip="Every object here ships inside the app. kubeNimbus is not talking to any cluster in this tab." />
+          </StackPanel>
+        </Border>
+
       <Grid Name="ContentRows">
         <Grid.RowDefinitions>
           <RowDefinition Height="Auto" />
@@ -463,6 +481,7 @@
           </Grid>
         </Border>
       </Grid>
+      </DockPanel>
     </Border>
   </Grid>
 </UserControl>

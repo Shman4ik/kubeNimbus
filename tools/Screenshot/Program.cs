@@ -68,7 +68,12 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-empty-namespace", () => HostInMainWindow(ClusterTabScenarios.EmptyNamespace())),
     ("cluster-tab-loading", () => HostInMainWindow(ClusterTabScenarios.Loading())),
     ("cluster-tab-disconnected", () => HostInMainWindow(ClusterTabScenarios.Disconnected())),
+    // The demo cluster, built by running the real ConnectCommand — see ClusterTabScenarios.
+    ("cluster-tab-demo-list", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
+    ("cluster-tab-demo-pod-detail", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetail(), height: 1000)),
+    ("cluster-tab-demo-exec-unavailable", () => HostInMainWindow(ClusterTabScenarios.DemoExecUnavailable())),
     ("main-window", () => BuildMainWindowContent()),
+    ("main-window-no-kubeconfig", () => BuildNoKubeconfigContent()),
     ("main-window-shortcuts", () => BuildMainWindowContent(openShortcuts: true)),
     ("main-window-switcher", () => BuildSwitcherContent()),
     // "pro" is a subsequence of several of these and a prefix of others — the
@@ -177,6 +182,29 @@ static void SeedContexts(MainWindowViewModel vm)
 
     vm.HasContexts = true;
     vm.Status = $"{vm.AvailableContexts.Count} context(s) available.";
+}
+
+// The first thing a clean install shows, and — for anyone who downloaded a
+// release rather than cloning the repo — quite possibly the only thing. It is
+// the one screen with no cluster behind it, so the *other* scenarios all seed
+// contexts to get past it (see SeedContexts); this one is deliberately the
+// state they avoid. Search paths are written by hand rather than left to the
+// real scan so the shot doesn't render the developer's own home directory.
+static Control BuildNoKubeconfigContent()
+{
+    var window = new MainWindow { Width = 1280, Height = 800 };
+    var vm = new MainWindowViewModel();
+    window.DataContext = vm;
+
+    vm.Tabs.Clear();
+    vm.AvailableContexts.Clear();
+    vm.HasContexts = false;
+    vm.Status = "No kubeconfig contexts found.";
+    vm.KubeconfigSearchPaths = string.Join(
+        System.Environment.NewLine,
+        "missing  C:\\Users\\reviewer\\.kube\\config   (default location)");
+
+    return window;
 }
 
 static Control BuildMainWindowContent(bool openShortcuts = false)

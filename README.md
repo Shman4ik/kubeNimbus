@@ -123,13 +123,31 @@ sha256sum -c SHA256SUMS.txt --ignore-missing     # shasum -a 256 -c on macOS
 </details>
 
 Then point it at a cluster — kubeNimbus reads your `$KUBECONFIG` chain and
-`~/.kube/config` and lists what it finds. Nothing to configure.
+`~/.kube/config` and lists what it finds. If neither turns anything up, the
+first screen has an **Open kubeconfig file…** button: pick the file and it's
+added. Only the *path* is remembered — the file is re-read through the normal
+kubeconfig chain every time, so nothing is ever copied into app storage.
 
 > **Note on `$KUBECONFIG`:** an app launched from Explorer, Finder or a
-> shortcut doesn't inherit environment variables set in your shell. If the
-> cluster switcher comes up empty, either launch from a terminal or use the
-> standard `~/.kube/config` path. kubeNimbus tells you exactly which paths it
-> searched.
+> shortcut doesn't inherit environment variables set in your shell. That's
+> what the file picker is for; kubeNimbus also tells you exactly which paths
+> it searched.
+
+### No cluster yet? Try the demo
+
+The same first screen has **Explore demo cluster** (also `Ctrl`/`Cmd`+`K` →
+"Explore the demo cluster"). It opens a full sample workload set that ships
+inside the binary — pods in every interesting state, live-looking logs,
+environment variables and secrets, events, usage graphs, Helm releases and a
+realistic CRD catalog — with **no cluster, no credentials and no network
+involved**. It's there so you can see what the app does before wiring
+anything up.
+
+It is labelled as sample data throughout: the tab reads *Demo cluster*, and a
+banner sits above the content for as long as the tab is open. Exec,
+port-forward and applying/deleting YAML genuinely need a real API server, so
+those panes say so instead of pretending; everything else is the real UI over
+sample objects.
 
 ## What it does
 
@@ -190,6 +208,10 @@ it's been exercised:
 - Binaries are unsigned (see above).
 - Windows has had the most hands-on use. The Linux and macOS builds are
   produced and AOT-verified by CI but have seen much less real-world testing.
+- The demo cluster is a fixed sample set, not a simulator: nothing in it
+  changes, scales or can be edited, and exec/port-forward/apply/delete are
+  unavailable there by nature. It's for seeing the app, not for practising
+  against.
 - Helm is read-only — install, upgrade and rollback stay Helm's job.
 - Usage history is session-scoped and capped at 30 minutes **by design**.
   Long-range metrics is Prometheus's job, and a permanent non-goal here.

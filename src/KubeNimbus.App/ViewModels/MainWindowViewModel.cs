@@ -1,4 +1,7 @@
 using System.Collections.ObjectModel;
+using Avalonia;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KubeNimbus.Core;
@@ -50,7 +53,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     public string SwitcherTooltip => HasContexts
         ? $"Switch or open a cluster  ({Hotkeys.Describe(Hotkeys.ClusterSwitcher)})"
-        : "No kubeconfig contexts found";
+        : $"No kubeconfig contexts — the demo cluster is still in here  ({Hotkeys.Describe(Hotkeys.ClusterSwitcher)})";
 
     [ObservableProperty]
     private string _status = "Loading kubeconfig…";
@@ -84,6 +87,19 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     /// <summary>Context name → user-assigned environment, overriding the name guess. Persisted.</summary>
     private readonly Dictionary<string, ClusterEnvironment> _environmentOverrides = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Kubeconfig files chosen through <see cref="OpenKubeconfigFileCommand"/>, searched
+    /// alongside $KUBECONFIG and ~/.kube/config. Persisted as paths and nothing else —
+    /// the file is re-read through <c>Kubeconfig</c> on every load and every connect, so
+    /// no credential is ever copied into app storage (CLAUDE.md rule #4).
+    ///
+    /// This exists because neither of the other two routes is reachable for the audience
+    /// that most needs one: $KUBECONFIG isn't inherited by a GUI launched from Explorer,
+    /// a shortcut or the Store, and "drop a file at ~/.kube/config" is not an instruction
+    /// anyone can follow from inside the app.
+    /// </summary>
+    private readonly List<string> _pickedKubeconfigPaths = [];
 
     /// <summary>
     /// The one global "advanced view" switch — persisted, default off. Off hides the
@@ -182,6 +198,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         _recent.Clear();
         _recent.AddRange(settings.RecentContexts ?? []);
+
+        _pickedKubeconfigPaths.Clear();
+        _pickedKubeconfigPaths.AddRange(settings.KubeconfigPaths ?? []);
 
         // Straight to the backing field: this runs during construction, before any
         // binding or tab exists, and going through the property would only persist
@@ -299,6 +318,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
             yield return new ClusterSwitcherItemViewModel(
                 context, group, EnvironmentFor(context), openTab: null, IsPinned(context.Name), isCurrent: false);
         }
+
+        // Its own group, last and labelled, so nobody reaches for it thinking it is one
+        // of their clusters — and so it is still findable on a machine that has none.
+        if (!seen.Contains(ClusterContext.Demo.Name))
+        {
+            yield return new ClusterSwitcherItemViewModel(
+                ClusterContext.Demo, ClusterSwitcherGroup.Demo, EnvironmentFor(ClusterContext.Demo),
+                openTab: null, isPinned: false, isCurrent: false);
+        }
     }
 
     private void ActivateSwitcherItem(ClusterSwitcherItemViewModel item)
@@ -349,7 +377,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         try
         {
-            var contexts = await Kubeconfig.LoadContextsAsync();
+            var contexts = await Kubeconfig.LoadContextsAsync(extraPaths: _pickedKubeconfigPaths);
             AvailableContexts.Clear();
             foreach (var ctx in contexts)
             {
@@ -357,10 +385,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
 
             HasContexts = AvailableContexts.Count > 0;
-            KubeconfigSearchPaths = string.Join(
-                Environment.NewLine,
-                Kubeconfig.CandidatePaths().Select(c =>
-                    $"{(c.Exists ? "found  " : "missing")}  {c.Path}   ({c.Source})"));
+            RefreshSearchPaths();
             Status = HasContexts
                 ? $"{AvailableContexts.Count} context(s) available."
                 : "No kubeconfig contexts found.";
@@ -369,10 +394,26 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            // Still refresh the search list: a file that failed to parse is exactly
+            // when "here is what was read" matters, and leaving the previous list on
+            // screen would name the wrong file (UI rule 9).
+            RefreshSearchPaths();
             Status = $"Failed to read kubeconfig: {ex.Message}";
             return false;
         }
     }
+
+    /// <summary>
+    /// Rebuilds the empty state's "Searched:" list. Picked files carry their own
+    /// source label, so a config the user chose is distinguishable from one the app
+    /// found — and a picked file that has since been moved shows as <c>missing</c>
+    /// instead of vanishing without explanation.
+    /// </summary>
+    private void RefreshSearchPaths() =>
+        KubeconfigSearchPaths = string.Join(
+            Environment.NewLine,
+            Kubeconfig.CandidatePaths(_pickedKubeconfigPaths).Select(c =>
+                $"{(c.Exists ? "found  " : "missing")}  {c.Path}   ({c.Source})"));
 
     [RelayCommand]
     private async Task ReloadContextsAsync()
@@ -383,11 +424,85 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// "Open kubeconfig file…" — the only route to a cluster that works from inside the
+    /// app. $KUBECONFIG is not inherited by a GUI launched from Explorer, a shortcut or
+    /// the Microsoft Store, and "put a file at ~/.kube/config" is an instruction nobody
+    /// can act on without leaving the app, so a first run on a clean machine had no
+    /// reachable next step at all.
+    ///
+    /// The file is never copied or read into app storage: only its path is kept, and
+    /// every load and every connect re-resolves it through the same kubeconfig chain
+    /// as any other file (CLAUDE.md rule #4).
+    /// </summary>
+    [RelayCommand]
+    private async Task OpenKubeconfigFileAsync()
+    {
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop
+            || desktop.MainWindow?.StorageProvider is not { } storage)
+        {
+            return;
+        }
+
+        var files = await storage.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Open kubeconfig file",
+            AllowMultiple = false,
+            // Kubeconfig files are as often extensionless ("config") as .yaml, so an
+            // extension filter alone would hide the single most likely file.
+            FileTypeFilter =
+            [
+                new FilePickerFileType("kubeconfig") { Patterns = ["config", "*.yaml", "*.yml", "*.conf", "kubeconfig*"] },
+                FilePickerFileTypes.All,
+            ],
+        });
+
+        if (files.Count == 0 || files[0].TryGetLocalPath() is not { Length: > 0 } path)
+        {
+            return;
+        }
+
+        // Try it before remembering it. A file that turns out not to be a kubeconfig
+        // would otherwise be persisted and re-break every subsequent start, with the
+        // rescan button rerunning the same failure.
+        var previous = _pickedKubeconfigPaths.ToArray();
+        _pickedKubeconfigPaths.RemoveAll(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
+        _pickedKubeconfigPaths.Insert(0, path);
+
+        if (!await LoadContextsAsync() || !HasContexts)
+        {
+            _pickedKubeconfigPaths.Clear();
+            _pickedKubeconfigPaths.AddRange(previous);
+            await LoadContextsAsync();
+            Status = $"No clusters in {Path.GetFileName(path)} — it has no contexts, or it isn't a kubeconfig file.";
+            return;
+        }
+
+        SaveWorkspace();
+
+        // Same follow-through as a rescan that finds something: opening the file and
+        // then being left on the empty state would read as the pick not having worked.
+        if (Tabs.Count == 0)
+        {
+            await AddTabAsync(AvailableContexts[0]);
+        }
+    }
+
     private async Task RestoreWorkspaceAsync()
     {
         var settings = WorkspaceStore.Load();
         foreach (var snapshot in settings.Tabs)
         {
+            // The demo cluster is not a kubeconfig context, so it is never in
+            // AvailableContexts and the name+path match below can't find it. The
+            // sentinel path is what identifies it — that is the whole reason it is a
+            // path rather than a new field on TabSnapshot.
+            if (snapshot.KubeconfigPath == ClusterContext.DemoKubeconfigPath)
+            {
+                await AddTabAsync(ClusterContext.Demo);
+                continue;
+            }
+
             var match = AvailableContexts.FirstOrDefault(c =>
                 c.Name == snapshot.ContextName && c.KubeconfigPath == snapshot.KubeconfigPath);
             if (match is not null)
@@ -410,7 +525,33 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanAddNewTab))]
     private void AddNewTab() => Switcher.Open();
 
-    private bool CanAddNewTab() => HasContexts;
+    /// <summary>
+    /// Always true since the demo cluster exists. It used to be <c>HasContexts</c>,
+    /// which was right when an empty kubeconfig meant an empty switcher — but the
+    /// switcher now always carries at least the demo row, and gating on contexts made
+    /// the top bar's cluster button dead on exactly the machine where the demo cluster
+    /// is the only thing to reach. UI rule 9 asks for a command that *cannot* run to be
+    /// disabled; this one can.
+    /// </summary>
+    private static bool CanAddNewTab() => true;
+
+    /// <summary>
+    /// Opens (or switches to) the built-in demo cluster. Deliberately <b>not</b> gated
+    /// on <see cref="HasContexts"/>: no kubeconfig is precisely when this is the only
+    /// thing on screen worth clicking, and it is the button a Microsoft Store reviewer
+    /// on a clean machine presses to see the app do anything at all.
+    /// </summary>
+    [RelayCommand]
+    private async Task OpenDemoClusterAsync()
+    {
+        if (Tabs.FirstOrDefault(t => t.IsDemo) is { } existing)
+        {
+            SelectedTab = existing;
+            return;
+        }
+
+        await AddTabAsync(ClusterContext.Demo);
+    }
 
     partial void OnHasContextsChanged(bool value)
     {
@@ -520,6 +661,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             PinnedContexts = [.. _pinned],
             RecentContexts = [.. _recent],
             EnvironmentOverrides = _environmentOverrides.ToDictionary(kv => kv.Key, kv => kv.Value.ToString()),
+            KubeconfigPaths = [.. _pickedKubeconfigPaths],
         });
     }
 
@@ -550,6 +692,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
         yield return new PaletteItem(
             "Switch cluster…", $"{AvailableContexts.Count} contexts · {Hotkeys.Describe(Hotkeys.ClusterSwitcher)}",
             "SwapHorizontalIconGeometry", Switcher.Open);
+
+        // Nothing is reachable exactly one way. The empty state's button is the route a
+        // first run finds; this is the route everyone else does, and it stays offered
+        // once a real cluster is open so the demo remains a place to try something out.
+        yield return new PaletteItem(
+            Tabs.Any(t => t.IsDemo) ? "Go to the demo cluster" : "Explore the demo cluster",
+            "Sample data that ships with the app — nothing is connected",
+            "LayersIconGeometry",
+            () => OpenDemoClusterCommand.Execute(null));
 
         foreach (var tab in Tabs)
         {
@@ -619,7 +770,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 () => rowTab.DeleteSelectedCommand.Execute(null));
         }
 
-        if (IsAdvancedView && SelectedTab is { IsConnected: true } connected)
+        // IsDemo excluded: the access review is three real API-server calls
+        // (SelfSubjectRulesReview, the RBAC object scan, SubjectAccessReview) with no
+        // honest offline stand-in, and a palette entry that matches a search and then
+        // refuses to run is worse than no match.
+        if (IsAdvancedView && SelectedTab is { IsConnected: true, IsDemo: false } connected)
         {
             yield return new PaletteItem(
                 "Access review — my permissions",
