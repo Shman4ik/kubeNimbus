@@ -57,6 +57,8 @@ public partial class MainWindow : Window
         SwitcherHintLabel.Text =
             $"Click or Enter to open · ↑↓ navigate · Esc close · {Hotkeys.PrimaryLabel}+1…9 jump to tab";
 
+        KeyBindings.Add(new KeyBinding { Gesture = Hotkeys.FilterList, Command = new RelayFocusRowFilterCommand(this) });
+
         KeyBindings.Add(new KeyBinding { Gesture = Hotkeys.ShortcutsHelp, Command = new RelayToggleShortcutsCommand(this) });
 
         // Ctrl/Cmd+1…9 jumps straight to a tab. Registered in a loop rather than
@@ -260,6 +262,25 @@ public partial class MainWindow : Window
     {
         Vm?.Palette.Open();
         PaletteQueryBox.Focus();
+    }
+
+    /// <summary>
+    /// Ctrl/Cmd+F. Registered on the window rather than on <see cref="ClusterTabView"/>
+    /// because a KeyBinding only sees keys that already route to its control, and this
+    /// one has to work with focus on the tab strip or nowhere at all. The visible
+    /// cluster view is resolved from the tree: the tab content is a ContentControl
+    /// bound to SelectedTab, so there is exactly one realized and visible at a time.
+    /// </summary>
+    internal void FocusRowFilter()
+    {
+        foreach (var view in this.GetVisualDescendants().OfType<ClusterTabView>())
+        {
+            if (view.IsEffectivelyVisible)
+            {
+                view.FocusRowFilter();
+                return;
+            }
+        }
     }
 
     private void OnPaletteBackdropPressed(object? sender, PointerPressedEventArgs e)
@@ -525,6 +546,16 @@ internal sealed class RelaySelectTabCommand(MainWindow window, int ordinal) : Sy
 
     public void Execute(object? parameter) =>
         (window.DataContext as ViewModels.MainWindowViewModel)?.SelectTabByOrdinal(ordinal);
+}
+
+/// <summary>Trivial ICommand so the Ctrl/Cmd+F gesture can live in a KeyBinding.</summary>
+internal sealed class RelayFocusRowFilterCommand(MainWindow window) : System.Windows.Input.ICommand
+{
+    public event EventHandler? CanExecuteChanged { add { } remove { } }
+
+    public bool CanExecute(object? parameter) => true;
+
+    public void Execute(object? parameter) => window.FocusRowFilter();
 }
 
 /// <summary>Trivial ICommand so the F1 gesture can live in a KeyBinding without a ViewModel round-trip.</summary>

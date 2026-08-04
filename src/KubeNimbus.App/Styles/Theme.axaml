@@ -273,7 +273,7 @@
          memory sparkline. The right gutter also stops the Name column's ellipsis
          from butting into Ready. -->
     <Style Selector="DataGridCell">
-        <Setter Property="Padding" Value="12,0,12,0" />
+        <Setter Property="Padding" Value="10,0,10,0" />
     </Style>
 
     <!-- Compact TabItem headers. FluentTheme sizes these at 24px, which dwarfs the

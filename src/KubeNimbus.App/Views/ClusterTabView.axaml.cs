@@ -293,6 +293,56 @@ public partial class ClusterTabView : UserControl
     private void OnHelmRowDoubleTapped(object? sender, TappedEventArgs e) =>
         Vm?.OpenSelectedHelmReleaseCommand.Execute(null);
 
+    /// <summary>
+    /// Ctrl/Cmd+F, routed here by <see cref="MainWindow"/> — the gesture is registered
+    /// on the window because the key can arrive with focus anywhere in the shell, and a
+    /// KeyBinding on this control only sees events that already reach it.
+    /// </summary>
+    public void FocusRowFilter()
+    {
+        if (Vm is not { IsHelmView: false })
+        {
+            return; // the box isn't in the Helm browser, and focusing a hidden TextBox is a dead keystroke
+        }
+
+        RowFilterBox.Focus();
+        RowFilterBox.SelectAll();
+    }
+
+    /// <summary>
+    /// Esc and Enter in the search box. Esc clears a filter and, when there is nothing
+    /// left to clear, hands focus back to the list — so the key always does something
+    /// rather than being swallowed. Enter/Down move to the rows, which is where you
+    /// were heading after typing the name.
+    /// </summary>
+    private void OnRowFilterKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (Vm is not { } vm)
+        {
+            return;
+        }
+
+        if (e.Key == Key.Escape)
+        {
+            if (vm.IsRowFiltering)
+            {
+                vm.ClearRowFilterCommand.Execute(null);
+            }
+            else
+            {
+                ResourceGrid.Focus();
+            }
+
+            e.Handled = true;
+        }
+        else if (e.Key is Key.Enter or Key.Down)
+        {
+            vm.SelectedRow ??= vm.VisibleRows.FirstOrDefault();
+            ResourceGrid.Focus();
+            e.Handled = true;
+        }
+    }
+
     private void OnGridKeyDown(object? sender, KeyEventArgs e)
     {
         if (Vm is not { } vm)

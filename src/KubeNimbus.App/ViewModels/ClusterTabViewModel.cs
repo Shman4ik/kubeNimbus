@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -118,7 +119,112 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [ObservableProperty]
     private SidebarKindViewModel? _selectedKind;
 
+    /// <summary>
+    /// Every row the watch knows about — the informer's own view of the cluster.
+    /// Added/Modified/Deleted are applied against this by key, so nothing may be
+    /// removed from it for display reasons: a row filtered out of sight has to stay
+    /// here, or the next watch event for that object would look like a fresh add.
+    /// </summary>
     public ObservableCollection<ResourceRowViewModel> Rows { get; } = [];
+
+    /// <summary>
+    /// What the list actually renders: <see cref="Rows"/> minus whatever
+    /// <see cref="RowFilter"/> excludes. Kept in sync from <see cref="Rows"/>'s own
+    /// <c>CollectionChanged</c>, so every producer — the watch, the fleet merge, the
+    /// demo dataset, the screenshot fixtures — keeps writing to <c>Rows</c> and
+    /// exactly one place in the app knows the filter exists.
+    /// </summary>
+    public ObservableCollection<ResourceRowViewModel> VisibleRows { get; } = [];
+
+    /// <summary>
+    /// Free-text filter over the list, matched against the columns that identify an
+    /// object (see <see cref="ResourceRowViewModel.Matches"/>). The sidebar filters
+    /// <em>kinds</em>; nothing filtered the objects, so finding one pod in a namespace
+    /// of two hundred meant scrolling — which is the one thing <c>kubectl get | grep</c>
+    /// has always been for. Cleared when the selected kind changes: it is a question
+    /// about the list it was typed into.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsRowFiltering))]
+    private string _rowFilter = "";
+
+    /// <summary>Trimmed <see cref="RowFilter"/>, cached so matching a 5000-row list
+    /// doesn't re-trim the same string once per row.</summary>
+    private string _rowQuery = "";
+
+    public bool IsRowFiltering => _rowQuery.Length > 0;
+
+    /// <summary>"12 of 87" — shown beside the box whenever a filter is on, because a
+    /// list that is short and doesn't say why is indistinguishable from a small
+    /// cluster.</summary>
+    [ObservableProperty]
+    private string _rowFilterSummary = "";
+
+    partial void OnRowFilterChanged(string value)
+    {
+        // The filter TextBox's two-way binding can round-trip null on control
+        // (re)creation — same reasoning as SelectedNamespace and SidebarFilter.
+        _rowQuery = (value ?? "").Trim();
+        RebuildVisibleRows();
+    }
+
+    [RelayCommand]
+    private void ClearRowFilter() => RowFilter = "";
+
+    private bool MatchesRowFilter(ResourceRowViewModel row) => _rowQuery.Length == 0 || row.Matches(_rowQuery);
+
+    private void RebuildVisibleRows()
+    {
+        VisibleRows.Clear();
+        foreach (var row in Rows)
+        {
+            if (MatchesRowFilter(row))
+            {
+                VisibleRows.Add(row);
+            }
+        }
+
+        RecomputeListEmpty();
+    }
+
+    /// <summary>
+    /// Mirrors <see cref="Rows"/> into <see cref="VisibleRows"/> through the filter.
+    /// Rows only ever appends (watch, fleet merge, demo dataset) or removes by object,
+    /// so those two cases are handled incrementally and a watch tick on a filtered
+    /// list costs one match, not a rescan; anything else — a Clear, an insert in the
+    /// middle — falls back to a rebuild rather than guessing at an index.
+    /// </summary>
+    private void OnRowsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        switch (e.Action)
+        {
+            case NotifyCollectionChangedAction.Add
+                when e.NewItems is { } added && e.NewStartingIndex + added.Count == Rows.Count:
+                foreach (var row in added.OfType<ResourceRowViewModel>())
+                {
+                    if (MatchesRowFilter(row))
+                    {
+                        VisibleRows.Add(row);
+                    }
+                }
+
+                break;
+
+            case NotifyCollectionChangedAction.Remove when e.OldItems is { } removed:
+                foreach (var row in removed.OfType<ResourceRowViewModel>())
+                {
+                    VisibleRows.Remove(row);
+                }
+
+                break;
+
+            default:
+                RebuildVisibleRows();
+                return; // already recomputed the counters
+        }
+
+        RecomputeListEmpty();
+    }
 
     /// <summary>True from the moment a watch (re)starts until its first event
     /// arrives — distinguishes "still loading" from "genuinely empty" so the
@@ -131,9 +237,21 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [ObservableProperty]
     private bool _isListEmpty;
 
+    /// <summary>True when the kind has rows but the filter matches none of them. A
+    /// distinct state from <see cref="IsListEmpty"/> on purpose (UI rule 9): "this
+    /// namespace has no pods" and "no pod here is called that" send you looking for
+    /// two completely different problems.</summary>
+    [ObservableProperty]
+    private bool _isFilterEmpty;
+
     partial void OnIsListLoadingChanged(bool value) => RecomputeListEmpty();
 
-    private void RecomputeListEmpty() => IsListEmpty = Rows.Count == 0 && !IsListLoading;
+    private void RecomputeListEmpty()
+    {
+        IsListEmpty = Rows.Count == 0 && !IsListLoading;
+        IsFilterEmpty = Rows.Count > 0 && VisibleRows.Count == 0 && !IsListLoading;
+        RowFilterSummary = IsRowFiltering ? $"{VisibleRows.Count} of {Rows.Count}" : "";
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsPodRowSelected))]
@@ -326,6 +444,12 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     public ClusterTabViewModel(ClusterContext context)
     {
         Context = context;
+
+        // The list renders VisibleRows; everything that produces rows writes to Rows.
+        // Subscribing here rather than filtering at each producer is what keeps the
+        // watch, the fleet merge, the demo dataset and the screenshot fixtures all
+        // unaware that a filter exists.
+        Rows.CollectionChanged += OnRowsChanged;
     }
 
     private bool CanConnect => !IsConnecting;
@@ -663,6 +787,11 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
 
         RecordRecentKind(kind);
+
+        // A name filter is a question about the list it was typed into: carrying
+        // "nginx" from Pods over to ConfigMaps lands on an empty list that looks
+        // like a broken watch.
+        RowFilter = "";
 
         foreach (var section in SidebarSections)
         {
