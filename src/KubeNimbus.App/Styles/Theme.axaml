@@ -264,6 +264,18 @@
         <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
     </Style>
 
+    <!-- DataGrid cells get a gutter on BOTH sides. Fluent's cell padding is
+         left-only, which is invisible while every column is left-aligned and
+         actively misleading as soon as one isn't: the resource list's Memory
+         column is right-aligned, so its "—" placeholder landed hard against the
+         Age column's "5d" and the pair rendered as "—5d" — i.e. a negative age.
+         A real value did the same ("48 MiB16d"), and the CPU number touched the
+         memory sparkline. The right gutter also stops the Name column's ellipsis
+         from butting into Ready. -->
+    <Style Selector="DataGridCell">
+        <Setter Property="Padding" Value="12,0,12,0" />
+    </Style>
+
     <!-- Compact TabItem headers. FluentTheme sizes these at 24px, which dwarfs the
          dock (see the pod detail Logs/Events strip); pull them down to body scale. -->
     <Style Selector="TabItem">

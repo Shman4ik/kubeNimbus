@@ -1675,3 +1675,49 @@ the 40px bar, and that entering full screen with the green button collapses the
 reserve rather than leaving a gap. The full-screen path is the one piece that could
 not be driven even under X11 — Xvfb has no window manager, so `WindowState` changes
 have nothing to honour them.
+
+**Windows validation pass (2026-08-04):** the half above that mattered — a real
+Windows box — finally ran this. Sandbox up (`docker start kubenimbus-sandbox`, no
+`-Recreate` needed), build 0 warnings, **145/145 TUnit, 0 skipped** (run via the
+test `.exe` directly — `dotnet test --project` is still broken on this SDK, see
+below), app launched against the live cluster via the Avalonia DevTools MCP (the
+dev-run process isn't Start-Menu-registered, so `computer-use` couldn't attach for
+real mouse drag/Snap-Layouts gestures — that specific gap remains). Confirmed via
+DevTools, structurally and functionally:
+
+- `ExtendClientAreaToDecorationsHint=True`, `WindowDecorationMargin=0,40,0,0` — one
+  40px bar, no second OS title bar underneath.
+- `PART_MinimizeButton`/`PART_MaximizeButton`/`PART_CloseButton` exist at
+  `Bounds 1145,0,135,40` in a 1280-wide window — exactly `3 × CaptionButtonWidth`
+  (45 DIP) from the right edge, confirming the reserve math.
+- **All three buttons are functionally real**, not just present: clicking Minimize
+  set `WindowState=Minimized` (`IsActive` false); clicking Maximize grew `ClientSize`
+  to the full physical panel (`3792×1600`) with `WindowDecorationMargin` unchanged;
+  clicking Close ended the process cleanly (confirmed via `tasklist`, and the
+  DevTools call itself timed out mid-request as the connection died — expected). This
+  is the scenario UI rule 12 warns about directly: Windows disables the *native*
+  close button under an extended client area, so a non-functional custom one would
+  have shipped a window with no way to close.
+- **Close → relaunch → workspace-restore** round-tripped correctly: relaunching
+  reconnected to the live cluster, restored the `kubenimbus-sandbox` tab, and kept
+  the Advanced-view setting — `WorkspaceSettings` persistence holds up with the new
+  chrome.
+- **Advanced-view toggle** (UI rule 8b — the double-toggle class of bug that shipped
+  broken three times already) — one click cleanly hid CPU/Memory columns, sparklines
+  and sidebar kind-count badges together; one click restored them; `IsChecked`
+  landed correctly each time. No regression.
+- No exceptions or errors in either session's app log.
+
+**Not covered by this pass**: real mouse drag-to-move, double-click-to-maximize and
+Win11 Snap Layouts on the caption strip (needs actual OS-level drag, which neither
+DevTools synthetic input nor `computer-use` could reach for this process), 150%
+DPI scaling, and multi-monitor. Also hit, and worth naming so it isn't mistaken for
+an app bug: DevTools' synthetic `Click` reliably drives `Button`/`ToggleButton`
+controls (used above) but returned `handled:false` against `DataGridRow` and
+`ComboBoxItem` in this session, and the live-watch pod list recycles virtualized
+`DataGridRow` node IDs across ticks — so a hands-on click-through of row
+selection/double-click-to-open, the namespace picker, and post-redesign
+port-forward/exec is still owed on a real mouse. Port-forward and exec's *last*
+full live-cluster verification predates the Fluent form/state pass's visual
+redesign of the port-forward pane (see the 2026-08-04 "Live-cluster validation
+pass" above).
