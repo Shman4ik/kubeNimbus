@@ -12,6 +12,24 @@ namespace KubeNimbus.App.Views;
 
 public partial class MainWindow : Window
 {
+    /// <summary>
+    /// Fallback width of one caption button, used only if the theme's own
+    /// <c>CaptionButtonWidth</c> resource cannot be read. Avalonia exposes no
+    /// measurement of the caption strip — <see cref="Window.WindowDecorationMargin"/>
+    /// reports the title bar's height, not the buttons' width — so the reserve is
+    /// derived from the same resource the buttons size themselves from.
+    /// </summary>
+    private const double FallbackCaptionButtonWidth = 45;
+
+    /// <summary>Minimize, maximize/restore, close — the three the decorations template draws.</summary>
+    private const int CaptionButtonCount = 3;
+
+    /// <summary>macOS traffic lights, which sit top-<em>left</em>: 3 × 14 plus the standard insets.</summary>
+    private const double MacTrafficLightsWidth = 78;
+
+    /// <summary>The command bar's own left/right breathing room, kept when a caption reserve is added.</summary>
+    private const double CommandBarInset = 12;
+
     private ClusterTabViewModel? _draggingTab;
     private Point _dragStart;
     private bool _dragging;
@@ -26,6 +44,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
+        ConfigureWindowChrome();
 
         KeyBindings.Add(new KeyBinding { Gesture = Hotkeys.CommandPalette, Command = new RelayOpenPaletteCommand(this) });
         PaletteShortcutLabel.Text = Hotkeys.Describe(Hotkeys.CommandPalette);
@@ -55,6 +75,10 @@ public partial class MainWindow : Window
         {
             UpdateThemeIcon();
             ApplyBackdrop();
+            // The decorations don't exist yet in the constructor, so the reserve's
+            // real value arrives with the first WindowDecorationMargin change. This
+            // is the backstop for a platform that never raises one.
+            ApplyCaptionReserve();
         };
         ActualThemeVariantChanged += (_, _) =>
         {
@@ -66,6 +90,133 @@ public partial class MainWindow : Window
     }
 
     private MainWindowViewModel? Vm => DataContext as MainWindowViewModel;
+
+    /// <summary>
+    /// Merges the command bar into the title bar, so the shell has one bar of chrome
+    /// at the top instead of two. The system title bar carried a window title the
+    /// command bar was printing again 32px lower, three buttons, and ~32px of height
+    /// that the inspector dock — ~300px, holding logs — was paying for.
+    /// <para>
+    /// Windows and macOS only, deliberately. Both keep the caption buttons in a
+    /// conventional corner we can leave empty, which is what every comparable app does
+    /// (VS Code, Chrome, Explorer, Lens, Aptakube) — though only macOS still *draws*
+    /// them itself; see below. Extending the client area on Linux hands us the whole
+    /// frame instead, and client-side decorations that match GNOME look wrong on KDE
+    /// and every tiling WM; we ship linux-x64/arm64, so that trade isn't worth ~32px.
+    /// Linux keeps the system-decorated window and this method does nothing.
+    /// </para>
+    /// <para>
+    /// <b>On Windows the caption buttons become ours.</b> Avalonia 12's Win32 backend
+    /// answers an extended client area with <c>RequestedDrawnDecorations = TitleBar</c>
+    /// and calls <c>DisableCloseButton</c> on the HWND, so the system's three buttons
+    /// are switched off and the app is expected to supply them — the opposite of
+    /// pre-12's <c>PreferSystemChrome</c>. They come from the
+    /// <c>CommandBarWindowDecorations</c> theme in Theme.axaml, which exists so the
+    /// stock Fluent one doesn't also paint a title bar panel and the window title over
+    /// the command bar. macOS asks for no drawn decorations at all and keeps its own
+    /// traffic lights.
+    /// </para>
+    /// <para>
+    /// The gestures a title bar owes the user — drag, double-click to maximize, the
+    /// right-click window menu, Win11 Snap Layouts — are not reimplemented here. They
+    /// come from the <c>TitleBar</c> decoration role on the bar in XAML, which Win32
+    /// answers as <c>HTCAPTION</c> (and from the buttons' own Minimize/Maximize/Close
+    /// roles, which map to <c>HTMINBUTTON</c>/<c>HTMAXBUTTON</c>/<c>HTCLOSE</c> — that
+    /// is what keeps Snap Layouts, which only appear over a real maximize button).
+    /// Hand-rolling the drag from <c>BeginMoveDrag</c> would reproduce one of the four
+    /// and quietly lose the rest.
+    /// </para>
+    /// </summary>
+    private void ConfigureWindowChrome()
+    {
+        if (!OperatingSystem.IsWindows() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        ExtendClientAreaToDecorationsHint = true;
+
+        // Caption region == the bar, so the buttons fill its height rather than a 30px
+        // strip floating inside a 40px row (30 is the theme's DefaultTitleBarHeight).
+        // Read from the bar itself so the two cannot drift apart.
+        ExtendClientAreaTitleBarHeightHint = CommandBar.Height;
+
+        // Windows only in practice: Avalonia's macOS backend reports it needs no drawn
+        // decorations and AppKit keeps the traffic lights, while Win32 disables the
+        // system buttons and asks the app for a title bar. Setting it unconditionally
+        // is still right — the theme is simply never built where nothing asks for it.
+        if (this.TryFindResource("CommandBarWindowDecorations", out var resource) && resource is ControlTheme decorations)
+        {
+            WindowDecorationsTheme = decorations;
+        }
+
+        ApplyCaptionReserve();
+        ApplyOffScreenMargin();
+        PropertyChanged += (_, e) =>
+        {
+            if (e.Property == OffScreenMarginProperty)
+            {
+                ApplyOffScreenMargin();
+            }
+            else if (e.Property == WindowDecorationMarginProperty)
+            {
+                ApplyCaptionReserve();
+            }
+        };
+    }
+
+    /// <summary>
+    /// Leaves the caption buttons their space, and takes it back the moment they are
+    /// not there. Without the reserve the palette pill and the theme toggle sit under
+    /// Close on Windows, and the cluster switcher sits under the traffic lights on
+    /// macOS; without the taking-back, <b>full screen</b> keeps a dead 135px (or 78px)
+    /// gap in a bar that no longer has any buttons in it — and on macOS the green
+    /// traffic light is the ordinary way into full screen, so that is a state people
+    /// reach, not a corner case.
+    /// <para>
+    /// <see cref="Window.WindowDecorationMargin"/> is the honest signal for "is there a
+    /// caption strip over my bar right now", and it is honest on both platforms for
+    /// different reasons: with drawn decorations (Windows) its top is the title bar
+    /// height only while that part is enabled, and full screen disables every part;
+    /// without them (macOS) it is the backend's own extended margin, which that backend
+    /// zeroes in full screen. Zero either way, and zero on Linux, where we never
+    /// extended in the first place.
+    /// </para>
+    /// </summary>
+    private void ApplyCaptionReserve()
+    {
+        var hasCaption = WindowDecorationMargin.Top > 0;
+
+        CommandBar.Padding = new Thickness(
+            CommandBarInset + (hasCaption && OperatingSystem.IsMacOS() ? MacTrafficLightsWidth : 0),
+            0,
+            CommandBarInset + (hasCaption && OperatingSystem.IsWindows() ? CaptionButtonsWidth() : 0),
+            0);
+    }
+
+    /// <summary>
+    /// A maximized window with an extended client area is deliberately sized a few
+    /// pixels larger than the work area on every edge (Windows does this so its own
+    /// resize borders stay grabbable), and Avalonia reports how much in
+    /// <see cref="Window.OffScreenMargin"/>. Not honoring it clips whatever is at the
+    /// window's edge — which, now, is the title bar's own contents.
+    /// </summary>
+    private void ApplyOffScreenMargin() => RootLayout.Margin = OffScreenMargin;
+
+    /// <summary>
+    /// Width of the caption strip the decorations template draws over the right of the
+    /// command bar, taken from the same <c>CaptionButtonWidth</c> resource the buttons
+    /// size themselves from — so restyling the buttons moves the reserve with them
+    /// instead of silently sliding the palette pill under Close.
+    /// </summary>
+    private double CaptionButtonsWidth()
+    {
+        var width = this.TryFindResource("CaptionButtonWidth", out var resource) && resource is double value
+            ? value
+            : FallbackCaptionButtonWidth;
+
+        return width * CaptionButtonCount;
+    }
 
     // Windows 11 Mica backdrop: the shell base swaps between the theme-split
     // translucent ShellBackdropBrush (while the material actually renders —

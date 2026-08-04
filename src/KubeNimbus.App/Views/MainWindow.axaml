@@ -3,6 +3,7 @@
         xmlns:vm="using:KubeNimbus.App.ViewModels"
         xmlns:views="using:KubeNimbus.App.Views"
         xmlns:core="using:KubeNimbus.Core"
+        xmlns:chrome="using:Avalonia.Controls.Chrome"
         xmlns:conv="using:KubeNimbus.App.Converters"
         xmlns:aconv="using:Avalonia.Data.Converters"
         xmlns:local="using:KubeNimbus.App"
@@ -39,7 +40,11 @@
     </DataTemplate>
   </Window.DataTemplates>
 
-  <Grid>
+  <!-- RootLayout carries OffScreenMargin (see MainWindow.ApplyOffScreenMargin): a
+       maximized window with an extended client area really does hang a few pixels
+       off every edge of the screen, and without the margin the command bar — the
+       one row that is now the title bar — is what gets clipped. -->
+  <Grid Name="RootLayout">
     <!-- Two-tone shell: chrome-tinted base; content pane is a raised "layer" (see Theme.axaml). -->
     <DockPanel Name="ShellBase" Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}">
 
@@ -49,15 +54,25 @@
            column next to a fixed dropdown, so a handful of tabs pushed the palette
            and the theme toggle off the right edge. -->
       <StackPanel DockPanel.Dock="Top">
-        <Border Name="CommandBar" Height="44" Padding="12,0"
+        <!-- This bar IS the title bar on Windows and macOS — see
+             MainWindow.ConfigureWindowChrome. The TitleBar role is what makes it one:
+             the platform treats the bar as its caption, so dragging, double-click to
+             maximize, the right-click window menu and Win11 Snap Layouts all keep
+             working without a line of code. Everything interactive inside it must
+             then opt back in with the User role, or the caption swallows its clicks.
+             Background="Transparent" for the usual reason (UI rule 8) — a null
+             background is not hit-testable, and the bar is now a click target itself.
+             Padding is set from code-behind because the reserve for the system
+             caption buttons is per-platform. -->
+        <Border Name="CommandBar" Height="40" Padding="12,0" Background="Transparent"
+                chrome:WindowDecorationProperties.ElementRole="TitleBar"
                 BorderThickness="0,0,0,1" BorderBrush="{StaticResource CardBorderBrush}">
           <Grid ColumnDefinitions="Auto,*,Auto">
             <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Spacing="6">
-              <!-- Wordmark only: the mark itself is the window icon (title bar,
-                   taskbar, Alt+Tab), so repeating it here was two logos 30px
-                   apart — and the glyph that used to sit here was a placeholder
-                   hexagon, not the real mark. -->
-              <TextBlock Text="kubeNimbus" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" Margin="4,0,10,0" />
+              <!-- No wordmark and no mark. The window title and the taskbar/Alt+Tab
+                   icon already carry both, and once this bar became the title bar the
+                   wordmark was printing the window's own title back at it 32px lower.
+                   The first control is therefore the thing you came here to use. -->
 
               <!-- The switcher entry point. This replaced a ComboBox + "+" pair that
                    between them could neither search nor switch: the dropdown only
@@ -67,7 +82,8 @@
               <!-- Never disabled: the switcher always offers at least the demo cluster,
                    and gating this on HasContexts made the button dead on precisely the
                    machine where the demo cluster is the only thing there is to reach. -->
-              <Button Name="SwitcherButton" Classes="chip" Padding="8,5" Click="OnSwitcherButtonClick">
+              <Button Name="SwitcherButton" Classes="chip" Padding="8,5" Click="OnSwitcherButtonClick"
+                      chrome:WindowDecorationProperties.ElementRole="User">
                 <ToolTip.Tip>
                   <TextBlock Text="{Binding SwitcherTooltip}" />
                 </ToolTip.Tip>
@@ -89,7 +105,13 @@
 
             <!-- Tabs scroll rather than squeeze: past a handful of clusters the
                  switcher (Ctrl/Cmd+P) is the way to reach one, and shrinking every
-                 tab until no name is legible helps nobody. -->
+                 tab until no name is legible helps nobody.
+                 Deliberately left without a decoration role, unlike the tabs inside
+                 it: the empty part of the strip is the largest and most obvious place
+                 to grab the window, exactly as it is in a browser. The cost is that
+                 the overflow scrollbar — which only exists past ~8 clusters, and only
+                 while hovered — falls inside the caption region and can't be dragged;
+                 the wheel, Ctrl/Cmd+1…9 and the switcher all still reach those tabs. -->
             <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
                           Margin="10,0" VerticalAlignment="Center">
               <ItemsControl Name="TabStrip" ItemsSource="{Binding Tabs}">
@@ -101,6 +123,7 @@
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:ClusterTabViewModel">
                     <Border Classes="clusterTab" Classes.active="{Binding IsSelected}"
+                            chrome:WindowDecorationProperties.ElementRole="User"
                             Tapped="OnTabHeaderTapped"
                             PointerPressed="OnTabHeaderPointerPressed"
                             PointerMoved="OnTabHeaderPointerMoved"
@@ -164,6 +187,7 @@
 
             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Spacing="2">
               <Button Name="PaletteButton" Classes="searchpill" Width="190" VerticalAlignment="Center" Margin="0,0,6,0"
+                      chrome:WindowDecorationProperties.ElementRole="User"
                       Click="OnPaletteButtonClick">
                 <Grid ColumnDefinitions="Auto,*,Auto">
                   <PathIcon Grid.Column="0" Data="{StaticResource MagnifyIconGeometry}" Width="11" Height="11" Opacity="0.55" VerticalAlignment="Center" />
@@ -173,10 +197,12 @@
                 </Grid>
               </Button>
               <Button Classes="chip" Padding="5" Command="{Binding ToggleShortcutsCommand}"
+                      chrome:WindowDecorationProperties.ElementRole="User"
                       ToolTip.Tip="Keyboard shortcuts (F1)">
                 <PathIcon Data="{StaticResource HelpCircleIconGeometry}" Width="15" Height="15" />
               </Button>
-              <Button Name="ThemeToggleButton" Classes="chip" Padding="5" Click="OnToggleThemeClick" ToolTip.Tip="Toggle light/dark theme">
+              <Button Name="ThemeToggleButton" Classes="chip" Padding="5" Click="OnToggleThemeClick"
+                      chrome:WindowDecorationProperties.ElementRole="User" ToolTip.Tip="Toggle light/dark theme">
                 <PathIcon Name="ThemeIcon" Data="{StaticResource WeatherNightIconGeometry}" Width="14" Height="14" />
               </Button>
             </StackPanel>

@@ -50,6 +50,17 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Changed
 
+- **One bar of chrome at the top of the window instead of two.** On Windows and
+  macOS the command bar is now the title bar itself, so the row that held only a
+  window title and three buttons is gone and the content starts ~36px higher —
+  about two more log lines in the inspector dock, permanently. Dragging,
+  double-click to maximize, the window menu and Windows 11 Snap Layouts all still
+  work, from the empty space in the tab strip. Linux keeps its system window
+  decorations, where client-side ones would look out of place on half the desktops
+  we ship for.
+- The kubeNimbus wordmark is no longer drawn in the top bar. The window title and
+  the taskbar icon already carry it, and once the bar became the title bar it was
+  printing the window's own title back at it.
 - The cluster switcher and the top bar's cluster button are no longer disabled
   when no kubeconfig context exists — they always carry at least the demo
   cluster, and gating them on "has contexts" made them dead on precisely the
