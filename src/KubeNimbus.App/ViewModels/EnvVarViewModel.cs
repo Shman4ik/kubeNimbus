@@ -4,11 +4,21 @@ namespace KubeNimbus.App.ViewModels;
 
 /// <summary>
 /// One entry from a container's <c>env:</c> list. A literal <see cref="DirectValue"/>
-/// is shown as-is; a <c>valueFrom.secretKeyRef</c>/<c>configMapKeyRef</c> is shown
-/// only as a reference (<see cref="SourceDescription"/>) until the user explicitly
-/// reveals it — resolving eagerly would mean a GET per env var on every pod-detail
-/// open, and the identity reading the kubeconfig may not have RBAC to read Secrets
-/// even when it can read Pods.
+/// is shown as-is; a reference resolves according to what it points at, and the two
+/// kinds are deliberately not treated the same:
+/// <list type="bullet">
+/// <item>A <c>configMapKeyRef</c> is <b>resolved on open</b> and shown like any other
+/// value. A ConfigMap is not secret — it is ordinary configuration, and making
+/// someone click "Reveal" to read `LOG_LEVEL=info` was a click charged for nothing.
+/// It costs one GET per distinct ConfigMap, deduplicated by the same cache the
+/// on-demand path uses.</item>
+/// <item>A <c>secretKeyRef</c> stays <b>masked</b> (<see cref="MaskedValue"/>) behind
+/// an eye toggle. Nothing is fetched until it is asked for: the mask is a placeholder,
+/// not a hidden copy of the value, so a secret never enters this process — or a
+/// screen-share — because a pane happened to be open. The identity reading the
+/// kubeconfig may also have no RBAC to read Secrets while it can read Pods, and that
+/// error belongs on the row someone asked about, not on four rows nobody did.</item>
+/// </list>
 /// </summary>
 public sealed partial class EnvVarViewModel(
     string name,
@@ -41,13 +51,20 @@ public sealed partial class EnvVarViewModel(
     /// </summary>
     public bool IsOptionalReference { get; init; }
 
-    /// <summary>A reference whose value isn't on screen yet — shown as a reference, with a Reveal button.</summary>
+    /// <summary>A reference: the value line is whatever resolving it produced, not a literal.</summary>
     public bool IsReference => SourceDescription is not null && DirectValue is null;
 
     /// <summary>The value line: a literal, or a resolved fieldRef.</summary>
     public bool HasDirectValue => DirectValue is not null;
 
     public bool CanReveal => SecretOrConfigMapKind is not null && SecretOrConfigMapName is not null;
+
+    /// <summary>A Secret key: masked until asked for, and the only row with an eye toggle.</summary>
+    public bool IsSecretReference => SecretOrConfigMapKind == "Secret";
+
+    /// <summary>The stand-in shown for an unrevealed Secret. Fixed width — the length of a
+    /// secret is itself worth not leaking, and a mask that tracked it would leak it.</summary>
+    public string MaskedValue => "••••••••";
 
     internal string? SecretOrConfigMapKind { get; } = secretOrConfigMapKind;
 
@@ -56,11 +73,37 @@ public sealed partial class EnvVarViewModel(
     internal string? Key { get; } = key;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsResolving))]
+    [NotifyPropertyChangedFor(nameof(IsMasked))]
     private bool _isRevealing;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasResolvedValue))]
+    [NotifyPropertyChangedFor(nameof(IsMasked))]
+    [NotifyPropertyChangedFor(nameof(IsResolving))]
     private string? _revealedValue;
 
+    /// <summary>
+    /// Whether the resolved value is on screen. Separate from <see cref="RevealedValue"/>
+    /// being non-null so the eye can hide a value again without discarding it and
+    /// re-fetching — and so that hiding it is what the button does, rather than
+    /// something you can only achieve by closing the tab.
+    /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasResolvedValue))]
+    [NotifyPropertyChangedFor(nameof(IsMasked))]
+    private bool _isRevealed;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsResolving))]
+    [NotifyPropertyChangedFor(nameof(IsMasked))]
     private string? _revealError;
+
+    public bool HasResolvedValue => IsRevealed && RevealedValue is not null;
+
+    /// <summary>A Secret whose value is not on screen: the dots stand in for it.</summary>
+    public bool IsMasked => IsSecretReference && !HasResolvedValue && RevealError is null && !IsRevealing;
+
+    /// <summary>Mid-fetch, with nothing to show yet — a ConfigMap row on open, or a Secret just asked for.</summary>
+    public bool IsResolving => IsRevealing && RevealedValue is null && RevealError is null;
 }

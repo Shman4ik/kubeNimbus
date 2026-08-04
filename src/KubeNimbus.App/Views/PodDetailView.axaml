@@ -218,19 +218,41 @@
                              since it reads like a literal but isn't one. -->
                         <TextBlock Text="{Binding SourceDescription}" FontSize="10.5" Opacity="0.5" TextWrapping="Wrap"
                                    IsVisible="{Binding IsDerivedValue}" />
-                        <!-- Reveal sits next to the reference it reveals, not flung to the
-                             pane's right edge — at full dock width that was half a screen away
-                             from the row it belongs to. -->
-                        <Grid ColumnDefinitions="Auto,Auto" HorizontalAlignment="Left" IsVisible="{Binding IsReference}">
-                          <TextBlock Grid.Column="0" Text="{Binding SourceDescription}" FontSize="11" Opacity="0.6" TextWrapping="Wrap"
-                                     MaxWidth="420" VerticalAlignment="Center" Margin="0,0,8,0" />
-                          <Button Grid.Column="1" Classes="chip" Padding="6,2" FontSize="10.5" Content="Reveal" VerticalAlignment="Center"
-                                  IsVisible="{Binding CanReveal}" IsEnabled="{Binding !IsRevealing}"
-                                  Command="{Binding $parent[UserControl].((vm:PodDetailTabViewModel)DataContext).RevealEnvVarCommand}"
-                                  CommandParameter="{Binding}" />
-                        </Grid>
-                        <SelectableTextBlock Text="{Binding RevealedValue}" FontSize="11.5" TextWrapping="Wrap" Foreground="{StaticResource AppAccentBrush}"
-                                             IsVisible="{Binding RevealedValue, Converter={x:Static aconv:ObjectConverters.IsNotNull}}" />
+
+                        <!-- A reference's value line. Same shape as a literal's, because for a
+                             ConfigMap that is exactly what it is: resolved on open, shown
+                             plainly, with the object it came from as the caption underneath.
+                             A Secret stops at the dots until the eye is clicked. -->
+                        <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsReference}">
+                          <SelectableTextBlock Text="{Binding RevealedValue}" FontSize="11.5" Opacity="0.85" TextWrapping="Wrap"
+                                               IsVisible="{Binding HasResolvedValue}" />
+                          <TextBlock Text="{Binding MaskedValue}" FontSize="11.5" Opacity="0.55" VerticalAlignment="Center"
+                                     FontFamily="Cascadia Mono,Consolas,monospace" IsVisible="{Binding IsMasked}" />
+                          <TextBlock Text="resolving…" FontSize="11" Opacity="0.45" VerticalAlignment="Center"
+                                     IsVisible="{Binding IsResolving}" />
+                          <!-- Eye, not a "Reveal" chip: it is a show/hide toggle, and it can hide
+                               again — the chip was one-way, so a value revealed on a shared screen
+                               stayed there until the tab was closed. Secrets only; a ConfigMap
+                               has nothing to hide and gets no control at all. -->
+                          <Button Classes="chip" Padding="4,2" VerticalAlignment="Center"
+                                  IsVisible="{Binding IsSecretReference}" IsEnabled="{Binding !IsRevealing}"
+                                  Command="{Binding $parent[UserControl].((vm:PodDetailTabViewModel)DataContext).ToggleEnvVarCommand}"
+                                  CommandParameter="{Binding}">
+                            <Panel>
+                              <PathIcon Data="{StaticResource EyeIconGeometry}" Width="12" Height="12"
+                                        IsVisible="{Binding !HasResolvedValue}" />
+                              <PathIcon Data="{StaticResource EyeOffIconGeometry}" Width="12" Height="12"
+                                        IsVisible="{Binding HasResolvedValue}" />
+                            </Panel>
+                            <ToolTip.Tip>
+                              <TextBlock Text="Show or hide this Secret value" />
+                            </ToolTip.Tip>
+                          </Button>
+                        </StackPanel>
+                        <!-- Provenance under the value, not instead of it: which object and key
+                             a value came from still matters once you can see the value. -->
+                        <TextBlock Text="{Binding SourceDescription}" FontSize="10.5" Opacity="0.5" TextWrapping="Wrap"
+                                   IsVisible="{Binding IsReference}" />
                         <!-- An `optional: true` ref whose key is absent is normal — the container
                              just starts without the variable — so it reads dim, not as an error. -->
                         <TextBlock Text="{Binding RevealError}" FontSize="11" Classes="statusText" TextWrapping="Wrap"

@@ -60,6 +60,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-yaml-secret-revealed", () => HostInMainWindow(ClusterTabScenarios.YamlEditorSecretRevealed())),
     ("cluster-tab-exec", () => HostInMainWindow(ClusterTabScenarios.Exec())),
     ("cluster-tab-port-forward", () => HostInMainWindow(ClusterTabScenarios.PortForward())),
+    ("cluster-tab-port-forward-idle", () => HostInMainWindow(ClusterTabScenarios.PortForwardIdle())),
     ("cluster-tab-helm-releases", () => HostInMainWindow(ClusterTabScenarios.HelmReleases())),
     ("cluster-tab-helm-release-detail", () => HostInMainWindow(ClusterTabScenarios.HelmReleaseDetail())),
     ("cluster-tab-rbac-who-can", () => HostInMainWindow(ClusterTabScenarios.RbacWhoCan(), height: 1000)),

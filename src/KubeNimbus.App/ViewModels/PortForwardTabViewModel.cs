@@ -52,11 +52,25 @@ public sealed partial class PortForwardTabViewModel : InspectorTabViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LocalUrl))]
+    [NotifyPropertyChangedFor(nameof(LocalPortInput))]
     private int _localPort;
+
+    /// <summary>
+    /// The Local port box's value, where <c>null</c> is the wire value 0 ("ask the OS
+    /// for an ephemeral port"). A box reading <c>0</c> only says that to someone who
+    /// has hovered the tooltip; an empty box under an "auto" watermark says it in
+    /// place, which is where the question is asked.
+    /// </summary>
+    public int? LocalPortInput
+    {
+        get => LocalPort == 0 ? null : LocalPort;
+        set => LocalPort = value ?? 0;
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanEditPorts))]
     [NotifyPropertyChangedFor(nameof(Health))]
+    [NotifyPropertyChangedFor(nameof(IsHealthy))]
     [NotifyCanExecuteChangedFor(nameof(StartCommand))]
     [NotifyCanExecuteChangedFor(nameof(StopCommand))]
     [NotifyCanExecuteChangedFor(nameof(CopyUrlCommand))]
@@ -67,6 +81,15 @@ public sealed partial class PortForwardTabViewModel : InspectorTabViewModelBase
     private string? _statusMessage;
 
     /// <summary>
+    /// Whether <see cref="StatusMessage"/> is a failure ("Local port 8080 is already
+    /// in use…") rather than a report ("Stopped."). Both used to render as the same
+    /// dim grey caption, so the one sentence that says why nothing happened looked
+    /// exactly like the one that says nothing is happening.
+    /// </summary>
+    [ObservableProperty]
+    private bool _statusIsError;
+
+    /// <summary>
     /// The kubelet's last complaint on this forward, kept separate from
     /// <see cref="StatusMessage"/> so "forwarding 127.0.0.1:8080" and "the last
     /// connection was refused" can both be on screen — which is exactly the pair you
@@ -74,6 +97,8 @@ public sealed partial class PortForwardTabViewModel : InspectorTabViewModelBase
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Health))]
+    [NotifyPropertyChangedFor(nameof(IsHealthy))]
+    [NotifyPropertyChangedFor(nameof(HasConnectionError))]
     private string? _connectionError;
 
     /// <summary>Drives the status dot: running and clean is ok, running with a failed connection is warn.</summary>
@@ -82,6 +107,11 @@ public sealed partial class PortForwardTabViewModel : InspectorTabViewModelBase
         : ConnectionError is null
             ? ResourceHealth.Ok
             : ResourceHealth.Warn;
+
+    /// <summary>Severity for the status bar, as two bools the view can bind classes to.</summary>
+    public bool IsHealthy => IsRunning && ConnectionError is null;
+
+    public bool HasConnectionError => ConnectionError is not null;
 
     /// <summary>Ports are configuration, not controls — a running forward's inputs are read-only.</summary>
     public bool CanEditPorts => !IsRunning;
@@ -107,6 +137,9 @@ public sealed partial class PortForwardTabViewModel : InspectorTabViewModelBase
         _podPort = _selectedPort?.Number ?? 8080;
 
         Key = $"portforward:{@namespace}/{podName}:{Guid.NewGuid():N}";
+        // A pane that says nothing on open is indistinguishable from one that failed
+        // to load (UI rule 9); the resting state is a sentence, not a blank.
+        StatusMessage = "Not forwarding. Pick a port and press Start.";
         UpdateTitle();
     }
 
@@ -152,6 +185,7 @@ public sealed partial class PortForwardTabViewModel : InspectorTabViewModelBase
         }
 
         ConnectionError = null;
+        StatusIsError = false;
         try
         {
             var session = _client.StartPortForward(_namespace, _podName, PodPort, LocalPort);
@@ -160,7 +194,10 @@ public sealed partial class PortForwardTabViewModel : InspectorTabViewModelBase
             _session = session;
             LocalPort = session.LocalPort;
             IsRunning = true;
-            StatusMessage = $"Forwarding 127.0.0.1:{LocalPort} → {_podName}:{PodPort}";
+            // No "Forwarding 127.0.0.1:x → pod:y" sentence any more: while running, the
+            // status bar shows the local URL itself (copyable, openable) and the tab
+            // header already carries pod:port, so the sentence restated both.
+            StatusMessage = null;
         }
         catch (PortForwardException ex)
         {
@@ -168,10 +205,12 @@ public sealed partial class PortForwardTabViewModel : InspectorTabViewModelBase
             // use — choose a different local port"). A raw SocketException here named
             // neither the port nor the remedy.
             StatusMessage = ex.Message;
+            StatusIsError = true;
         }
         catch (Exception ex)
         {
             StatusMessage = $"Failed to start: {ex.Message}";
+            StatusIsError = true;
         }
     }
 
@@ -191,6 +230,7 @@ public sealed partial class PortForwardTabViewModel : InspectorTabViewModelBase
 
         IsRunning = false;
         ConnectionError = null;
+        StatusIsError = false;
         StatusMessage = "Stopped.";
     }
 
@@ -204,6 +244,7 @@ public sealed partial class PortForwardTabViewModel : InspectorTabViewModelBase
         }
 
         await clipboard.SetTextAsync(LocalUrl);
+        StatusIsError = false;
         StatusMessage = $"Copied {LocalUrl} to the clipboard.";
     }
 
@@ -219,6 +260,7 @@ public sealed partial class PortForwardTabViewModel : InspectorTabViewModelBase
         catch (Exception ex)
         {
             StatusMessage = $"Could not open a browser: {ex.Message}";
+            StatusIsError = true;
         }
     }
 

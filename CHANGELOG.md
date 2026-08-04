@@ -52,6 +52,17 @@ it as the GitHub Release body, so headings must match tags exactly
   sits next to the reference it reveals rather than at the pane's right edge.
 - Long inspector tab titles (a generated pod name is ~50 characters) trim with
   a tooltip instead of pushing the dock's tab strip onto a second row.
+- **ConfigMap-backed environment variables show their value straight away.**
+  Only Secrets are hidden now, behind an eye toggle that can also hide the value
+  again — a ConfigMap is ordinary configuration, and a click to read
+  `LOG_LEVEL=info` bought nothing. Nothing is fetched for a Secret until you ask
+  for it, so the value still never reaches the app unrequested.
+- **The port-forward panel was rebuilt.** Six rows became two: the panel title
+  the dock tab already carried is gone, fields read local → pod in the direction
+  the traffic goes, the local port is an empty box marked `auto` instead of a
+  `0` that silently meant the same thing, Start and Stop are one button rather
+  than a pair with one half always dead, and a running forward shows its local
+  URL — selectable, copyable, openable — instead of a sentence about it.
 
 ### Fixed
 

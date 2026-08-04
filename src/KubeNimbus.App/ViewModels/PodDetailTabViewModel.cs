@@ -493,6 +493,12 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
                     "ConfigMap", crName.GetString() ?? "", $"All keys from ConfigMap/{crName.GetString()}{prefixSuffix}{optional}"));
             }
         }
+
+        // Fire-and-forget: the tab is already usable, and each row fills itself in as
+        // its ConfigMap comes back. Guarded by the signature above, so a watch tick
+        // that changed nothing doesn't re-issue these. Failures land on their own row
+        // (RevealError), which is why nothing is observed here.
+        _ = ResolveConfigMapValuesAsync();
     }
 
     /// <summary>Finds one container's spec across all three container arrays.</summary>
@@ -648,6 +654,38 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         };
     }
 
+    /// <summary>
+    /// The eye toggle on a Secret row. Once fetched the value is kept, so hiding and
+    /// showing it again costs nothing and doesn't re-hit the API server — the button
+    /// is a visibility control, which is what an eye icon promises.
+    /// </summary>
+    [RelayCommand]
+    private async Task ToggleEnvVarAsync(EnvVarViewModel v)
+    {
+        if (v.RevealedValue is not null)
+        {
+            v.IsRevealed = !v.IsRevealed;
+            return;
+        }
+
+        await RevealEnvVarAsync(v);
+    }
+
+    /// <summary>
+    /// Resolves every <c>configMapKeyRef</c> row in the current list. ConfigMaps are
+    /// ordinary configuration, so their values are on screen without being asked for;
+    /// the fetches are sequential because the cache dedupes by object name and a
+    /// container referencing eight keys of one ConfigMap should issue one GET, not
+    /// eight parallel ones that all miss the cache together.
+    /// </summary>
+    private async Task ResolveConfigMapValuesAsync()
+    {
+        foreach (var v in EnvironmentVars.Where(v => v.SecretOrConfigMapKind == "ConfigMap").ToList())
+        {
+            await RevealEnvVarAsync(v);
+        }
+    }
+
     [RelayCommand]
     private async Task RevealEnvVarAsync(EnvVarViewModel v)
     {
@@ -683,6 +721,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
             }
 
             v.RevealedValue = kind == "Secret" ? DecodeBase64(rawValue.GetString()!) : rawValue.GetString();
+            v.IsRevealed = true;
         }
         catch (Exception ex)
         {

@@ -172,6 +172,52 @@ choice must be AOT/trimming-compatible from day one.
    `Pod/<name>` / `Helm/<name>` / `Access/<ns>`, so a row that repeats it is a
    row spent on nothing (this is why `HelmReleaseView` and `RbacView` no longer
    have one).
+11. **A form puts its label above the input, and its state in an InfoBar.** Both
+   are WinUI's own patterns ([Fluent basics][fluent-basics]), and both replace
+   something that had gone wrong by hand. A label *beside* its input sits in an
+   `Auto` column with no gap of its own, so "Local port" ran straight into its
+   own text box in the port-forward pane, and every pane that tried invented a
+   different hand-tuned spacer column; `TextBlock.fieldLabel` above the control
+   has nothing to collide with and takes the field's own width. State was a bare
+   `Ellipse.statusDot` next to a sentence, which carries the information only
+   for someone who already knows the colour code; `Border.infoBar` (+ `.success`
+   / `.warn` / `.error`, severity as a bound class) states it. Two more things
+   the port-forward pane settled: fields read in the direction the traffic goes
+   and the status line prints (**local → pod**, it used to read pod-first), and
+   a control pair where one half is always disabled is one control — Start and
+   Stop are the same slot, swapped on `IsRunning`, not a live button beside a
+   dead one.
+
+[fluent-basics]: https://learn.microsoft.com/en-us/windows/apps/design/basics/
+
+## ConfigMaps are shown, Secrets are masked
+
+Pod detail's Environment tab treats the two reference kinds differently, and the
+difference is the point — they used to be one code path with one "Reveal" chip,
+which was simultaneously too guarded and not guarded enough:
+
+- A **`configMapKeyRef` resolves on open** and renders like any literal, with
+  `ConfigMap/<name> · key=<k>` as the caption underneath. A ConfigMap is not
+  secret; it is ordinary configuration that anyone who can read the pod can read
+  anyway, and charging a click to see `LOG_LEVEL=info` bought nothing. It costs
+  one GET per *distinct* ConfigMap — `PodDetailTabViewModel.ResolveConfigMapValuesAsync`
+  awaits them one at a time precisely so eight keys of one object don't become
+  eight parallel misses of `_secretConfigMapCache`. It is fire-and-forget from
+  `RefreshEnvironment`, guarded by the same env signature, so a watch tick that
+  changed nothing re-fetches nothing; a failure lands on its own row's
+  `RevealError`, never on the tab.
+- A **`secretKeyRef` stays masked** behind `EnvVarViewModel.MaskedValue` (a fixed
+  eight dots — the *length* of a secret is worth not leaking too) with an
+  eye/eye-off toggle. Nothing is fetched until it is clicked: the mask is a
+  placeholder, not a hidden copy, so a secret never enters this process — or a
+  screen-share — because a pane happened to be open, and an RBAC 403 on Secrets
+  lands on the one row someone asked about rather than on four nobody did.
+  `ToggleEnvVarCommand` keeps the fetched value and flips `IsRevealed`, so the
+  eye can **hide** it again; the old chip was one-way, and a value revealed on a
+  shared screen stayed there until the tab was closed.
+
+The YAML editor's Secret "Reveal values" panel is the other half of this and is
+unchanged: `data` stays base64 in the editable text, matching kubectl.
 
 ## The Advanced view
 
@@ -1200,7 +1246,8 @@ Secret reveal path against a real Secret, the row context menu and the new
 palette entries by actual mouse/keyboard (they were verified by construction,
 not driven), Advanced-view off/on in the *running* app rather than in the
 harness, and the win-x64 NativeAOT publish — still the one build that has never
-run anywhere.
+run anywhere. **Closed 2026-08-04** except win-x64 NativeAOT — see "Live-cluster
+validation pass" below.
 
 **Inspector density pass:** driven by a screenshot of the running app whose
 complaint was, in three parts, "tabs too big, too much nesting, too little room
@@ -1248,6 +1295,81 @@ has only been seen in the harness. The row heights it frees up are worth a look
 in the running app, particularly a pod with many containers (the strip now
 scrolls rather than wrapping) and a filter box narrowed by a small window.
 And win-x64 NativeAOT remains the build that has never run anywhere.
+**Closed 2026-08-04** for the running-app half — see "Live-cluster validation
+pass" below; win-x64 NativeAOT is still outstanding.
+
+**Live-cluster validation pass (2026-08-04):** a hand-driven pass against the
+sandbox to close the "not verified" gaps the two passes above both flagged —
+the port-forward pane, the Secret reveal path, the row context menu, and the
+Advanced-view toggle had each only ever been exercised by construction or in
+the headless harness, never actually clicked. Docker's daemon and the
+`rancher/k3s` pull both worked this time (the egress block on prior sessions
+was environment-specific, not a standing constraint), so `docker start
+kubenimbus-sandbox` plus a ~45s wait for kubelet to reconcile after the
+container restart was enough — no `-Recreate` needed. Method: the Avalonia
+DevTools MCP attached to the running Debug build for node-targeted clicks
+(`input` with `Click`/`Text`/`KeyDown` — reliable for buttons/tabs/ListBoxItems,
+but the DataGrid row's double-click-to-open gesture doesn't answer to a
+synthetic `Click` twice in a row, since ClickCount tracking lives in Avalonia's
+input manager, not the diagnostics bridge), with computer-use driving real
+mouse/keyboard for the gestures DevTools can't send (double-click, right-click)
+and for resizing the window. The window was resized from the physical
+3840×1600 panel down to **1920×1080** via a direct Win32 `SetWindowPos` (found
+by `EnumWindows` — the title is `"kubeNimbus"` but window-name lookup by exact
+string missed it, so enumerate-and-grep was the reliable path) — reviewing UI
+at native 4K-wide would have hidden the layout problems a majority of users
+would actually see at Full HD. None turned up at 1920×1080: sidebar, dock and
+tab strip all stayed within bounds with no clipping or wrapping.
+
+Confirmed working, each against real cluster state (not fixtures):
+
+- **Logs start on open, no click.** Double-clicking `demo-broken/crashloop`
+  populated the Logs tab immediately with its real ERROR line.
+- **Container switch switches the stream.** Selecting `access-log-tailer` on
+  `demo-shop/shop-web-*` replaced the `web` container's nginx access log with
+  the tailer's own heartbeat/WARN/ERROR lines — not the old container's log
+  under the new label.
+- **Non-keyword log lines are visible**, not invisible-by-null-brush: the
+  `web` container's plain nginx `[notice]`/access lines rendered in normal
+  text color alongside the tailer's colour-coded severity lines.
+- **Env tab, live.** `shop-web`'s `web` container showed a literal
+  (`SERVICE_NAME`), a ConfigMap ref, a Secret ref, and a `fieldRef:
+  status.podIP` resolved to the pod's real IP; clicking **Reveal** on the
+  Secret ref decoded a real value (`sandbox-token-0000`) from the live
+  `shop-credentials` Secret.
+- **Exec, end to end.** Connecting to `shop-web`'s `web` container (an nginx
+  image, no bash) reported "Connected to web (/bin/sh)" — the bash→sh→ash
+  probe correctly skipped bash — the input box had focus without an extra
+  click, and `echo hello_from_kubenimbus` round-tripped through the real
+  WebSocket exec channel.
+- **Port-forward, end to end** — the one surface Core-only (`pftest.cs`) had
+  ever exercised. Declared port 80 offered by name/number from the pod spec,
+  Start produced `Forwarding 127.0.0.1:50337 → shop-web-...:80`, and `curl
+  http://127.0.0.1:50337/` returned a real `HTTP 200` from the pod's nginx.
+  Stop cleanly reverted to a "Stopped." state with inputs re-enabled.
+- **Row context menu** opens on the row under the cursor (not the previous
+  selection) with all six actions; **Edit YAML** from it opened a real pod
+  manifest with live `managedFields`, syntax highlighting, and working
+  Apply/Delete.
+- **Advanced view toggle**, live: CPU/Memory columns and per-container
+  sparklines appeared with real polled values from metrics-server (e.g.
+  `cache-0` at `1m`/`5.0 MiB`), and sidebar kind-count badges appeared next to
+  every section.
+- **Helm release detail**, live: `Helm/checkout` opened straight to the
+  Values/Manifest/Notes/History strip with no repeated title row (the
+  density-pass fix), decoded real chart values, and History showed the
+  sandbox's synthetic 3-revision release (`checkout-0.2.1`/`-0.2.0`/`-0.1.0`,
+  rev 3 `deployed`, 1–2 `superseded`) with real timestamps.
+
+Build: 0 warnings. **TUnit: 137/137 passed, 0 skipped**, run via the test
+`.exe` directly (`dotnet test --project` still reports "Zero tests ran" on
+this SDK — see below) — 0 skipped confirms the cluster-gated tests really ran
+against a live server, not just the unit-only subset.
+
+**Not covered this pass**: RBAC access review / Who-can (unchanged since the
+last pass that verified it), init/ephemeral container visibility, and the
+win-x64 NativeAOT publish, which has still never run on any machine this
+project has touched.
 
 ### `dotnet test --project` is broken on this machine (SDK 10.0.400-preview)
 
@@ -1266,3 +1388,34 @@ unaffected — but if a local run ever looks suspiciously green *or* suspiciousl
 empty, check the invocation before the code. This is the second distinct way
 `dotnet test` has silently run nothing in this repo; the first (a positional
 csproj, exit 0) is documented under Verification workflow.
+
+**Fluent form/state pass:** two surfaces reworked against [Fluent basics][fluent-basics],
+adding UI rule 11 and the ConfigMap/Secret section above.
+
+- **Port forward.** Was a six-row stack under a `PORT FORWARD` title the dock tab
+  already carried, with beside-the-input labels ("Local port" touching its own
+  box), a Start/Stop pair one half of which is always dead, a `0` that silently
+  meant "pick one for me", and a bare status dot. Now: no title row, one field
+  row reading local → pod with labels above (`TextBlock.fieldLabel`), the
+  declared-port picker beside the pod-port box rather than on a row of its own,
+  one button that swaps on `IsRunning`, an empty box under an `auto` placeholder
+  (`LocalPortInput`, where null *is* the wire value 0), and a `Border.infoBar`
+  carrying the local URL itself — selectable, copyable, openable — since reaching
+  the thing you forwarded is the whole point of forwarding it. The running
+  `StatusMessage` sentence is gone (the bar and the tab header said all of it);
+  `StatusIsError` distinguishes "Stopped." from "Local port 8080 is already in
+  use", which used to render identically.
+- **Env tab.** ConfigMap refs resolve on open, Secret refs mask behind an eye —
+  see the section above for the rules and the reasons.
+- New screenshot scenario `cluster-tab-port-forward-idle` (the state the tab
+  actually opens in, and the one nothing rendered before), and
+  `cluster-tab-pod-detail-environment` now drains the auto-resolve before writing
+  its fixture values, same as `HelmReleaseDetail` — the offline client's
+  "connection refused" otherwise lands on the capture's own `RunJobs()`.
+
+**Verified this session**: build (0 warnings), **137/137 TUnit, 0 skipped**
+(sandbox up, so the cluster-gated tests really ran), and all 34 scenarios × both
+themes rendered. **Not verified**: neither surface has been driven by hand in the
+running app this session — the eye toggle against a real Secret and a real
+forward's start/stop are the two worth clicking. win-x64 NativeAOT remains the
+build that has never run anywhere.
