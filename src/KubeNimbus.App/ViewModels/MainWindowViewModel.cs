@@ -1,4 +1,7 @@
 using System.Collections.ObjectModel;
+using Avalonia;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KubeNimbus.Core;
@@ -84,6 +87,19 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     /// <summary>Context name → user-assigned environment, overriding the name guess. Persisted.</summary>
     private readonly Dictionary<string, ClusterEnvironment> _environmentOverrides = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Kubeconfig files chosen through <see cref="OpenKubeconfigFileCommand"/>, searched
+    /// alongside $KUBECONFIG and ~/.kube/config. Persisted as paths and nothing else —
+    /// the file is re-read through <c>Kubeconfig</c> on every load and every connect, so
+    /// no credential is ever copied into app storage (CLAUDE.md rule #4).
+    ///
+    /// This exists because neither of the other two routes is reachable for the audience
+    /// that most needs one: $KUBECONFIG isn't inherited by a GUI launched from Explorer,
+    /// a shortcut or the Store, and "drop a file at ~/.kube/config" is not an instruction
+    /// anyone can follow from inside the app.
+    /// </summary>
+    private readonly List<string> _pickedKubeconfigPaths = [];
 
     /// <summary>
     /// The one global "advanced view" switch — persisted, default off. Off hides the
@@ -182,6 +198,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         _recent.Clear();
         _recent.AddRange(settings.RecentContexts ?? []);
+
+        _pickedKubeconfigPaths.Clear();
+        _pickedKubeconfigPaths.AddRange(settings.KubeconfigPaths ?? []);
 
         // Straight to the backing field: this runs during construction, before any
         // binding or tab exists, and going through the property would only persist
@@ -349,7 +368,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         try
         {
-            var contexts = await Kubeconfig.LoadContextsAsync();
+            var contexts = await Kubeconfig.LoadContextsAsync(extraPaths: _pickedKubeconfigPaths);
             AvailableContexts.Clear();
             foreach (var ctx in contexts)
             {
@@ -357,10 +376,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
 
             HasContexts = AvailableContexts.Count > 0;
-            KubeconfigSearchPaths = string.Join(
-                Environment.NewLine,
-                Kubeconfig.CandidatePaths().Select(c =>
-                    $"{(c.Exists ? "found  " : "missing")}  {c.Path}   ({c.Source})"));
+            RefreshSearchPaths();
             Status = HasContexts
                 ? $"{AvailableContexts.Count} context(s) available."
                 : "No kubeconfig contexts found.";
@@ -369,15 +385,95 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            // Still refresh the search list: a file that failed to parse is exactly
+            // when "here is what was read" matters, and leaving the previous list on
+            // screen would name the wrong file (UI rule 9).
+            RefreshSearchPaths();
             Status = $"Failed to read kubeconfig: {ex.Message}";
             return false;
         }
     }
 
+    /// <summary>
+    /// Rebuilds the empty state's "Searched:" list. Picked files carry their own
+    /// source label, so a config the user chose is distinguishable from one the app
+    /// found — and a picked file that has since been moved shows as <c>missing</c>
+    /// instead of vanishing without explanation.
+    /// </summary>
+    private void RefreshSearchPaths() =>
+        KubeconfigSearchPaths = string.Join(
+            Environment.NewLine,
+            Kubeconfig.CandidatePaths(_pickedKubeconfigPaths).Select(c =>
+                $"{(c.Exists ? "found  " : "missing")}  {c.Path}   ({c.Source})"));
+
     [RelayCommand]
     private async Task ReloadContextsAsync()
     {
         if (await LoadContextsAsync() && Tabs.Count == 0 && AvailableContexts.Count > 0)
+        {
+            await AddTabAsync(AvailableContexts[0]);
+        }
+    }
+
+    /// <summary>
+    /// "Open kubeconfig file…" — the only route to a cluster that works from inside the
+    /// app. $KUBECONFIG is not inherited by a GUI launched from Explorer, a shortcut or
+    /// the Microsoft Store, and "put a file at ~/.kube/config" is an instruction nobody
+    /// can act on without leaving the app, so a first run on a clean machine had no
+    /// reachable next step at all.
+    ///
+    /// The file is never copied or read into app storage: only its path is kept, and
+    /// every load and every connect re-resolves it through the same kubeconfig chain
+    /// as any other file (CLAUDE.md rule #4).
+    /// </summary>
+    [RelayCommand]
+    private async Task OpenKubeconfigFileAsync()
+    {
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop
+            || desktop.MainWindow?.StorageProvider is not { } storage)
+        {
+            return;
+        }
+
+        var files = await storage.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Open kubeconfig file",
+            AllowMultiple = false,
+            // Kubeconfig files are as often extensionless ("config") as .yaml, so an
+            // extension filter alone would hide the single most likely file.
+            FileTypeFilter =
+            [
+                new FilePickerFileType("kubeconfig") { Patterns = ["config", "*.yaml", "*.yml", "*.conf", "kubeconfig*"] },
+                FilePickerFileTypes.All,
+            ],
+        });
+
+        if (files.Count == 0 || files[0].TryGetLocalPath() is not { Length: > 0 } path)
+        {
+            return;
+        }
+
+        // Try it before remembering it. A file that turns out not to be a kubeconfig
+        // would otherwise be persisted and re-break every subsequent start, with the
+        // rescan button rerunning the same failure.
+        var previous = _pickedKubeconfigPaths.ToArray();
+        _pickedKubeconfigPaths.RemoveAll(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
+        _pickedKubeconfigPaths.Insert(0, path);
+
+        if (!await LoadContextsAsync() || !HasContexts)
+        {
+            _pickedKubeconfigPaths.Clear();
+            _pickedKubeconfigPaths.AddRange(previous);
+            await LoadContextsAsync();
+            Status = $"No clusters in {Path.GetFileName(path)} — it has no contexts, or it isn't a kubeconfig file.";
+            return;
+        }
+
+        SaveWorkspace();
+
+        // Same follow-through as a rescan that finds something: opening the file and
+        // then being left on the empty state would read as the pick not having worked.
+        if (Tabs.Count == 0)
         {
             await AddTabAsync(AvailableContexts[0]);
         }
@@ -520,6 +616,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             PinnedContexts = [.. _pinned],
             RecentContexts = [.. _recent],
             EnvironmentOverrides = _environmentOverrides.ToDictionary(kv => kv.Key, kv => kv.Value.ToString()),
+            KubeconfigPaths = [.. _pickedKubeconfigPaths],
         });
     }
 

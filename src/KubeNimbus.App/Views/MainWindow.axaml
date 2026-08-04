@@ -221,15 +221,22 @@
               </StackPanel>
 
               <TextBlock TextWrapping="Wrap" Opacity="0.75" FontSize="12"
-                         Text="kubeNimbus never stores credentials — it reads clusters from your kubeconfig: every entry of $KUBECONFIG, then the default location. Searched:" />
+                         Text="kubeNimbus never stores credentials — it reads clusters from your kubeconfig: any file you have opened here, then every entry of $KUBECONFIG, then the default location. Searched:" />
               <TextBlock Text="{Binding KubeconfigSearchPaths}" FontFamily="Cascadia Mono,Consolas,monospace"
                          FontSize="11.5" Opacity="0.85" TextWrapping="Wrap" />
 
+              <!-- Ordered by what a user on a clean machine can actually do, most
+                   reachable first. The file picker is the only route that works from
+                   inside the app: $KUBECONFIG is not inherited by a GUI launched from
+                   Explorer, a shortcut or the Store, so "set the variable" is a
+                   restart away at best, and it used to be the first thing offered. -->
               <TextBlock TextWrapping="Wrap" Opacity="0.75" FontSize="12"
-                         Text="Point $KUBECONFIG at a config file (and restart the app so it inherits the variable), or drop one at the default location and press Rescan. To spin up a throwaway local cluster, run scripts/sandbox-up from the repo." />
+                         Text="Open a kubeconfig file to add its clusters — kubeNimbus remembers where the file is, not what is in it. If you already have one at the default location, or you have set $KUBECONFIG in a terminal and restarted the app, press Rescan." />
 
-              <Button Classes="accent" Content="Rescan kubeconfig" Command="{Binding ReloadContextsCommand}"
-                      HorizontalAlignment="Left" />
+              <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Left">
+                <Button Classes="accent" Content="Open kubeconfig file…" Command="{Binding OpenKubeconfigFileCommand}" />
+                <Button Content="Rescan" Command="{Binding ReloadContextsCommand}" />
+              </StackPanel>
             </StackPanel>
           </Border>
         </StackPanel>
