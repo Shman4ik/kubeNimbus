@@ -244,7 +244,7 @@
             <StackPanel Spacing="12">
               <StackPanel Orientation="Horizontal" Spacing="8">
                 <PathIcon Data="{StaticResource AlertCircleIconGeometry}" Width="15" Height="15" VerticalAlignment="Center"
-                          Foreground="{StaticResource WarnBrush}" />
+                          Foreground="{StaticResource AppWarningBrush}" />
                 <TextBlock Text="{Binding Status}" FontWeight="SemiBold" VerticalAlignment="Center" />
               </StackPanel>
 

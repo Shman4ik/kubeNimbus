@@ -37,6 +37,38 @@ choice must be AOT/trimming-compatible from day one.
   runner is pinned in `global.json` (`test.runner = Microsoft.Testing.Platform`).
 - Nullable enabled; async all the way (no `.Result`/`.Wait()`); DTOs are records.
 
+## The sibling project, and what is shared with it
+
+pgNimbus (`X:\source\pgNimbus`, normally checked out beside this repo) is the
+same product for a different database, and the two must look and behave like one
+family. The shared half lives in **[`shared/nimbusUi`](shared/nimbusUi/)** — a
+git subtree of [nimbusUi](https://github.com/Shman4ik/nimbusUi), referenced as an
+ordinary `ProjectReference`:
+
+- `Theme/Tokens.axaml` — the palette, radii, scrollbars, Fluent resource overrides.
+- `Theme/Icons.axaml` — the MDI glyphs both apps draw.
+- `Theme/Theme.axaml` — the shared style classes (`card`, `layer`, `chip`,
+  `toolbar`, `searchpill`, `statusBar`, …).
+- `Chrome/` — the one-bar window chrome and its drawn caption buttons.
+- `Hotkeys.cs` — Ctrl/Cmd resolution; `KubeNimbus.App.Hotkeys` forwards to it and
+  adds this app's own gestures.
+- **[`DESIGN.md`](shared/nimbusUi/DESIGN.md) — the UI rules, single source.**
+
+Three rules about it:
+
+1. **A change to a shared surface is a change to both apps.** Edit the files in
+   place, build kubeNimbus, then `git subtree push --prefix shared/nimbusUi`,
+   pull it into pgNimbus and build that too. Both working copies are normally
+   open side by side, so this is one session's work, not a follow-up ticket. The
+   PR template asks for the paired PR.
+2. **The membership test is "can it be described without naming Kubernetes?"**
+   If yes it probably belongs up there; if no it stays here. When in doubt leave
+   it here — a wrong thing pulled up has to be un-shared against two consumers.
+3. **`DESIGN.md` owns the rule text; this file owns the evidence.** The UI rules
+   below that are shared say so, and what they keep is the kubeNimbus-specific
+   incident that produced them. Don't restate a shared rule here in full — that
+   is exactly how the two files started disagreeing.
+
 ## Hard architectural rules (non-negotiable)
 
 1. **KubeNimbus.Core has ZERO Avalonia/UI dependencies.** The engine stays
@@ -65,6 +97,14 @@ choice must be AOT/trimming-compatible from day one.
    chain at connect time.
 
 ## UI design rules
+
+> Rules **1, 2, 5, 8, 8b, 9, 11, 12 and 14 are shared with pgNimbus**, and their
+> canonical statement is in [`shared/nimbusUi/DESIGN.md`](shared/nimbusUi/DESIGN.md)
+> (as its rules 1, 2, 3, 5, 6, 7, 8, 9 and 12). What is kept below is the
+> kubeNimbus incident behind each one — the concrete failure is the reason the
+> rule is believed, and it is worth more here than a second copy of the rule.
+> Change a shared rule in DESIGN.md, not here. Rules 3, 4, 6, 7, 10 and 13 are
+> this app's own.
 
 1. **Minimalist.** Every always-visible control must be justified; default answer
    is no. Secondary actions live in a command palette (Ctrl+K) or context menus.

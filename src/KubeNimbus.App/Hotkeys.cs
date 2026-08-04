@@ -1,18 +1,20 @@
-using System.Runtime.InteropServices;
 using Avalonia.Input;
 
 namespace KubeNimbus.App;
 
 /// <summary>
-/// Single source of truth for platform chord modifiers. No Ctrl gesture is
-/// hardcoded in views: palette labels and the cheat sheet all derive from here,
-/// so Cmd-on-macOS vs Ctrl-elsewhere stays consistent.
+/// This app's gestures. The modifier itself and the labelling come from
+/// <see cref="Nimbus.Ui.Hotkeys"/>, shared with pgNimbus; what lives here is the
+/// set of chords kubeNimbus binds and the cheat sheet describing them.
+/// <para>
+/// No Ctrl gesture is hardcoded in a view — including the ones built in a loop
+/// (Ctrl/Cmd+1…9 for tab jumps come from <see cref="Primary"/> in code-behind).
+/// </para>
 /// </summary>
 public static class Hotkeys
 {
-    /// <summary>Cmd on macOS, Ctrl everywhere else.</summary>
-    public static KeyModifiers Primary { get; } =
-        RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? KeyModifiers.Meta : KeyModifiers.Control;
+    /// <summary>Cmd on macOS, Ctrl everywhere else. Forwarded from the shared resolver.</summary>
+    public static KeyModifiers Primary => Nimbus.Ui.Hotkeys.Primary;
 
     public static readonly KeyGesture CommandPalette = new(Key.K, Primary);
 
@@ -34,17 +36,15 @@ public static class Hotkeys
     public static readonly KeyGesture ShortcutsHelp = new(Key.F1);
 
     /// <summary>"Cmd" on macOS, "Ctrl" elsewhere — for describing chords built by hand.</summary>
-    public static string PrimaryLabel { get; } = Primary.HasFlag(KeyModifiers.Meta) ? "Cmd" : "Ctrl";
+    public static string PrimaryLabel => Nimbus.Ui.Hotkeys.PrimaryLabel;
 
     /// <summary>Human-readable label for a gesture, for palette rows and the cheat sheet.</summary>
-    public static string Describe(KeyGesture gesture)
-    {
-        var mod = gesture.KeyModifiers.HasFlag(KeyModifiers.Meta) ? "Cmd"
-            : gesture.KeyModifiers.HasFlag(KeyModifiers.Control) ? "Ctrl"
-            : "";
-        return string.IsNullOrEmpty(mod) ? gesture.Key.ToString() : $"{mod}+{gesture.Key}";
-    }
+    public static string Describe(KeyGesture gesture) => Nimbus.Ui.Hotkeys.Describe(gesture);
 
+    /// <summary>
+    /// One row of the cheat sheet. Re-exported from the shared type so views can keep
+    /// saying <c>Hotkeys.ShortcutEntry</c> without also knowing where it comes from.
+    /// </summary>
     public sealed record ShortcutEntry(string Action, string Keys);
 
     /// <summary>Single source of truth for the F1 cheat sheet (ShortcutsOverlay) —

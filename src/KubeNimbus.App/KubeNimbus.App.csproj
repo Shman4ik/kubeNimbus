@@ -39,6 +39,12 @@
 
   <ItemGroup>
     <ProjectReference Include="../KubeNimbus.Core/KubeNimbus.Core.csproj" />
+    <!-- The design system shared with pgNimbus. A git subtree, not a NuGet
+         package: the sources stay in the tree, so the NativeAOT publish needs no
+         feed and a colour change is one edit and one build. See
+         shared/nimbusUi/README.md for the subtree pull/push commands, and
+         shared/nimbusUi/DESIGN.md for the rules it enforces. -->
+    <ProjectReference Include="../../shared/nimbusUi/src/Nimbus.Ui/Nimbus.Ui.csproj" />
   </ItemGroup>
 
   <ItemGroup>

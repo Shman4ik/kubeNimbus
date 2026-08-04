@@ -33,6 +33,14 @@ Anything left unverified:
 
 - [ ] [CLAUDE.md](../CLAUDE.md) updated if this changes anything it describes
       — it's the contract, not a record of the past
+- [ ] **Touches `shared/nimbusUi`?** Then the change is pgNimbus's too: push
+      the subtree up (`git subtree push --prefix shared/nimbusUi …`), open the
+      matching pgNimbus PR, and link it here. A shared change that lands in one
+      app only is how the copies drifted in the first place — see
+      [DESIGN.md](../shared/nimbusUi/DESIGN.md).
+- [ ] Anything general enough for pgNimbus (a token, a style class, a window
+      behaviour) went into `shared/nimbusUi` rather than this app's
+      `Styles/Theme.axaml`
 - [ ] `CHANGELOG.md` `[Unreleased]` updated for a user-visible change
 - [ ] No new UI state that renders as a blank rectangle (loading / empty /
       disconnected / partial / error each have an explicit visual)
