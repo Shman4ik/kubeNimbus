@@ -24,6 +24,13 @@ public static class Hotkeys
     /// </summary>
     public static readonly KeyGesture ClusterSwitcher = new(Key.P, Primary);
 
+    /// <summary>
+    /// Focus the resource list's search box. Its own gesture rather than a palette
+    /// entry because it is the find-in-list every application has bound to this chord,
+    /// and typing a pod name is the fastest way through a 200-row namespace.
+    /// </summary>
+    public static readonly KeyGesture FilterList = new(Key.F, Primary);
+
     public static readonly KeyGesture ShortcutsHelp = new(Key.F1);
 
     /// <summary>"Cmd" on macOS, "Ctrl" elsewhere — for describing chords built by hand.</summary>
@@ -49,6 +56,7 @@ public static class Hotkeys
         new("Jump to cluster tab 1–9", $"{PrimaryLabel}+1…9"),
         new("Open the command palette", Describe(CommandPalette)),
         new("Show this cheat sheet", Describe(ShortcutsHelp)),
+        new("Search the resource list by name", Describe(FilterList)),
         new("Open the selected resource", "Enter"),
         new("Quick-peek the selected resource", "Space"),
         new("Default action (pod → logs, resource → YAML, …)", "Double-click"),

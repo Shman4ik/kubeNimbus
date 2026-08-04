@@ -47,6 +47,12 @@ it as the GitHub Release body, so headings must match tags exactly
   selected. Right-click a cluster tab to correct the guess; the assignment is
   remembered.
 - **`Ctrl`/`Cmd`+`1`…`9`** jumps straight to a cluster tab (9 = last).
+- **Search the resource list by name** (`Ctrl`/`Cmd`+`F`, or the box in the list
+  header). Matches name, namespace and — across clusters — the cluster, with a
+  running "12 of 87" beside it so a filtered list never looks like a small one.
+  `Esc` clears it, `Enter` moves to the rows, and a search that matches nothing
+  says so and offers the way back rather than showing an empty table. The
+  sidebar's box filters resource *kinds*; this one filters the objects.
 
 ### Changed
 
@@ -105,6 +111,11 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Fixed
 
+- Table columns ran into each other. A right-aligned value sat flush against the
+  next column's text — `48 MiB16d` — and, worse, the `—` shown for a pod with no
+  usage reading landed against its age and read as a negative one (`—5d`). Cells
+  now have a gutter on both sides, and the column widths were re-cut so the last
+  column still fits in a narrow window.
 - Clicking a cluster in the switcher only worked when the click landed on the
   cluster's name. A pointer handler sat on the row's content panel, which in
   Avalonia doesn't receive clicks where no child covers it — so most of each

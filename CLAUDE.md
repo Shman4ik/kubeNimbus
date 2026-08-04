@@ -252,6 +252,42 @@ choice must be AOT/trimming-compatible from day one.
      buttons, their hover states and the reserve correctly, and it is how this was
      verified at all.
 
+13. **The list gets its own search box, and it is not the sidebar's.** The sidebar
+   filter narrows *kinds*; nothing narrowed the *objects*, so finding one pod in a
+   namespace of two hundred meant scrolling — the job `kubectl get | grep` has always
+   done, and the one gesture the list had no answer to. `ClusterTabViewModel.RowFilter`
+   drives it, Ctrl/Cmd+F (`Hotkeys.FilterList`) focuses it, Esc clears it and then
+   hands focus back to the rows, Enter/↓ moves to the rows. Three things are
+   load-bearing:
+   - **`Rows` stays the watch's own list; the grid renders `VisibleRows`.** The
+     informer applies Added/Modified/Deleted against `Rows` by key, so a row hidden by
+     the filter has to stay in it — remove it and the next watch event for that object
+     reads as a fresh add. `VisibleRows` is mirrored from `Rows`'s own
+     `CollectionChanged`, which is *why* the watch, the fleet merge, `PopulateDemoRows`
+     and every screenshot fixture still write to `Rows` and know nothing about a
+     filter. Appends and removes are handled incrementally; anything else rebuilds.
+   - **It matches what identifies an object** — name, namespace, and cluster in fleet
+     mode (`ResourceRowViewModel.Matches`) — and deliberately not the status, which
+     would make "Running" match most of a healthy list.
+   - **A search that matches nothing is its own state** (`IsFilterEmpty`), separate
+     from `IsListEmpty`: "this namespace has no pods" and "no pod here is called that"
+     send you looking for opposite problems. It names the query, says how many rows it
+     filtered out of, and offers the way back. The filter is cleared when the selected
+     kind changes — carrying "nginx" from Pods to ConfigMaps lands on an empty list
+     that looks like a broken watch.
+14. **A `DataGridCell` needs a gutter on both sides.** Fluent's cell padding is
+   left-only, which is invisible while every column is left-aligned and actively
+   *misleading* as soon as one isn't. The resource list's Memory column is
+   right-aligned, so its "—" placeholder landed hard against Age's "5d" and the pair
+   read as `—5d`, i.e. a negative age; a real value did the same (`48 MiB16d`) and the
+   CPU number touched the memory sparkline. `Style Selector="DataGridCell"` sets
+   `10,0,10,0` in Theme.axaml. The gutter is not free — nine columns × 10px comes out
+   of a fixed width, and the first cut pushed Age off the right edge at 1280px — so
+   the column `MinWidth`s were re-cut to match (Name 136, Status 140, Ready 56,
+   Restarts 78, CPU 98, Memory 106, sparklines 34). Check `cluster-tab-advanced-view`
+   at its rendered 1280px, which is narrower than most real windows and is where this
+   fails first.
+
 [fluent-basics]: https://learn.microsoft.com/en-us/windows/apps/design/basics/
 
 ## ConfigMaps are shown, Secrets are masked
@@ -1721,3 +1757,30 @@ port-forward/exec is still owed on a real mouse. Port-forward and exec's *last*
 full live-cluster verification predates the Fluent form/state pass's visual
 redesign of the port-forward pane (see the 2026-08-04 "Live-cluster validation
 pass" above).
+
+**List search + column gutter pass:** two complaints from the running app, both about
+the list. See UI rules 13 and 14 above for the rules they added.
+
+- **There was no way to search the list by name.** The sidebar's filter box narrows
+  kinds, and people reasonably read it as *the* filter; nothing narrowed the objects.
+  New: `RowFilter`/`VisibleRows` on `ClusterTabViewModel`, a search box in the list
+  header (same shape as the sidebar's, with a "12 of 87" beside it), Ctrl/Cmd+F on the
+  window, Esc/Enter in the box, `ResourceRowViewModel.Matches`, an `IsFilterEmpty`
+  no-match state, and `cluster-tab-list-filtered{,-empty}` screenshot scenarios.
+- **Columns ran into each other.** `48 MiB16d`, and — worse — a `—` placeholder in the
+  Memory column abutting Age, which reads as a *negative age* and was reported as one.
+  Root cause was Fluent's left-only `DataGridCell` padding, not the values. The gutter
+  itself landed in 6a48547 at 12px; this pass cut it to 10px and re-cut the column
+  minimums with it, because 12px on nine columns pushed **Age off the right edge** at
+  the 1280px the harness renders (UI rule 14). Both grids in `ClusterTabView` get it,
+  and so does every other DataGrid in the app.
+  The fleet list still clips its rightmost headers at 1280px — ten columns do not fit
+  in ~910px and horizontal scroll is the answer — but that is unchanged from before
+  the gutter, checked by rendering the scenario with Fluent's padding put back.
+
+**Verified this session**: build with 0 new warnings, **145/145 TUnit, 0 skipped**,
+and all 40 scenarios × both themes rendered (the harness is the XAML smoke test).
+**Not verified**: nothing has been driven by hand in the running app —
+Ctrl/Cmd+F focusing the box, Esc handing focus back to the grid, and the filter
+surviving a live watch tick (a Modified event on a filtered-out row must not make it
+reappear) are the three worth clicking.

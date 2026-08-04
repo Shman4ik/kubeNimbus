@@ -350,6 +350,30 @@ internal static class ClusterTabScenarios
         return tab;
     }
 
+    /// <summary>
+    /// The list narrowed by its search box. Goes through the real <c>RowFilter</c>
+    /// setter, so what renders is what typing produces — including the "n of m"
+    /// beside the box.
+    /// </summary>
+    public static ClusterTabViewModel FilteredList()
+    {
+        var tab = BaseTab();
+        tab.RowFilter = "check";
+        tab.SelectedRow = tab.VisibleRows.FirstOrDefault();
+        return tab;
+    }
+
+    /// <summary>
+    /// A search that matches nothing — a different state from an empty namespace, and
+    /// the one the list had no visual for at all before the box existed.
+    /// </summary>
+    public static ClusterTabViewModel FilteredListEmpty()
+    {
+        var tab = BaseTab();
+        tab.RowFilter = "nginx-ingress";
+        return tab;
+    }
+
     public static ClusterTabViewModel EmptyNamespace()
     {
         var tab = BaseTab(populateRows: false);

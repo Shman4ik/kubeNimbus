@@ -118,7 +118,7 @@
           <RowDefinition Height="0" MinHeight="0" />
         </Grid.RowDefinitions>
 
-        <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,Auto,*,Auto" Margin="0,0,0,10">
+        <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto" Margin="0,0,0,10">
           <TextBlock Grid.Column="0" Text="{Binding SelectedKind.DisplayName}" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" />
           <ComboBox Grid.Column="1" ItemsSource="{Binding NamespaceOptions}" SelectedItem="{Binding SelectedNamespace}"
                      Margin="12,0,0,0" MinWidth="170"
@@ -145,15 +145,45 @@
               <TextBlock Text="{Binding ConnectionWarning}" FontSize="12" TextTrimming="CharacterEllipsis" />
             </StackPanel>
           </Border>
-          <Button Grid.Column="4" Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="Refresh" Padding="6">
+          <!-- Search the list by name. The sidebar's filter box narrows *kinds*; this
+               one narrows the objects, which is the thing `kubectl get | grep` has
+               always been for and the one gesture the list had no answer to. Same
+               shape as the sidebar's box (UI rule: people should find it where they
+               left it), and the "12 of 87" beside it states that the list is short on
+               purpose. Hidden in the Helm browser, which is a different list. -->
+          <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="8" Margin="12,0,0,0"
+                      VerticalAlignment="Center" IsVisible="{Binding !IsHelmView}">
+            <TextBlock Text="{Binding RowFilterSummary}" FontSize="11" Opacity="0.55" VerticalAlignment="Center"
+                       IsVisible="{Binding IsRowFiltering}" />
+            <TextBox Name="RowFilterBox" Classes="filterbox" Width="230"
+                     Text="{Binding RowFilter}" PlaceholderText="Search by name…"
+                     KeyDown="OnRowFilterKeyDown">
+              <TextBox.InnerLeftContent>
+                <PathIcon Data="{StaticResource MagnifyIconGeometry}" Width="11" Height="11" Opacity="0.5" Margin="8,0,0,0" />
+              </TextBox.InnerLeftContent>
+              <TextBox.InnerRightContent>
+                <Button Classes="chip" Padding="0" MinWidth="16" MinHeight="16" Margin="0,0,4,0"
+                        IsVisible="{Binding IsRowFiltering}"
+                        Command="{Binding ClearRowFilterCommand}"
+                        ToolTip.Tip="Clear the search (Esc)">
+                  <PathIcon Data="{StaticResource CloseIconGeometry}" Width="9" Height="9" />
+                </Button>
+              </TextBox.InnerRightContent>
+            </TextBox>
+          </StackPanel>
+          <Button Grid.Column="5" Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="Refresh" Padding="6"
+                  Margin="8,0,0,0">
             <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="14" Height="14" />
           </Button>
         </Grid>
 
         <!-- Resource list (hidden while the Helm browser is showing) -->
         <Grid Grid.Row="1" IsVisible="{Binding !IsHelmView}">
+          <!-- VisibleRows, not Rows: the watch keeps applying its events against the
+               full list (see ClusterTabViewModel.Rows) while this renders whatever
+               survives the search box. -->
           <DataGrid Name="ResourceGrid"
-                     ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}"
+                     ItemsSource="{Binding VisibleRows}" SelectedItem="{Binding SelectedRow}"
                      IsReadOnly="True" GridLinesVisibility="Horizontal" CanUserResizeColumns="True"
                      DoubleTapped="OnRowDoubleTapped">
             <!-- Right-clicking a resource used to do nothing at all: the app had exactly
@@ -224,7 +254,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Name" Width="2*" MinWidth="150">
+              <DataGridTemplateColumn Header="Name" Width="2*" MinWidth="136">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" VerticalAlignment="Center" />
@@ -237,7 +267,7 @@
                    or hides each one. A DataGridColumn is outside the visual tree, so it
                    inherits no DataContext and cannot bind IsVisible itself — same reason
                    the Cluster and usage columns are handled there. -->
-              <DataGridTemplateColumn Header="Ready" Width="Auto" MinWidth="64" IsVisible="False">
+              <DataGridTemplateColumn Header="Ready" Width="Auto" MinWidth="56" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding ReadyText}" VerticalAlignment="Center"
@@ -245,7 +275,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Status" Width="*" MinWidth="150">
+              <DataGridTemplateColumn Header="Status" Width="*" MinWidth="140">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <Border Classes="statusPill" Classes.ok="{Binding StatusHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=ok}"
@@ -268,7 +298,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Restarts" Width="Auto" MinWidth="88" IsVisible="False">
+              <DataGridTemplateColumn Header="Restarts" Width="Auto" MinWidth="78" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <!-- The count carries "(43m ago)": 200 restarts that stopped yesterday
@@ -282,14 +312,14 @@
                    metrics-server, so ClusterTabView.ApplyMetricsColumns shows and
                    hides them (a DataGridColumn isn't in the visual tree and can't
                    bind to the DataContext). -->
-              <DataGridTemplateColumn Header="CPU" Width="Auto" MinWidth="112" IsVisible="False">
+              <DataGridTemplateColumn Header="CPU" Width="Auto" MinWidth="98" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <!-- Sparkline + current value: the number answers "how much now",
                          the line answers "is this a spike or its normal level" —
                          which one number alone can never say. -->
                     <Grid ColumnDefinitions="*,Auto" ToolTip.Tip="{Binding CpuTooltip}">
-                      <controls:Sparkline Grid.Column="0" Values="{Binding CpuSeries}" Height="16" MinWidth="44"
+                      <controls:Sparkline Grid.Column="0" Values="{Binding CpuSeries}" Height="16" MinWidth="34"
                                           Margin="0,0,6,0" VerticalAlignment="Center"
                                           Stroke="{StaticResource UsageCpuStrokeBrush}"
                                           AreaFill="{StaticResource UsageCpuAreaBrush}"
@@ -300,11 +330,11 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Memory" Width="Auto" MinWidth="118" IsVisible="False">
+              <DataGridTemplateColumn Header="Memory" Width="Auto" MinWidth="106" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <Grid ColumnDefinitions="*,Auto" ToolTip.Tip="{Binding MemoryTooltip}">
-                      <controls:Sparkline Grid.Column="0" Values="{Binding MemorySeries}" Height="16" MinWidth="44"
+                      <controls:Sparkline Grid.Column="0" Values="{Binding MemorySeries}" Height="16" MinWidth="34"
                                           Margin="0,0,6,0" VerticalAlignment="Center"
                                           Stroke="{StaticResource UsageMemoryStrokeBrush}"
                                           AreaFill="{StaticResource UsageMemoryAreaBrush}"
@@ -343,6 +373,23 @@
             <TextBlock Text="{Binding SelectedNamespace, StringFormat='in {0}'}" FontSize="12" Opacity="0.5"
                        HorizontalAlignment="Center"
                        IsVisible="{Binding SelectedKind.Descriptor.Namespaced}" />
+          </StackPanel>
+
+          <!-- "The search matched nothing" is a different state from "this kind has
+               nothing" (UI rule 9), and the two lead to opposite next steps — one is a
+               typo, the other is an empty namespace. Says how many rows it filtered out
+               of, and offers the way back. -->
+          <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" MaxWidth="360"
+                      IsVisible="{Binding IsFilterEmpty}">
+            <PathIcon Data="{StaticResource MagnifyIconGeometry}" Width="26" Height="26" Opacity="0.25"
+                      HorizontalAlignment="Center" />
+            <TextBlock Text="{Binding RowFilter, StringFormat='Nothing matches “{0}”'}"
+                       FontWeight="SemiBold" FontSize="13" HorizontalAlignment="Center" Opacity="0.7"
+                       TextTrimming="CharacterEllipsis" />
+            <TextBlock Text="{Binding Rows.Count, StringFormat='{}{0} in the list'}" FontSize="12" Opacity="0.5"
+                       HorizontalAlignment="Center" />
+            <Button Classes="chip" HorizontalAlignment="Center" Command="{Binding ClearRowFilterCommand}"
+                    Content="Clear search" />
           </StackPanel>
         </Grid>
 
