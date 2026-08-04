@@ -7,14 +7,21 @@
         xmlns:conv="using:KubeNimbus.App.Converters"
         xmlns:aconv="using:Avalonia.Data.Converters"
         xmlns:local="using:KubeNimbus.App"
+        xmlns:cmd="using:KubeNimbus.App"
         x:Class="KubeNimbus.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="kubeNimbus"
-        Icon="/Assets/app.ico"
         Width="1280" Height="800" MinWidth="960" MinHeight="600"
         FontFamily="{StaticResource InterFontFamily}"
         Background="Transparent"
         TransparencyLevelHint="Mica,AcrylicBlur">
+
+  <!-- There is deliberately no Icon="/Assets/app.ico" on the Window above. That
+       attribute goes through IconTypeConverter, which cannot resolve a relative asset
+       path under NativeAOT: the published binary died on every RID with
+       "The resource /Assets/app.ico could not be found" before the window appeared.
+       WindowIcons.Apply, from code-behind, loads the same file by absolute avares://
+       URI and skips the converter — see WindowIcons for the full story. -->
 
   <Window.DataTemplates>
     <DataTemplate DataType="vm:ClusterTabViewModel">
@@ -68,11 +75,55 @@
                 chrome:WindowDecorationProperties.ElementRole="TitleBar"
                 BorderThickness="0,0,0,1" BorderBrush="{StaticResource CardBorderBrush}">
           <Grid ColumnDefinitions="Auto,*,Auto">
-            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Spacing="6">
+            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Spacing="6"
+                        chrome:WindowDecorationProperties.ElementRole="User">
               <!-- No wordmark and no mark. The window title and the taskbar/Alt+Tab
                    icon already carry both, and once this bar became the title bar the
                    wordmark was printing the window's own title back at it 32px lower.
                    The first control is therefore the thing you came here to use. -->
+
+              <!-- App menu (☰), first control in the bar — same position, same glyph and
+                   the same job as pgNimbus's: the discoverable home for the commands
+                   that have no other visible control. Everything in it is also a
+                   palette entry; this is the route for someone who does not yet know
+                   the palette exists, which on a first run is everyone. -->
+              <Button Name="AppMenuButton" Classes="chip" Padding="5" VerticalAlignment="Center"
+                      ToolTip.Tip="Clusters, kubeconfig and preferences">
+                <PathIcon Data="{StaticResource MenuIconGeometry}" Width="14" Height="14" />
+                <Button.Flyout>
+                  <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                    <MenuItem Header="New cluster tab" Command="{Binding AddNewTabCommand}" />
+                    <MenuItem Header="Switch or open a cluster…" Command="{Binding OpenSwitcherCommand}" />
+                    <MenuItem Header="Explore demo cluster" Command="{Binding OpenDemoClusterCommand}" />
+                    <Separator />
+                    <MenuItem Header="Open kubeconfig file…" Command="{Binding OpenKubeconfigFileCommand}" />
+                    <MenuItem Header="Rescan kubeconfig" Command="{Binding ReloadContextsCommand}" />
+                    <Separator />
+                    <MenuItem Header="Close cluster tab" Command="{Binding CloseTabCommand}"
+                              CommandParameter="{Binding SelectedTab}" />
+                    <Separator />
+                    <MenuItem Header="Preferences…" Command="{Binding ShowPreferencesCommand}" />
+                    <MenuItem Header="Keyboard shortcuts" Command="{Binding ToggleShortcutsCommand}" />
+                    <MenuItem Header="About kubeNimbus" Command="{Binding ShowAboutCommand}" />
+                  </MenuFlyout>
+                </Button.Flyout>
+              </Button>
+
+              <!-- Sidebar toggle, in pgNimbus's position and with its platform-specific
+                   glyph pair. The catalog sidebar is a third of the content area, and a
+                   wide resource list is exactly what you want it back for. One-way
+                   IsChecked + an explicit command target, never an inverting command
+                   beside a two-way binding (UI rule 8b). -->
+              <ToggleButton Name="SidebarToggleButton" Classes="chip" Padding="5" VerticalAlignment="Center"
+                            IsChecked="{Binding IsSidebarVisible, Mode=TwoWay}"
+                            cmd:CommandTip.Text="Show or hide the resource sidebar"
+                            cmd:CommandTip.Command="ToggleSidebar">
+                <PathIcon Data="{OnPlatform Default={StaticResource SidebarToggleIconGeometry}, macOS={StaticResource SidebarToggleMacIconGeometry}}"
+                          Width="14" Height="14" />
+              </ToggleButton>
+
+              <Rectangle Width="1" Height="18" Margin="2,0,4,0" VerticalAlignment="Center"
+                         Fill="{StaticResource CardBorderBrush}" />
 
               <!-- The switcher entry point. This replaced a ComboBox + "+" pair that
                    between them could neither search nor switch: the dropdown only
@@ -185,9 +236,13 @@
               </ItemsControl>
             </ScrollViewer>
 
-            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Spacing="2">
+            <!-- Right cluster, in pgNimbus's order: the search pill, then theme,
+                 preferences, help. The two apps' bars now read the same left to right,
+                 which is the whole point of anyone using both — the help button used to
+                 sit before the theme toggle here and after the cog there. -->
+            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Spacing="2"
+                        chrome:WindowDecorationProperties.ElementRole="User">
               <Button Name="PaletteButton" Classes="searchpill" Width="190" VerticalAlignment="Center" Margin="0,0,6,0"
-                      chrome:WindowDecorationProperties.ElementRole="User"
                       Click="OnPaletteButtonClick">
                 <Grid ColumnDefinitions="Auto,*,Auto">
                   <PathIcon Grid.Column="0" Data="{StaticResource MagnifyIconGeometry}" Width="11" Height="11" Opacity="0.55" VerticalAlignment="Center" />
@@ -196,14 +251,18 @@
                   <TextBlock Grid.Column="2" Name="PaletteShortcutLabel" FontSize="11" Opacity="0.4" VerticalAlignment="Center" />
                 </Grid>
               </Button>
-              <Button Classes="chip" Padding="5" Command="{Binding ToggleShortcutsCommand}"
-                      chrome:WindowDecorationProperties.ElementRole="User"
-                      ToolTip.Tip="Keyboard shortcuts (F1)">
-                <PathIcon Data="{StaticResource HelpCircleIconGeometry}" Width="15" Height="15" />
-              </Button>
               <Button Name="ThemeToggleButton" Classes="chip" Padding="5" Click="OnToggleThemeClick"
-                      chrome:WindowDecorationProperties.ElementRole="User" ToolTip.Tip="Toggle light/dark theme">
+                      ToolTip.Tip="Toggle light/dark theme">
                 <PathIcon Name="ThemeIcon" Data="{StaticResource WeatherNightIconGeometry}" Width="14" Height="14" />
+              </Button>
+              <Button Name="PreferencesButton" Classes="chip" Padding="5" Command="{Binding ShowPreferencesCommand}"
+                      cmd:CommandTip.Command="Preferences">
+                <PathIcon Data="{StaticResource CogIconGeometry}" Width="14" Height="14" />
+              </Button>
+              <Button Classes="chip" Padding="5" Command="{Binding ToggleShortcutsCommand}"
+                      cmd:CommandTip.Text="Keyboard shortcuts"
+                      cmd:CommandTip.Command="ShortcutsWindow">
+                <PathIcon Data="{StaticResource HelpCircleIconGeometry}" Width="15" Height="15" />
               </Button>
             </StackPanel>
           </Grid>
@@ -393,29 +452,68 @@
       </Border>
     </Border>
 
-    <!-- Shortcuts cheat sheet overlay (F1 / the ? button) -->
+    <!-- Shortcuts cheat sheet overlay (F1 / the ? button).
+
+         Every row below is generated from KubeNimbus.Core.Commands.CommandCatalog via
+         ShortcutsViewModel — the same list that builds the window's key bindings and
+         the published shortcut reference. Add a shortcut to the catalog and it appears
+         here on its own; never hand-author a row in this file.
+
+         The keys are drawn as individual caps rather than one monospace string, which
+         is what the rest of the industry does and what pgNimbus's sheet does — a
+         "Ctrl+Shift+F" in a mono font reads as a filename, three caps read as keys. -->
     <Border Background="#80000000" IsVisible="{Binding IsShortcutsOpen}" PointerPressed="OnShortcutsBackdropPressed">
-      <Border Classes="layer" Width="420" VerticalAlignment="Center" HorizontalAlignment="Center">
-        <StackPanel Spacing="4">
-          <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">
+      <Border Classes="layer" Width="520" MaxHeight="640" VerticalAlignment="Center" HorizontalAlignment="Center" Padding="0">
+        <Grid RowDefinitions="Auto,*">
+          <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="14,12,10,8">
             <TextBlock Grid.Column="0" Text="Keyboard shortcuts" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" />
             <Button Grid.Column="1" Classes="chip" Padding="0" MinWidth="18" MinHeight="18" Command="{Binding CloseShortcutsCommand}">
               <PathIcon Data="{StaticResource CloseIconGeometry}" Width="10" Height="10" />
             </Button>
           </Grid>
-          <ItemsControl ItemsSource="{x:Static local:Hotkeys.CheatSheet}">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="local:Hotkeys+ShortcutEntry">
-                <Grid ColumnDefinitions="*,Auto" Margin="0,5">
-                  <TextBlock Grid.Column="0" Text="{Binding Action}" FontSize="12.5" VerticalAlignment="Center" />
-                  <Border Grid.Column="1" Classes="card" Padding="7,2">
-                    <TextBlock Text="{Binding Keys}" FontSize="11.5" FontFamily="Cascadia Mono,Consolas,monospace" />
-                  </Border>
-                </Grid>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-        </StackPanel>
+
+          <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" Padding="14,0,14,14">
+            <ItemsControl ItemsSource="{Binding Shortcuts.Sections}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:ShortcutSection">
+                  <StackPanel Spacing="4" Margin="0,0,0,12">
+                    <TextBlock Classes="sectionHeader" Text="{Binding Title}" Margin="4,0,4,4" />
+                    <Border Classes="card" Padding="4">
+                      <ItemsControl ItemsSource="{Binding Rows}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="vm:ShortcutRow">
+                            <Grid ColumnDefinitions="*,Auto" Margin="8,5">
+                              <TextBlock Grid.Column="0" Text="{Binding Action}" FontSize="12.5"
+                                         VerticalAlignment="Center" TextWrapping="Wrap" />
+                              <ItemsControl Grid.Column="1" ItemsSource="{Binding Tokens}"
+                                            HorizontalAlignment="Right" Margin="12,0,0,0">
+                                <ItemsControl.ItemsPanel>
+                                  <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" Spacing="4" />
+                                  </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                  <DataTemplate x:DataType="vm:ShortcutToken">
+                                    <Panel>
+                                      <Border Classes="kbd" IsVisible="{Binding IsKey}">
+                                        <TextBlock Text="{Binding Text}" />
+                                      </Border>
+                                      <TextBlock Classes="combo" IsVisible="{Binding !IsKey}" Text="{Binding Text}" />
+                                    </Panel>
+                                  </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                              </ItemsControl>
+                            </Grid>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </Border>
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </Grid>
       </Border>
     </Border>
   </Grid>

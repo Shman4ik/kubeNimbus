@@ -550,8 +550,27 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
         }
     }
 
+    /// <summary>
+    /// Asks for the delete. Normally that means arming the confirm step; with
+    /// "Confirm before deleting" turned off it deletes outright.
+    ///
+    /// <para>
+    /// The setting is read here, at the moment the button is pressed, rather than
+    /// cached on the tab: someone who turns the confirm back on after a near-miss
+    /// expects the very next delete to ask, not the next tab they open.
+    /// </para>
+    /// </summary>
     [RelayCommand(CanExecute = nameof(IsLive))]
-    private void RequestDelete() => IsConfirmingDelete = true;
+    private async Task RequestDeleteAsync()
+    {
+        if (!App.LoadSettings().ConfirmDeletes)
+        {
+            await ConfirmDeleteAsync();
+            return;
+        }
+
+        IsConfirmingDelete = true;
+    }
 
     [RelayCommand]
     private void CancelDelete() => IsConfirmingDelete = false;

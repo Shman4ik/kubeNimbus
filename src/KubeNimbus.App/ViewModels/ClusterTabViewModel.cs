@@ -17,8 +17,14 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 {
     public const string AllNamespaces = "All namespaces";
 
-    /// <summary>metrics.k8s.io aggregates over a ~30s window, so polling faster than this buys nothing.</summary>
-    private static readonly TimeSpan MetricsPollInterval = TimeSpan.FromSeconds(15);
+    /// <summary>
+    /// How often metrics are re-read, from settings. metrics.k8s.io aggregates over a
+    /// ~30s window, so polling faster than the default buys no resolution; the setting
+    /// exists for the other direction — a large cluster or a metered link, where this
+    /// being the app's only poll makes it the only thing worth turning down.
+    /// </summary>
+    private static TimeSpan MetricsPollInterval =>
+        TimeSpan.FromSeconds(App.LoadSettings().MetricsPollSeconds);
 
     private readonly Dictionary<string, ResourceRowViewModel> _rowsByKey = new(StringComparer.Ordinal);
 
@@ -320,6 +326,23 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     }
 
     /// <summary>
+    /// The shell's sidebar-visibility switch, mirrored here so the view can bind it
+    /// with a compiled binding against its own DataContext. Same arrangement as
+    /// <see cref="IsAdvancedView"/> and for the same reason; the shell owns the value
+    /// and persists it, this is the tab's copy.
+    ///
+    /// <para>
+    /// The view acts on this from code-behind rather than binding a
+    /// <c>ColumnDefinition.Width</c>: hiding a Grid child does not collapse the column
+    /// it sits in, so the width itself has to move, and the width is a star value the
+    /// layout owns — the same reason <c>ApplyDockState</c> mutates row heights instead
+    /// of binding them.
+    /// </para>
+    /// </summary>
+    [ObservableProperty]
+    private bool _isSidebarVisible = true;
+
+    /// <summary>
     /// The list's CPU/Memory columns (number + sparkline). Two conditions, not one:
     /// the cluster has to actually serve metrics.k8s.io for the metered kind
     /// (<see cref="AreMetricsVisible"/>), *and* the user has to have asked for the
@@ -607,7 +630,34 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         foreach (var section in SidebarSections)
         {
             section.ShowKindCount = IsAdvancedView;
+
+            // Wired here rather than at construction because this runs after every
+            // rebuild, and a section built during one must not record its state while
+            // the list is still half-assembled.
+            section.ExpansionChanged = PersistExpandedSections;
         }
+    }
+
+    /// <summary>
+    /// Remembers which sidebar sections are open, so the choice survives a restart.
+    /// Stores the whole set rather than a per-section flag: the list is read as "these
+    /// are expanded, everything else is not", and an empty set means "nobody has said"
+    /// so the built-in defaults still apply on a fresh install.
+    ///
+    /// <para>
+    /// A filter's force-expansion is deliberately not recorded — <c>IsForceExpanded</c>
+    /// is a separate property precisely so that typing in the filter box does not
+    /// rewrite what someone chose to have open.
+    /// </para>
+    /// </summary>
+    private void PersistExpandedSections()
+    {
+        var expanded = SidebarSections
+            .Where(s => s.IsExpanded)
+            .Select(s => s.Title)
+            .ToList();
+
+        App.Update(s => s with { ExpandedSidebarSections = expanded });
     }
 
     /// <summary>

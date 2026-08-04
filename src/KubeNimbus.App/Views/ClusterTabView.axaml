@@ -7,10 +7,14 @@
              x:Class="KubeNimbus.App.Views.ClusterTabView"
              x:DataType="vm:ClusterTabViewModel">
 
-  <Grid ColumnDefinitions="0.65*,2*">
+  <!-- Named because ApplySidebarVisibility mutates column 0's width from code-behind:
+       hiding a Grid child does not collapse the column it occupies, so the width is
+       what has to move, and it is a star value the layout owns — the same reason
+       ApplyDockState mutates row heights rather than binding them. -->
+  <Grid Name="ContentColumns" ColumnDefinitions="0.65*,2*">
 
     <!-- Sidebar: sits directly on the shell tone, Files-style — no card chrome. -->
-    <Grid Grid.Column="0" RowDefinitions="Auto,*" Margin="0,0,8,0">
+    <Grid Name="Sidebar" Grid.Column="0" RowDefinitions="Auto,*" Margin="0,0,8,0">
 
       <!-- Filter row, with the advanced-view switch docked right of it — same placement
            and same shape as pgNimbus's SchemaTreePanel, because it answers the same

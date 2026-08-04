@@ -25,10 +25,23 @@ namespace KubeNimbus.App.ViewModels;
 /// </summary>
 public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
 {
-    private const int MaxLogLines = 4000;
+    /// <summary>
+    /// Log scrollback cap. Read from settings once per tab rather than held as a
+    /// constant: someone reading a crash loop wants far more history than someone
+    /// watching a chatty ingress, and 4000 was a guess that suited neither. Read at
+    /// construction — a live tab does not re-trim itself when the preference changes,
+    /// which would mean a setting could silently discard buffered lines someone was
+    /// mid-way through reading.
+    /// </summary>
+    private readonly int _maxLogLines = App.LoadSettings().LogBufferLines;
 
-    /// <summary>Same cadence as the list view — metrics.k8s.io aggregates over ~30s.</summary>
-    private static readonly TimeSpan MetricsPollInterval = TimeSpan.FromSeconds(15);
+    /// <summary>
+    /// Same cadence as the list view, and from the same setting — metrics.k8s.io
+    /// aggregates over ~30s, so this is a "how quiet do you want to be" dial rather
+    /// than a resolution one.
+    /// </summary>
+    private static TimeSpan MetricsPollInterval =>
+        TimeSpan.FromSeconds(App.LoadSettings().MetricsPollSeconds);
 
     /// <summary>Null on the demo cluster — see <see cref="InspectorTabViewModelBase.IsDemo"/>.</summary>
     private readonly ClusterClient? _client;
@@ -1238,7 +1251,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     /// </summary>
     private void TrimLogBuffer()
     {
-        var excess = _allLogLines.Count - MaxLogLines;
+        var excess = _allLogLines.Count - _maxLogLines;
         if (excess <= 0)
         {
             return;
