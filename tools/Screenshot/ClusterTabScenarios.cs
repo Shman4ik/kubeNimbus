@@ -435,22 +435,52 @@ internal static class ClusterTabScenarios
         return tab;
     }
 
-    /// <summary>Pod detail's Environment tab — literal values, unresolved Secret/ConfigMap refs, and
-    /// one already-revealed value (demoing what RevealEnvVarCommand's result looks like, without a network call).</summary>
+    /// <summary>
+    /// Pod detail's Environment tab: literal values, ConfigMap refs resolved in place,
+    /// Secret refs masked, and one Secret revealed so both sides of the eye toggle are
+    /// on screen at once.
+    ///
+    /// The tab auto-resolves its ConfigMap refs on build, which against the offline
+    /// client fails fast and lands on the same <c>RunJobs()</c> the capture pumps — so
+    /// the resolve is drained first and the fixture values written afterwards, leaving
+    /// the rows exactly as a cluster that answered would have (same reasoning as
+    /// <see cref="HelmReleaseDetail"/>).
+    /// </summary>
     public static ClusterTabViewModel PodDetailEnvironment()
     {
         var tab = PodDetail();
         if (tab.SelectedInspectorTab is PodDetailTabViewModel detail)
         {
             detail.SelectedDetailTabIndex = 1;
-            var revealed = detail.EnvironmentVars.FirstOrDefault(v => v.Name == "DB_USERNAME");
-            if (revealed is not null)
+
+            for (var i = 0; i < 100 && detail.EnvironmentVars.Any(v => v.IsRevealing); i++)
             {
-                revealed.RevealedValue = "payments_svc";
+                Dispatcher.UIThread.RunJobs();
+                Thread.Sleep(10);
             }
+
+            foreach (var v in detail.EnvironmentVars)
+            {
+                v.RevealError = null;
+            }
+
+            // A ConfigMap value: on screen without being asked for.
+            Reveal(detail, "FEATURE_FLAGS", "checkout_v2=on,receipts_pdf=off");
+            // A Secret value someone has clicked the eye on. Every other Secret ref in
+            // the fixture stays masked, which is the default this pass is about.
+            Reveal(detail, "DB_USERNAME", "payments_svc");
         }
 
         return tab;
+
+        static void Reveal(PodDetailTabViewModel detail, string name, string value)
+        {
+            if (detail.EnvironmentVars.FirstOrDefault(v => v.Name == name) is { } v)
+            {
+                v.RevealedValue = value;
+                v.IsRevealed = true;
+            }
+        }
     }
 
     /// <summary>
@@ -772,15 +802,39 @@ internal static class ClusterTabScenarios
         return tab;
     }
 
+    /// <summary>
+    /// The same pane before anything is forwarded — the state the tab actually opens
+    /// in, and the one that used to render as a row of controls with no statement of
+    /// what they would do (UI rule 9).
+    /// </summary>
+    public static ClusterTabViewModel PortForwardIdle()
+    {
+        var tab = BaseTab();
+        var row = tab.Rows.First(r => r.Name.StartsWith("payment-service-report-generator", StringComparison.Ordinal));
+        var pf = new PortForwardTabViewModel(
+            FixtureData.CreateOfflineClient(), "payments", row.Name,
+            [new ContainerPort(8080, "http"), new ContainerPort(9090, "metrics")]) { IsPreview = false };
+
+        tab.InspectorTabs.Add(pf);
+        tab.SelectedInspectorTab = pf;
+        return tab;
+    }
+
     public static ClusterTabViewModel PortForward()
     {
         var tab = BaseTab();
         var row = tab.Rows.First(r => r.Name.StartsWith("payment-service-report-generator", StringComparison.Ordinal));
         var client = FixtureData.CreateOfflineClient();
-        var pf = new PortForwardTabViewModel(client, "payments", row.Name, 8080) { IsPreview = false };
+        // Two named declared ports, so the picker renders what a real pod spec gives it
+        // ("8080 · http") rather than a bare number.
+        var pf = new PortForwardTabViewModel(
+            client, "payments", row.Name,
+            [new ContainerPort(8080, "http"), new ContainerPort(9090, "metrics")]) { IsPreview = false };
         pf.LocalPort = 54321;
         pf.IsRunning = true;
-        pf.StatusMessage = "Forwarding 127.0.0.1:54321 → payment-service-report-generator-7f9c8d6bcd-x7k2m:8080";
+        // Running: the status bar carries the local URL itself, so StatusMessage is
+        // empty — matching what StartAsync leaves behind.
+        pf.StatusMessage = null;
 
         tab.InspectorTabs.Add(pf);
         tab.SelectedInspectorTab = pf;

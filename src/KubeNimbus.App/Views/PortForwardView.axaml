@@ -6,67 +6,109 @@
              x:Class="KubeNimbus.App.Views.PortForwardView"
              x:DataType="vm:PortForwardTabViewModel">
 
-  <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" Margin="12,10,12,12" MaxWidth="440" HorizontalAlignment="Left">
-    <TextBlock Grid.Row="0" Classes="sectionHeader" Text="PORT FORWARD" Margin="0,0,0,12" />
+  <!-- No panel title row: the dock tab above already reads `Forward: <pod>:<port>`
+       (UI rule 10). What is left is one row of fields and one row of status. -->
+  <StackPanel Spacing="12" Margin="14,12,14,12" MaxWidth="640" HorizontalAlignment="Left">
 
-    <!-- The pod's own declared ports, with their names. They were read off the spec
-         and then thrown away for a hardcoded 8080, so forwarding to a pod serving on
-         9090 meant knowing that and typing it. Hidden entirely for a pod that
-         declares none — there is nothing to pick (UI rule 1). -->
-    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" Margin="0,0,0,10"
-                IsVisible="{Binding HasDeclaredPorts}">
-      <TextBlock Text="Declared" VerticalAlignment="Center" Opacity="0.7" />
-      <ComboBox ItemsSource="{Binding AvailablePorts}" SelectedItem="{Binding SelectedPort}" MinWidth="160"
-                IsEnabled="{Binding CanEditPorts}">
-        <ComboBox.ItemTemplate>
-          <DataTemplate x:DataType="vm:ContainerPort">
-            <TextBlock Text="{Binding Display}" />
-          </DataTemplate>
-        </ComboBox.ItemTemplate>
-      </ComboBox>
-    </StackPanel>
+    <!-- The fields read in the same direction as the traffic, and as the sentence the
+         status bar prints: local port → pod port. They used to read pod-first, which
+         is the reverse of both. Labels sit above their inputs (Fluent's form pattern)
+         — beside them, "Local port" ran straight into its own box. -->
+    <StackPanel Orientation="Horizontal" Spacing="10">
+      <StackPanel Spacing="4">
+        <TextBlock Classes="fieldLabel" Text="Local port" />
+        <!-- Empty = the OS picks one. The wire value is 0, but a box reading "0" only
+             says so to someone who has hovered the tooltip; the watermark says it in
+             place (see LocalPortInput). -->
+        <NumericUpDown Width="104" Value="{Binding LocalPortInput}" PlaceholderText="auto"
+                       Minimum="0" Maximum="65535" ShowButtonSpinner="False" FormatString="0"
+                       IsEnabled="{Binding CanEditPorts}"
+                       ToolTip.Tip="Leave empty to let the OS pick a free local port." />
+      </StackPanel>
 
-    <!-- Read-only while running: the ports the forward was started with are what it
-         is doing, and an editable box that changes nothing is a lie about that. -->
-    <Grid Grid.Row="2" ColumnDefinitions="Auto,90,24,Auto,90">
-      <TextBlock Grid.Column="0" Text="Pod port" VerticalAlignment="Center" />
-      <NumericUpDown Grid.Column="1" Value="{Binding PodPort}" Minimum="1" Maximum="65535" ShowButtonSpinner="False"
-                     FormatString="0" IsEnabled="{Binding CanEditPorts}" />
-      <TextBlock Grid.Column="3" Text="Local port" VerticalAlignment="Center" />
-      <NumericUpDown Grid.Column="4" Value="{Binding LocalPort}" Minimum="0" Maximum="65535" ShowButtonSpinner="False"
-                     FormatString="0" IsEnabled="{Binding CanEditPorts}"
-                     ToolTip.Tip="0 = pick an available port automatically" />
-    </Grid>
+      <TextBlock Text="&#x2192;" FontSize="15" Opacity="0.4" VerticalAlignment="Bottom" Margin="0,0,0,6" />
 
-    <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8" Margin="0,12,0,0">
-      <Button Classes="accent" Content="Start" Command="{Binding StartCommand}" />
-      <Button Content="Stop" Command="{Binding StopCommand}" />
-      <!-- Running with a refused connection is warn, not ok: the listener really is
-           accepting, so "stopped" would be wrong, but so is a green dot over a
-           forward whose last connection the kubelet turned away. -->
-      <Ellipse Classes="statusDot" VerticalAlignment="Center" Margin="8,0,0,0"
-               Fill="{Binding Health, Converter={x:Static conv:HealthToBrushConverter.Instance}}" />
-    </StackPanel>
+      <StackPanel Spacing="4">
+        <TextBlock Classes="fieldLabel" Text="Pod port" />
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <!-- Read-only while running: the ports the forward was started with are what
+               it is doing, and an editable box that changes nothing lies about that. -->
+          <NumericUpDown Width="92" Value="{Binding PodPort}" Minimum="1" Maximum="65535"
+                         ShowButtonSpinner="False" FormatString="0" IsEnabled="{Binding CanEditPorts}" />
+          <!-- The pod's own declared ports, with their names — they were read off the
+               spec and then thrown away for a hardcoded 8080, so forwarding to a pod
+               serving on 9090 meant knowing that and typing it. Hidden entirely for a
+               pod that declares none: there is nothing to pick (UI rule 1). -->
+          <ComboBox ItemsSource="{Binding AvailablePorts}" SelectedItem="{Binding SelectedPort}"
+                    MinWidth="132" IsVisible="{Binding HasDeclaredPorts}" IsEnabled="{Binding CanEditPorts}"
+                    ToolTip.Tip="Ports this pod declares">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:ContainerPort">
+                <TextBlock Text="{Binding Display}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+        </StackPanel>
+      </StackPanel>
 
-    <!-- Reaching the thing you just forwarded, which is the entire point of forwarding it. -->
-    <StackPanel Grid.Row="4" Orientation="Horizontal" Spacing="8" Margin="0,12,0,0" IsVisible="{Binding IsRunning}">
-      <TextBlock Text="{Binding LocalUrl}" VerticalAlignment="Center" FontFamily="Cascadia Mono,Consolas,monospace"
-                 FontSize="12" Opacity="0.85" />
-      <Button Classes="toolbar" Padding="5" Command="{Binding CopyUrlCommand}" ToolTip.Tip="Copy the local URL">
-        <PathIcon Data="{StaticResource ContentCopyIconGeometry}" Width="12" Height="12" />
+      <!-- One button, not a pair with one of them always dead: the forward is either
+           running or it isn't, and the button is the thing that changes that. -->
+      <Button Classes="accent" Command="{Binding StartCommand}" VerticalAlignment="Bottom"
+              IsVisible="{Binding !IsRunning}">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <PathIcon Data="{StaticResource PlayIconGeometry}" Width="12" Height="12" />
+          <TextBlock Text="Start" />
+        </StackPanel>
       </Button>
-      <Button Classes="toolbar" Padding="5" Command="{Binding OpenInBrowserCommand}" ToolTip.Tip="Open in the default browser">
-        <PathIcon Data="{StaticResource OpenInNewIconGeometry}" Width="12" Height="12" />
+      <Button Command="{Binding StopCommand}" VerticalAlignment="Bottom" IsVisible="{Binding IsRunning}">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <PathIcon Data="{StaticResource StopIconGeometry}" Width="12" Height="12" />
+          <TextBlock Text="Stop" />
+        </StackPanel>
       </Button>
     </StackPanel>
 
-    <StackPanel Grid.Row="5" Spacing="4" Margin="0,12,0,0">
-      <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Opacity="0.75" FontSize="12" />
-      <!-- The kubelet's own sentence ("error forwarding port 8080 to pod x: connection
-           refused"), which used to be dropped on the floor — leaving a forward that
-           accepted connections and answered none of them, saying nothing. -->
-      <TextBlock Text="{Binding ConnectionError}" Classes="statusText warn" TextWrapping="Wrap"
-                 IsVisible="{Binding ConnectionError, Converter={x:Static aconv:ObjectConverters.IsNotNull}}" />
-    </StackPanel>
-  </Grid>
+    <!-- Running state. Reaching the thing you just forwarded is the entire point of
+         forwarding it, so the local URL *is* the status line — copyable, openable and
+         selectable rather than a sentence about it.
+         Running with a refused connection is warn, not ok: the listener really is
+         accepting, so "stopped" would be wrong, but so is a green bar over a forward
+         whose last connection the kubelet turned away. -->
+    <Border Classes="infoBar" Classes.success="{Binding IsHealthy}" Classes.warn="{Binding HasConnectionError}"
+            IsVisible="{Binding IsRunning}">
+      <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" RowDefinitions="Auto,Auto">
+        <Ellipse Grid.Row="0" Grid.Column="0" Classes="statusDot" VerticalAlignment="Center" Margin="0,0,8,0"
+                 Fill="{Binding Health, Converter={x:Static conv:HealthToBrushConverter.Instance}}" />
+        <TextBlock Grid.Row="0" Grid.Column="1" Text="Forwarding" FontSize="12" Opacity="0.7"
+                   VerticalAlignment="Center" Margin="0,0,8,0" />
+        <SelectableTextBlock Grid.Row="0" Grid.Column="2" Text="{Binding LocalUrl}" VerticalAlignment="Center"
+                             FontFamily="Cascadia Mono,Consolas,monospace" FontSize="12.5"
+                             TextTrimming="CharacterEllipsis" />
+        <Button Grid.Row="0" Grid.Column="3" Classes="toolbar" Padding="6" Command="{Binding CopyUrlCommand}"
+                ToolTip.Tip="Copy the local URL">
+          <PathIcon Data="{StaticResource ContentCopyIconGeometry}" Width="12" Height="12" />
+        </Button>
+        <Button Grid.Row="0" Grid.Column="4" Classes="toolbar" Padding="6" Command="{Binding OpenInBrowserCommand}"
+                ToolTip.Tip="Open in the default browser">
+          <PathIcon Data="{StaticResource OpenInNewIconGeometry}" Width="12" Height="12" />
+        </Button>
+
+        <!-- The kubelet's own sentence ("error forwarding port 8080 to pod x:
+             connection refused"), which used to be dropped on the floor — leaving a
+             forward that accepted connections and answered none of them, saying
+             nothing. -->
+        <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="4" Text="{Binding ConnectionError}"
+                   Classes="statusText warn" TextWrapping="Wrap" Margin="0,6,0,0"
+                   IsVisible="{Binding HasConnectionError}" />
+      </Grid>
+    </Border>
+
+    <!-- What the pane is doing, or why the last Start didn't take. Never a blank
+         rectangle (UI rule 9) — the resting text says a forward is not running. It
+         stays visible while running too, because "Copied …" and "Could not open a
+         browser" are both only reachable from there. -->
+    <TextBlock Classes="statusText" Classes.dim="{Binding !StatusIsError}" Classes.error="{Binding StatusIsError}"
+               Text="{Binding StatusMessage}" TextWrapping="Wrap"
+               IsVisible="{Binding StatusMessage, Converter={x:Static aconv:StringConverters.IsNotNullOrEmpty}}" />
+  </StackPanel>
 </UserControl>
