@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Reflection;
 using Avalonia.Controls;
-using Avalonia.Input;
 using Avalonia.Interactivity;
 
 namespace KubeNimbus.App.Views;
@@ -12,14 +11,17 @@ namespace KubeNimbus.App.Views;
 /// "+&lt;git-sha&gt;" build metadata — the same single source
 /// (<c>Directory.Build.props</c>'s <c>VersionPrefix</c>, overridden by the tag) that
 /// the release workflow uses, so this box cannot name a version the binary is not.
+/// <para>
+/// Hosted in the shell's About <c>OverlayPanel</c> rather than in a window of its own:
+/// an About box is read once and dismissed, which is exactly what an overlay is for,
+/// and a second Alt+Tab entry for four lines of text was never earning its place.
+/// </para>
 /// </summary>
-public partial class AboutWindow : Window
+public partial class AboutView : UserControl
 {
-    public AboutWindow()
+    public AboutView()
     {
         InitializeComponent();
-        WindowIcons.Apply(this);
-        ThemedWindowChrome.Attach(this);
 
         var assembly = Assembly.GetEntryAssembly();
         var version = assembly?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
@@ -28,14 +30,6 @@ public partial class AboutWindow : Window
 
         var copyright = assembly?.GetCustomAttribute<AssemblyCopyrightAttribute>()?.Copyright;
         CopyrightText.Text = string.IsNullOrEmpty(copyright) ? "MIT License" : $"{copyright} · MIT License";
-
-        KeyDown += (_, e) =>
-        {
-            if (e.Key == Key.Escape)
-            {
-                Close();
-            }
-        };
     }
 
     private void OnGitHubClick(object? sender, RoutedEventArgs e)

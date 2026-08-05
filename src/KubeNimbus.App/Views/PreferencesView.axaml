@@ -1,20 +1,16 @@
-<Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:KubeNimbus.App.ViewModels"
-        x:Class="KubeNimbus.App.Views.PreferencesWindow"
-        x:DataType="vm:PreferencesViewModel"
-        Title="kubeNimbus — Preferences"
-        Width="580" Height="620"
-        MinWidth="460" MinHeight="520"
-        WindowStartupLocation="CenterOwner"
-        FontFamily="{StaticResource InterFontFamily}">
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:KubeNimbus.App.ViewModels"
+             x:Class="KubeNimbus.App.Views.PreferencesView"
+             x:DataType="vm:PreferencesViewModel">
+
 
     <!-- Deliberately the same page as pgNimbus's: section header, one card per
          setting, label and explanation on the left, the control on the right, no
          OK/Cancel because every change applies and persists as it is made. Someone who
          uses both apps should not have to learn this twice. -->
 
-    <Window.Styles>
+    <UserControl.Styles>
         <Style Selector="TextBlock.label">
             <Setter Property="FontSize" Value="13" />
             <Setter Property="VerticalAlignment" Value="Center" />
@@ -24,7 +20,7 @@
             <Setter Property="Opacity" Value="0.55" />
             <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
-    </Window.Styles>
+    </UserControl.Styles>
 
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="20" Spacing="6">
@@ -161,4 +157,4 @@
         </StackPanel>
     </ScrollViewer>
 
-</Window>
+</UserControl>

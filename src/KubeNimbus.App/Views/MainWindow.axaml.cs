@@ -198,13 +198,11 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnShortcutsBackdropPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (e.Source == sender)
-        {
-            Vm?.CloseShortcutsCommand.Execute(null);
-        }
-    }
+    // The shortcuts, preferences and About panels have no handler here on purpose:
+    // Nimbus.Ui's OverlayPanel owns its own backdrop, ✕ and Esc. The palette and the
+    // switcher keep theirs because they are not that control — both put keyboard
+    // focus in a search box and drive a selection from the arrow keys, which is a
+    // different thing from a panel you read and dismiss.
 
     private void OnPaletteItemTapped(object? sender, TappedEventArgs e) => Vm?.Palette.ExecuteSelected();
 

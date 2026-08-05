@@ -91,12 +91,13 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // ranking (prefix > contiguous > subsequence) is the point of the shot.
     ("main-window-switcher-search", () => BuildSwitcherContent("pro")),
 
-    // The two windows outside the shell. Rendering them here is not really about the
-    // picture: these are the only Windows in the app whose XAML nothing else loads, and
-    // the harness is CI's one check that a view still loads at all (a stale avares://
-    // URI or a DataTemplate that stopped resolving compiles perfectly).
-    ("preferences-window", BuildPreferencesWindow),
-    ("about-window", () => new AboutWindow { Width = 320, Height = 260 }),
+    // Preferences and About, which are overlays over the shell now rather than
+    // windows of their own. Rendering them is not really about the picture: the
+    // harness is CI's one check that a view still loads at all (a stale avares://
+    // URI or a DataTemplate that stopped resolving compiles perfectly), and these
+    // two views are loaded from nowhere else.
+    ("main-window-preferences", () => BuildMainWindowContent(openPreferences: true)),
+    ("main-window-about", () => BuildMainWindowContent(openAbout: true)),
 };
 
 foreach (var (name, build) in scenarios)
@@ -225,7 +226,7 @@ static Control BuildNoKubeconfigContent()
     return window;
 }
 
-static Control BuildMainWindowContent(bool openShortcuts = false)
+static Control BuildMainWindowContent(bool openShortcuts = false, bool openPreferences = false, bool openAbout = false)
 {
     var window = new MainWindow();
     var vm = new MainWindowViewModel();
@@ -242,24 +243,13 @@ static Control BuildMainWindowContent(bool openShortcuts = false)
     vm.SelectedTab = tabB;
     vm.IsShortcutsOpen = openShortcuts;
 
+    // The preferences page proxies the shell's own state, and the settings it writes
+    // land in the harness's redirected directory (AppSettingsStore.DirectoryOverride
+    // at the top of this file) rather than the developer's own.
+    vm.IsPreferencesOpen = openPreferences;
+    vm.IsAboutOpen = openAbout;
+
     return window;
-}
-
-// The preferences page. Built against a real MainWindowViewModel because every
-// control on it proxies the shell's own state, and the settings it writes land in
-// the harness's redirected directory (see AppSettingsStore.DirectoryOverride at the
-// top of this file) rather than the developer's own.
-static Control BuildPreferencesWindow()
-{
-    var vm = new MainWindowViewModel();
-    SeedContexts(vm);
-
-    return new PreferencesWindow
-    {
-        DataContext = new PreferencesViewModel(vm),
-        Width = 580,
-        Height = 720,
-    };
 }
 
 // The cluster switcher, open. `query` renders the searching state — one flat

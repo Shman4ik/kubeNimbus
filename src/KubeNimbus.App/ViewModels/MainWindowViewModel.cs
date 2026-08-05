@@ -182,62 +182,48 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private void SetSidebarVisible(bool value) => IsSidebarVisible = value;
 
     /// <summary>
-    /// Opens the preferences page, or re-activates it if it is already up. One
-    /// instance: every control on it applies immediately, so a second copy would be
-    /// two views of the same live state racing each other's writes.
+    /// Opens the preferences page. One instance, because every control on it applies
+    /// immediately and a second copy would be two views of the same live state racing
+    /// each other's writes — which the single overlay gives for free.
     /// </summary>
     [RelayCommand]
-    private void ShowPreferences()
-    {
-        if (_preferencesWindow is { } existing)
-        {
-            existing.Activate();
-            return;
-        }
-
-        var window = new Views.PreferencesWindow { DataContext = new PreferencesViewModel(this) };
-        window.Closed += (_, _) => _preferencesWindow = null;
-        _preferencesWindow = window;
-        ShowDialogOwned(window);
-    }
-
-    private Views.PreferencesWindow? _preferencesWindow;
-
-    /// <summary>Opens the About box. Same one-instance rule, same reason it is cheap to hold.</summary>
-    [RelayCommand]
-    private void ShowAbout()
-    {
-        if (_aboutWindow is { } existing)
-        {
-            existing.Activate();
-            return;
-        }
-
-        var window = new Views.AboutWindow();
-        window.Closed += (_, _) => _aboutWindow = null;
-        _aboutWindow = window;
-        ShowDialogOwned(window);
-    }
-
-    private Views.AboutWindow? _aboutWindow;
+    private void ShowPreferences() => IsPreferencesOpen = true;
 
     /// <summary>
-    /// Shows a window owned by the shell, so it stays above it, centres on it and
-    /// closes with it. Non-modal deliberately — the preferences page is something you
-    /// leave open while trying a setting against a live cluster, and a modal one would
-    /// make that impossible. Falls back to a plain Show when there is no desktop
-    /// lifetime (the screenshot harness renders these windows directly).
+    /// The preferences page's own view model, built on first open and torn down when
+    /// the overlay closes. Held rather than rebuilt per open so the page keeps its
+    /// scroll position and its kubeconfig-list selection across a dismiss.
     /// </summary>
-    private static void ShowDialogOwned(Avalonia.Controls.Window window)
+    [ObservableProperty]
+    private PreferencesViewModel? _preferences;
+
+    [ObservableProperty]
+    private bool _isPreferencesOpen;
+
+    /// <summary>
+    /// The page subscribes to this view model's <c>PropertyChanged</c> to mirror the
+    /// settings the shell owns, so an open page is a live listener. Closing it has to
+    /// <see cref="PreferencesViewModel.Detach"/>, or every dismissed page stays
+    /// subscribed for the life of the window.
+    /// </summary>
+    partial void OnIsPreferencesOpenChanged(bool value)
     {
-        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime { MainWindow: { } owner })
+        if (value)
         {
-            window.Show(owner);
+            Preferences ??= new PreferencesViewModel(this);
             return;
         }
 
-        window.Show();
+        Preferences?.Detach();
+        Preferences = null;
     }
+
+    /// <summary>Opens the About box.</summary>
+    [RelayCommand]
+    private void ShowAbout() => IsAboutOpen = true;
+
+    [ObservableProperty]
+    private bool _isAboutOpen;
 
     /// <summary>
     /// The F1 cheat sheet's rows, projected from <see cref="Core.Commands.CommandCatalog"/>.
@@ -261,9 +247,6 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// </summary>
     [RelayCommand]
     private void ToggleSidebar() => IsSidebarVisible = !IsSidebarVisible;
-
-    [RelayCommand]
-    private void CloseShortcuts() => IsShortcutsOpen = false;
 
     public MainWindowViewModel()
     {
