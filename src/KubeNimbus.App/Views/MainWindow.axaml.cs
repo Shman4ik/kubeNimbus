@@ -7,6 +7,7 @@ using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using KubeNimbus.App.ViewModels;
+using KubeNimbus.Core.Commands;
 using Nimbus.Ui.Chrome;
 
 namespace KubeNimbus.App.Views;
@@ -28,37 +29,24 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
+        // Not an Icon= attribute in the XAML: that path cannot resolve under NativeAOT
+        // and killed the published binary on every RID (see WindowIcons).
+        WindowIcons.Apply(this);
+
         // One bar of chrome at the top instead of two: the command bar becomes the
         // title bar. Shared with pgNimbus — the platform rules this has to respect
         // are documented on NimbusWindowChrome itself, and three of the four fail
         // silently. 12 is this app's own horizontal breathing room in the bar.
         NimbusWindowChrome.Attach(this, CommandBar, RootLayout, inset: 12);
 
-        KeyBindings.Add(new KeyBinding { Gesture = Hotkeys.CommandPalette, Command = new RelayOpenPaletteCommand(this) });
-        PaletteShortcutLabel.Text = Hotkeys.Describe(Hotkeys.CommandPalette);
+        BuildKeyBindings();
 
-        KeyBindings.Add(new KeyBinding { Gesture = Hotkeys.ClusterSwitcher, Command = new RelayOpenSwitcherCommand(this) });
-        // Says "click" explicitly: with both a hovered and a selected row visible,
-        // whether the mouse needs one click or two is a real question, and a popup
-        // that answers it costs one line.
-        SwitcherHintLabel.Text =
-            $"Click or Enter to open · ↑↓ navigate · Esc close · {Hotkeys.PrimaryLabel}+1…9 jump to tab";
-
-        KeyBindings.Add(new KeyBinding { Gesture = Hotkeys.FilterList, Command = new RelayFocusRowFilterCommand(this) });
-
-        KeyBindings.Add(new KeyBinding { Gesture = Hotkeys.ShortcutsHelp, Command = new RelayToggleShortcutsCommand(this) });
-
-        // Ctrl/Cmd+1…9 jumps straight to a tab. Registered in a loop rather than
-        // nine XAML KeyBindings so the modifier still comes from Hotkeys.Primary
-        // (UI rule 4 — no hardcoded Ctrl gestures).
-        for (var ordinal = 1; ordinal <= 9; ordinal++)
-        {
-            KeyBindings.Add(new KeyBinding
-            {
-                Gesture = new KeyGesture(Key.D0 + ordinal, Hotkeys.Primary),
-                Command = new RelaySelectTabCommand(this, ordinal),
-            });
-        }
+        // The Ctrl/Cmd scheme is a user preference now, so every gesture in the window
+        // has to be rebuilt when it changes — a KeyGesture built once holds the
+        // modifier it was created with, and the window would answer the other
+        // platform's chords until restart.
+        Hotkeys.Changed += BuildKeyBindings;
+        Unloaded += (_, _) => Hotkeys.Changed -= BuildKeyBindings;
 
         Opened += (_, _) =>
         {
@@ -75,6 +63,69 @@ public partial class MainWindow : Window
     }
 
     private MainWindowViewModel? Vm => DataContext as MainWindowViewModel;
+
+    /// <summary>
+    /// Builds every window-level gesture from <see cref="Core.Commands.CommandCatalog"/>,
+    /// replacing whatever was there. Called at construction and again whenever the
+    /// Ctrl/Cmd scheme changes.
+    ///
+    /// <para>
+    /// The bindings are cleared first rather than added to: rebuilding on a scheme
+    /// change would otherwise leave the old modifier's gestures registered alongside
+    /// the new ones, so Ctrl+K would keep working after someone chose Cmd — which reads
+    /// as the preference having done nothing.
+    /// </para>
+    ///
+    /// <para>
+    /// A few commands are handled here rather than resolved from the view model,
+    /// because they move focus into a control rather than change state — a thing an
+    /// ICommand on a view model cannot express. Their gestures still come from the
+    /// catalog, which is the part that has to be stated once.
+    /// </para>
+    /// </summary>
+    private void BuildKeyBindings()
+    {
+        KeyBindings.Clear();
+
+        foreach (var (id, gesture) in CommandBindings.WindowBindings())
+        {
+            System.Windows.Input.ICommand command = id switch
+            {
+                CommandId.CommandPalette => new RelayOpenPaletteCommand(this),
+                CommandId.ClusterSwitcher => new RelayOpenSwitcherCommand(this),
+                CommandId.FilterList => new RelayFocusRowFilterCommand(this),
+                CommandId.ShortcutsWindow => new RelayToggleShortcutsCommand(this),
+
+                // Everything else goes through the view model. Resolved at execute
+                // time, not now: the DataContext is set after construction, and
+                // SelectedTab-backed commands change on every tab switch.
+                _ => new RelayCatalogCommand(this, id),
+            };
+
+            KeyBindings.Add(new KeyBinding { Gesture = gesture, Command = command });
+        }
+
+        // Ctrl/Cmd+1…9 jumps straight to a tab. Registered in a loop rather than nine
+        // XAML KeyBindings so the modifier still comes from Hotkeys.Primary (UI rule 4
+        // — no hardcoded Ctrl gestures). A range, so it is a catalog gesture *note*
+        // rather than a chord, which is why it is built here and not in the loop above.
+        for (var ordinal = 1; ordinal <= 9; ordinal++)
+        {
+            KeyBindings.Add(new KeyBinding
+            {
+                Gesture = new KeyGesture(Key.D0 + ordinal, Hotkeys.Primary),
+                Command = new RelaySelectTabCommand(this, ordinal),
+            });
+        }
+
+        PaletteShortcutLabel.Text = Hotkeys.Describe(Hotkeys.CommandPalette);
+
+        // Says "click" explicitly: with both a hovered and a selected row visible,
+        // whether the mouse needs one click or two is a real question, and a popup that
+        // answers it costs one line.
+        SwitcherHintLabel.Text =
+            $"Click or Enter to open · ↑↓ navigate · Esc close · {Hotkeys.PrimaryLabel}+1…9 jump to tab";
+    }
 
     // Windows 11 Mica backdrop: the shell base swaps between the theme-split
     // translucent ShellBackdropBrush (while the material actually renders —
@@ -391,6 +442,34 @@ internal sealed class RelayOpenSwitcherCommand(MainWindow window) : System.Windo
     public bool CanExecute(object? parameter) => true;
 
     public void Execute(object? parameter) => window.OpenSwitcher();
+}
+
+/// <summary>
+/// Runs a catalog command through the view model, resolved at execute time. Late
+/// resolution is the point: the DataContext is not set when the bindings are built,
+/// and the commands that hang off <c>SelectedTab</c> change on every tab switch — a
+/// command captured at build time would fire at whichever tab happened to be open when
+/// the window was constructed.
+/// </summary>
+internal sealed class RelayCatalogCommand(MainWindow window, CommandId id) : System.Windows.Input.ICommand
+{
+    public event EventHandler? CanExecuteChanged { add { } remove { } }
+
+    public bool CanExecute(object? parameter) => true;
+
+    public void Execute(object? parameter)
+    {
+        if (window.DataContext is not ViewModels.MainWindowViewModel vm)
+        {
+            return;
+        }
+
+        var command = CommandBindings.Resolve(id, vm);
+        if (command?.CanExecute(null) == true)
+        {
+            command.Execute(null);
+        }
+    }
 }
 
 /// <summary>Trivial ICommand backing one Ctrl/Cmd+N tab jump.</summary>

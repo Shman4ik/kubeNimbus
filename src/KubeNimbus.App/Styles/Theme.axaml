@@ -458,4 +458,27 @@
     <Style Selector="Border.inlineWarning TextBlock">
         <Setter Property="Foreground" Value="{StaticResource AppWarningBrush}" />
     </Style>
+
+    <!-- Key caps for the F1 cheat sheet: one bordered chip per key, the way every
+         other tool prints a shortcut. This replaced a single monospace string per row
+         ("Ctrl+1…9"), which read as a filename rather than as keys — and baked the
+         modifier into text, so it could not follow the Ctrl/Cmd preference.
+         `combo` is the quiet connective between alternatives ("/", "Double-click"). -->
+    <Style Selector="Border.kbd">
+        <Setter Property="Background" Value="{StaticResource CardBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="Padding" Value="7,2" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.kbd TextBlock">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.combo">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Opacity" Value="0.5" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
 </Styles>

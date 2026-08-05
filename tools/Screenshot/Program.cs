@@ -29,6 +29,15 @@ WorkspaceStore.DirectoryOverride = Path.Combine(Path.GetTempPath(), "kubenimbus-
 Directory.CreateDirectory(WorkspaceStore.DirectoryOverride);
 File.Delete(Path.Combine(WorkspaceStore.DirectoryOverride, "workspace.json"));
 
+// The same redirect for settings.json, and for a stronger reason: the preferences a
+// scenario touches (theme, advanced view, sidebar visibility) are exactly the ones the
+// developer running the harness has chosen for themselves, and several scenarios set
+// them by construction. Deleting the file first also pins every render to the shipped
+// defaults, so a screenshot can never quietly depend on whatever was left behind by
+// the previous run.
+KubeNimbus.Core.Settings.AppSettingsStore.DirectoryOverride = WorkspaceStore.DirectoryOverride;
+File.Delete(Path.Combine(WorkspaceStore.DirectoryOverride, "settings.json"));
+
 BuildAvaloniaApp().SetupWithoutStarting();
 
 var scenarios = new (string Name, Func<Control> Build)[]
@@ -81,6 +90,13 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // "pro" is a subsequence of several of these and a prefix of others — the
     // ranking (prefix > contiguous > subsequence) is the point of the shot.
     ("main-window-switcher-search", () => BuildSwitcherContent("pro")),
+
+    // The two windows outside the shell. Rendering them here is not really about the
+    // picture: these are the only Windows in the app whose XAML nothing else loads, and
+    // the harness is CI's one check that a view still loads at all (a stale avares://
+    // URI or a DataTemplate that stopped resolving compiles perfectly).
+    ("preferences-window", BuildPreferencesWindow),
+    ("about-window", () => new AboutWindow { Width = 320, Height = 260 }),
 };
 
 foreach (var (name, build) in scenarios)
@@ -227,6 +243,23 @@ static Control BuildMainWindowContent(bool openShortcuts = false)
     vm.IsShortcutsOpen = openShortcuts;
 
     return window;
+}
+
+// The preferences page. Built against a real MainWindowViewModel because every
+// control on it proxies the shell's own state, and the settings it writes land in
+// the harness's redirected directory (see AppSettingsStore.DirectoryOverride at the
+// top of this file) rather than the developer's own.
+static Control BuildPreferencesWindow()
+{
+    var vm = new MainWindowViewModel();
+    SeedContexts(vm);
+
+    return new PreferencesWindow
+    {
+        DataContext = new PreferencesViewModel(vm),
+        Width = 580,
+        Height = 720,
+    };
 }
 
 // The cluster switcher, open. `query` renders the searching state — one flat

@@ -12,7 +12,15 @@ public sealed partial class SidebarSectionViewModel : ObservableObject
     {
         Title = title;
         IconKey = SidebarGrouping.IconKeyFor(title);
-        _isExpanded = SidebarGrouping.IsExpandedByDefault(title);
+
+        // The remembered set wins over the built-in default, so someone who does live
+        // in CRDs stops re-opening that section every session. An empty set means
+        // "nobody has said" — not "expand nothing" — so it falls back rather than
+        // collapsing all six, which is why this tests Count instead of Contains alone.
+        var remembered = App.LoadSettings().ExpandedSidebarSections;
+        _isExpanded = remembered.Count > 0
+            ? remembered.Contains(title, StringComparer.Ordinal)
+            : SidebarGrouping.IsExpandedByDefault(title);
 
         // KindCount is computed, so it raises nothing by itself — and the Recent
         // section is rebuilt in place on every kind selection. Without this the
@@ -28,9 +36,18 @@ public sealed partial class SidebarSectionViewModel : ObservableObject
 
     /// <summary>Config, Cluster and CRDs each dwarf the sections you actually browse —
     /// they start collapsed so a fresh connection doesn't open on a wall of kinds.
-    /// See <see cref="SidebarGrouping.IsExpandedByDefault"/> for the counts behind that.</summary>
+    /// See <see cref="SidebarGrouping.IsExpandedByDefault"/> for the counts behind that.
+    /// Once the user collapses or expands anything, their set is remembered instead.</summary>
     [ObservableProperty]
     private bool _isExpanded;
+
+    /// <summary>
+    /// Write-back for the remembered expansion set, set by <see cref="ClusterTabViewModel"/>
+    /// as it builds the sidebar. Null while the sidebar is being (re)built, so a
+    /// rebuild that sets every section's state in turn does not write six times and
+    /// record a half-built set.
+    /// </summary>
+    public Action? ExpansionChanged { get; set; }
 
     /// <summary>True while a sidebar filter is active and this section has a match —
     /// force-expands the section without touching the user's own collapse choice.</summary>
@@ -56,7 +73,17 @@ public sealed partial class SidebarSectionViewModel : ObservableObject
 
     public bool ShowKinds => IsExpanded || IsForceExpanded;
 
-    partial void OnIsExpandedChanged(bool value) => OnPropertyChanged(nameof(ShowKinds));
+    partial void OnIsExpandedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowKinds));
+
+        // Records the whole set, not this one section: the stored list is read as
+        // "these are expanded, everything else is not", so writing one entry in
+        // isolation would leave the others ambiguous. ExpansionChanged is set by the
+        // tab that owns the section list — a section still knows nothing about its
+        // siblings, same arrangement as AdvancedViewChanged on the tab.
+        ExpansionChanged?.Invoke();
+    }
 
     partial void OnIsForceExpandedChanged(bool value) => OnPropertyChanged(nameof(ShowKinds));
 

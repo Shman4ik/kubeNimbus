@@ -49,6 +49,11 @@ ordinary `ProjectReference`:
 - `Theme/Icons.axaml` — the MDI glyphs both apps draw.
 - `Theme/Theme.axaml` — the shared style classes (`card`, `layer`, `chip`,
   `toolbar`, `searchpill`, `statusBar`, …).
+- `Theme/Controls.axaml` — the Fluent **control** retheming: `TextBox`/`ComboBox`/
+  `NumericUpDown` radius and brand text selection, `ListBox`/`ListBoxItem`/`TreeView`
+  rounded rows, `DataGrid` soft rules, the `.soft` and `.danger` button families,
+  `TabControl`. This is the half the first extraction missed, and missing it is
+  why the two apps stopped looking alike — see "The design-parity pass" below.
 - `Chrome/` — the one-bar window chrome and its drawn caption buttons.
 - `Hotkeys.cs` — Ctrl/Cmd resolution; `KubeNimbus.App.Hotkeys` forwards to it and
   adds this app's own gestures.
@@ -105,6 +110,10 @@ Three rules about it:
 > rule is believed, and it is worth more here than a second copy of the rule.
 > Change a shared rule in DESIGN.md, not here. Rules 3, 4, 6, 7, 10 and 13 are
 > this app's own.
+>
+> Rules **15 and 16** are a third kind: they are about *matching* pgNimbus rather
+> than about either app alone, so they live here (the chrome they describe is
+> this app's) but a change to either is a change both apps should get.
 
 1. **Minimalist.** Every always-visible control must be justified; default answer
    is no. Secondary actions live in a command palette (Ctrl+K) or context menus.
@@ -328,6 +337,30 @@ Three rules about it:
    at its rendered 1280px, which is narrower than most real windows and is where this
    fails first.
 
+15. **The two apps' command bars read the same left to right.** Not identical — the
+   flexible middle column carries kubeNimbus's cluster tabs and pgNimbus's centred
+   search pill, because tabs are this app's primary navigation and demoting them to a
+   second row would put back the chrome rule 12 removed. But everything either side is
+   now in the same order and drawn with the same glyphs: `☰` app menu, sidebar toggle,
+   then the app's own middle, then search pill, theme, `⚙` preferences, `?`. The help
+   button used to sit *before* the theme toggle here and *after* the cog there, which
+   is precisely the kind of difference that makes two apps by the same author feel
+   unrelated. The `☰` menu is the discoverable home for commands with no other visible
+   control — everything in it is also a palette entry, and it is the route for someone
+   who does not yet know the palette exists, which on a first run is everyone.
+   Every interactive control in the bar still needs
+   `chrome:WindowDecorationProperties.ElementRole="User"` (rule 12) — set on the two
+   `StackPanel`s here so a control added later inherits it rather than being swallowed
+   by the caption.
+16. **A secondary window's OS caption follows the theme.** The main window has no
+   OS-painted title bar left to disagree with (rule 12), but every other window gets
+   one, and Windows paints it from the OS's own dark-mode setting: open Preferences
+   while the app is in Light and Windows is in Dark and the title bar is black above a
+   white page. `ThemedWindowChrome.Attach` pins `DWMWA_CAPTION_COLOR` to the same
+   brush the shell base uses. Cosmetic and best-effort throughout — an unsupported
+   build or a window that has not opened yet degrades to the OS default rather than
+   failing construction.
+
 [fluent-basics]: https://learn.microsoft.com/en-us/windows/apps/design/basics/
 
 ## ConfigMaps are shown, Secrets are masked
@@ -439,6 +472,99 @@ go for that to hold — `SwitcherButton.IsEnabled` and, less visibly,
 cluster button and Ctrl/Cmd+P dead on exactly the machine where the demo cluster is
 the only cluster there is. `AddNewTabCommand.CanExecute` is now unconditionally true
 for the same reason: the switcher always has at least the demo row in it.
+
+## Settings, and what belongs in which file
+
+There are **two** persisted files and the split is not arbitrary:
+
+- **`settings.json`** (`KubeNimbus.Core/Settings/`, `AppSettings` + `AppSettingsStore`)
+  is *preferences* — what you chose once and expect to still be true next launch:
+  theme, hotkey scheme, advanced view, sidebar visibility and expanded sections,
+  picked kubeconfig paths, log scrollback, metrics poll interval, delete confirmation.
+- **`workspace.json`** (`KubeNimbus.App/WorkspaceStore.cs`) is *session* — what the
+  window looked like: open tabs, pinned and recent contexts, environment overrides.
+
+The test: deleting the workspace should lose your tabs and nothing else; deleting the
+settings should reset your preferences and not close your clusters. Theme,
+`IsAdvancedView` and `KubeconfigPaths` used to be in the workspace, on the wrong side
+of that line; `App.MigrateWorkspacePreferences` moves them once, guarded on
+`settings.json` not existing yet, so nobody's existing choice is lost — "the update
+ate my settings" is the specific bug that guard exists to prevent.
+
+Five rules:
+
+1. **Every setter goes through `App.Update(s => s with { … })`**, a read-modify-write.
+   Never a cached snapshot: the preferences window, the palette and an inline toggle
+   can all be live at once, and writing back a snapshot taken before another one
+   changed something silently reverts it.
+2. **The store validates; the UI is not trusted to.** `AppSettings.Normalized()` is
+   applied on both read and write, because the file is plain JSON in a user-writable
+   directory: a hand-edited `MetricsPollSeconds: 0` would spin a timer as fast as the
+   dispatcher allows and hammer the API server. Clamping (rather than rejecting the
+   file) keeps every other setting in it.
+3. **A setting nothing reads is worse than no setting.** Each one is wired to the code
+   that used to hardcode it — `PodDetailTabViewModel._maxLogLines` (was a const 4000),
+   both `MetricsPollInterval`s (was 15s), `RequestDeleteAsync` (the confirm step),
+   `SidebarSectionViewModel`'s initial expansion. Where the read happens is a decision
+   each time: the delete confirm re-reads at the moment the button is pressed (someone
+   who turns it back on after a near-miss expects the *next* delete to ask), while the
+   log cap is read per tab (re-trimming a live buffer would discard lines someone was
+   reading).
+4. **Nothing here may become a credential** (rule 4). `KubeconfigPaths` is the closest
+   it comes and is paths only, re-resolved through the chain at connect time. The
+   preferences page says so in the panel, which is where someone would worry about it.
+5. **`AppSettingsStore.DirectoryOverride`** exists for the screenshot harness, same as
+   `WorkspaceStore.DirectoryOverride` and for a stronger reason: the preferences a
+   scenario touches are exactly the ones the developer running it has chosen for
+   themselves.
+
+The page itself (`PreferencesWindow` + `PreferencesViewModel`) is deliberately the same
+shape as pgNimbus's — section header, one card per setting, label and explanation left,
+control right, **immediate apply and no OK/Cancel** — because someone who uses both
+should not learn it twice. Settings the shell already owns (`IsAdvancedView`,
+`IsSidebarVisible`) are *proxied* through `MainWindowViewModel`, never duplicated, so
+the page and the command bar's own toggles cannot disagree while both are on screen.
+
+## The command catalog (shortcuts, palette, cheat sheet, docs)
+
+`KubeNimbus.Core/Commands/` is the single source for every command and documented
+gesture: `CommandCatalog` holds the descriptors, `Chord`/`CommandKey`/`ChordModifiers`
+express a key combination without naming a platform, and `ShortcutDocs` renders the
+whole thing as `docs/keyboard-shortcuts.md`. The App layer projects it —
+`CommandBindings` turns descriptors into Avalonia gestures and resolves ids to
+view-model commands, `ShortcutsViewModel` builds the F1 sheet, `CommandTip` builds
+tooltips. It replaced a hand-written `Hotkeys.CheatSheet` array plus gestures typed
+into four places.
+
+Six things worth keeping:
+
+1. **Core stays UI-free** (rule 1), so `CommandKey` is a local enum rather than
+   Avalonia's `Key` and `CommandBindings.ToKey` owns the one mapping. That is also why
+   this cannot live in `nimbusUi` despite being app-neutral: the shared library
+   references Avalonia, and Core may not.
+2. **The gestures are properties, not `static readonly` fields.** The Ctrl/Cmd scheme
+   is a user preference now, and a `KeyGesture` captured at type-initialization
+   outlives the setting that produced it. `Hotkeys.cs` used to hold exactly such
+   fields; the window rebuilds its bindings from `Hotkeys.Changed`, and
+   `BuildKeyBindings` **clears** first — adding to the existing set would leave Ctrl+K
+   working after someone chose Cmd, which reads as the preference doing nothing.
+3. **The palette is a *partial* projection, deliberately.** Most of this app's rows are
+   conditional — logs/exec/port-forward only while a pod row is selected, the fleet
+   toggle only with more than one cluster connected — so they stay closures over the
+   selected tab in `BuildPaletteItems`, because a palette entry that matches a search
+   and then refuses to run is worse than no match. What they take from the catalog is
+   title, icon and shortcut text. `CommandBindings`' startup check is therefore over
+   `WindowBinding` only, which is narrower than pgNimbus's and says so in place.
+4. **An action with no gesture is `PaletteOnly`, not `PaletteAndSheet`.** F1 is a
+   *keyboard* reference: a row reading "Edit YAML — —" tells the reader nothing and
+   pushes the rows that do carry a key further down. `CommandCatalogTests` pins this —
+   every cheat-sheet row must have a chord or a gesture note.
+5. **`ChordModifiers.Control` is literal Ctrl on every platform**, and the exec pane is
+   why: `^C` and `^D` are terminal control characters, Control on macOS too, and Cmd+C
+   there is Copy. A test asserts both render as "Ctrl" even under the Cmd scheme.
+6. **The docs page is a golden file.** `ShortcutDocsTests` fails on any drift;
+   `KUBENIMBUS_UPDATE_DOCS=1` regenerates it. A shortcut reference that can silently
+   fall behind the app is worse than none.
 
 ## The Advanced view
 
@@ -1824,3 +1950,73 @@ and all 40 scenarios × both themes rendered (the harness is the XAML smoke test
 Ctrl/Cmd+F focusing the box, Esc handing focus back to the grid, and the filter
 surviving a live watch tick (a Modified event on a filtered-out row must not make it
 reappear) are the three worth clicking.
+
+**Design-parity pass (settings, help system, one design language):** the complaint was
+that kubeNimbus looked visibly worse than pgNimbus *even after* the shared design
+system was extracted, that the two top bars did not match, and that kubeNimbus had no
+settings and no help system. Four halves, and the first one explains the other three:
+
+- **The shared library was in sync; the extraction was incomplete.** `shared/nimbusUi`
+  was byte-identical in both repos (modulo CRLF) — but what had been pulled up was only
+  the *shell* vocabulary (tokens, `card`/`layer`/`chip`/`searchpill`/`toolbar`/`accent`,
+  scrollbars, `statusBar`, `sectionHeader`). pgNimbus's ~350 lines of **Fluent control
+  retheming** stayed behind in its own `Theme.axaml`, so kubeNimbus rendered every
+  `TextBox`, `ComboBox`, `NumericUpDown`, `ListBox`, `TreeView` and `DataGrid`, and had
+  no `.soft`/`.danger` button family at all, as **stock Fluent** beside pgNimbus's toned
+  versions. That is the whole of "looks worse", and it was invisible from inside either
+  app — you only see it with the two windows side by side. Now
+  `shared/nimbusUi/Theme/Controls.axaml`, consumed by both. `TabItem` stays per-app as
+  before, and `TabControl.segmented` newly joins it on DESIGN.md's not-shared list:
+  kubeNimbus does that job with `ListBox.segmented` + `TabControl.headerless` on
+  purpose (UI rule 10).
+- **The command bar now reads the same left to right as pgNimbus's** — see UI rule 15.
+  New: the `☰` app menu and the sidebar toggle at the left, `⚙` preferences on the
+  right, and the right cluster reordered to pgNimbus's order. The sidebar toggle is a
+  real feature, not just a matching glyph: `MainWindowViewModel.IsSidebarVisible` is
+  shell-owned and mirrored onto every tab like `IsAdvancedView`, and
+  `ClusterTabView.ApplySidebarVisibility` collapses the **column**, not just the panel
+  — hiding a Grid child leaves its column at full width, which would have left a third
+  of the content area blank and the list exactly as narrow as before.
+- **A settings system**, `settings.json` beside the existing workspace — see "Settings,
+  and what belongs in which file" above for the split, the migration and the five
+  rules. It also connects something that had been dead: the shared hotkey resolver has
+  supported a Ctrl/Cmd override since extraction, but kubeNimbus never called
+  `Initialize`, so the setting existed in code and was unreachable.
+- **A help system**: `CommandCatalog` in Core as the single source for key bindings,
+  palette titles, the F1 sheet and a generated `docs/keyboard-shortcuts.md`, plus
+  `CommandTip` for tooltips that carry a live shortcut, an About window, and a cheat
+  sheet rebuilt with sectioned keycap chips instead of a flat list of monospace
+  strings. See "The command catalog" above for the six rules. This also fixed a latent
+  bug: `Hotkeys.cs` held its gestures in `static readonly` fields, which the shared
+  resolver explicitly warns against — harmless while the modifier could never change,
+  a real bug the moment the scheme became a preference.
+
+**win-x64 NativeAOT now builds *and launches* — the first time either has happened.**
+It was still failing at the same `/Assets/app.ico` `FileNotFoundException` that
+CLAUDE.md had recorded for linux/osx, which means the bug was never platform-specific:
+**every** release RID shipped a binary that could not start. The cause is narrower than
+"Avalonia asset registration under AOT": `Icon="/Assets/app.ico"` goes through
+`IconTypeConverter.CreateIconFromPath`, and it is the converter's resolution of a
+*relative* path that does not survive — which is why fully qualifying the URI in the
+XAML attribute (tried in an earlier session, reverted) did not help. Loading the same
+file by absolute `avares://` URI through `AssetLoader` in code skips the converter
+entirely; that is what pgNimbus has always done for its window icons, and why its AOT
+binaries start. `WindowIcons.Apply` does it here, and the `Icon=` attributes are gone
+from both windows. The published binary was launched and showed a real window.
+
+**Verified this session**: build with **0 warnings**, **155/155 TUnit, 0 skipped** (the
+10 new catalog/docs tests among them), all **84** screenshots (42 scenarios × both
+themes) including the two new windows, the **win-x64 NativeAOT publish** with no new
+warnings beyond the known DataGrid IL2104/IL3053, and that binary launching. pgNimbus
+was rebuilt and re-rendered against the moved styles (30 screenshots) and is unchanged.
+
+**Not verified**, in rough priority order: nothing in this pass has been driven by hand
+against a live cluster — the preferences page's kubeconfig add/remove, the sidebar
+toggle at various window widths, Ctrl/Cmd+, and Ctrl/Cmd+B, and above all **changing
+the hotkey scheme while the app is open** (the rebuild-on-`Changed` path: bindings,
+cheat sheet and tooltips all have to re-render, and `BuildKeyBindings` clearing first is
+the part that would fail quietly). The linux/osx NativeAOT binaries should also be
+re-published to confirm the icon fix unblocks them too — the diagnosis says it will,
+but only win-x64 has actually been run. And the macOS half of UI rule 15/16 (traffic
+lights beside the new left cluster, DWM caption colour has no macOS equivalent) is
+untested, as ever.

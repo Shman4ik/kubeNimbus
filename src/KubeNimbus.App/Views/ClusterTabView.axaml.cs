@@ -58,6 +58,7 @@ public partial class ClusterTabView : UserControl
         ApplyMetricsColumns();
         ApplyFleetColumn();
         ApplySummaryColumns();
+        ApplySidebarVisibility();
     }
 
     /// <summary>
@@ -129,6 +130,33 @@ public partial class ClusterTabView : UserControl
         {
             ApplySummaryColumns();
         }
+        else if (e.PropertyName == nameof(ClusterTabViewModel.IsSidebarVisible))
+        {
+            ApplySidebarVisibility();
+        }
+    }
+
+    /// <summary>
+    /// Shows or hides the resource-catalog sidebar by collapsing its column, not just
+    /// the panel: a hidden Grid child leaves its column at full width, so hiding the
+    /// sidebar alone would leave a third of the content area blank and the list exactly
+    /// as narrow as before — which is the one thing the toggle exists to fix.
+    ///
+    /// <para>
+    /// The star width is restored to the literal the XAML declares rather than
+    /// remembered from before the hide. There is no splitter on this column, so the
+    /// value can never have been dragged away from it, and reading it back would only
+    /// create a way for "hidden" to be captured as the restore width.
+    /// </para>
+    /// </summary>
+    private void ApplySidebarVisibility()
+    {
+        var visible = Vm?.IsSidebarVisible ?? true;
+
+        Sidebar.IsVisible = visible;
+        ContentColumns.ColumnDefinitions[0].Width = visible
+            ? new GridLength(0.65, GridUnitType.Star)
+            : new GridLength(0);
     }
 
     /// <summary>

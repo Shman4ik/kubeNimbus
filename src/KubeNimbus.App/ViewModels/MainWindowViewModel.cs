@@ -5,6 +5,8 @@ using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KubeNimbus.Core;
+using KubeNimbus.Core.Commands;
+using KubeNimbus.Core.Settings;
 
 namespace KubeNimbus.App.ViewModels;
 
@@ -145,11 +147,120 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void SetAdvancedView(bool value) => IsAdvancedView = value;
 
+    /// <summary>
+    /// Whether the cluster tab's resource-catalog sidebar is shown. Shell-owned and
+    /// mirrored onto every tab, exactly like <see cref="IsAdvancedView"/> — the
+    /// sidebar lives inside <c>ClusterTabView</c>, but the control that hides it is in
+    /// the command bar, and the choice is global rather than per-tab (hiding it on one
+    /// cluster and not the next would read as a bug).
+    ///
+    /// <para>
+    /// Bound one-way from the toggle's <c>IsChecked</c> plus an explicit
+    /// <see cref="SetSidebarVisibleCommand"/> target value — never an inverting command
+    /// beside a two-way binding, which is the double-toggle no-op this repo has shipped
+    /// three times (UI rule 8b).
+    /// </para>
+    /// </summary>
+    [ObservableProperty]
+    private bool _isSidebarVisible = true;
+
+    partial void OnIsSidebarVisibleChanged(bool value)
+    {
+        App.Update(s => s with { IsSidebarVisible = value });
+
+        foreach (var tab in Tabs)
+        {
+            tab.IsSidebarVisible = value;
+        }
+    }
+
+    /// <summary>
+    /// Sets the sidebar's visibility to an explicit value, for the palette entry.
+    /// Explicit rather than inverting, for the reason on <see cref="SetAdvancedView"/>.
+    /// </summary>
+    [RelayCommand]
+    private void SetSidebarVisible(bool value) => IsSidebarVisible = value;
+
+    /// <summary>
+    /// Opens the preferences page, or re-activates it if it is already up. One
+    /// instance: every control on it applies immediately, so a second copy would be
+    /// two views of the same live state racing each other's writes.
+    /// </summary>
+    [RelayCommand]
+    private void ShowPreferences()
+    {
+        if (_preferencesWindow is { } existing)
+        {
+            existing.Activate();
+            return;
+        }
+
+        var window = new Views.PreferencesWindow { DataContext = new PreferencesViewModel(this) };
+        window.Closed += (_, _) => _preferencesWindow = null;
+        _preferencesWindow = window;
+        ShowDialogOwned(window);
+    }
+
+    private Views.PreferencesWindow? _preferencesWindow;
+
+    /// <summary>Opens the About box. Same one-instance rule, same reason it is cheap to hold.</summary>
+    [RelayCommand]
+    private void ShowAbout()
+    {
+        if (_aboutWindow is { } existing)
+        {
+            existing.Activate();
+            return;
+        }
+
+        var window = new Views.AboutWindow();
+        window.Closed += (_, _) => _aboutWindow = null;
+        _aboutWindow = window;
+        ShowDialogOwned(window);
+    }
+
+    private Views.AboutWindow? _aboutWindow;
+
+    /// <summary>
+    /// Shows a window owned by the shell, so it stays above it, centres on it and
+    /// closes with it. Non-modal deliberately — the preferences page is something you
+    /// leave open while trying a setting against a live cluster, and a modal one would
+    /// make that impossible. Falls back to a plain Show when there is no desktop
+    /// lifetime (the screenshot harness renders these windows directly).
+    /// </summary>
+    private static void ShowDialogOwned(Avalonia.Controls.Window window)
+    {
+        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime { MainWindow: { } owner })
+        {
+            window.Show(owner);
+            return;
+        }
+
+        window.Show();
+    }
+
+    /// <summary>
+    /// The F1 cheat sheet's rows, projected from <see cref="Core.Commands.CommandCatalog"/>.
+    /// Rebuilt when the Ctrl/Cmd scheme changes: the key caps spell the modifier out, so
+    /// a sheet built once would keep showing the other platform's chord.
+    /// </summary>
+    [ObservableProperty]
+    private ShortcutsViewModel _shortcuts = new();
+
     [ObservableProperty]
     private bool _isShortcutsOpen;
 
     [RelayCommand]
     private void ToggleShortcuts() => IsShortcutsOpen = !IsShortcutsOpen;
+
+    /// <summary>
+    /// Toggles the sidebar, for the keyboard binding. Inverting is safe here and
+    /// nowhere else: this is reached from a <c>KeyBinding</c>, never from the command
+    /// bar's <c>ToggleButton</c> — that one uses a two-way <c>IsChecked</c> alone, and
+    /// wiring both to the same control is the double-toggle no-op of UI rule 8b.
+    /// </summary>
+    [RelayCommand]
+    private void ToggleSidebar() => IsSidebarVisible = !IsSidebarVisible;
 
     [RelayCommand]
     private void CloseShortcuts() => IsShortcutsOpen = false;
@@ -160,6 +271,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Switcher = new ClusterSwitcherViewModel(BuildSwitcherItems) { Activate = ActivateSwitcherItem };
 
         LoadPreferences();
+
+        // The sheet spells out Ctrl or Cmd on every cap, so it has to be rebuilt when
+        // the preference changes rather than showing the other platform's chords until
+        // restart. The window rebuilds its key bindings off the same event.
+        Hotkeys.Changed += () => Shortcuts = new ShortcutsViewModel();
 
         // Stamp the environment on every tab that enters the strip, wherever it came
         // from. Doing it here rather than in AddTabAsync means a tab built outside the
@@ -177,6 +293,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 // stamping never round-trips through the shell.
                 tab.IsAdvancedView = IsAdvancedView;
                 tab.AdvancedViewChanged = value => IsAdvancedView = value;
+                tab.IsSidebarVisible = IsSidebarVisible;
             }
         };
 
@@ -184,14 +301,17 @@ public sealed partial class MainWindowViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Reads the parts of the workspace that aren't tabs — pins, recents and
-    /// environment overrides. Separate from <see cref="RestoreWorkspaceAsync"/>
-    /// because these have to be in place *before* the first tab opens: the
-    /// environment colour is read as each tab is constructed.
+    /// Reads what has to exist before the first tab opens: the session state that
+    /// isn't tabs (pins, recents, environment overrides — the environment colour is
+    /// read as each tab is constructed) and the preferences the shell mirrors onto
+    /// every tab. Two files, because they answer different questions — see
+    /// <see cref="AppSettings"/> — and one call site, because both are needed at the
+    /// same moment.
     /// </summary>
     private void LoadPreferences()
     {
         var settings = WorkspaceStore.Load();
+        var preferences = App.LoadSettings();
 
         _pinned.Clear();
         _pinned.AddRange(settings.PinnedContexts ?? []);
@@ -200,14 +320,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
         _recent.AddRange(settings.RecentContexts ?? []);
 
         _pickedKubeconfigPaths.Clear();
-        _pickedKubeconfigPaths.AddRange(settings.KubeconfigPaths ?? []);
+        _pickedKubeconfigPaths.AddRange(preferences.KubeconfigPaths);
 
-        // Straight to the backing field: this runs during construction, before any
-        // binding or tab exists, and going through the property would only persist
-        // the value that was just read back over itself. MVVMTK0034 is the analyzer
-        // asking "did you mean the property?" — here, no.
+        // Straight to the backing fields: this runs during construction, before any
+        // binding or tab exists, and going through the properties would only persist
+        // the values that were just read back over themselves. MVVMTK0034 is the
+        // analyzer asking "did you mean the property?" — here, no.
 #pragma warning disable MVVMTK0034
-        _isAdvancedView = settings.IsAdvancedView ?? false;
+        _isAdvancedView = preferences.IsAdvancedView;
+        _isSidebarVisible = preferences.IsSidebarVisible;
 #pragma warning restore MVVMTK0034
 
         _environmentOverrides.Clear();
@@ -488,6 +609,30 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Forgets a picked kubeconfig path and rescans, for the preferences page's list.
+    /// Only the app's memory of the path goes — the file is not touched, which matters
+    /// on a page listing the files that reach someone's production clusters.
+    ///
+    /// <para>
+    /// Open tabs are deliberately left alone. A tab holds a live, already-resolved
+    /// connection; closing clusters as a side effect of tidying a path list would be a
+    /// far bigger action than the one asked for, and the tab simply will not come back
+    /// on the next restore.
+    /// </para>
+    /// </summary>
+    public async Task ForgetKubeconfigPathAsync(string path)
+    {
+        if (_pickedKubeconfigPaths.RemoveAll(p =>
+                string.Equals(p, path, StringComparison.OrdinalIgnoreCase)) == 0)
+        {
+            return;
+        }
+
+        SaveWorkspace();
+        await LoadContextsAsync();
+    }
+
     private async Task RestoreWorkspaceAsync()
     {
         var settings = WorkspaceStore.Load();
@@ -661,26 +806,48 @@ public sealed partial class MainWindowViewModel : ObservableObject
             PinnedContexts = [.. _pinned],
             RecentContexts = [.. _recent],
             EnvironmentOverrides = _environmentOverrides.ToDictionary(kv => kv.Key, kv => kv.Value.ToString()),
-            KubeconfigPaths = [.. _pickedKubeconfigPaths],
         });
-    }
 
-    public void PersistTheme(string? theme)
-    {
-        var settings = WorkspaceStore.Load();
-        WorkspaceStore.Save(settings with { Theme = theme });
+        // The picked kubeconfig paths are a preference, not session state — they are
+        // what the app should look at next launch regardless of which tabs were open —
+        // so they live in settings.json and are written alongside rather than into the
+        // workspace. Same call, because every gesture that changes one is a gesture
+        // that saves the workspace anyway.
+        App.Update(s => s with { KubeconfigPaths = [.. _pickedKubeconfigPaths] });
     }
 
     /// <summary>
-    /// Read-modify-write, same shape as <see cref="PersistTheme"/> — the workspace
-    /// file also holds tabs, pins, recents and environment overrides, and rewriting
-    /// it from this view model's fields alone would drop whatever another write
-    /// landed in the meantime.
+    /// Persists a theme chosen from the top bar's light/dark toggle. Goes through
+    /// <see cref="App.SetTheme"/> so the toggle and the preferences page write the
+    /// same setting in the same spelling — they used to disagree, because the toggle
+    /// wrote ThemeVariant names into the workspace.
     /// </summary>
-    private static void PersistAdvancedView(bool value)
+    public void PersistTheme(string? theme) => App.SetTheme(theme ?? "system");
+
+    /// <summary>
+    /// Read-modify-write through <see cref="App.Update"/>, never a cached snapshot:
+    /// the preferences window can be open at the same time as this toggle, and
+    /// writing back a snapshot taken before it would revert whatever it just changed.
+    /// </summary>
+    private static void PersistAdvancedView(bool value) =>
+        App.Update(s => s with { IsAdvancedView = value });
+
+    /// <summary>
+    /// One palette row built from its catalog entry — title and icon from the
+    /// descriptor, the shortcut appended to the subtitle when it has one. The action
+    /// stays a closure supplied by the caller, because most of this app's palette rows
+    /// are conditional on the selected tab or row and only exist while they apply.
+    /// </summary>
+    private static PaletteItem Catalog(CommandId id, string subtitle, Action run)
     {
-        var settings = WorkspaceStore.Load();
-        WorkspaceStore.Save(settings with { IsAdvancedView = value });
+        var descriptor = CommandCatalog.Get(id);
+        var shortcut = descriptor.ShortcutLabel(Hotkeys.PrimaryLabel);
+
+        return new PaletteItem(
+            descriptor.Title,
+            shortcut is { Length: > 0 } ? $"{subtitle} · {shortcut}" : subtitle,
+            descriptor.IconKey,
+            run);
     }
 
     private IEnumerable<PaletteItem> BuildPaletteItems()
@@ -723,6 +890,26 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 : "Back to the minimal layout",
             "TuneIconGeometry",
             () => IsAdvancedView = advancedTarget);
+
+        // Same explicit-target shape, same reason, for the sidebar.
+        var sidebarTarget = !IsSidebarVisible;
+        yield return new PaletteItem(
+            sidebarTarget ? "Show the resource sidebar" : "Hide the resource sidebar",
+            sidebarTarget ? "Bring back the kind catalog" : "Give the resource list the full width",
+            "SidebarToggleIconGeometry",
+            () => IsSidebarVisible = sidebarTarget);
+
+        // Title, icon and shortcut caption all come from the catalog rather than being
+        // retyped here, so the palette row, the tooltip and the F1 sheet cannot spell
+        // the same command three different ways.
+        yield return Catalog(CommandId.Preferences, "Theme, shortcuts, kubeconfig files, logs and metrics",
+            () => ShowPreferencesCommand.Execute(null));
+
+        yield return Catalog(CommandId.ShortcutsWindow, "Every gesture, grouped",
+            () => ToggleShortcutsCommand.Execute(null));
+
+        yield return Catalog(CommandId.About, "Version and license",
+            () => ShowAboutCommand.Execute(null));
 
         // Gated on the toggle's own visibility rather than on IsFleetViewAvailable, so
         // the palette offers exactly what the command bar does — including the way out
