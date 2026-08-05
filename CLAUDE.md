@@ -348,6 +348,13 @@ Three rules about it:
    unrelated. The `☰` menu is the discoverable home for commands with no other visible
    control — everything in it is also a palette entry, and it is the route for someone
    who does not yet know the palette exists, which on a first run is everyone.
+   Its **tail is the same triple in both apps** — Preferences…, Keyboard shortcuts,
+   About — and that is not symmetry for its own sake: pgNimbus had About wired
+   exclusively to the macOS native app menu, so on Windows and Linux there was no
+   way to open it at all. The help *glyph* is shared for the same reason the order
+   is (`HelpCircleIconGeometry`, now in `nimbusUi/Theme/Icons.axaml`): pgNimbus drew
+   a bare `?` text button beside four `PathIcon`s, which sits on the glyph baseline
+   instead of the icons' box and takes the default foreground instead of theirs.
    Every interactive control in the bar still needs
    `chrome:WindowDecorationProperties.ElementRole="User"` (rule 12) — set on the two
    `StackPanel`s here so a control added later inherits it rather than being swallowed
