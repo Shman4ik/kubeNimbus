@@ -8,6 +8,7 @@
         xmlns:aconv="using:Avalonia.Data.Converters"
         xmlns:local="using:KubeNimbus.App"
         xmlns:cmd="using:KubeNimbus.App"
+        xmlns:nui="using:Nimbus.Ui.Controls"
         x:Class="KubeNimbus.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="kubeNimbus"
@@ -452,69 +453,43 @@
       </Border>
     </Border>
 
-    <!-- Shortcuts cheat sheet overlay (F1 / the ? button).
+    <!-- The shell's three dismissable panels. Same control, same shape, same
+         gestures (backdrop, ✕, Esc) — and none of them a second window, which is
+         what they all were before nimbusUi grew an OverlayPanel to hold them. See
+         that control for why; the short version is that a secondary Window arrives
+         with an OS-painted caption the app does not control, a second Alt+Tab entry,
+         and chrome that is not the shell's.
 
-         Every row below is generated from KubeNimbus.Core.Commands.CommandCatalog via
-         ShortcutsViewModel — the same list that builds the window's key bindings and
-         the published shortcut reference. Add a shortcut to the catalog and it appears
-         here on its own; never hand-author a row in this file.
+         IsOpen binds two-way and is the ONLY wiring: the panel closes itself and the
+         binding writes it back. Never pair it with a closing Command — that is the
+         double-toggle no-op of UI rule 8b. -->
+    <nui:OverlayPanel IsOpen="{Binding IsShortcutsOpen, Mode=TwoWay}"
+                      Title="Keyboard shortcuts" PanelWidth="520" PanelMaxHeight="640"
+                      Content="{Binding Shortcuts}">
+      <nui:OverlayPanel.ContentTemplate>
+        <DataTemplate DataType="vm:ShortcutsViewModel">
+          <views:ShortcutsView />
+        </DataTemplate>
+      </nui:OverlayPanel.ContentTemplate>
+    </nui:OverlayPanel>
 
-         The keys are drawn as individual caps rather than one monospace string, which
-         is what the rest of the industry does and what pgNimbus's sheet does — a
-         "Ctrl+Shift+F" in a mono font reads as a filename, three caps read as keys. -->
-    <Border Background="#80000000" IsVisible="{Binding IsShortcutsOpen}" PointerPressed="OnShortcutsBackdropPressed">
-      <Border Classes="layer" Width="520" MaxHeight="640" VerticalAlignment="Center" HorizontalAlignment="Center" Padding="0">
-        <Grid RowDefinitions="Auto,*">
-          <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="14,12,10,8">
-            <TextBlock Grid.Column="0" Text="Keyboard shortcuts" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" />
-            <Button Grid.Column="1" Classes="chip" Padding="0" MinWidth="18" MinHeight="18" Command="{Binding CloseShortcutsCommand}">
-              <PathIcon Data="{StaticResource CloseIconGeometry}" Width="10" Height="10" />
-            </Button>
-          </Grid>
+    <nui:OverlayPanel IsOpen="{Binding IsPreferencesOpen, Mode=TwoWay}"
+                      Title="Preferences" PanelWidth="580" PanelMaxHeight="640"
+                      Content="{Binding Preferences}">
+      <nui:OverlayPanel.ContentTemplate>
+        <DataTemplate DataType="vm:PreferencesViewModel">
+          <views:PreferencesView />
+        </DataTemplate>
+      </nui:OverlayPanel.ContentTemplate>
+    </nui:OverlayPanel>
 
-          <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" Padding="14,0,14,14">
-            <ItemsControl ItemsSource="{Binding Shortcuts.Sections}">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="vm:ShortcutSection">
-                  <StackPanel Spacing="4" Margin="0,0,0,12">
-                    <TextBlock Classes="sectionHeader" Text="{Binding Title}" Margin="4,0,4,4" />
-                    <Border Classes="card" Padding="4">
-                      <ItemsControl ItemsSource="{Binding Rows}">
-                        <ItemsControl.ItemTemplate>
-                          <DataTemplate x:DataType="vm:ShortcutRow">
-                            <Grid ColumnDefinitions="*,Auto" Margin="8,5">
-                              <TextBlock Grid.Column="0" Text="{Binding Action}" FontSize="12.5"
-                                         VerticalAlignment="Center" TextWrapping="Wrap" />
-                              <ItemsControl Grid.Column="1" ItemsSource="{Binding Tokens}"
-                                            HorizontalAlignment="Right" Margin="12,0,0,0">
-                                <ItemsControl.ItemsPanel>
-                                  <ItemsPanelTemplate>
-                                    <StackPanel Orientation="Horizontal" Spacing="4" />
-                                  </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                  <DataTemplate x:DataType="vm:ShortcutToken">
-                                    <Panel>
-                                      <Border Classes="kbd" IsVisible="{Binding IsKey}">
-                                        <TextBlock Text="{Binding Text}" />
-                                      </Border>
-                                      <TextBlock Classes="combo" IsVisible="{Binding !IsKey}" Text="{Binding Text}" />
-                                    </Panel>
-                                  </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                              </ItemsControl>
-                            </Grid>
-                          </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                      </ItemsControl>
-                    </Border>
-                  </StackPanel>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-          </ScrollViewer>
-        </Grid>
-      </Border>
-    </Border>
+    <!-- Sized to its content rather than to the 520 default: an About box is six
+         short lines, and a half-empty 520x640 card would look like a page that
+         failed to load. -->
+    <nui:OverlayPanel IsOpen="{Binding IsAboutOpen, Mode=TwoWay}"
+                      Title="About" PanelWidth="340" PanelMaxHeight="400">
+      <views:AboutView />
+    </nui:OverlayPanel>
+
   </Grid>
 </Window>

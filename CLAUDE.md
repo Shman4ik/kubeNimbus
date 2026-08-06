@@ -348,18 +348,46 @@ Three rules about it:
    unrelated. The `☰` menu is the discoverable home for commands with no other visible
    control — everything in it is also a palette entry, and it is the route for someone
    who does not yet know the palette exists, which on a first run is everyone.
+   Its **tail is the same triple in both apps** — Preferences…, Keyboard shortcuts,
+   About — and that is not symmetry for its own sake: pgNimbus had About wired
+   exclusively to the macOS native app menu, so on Windows and Linux there was no
+   way to open it at all. The help *glyph* is shared for the same reason the order
+   is (`HelpCircleIconGeometry`, now in `nimbusUi/Theme/Icons.axaml`): pgNimbus drew
+   a bare `?` text button beside four `PathIcon`s, which sits on the glyph baseline
+   instead of the icons' box and takes the default foreground instead of theirs.
    Every interactive control in the bar still needs
    `chrome:WindowDecorationProperties.ElementRole="User"` (rule 12) — set on the two
    `StackPanel`s here so a control added later inherits it rather than being swallowed
    by the caption.
-16. **A secondary window's OS caption follows the theme.** The main window has no
-   OS-painted title bar left to disagree with (rule 12), but every other window gets
-   one, and Windows paints it from the OS's own dark-mode setting: open Preferences
-   while the app is in Light and Windows is in Dark and the title bar is black above a
-   white page. `ThemedWindowChrome.Attach` pins `DWMWA_CAPTION_COLOR` to the same
-   brush the shell base uses. Cosmetic and best-effort throughout — an unsupported
-   build or a window that has not opened yet degrades to the OS default rather than
-   failing construction.
+16b. **A panel you open, use and dismiss is an `OverlayPanel`, not a window.** Shared;
+   canonical text is [`DESIGN.md`](shared/nimbusUi/DESIGN.md) rule 13. The cheat sheet
+   was already an overlay here and About and Preferences were windows, which is the
+   inconsistency that produced the rule: two of the three items at the bottom of the ☰
+   menu opened a surface in the shell's own chrome and the third opened one in the OS's.
+   `Views/ShortcutsView`, `AboutView` and `PreferencesView` are the bodies;
+   `MainWindowViewModel.IsShortcutsOpen` / `IsPreferencesOpen` / `IsAboutOpen` are the
+   state, bound two-way and never paired with a closing command (rule 8b again).
+   The preferences page **lost something real** in the move and it is worth naming:
+   it used to be a non-modal window precisely so you could leave it open while trying a
+   setting against a live cluster, and an overlay covers the cluster. Immediate-apply is
+   what makes that affordable — the change is already made and persisted when you
+   dismiss — but if a setting ever needs watching *while* it is changed, that argument
+   comes back and this is the decision to revisit.
+   The palette and the cluster switcher are deliberately **not** OverlayPanels: both put
+   focus in a search box and drive a selection from the arrow keys, which is a different
+   control, not a differently-styled one.
+16. **This app has exactly one window, and that is now the rule rather than an
+   accident.** It used to have three — the shell plus About and Preferences — and the
+   two secondaries needed `ThemedWindowChrome.Attach` to pin `DWMWA_CAPTION_COLOR`,
+   because Windows paints a title bar from the *OS's* dark-mode setting: open
+   Preferences while the app is in Light and Windows is in Dark and you got a black
+   caption above a white page. Rule 16b turned both into overlays, which left that file
+   with no callers, so it is gone. pgNimbus still has its copy and genuinely needs it
+   (a connection dialog, a crash reporter and two reference windows that cannot be
+   overlays), and `DESIGN.md`'s cross-port list already tracks moving the DWM half into
+   `nimbusUi` — which is where to get it back from if this app ever grows a second
+   window. Adding one *without* it is the bug to remember: the black-caption-over-white
+   -page failure is invisible on a machine whose OS theme happens to match the app's.
 
 [fluent-basics]: https://learn.microsoft.com/en-us/windows/apps/design/basics/
 

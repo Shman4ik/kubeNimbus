@@ -1,0 +1,58 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:KubeNimbus.App.ViewModels"
+             x:Class="KubeNimbus.App.Views.ShortcutsView"
+             x:DataType="vm:ShortcutsViewModel">
+
+  <!-- Every row below is generated from KubeNimbus.Core.Commands.CommandCatalog via
+       ShortcutsViewModel — the same list that builds the window's key bindings and
+       the published shortcut reference. Add a shortcut to the catalog and it appears
+       here on its own; never hand-author a row in this file.
+
+       The keys are drawn as individual caps rather than one monospace string, which
+       is what the rest of the industry does and what pgNimbus's sheet does — a
+       "Ctrl+Shift+F" in a mono font reads as a filename, three caps read as keys. -->
+
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled" Padding="14,0,14,14">
+    <ItemsControl ItemsSource="{Binding Sections}">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="vm:ShortcutSection">
+          <StackPanel Spacing="4" Margin="0,0,0,12">
+            <TextBlock Classes="sectionHeader" Text="{Binding Title}" Margin="4,0,4,4" />
+            <Border Classes="card" Padding="4">
+              <ItemsControl ItemsSource="{Binding Rows}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ShortcutRow">
+                    <Grid ColumnDefinitions="*,Auto" Margin="8,5">
+                      <TextBlock Grid.Column="0" Text="{Binding Action}" FontSize="12.5"
+                                 VerticalAlignment="Center" TextWrapping="Wrap" />
+                      <ItemsControl Grid.Column="1" ItemsSource="{Binding Tokens}"
+                                    HorizontalAlignment="Right" Margin="12,0,0,0">
+                        <ItemsControl.ItemsPanel>
+                          <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="4" />
+                          </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="vm:ShortcutToken">
+                            <Panel>
+                              <Border Classes="kbd" IsVisible="{Binding IsKey}">
+                                <TextBlock Text="{Binding Text}" />
+                              </Border>
+                              <TextBlock Classes="combo" IsVisible="{Binding !IsKey}" Text="{Binding Text}" />
+                            </Panel>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </Border>
+          </StackPanel>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+  </ScrollViewer>
+
+</UserControl>
