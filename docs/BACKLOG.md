@@ -12,7 +12,7 @@ behaviour on the next tick.
 
 | Key | Value | Meaning |
 |---|---|---|
-| `AUTO_PR` | `no` | On PASS, push the branch only. `yes` also opens a pull request. |
+| `AUTO_PR` | `yes` | On PASS, push the branch **and** open a pull request against `main`, following `.github/PULL_REQUEST_TEMPLATE.md`. Set to `no` to push the branch only. |
 | `MAX_FIX_ROUNDS` | `2` | Verifier FAIL → implementer fix rounds before the item is marked `blocked`. |
 | `RESEARCH_EVERY` | `5` | Cycles between competitor-research runs. |
 | `READY_POOL_MIN` | `5` | Research also runs whenever Ready drops below this. |
@@ -126,6 +126,7 @@ adoption than anything in section B.
 | ENG-4 | Accessibility pass: keyboard-only navigation, focus visuals, automation names | Also a Microsoft Store certification item, so it pairs with DIST-2 | M | P2 | |
 | ENG-5 | Persist the sidebar's Recent kinds across restarts | Explicitly deferred in `CLAUDE.md` pending a `WorkspaceSettings` schema change | S | P3 | |
 | ENG-6 | Horizontal scroll for the fleet list — ten columns do not fit 1280 px and the rightmost headers clip | Known and documented as unchanged since before the gutter pass | S | P3 | |
+| ENG-7 | `AsyncMergeTests.Blocking` emits CS8425 (`CancellationToken` parameter with no `[EnumeratorCancellation]`) — *done when the build is back to 0 warnings* | `CLAUDE.md` records "build: 0 warnings" as the standard, and `main` no longer meets it. Worth fixing while it is one warning, because one is visible and three are noise | S | P3 | |
 
 ---
 
