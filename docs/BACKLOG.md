@@ -38,7 +38,7 @@ rather than here.
 
 | ID | Item | Prio | Size | Status | Rounds |
 |---|---|---|---|---|---|
-| VER-2 | CI and the release workflow **launch** every binary they publish — Xvfb on Linux, the matching runner for win-x64 and osx-arm64 — and fail if a window never appears | P0 | M | ready | 0 |
+| VER-2 | CI and the release workflow **launch** every binary they publish — Xvfb on Linux, the matching runner for win-x64 and osx-arm64 — and fail if a window never appears | P0 | M | in-progress | 0 |
 | VER-1 | With VER-2's runners in place, confirm `linux-x64`, `linux-arm64` and `osx-arm64` actually start after the `WindowIcons.Apply` fix, and record the result in CLAUDE.md | P0 | S | ready | 0 |
 | ENG-1 | Land the four open PRs — #21 (YamlDotNet 16→18, load-bearing for every apply), #31, #32, #30 — building and testing each rather than rubber-stamping | P1 | S | ready | 0 |
 | VER-5 | Regression test: a `Modified` watch event for a filtered-out row must not resurface it, and `VisibleRows` must stay mirrored from `Rows` | P1 | S | ready | 0 |
