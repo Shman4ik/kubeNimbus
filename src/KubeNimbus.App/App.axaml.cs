@@ -32,6 +32,12 @@ public partial class App : Application
             {
                 DataContext = new MainWindowViewModel(),
             };
+
+            // No-op unless the process was started with `--smoke-test`. Called from
+            // here, on the window the app really builds, so CI's launch check cannot
+            // drift into being a second startup path that passes while the real one is
+            // broken — which is the failure it exists to catch.
+            SmokeTest.Attach(desktop);
         }
 
         base.OnFrameworkInitializationCompleted();

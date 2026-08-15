@@ -111,6 +111,13 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Fixed
 
+- **Every downloadable binary is now launched before it is published.** The
+  0.1.0 release shipped Linux and macOS builds that could not start at all —
+  they exited with an error before drawing anything — because the release
+  workflow compiled each one and never ran it. CI and the release workflow now
+  start the binary they just built, on a runner of its own platform, and refuse
+  to archive or publish it unless its main window actually appears. A build that
+  cannot start fails loudly instead of reaching a download page.
 - Table columns ran into each other. A right-aligned value sat flush against the
   next column's text — `48 MiB16d` — and, worse, the `—` shown for a pod with no
   usage reading landed against its age and read as a negative one (`—5d`). Cells
