@@ -52,10 +52,16 @@ jobs:
           global-json-file: global.json
 
       # ILCompiler links with clang against zlib; the hosted images don't
-      # guarantee the dev headers.
+      # guarantee the dev headers. Xvfb and the X client libraries are for the
+      # launch check below — Avalonia's X11 backend dlopens exactly these seven
+      # and nothing else native. Windows and macOS runners have a window server
+      # already, so only Linux needs a display supplying.
       - name: Install AOT toolchain prerequisites (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang zlib1g-dev \
+            xvfb libice6 libsm6 libx11-6 libxcursor1 libxext6 libxi6 libxrandr2
 
       - name: Resolve version
         id: version
@@ -87,6 +93,61 @@ jobs:
           -p:PublishAot=true
           -p:Version=${{ steps.version.outputs.version }}
           -o publish/${{ matrix.rid }}
+
+      # ---------------------------------------------------------------------
+      # Launch check. Deliberately BEFORE staging: a binary that cannot start
+      # must fail its matrix leg rather than be archived, checksummed and
+      # attached to a public release. That is not hypothetical — v0.1.0 shipped
+      # three RIDs that died on startup with `FileNotFoundException: The
+      # resource /Assets/app.ico could not be found`, because this workflow
+      # published each binary and never once ran it. See
+      # src/KubeNimbus.App/WindowIcons.cs for the bug and
+      # src/KubeNimbus.App/SmokeTest.cs for what `--smoke-test` asserts: the
+      # real startup path, exit 0 only once the main window has opened and
+      # composited a frame.
+      #
+      # NativeAOT cannot cross-compile, which is why this matrix has a runner
+      # per RID in the first place — so each runner can also natively run the
+      # binary it just built. fail-fast is off, so one broken RID still leaves
+      # the others' results visible, and the `release` job needs `build`, so a
+      # failed leg blocks the release itself.
+      #
+      # Each leg carries timeout-minutes as a backstop below the app's own 90s
+      # watchdog: a process wedged beneath the .NET runtime would otherwise sit
+      # on the runner for the job's full 45 minutes.
+      # ---------------------------------------------------------------------
+      - name: Launch check (Linux)
+        if: runner.os == 'Linux'
+        timeout-minutes: 5
+        shell: bash
+        run: xvfb-run -a --server-args="-screen 0 1280x800x24" ./publish/${{ matrix.rid }}/kubeNimbus --smoke-test
+
+      # Start-Process rather than the call operator: kubeNimbus.exe is built
+      # WinExe (GUI subsystem), and PowerShell does not wait for a GUI-subsystem
+      # child invoked with `&` — it returns immediately and leaves $LASTEXITCODE
+      # meaningless, which would make this step pass unconditionally. -Wait
+      # -PassThru gives a real exit code; the redirects then have to be echoed
+      # by hand, since a GUI subsystem process has no console of its own.
+      - name: Launch check (Windows)
+        if: runner.os == 'Windows'
+        timeout-minutes: 5
+        shell: pwsh
+        run: |
+          $exe = ".\publish\${{ matrix.rid }}\kubeNimbus.exe"
+          $p = Start-Process -FilePath $exe -ArgumentList '--smoke-test' `
+                             -Wait -PassThru -NoNewWindow `
+                             -RedirectStandardOutput smoke-out.txt `
+                             -RedirectStandardError smoke-err.txt
+          Get-Content smoke-out.txt, smoke-err.txt -ErrorAction SilentlyContinue
+          if ($p.ExitCode -ne 0) {
+            throw "Launch check failed: $exe --smoke-test exited $($p.ExitCode). The published binary does not start."
+          }
+
+      - name: Launch check (macOS)
+        if: runner.os == 'macOS'
+        timeout-minutes: 5
+        shell: bash
+        run: ./publish/${{ matrix.rid }}/kubeNimbus --smoke-test
 
       # The AOT output carries .pdb/.dbg sidecars that quadruple the download
       # and are of no use to anyone who isn't debugging a stripped binary.

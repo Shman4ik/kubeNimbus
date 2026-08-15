@@ -76,12 +76,35 @@ jobs:
           global-json-file: global.json
 
       # ILCompiler links with clang against zlib; the hosted image doesn't
-      # guarantee the dev headers.
+      # guarantee the dev headers. Xvfb and the X client libraries are for the
+      # launch check below — Avalonia's X11 backend dlopens exactly these seven
+      # (`strings` on the published binary), and nothing else native.
       - name: Install AOT toolchain prerequisites
-        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang zlib1g-dev \
+            xvfb libice6 libsm6 libx11-6 libxcursor1 libxext6 libxi6 libxrandr2
 
       # Not the shipping binary (that's win-x64), but it runs the same
       # IL-trimming/AOT analysis, so a new non-trim-safe dependency or
       # reflection call fails here instead of at release time.
       - name: Publish
         run: dotnet publish src/KubeNimbus.App -c Release -r linux-x64 -p:PublishAot=true -o publish/app
+
+      # A clean publish proves the binary COMPILES AOT-clean. It says nothing
+      # about whether it STARTS, and those are different questions: the
+      # `/Assets/app.ico` FileNotFoundException published without a single extra
+      # warning and then died before the first frame — on every RID, in three
+      # shipped releases, because nothing here ever ran the output. See
+      # src/KubeNimbus.App/WindowIcons.cs.
+      #
+      # `--smoke-test` (src/KubeNimbus.App/SmokeTest.cs) runs the real startup
+      # path and exits 0 only once the main window has opened and composited a
+      # frame; any other outcome — an exception, a window that never appears, a
+      # window with no size — is a non-zero exit and a failed job. Under Xvfb
+      # rather than headless, so what is exercised is the X11 backend a user
+      # gets. The in-app watchdog bounds a hang at 90s; timeout-minutes is the
+      # backstop for a process wedged below the runtime.
+      - name: Launch check (linux-x64)
+        timeout-minutes: 5
+        run: xvfb-run -a --server-args="-screen 0 1280x800x24" ./publish/app/kubeNimbus --smoke-test

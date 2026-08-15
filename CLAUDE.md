@@ -1112,6 +1112,10 @@ dotnet run --project tools/Screenshot -- /tmp/kubenimbus-screenshots
 # NativeAOT publish — THE shipping build. Verify it end-to-end on every change
 # that could affect trimming/AOT (new package, new reflection, new binding).
 dotnet publish src/KubeNimbus.App -c Release -r win-x64 -p:PublishAot=true -o publish/app
+
+# And then LAUNCH what you just published. A clean publish is not a working
+# binary — see "The launch check" below.
+publish/app/kubeNimbus --smoke-test        # Linux: wrap in xvfb-run -a
 ```
 
 On a machine without the Windows/MSVC toolchain (e.g. this repo's Linux dev
@@ -1122,6 +1126,67 @@ reflection, a non-trim-safe binding) even though it isn't the shipping
 binary — run it after any change that could plausibly affect trimming, and
 call out in the PR that the authoritative win-x64 publish still needs a
 local Windows pass.
+
+### The launch check (`--smoke-test`)
+
+**A publish that emits no warnings is not a binary that starts, and this repo has
+the receipts.** `Icon="/Assets/app.ico"` published perfectly cleanly on every RID —
+same two DataGrid warnings, exit 0 — and then died before the first frame with
+`FileNotFoundException: The resource /Assets/app.ico could not be found` out of
+`IconTypeConverter.CreateIconFromPath` (see `WindowIcons`). Because `ci.yml`
+published the AOT output and never ran it, and `release.yml` published four RIDs and
+never ran any of them, **v0.1.0 shipped three release binaries that could not
+launch**, and nobody found out from CI. That is what this check exists to stop, and
+it is the reason "publishes cleanly" is never again allowed to stand in for "works".
+
+`kubeNimbus --smoke-test` (`src/KubeNimbus.App/SmokeTest.cs`) starts the app the
+ordinary way and exits **0 only after the main window has opened and composited a
+frame**. Anything else is a distinct non-zero code: 64 no MainWindow, 65 a frame
+rendered but the window is hidden or 0×0, 66 startup threw, 67 the watchdog expired.
+Five things about it are deliberate:
+
+- **It lives in the app, not beside it.** A GUI process never exits on its own, so an
+  external checker needs both a way to end it and a way to see a window — and that is
+  a different tool per platform (`xdotool` on X11, `MainWindowHandle` polling on
+  Windows, scripted Accessibility on macOS, which a runner will not grant). One flag
+  is uniform across all four shipped RIDs and adds no packages.
+- **It observes the window the app already built**, from `App
+  .OnFrameworkInitializationCompleted`; it never constructs one of its own. A check
+  with its own startup path is a check that can pass while the real path is broken.
+- **The verdict is the exit code**, not the log line. `kubeNimbus` is `WinExe`
+  (GUI subsystem), so on Windows stdout only exists if the parent supplied a handle —
+  the `SMOKE-OK`/`SMOKE-FAIL` lines are for reading a red job, not for deciding it.
+- **The assertion happens inside `RequestAnimationFrame`, not in `Opened`.** `Opened`
+  fires before layout and render, so a size check there reads a window that is
+  legitimately still 0×0. Requesting an animation frame schedules a compositor tick
+  and calls back after it, which is what makes "a window appeared" an actual claim.
+- **The watchdog is armed in `Run`, before `StartWithClassicDesktopLifetime`** — not
+  in `Attach`, which is the obvious place and is wrong. `Attach` runs inside framework
+  initialization, so a hang in platform detect, `App.Initialize`'s XAML load or a
+  static constructor would never arm it and would sit on the runner until the job
+  timeout. It is a pool-thread `Timer` calling `Environment.Exit`, because the failure
+  it has to survive is a wedged UI thread and a `DispatcherTimer` would be wedged
+  with it. Verified by running with `KUBENIMBUS_SMOKE_TIMEOUT_SECONDS=1` against a
+  ~1.4 s Debug start: `SMOKE-FAIL (67) no window after 1s (last stage: process
+  started)`.
+
+**Where it runs.** `ci.yml`'s `aot` job runs it on the linux-x64 output under Xvfb —
+Xvfb rather than headless, so the backend under test is the X11 one a user gets.
+`release.yml` runs it on **every** RID, on that RID's own runner (NativeAOT cannot
+cross-compile, which is why the matrix already has one runner per RID), **before**
+staging: a binary that cannot start must fail its leg rather than be archived,
+checksummed and attached to a public release. The Windows leg uses `Start-Process
+-Wait -PassThru` and not `&` — PowerShell does not wait for a GUI-subsystem child
+invoked with the call operator, so `$LASTEXITCODE` would be meaningless and the step
+would pass unconditionally. Avalonia's X11 backend dlopens exactly seven native
+libraries (`libX11`, `libXext`, `libXrandr`, `libXi`, `libXcursor`, `libICE`,
+`libSM`); both Linux workflows install them alongside `xvfb`.
+
+**The check is only worth having if a broken binary fails it, so prove that, don't
+assume it.** Restore `Icon="/Assets/app.ico"` on `MainWindow`, publish, and run the
+check: the publish succeeds with the same two DataGrid warnings and the check exits
+66 with the historical stack trace. Revert afterwards. Doing this again is cheap and
+is the only thing that distinguishes this from a step that always passes.
 
 ### NativeAOT publish needs the MSVC toolchain (Windows)
 
@@ -1228,6 +1293,12 @@ design decisions behind it are here.
   is a matrix of four runners rather than four `-r` flags on one. `win-x64` is
   the shipping target; `linux-x64`, `linux-arm64` and `osx-arm64` ship too.
   `fail-fast: false` — knowing that only one RID broke is the useful outcome.
+- **Every RID is launched before it is archived.** The matrix already gives each
+  RID a runner of its own OS and architecture (it has to — NativeAOT cannot
+  cross-compile), so each one also *runs* the binary it just built, via
+  `--smoke-test`, between Publish and Stage. See "The launch check" above. This
+  step is not optional polish: without it, v0.1.0 attached three binaries that
+  could not start to a public release page.
 - **Everything `0.x` or with a pre-release suffix ships flagged as a
   pre-release.** kubeNimbus is pre-1.0 and the release page should say so.
 - **Binaries are unsigned** (no certificates), so every release body repeats
@@ -2074,3 +2145,51 @@ re-published to confirm the icon fix unblocks them too — the diagnosis says it
 but only win-x64 has actually been run. And the macOS half of UI rule 15/16 (traffic
 lights beside the new left cluster, DWM caption colour has no macOS equivalent) is
 untested, as ever.
+
+**Launch-check pass (VER-2):** the gap the two paragraphs above describe is now closed
+mechanically rather than by remembering. CI and the release workflow **run** every
+binary they publish; see "The launch check (`--smoke-test`)" under Verification
+workflow for the design, and the Releasing section for where it sits in the matrix.
+New: `src/KubeNimbus.App/SmokeTest.cs`, a `--smoke-test` flag on `Program.Main`, one
+`SmokeTest.Attach(desktop)` call in `App.OnFrameworkInitializationCompleted`, a launch
+step in `ci.yml`'s `aot` job, and three OS-conditional launch steps in `release.yml`
+placed between Publish and Stage.
+
+**The negative test is the deliverable, and it was actually run.** Restoring
+`Icon="/Assets/app.ico"` on `MainWindow` and re-publishing linux-x64 AOT produced a
+publish that was *indistinguishable from a healthy one* — same two DataGrid
+IL2104/IL3053 warnings, exit 0 — and the launch check then failed it:
+
+```
+SMOKE-FAIL (66) startup threw System.IO.FileNotFoundException: The resource /Assets/app.ico could not be found.
+   at Avalonia.Platform.StandardAssetLoader.OpenAndGetAssembly(Uri, Uri)
+   at Avalonia.Markup.Xaml.Converters.IconTypeConverter.CreateIconFromPath(ITypeDescriptorContext, String)
+   at KubeNimbus.App.Views.MainWindow.InitializeComponent(Boolean)
+STEP EXIT=66
+```
+
+The break was reverted and `MainWindow.axaml` re-verified byte-identical to HEAD. The
+watchdog was proven separately (`KUBENIMBUS_SMOKE_TIMEOUT_SECONDS=1` against a ~1.4 s
+Debug start → exit 67), and a no-flag launch was confirmed unchanged: the window is
+still there under `xdotool search --name kubeNimbus` and the process still waits to be
+closed.
+
+**Verified this session**: `dotnet build KubeNimbus.slnx` with **0 new warnings** (one
+pre-existing CS8425 in `AsyncMergeTests.cs`, untouched), **155/155 TUnit, 0 failed, 0
+skipped** via `--project` (no sandbox here, so that is the unit-only subset — the
+cluster-gated tests return early), all **84** screenshots (42 scenarios × both themes),
+the linux-x64 NativeAOT publish with no new warnings beyond the known DataGrid pair,
+and the launch check itself against that published binary — `SMOKE-OK main window
+rendered at 1280x800 after 146 ms`, exit 0, under Xvfb.
+
+**Not verified here, and it is the majority of what this pass adds**: the win-x64,
+linux-arm64 and osx-arm64 legs of `release.yml` have never executed — this container is
+linux-x64 only, and it has no `pwsh`, so even the Windows step's PowerShell was not
+syntax-checked (the YAML around it was). Two platform assumptions are therefore
+untested and are the first things to watch on the next tagged build or a
+`workflow_dispatch` dry run: that a GitHub Windows runner's session lets a GUI-subsystem
+process create a window at all, and that an unbundled (no `.app`) osx-arm64 binary can
+open an NSWindow on a macOS runner. Both are expected to work and both would show up as
+a *failed launch check* rather than a bad release, which is the right way round — but a
+dry run is much cheaper than finding out on a tag. VER-1 is the item that will confirm
+the three non-Windows RIDs actually start once these runners exist.
