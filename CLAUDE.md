@@ -729,6 +729,32 @@ Public-facing docs, each with one job — don't duplicate content between them:
 | `CHANGELOG.md` | Release history — and machine-read: the release workflow lifts the section matching a tag out of it verbatim. |
 | `CODE_OF_CONDUCT.md` | Contributor Covenant 2.1, unmodified apart from the contact address. |
 | `CLAUDE.md` (this file) | Whoever is changing the code. The engineering contract and the *why* behind every rule. |
+| `docs/BACKLOG.md` | What is queued, and the state the backlog loop runs from — see below. |
+
+## The backlog loop
+
+`docs/BACKLOG.md` is the queue, and `.claude/` holds the machinery that works
+through it: `/backlog-cycle` (the orchestrator, one item per run, driven by the
+`/loop` skill) plus three agents — `kn-implementer` (Opus, builds it),
+`kn-verifier` (Sonnet, re-runs the checks and reviews against the rules above,
+with no Edit tool so it cannot quietly fix what it should be reporting), and
+`kn-researcher` (competitor demand and marketing emphasis, writing dated reports
+under `docs/research/`).
+
+Three things about it are load-bearing:
+
+1. **The loop may only take work from the Ready table, and only a human puts
+   anything there.** Research proposals and newly-found work land in the Inbox
+   with the priority column blank. An agent promoting its own suggestion into
+   Ready would close the only loop in this arrangement that has a person in it.
+2. **Verification debt is an item, not a footnote.** Whatever the verifier
+   reports as unverifiable in its environment — no live cluster, no Windows or
+   macOS box, no display — becomes its own Inbox row in the same cycle. This
+   repo has repeatedly lost track of exactly that, and the cost is on record:
+   three of four release RIDs shipped a binary that could not start, because
+   `ci.yml` publishes the AOT output and has never launched it.
+3. **`MAX_FIX_ROUNDS` exists so a stuck item becomes a `blocked` row with a
+   precise note** rather than a fifth round of the same failure.
 
 ## App icon / logo assets
 
