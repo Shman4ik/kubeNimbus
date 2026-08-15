@@ -38,7 +38,6 @@ rather than here.
 
 | ID | Item | Prio | Size | Status | Rounds |
 |---|---|---|---|---|---|
-| VER-2 | CI and the release workflow **launch** every binary they publish — Xvfb on Linux, the matching runner for win-x64 and osx-arm64 — and fail if a window never appears | P0 | M | in-progress | 0 |
 | VER-1 | With VER-2's runners in place, confirm `linux-x64`, `linux-arm64` and `osx-arm64` actually start after the `WindowIcons.Apply` fix, and record the result in CLAUDE.md | P0 | S | ready | 0 |
 | ENG-1 | Land the four open PRs — #21 (YamlDotNet 16→18, load-bearing for every apply), #31, #32, #30 — building and testing each rather than rubber-stamping | P1 | S | ready | 0 |
 | VER-5 | Regression test: a `Modified` watch event for a filtered-out row must not resurface it, and `VisibleRows` must stay mirrored from `Rows` | P1 | S | ready | 0 |
@@ -65,7 +64,9 @@ because nothing ever launched one.
 | ID | Item — *done when* | Signal | Size | Rec | Prio |
 |---|---|---|---|---|---|
 | VER-1 | Re-publish `linux-x64`, `linux-arm64` and `osx-arm64` NativeAOT after the `WindowIcons.Apply` fix and **launch each one** — *done when each binary opens a real window, recorded in CLAUDE.md* | The icon-converter bug was diagnosed as cross-platform, but only win-x64 has actually been run since the fix. Until this passes, the release workflow still ships three RIDs on a hypothesis | S | **P0** |  → Ready |
-| VER-2 | CI launches the published AOT binary under Xvfb and asserts a window appears — *done when a deliberately broken startup path fails the job* | `ci.yml` publishes AOT but never runs the output. That is exactly how the `/Assets/app.ico` `FileNotFoundException` reached three release binaries | M | **P0** |  → Ready |
+| VER-10 | Exercise `release.yml` with `workflow_dispatch` + `dry_run: true` — *done when the `win-x64`, `linux-arm64` and `osx-arm64` launch checks have each actually run on their own runner* | VER-2 shipped launch checks for all four RIDs but only the linux-x64 command line has ever executed. The Windows PowerShell leg has not even been syntax-checked (no `pwsh` in the container). A dry run costs nothing and is the only thing standing between "written correctly" and "known to work" | S | | |
+| VER-11 | Two runner assumptions behind VER-2's launch checks: that a GitHub Windows runner's session lets a GUI-subsystem process create a window, and that an unbundled (no `.app`) osx-arm64 binary can open an NSWindow | Both are plausible and both fail in the *safe* direction (a failed launch check, not a bad release) — but if either is false, the check is permanently red for that RID and someone will be tempted to disable it. Closed for free if VER-10 passes | S | | |
+| VER-12 | Correct the "three RIDs shipped unable to start" figure to "every RID" — *done when `docs/BACKLOG.md`, `CLAUDE.md`, both workflow comments, `SmokeTest.cs`'s XML doc and `CHANGELOG.md` agree* | `CLAUDE.md:2121` already establishes the icon bug was never platform-specific — win-x64 was broken too, so it was four, not three. The "three" figure originates in this file and VER-2 propagated it into five more places. A CLAUDE.md claim that is not true is itself a defect by this repo's own discipline | S | | |
 | VER-3 | Change the Ctrl/Cmd hotkey scheme with the app open — *done when bindings, the F1 sheet and every tooltip re-render, and the old gesture stops working* | `BuildKeyBindings` clearing first is the part that fails silently; the whole path is new and untested | S | **P1** |  → Ready |
 | VER-4 | Hands-on live-cluster pass over the redesigned port-forward pane and the Env eye toggle — *done when a real forward starts/stops from the new UI and a real Secret reveals and re-hides* | Both were redesigned after their last live verification. Core is proven by `pftest.cs`; the panes are not | M | **P1** |  P1 · needs a human |
 | VER-5 | Automated regression: a `Modified` watch event for a filtered-out row must not resurface it, and `VisibleRows` must stay mirrored — *done when the test fails if `Rows` is filtered in place* | UI rule 13's central invariant has no test, and the failure mode (a row reappearing mid-filter) looks like a watch bug, not a filter bug | S | **P1** |  → Ready |
@@ -134,7 +135,7 @@ adoption than anything in section B.
 
 | ID | Item | Landed | Commit |
 |---|---|---|---|
-| | | | |
+| VER-2 | CI and the release workflow launch every binary they publish, and fail if no window appears — a `--smoke-test` flag runs the app's real startup path and exits non-zero unless the main window composites a frame; wired into `ci.yml` (linux-x64 under Xvfb) and all four `release.yml` matrix legs, before staging, so a binary that cannot start is never archived | 2026-08-15 | `f96fc29` |
 
 ---
 
