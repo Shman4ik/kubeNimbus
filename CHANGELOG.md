@@ -123,6 +123,12 @@ it as the GitHub Release body, so headings must match tags exactly
   `0` that silently meant the same thing, Start and Stop are one button rather
   than a pair with one half always dead, and a running forward shows its local
   URL — selectable, copyable, openable — instead of a sentence about it.
+- **The list's name filter is now covered by automated tests.** The thing they
+  guard is specific: while a filter is on, kubeNimbus keeps watching every
+  object, not just the ones on screen, so an update to something the filter
+  hides can never make it pop back into a filtered list — and clearing the
+  filter always gives you back the current state of everything, including
+  objects that appeared or changed while it was on.
 
 ### Fixed
 

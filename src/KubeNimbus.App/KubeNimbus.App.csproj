@@ -25,6 +25,15 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- tests/KubeNimbus.App.Tests drives the real watch-apply path
+         (ClusterTabViewModel.Apply/ApplyFleet) to pin UI rule 13's invariant.
+         The App layer has no test project of its own precisely because the code
+         cannot move to Core (hard rule 1), so the alternative to this line is a
+         stand-in reproduction of the logic — which would pin nothing. -->
+    <InternalsVisibleTo Include="KubeNimbus.App.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.1" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.1" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.1" />

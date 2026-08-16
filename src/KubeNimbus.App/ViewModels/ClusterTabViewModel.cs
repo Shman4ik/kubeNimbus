@@ -1306,7 +1306,18 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
     }
 
-    private void Apply(ResourceEvent<DynamicResource> evt)
+    /// <summary>
+    /// Applies one watch event to <see cref="Rows"/> by key. Nothing here consults the
+    /// row filter, and that is the invariant, not an omission: <c>Rows</c> is the
+    /// informer's own view of the cluster, so a row hidden by the filter has to stay in
+    /// it — drop it and the next Modified for that object finds no entry in
+    /// <see cref="_rowsByKey"/> and reads as a fresh add, which resurfaces the row in
+    /// the middle of a filtered list. Pinned by <c>ClusterTabRowFilterTests</c>.
+    ///
+    /// Internal rather than private only so that test can drive this path for real;
+    /// nothing else in the app calls it.
+    /// </summary>
+    internal void Apply(ResourceEvent<DynamicResource> evt)
     {
         IsListLoading = false;
 
@@ -1349,8 +1360,11 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// treat a Reset as "clear the list": a Reset is scoped to the cluster that sent it
     /// (initial sync, or a relist after 410 Gone), so clearing everything would wipe
     /// four healthy clusters because the fifth reconnected.
+    ///
+    /// Internal for the same reason <see cref="Apply"/> is — the cluster-qualified keys
+    /// make this a second way to get the filter/informer split wrong.
     /// </summary>
-    private void ApplyFleet(FleetResourceEvent tagged)
+    internal void ApplyFleet(FleetResourceEvent tagged)
     {
         IsListLoading = false;
         var cluster = tagged.ClusterName;
