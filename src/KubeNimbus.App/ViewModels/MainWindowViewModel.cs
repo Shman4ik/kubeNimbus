@@ -933,11 +933,33 @@ public sealed partial class MainWindowViewModel : ObservableObject
                     () => rowTab.PortForwardSelectedCommand.Execute(null));
             }
 
+            // The mutating actions, gated on what this row's own kind and object
+            // actually support (a scale subresource; a pod template to stamp) rather
+            // than on a list of kinds — and offered only when they apply, for the same
+            // reason the pod-only entries above are: a palette entry that matches a
+            // search and then refuses to run is worse than no match. Each of them arms
+            // the confirm strip; none of them changes anything on this click.
+            if (rowTab.CanScaleSelectedRow)
+            {
+                yield return new PaletteItem("Scale…", $"{where} · set the replica count", "ScaleIconGeometry",
+                    () => rowTab.ScaleSelectedCommand.Execute(null));
+            }
+
+            if (rowTab.CanRestartSelectedRow)
+            {
+                yield return new PaletteItem(
+                    "Rollout restart…", $"{where} · roll its pods", "RestartIconGeometry",
+                    () => rowTab.RestartSelectedCommand.Execute(null));
+            }
+
             yield return new PaletteItem("Edit YAML", where, "CodeBracesIconGeometry",
                 () => rowTab.EditSelectedYamlCommand.Execute(null));
 
-            yield return new PaletteItem("Delete…", $"{where} · asks to confirm", "DeleteIconGeometry",
-                () => rowTab.DeleteSelectedCommand.Execute(null));
+            if (rowTab.CanDeleteSelectedRow)
+            {
+                yield return new PaletteItem("Delete…", $"{where} · asks to confirm", "DeleteIconGeometry",
+                    () => rowTab.DeleteSelectedCommand.Execute(null));
+            }
         }
 
         // IsDemo excluded: the access review is three real API-server calls

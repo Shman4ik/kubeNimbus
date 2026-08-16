@@ -77,7 +77,7 @@ public sealed partial class ClusterClient
         return null;
     }
 
-    private static IEnumerable<ResourceDescriptor> ParseResourceList(JsonElement resourceList, string group)
+    internal static IEnumerable<ResourceDescriptor> ParseResourceList(JsonElement resourceList, string group)
     {
         var version = resourceList.TryGetProperty("groupVersion", out var gv)
             ? (gv.GetString() ?? "v1").Split('/').Last()
@@ -85,9 +85,38 @@ public sealed partial class ClusterClient
 
         if (!resourceList.TryGetProperty("resources", out var resources) || resources.ValueKind != JsonValueKind.Array)
         {
-            yield break;
+            return [];
         }
 
+        // Subresources are entries in the same array ("deployments/scale"), and their
+        // order relative to the parent is not guaranteed, so they are collected in a
+        // first pass and attached in the second. They are what tells the app that a
+        // kind can be scaled without a hardcoded list of kinds that can — including a
+        // CRD that declares `scale`, and excluding an apps/v1 resource on a server
+        // that (for whatever reason) doesn't serve one.
+        var subresources = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var res in resources.EnumerateArray())
+        {
+            if (res.TryGetProperty("name", out var n) && n.GetString() is { } name
+                && name.IndexOf('/') is var slash && slash > 0)
+            {
+                var parent = name[..slash];
+                var child = name[(slash + 1)..];
+                if (!subresources.TryGetValue(parent, out var list))
+                {
+                    subresources[parent] = list = [];
+                }
+
+                list.Add(child);
+            }
+        }
+
+        return ParseParents(resources, group, version, subresources);
+    }
+
+    private static IEnumerable<ResourceDescriptor> ParseParents(
+        JsonElement resources, string group, string version, Dictionary<string, List<string>> subresources)
+    {
         foreach (var res in resources.EnumerateArray())
         {
             var name = res.TryGetProperty("name", out var n) ? n.GetString() : null;
@@ -96,8 +125,11 @@ public sealed partial class ClusterClient
                 continue; // subresource (status, scale, log, exec, ...) — not independently browsable
             }
 
-            if (res.TryGetProperty("verbs", out var verbs) && verbs.ValueKind == JsonValueKind.Array
-                && !verbs.EnumerateArray().Any(v => v.GetString() == "list"))
+            var verbs = res.TryGetProperty("verbs", out var verbsEl) && verbsEl.ValueKind == JsonValueKind.Array
+                ? verbsEl.EnumerateArray().Select(v => v.GetString() ?? "").Where(v => v.Length > 0).ToArray()
+                : [];
+
+            if (verbs.Length > 0 && !verbs.Contains("list", StringComparer.Ordinal))
             {
                 continue; // not listable — nothing to show in a table
             }
@@ -114,7 +146,11 @@ public sealed partial class ClusterClient
                     : [],
                 Categories: res.TryGetProperty("categories", out var cat) && cat.ValueKind == JsonValueKind.Array
                     ? [.. cat.EnumerateArray().Select(c => c.GetString() ?? "")]
-                    : []);
+                    : [])
+            {
+                Subresources = subresources.TryGetValue(name, out var subs) ? subs : [],
+                Verbs = verbs,
+            };
         }
     }
 }

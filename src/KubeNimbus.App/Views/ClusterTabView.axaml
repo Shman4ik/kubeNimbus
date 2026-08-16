@@ -114,6 +114,88 @@
           </StackPanel>
         </Border>
 
+        <!-- The armed workload action (scale / rollout restart / delete). Present only
+             while one is armed, so it costs no chrome the rest of the time (UI rule 1),
+             and docked outside ContentRows for the same reason the demo bar is: that
+             grid's row indices are load-bearing for ApplyDockState.
+
+             It is the confirm step for all three actions and the only place a replica
+             count is typed — a form, so it follows UI rule 11: label above the input,
+             state in an InfoBar rather than a bare status dot. The alternative designs
+             were a second window (forbidden — UI rule 16), an OverlayPanel (which
+             covers the very list the action is about, and which rule 16b reserves for
+             shell-level surfaces you open, use and dismiss), and an inspector dock tab
+             (a third row of chrome inside a ~300px dock, against UI rule 10, for a
+             question with a one-word answer).
+
+             An inline DataTemplate rather than the action assigned straight to this
+             element's DataContext: `x:DataType` re-roots an element's *own* bindings
+             too, so a Border that both sets DataContext and declares the new type
+             compiles (against the wrong type) and silently renders nothing — which is
+             exactly what the first cut of this did. A template's bindings are rooted at
+             its own type by construction and cannot make that mistake. -->
+        <ContentControl DockPanel.Dock="Top" Content="{Binding PendingRowAction}" Margin="0,0,0,8"
+                        IsVisible="{Binding PendingRowAction, Converter={x:Static aconv:ObjectConverters.IsNotNull}}">
+          <ContentControl.ContentTemplate>
+            <DataTemplate x:DataType="vm:RowActionViewModel">
+              <Border Classes="card" Padding="12,10">
+                <StackPanel Spacing="8">
+                  <TextBlock Text="{Binding Question}" TextWrapping="Wrap" FontSize="12.5" />
+
+                  <Border Classes="demoBar" IsVisible="{Binding IsDemo}">
+                    <DockPanel>
+                      <PathIcon DockPanel.Dock="Left" Data="{StaticResource AlertCircleIconGeometry}" Width="12" Height="12"
+                                VerticalAlignment="Top" Margin="0,2,8,0" />
+                      <TextBlock Text="{x:Static vm:RowActionViewModel.DemoNotice}" TextWrapping="Wrap" />
+                    </DockPanel>
+                  </Border>
+
+                  <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
+                    <!-- Label above the input, never beside it: an Auto column has no gap of
+                         its own, which is how "Local port" ended up touching its own text box
+                         in the port-forward pane (UI rule 11). -->
+                    <StackPanel Grid.Column="0" IsVisible="{Binding IsScale}" Spacing="2">
+                      <TextBlock Classes="fieldLabel" Text="Replicas" />
+                      <NumericUpDown Name="ReplicaInput" Value="{Binding Replicas}" Minimum="0"
+                                     Maximum="{x:Static vm:RowActionViewModel.MaxReplicas}"
+                                     Increment="1" FormatString="0" MinWidth="120"
+                                     IsEnabled="{Binding IsEditable}" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="1" Classes="statusText dim" VerticalAlignment="Bottom" Margin="10,0,0,8"
+                               Text="{Binding CurrentScale}" IsVisible="{Binding IsScale}" />
+
+                    <Button Grid.Column="3" Content="{Binding ConfirmLabel}" Classes="accent" Margin="8,0,0,0"
+                            VerticalAlignment="Bottom" Command="{Binding ConfirmCommand}"
+                            IsVisible="{Binding !IsDone}" />
+                    <!-- Cancel before, Close after: one slot, swapped on the state, rather
+                         than a live button beside a dead one (UI rule 11 again). Cancel goes
+                         dead while the request is in flight, and that is the honest state:
+                         the patch or delete is already with the API server, so a button that
+                         dismissed the strip there would read as "cancelled" over an action
+                         that went through. -->
+                    <Button Grid.Column="4" Margin="6,0,0,0" VerticalAlignment="Bottom" Content="Cancel"
+                            Command="{Binding DismissCommand}" IsVisible="{Binding !IsDone}"
+                            IsEnabled="{Binding IsEditable}" />
+                    <Button Grid.Column="4" Margin="6,0,0,0" VerticalAlignment="Bottom" Content="Close"
+                            Command="{Binding DismissCommand}" IsVisible="{Binding IsDone}" />
+                  </Grid>
+
+                  <TextBlock Classes="statusText warn" TextWrapping="Wrap" IsVisible="{Binding IsScalingToZero}"
+                             Text="0 replicas stops every pod this workload owns. Nothing else about it is removed." />
+
+                  <!-- Every state gets a visual (UI rule 9): reading, in flight, the API
+                       server's own refusal (a 403 here names the subject, the verb and the
+                       resource), and the result. -->
+                  <Border Classes="infoBar" IsVisible="{Binding HasMessage}"
+                          Classes.success="{Binding IsSuccess}" Classes.error="{Binding IsError}">
+                    <TextBlock Text="{Binding Message}" TextWrapping="Wrap" FontSize="12" />
+                  </Border>
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ContentControl.ContentTemplate>
+        </ContentControl>
+
       <Grid Name="ContentRows">
         <Grid.RowDefinitions>
           <RowDefinition Height="Auto" />
@@ -218,13 +300,33 @@
                   </MenuItem.Icon>
                 </MenuItem>
                 <Separator />
+                <!-- The mutating actions. Each one arms the confirm strip above the
+                     list rather than firing on the click: these are the app's first
+                     one-click changes to a running cluster, and every one of them is
+                     confirmable (see RowActionViewModel). Scale is offered when the
+                     server declares a `scale` subresource for the kind, restart when
+                     the object has a pod template to stamp — both from discovery/the
+                     object, never from a list of kinds. -->
+                <MenuItem Header="Scale…" Command="{Binding ScaleSelectedCommand}"
+                          ToolTip.Tip="Set the replica count through the scale subresource">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource ScaleIconGeometry}" Width="13" Height="13" />
+                  </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="Rollout restart…" Command="{Binding RestartSelectedCommand}"
+                          ToolTip.Tip="Stamps the pod template so the controller rolls its pods — the same thing kubectl rollout restart does">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource RestartIconGeometry}" Width="13" Height="13" />
+                  </MenuItem.Icon>
+                </MenuItem>
+                <Separator />
                 <MenuItem Header="Edit YAML" Command="{Binding EditSelectedYamlCommand}">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource CodeBracesIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
                 <MenuItem Header="Delete…" Command="{Binding DeleteSelectedCommand}"
-                          ToolTip.Tip="Opens the object's YAML with the delete confirmation armed">
+                          ToolTip.Tip="Asks to confirm, naming the object — for a controller-owned pod, deleting it is how it gets recreated">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource DeleteIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>

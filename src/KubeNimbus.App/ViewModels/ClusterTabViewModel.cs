@@ -262,12 +262,17 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsPodRowSelected))]
     [NotifyPropertyChangedFor(nameof(HasSelectedRow))]
+    [NotifyPropertyChangedFor(nameof(CanScaleSelectedRow))]
+    [NotifyPropertyChangedFor(nameof(CanRestartSelectedRow))]
+    [NotifyPropertyChangedFor(nameof(CanDeleteSelectedRow))]
     [NotifyCanExecuteChangedFor(nameof(OpenLogsCommand))]
     [NotifyCanExecuteChangedFor(nameof(OpenPreviousLogsCommand))]
     [NotifyCanExecuteChangedFor(nameof(ExecIntoSelectedCommand))]
     [NotifyCanExecuteChangedFor(nameof(PortForwardSelectedCommand))]
     [NotifyCanExecuteChangedFor(nameof(EditSelectedYamlCommand))]
     [NotifyCanExecuteChangedFor(nameof(DeleteSelectedCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ScaleSelectedCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RestartSelectedCommand))]
     private ResourceRowViewModel? _selectedRow;
 
     /// <summary>
@@ -1012,6 +1017,13 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     {
         StopWatch();
 
+        // An armed scale/restart/delete is a question about the list that is being torn
+        // down here (kind switched, namespace switched, fleet toggled). Its target row
+        // is about to leave the screen, so the strip goes with it rather than lingering
+        // over a list it no longer belongs to. A *completed* action's result strip is
+        // dismissed the same way, which is correct: the answer was already read.
+        PendingRowAction = null;
+
         Rows.Clear();
         _rowsByKey.Clear();
         _fleetTargets.Clear();
@@ -1503,19 +1515,119 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             client, descriptor, row.Namespace, row.Name, row.Resource.ToYaml(), row.ClusterName));
     }
 
+    // ------------------------------------------------- mutating workload actions
+    //
+    // Scale / rollout restart / delete. The app was read-mostly before these: the only
+    // way to change a replica count was to edit YAML, and "restart that deployment" —
+    // the single most common on-call GUI action, and one click in every competitor —
+    // had no entry point at all. All three land on the same armed confirm strip
+    // (see RowActionViewModel), which is what makes "confirmable" one implementation
+    // rather than three, and what gives the replica count somewhere to be typed.
+
     /// <summary>
-    /// Delete goes through the YAML editor's existing two-step confirm rather than
-    /// deleting from the menu: a context-menu item that destroys an object on one
-    /// click, with the object named nowhere, is not a gesture this app should have.
+    /// The armed action, or null when nothing is pending. Set by the three commands
+    /// below and cleared when the strip is dismissed or the list changes underneath it.
     /// </summary>
-    [RelayCommand(CanExecute = nameof(HasSelectedRow))]
+    [ObservableProperty]
+    private RowActionViewModel? _pendingRowAction;
+
+    /// <summary>
+    /// Whether the selected row's kind can be scaled — the server declares a
+    /// <c>scale</c> subresource for it. Discovery, never a list of kinds: in an
+    /// aggregated fleet list the descriptor is the one that cluster's own discovery
+    /// produced, so the same CRD can be scalable on one cluster and not on another and
+    /// the menu is right on both.
+    /// </summary>
+    public bool CanScaleSelectedRow =>
+        SelectedRow is { } row && DescriptorFor(row) is { } descriptor && WorkloadActions.SupportsScale(descriptor);
+
+    /// <summary>
+    /// Whether the selected object can be rollout-restarted: it has a pod template to
+    /// stamp. A property of the object rather than of its kind, which is what makes it
+    /// true for Deployments, StatefulSets, DaemonSets <em>and</em> a CRD that embeds a
+    /// pod template, with none of the four named anywhere.
+    /// </summary>
+    public bool CanRestartSelectedRow =>
+        SelectedRow is { } row && DescriptorFor(row) is { } descriptor
+        && WorkloadActions.SupportsRestart(descriptor, row.Resource);
+
+    /// <summary>Whether the server says the selected row's kind can be deleted at all.</summary>
+    public bool CanDeleteSelectedRow =>
+        SelectedRow is { } row && DescriptorFor(row) is { } descriptor && WorkloadActions.SupportsDelete(descriptor);
+
+    [RelayCommand(CanExecute = nameof(CanScaleSelectedRow))]
+    private async Task ScaleSelectedAsync()
+    {
+        if (ArmRowAction(RowActionKind.Scale) is { } action)
+        {
+            // Opens on the object's own spec.replicas so the box is never empty, then
+            // replaces it with the scale subresource's answer, which is the field the
+            // patch will actually set.
+            await action.LoadCurrentScaleAsync();
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanRestartSelectedRow))]
+    private void RestartSelected() => ArmRowAction(RowActionKind.Restart);
+
+    /// <summary>
+    /// Delete, with the confirm armed in place. It used to open the object's YAML with
+    /// that editor's own confirm armed, which put an editor tab and a manifest between
+    /// someone and a one-line question; the strip asks it where the row is, and names
+    /// the object either way. The YAML editor keeps its own Delete for when you are
+    /// already in there.
+    ///
+    /// <para>
+    /// "Confirm before deleting" is read here, at the press, exactly as
+    /// <c>YamlEditorTabViewModel.RequestDeleteAsync</c> reads it: someone who turns it
+    /// back on after a near-miss expects the very next delete to ask. Scale and restart
+    /// do not consult it — it is a setting about deleting, and scale needs its input
+    /// step regardless.
+    /// </para>
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanDeleteSelectedRow))]
     private void DeleteSelected()
     {
-        EditSelectedYaml();
-        if (SelectedInspectorTab is YamlEditorTabViewModel yaml)
+        if (ArmRowAction(RowActionKind.Delete) is { } action && !App.LoadSettings().ConfirmDeletes)
         {
-            yaml.IsConfirmingDelete = true;
+            action.ConfirmCommand.Execute(null);
         }
+    }
+
+    /// <summary>
+    /// Builds the pending action for the selected row, against that row's own client and
+    /// descriptor (its cluster's, in fleet mode — an action that resolved either from the
+    /// tab would fire at the wrong cluster).
+    /// </summary>
+    private RowActionViewModel? ArmRowAction(RowActionKind kind)
+    {
+        if (SelectedRow is not { } row || DescriptorFor(row) is not { } descriptor)
+        {
+            return null;
+        }
+
+        // Null only on the demo cluster, which is what the strip reads as "not available
+        // here" — same shape as the exec and port-forward panes.
+        var client = ClientFor(row);
+        if (client is null && !IsDemo)
+        {
+            return null;
+        }
+
+        var action = new RowActionViewModel(
+            kind, client, descriptor, row.Namespace, row.Name, row.ClusterName,
+            kind == RowActionKind.Scale ? WorkloadActions.DeclaredReplicas(row.Resource) : null);
+
+        action.Dismissed = () =>
+        {
+            if (ReferenceEquals(PendingRowAction, action))
+            {
+                PendingRowAction = null;
+            }
+        };
+
+        PendingRowAction = action;
+        return action;
     }
 
     /// <summary>
