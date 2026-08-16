@@ -21,6 +21,21 @@ updates:
       test-tooling:
         patterns:
           - "TUnit*"
+    ignore:
+      # YamlDotNet is NOT ours to bump independently. KubernetesClient.Aot ships
+      # a precompiled StaticTypeInspector generated against YamlDotNet 16.3.0,
+      # and 18.0.0 added HasParseMethod to that interface — so a newer YamlDotNet
+      # throws TypeLoadException from k8s.KubernetesYaml's static constructor,
+      # which means EVERY kubeconfig read fails and the app reaches no cluster.
+      # It builds clean and the launch check still passes, so nothing but the
+      # tests and tools/Screenshot catches it. Tried in #15, reverted; proposed
+      # again in #21, refused for the same reason.
+      #
+      # Grouping it under kubernetes-client would not help: the group only
+      # batches PRs, it does not stop one being opened. Only an ignore does.
+      # Remove this the moment KubernetesClient.Aot ships a release built
+      # against YamlDotNet 18 — see the pin's comment in KubeNimbus.Core.csproj.
+      - dependency-name: "YamlDotNet"
 
   - package-ecosystem: github-actions
     directory: "/"
