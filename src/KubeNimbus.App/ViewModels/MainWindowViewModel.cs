@@ -852,6 +852,19 @@ public sealed partial class MainWindowViewModel : ObservableObject
             "LayersIconGeometry",
             () => OpenDemoClusterCommand.Execute(null));
 
+        // The machine's own terminal on the selected cluster. Offered on a demo tab too,
+        // unlike the access review: this one refuses in place with a sentence that says
+        // why (the demo section's rule 5), which is a real answer, where the access
+        // review has none — and rule 15 asks the ☰ menu and the palette to carry the
+        // same commands.
+        if (SelectedTab is { } terminalTab)
+        {
+            yield return Catalog(
+                CommandId.OpenTerminal,
+                $"KUBECONFIG and the current context, pointed at {terminalTab.Header}",
+                () => terminalTab.OpenInTerminalCommand.Execute(null));
+        }
+
         foreach (var tab in Tabs)
         {
             yield return new PaletteItem(

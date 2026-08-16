@@ -14,6 +14,20 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Added
 
+- **Open a terminal on this cluster.** From the ☰ menu or `Ctrl`/`Cmd`+`K`,
+  kubeNimbus starts your own terminal — Windows Terminal or conhost, Terminal on
+  macOS, whatever `xdg-terminal-exec`/`$TERMINAL` resolves to on Linux — with
+  `KUBECONFIG` set and the current context already pointed at the cluster in the
+  selected tab. Your kubeconfig is never modified and never copied: the context
+  is pinned by merging a tiny generated file ahead of it, which holds a context
+  name and nothing else, so `kubectl`, `helm`, `k9s`, `stern` and `kubectx` all
+  agree about which cluster that window is on. Each cluster gets its own pinning
+  file, so two terminals on two clusters cannot end up pointed at the same one.
+  If `kubectl` is not found, the terminal still opens and the app says so — it
+  also notes that an app usually sees a shorter `PATH` than your shell does, so
+  the tool may well be there. If no terminal could be opened at all, the exact
+  `KUBECONFIG` value is shown to copy. On the demo cluster it explains that
+  there is no kubeconfig behind sample data rather than opening anything.
 - **Workload actions — scale, rollout restart, and delete — from the resource
   list.** Right-click a row (or use `Ctrl`/`Cmd`+`K`) for **Scale…**, **Rollout
   restart…** and **Delete…**. Each one arms a confirm strip above the list that
