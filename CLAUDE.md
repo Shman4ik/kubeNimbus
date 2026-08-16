@@ -2193,3 +2193,33 @@ open an NSWindow on a macOS runner. Both are expected to work and both would sho
 a *failed launch check* rather than a bad release, which is the right way round — but a
 dry run is much cheaper than finding out on a tag. VER-1 is the item that will confirm
 the three non-Windows RIDs actually start once these runners exist.
+
+**linux-x64 is now confirmed on a real runner (VER-1, partial).** The merge of the pass
+above pushed to `main`, which ran `ci.yml`, which now carries the launch check — so the
+first real-runner evidence arrived as a side effect of landing it. CI run
+[31902245451](https://github.com/Shman4ik/kubeNimbus/actions/runs/31902245451) at commit
+`961b085`, job *NativeAOT publish (linux-x64)* on `ubuntu-latest`, step **Launch check
+(linux-x64)** — conclusion `success`:
+
+```
+[smoke 0 ms] launch check starting (timeout 90s)
+[smoke 793 ms] main window opened
+SMOKE-OK main window rendered at 1280x800 after 794 ms
+```
+
+Two things this settles beyond "the step passes". The published linux-x64 AOT binary
+**starts and composites a frame on a machine that is not this container**, which is the
+half of the `WindowIcons.Apply` fix that had only ever been argued from a diagnosis; and
+794 ms on a cold hosted runner (against ~100–150 ms locally) is the number to compare
+future runs against before reading a slow start as a regression.
+
+**`linux-arm64` and `osx-arm64` remain unconfirmed, and cannot be confirmed from here.**
+Those legs live only in `release.yml`, which runs on a tag or a `workflow_dispatch`.
+NativeAOT cannot cross-compile, so this linux-x64 container cannot build either one, and
+the GitHub App token this repo's agents run under lacks `actions: write` — a dispatch
+returns `403 Resource not accessible by integration`. So the remaining two thirds of
+VER-1 need one of exactly two things: a human pressing **Run workflow** on `release.yml`
+with `dry_run: true`, or `actions: write` granted to the integration. Until then the
+release workflow still ships two RIDs on a diagnosis rather than an observation — which
+is the same shape of gap that produced the v0.1.0 breakage, and the reason VER-1 is
+recorded as `blocked` rather than quietly closed on one passing RID.
