@@ -39,7 +39,7 @@ rather than here.
 | ID | Item | Prio | Size | Status | Rounds |
 |---|---|---|---|---|---|
 | VER-1 | With VER-2's runners in place, confirm `linux-x64`, `linux-arm64` and `osx-arm64` actually start after the `WindowIcons.Apply` fix, and record the result in CLAUDE.md | P0 | S | blocked | 1 |
-| VER-5 | Regression test: a `Modified` watch event for a filtered-out row must not resurface it, and `VisibleRows` must stay mirrored from `Rows` | P1 | S | ready | 0 |
+| VER-5 | Regression test: a `Modified` watch event for a filtered-out row must not resurface it, and `VisibleRows` must stay mirrored from `Rows` | P1 | S | in-progress | 0 |
 | FEAT-16 | Open the machine's own terminal with `KUBECONFIG` and the context pointed at this cluster; explicit state when `kubectl` is missing | P1 | S | ready | 0 |
 | FEAT-10 | Replace the exec pane's ANSI stripping with `SvcSystems.UI.Terminal` over `XTerm.NET` — keep the WebSocket transport and the bash→sh→ash probe | P1 | M | ready | 0 |
 | VER-3 | Change the Ctrl/Cmd hotkey scheme with the app running (Xvfb is enough) — bindings, F1 sheet and tooltips must all re-render, old gesture must stop working | P1 | S | ready | 0 |
