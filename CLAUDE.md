@@ -602,6 +602,11 @@ Six things worth keeping:
    fields; the window rebuilds its bindings from `Hotkeys.Changed`, and
    `BuildKeyBindings` **clears** first — adding to the existing set would leave Ctrl+K
    working after someone chose Cmd, which reads as the preference doing nothing.
+   The clearing rebuild itself is `CommandBindings.RebuildWindowBindings`, out of the
+   window so it can be tested (a `MainWindow` needs a running Application); the four
+   surfaces that have to follow the scheme are pinned by `HotkeySchemeTests`
+   (`tests/KubeNimbus.App.Tests`) and were driven against the running app — see the
+   VER-3 pass in Current status for what that showed and what it still cannot cover.
 3. **The palette is a *partial* projection, deliberately.** Most of this app's rows are
    conditional — logs/exec/port-forward only while a pod row is selected, the fleet
    toggle only with more than one cluster connected — so they stay closures over the
@@ -2604,3 +2609,91 @@ environment is handed over but proves nothing about a client/server emulator for
 it (gnome-terminal's D-Bus `environ` forwarding is the specific thing to watch). No live
 cluster either, so nothing has been checked by typing `kubectl get pods` in a window this
 feature opened — which is, in the end, the acceptance criterion.
+
+**Hotkey-scheme drive-through (VER-3):** the Ctrl/Cmd preference had never been changed
+with the app running — the whole re-render path (key bindings, the F1 sheet, every
+`CommandTip` tooltip) was argued from the code and from the comment on
+command-catalog rule 2, and `BuildKeyBindings` clearing first was the part that would
+fail with nothing on screen to say so. It was driven, under Xvfb, and **it works** —
+nothing was broken and nothing needed fixing. What this pass adds is the evidence and a
+regression check, because "we read the code and it looked right" is exactly what was
+already true before it.
+
+**Linux is a real test bed for this, which is not obvious.** `Nimbus.Ui.Hotkeys.Resolve`
+only consults the platform for `"auto"`; an explicit `"mac"` resolves to
+`KeyModifiers.Meta` everywhere, and Avalonia's X11 backend maps Mod4 (Super) onto Meta.
+So `xdotool key super+k` **is** the Cmd chord here, and the scheme is fully observable
+without a Mac. What Linux cannot show is whether a real macOS keyboard's Cmd reaches the
+same place — that is still untested.
+
+Driven with `Xvfb :99` + `xdotool` + `import`, against a Debug build with
+`XDG_CONFIG_HOME` redirected to a scratch dir, no kubeconfig (so the shell's empty state,
+then the demo cluster). Preferences → Shortcut modifier → **Cmd**, with the window open,
+and then, in order:
+
+- **Bindings re-render.** `super+k` opened the palette; `super+p` opened the switcher;
+  `super+f` focused the list search box and typing `redis` filtered the demo pods to
+  "1 of 6"; `super+b` collapsed the sidebar. The command bar's palette pill relabelled
+  itself from `Ctrl+K` to `Cmd+K` without a restart, and the switcher's own footer hint
+  to `Cmd+1…9 jump to tab` — both are set by `BuildKeyBindings`, so they double as a
+  witness that it ran.
+- **The F1 sheet re-renders.** Every cap redrew as `Cmd` (`Cmd P`, `Cmd F`, `Cmd R`,
+  `Cmd S`, and the note `Cmd+1 … Cmd+9`) — and the exec-pane rows still read `Ctrl C`
+  and `Ctrl D`, which is command-catalog rule 5 holding where it is actually read.
+- **Tooltips re-render.** The sidebar toggle read `Show or hide the resource sidebar
+  (Cmd+B)` and the cog `Preferences… (Cmd+,)`. So did the switcher button's
+  `SwitcherTooltip`, which is *not* a `CommandTip` and has no `Hotkeys.Changed`
+  subscription at all — it survives because `ToolTip.Tip` holds a `TextBlock` whose
+  binding is re-evaluated each time the popup is attached. Worth knowing that it works
+  for a different reason than the other three: a future tooltip that caches its text
+  would not.
+- **The old gesture stops working.** `ctrl+k`, `ctrl+f` and `ctrl+b` all did nothing —
+  no palette, an untouched search box, an unchanged sidebar. The reverse direction was
+  driven too (back to **Auto**): `super+k` went dead and `ctrl+k` came back, with the
+  labels following.
+
+**The regression check, and what it can and cannot cover.** `HotkeySchemeTests`
+(`tests/KubeNimbus.App.Tests`) pins the four, and the reason it needed a small seam is
+that a `MainWindow` cannot be constructed without a running Application — so the clearing
+rebuild moved out of `MainWindow.BuildKeyBindings` into
+`CommandBindings.RebuildWindowBindings(IList<KeyBinding>, …)`, which a test can drive
+twice over one list. The window keeps the half that is genuinely its own (the commands
+that act on it, the two labels). `CommandTip.Compose` gained a control-free overload for
+the same reason. Both breaks were written and confirmed red before the tests were called
+done, same discipline as VER-5:
+
+- Deleting `bindings.Clear()` — **3 of 27 red**, reporting `Expected to be 16` (the list
+  had doubled), `KeyModifiers.Control` still present after switching to Meta, and
+  `Ctrl+1` still bound. This is the silent failure the item names, and note that it
+  breaks *nothing visible*: the new chord works and every label is correct.
+- Caching `Hotkeys.PrimaryLabel` in a `static readonly` field in `ShortcutsViewModel` and
+  `CommandTip` — the exact trap the shared resolver's own doc-comment warns about —
+  **2 of 27 red**, on the cheat-sheet caps and the tooltip text.
+
+What it does **not** cover, and could not: that `MainWindow` and `MainWindowViewModel`
+still *subscribe* to `Hotkeys.Changed` at all. Deleting either subscription leaves every
+test green and every projection correct-when-rebuilt; only the drive-through above catches
+it. That is a window-level and shell-view-model-level wiring fact, and pinning it needs
+`Avalonia.Headless` — which the App.Tests project deliberately does not start.
+
+**Verified this session**: `dotnet build KubeNimbus.slnx` with **0 warnings** (the
+pre-existing CS8425 in `AsyncMergeTests.cs` only appears on a from-scratch test-project
+build and is untouched); **190/190 Core TUnit** and **27/27 App TUnit**, 0 failed, 0
+skipped, both via `--project` (no sandbox here, so the Core count is the unit-only subset
+— the cluster-gated tests return early); the two break/revert runs above; all **48**
+scenarios × both themes rendered (96 PNGs, as the XAML smoke test — nothing here changes
+a pixel and no committed PNG was touched); the linux-x64 NativeAOT publish with no new
+warnings beyond the known DataGrid IL2104/IL3053; `--smoke-test` on that published binary
+under Xvfb (`SMOKE-OK main window rendered at 1280x800 after 107 ms`, exit 0); and the
+**whole drive-through re-run against the refactored build**, since the first pass had
+verified the code the refactor then moved.
+
+**Not verified**: no macOS or Windows box, so the scheme has only ever been exercised
+with X11's Meta standing in for Cmd — the `"auto"` branch resolving to Meta *because the
+platform is macOS*, and a real Cmd keypress arriving as `KeyModifiers.Meta` on
+`Avalonia.Native`, are both still argued rather than observed. No live cluster (the demo
+cluster was used for the list-search half), so `Ctrl/Cmd+R`'s refresh and `Ctrl/Cmd+S`'s
+YAML apply were not driven under the changed scheme; both are ordinary catalog rows in
+the same rebuilt list as the four that were. And the drive-through is manual: there is no
+automated Xvfb gesture test, so this evidence is a session's record, not a check that
+re-runs.

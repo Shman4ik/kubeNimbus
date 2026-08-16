@@ -85,38 +85,14 @@ public partial class MainWindow : Window
     /// </summary>
     private void BuildKeyBindings()
     {
-        KeyBindings.Clear();
-
-        foreach (var (id, gesture) in CommandBindings.WindowBindings())
-        {
-            System.Windows.Input.ICommand command = id switch
-            {
-                CommandId.CommandPalette => new RelayOpenPaletteCommand(this),
-                CommandId.ClusterSwitcher => new RelayOpenSwitcherCommand(this),
-                CommandId.FilterList => new RelayFocusRowFilterCommand(this),
-                CommandId.ShortcutsWindow => new RelayToggleShortcutsCommand(this),
-
-                // Everything else goes through the view model. Resolved at execute
-                // time, not now: the DataContext is set after construction, and
-                // SelectedTab-backed commands change on every tab switch.
-                _ => new RelayCatalogCommand(this, id),
-            };
-
-            KeyBindings.Add(new KeyBinding { Gesture = gesture, Command = command });
-        }
-
-        // Ctrl/Cmd+1…9 jumps straight to a tab. Registered in a loop rather than nine
-        // XAML KeyBindings so the modifier still comes from Hotkeys.Primary (UI rule 4
-        // — no hardcoded Ctrl gestures). A range, so it is a catalog gesture *note*
-        // rather than a chord, which is why it is built here and not in the loop above.
-        for (var ordinal = 1; ordinal <= 9; ordinal++)
-        {
-            KeyBindings.Add(new KeyBinding
-            {
-                Gesture = new KeyGesture(Key.D0 + ordinal, Hotkeys.Primary),
-                Command = new RelaySelectTabCommand(this, ordinal),
-            });
-        }
+        // The clearing rebuild itself lives in CommandBindings so it can be driven from
+        // a view-model test (a MainWindow needs a running Application); what stays here
+        // is the half that is genuinely the window's — the commands that act on it, and
+        // the two labels that spell the modifier out.
+        CommandBindings.RebuildWindowBindings(
+            KeyBindings,
+            WindowCommandFor,
+            ordinal => new RelaySelectTabCommand(this, ordinal));
 
         PaletteShortcutLabel.Text = Hotkeys.Describe(Hotkeys.CommandPalette);
 
@@ -126,6 +102,22 @@ public partial class MainWindow : Window
         SwitcherHintLabel.Text =
             $"Click or Enter to open · ↑↓ navigate · Esc close · {Hotkeys.PrimaryLabel}+1…9 jump to tab";
     }
+
+    /// <summary>
+    /// The command behind one window-level gesture. Four of them act on the window
+    /// itself — they move focus into a control or open a shell overlay, which is not
+    /// something an <c>ICommand</c> on a view model can express — and everything else is
+    /// resolved from the view model at execute time, not now: the DataContext is set
+    /// after construction, and SelectedTab-backed commands change on every tab switch.
+    /// </summary>
+    private System.Windows.Input.ICommand WindowCommandFor(CommandId id) => id switch
+    {
+        CommandId.CommandPalette => new RelayOpenPaletteCommand(this),
+        CommandId.ClusterSwitcher => new RelayOpenSwitcherCommand(this),
+        CommandId.FilterList => new RelayFocusRowFilterCommand(this),
+        CommandId.ShortcutsWindow => new RelayToggleShortcutsCommand(this),
+        _ => new RelayCatalogCommand(this, id),
+    };
 
     // Windows 11 Mica backdrop: the shell base swaps between the theme-split
     // translucent ShellBackdropBrush (while the material actually renders —

@@ -59,11 +59,20 @@ public static class CommandTip
         Hook(control);
     }
 
-    private static string? Compose(Control control)
-    {
-        var text = control.GetValue(TextProperty);
+    private static string? Compose(Control control) =>
+        Compose(control.GetValue(TextProperty), control.GetValue(CommandProperty));
 
-        if (control.GetValue(CommandProperty) is not { } id)
+    /// <summary>
+    /// The tip text itself, with no control involved. Split out so the scheme-sensitive
+    /// half can be pinned by <c>HotkeySchemeTests</c>: composing against the live
+    /// <see cref="Hotkeys.PrimaryLabel"/> is what makes a tooltip re-render when the
+    /// preference changes, and reading it once into a constant is a regression nothing
+    /// else would catch — a stale tooltip renders perfectly, it just names the other
+    /// platform's chord.
+    /// </summary>
+    internal static string? Compose(string? text, CommandId? command)
+    {
+        if (command is not { } id)
         {
             return text;
         }

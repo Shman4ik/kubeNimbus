@@ -138,6 +138,57 @@ public static class CommandBindings
         }
     }
 
+    /// <summary>
+    /// Fills a window's <c>KeyBindings</c> from the catalog, resolved against the live
+    /// Ctrl/Cmd scheme. Called once at construction and again on every
+    /// <c>Hotkeys.Changed</c>.
+    ///
+    /// <para>
+    /// <b>The list is cleared, never appended to</b>, and that is the whole reason this
+    /// is a method of its own rather than a loop inside the window. A rebuild that added
+    /// to what was already there would leave the old modifier's gestures registered
+    /// beside the new ones, so Ctrl+K would keep working after someone chose Cmd — a
+    /// preference that reads as having done nothing, with no error anywhere. Pulling it
+    /// out of the window is what lets <c>HotkeySchemeTests</c> drive two rebuilds over
+    /// one list and assert the first scheme's chords are gone; a <c>MainWindow</c> needs
+    /// a running Application and cannot be constructed from a view-model test.
+    /// </para>
+    ///
+    /// <para>
+    /// The commands come from the caller because several of them act on the window
+    /// itself (moving focus into a control is not something an <c>ICommand</c> on a view
+    /// model can express). Ctrl/Cmd+1…9 is built here in a loop rather than as nine XAML
+    /// bindings, for UI rule 4 — the modifier has to come from <see cref="Hotkeys.Primary"/>
+    /// on every rebuild, and a range is a catalog gesture *note* rather than a chord, so
+    /// it has no descriptor to iterate.
+    /// </para>
+    /// </summary>
+    public static void RebuildWindowBindings(
+        IList<KeyBinding> bindings,
+        Func<CommandId, ICommand> commandFor,
+        Func<int, ICommand> tabJumpCommandFor)
+    {
+        ArgumentNullException.ThrowIfNull(bindings);
+        ArgumentNullException.ThrowIfNull(commandFor);
+        ArgumentNullException.ThrowIfNull(tabJumpCommandFor);
+
+        bindings.Clear();
+
+        foreach (var (id, gesture) in WindowBindings())
+        {
+            bindings.Add(new KeyBinding { Gesture = gesture, Command = commandFor(id) });
+        }
+
+        for (var ordinal = 1; ordinal <= 9; ordinal++)
+        {
+            bindings.Add(new KeyBinding
+            {
+                Gesture = new KeyGesture(Key.D0 + ordinal, Hotkeys.Primary),
+                Command = tabJumpCommandFor(ordinal),
+            });
+        }
+    }
+
     // Deliberately a lookup rather than a switch over the whole enum: the catalog also
     // holds documentation-only rows (double-click, Ctrl+C in the terminal, drag a tab)
     // that have no view-model command at all, and those must never reach Resolve.
