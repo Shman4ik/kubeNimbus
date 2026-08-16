@@ -40,7 +40,7 @@ rather than here.
 |---|---|---|---|---|---|
 | VER-1 | With VER-2's runners in place, confirm `linux-x64`, `linux-arm64` and `osx-arm64` actually start after the `WindowIcons.Apply` fix, and record the result in CLAUDE.md | P0 | S | blocked | 1 |
 | FEAT-10 | Replace the exec pane's ANSI stripping with `SvcSystems.UI.Terminal` over `XTerm.NET` — keep the WebSocket transport and the bash→sh→ash probe | P1 | M | ready | 0 |
-| VER-3 | Change the Ctrl/Cmd hotkey scheme with the app running (Xvfb is enough) — bindings, F1 sheet and tooltips must all re-render, old gesture must stop working | P1 | S | ready | 0 |
+| VER-3 | Change the Ctrl/Cmd hotkey scheme with the app running (Xvfb is enough) — bindings, F1 sheet and tooltips must all re-render, old gesture must stop working | P1 | S | in-progress | 0 |
 | FEAT-2 | Drive list columns from a CRD's `additionalPrinterColumns`, leaving `ResourceStatusSummary` owning the built-ins | P1 | M | ready | 0 |
 | DIST-6 | Re-check the positioning against KubeUI and either confirm or rewrite CLAUDE.md's market paragraph — a `kn-researcher` job, not an implementer one | P1 | S | ready | 0 |
 | FEAT-3 | Tail logs across every pod of a Deployment/selector in one pane, colour-keyed by pod | P1 | L | ready | 0 |
