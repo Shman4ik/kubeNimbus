@@ -226,9 +226,14 @@ public static class DemoData
         {
             ResourceDescriptor.Pods,
             Descriptor("", "v1", "Service", "services", true),
-            Descriptor("apps", "v1", "Deployment", "deployments", true),
-            Descriptor("apps", "v1", "ReplicaSet", "replicasets", true),
-            Descriptor("apps", "v1", "StatefulSet", "statefulsets", true),
+            // The three kinds a real server declares a `scale` subresource for, carried
+            // here too: capability comes from discovery (see WorkloadActions), so
+            // without it the demo cluster would hide the Scale action outright instead
+            // of offering it and explaining — in place — that there is no API server
+            // behind it. Same argument as the exec and port-forward panes.
+            Descriptor("apps", "v1", "Deployment", "deployments", true, scalable: true),
+            Descriptor("apps", "v1", "ReplicaSet", "replicasets", true, scalable: true),
+            Descriptor("apps", "v1", "StatefulSet", "statefulsets", true, scalable: true),
             Descriptor("apps", "v1", "DaemonSet", "daemonsets", true),
             Descriptor("batch", "v1", "Job", "jobs", true),
             Descriptor("batch", "v1", "CronJob", "cronjobs", true),
@@ -292,8 +297,12 @@ public static class DemoData
         }
     }
 
-    private static ResourceDescriptor Descriptor(string group, string version, string kind, string plural, bool namespaced) =>
-        new(group, version, kind, plural, kind.ToLowerInvariant(), namespaced, [], []);
+    private static ResourceDescriptor Descriptor(
+        string group, string version, string kind, string plural, bool namespaced, bool scalable = false) =>
+        new(group, version, kind, plural, kind.ToLowerInvariant(), namespaced, [], [])
+        {
+            Subresources = scalable ? ["scale", "status"] : [],
+        };
 
     /// <summary>
     /// Builds the sidebar the demo cluster shows, through the same

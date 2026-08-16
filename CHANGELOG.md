@@ -14,6 +14,21 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Added
 
+- **Workload actions — scale, rollout restart, and delete — from the resource
+  list.** Right-click a row (or use `Ctrl`/`Cmd`+`K`) for **Scale…**, **Rollout
+  restart…** and **Delete…**. Each one arms a confirm strip above the list that
+  names the object before anything happens: Scale reads the workload's current
+  replica count and takes a new one, Restart stamps the pod template the same
+  way `kubectl rollout restart` does — so the controller rolls the pods under
+  its own update strategy, honoring surge, `maxUnavailable` and
+  PodDisruptionBudgets, rather than deleting them out from under it — and
+  Delete asks first (unless you have turned "Confirm before deleting" off).
+  Whether an object can be scaled or restarted comes from the cluster itself,
+  so a custom resource with a `scale` subresource or an embedded pod template
+  gets the same actions the built-in kinds do. Failures are shown in place with
+  the API server's own message, which for the common one (RBAC) names the user,
+  the verb and the resource. Until now the only way to change a replica count
+  was to edit YAML by hand.
 - **Demo cluster.** With no kubeconfig and no cluster, **Explore demo cluster**
   (in the empty state, in `Ctrl`/`Cmd`+`K`, and in the cluster switcher's own
   group) opens a full sample workload set that ships inside the binary — pods

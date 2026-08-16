@@ -12,8 +12,16 @@ namespace KubeNimbus.Screenshot;
 /// </summary>
 internal static class ClusterTabScenarios
 {
+    /// <summary>
+    /// Carries the <c>scale</c> subresource because a real server's discovery does, and
+    /// that — not the kind's name — is what makes the Scale action appear (see
+    /// <see cref="WorkloadActions.SupportsScale"/>).
+    /// </summary>
     private static readonly ResourceDescriptor DeploymentDescriptor =
-        new("apps", "v1", "Deployment", "deployments", "deployment", true, [], []);
+        new("apps", "v1", "Deployment", "deployments", "deployment", true, [], [])
+        {
+            Subresources = ["scale", "status"],
+        };
 
     private static readonly ResourceDescriptor SecretDescriptor =
         new("", "v1", "Secret", "secrets", "secret", true, [], []);
@@ -347,6 +355,112 @@ internal static class ClusterTabScenarios
         var tab = BaseTab();
         var crds = tab.SidebarSections.First(s => s.Title == "CRDs");
         crds.IsExpanded = true;
+        return tab;
+    }
+
+    // ------------------------------------------------ mutating workload actions
+    //
+    // The armed confirm strip for scale / rollout restart / delete. Every one of these
+    // goes through the tab's real commands, so what renders is what the context menu
+    // and the palette produce — including the capability gate: the Scale action only
+    // appears because the fixture descriptor carries the `scale` subresource discovery
+    // would have reported.
+
+    /// <summary>A Deployment list with a row selected — the starting point for the workload actions.</summary>
+    private static ClusterTabViewModel DeploymentsTab()
+    {
+        var tab = BaseTab(populateRows: false);
+        var kind = tab.SidebarSections
+            .First(s => s.Title == "Workloads").Kinds
+            .First(k => k.Descriptor.Kind == "Deployment");
+        kind.IsSelected = true;
+        tab.SelectedKind = kind;
+
+        foreach (var deployment in FixtureData.Deployments)
+        {
+            tab.Rows.Add(new ResourceRowViewModel(deployment));
+        }
+
+        tab.SelectedRow = tab.Rows.FirstOrDefault(r => r.Name == "checkout-worker") ?? tab.Rows.FirstOrDefault();
+
+        // Same ordering fix as BaseTab: assigning SelectedKind ran the real watch path,
+        // which latched the empty state before these rows existed.
+        tab.IsListLoading = false;
+        tab.IsListEmpty = tab.Rows.Count == 0;
+        return tab;
+    }
+
+    /// <summary>
+    /// Arms an action on the selected Deployment row. The tab's own
+    /// <c>ScaleSelectedCommand</c>/<c>RestartSelectedCommand</c> refuse here and are
+    /// right to: a fixture tab has no <c>Client</c> and is not the demo cluster, which
+    /// is precisely the "disconnected" case they must not act in. So the strip is built
+    /// against the offline fixture client instead — the same thing the exec, YAML and
+    /// Helm scenarios do with their inspector tabs, and for the same reason.
+    /// </summary>
+    private static RowActionViewModel ArmRowAction(ClusterTabViewModel tab, RowActionKind kind)
+    {
+        var row = tab.SelectedRow!;
+        var action = new RowActionViewModel(
+            kind, FixtureData.CreateOfflineClient(), tab.SelectedKind!.Descriptor, row.Namespace, row.Name,
+            replicas: WorkloadActions.DeclaredReplicas(row.Resource));
+
+        tab.PendingRowAction = action;
+        return action;
+    }
+
+    /// <summary>
+    /// Scale, armed: the replica box, the current scale beside it, and the confirm. The
+    /// scale subresource cannot be read from an offline client, so the reading it would
+    /// have produced is written in — obviously-fake numbers, as with every other fixture.
+    /// </summary>
+    public static ClusterTabViewModel RowActionScale()
+    {
+        var tab = DeploymentsTab();
+        var action = ArmRowAction(tab, RowActionKind.Scale);
+        action.Replicas = 4;
+        action.CurrentScale = "currently 2 set · 1 running";
+        return tab;
+    }
+
+    /// <summary>Rollout restart, armed — the one-click action every competitor has and this app didn't.</summary>
+    public static ClusterTabViewModel RowActionRestart()
+    {
+        var tab = DeploymentsTab();
+        ArmRowAction(tab, RowActionKind.Restart);
+        return tab;
+    }
+
+    /// <summary>
+    /// The failure that actually happens: RBAC. The API server's own sentence names the
+    /// subject, the verb and the resource, and it lands in the strip's InfoBar rather
+    /// than anywhere the action can be mistaken for having worked (UI rule 9).
+    /// </summary>
+    public static ClusterTabViewModel RowActionFailed()
+    {
+        var tab = DeploymentsTab();
+        var action = ArmRowAction(tab, RowActionKind.Restart);
+        action.IsError = true;
+        action.Message =
+            "Restart failed: deployments.apps \"checkout-worker\" is forbidden: User \"deploy-bot\" "
+            + "cannot patch resource \"deployments\" in API group \"apps\" in the namespace \"payments\"";
+        return tab;
+    }
+
+    /// <summary>
+    /// The demo cluster's answer. Scale needs an API server and the demo has none, so
+    /// the strip arms, names what it cannot do and disables its confirm — the same
+    /// treatment exec and port-forward get, and never a silent no-op.
+    /// </summary>
+    public static ClusterTabViewModel DemoScaleUnavailable()
+    {
+        var tab = DemoTab();
+        var kind = tab.SidebarSections
+            .First(s => s.Title == "Workloads").Kinds
+            .First(k => k.Descriptor.Kind == "Deployment");
+        tab.SelectKindCommand.Execute(kind);
+        tab.SelectedRow = tab.Rows.FirstOrDefault();
+        tab.ScaleSelectedCommand.Execute(null);
         return tab;
     }
 

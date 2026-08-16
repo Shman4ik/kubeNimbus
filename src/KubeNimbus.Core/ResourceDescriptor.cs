@@ -35,6 +35,42 @@ public sealed record ResourceDescriptor(
     public string ItemPath(string? @namespace, string name) =>
         $"{CollectionPath(@namespace)}/{Uri.EscapeDataString(name)}";
 
+    /// <summary>Path to one of this kind's subresources, e.g. <c>…/deployments/web/scale</c>.</summary>
+    public string SubresourcePath(string? @namespace, string name, string subresource) =>
+        $"{ItemPath(@namespace, name)}/{subresource}";
+
+    /// <summary>
+    /// The subresources discovery reported for this kind — <c>"scale"</c>, <c>"status"</c>,
+    /// <c>"log"</c>, … (the part after the slash in the discovery entry's name). This is
+    /// how the app knows a kind can be scaled without keeping a list of kinds that can:
+    /// a CRD that declares a <c>scale</c> subresource is scalable, and an <c>apps/v1</c>
+    /// resource on a server that doesn't serve one isn't.
+    /// </summary>
+    public IReadOnlyList<string> Subresources { get; init; } = [];
+
+    /// <summary>
+    /// The verbs discovery reported for this kind (<c>list</c>, <c>patch</c>,
+    /// <c>delete</c>, …). Empty means <em>not known</em>, not "none": descriptors built
+    /// by hand (the well-known ones above, the demo catalog, test fixtures) carry no
+    /// verbs, and a capability check must not read that as a prohibition —
+    /// see <see cref="AllowsVerb"/>.
+    /// </summary>
+    public IReadOnlyList<string> Verbs { get; init; } = [];
+
+    /// <summary>True when the server reported this subresource for this kind.</summary>
+    public bool HasSubresource(string name) =>
+        Subresources.Any(s => string.Equals(s, name, StringComparison.Ordinal));
+
+    /// <summary>
+    /// Whether the server said this kind supports <paramref name="verb"/>. Unknown
+    /// (an empty <see cref="Verbs"/>) answers <c>true</c>: discovery is used here to
+    /// hide what a server has said it cannot do, never to invent a prohibition it
+    /// didn't state. RBAC is not in this answer either way — the API server is the
+    /// authority on permission, and its 403 is what the UI surfaces.
+    /// </summary>
+    public bool AllowsVerb(string verb) =>
+        Verbs.Count == 0 || Verbs.Any(v => string.Equals(v, verb, StringComparison.Ordinal));
+
     /// <summary>Well-known descriptor for core/v1 Pods — used before discovery completes and by tests.</summary>
     public static readonly ResourceDescriptor Pods = new(
         Group: "", Version: "v1", Kind: "Pod", Plural: "pods", SingularName: "pod",

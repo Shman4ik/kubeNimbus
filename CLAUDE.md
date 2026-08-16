@@ -388,6 +388,26 @@ Three rules about it:
    `nimbusUi` — which is where to get it back from if this app ever grows a second
    window. Adding one *without* it is the bug to remember: the black-caption-over-white
    -page failure is invisible on a machine whose OS theme happens to match the app's.
+17. **A mutating action arms a strip; it never fires on the click that started it.**
+   Scale, rollout restart and delete all land on one `RowActionViewModel` rendered above
+   the resource list, which names the object, holds the replica box when there is one,
+   and carries the in-flight / succeeded / refused states in an `infoBar` (rule 11).
+   One strip for all three, because the confirm sentence, the busy state, the RBAC 403
+   and the success line are the same work three times over otherwise, and three
+   near-identical confirms is precisely how they drift apart. Four alternatives were
+   considered and rejected, and the reasons are the rule: a **second window** is
+   forbidden outright (rule 16); an **OverlayPanel** covers the very list the action is
+   about, and rule 16b scopes overlays to shell-level surfaces; an **inspector dock tab**
+   spends a third row of chrome inside a ~300px dock (rule 10) on a question with a
+   one-word answer; and a **menu item that acts immediately** puts a destructive verb one
+   twitch away from Edit YAML. The strip is present only while an action is armed, so it
+   costs nothing the rest of the time (rule 1). It is docked *outside* `ContentRows`
+   for the same reason the demo banner is — that grid's row indices are load-bearing for
+   `ApplyDockState`. And it is a `ContentControl` + inline `DataTemplate`, not a `Border`
+   with `DataContext` and `x:DataType` both set on it: `x:DataType` re-roots an element's
+   **own** bindings too, so that combination compiles against the wrong type and renders
+   *nothing at all*, silently — which is how the first cut of this shipped past the
+   compiler and was caught only by looking at the screenshot.
 
 [fluent-basics]: https://learn.microsoft.com/en-us/windows/apps/design/basics/
 
@@ -840,6 +860,15 @@ the App layer.
   `SidebarGrouping` (App layer) buckets each descriptor into
   Workloads/Network/Config/Storage/CRDs by Kind — an unrecognized API group
   falls through to CRDs automatically, nothing is hardcoded.
+  A descriptor also carries the server's **`Subresources` and `Verbs`** for that
+  kind. Subresources arrive as sibling entries in the same array
+  (`deployments/scale`) in no guaranteed order, so they are collected in a first
+  pass and attached in a second; they are still never browsable kinds of their
+  own. This is the evidence every capability check uses — see "Mutating workload
+  actions" below. `Verbs` empty means **not known**, not "none"
+  (`ResourceDescriptor.AllowsVerb` answers true): descriptors built by hand — the
+  well-known statics, the demo catalog, fixtures — carry none, and reading that as
+  a prohibition would silently disable a feature everywhere except a live cluster.
 - **Server-side apply** (`ClusterClient.Dynamic.cs`) PATCHes with
   `Content-Type: application/apply-patch+yaml`; the body is JSON (valid JSON
   is valid YAML, so the API server's apply decoder accepts it) produced by
@@ -857,6 +886,71 @@ the App layer.
   websocket port-forward channel framing doesn't support multiplexing several
   local clients over one upstream connection) and pumps bytes with the
   channel-byte-prefix framing by hand.
+
+## Mutating workload actions (scale, rollout restart, delete)
+
+The app was read-mostly until this: the only way to change a replica count was to edit
+YAML, and "restart that deployment" — one click in Lens, Aptakube, k9s and Headlamp,
+and the most common on-call GUI action there is — had no entry point at all.
+`ClusterClient.Workloads.cs` and `WorkloadActions.cs` (Core) are the engine;
+`RowActionViewModel` + the strip above the list (UI rule 17) are the surface; the row
+`ContextFlyout` and the command palette are the two ways in, as the backlog item asked.
+
+Six things are load-bearing:
+
+1. **A restart is an annotation, not a delete loop.** `RestartWorkloadAsync` stamps
+   `kubectl.kubernetes.io/restartedAt` on `spec.template.metadata.annotations` and stops
+   — the controller then rolls its own pods under its own update strategy, honoring
+   surge, `maxUnavailable`, partitions, PDBs and readiness gates. Deleting the pods
+   ourselves would bypass every one of those and can take a whole Deployment down at
+   once. The key is **kubectl's own**, deliberately: a restart from kubeNimbus and one
+   from kubectl have to be the same event to whoever reads the object afterwards.
+2. **Both patches are `application/merge-patch+json`, not strategic merge.** kubectl
+   uses strategic merge for built-ins; a CRD answers that with a 415. For the nested
+   scalar maps these two actions touch, RFC 7386 produces exactly the same object —
+   merge patch recurses into objects and merges keys, so the template's labels,
+   containers and other annotations all survive — and it is the one content type
+   everything accepts. `WorkloadActionsTests` pins the byte-for-byte patch bodies,
+   because **every failure mode here is silent**: a wrong annotation key, or a patch one
+   level short (on the object's own metadata rather than the template's), is a 200 that
+   rolls nothing and is indistinguishable from a dead button.
+3. **Scale goes through the `scale` subresource**, like `kubectl scale`, and reads it
+   before offering a number. The object's own `spec.replicas` is only the opening value
+   of the box while that read is in flight — a CRD may declare a different
+   `specReplicasPath`, and the subresource is the one field every scalable kind agrees
+   on. The read failing (RBAC on the subresource) is stated in the strip and does not
+   block the action.
+4. **Capability comes from discovery and from the object, never from a list of kinds.**
+   Scale is offered when the server declares a `scale` subresource for that kind
+   (`WorkloadActions.SupportsScale`) — so an Argo Rollout is scalable on exactly the same
+   evidence a Deployment is, and neither is named anywhere. Restart has *no* discovery
+   signal at all (no subresource, no verb), so the honest test is the object: does it
+   have a pod template to stamp (`HasPodTemplate`)? That is true of Deployments,
+   StatefulSets, DaemonSets and a CRD that embeds a template, and false for a bare Pod —
+   whose restart gesture is the delete. Delete is gated on the `delete` verb.
+   In an aggregated fleet list the descriptor is the row's **own** cluster's, so the same
+   CRD can be scalable on one cluster and not on another and the menu is right on both.
+5. **Delete no longer detours through the YAML editor.** It used to open the object's
+   manifest with that editor's confirm armed, which put an editor tab and a page of
+   YAML between someone and a one-line question; it arms the same strip now, and names
+   the object either way. The YAML editor keeps its own Delete for when you are already
+   in there. "Confirm before deleting" is read **at the press** (same as
+   `YamlEditorTabViewModel.RequestDeleteAsync`, same reason). Scale and restart do not
+   consult it: it is a setting about deleting, and scale needs its input step regardless.
+6. **The demo cluster arms the strip and refuses in place.** All three actions need an
+   API server, so `RowActionViewModel.IsDemo` (`client is null`, as everywhere) renders
+   the notice and disables Confirm — never a silent no-op. That is also why the demo
+   catalog's Deployment/ReplicaSet/StatefulSet descriptors carry a `scale` subresource:
+   without it the capability check would hide the action outright and the demo would
+   teach that kubeNimbus cannot scale, rather than that this cluster cannot.
+   `cluster-tab-demo-scale-unavailable` is that scenario, and it is the one of the four
+   new screenshots that runs the real command path end to end — a fixture tab has no
+   `Client`, so the commands correctly refuse there and the strip is built by hand
+   (`ClusterTabScenarios.ArmRowAction`), exactly as the exec/YAML/Helm scenarios do.
+
+**Not shipped, deliberately:** rollout *status*/history/undo, pause/resume, and scaling
+from a row's inline editor. `kubectl rollout undo` needs ReplicaSet revision walking and
+is its own item; the rest are backlog candidates, not omissions this pass forgot.
 
 ## Metrics (metrics.k8s.io)
 
@@ -2223,3 +2317,51 @@ with `dry_run: true`, or `actions: write` granted to the integration. Until then
 release workflow still ships two RIDs on a diagnosis rather than an observation — which
 is the same shape of gap that produced the v0.1.0 breakage, and the reason VER-1 is
 recorded as `blocked` rather than quietly closed on one passing RID.
+
+**Workload-actions pass (FEAT-1):** the app's first mutating actions beyond a YAML
+apply/delete — scale, `rollout restart` and delete-a-pod, on the row context menu and in
+the palette, each armed rather than fired. See "Mutating workload actions" above for the
+six rules and UI rule 17 for the strip they all share. New: `WorkloadActions.cs` and
+`ClusterClient.Workloads.cs` in Core (+ 13 `WorkloadActionsTests`), `Subresources`/`Verbs`
+on `ResourceDescriptor` with the discovery parser to fill them, `RowActionViewModel` and
+the strip in `ClusterTabView`, two app-local icons, two context-menu items, three palette
+entries and four screenshot scenarios (`cluster-tab-row-action-{scale,restart,failed}`,
+`cluster-tab-demo-scale-unavailable`).
+
+Two things worth keeping from doing it:
+
+- **The strip rendered as nothing, silently, and compiled clean.** A `Border` that both
+  set `DataContext="{Binding PendingRowAction}"` and declared
+  `x:DataType="vm:RowActionViewModel"` compiles — `x:DataType` re-roots that element's
+  *own* bindings too, so the DataContext binding itself was resolved against the wrong
+  type — and produces an invisible panel with no error anywhere. Only the screenshot
+  showed it. It is a `ContentControl` + inline `DataTemplate` now (UI rule 17).
+- **A fixture tab has no `Client`, so the three commands refuse in the harness — and are
+  right to.** That is the disconnected case they must not act in. The fixture scenarios
+  therefore build `RowActionViewModel` directly against the offline client, exactly as
+  the exec/YAML/Helm scenarios build their inspector tabs; the demo scenario is the one
+  that goes through the real command, because the demo path is designed to work without
+  a client.
+
+**Verified this session**: `dotnet build KubeNimbus.slnx` with **0 warnings** (the
+pre-existing CS8425 in `AsyncMergeTests.cs` reappears only on a from-scratch test-project
+build and is untouched), **168/168 TUnit, 0 failed, 0 skipped** via `--project` — the 13
+new ones among them, and 0 skipped here means the unit-only subset, since the
+cluster-gated tests return early with no sandbox — all **92** screenshots (46 scenarios ×
+both themes), the linux-x64 NativeAOT publish with no new warnings beyond the known
+DataGrid IL2104/IL3053, and the launch check on that published binary under Xvfb
+(`SMOKE-OK main window rendered at 1280x800 after 442 ms`, exit 0).
+
+**Not verified, and it is the whole live half.** No cluster came up here (Docker's blob
+CDN is blocked by this session's egress policy), so **not one of these three actions has
+been run against an API server**: the scale patch, the restart annotation and the delete
+are all argued from the wire format and pinned by unit tests, never observed. Nor has any
+of it been driven by hand in the running app — the context menu items, the palette
+entries, the replica box's keyboard behaviour and the `ConfirmDeletes: false` path (which
+fires the delete straight from the menu) were all verified by construction or in the
+headless harness. First things to do on a machine with a sandbox: scale
+`demo-shop/shop-web` up and down and watch the list follow it; restart it and confirm the
+pods roll rather than all disappear at once (`kubectl get pods -w` beside it), and that
+`kubectl get deploy shop-web -o yaml` shows the `restartedAt` annotation; restart twice
+inside one second and confirm the second is a no-op, as it is for kubectl; and check the
+403 path with a `kubectl --as` impersonated user that cannot patch.
