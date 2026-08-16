@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    View-model tests for the App layer. This project exists because the invariant
+    it pins (UI rule 13: `Rows` is the watch's own list, `VisibleRows` is the
+    rendered projection) lives in KubeNimbus.App and cannot move to Core — hard
+    architectural rule 1 keeps Core free of Avalonia/CommunityToolkit — so it had
+    nowhere to be tested from.
+
+    No Avalonia app instance is started: ClusterTabViewModel's constructor, the
+    watch-apply path and the VisibleRows mirror are plain CommunityToolkit MVVM
+    over ObservableCollection, and the Dispatcher only appears on the far side of
+    a live watch, which these tests never start.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <!-- TUnit runs on Microsoft.Testing.Platform. Do NOT add Microsoft.NET.Test.Sdk;
+         it hijacks discovery and breaks the TUnit runner. -->
+    <EnableMSTestRunner>false</EnableMSTestRunner>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <!-- The referenced app project is AOT-analysed; this harness is not shipped. -->
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="TUnit" Version="1.64.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/KubeNimbus.App/KubeNimbus.App.csproj" />
+  </ItemGroup>
+
+</Project>

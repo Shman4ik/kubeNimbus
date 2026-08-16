@@ -315,6 +315,12 @@ Three rules about it:
      `CollectionChanged`, which is *why* the watch, the fleet merge, `PopulateDemoRows`
      and every screenshot fixture still write to `Rows` and know nothing about a
      filter. Appends and removes are handled incrementally; anything else rebuilds.
+     **Pinned by `ClusterTabRowFilterTests`** (`tests/KubeNimbus.App.Tests`), which
+     drives the real `Apply`/`ApplyFleet` and asserts on row *identity* as well as on
+     what is on screen — the two ways of getting this wrong (filtering in
+     `RebuildVisibleRows`, or dropping non-matching rows in the watch-apply path)
+     were both written into the code and confirmed to turn the suite red before the
+     tests were called done.
    - **It matches what identifies an object** — name, namespace, and cluster in fleet
      mode (`ResourceRowViewModel.Matches`) — and deliberately not the status, which
      would make "Running" match most of a healthy list.
@@ -733,7 +739,8 @@ would clobber the developer's own tabs and pins.
 ```
 src/KubeNimbus.Core        Engine: kubeconfig, ClusterClient (watch/logs). No UI.
 src/KubeNimbus.App         Avalonia 12 desktop shell.
-tests/KubeNimbus.Core.Tests  TUnit integration tests against a live cluster.
+tests/KubeNimbus.Core.Tests  TUnit unit + integration tests; the latter skip with no cluster.
+tests/KubeNimbus.App.Tests   TUnit view-model tests. No Avalonia app, no cluster, no display.
 tools/Screenshot           Headless visual-verification harness. Dev-only.
 design/                    Logo sources (SVG) + generated masters/store/screenshots.
 scripts/                   Sandbox cluster bootstrap + the icon/logo pipeline.
@@ -1196,6 +1203,11 @@ dotnet build KubeNimbus.slnx
 # green, check the invocation first.
 dotnet test --project tests/KubeNimbus.Core.Tests/KubeNimbus.Core.Tests.csproj
 
+# Run the App layer's view-model tests. Same runner, same --project rule; these
+# need no cluster, no display and no Avalonia app instance. Two invocations
+# rather than one over the solution so a red run names which half broke.
+dotnet test --project tests/KubeNimbus.App.Tests/KubeNimbus.App.Tests.csproj
+
 # Run the app against the sandbox during development.
 $env:KUBECONFIG = ".sandbox/kubeconfig.yaml"
 dotnet run --project src/KubeNimbus.App
@@ -1220,6 +1232,38 @@ reflection, a non-trim-safe binding) even though it isn't the shipping
 binary — run it after any change that could plausibly affect trimming, and
 call out in the PR that the authoritative win-x64 publish still needs a
 local Windows pass.
+
+### View-model tests (`tests/KubeNimbus.App.Tests`)
+
+The App layer had no test project until VER-5, and the gap was not an oversight so
+much as an unanswered question: the code worth pinning is in `KubeNimbus.App`, and
+hard rule 1 forbids moving it to Core to reach `KubeNimbus.Core.Tests`. So there is
+now a second TUnit project — same runner, same `--project` rule, same "never add
+`Microsoft.NET.Test.Sdk`" — referencing `KubeNimbus.App` directly.
+
+Four things about it:
+
+- **It starts no Avalonia application.** `ClusterTabViewModel`'s constructor, the
+  watch-apply path and the `Rows`→`VisibleRows` mirror are plain
+  CommunityToolkit MVVM over `ObservableCollection`; `Dispatcher.UIThread` only
+  appears on the far side of a live watch, which these tests never start (`Client`
+  stays null, so `RestartWatch` returns before it can). If a future test does need
+  a rendered control, that is `Avalonia.Headless` and the screenshot harness's
+  pattern — not a headless app instance bolted onto this one by default.
+- **It drives the real methods, not a copy.** `ClusterTabViewModel.Apply` and
+  `ApplyFleet` are `internal` (with `InternalsVisibleTo` in the App csproj) purely
+  so the tests can post watch events the way the watch pump does. A test over a
+  stand-in reproduction of the mirroring logic would pin nothing: the bug it guards
+  against is one a second implementation, written from the rule, would not have.
+- **It redirects both stores.** `AppSettingsStore.DirectoryOverride` and
+  `WorkspaceStore.DirectoryOverride` are set to a temp directory in
+  `TestObjects.RedirectStores`, same reason the screenshot harness sets them —
+  a test run must not read, still less write, the files of whoever is running it.
+- **The screenshot harness cannot replace it, and that is the whole argument.**
+  `Rows` and `VisibleRows` agree with each other in every state a PNG can capture;
+  the difference between a correct mirror and one that filters `Rows` in place only
+  shows on the *next* watch event. That is not a rendering property, so it needed a
+  different kind of check.
 
 ### The launch check (`--smoke-test`)
 
@@ -2365,3 +2409,53 @@ pods roll rather than all disappear at once (`kubectl get pods -w` beside it), a
 `kubectl get deploy shop-web -o yaml` shows the `restartedAt` annotation; restart twice
 inside one second and confirm the second is a no-op, as it is for kubectl; and check the
 403 path with a `kubectl --as` impersonated user that cannot patch.
+
+**Row-filter regression pass (VER-5):** UI rule 13's central invariant — `Rows` is the
+watch's own complete list, `VisibleRows` is the rendered projection — had no automated
+check, and could not have had one: the App layer had no test project, and the rule's
+code cannot move to Core. New: `tests/KubeNimbus.App.Tests` (see "View-model tests"
+under Verification workflow for why it is shaped the way it is) and
+`ClusterTabRowFilterTests` in it, 13 tests over the real `Apply`/`ApplyFleet`.
+
+**The demonstration is the deliverable here, not the passing run.** A regression test
+for an invariant is worth exactly what it costs to break the invariant and watch it
+fail, so both wrong implementations the item names were actually written and run:
+
+- Making `RebuildVisibleRows` filter `Rows` in place (removing non-matching rows from
+  `Rows` *and* `_rowsByKey`) turned **9 of 13** red. The headline one reported
+  `Expected "api-7f9, cache-0, web-1" but received "api-7f9"` — `Rows` had been cut
+  down to what was on screen — and `Repeated_modifications_…` reported `Expected 3
+  but found 2`, which is the resurfacing itself: the key map had lost `cache-0`, so
+  the next Modified for it built a fresh row and added it back.
+- Making the watch-apply path drop rows the filter no longer matches turned **5 of
+  13** red, the headline one reporting `Expected "api-7f9, cache-0, web-1" but
+  received "api-7f9, web-1"`.
+
+Both were reverted and the file diffed back to its intended state. What this says about
+the assertions: the ones that catch this are on `Rows`, on row *object identity* across
+a Modified, and on `RowFilterSummary` ("1 of 3", which a list filtered in place prints
+as "1 of 1") — asserting only on `VisibleRows` would have passed under both breaks,
+because a filtered-in-place list still renders correctly until the next event.
+
+Two smaller things the pass settled. `IsListEmpty`/`IsFilterEmpty` are pinned as three
+states, not two, including the loading one — and writing that test showed a bare
+`ClusterTabViewModel` reports `IsListEmpty == false`, because `RecomputeListEmpty` has
+never run; that is right (a tab that has never watched anything has no list to be
+empty), so the test reaches the settled-empty state through a `Reset`, the way an empty
+namespace's initial sync does. And `RowFilter` clearing on a kind change *is* cheaply
+reachable — through the real `SelectKindCommand`, whose `RestartWatch` returns
+immediately with no client, which is the disconnected state and not a contrivance.
+
+**Verified this session**: `dotnet build KubeNimbus.slnx` with **1 warning, and it is the
+pre-existing CS8425 in `AsyncMergeTests.cs`** — 0 new; **168/168 Core TUnit, 0 failed, 0
+skipped** (no sandbox here, so that is the unit-only subset — the cluster-gated tests
+return early) and **13/13 App TUnit**, both via `--project`; the break/revert runs above;
+and all **92** screenshots (46 scenarios × both themes) still render, run as the XAML
+smoke test rather than for anything visual — nothing here changes a pixel and no
+committed PNG was touched. **Not verified**: no NativeAOT publish was run — the change
+adds no package, no binding and no serialization, and the only App-code edit is two
+`private` methods becoming `internal`, which the trimmer treats identically; and nothing
+was driven against a live cluster, because there is nothing here to drive (these tests
+replace the watch, they do not exercise it). The one thing a reviewer should weigh rather
+than take on trust is that `InternalsVisibleTo` line: it is the price of testing the real
+watch-apply path instead of a copy of it.
