@@ -448,6 +448,51 @@ internal static class ClusterTabScenarios
     }
 
     /// <summary>
+    /// "Open a terminal on this cluster" when the machine has no <c>kubectl</c> — the
+    /// state the backlog item is explicitly about, and the one the app has to say out
+    /// loud because the terminal itself opens in front of the window.
+    ///
+    /// <para>
+    /// The launch is not run: this harness has no terminal emulator, and a scenario that
+    /// spawned processes would be a different kind of thing entirely. What is run is the
+    /// app's own <see cref="ClusterTabViewModel.DescribeTerminalLaunch"/>, so the words
+    /// on the screenshot are the words the app produces, not a fixture's paraphrase of
+    /// them. The paths are obviously-synthetic, like every other fixture value.
+    /// </para>
+    /// </summary>
+    public static ClusterTabViewModel TerminalNoKubectl()
+    {
+        var tab = BaseTab();
+        var result = new TerminalLaunchResult(
+            TerminalLaunchOutcome.Opened,
+            TerminalLabel: "gnome-terminal",
+            KubectlPath: null,
+            KubeconfigValue:
+            "/home/dev/.config/kubeNimbus/terminal/context-4f21ab90c7d3.kubeconfig:/home/dev/.kube/config",
+            ContextName: tab.Context.Name,
+            Tried: ["xdg-terminal-exec", "gnome-terminal"],
+            Error: null);
+
+        var (message, warning, error) = ClusterTabViewModel.DescribeTerminalLaunch(result);
+        tab.TerminalNotice = message;
+        tab.TerminalNoticeIsWarning = warning;
+        tab.TerminalNoticeIsError = error;
+        return tab;
+    }
+
+    /// <summary>
+    /// The demo cluster's answer to the same gesture, driven through the real command —
+    /// there is no kubeconfig behind the demo dataset, so it refuses in place and says
+    /// why rather than opening a terminal pointed at a sentinel path.
+    /// </summary>
+    public static ClusterTabViewModel DemoTerminalUnavailable()
+    {
+        var tab = DemoTab();
+        tab.OpenInTerminalCommand.Execute(null);
+        return tab;
+    }
+
+    /// <summary>
     /// The demo cluster's answer. Scale needs an API server and the demo has none, so
     /// the strip arms, names what it cannot do and disables its confirm — the same
     /// treatment exec and port-forward get, and never a silent no-op.

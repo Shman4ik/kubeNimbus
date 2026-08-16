@@ -959,6 +959,100 @@ Six things are load-bearing:
 from a row's inline editor. `kubectl rollout undo` needs ReplicaSet revision walking and
 is its own item; the rest are backlog candidates, not omissions this pass forgot.
 
+## The machine's own terminal ("open a terminal on this cluster")
+
+`TerminalLauncher.cs` (Core) starts the user's own terminal with `KUBECONFIG` set and
+the current context pinned to one cluster — the daily gesture people leave a GUI for,
+and the one thing this app had no answer to at all. It is deliberately **not** a shell
+inside the app: that needs a PTY dependency (`Porta.Pty` and its `Vanara.PInvoke` tail,
+the only place this repo would ever need one), and it still would not be *your* terminal,
+with your prompt, your fonts, your fzf and your kubectl plugins.
+
+Six things are load-bearing:
+
+1. **The context is pinned through a one-key overlay kubeconfig, and that is the whole
+   design.** kubectl has no environment variable for "current context" — kubectx and
+   friends work by *rewriting the file*, which this app must not do (someone's other
+   terminals, their shell prompt and their next kubeNimbus session would all silently
+   move with it). What kubectl does have is `KUBECONFIG` merging, and `current-context`
+   comes from the **first file in the chain that sets one**. So the launcher writes
+   `apiVersion` + `kind` + `current-context` and nothing else, and sets
+   `KUBECONFIG=<overlay><sep><the real file>`. The real file is merged in unchanged and
+   never written to by kubeNimbus. And because it is `KUBECONFIG` rather than a shell
+   alias, helm, k9s, stern and kubectx all agree with kubectl about which cluster this
+   is. The "real file" is the single file the context was found in
+   (`ClusterContext.KubeconfigPath`) — the same one `Kubeconfig.BuildClientConfig` hands
+   the in-app client, so the terminal and the tab that opened it cannot resolve a
+   duplicate context name differently.
+2. **Paths only, never credentials** (hard rule 4). The overlay holds a context *name*;
+   there is no cluster block, no user block and therefore no token, certificate or
+   exec-plugin invocation anywhere near it. `TerminalLauncherTests` asserts that
+   negatively, because "we accidentally started copying kubeconfigs" is the failure that
+   would never announce itself.
+3. **One overlay per context, never one shared file.** `~/.config/kubeNimbus/terminal/
+   context-<hash of the name>.kubeconfig`. Hashed rather than sanitized because real
+   context names are ARNs and URLs (`arn:aws:eks:…:cluster/x`) and any sanitizer that
+   made those into filenames would map two clusters onto one file — at which point
+   opening a second terminal silently re-points the first one's next command at the
+   wrong cluster, which is precisely the incident the environment colours exist for.
+4. **The env-inheritance trap is why two of the three platforms do not use the obvious
+   command.** Both `wt.exe` and `open` hand the request to *another process* that then
+   spawns the shell — Windows Terminal's monarch/peasant model makes the new tab inside
+   an already-running window, and `open` goes through LaunchServices — so the shell
+   inherits **that** process's environment and not ours. A tab that looks right and is
+   aimed at the wrong cluster is the one outcome this feature must not have. So:
+   **Windows** starts `pwsh.exe` → `powershell.exe` → `cmd.exe` directly with the
+   environment on the `ProcessStartInfo`, which still lands inside Windows Terminal
+   wherever it is the default terminal application (a console-host setting, not a
+   command line) and inside conhost where it is not — i.e. the item's stated fallback,
+   reached by a different route. **macOS** writes a `.command` launcher script that
+   exports `KUBECONFIG` and `exec "$SHELL" -l`, and opens *that* with
+   `open -a Terminal`. **Linux** is the only one where the obvious thing is also the
+   correct thing: `$TERMINAL`, then `xdg-terminal-exec`, then `x-terminal-emulator`,
+   then the emulators, each started with **no arguments** (which every one of them reads
+   as "open my default shell", and which is the only form needing no per-emulator flag
+   table) and inheriting the environment normally.
+5. **A missing `kubectl` warns; it never blocks.** Three reasons, and the third is the
+   strongest: the terminal is useful without it (`KUBECONFIG` is what helm, k9s, stern
+   and kubectx read too); kubectl may be installed a minute later; and **our PATH is not
+   the terminal's PATH** — a GUI launched from Explorer, the Dock or the Store inherits
+   a minimal environment, the same reason `$KUBECONFIG` never reaches it, so a probe
+   miss is weak evidence about the shell that is about to open. The probe therefore also
+   looks in the login-shell directories (`/usr/local/bin`, `/opt/homebrew/bin`, …), and
+   the message says the PATH may be shorter here than in your shell rather than
+   asserting kubectl is absent.
+6. **Every outcome lands in one dismissible `infoBar` above the list**
+   (`ClusterTabViewModel.TerminalNotice`, UI rules 9 and 11), and it exists because this
+   command's own feedback — a window — **opens in front of the app**. Success, opened-
+   without-kubectl, nothing-could-be-opened and the demo refusal all land there;
+   `DescribeTerminalLaunch` is a public static so both the tests and the screenshot
+   harness render the app's real words rather than a paraphrase. The no-terminal case
+   prints the exact `KUBECONFIG` value in selectable text, because that is what makes
+   the gesture completable by hand. Two entry points and no new always-visible control
+   (UI rules 1 and 15): the ☰ menu and a Ctrl/Cmd+K entry.
+
+**The demo cluster refuses in place**, rather than being palette-gated the way the
+access review is. The difference is that this one has an honest sentence to say — its
+objects ship inside the binary, so there is no kubeconfig to point anything at — where
+the access review has nothing at all; and a terminal pointed at the sentinel `<demo>`
+path is exactly the "never a silent no-op" the demo section's rule 5 forbids.
+
+**Known risks, none of them verified here** (no Windows box, no macOS box, no desktop
+terminal emulator in this container — see the pass note in Current status):
+
+- A client/server emulator that does *not* forward its client's environment would open a
+  terminal with no `KUBECONFIG` at all. gnome-terminal does forward it (its client sends
+  `environ` over D-Bus precisely for this), which is why it is on the list, but the
+  general case is emulator-specific. The success notice printing the value is the
+  mitigation.
+- macOS's `exec "$SHELL" -l` re-runs the login profile, so a profile that exports
+  `KUBECONFIG` itself wins over the launcher script. Unavoidable without giving up the
+  login shell; stated here so it is not re-diagnosed from scratch.
+- **`FEAT-17` ("open this exec session in my terminal") is the seam left, not built.**
+  It wants `kubectl exec -it` as the command the terminal runs, which is a *fourth*
+  per-platform argument shape on top of the three above — do not bolt it onto the
+  no-arguments Linux path without re-reading rule 4 above.
+
 ## Metrics (metrics.k8s.io)
 
 `ClusterClient.Metrics.cs` reads the aggregated metrics API for pod (per
@@ -2459,3 +2553,54 @@ was driven against a live cluster, because there is nothing here to drive (these
 replace the watch, they do not exercise it). The one thing a reviewer should weigh rather
 than take on trust is that `InternalsVisibleTo` line: it is the price of testing the real
 watch-apply path instead of a copy of it.
+
+**Terminal-launch pass (FEAT-16):** "open a terminal on this cluster" — the daily
+gesture people leave a GUI for, and the last thing this app made you go and do by hand.
+See "The machine's own terminal" above for the six rules. New: `TerminalLauncher.cs` in
+Core (+ 21 `TerminalLauncherTests`), `ClusterTabViewModel.OpenInTerminalCommand` and the
+notice `infoBar` it lands in (+ 6 `ClusterTabTerminalTests`), a `CommandId.OpenTerminal`
+catalog entry (palette-only, so `docs/keyboard-shortcuts.md` is unchanged), a ☰ menu
+item, and two screenshot scenarios — `cluster-tab-terminal-no-kubectl` and
+`cluster-tab-demo-terminal-unavailable`, the second of which runs the real command end to
+end.
+
+**The thing this pass learned, and the reason two platforms do not use the obvious
+command:** `wt.exe` and `open` both hand the request to *another* process, which is what
+then spawns the shell — so the shell inherits **that** process's environment rather than
+the one we so carefully set. On Windows Terminal this is the monarch/peasant model
+(a second tab is created inside the already-running window); on macOS it is
+LaunchServices. Either way the terminal opens looking correct and pointed at whatever
+cluster that process happened to start with, which is the single failure this feature
+must not have. Rule 4 of that section is the answer; it is worth re-reading before
+"simplifying" the Windows path back to `wt.exe`.
+
+**Verified this session**: `dotnet build KubeNimbus.slnx` with **0 new warnings** (the
+one warning is the pre-existing CS8425 in `AsyncMergeTests.cs`), **190/190 Core TUnit,
+0 failed, 0 skipped** and **19/19 App TUnit**, both via `--project`; all **48** scenarios
+× both themes rendered (96 PNGs), including the two new ones in light and dark; the
+linux-x64 NativeAOT publish with no new warnings beyond the known DataGrid
+IL2104/IL3053; and `--smoke-test` on that published binary under Xvfb (`SMOKE-OK main
+window rendered at 1280x800 after 522 ms`, exit 0).
+
+**And the launcher itself was actually run on Linux**, which the unit tests deliberately
+do not do: a scratch harness put a fake `xdg-terminal-exec` on PATH that records its own
+environment, and the child process was confirmed to receive
+`KUBECONFIG=<overlay>:<real file>` and `KUBENIMBUS_CONTEXT`. The overlay written to disk
+was confirmed to contain a context name and no credential. And the merge claim the whole
+design rests on was checked against an independent implementation of it — the Kubernetes
+client's own `$KUBECONFIG` chain handling: with the overlay first the resolved namespace
+is the pinned context's (`payments`), without it the real file's own `current-context`
+wins (`staging`), and the real file is byte-identical afterwards. Removing the fake
+terminal and adding a fake `kubectl` produced the other outcome, `NoTerminal` with
+`KubectlMissing` false.
+
+**Not verified, and it is most of "all three platforms"**: no Windows box and no macOS
+box, so `pwsh.exe`/`powershell.exe`/`cmd.exe` starting with a visible console from a
+`WinExe` parent, and `open -a Terminal <script>` running the generated `.command` and
+landing in a login shell, are both argued from the platform docs and have never been
+run. Nor has any *real* terminal emulator been driven — this container has none, so the
+Linux path is verified against a shell script standing in for one, which proves the
+environment is handed over but proves nothing about a client/server emulator forwarding
+it (gnome-terminal's D-Bus `environ` forwarding is the specific thing to watch). No live
+cluster either, so nothing has been checked by typing `kubectl get pods` in a window this
+feature opened — which is, in the end, the acceptance criterion.

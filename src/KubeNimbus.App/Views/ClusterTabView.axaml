@@ -196,6 +196,35 @@
           </ContentControl.ContentTemplate>
         </ContentControl>
 
+        <!-- What happened when a terminal was asked for. Present only while there is
+             something to report, so it costs nothing the rest of the time (UI rule 1),
+             and docked outside ContentRows for the same reason the demo bar and the row
+             action strip are: that grid's row indices are load-bearing for
+             ApplyDockState.
+
+             It exists because this command's own feedback — a window — opens *in front
+             of the app*, so the two states that matter ("no kubectl on this machine"
+             and "nothing here could be opened at all") would otherwise be invisible.
+             State in an InfoBar rather than a status dot, UI rule 11; severity as a
+             bound class, same as the row action strip's. -->
+        <Border DockPanel.Dock="Top" Classes="infoBar" Margin="0,0,0,8"
+                Classes.warn="{Binding TerminalNoticeIsWarning}"
+                Classes.error="{Binding TerminalNoticeIsError}"
+                IsVisible="{Binding TerminalNotice, Converter={x:Static aconv:ObjectConverters.IsNotNull}}">
+          <DockPanel>
+            <PathIcon DockPanel.Dock="Left" Data="{StaticResource ConsoleIconGeometry}" Width="12" Height="12"
+                      VerticalAlignment="Top" Margin="0,2,8,0" />
+            <Button DockPanel.Dock="Right" Classes="chip" Padding="0" MinWidth="18" MinHeight="18"
+                    Margin="8,0,0,0" VerticalAlignment="Top"
+                    Command="{Binding DismissTerminalNoticeCommand}" ToolTip.Tip="Dismiss">
+              <PathIcon Data="{StaticResource CloseIconGeometry}" Width="9" Height="9" />
+            </Button>
+            <!-- Selectable: the KUBECONFIG value is the thing to copy when no terminal
+                 could be opened, which is precisely when it is being read. -->
+            <SelectableTextBlock Text="{Binding TerminalNotice}" TextWrapping="Wrap" FontSize="12" />
+          </DockPanel>
+        </Border>
+
       <Grid Name="ContentRows">
         <Grid.RowDefinitions>
           <RowDefinition Height="Auto" />

@@ -118,6 +118,17 @@ public static class CommandCatalog
         },
         new()
         {
+            Id = CommandId.OpenTerminal,
+            Title = "Open a terminal on this cluster",
+            Category = CommandCategory.Clusters,
+            IconKey = "ConsoleIconGeometry",
+            // No chord, deliberately. It is a deliberate errand rather than a
+            // navigation gesture, and the free chords left in this app are worth more
+            // to things reached dozens of times a session.
+            Surfaces = PaletteOnly,
+        },
+        new()
+        {
             Id = CommandId.SetEnvironment,
             Title = "Set the cluster's environment",
             CheatTitle = "Correct a cluster's environment colour",

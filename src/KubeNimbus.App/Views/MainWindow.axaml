@@ -100,6 +100,14 @@
                     <MenuItem Header="Open kubeconfig file…" Command="{Binding OpenKubeconfigFileCommand}" />
                     <MenuItem Header="Rescan kubeconfig" Command="{Binding ReloadContextsCommand}" />
                     <Separator />
+                    <!-- The machine's own terminal, on the selected cluster. Here and in
+                         the palette, which is the two-entry-point shape UI rule 15 asks
+                         for; it gets no always-visible button of its own (UI rule 1).
+                         Disabled with no tab open — there would be no cluster to point
+                         it at — but never disabled for the demo cluster, which refuses
+                         in place with a sentence instead. -->
+                    <MenuItem Header="Open a terminal on this cluster"
+                              Command="{Binding SelectedTab.OpenInTerminalCommand}" />
                     <MenuItem Header="Close cluster tab" Command="{Binding CloseTabCommand}"
                               CommandParameter="{Binding SelectedTab}" />
                     <Separator />

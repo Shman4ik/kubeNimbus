@@ -80,6 +80,9 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-row-action-scale", () => HostInMainWindow(ClusterTabScenarios.RowActionScale())),
     ("cluster-tab-row-action-restart", () => HostInMainWindow(ClusterTabScenarios.RowActionRestart())),
     ("cluster-tab-row-action-failed", () => HostInMainWindow(ClusterTabScenarios.RowActionFailed())),
+    // "Open a terminal on this cluster" — the two outcomes the app has to state, since
+    // the successful one opens a window in front of the app and needs no screenshot.
+    ("cluster-tab-terminal-no-kubectl", () => HostInMainWindow(ClusterTabScenarios.TerminalNoKubectl())),
     ("cluster-tab-empty-namespace", () => HostInMainWindow(ClusterTabScenarios.EmptyNamespace())),
     ("cluster-tab-loading", () => HostInMainWindow(ClusterTabScenarios.Loading())),
     ("cluster-tab-disconnected", () => HostInMainWindow(ClusterTabScenarios.Disconnected())),
@@ -88,6 +91,8 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-demo-pod-detail", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetail(), height: 1000)),
     ("cluster-tab-demo-exec-unavailable", () => HostInMainWindow(ClusterTabScenarios.DemoExecUnavailable())),
     ("cluster-tab-demo-scale-unavailable", () => HostInMainWindow(ClusterTabScenarios.DemoScaleUnavailable())),
+    ("cluster-tab-demo-terminal-unavailable",
+        () => HostInMainWindow(ClusterTabScenarios.DemoTerminalUnavailable())),
     ("main-window", () => BuildMainWindowContent()),
     ("main-window-no-kubeconfig", () => BuildNoKubeconfigContent()),
     ("main-window-shortcuts", () => BuildMainWindowContent(openShortcuts: true)),
