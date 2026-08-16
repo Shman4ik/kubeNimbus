@@ -38,7 +38,7 @@ rather than here.
 
 | ID | Item | Prio | Size | Status | Rounds |
 |---|---|---|---|---|---|
-| VER-1 | With VER-2's runners in place, confirm `linux-x64`, `linux-arm64` and `osx-arm64` actually start after the `WindowIcons.Apply` fix, and record the result in CLAUDE.md | P0 | S | in-progress | 0 |
+| VER-1 | With VER-2's runners in place, confirm `linux-x64`, `linux-arm64` and `osx-arm64` actually start after the `WindowIcons.Apply` fix, and record the result in CLAUDE.md | P0 | S | blocked | 1 |
 | ENG-1 | Land the four open PRs — #21 (YamlDotNet 16→18, load-bearing for every apply), #31, #32, #30 — building and testing each rather than rubber-stamping | P1 | S | ready | 0 |
 | VER-5 | Regression test: a `Modified` watch event for a filtered-out row must not resurface it, and `VisibleRows` must stay mirrored from `Rows` | P1 | S | ready | 0 |
 | FEAT-1 | Workload actions — scale, `rollout restart`, delete a pod — on the row context menu and in the palette, with confirmation | P0 | M | ready | 0 |
@@ -49,6 +49,32 @@ rather than here.
 | DIST-6 | Re-check the positioning against KubeUI and either confirm or rewrite CLAUDE.md's market paragraph — a `kn-researcher` job, not an implementer one | P1 | S | ready | 0 |
 | FEAT-3 | Tail logs across every pod of a Deployment/selector in one pane, colour-keyed by pod | P1 | L | ready | 0 |
 | FEAT-4 | Node detail (conditions, taints, allocatable vs requested, pods on the node) plus cordon / uncordon / drain | P1 | L | ready | 0 |
+
+**VER-1 is `blocked`, and it needs about thirty seconds of your time to unblock.**
+One third of it is done: `linux-x64` is confirmed starting on a real GitHub runner —
+CI run [31902245451](https://github.com/Shman4ik/kubeNimbus/actions/runs/31902245451),
+step *Launch check (linux-x64)*, `SMOKE-OK main window rendered at 1280x800 after
+794 ms`. That arrived free, because `ci.yml` runs on every push to `main`.
+
+`linux-arm64` and `osx-arm64` only exist in `release.yml`, which fires on a tag or a
+`workflow_dispatch`. NativeAOT cannot cross-compile, so no agent container can build
+them, and the GitHub App token agents run under lacks `actions: write` — a dispatch
+answers `403 Resource not accessible by integration`. Two ways out, both yours:
+
+1. Press **Run workflow** on `release.yml` (Actions tab) with `dry_run: true` and any
+   version, e.g. `0.1.1`. It builds all four RIDs on their own runners, runs the launch
+   checks, and creates nothing public. Then this item finishes in a minute.
+2. Or grant the integration `actions: write`, after which the loop can dispatch it
+   itself — a standing capability, so worth deciding deliberately rather than for this
+   one item.
+
+**This also says something about the Ready table's entry test.** That test is "an agent
+can finish it without a human at a keyboard — no live cluster it cannot start, no
+Windows or macOS box, no account or purchase". VER-1 fails it: two of its three RIDs
+need runners no agent here can reach. It sat at the top of Ready, so every scheduled
+cycle picked it, discovered this, and stalled — which is exactly what happened before
+this note existed. Re-filing it is a priority decision and therefore yours; the loop has
+not touched its position.
 
 ---
 
