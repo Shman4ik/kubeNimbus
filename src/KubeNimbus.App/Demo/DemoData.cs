@@ -43,6 +43,8 @@ public static class DemoData
     private static readonly JsonDocument SecretDoc = Load("secret.json");
     private static readonly JsonDocument ConfigMapsDoc = Load("configmaps.json");
     private static readonly JsonDocument CrdCatalogDoc = Load("crd-catalog.json");
+    private static readonly JsonDocument CrdsDoc = Load("crds.json");
+    private static readonly JsonDocument CertificatesDoc = Load("certificates.json");
 
     private static JsonDocument Load(string fileName)
     {
@@ -83,6 +85,53 @@ public static class DemoData
     /// </summary>
     public static IReadOnlyList<DynamicResource> ConfigMaps { get; } =
         [.. ConfigMapsDoc.RootElement.EnumerateArray().Select(e => new DynamicResource(e))];
+
+    /// <summary>
+    /// cert-manager Certificates — the demo cluster's custom resources, and the one
+    /// kind here whose list columns come from a CRD rather than from
+    /// <c>ResourceStatusSummary</c>. They exist so the demo shows what every CRD-heavy
+    /// real cluster shows: READY / SECRET (and, in the advanced view, the CRD's own
+    /// <c>priority: 1</c> ISSUER and STATUS), exactly as <c>kubectl get certificates</c>
+    /// prints them.
+    /// </summary>
+    public static IReadOnlyList<DynamicResource> Certificates { get; } =
+        [.. CertificatesDoc.RootElement.EnumerateArray().Select(e => new DynamicResource(e))];
+
+    /// <summary>
+    /// The demo cluster's stand-in for <c>ClusterClient.GetPrinterColumnsAsync</c>: it
+    /// has no API server to GET a CustomResourceDefinition from, so the CRD ships in
+    /// the dataset instead — and is read by the same <see cref="PrinterColumns.Parse"/>
+    /// a live cluster's response goes through. Empty for every kind the dataset has no
+    /// CRD for, which is the same answer a real server gives for a built-in.
+    /// </summary>
+    public static IReadOnlyList<PrinterColumn> PrinterColumnsFor(ResourceDescriptor descriptor)
+    {
+        if (string.IsNullOrEmpty(descriptor.Group))
+        {
+            return [];
+        }
+
+        foreach (var crd in CrdsDoc.RootElement.EnumerateArray())
+        {
+            if (!crd.TryGetProperty("spec", out var spec))
+            {
+                continue;
+            }
+
+            var group = spec.TryGetProperty("group", out var g) ? g.GetString() : null;
+            var plural = spec.TryGetProperty("names", out var names) && names.TryGetProperty("plural", out var p)
+                ? p.GetString()
+                : null;
+
+            if (string.Equals(group, descriptor.Group, StringComparison.Ordinal)
+                && string.Equals(plural, descriptor.Plural, StringComparison.Ordinal))
+            {
+                return PrinterColumns.Parse(crd, descriptor.Version);
+            }
+        }
+
+        return [];
+    }
 
     public static readonly string[] Namespaces = ["default", "kube-system", "monitoring", "payments"];
 
@@ -343,6 +392,7 @@ public static class DemoData
             { Group: "", Kind: "Event" } => Events,
             { Group: "", Kind: "Secret" } => [Secret],
             { Group: "", Kind: "ConfigMap" } => ConfigMaps,
+            { Group: "cert-manager.io", Kind: "Certificate" } => Certificates,
             _ => [],
         };
 

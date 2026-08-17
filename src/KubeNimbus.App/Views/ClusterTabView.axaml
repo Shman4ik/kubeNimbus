@@ -443,6 +443,100 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
+              <!-- CRD printer columns. A CustomResourceDefinition declares the columns it
+                   wants a list of its objects to have (spec.versions[].additionalPrinterColumns)
+                   and kubectl honours them, so these are what `kubectl get <crd>` prints.
+                   They are fixed slots rather than columns built in code for one reason:
+                   a DataGridColumn is outside the visual tree, so a code-built column
+                   needs a code-built binding, and a code-built binding is a reflection
+                   binding — which NativeAOT is exactly what this repo will not ship.
+                   ClusterTabView.ApplyPrinterColumns fills in the headers and the
+                   visibility from ClusterTabViewModel.VisiblePrinterColumns; the
+                   PrinterSlotHeader sentinel below is how it finds them, and is read
+                   once at construction, before any of them is renamed.
+                   A built-in kind never has any (it is not a CRD), which is what keeps
+                   ResourceStatusSummary the sole owner of every column a Pod, Deployment,
+                   Node or Event list shows. -->
+              <DataGridTemplateColumn Header="crd-printer-slot" Width="*" MinWidth="88" IsVisible="False">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                    <TextBlock Text="{Binding PrinterCells[0].Text}" VerticalAlignment="Center" FontSize="11.5"
+                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PrinterCells[0].Text}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="crd-printer-slot" Width="*" MinWidth="88" IsVisible="False">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                    <TextBlock Text="{Binding PrinterCells[1].Text}" VerticalAlignment="Center" FontSize="11.5"
+                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PrinterCells[1].Text}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="crd-printer-slot" Width="*" MinWidth="88" IsVisible="False">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                    <TextBlock Text="{Binding PrinterCells[2].Text}" VerticalAlignment="Center" FontSize="11.5"
+                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PrinterCells[2].Text}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="crd-printer-slot" Width="*" MinWidth="88" IsVisible="False">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                    <TextBlock Text="{Binding PrinterCells[3].Text}" VerticalAlignment="Center" FontSize="11.5"
+                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PrinterCells[3].Text}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="crd-printer-slot" Width="*" MinWidth="88" IsVisible="False">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                    <TextBlock Text="{Binding PrinterCells[4].Text}" VerticalAlignment="Center" FontSize="11.5"
+                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PrinterCells[4].Text}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="crd-printer-slot" Width="*" MinWidth="88" IsVisible="False">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                    <TextBlock Text="{Binding PrinterCells[5].Text}" VerticalAlignment="Center" FontSize="11.5"
+                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PrinterCells[5].Text}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="crd-printer-slot" Width="*" MinWidth="88" IsVisible="False">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                    <TextBlock Text="{Binding PrinterCells[6].Text}" VerticalAlignment="Center" FontSize="11.5"
+                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PrinterCells[6].Text}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="crd-printer-slot" Width="*" MinWidth="88" IsVisible="False">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                    <TextBlock Text="{Binding PrinterCells[7].Text}" VerticalAlignment="Center" FontSize="11.5"
+                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PrinterCells[7].Text}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="crd-printer-slot" Width="*" MinWidth="88" IsVisible="False">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                    <TextBlock Text="{Binding PrinterCells[8].Text}" VerticalAlignment="Center" FontSize="11.5"
+                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PrinterCells[8].Text}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="crd-printer-slot" Width="*" MinWidth="88" IsVisible="False">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                    <TextBlock Text="{Binding PrinterCells[9].Text}" VerticalAlignment="Center" FontSize="11.5"
+                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PrinterCells[9].Text}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
               <!-- Usage columns: only meaningful for pods/nodes on a cluster with
                    metrics-server, so ClusterTabView.ApplyMetricsColumns shows and
                    hides them (a DataGridColumn isn't in the visual tree and can't

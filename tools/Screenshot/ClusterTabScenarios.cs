@@ -199,6 +199,37 @@ internal static class ClusterTabScenarios
         return tab;
     }
 
+    /// <summary>
+    /// A CRD list wearing the columns the CRD itself declares — the whole of FEAT-2 in
+    /// one image. Selecting cert-manager's Certificate kind goes through the real
+    /// <c>SelectKindCommand</c>, so the columns are read from the dataset's own
+    /// CustomResourceDefinition by the same <c>PrinterColumns.Parse</c> a live cluster's
+    /// GET goes through, and the cells by the same evaluator. What to look at: READY and
+    /// SECRET where the generic Status pill used to be, the READY cell coming from a
+    /// condition filter (<c>.status.conditions[?(@.type=="Ready")].status</c>), the
+    /// object with no status at all rendering as an empty cell rather than an error, and
+    /// AGE still being the list's own live column rather than the CRD's declared one.
+    /// </summary>
+    public static ClusterTabViewModel DemoCrdPrinterColumns() => SelectDemoCertificates(DemoTab());
+
+    /// <summary>
+    /// The same list with the advanced view on, which is this app's <c>-o wide</c>: the
+    /// CRD's two <c>priority: 1</c> columns (ISSUER and STATUS) join it, and leave again
+    /// when the switch goes off. A true before/after with the scenario above — same tab,
+    /// same objects, one switch.
+    /// </summary>
+    public static ClusterTabViewModel DemoCrdPrinterColumnsWide() => Advanced(SelectDemoCertificates(DemoTab()));
+
+    private static ClusterTabViewModel SelectDemoCertificates(ClusterTabViewModel tab)
+    {
+        tab.SelectedNamespace = ClusterTabViewModel.AllNamespaces;
+        var kind = tab.SidebarSections
+            .SelectMany(s => s.Kinds)
+            .First(k => k.Descriptor is { Group: "cert-manager.io", Kind: "Certificate" });
+        tab.SelectKindCommand.Execute(kind);
+        return tab;
+    }
+
     /// <summary>Pumps the dispatcher until the demo log replay has produced something to render.</summary>
     private static void DrainDemoLogs(ClusterTabViewModel tab)
     {

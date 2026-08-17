@@ -304,6 +304,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(AreUsageColumnsVisible))]
     [NotifyPropertyChangedFor(nameof(IsFleetToggleVisible))]
+    [NotifyPropertyChangedFor(nameof(VisiblePrinterColumns))]
     private bool _isAdvancedView;
 
     /// <summary>
@@ -319,6 +320,12 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     partial void OnIsAdvancedViewChanged(bool value)
     {
         ApplySidebarChrome();
+
+        // The advanced view is this app's `kubectl get -o wide`: a CRD's own
+        // `priority: 1` columns join the list with it and leave with it. Re-evaluating
+        // is JSON reading over objects the rows already hold, so this stays a display
+        // switch — no fetch, no watch restart, no lost selection.
+        PushPrinterColumnsToRows();
 
         // Tabs already open have to follow the switch live — the alternative is a
         // force-apply button that stays on screen until the tab is reopened.
@@ -355,6 +362,117 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// a DataGridColumn is outside the visual tree and can't bind.
     /// </summary>
     public bool AreUsageColumnsVisible => AreMetricsVisible && IsAdvancedView;
+
+    // ------------------------------------------------- CRD printer columns
+    //
+    // A CustomResourceDefinition declares the columns it wants a list of its objects to
+    // have, and kubectl honours them — `kubectl get certificates` prints cert-manager's
+    // READY / SECRET / ISSUER, not a generic status. This app printed the same generic
+    // Status column for all ~70 CRD kinds on a real cluster, which is the weakest
+    // surface in a client that sells CRDs as first-class. Built-in kinds are untouched:
+    // they are not CRDs, so there is nothing to read for them and ResourceStatusSummary
+    // still owns every column they show.
+
+    /// <summary>
+    /// Everything the selected kind's CRD declares, unfiltered — the advanced-view and
+    /// width decisions are made by <see cref="VisiblePrinterColumns"/>, so that a
+    /// display switch never has to refetch. Empty for a built-in kind, for an
+    /// aggregated API, for a CRD that declares nothing, and for a user who cannot read
+    /// <c>apiextensions.k8s.io</c>; all four then render exactly the list they did
+    /// before this existed.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(VisiblePrinterColumns))]
+    private IReadOnlyList<PrinterColumn> _printerColumns = [];
+
+    /// <summary>
+    /// The columns the grid actually draws: priority-0 always, the CRD's own
+    /// <c>priority: 1</c> ones only in the advanced view (kubectl's <c>-o wide</c>
+    /// lever, wired to the switch this app already has), a declared Age folded into the
+    /// list's own live Age column, and the whole thing capped at the number of printer
+    /// slots the grid declares. See <see cref="PrinterColumns.Visible"/>.
+    /// </summary>
+    public IReadOnlyList<PrinterColumn> VisiblePrinterColumns =>
+        KubeNimbus.Core.PrinterColumns.Visible(PrinterColumns, IsAdvancedView, ResourceRowViewModel.PrinterCellCount);
+
+    partial void OnPrinterColumnsChanged(IReadOnlyList<PrinterColumn> value) => PushPrinterColumnsToRows();
+
+    /// <summary>
+    /// Per-kind cache, for this tab's lifetime. Keyed by group/version/kind because a
+    /// CRD serves different columns per version, and a cluster can be upgraded under a
+    /// running tab. The negative answer is cached too — a built-in kind must not cost a
+    /// 404 every time it is reselected.
+    /// </summary>
+    private readonly Dictionary<string, IReadOnlyList<PrinterColumn>> _printerColumnCache = new(StringComparer.Ordinal);
+
+    private static string PrinterCacheKey(ResourceDescriptor descriptor) =>
+        $"{descriptor.Group}/{descriptor.Version}/{descriptor.Kind}";
+
+    /// <summary>
+    /// Points the list at whatever printer columns the newly-selected kind has. The
+    /// cached (or demo) answer lands synchronously so the grid is never briefly wrong;
+    /// a cache miss on a live cluster clears the columns first and fills them in when
+    /// the GET returns, which is one small request the first time a kind is opened.
+    /// </summary>
+    private void UpdatePrinterColumns(ResourceDescriptor descriptor)
+    {
+        if (Client is null)
+        {
+            // Demo cluster (or a tab with no client at all): the dataset answers for
+            // its own CRD, through the same PrinterColumns.Parse a live cluster uses.
+            PrinterColumns = IsDemo ? Demo.DemoData.PrinterColumnsFor(descriptor) : [];
+            return;
+        }
+
+        var key = PrinterCacheKey(descriptor);
+        if (_printerColumnCache.TryGetValue(key, out var cached))
+        {
+            PrinterColumns = cached;
+            return;
+        }
+
+        PrinterColumns = [];
+
+        var client = Client;
+        var token = _watchCts?.Token ?? CancellationToken.None;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var columns = await client.GetPrinterColumnsAsync(descriptor, token).ConfigureAwait(false);
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    _printerColumnCache[key] = columns;
+
+                    // The user can have moved on while this was in flight; the columns
+                    // belong to the kind that asked for them and to no other.
+                    if (SelectedKind?.Descriptor is { } current && PrinterCacheKey(current) == key)
+                    {
+                        PrinterColumns = columns;
+                    }
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                // Normal: the kind or namespace changed while this was in flight. Not
+                // cached either — the next selection of this kind should ask again.
+            }
+        }, token);
+    }
+
+    /// <summary>
+    /// Hands the current column set to every row. Rows are created one at a time by the
+    /// watch, so they take the set on creation too; this is for the two moments the set
+    /// itself changes — the fetch landing, and the advanced-view switch.
+    /// </summary>
+    private void PushPrinterColumnsToRows()
+    {
+        var columns = VisiblePrinterColumns;
+        foreach (var row in Rows)
+        {
+            row.SetPrinterColumns(columns);
+        }
+    }
 
     /// <summary>
     /// True while the Helm entry is selected: the content area swaps the generic
@@ -863,6 +981,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             StopWatch();
             IsHelmView = true;
             AreMetricsVisible = false;
+            PrinterColumns = []; // Helm releases are not an API kind and have no CRD behind them.
             _ = RefreshHelmReleasesAsync();
             return;
         }
@@ -1033,6 +1152,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         if ((Client is null && !IsDemo) || SelectedKind is null)
         {
             AreMetricsVisible = false;
+            PrinterColumns = [];
             return;
         }
 
@@ -1041,6 +1161,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         if (Client is not { } client)
         {
+            UpdatePrinterColumns(descriptor);
+
             // Only reachable on the demo cluster — the guard above returned for every
             // other tab with no client. Rows come from the shipped dataset; no watch,
             // no metrics poll, no socket.
@@ -1050,6 +1172,15 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         _watchCts = new CancellationTokenSource();
         var token = _watchCts.Token;
+
+        // Fleet mode uses *this* tab's descriptor for the columns, deliberately. The
+        // headers can only be one set, so they come from the cluster whose sidebar the
+        // kind was selected in; every row is then evaluated against those same JSON
+        // paths whatever cluster served it. A member serving an older version with a
+        // different shape resolves to blank cells rather than to a wrong value, which
+        // is the same outcome a missing field already has, and the alternative —
+        // per-cluster headers — is not a thing a single table can render.
+        UpdatePrinterColumns(descriptor);
 
         if (IsFleetView && FleetMembersProvider?.Invoke() is { Count: > 0 } members)
         {
@@ -1097,9 +1228,11 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// </summary>
     private void PopulateDemoRows(ResourceDescriptor descriptor, string? @namespace)
     {
+        var printerColumns = VisiblePrinterColumns;
         foreach (var resource in Demo.DemoData.ResourcesFor(descriptor, @namespace))
         {
             var row = new ResourceRowViewModel(resource);
+            row.SetPrinterColumns(printerColumns);
             _rowsByKey[resource.Key] = row;
             Rows.Add(row);
         }
@@ -1337,6 +1470,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 else
                 {
                     var row = new ResourceRowViewModel(resource);
+                    row.SetPrinterColumns(VisiblePrinterColumns);
                     _rowsByKey[resource.Key] = row;
                     Rows.Add(row);
                 }
@@ -1395,6 +1529,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 else
                 {
                     var row = new ResourceRowViewModel(added, cluster);
+                    row.SetPrinterColumns(VisiblePrinterColumns);
                     _rowsByKey[addedKey] = row;
                     Rows.Add(row);
                 }
