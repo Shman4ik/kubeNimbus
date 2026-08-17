@@ -51,7 +51,7 @@
   </tr>
   <tr>
     <td width="50%"><img src="design/screenshots/cluster-switcher.dark.png" alt="Searchable cluster switcher with pinned clusters and environment labels"><br><sub><b>Cluster switcher</b> (Ctrl/Cmd+P) — fuzzy search over every context, pinned favourites, and prod/staging/dev colour so you always know where you are.</sub></td>
-    <td width="50%"></td>
+    <td width="50%"><img src="design/screenshots/exec-terminal.dark.png" alt="top running full-screen inside the exec pane's terminal emulator"><br><sub><b>A real terminal</b> in the exec pane — <code>vi</code>, <code>top</code> and <code>mc</code> draw, with colour and cursor addressing, and Ctrl+C still reaches the container.</sub></td>
   </tr>
 </table>
 
@@ -168,7 +168,9 @@ resourceVersion resume and a relist on 410 Gone.
 follow, search, severity colouring and a previous-container fetch; environment
 variables with per-key on-demand reveal for Secret and ConfigMap refs; events
 as a card feed; owner-chain navigation from pod to replica set to deployment.
-**Exec** into a container and **port-forward**, both over websockets.
+**Exec** into a container — a real VT terminal, so `vi`, `top`, `mc` and `less`
+work rather than unspooling escape codes — and **port-forward**, both over
+websockets.
 
 **Edit** — YAML view and edit for any resource with syntax highlighting,
 server-side apply through a field manager, conflicts surfaced with a

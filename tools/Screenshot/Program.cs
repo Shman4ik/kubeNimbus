@@ -69,6 +69,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-yaml-secret-revealed", () => HostInMainWindow(ClusterTabScenarios.YamlEditorSecretRevealed())),
     ("cluster-tab-exec", () => HostInMainWindow(ClusterTabScenarios.Exec())),
     ("cluster-tab-exec-fullscreen", () => HostInMainWindow(ClusterTabScenarios.ExecFullScreen())),
+    ("cluster-tab-exec-fullscreen-maximized", () => HostInMainWindow(ClusterTabScenarios.ExecFullScreenMaximized())),
     ("cluster-tab-exec-no-shell", () => HostInMainWindow(ClusterTabScenarios.ExecNoShell())),
     ("cluster-tab-port-forward", () => HostInMainWindow(ClusterTabScenarios.PortForward())),
     ("cluster-tab-port-forward-idle", () => HostInMainWindow(ClusterTabScenarios.PortForwardIdle())),

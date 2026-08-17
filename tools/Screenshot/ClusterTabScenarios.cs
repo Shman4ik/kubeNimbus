@@ -966,6 +966,47 @@ internal static class ClusterTabScenarios
         + "   57 root      20   0    2216   1104  R   0.3   0.1   0:00.01 top\r\n");
 
     /// <summary>
+    /// The same full-screen tool with the dock maximized — the README gallery's cell,
+    /// for the same reason <see cref="YamlEditorMaximized"/> is: a gallery image is
+    /// rendered at half the table's width, and a ~300px dock inside a 1280px window
+    /// shrinks to a band nobody can read. The process table is longer than
+    /// <see cref="ExecFullScreen"/>'s because a maximized <c>top</c> that filled three
+    /// rows of a forty-row screen would misrepresent the pane rather than flatter it.
+    /// </summary>
+    public static ClusterTabViewModel ExecFullScreenMaximized()
+    {
+        string[] processes =
+        [
+            "    1 root      20   0  712540  48120  S   6.0   2.3   0:03.44 report-generator",
+            "   14 root      20   0  198432  22104  S   2.1   1.0   0:01.09 access-log-tailer",
+            "   28 root      20   0  104880  11960  S   0.7   0.5   0:00.51 metrics-sidecar",
+            "   42 root      20   0    1652    964  S   0.0   0.1   0:00.02 sh",
+            "   57 root      20   0    2216   1104  R   0.3   0.1   0:00.01 top",
+            "   63 root      20   0   88104   9240  S   0.2   0.4   0:00.18 tenant-sync",
+            "   71 root      20   0   45012   5388  S   0.1   0.2   0:00.07 config-watch",
+            "   88 root      20   0   32760   4120  S   0.0   0.2   0:00.03 healthz",
+        ];
+
+        var tab = BuildExec(
+            "\u001b[2J\u001b[H"
+            + "top - 14:02:11 up 3 days,  4:17,  load average: 0.32, 0.28, 0.24\r\n"
+            + "Tasks:   8 total,   1 running,   7 sleeping,   0 stopped,   0 zombie\r\n"
+            + "%Cpu(s):  \u001b[1;32m 9.4\u001b[0m us,  \u001b[1;33m 1.4\u001b[0m sy, "
+            + "\u001b[1;36m89.2\u001b[0m id\r\n"
+            + "MiB Mem :  \u001b[1m2048.0\u001b[0m total,  \u001b[1m 512.4\u001b[0m free,  "
+            + "\u001b[1m1024.8\u001b[0m used,  \u001b[1m 510.8\u001b[0m buff/cache\r\n"
+            + "MiB Swap:  \u001b[1m   0.0\u001b[0m total,  \u001b[1m   0.0\u001b[0m free,  "
+            + "\u001b[1m   0.0\u001b[0m used.  \u001b[1m 892.1\u001b[0m avail Mem\r\n"
+            + "\r\n"
+            + "\u001b[7m  PID USER      PR  NI    VIRT    RES  S  %CPU  %MEM     TIME+ COMMAND"
+            + new string(' ', 40) + "\u001b[0m\r\n"
+            + string.Join("\r\n", processes) + "\r\n");
+
+        tab.IsInspectorMaximized = true;
+        return tab;
+    }
+
+    /// <summary>
     /// The blank-terminal states, and the only one of them the harness can reach for
     /// real: the offline client's three shell attempts all fail, so this is the actual
     /// message <c>ConnectAsync</c> writes. A terminal with nothing in it is

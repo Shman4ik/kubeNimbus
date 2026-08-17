@@ -22,6 +22,14 @@ then copy the ones the README uses:
 | `rbac-who-can.dark.png` | `cluster-tab-rbac-who-can` |
 | `fleet-list.dark.png` | `cluster-tab-fleet-list` |
 | `cluster-switcher.dark.png` | `main-window-switcher` |
+| `exec-terminal.dark.png` | `cluster-tab-exec-fullscreen-maximized` |
+
+Two of these are the **maximized** variant of their scenario
+(`yaml-editor.dark.png`, `exec-terminal.dark.png`), and that is not a stylistic
+preference: a gallery cell renders at half the table's width, and a ~300px
+inspector dock inside a 1280px window shrinks to a band whose text nobody can
+read. The pane is the subject of those two images, so it gets the whole content
+area.
 
 Only the hero image is checked in for both themes — GitHub's `<picture>` element
 switches it with the reader's theme. The gallery below it is dark-only, to keep
