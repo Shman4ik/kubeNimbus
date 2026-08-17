@@ -39,7 +39,7 @@ rather than here.
 | ID | Item | Prio | Size | Status | Rounds |
 |---|---|---|---|---|---|
 | VER-1 | With VER-2's runners in place, confirm `linux-x64`, `linux-arm64` and `osx-arm64` actually start after the `WindowIcons.Apply` fix, and record the result in CLAUDE.md | P0 | S | blocked | 1 |
-| FEAT-2 | Drive list columns from a CRD's `additionalPrinterColumns`, leaving `ResourceStatusSummary` owning the built-ins | P1 | M | ready | 0 |
+| FEAT-2 | Drive list columns from a CRD's `additionalPrinterColumns`, leaving `ResourceStatusSummary` owning the built-ins | P1 | M | in-progress | 0 |
 | FEAT-3 | Tail logs across every pod of a Deployment/selector in one pane, colour-keyed by pod | P1 | L | ready | 0 |
 | FEAT-4 | Node detail (conditions, taints, allocatable vs requested, pods on the node) plus cordon / uncordon / drain | P1 | L | ready | 0 |
 
