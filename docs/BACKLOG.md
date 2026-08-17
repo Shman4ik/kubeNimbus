@@ -154,6 +154,8 @@ evidence, and it is worth doing before you commit to anything below P1.
 | FEAT-37 | Persist the log **display** toggles (timestamps, wrap) across tabs and restarts — and deliberately **not** the Previous/stream-source toggle | Demand: [freelens#1854](https://github.com/freelensapp/freelens/issues/1854), closed by PR #1904; the three named were "Show timestamps", "Word Wrap" and "Show previous terminated container". **The field's correction is the interesting half:** persisting the third produced [freelens#2095](https://github.com/freelensapp/freelens/issues/2095) ("Pod logs show previous terminated container by default") and [freelens#2096](https://github.com/freelensapp/freelens/issues/2096) ("Do not persist show-previous-container as global default"). **Notes:** `ShowLogTimestamps`/`WrapLogLines` are per-tab today and reset for every pod opened. Belongs in **`settings.json`** (a preference, not session state — the two-file split), beside `LogBufferLines`. The negative half is load-bearing: a persisted Previous would make CrashLoopBackOff logs the default view of a healthy pod | S | P2 | |
 | FEAT-38 | Honour `kubectl.kubernetes.io/default-container` when choosing which container the log pane opens on | Demand: [lens#5391](https://github.com/lensapp/lens/issues/5391) — **12 👍**, closed **`not planned`** by Lens, so it is unmet demand in the incumbent. kubectl has honoured the annotation since 1.21 and [stern](https://github.com/stern/stern) honours it. **Notes:** kubeNimbus picks "the first app container", which is what kubectl did *before* the annotation existed — so a pod with an injected sidecar ordered first opens on the wrong container. Read it from `metadata.annotations` on the pod object the tab already holds and fall back to today's rule. `FirstContainerOf` (exec/port-forward) carries the same assumption and should move with it. No new UI | S | P2 | |
 | FEAT-39 | Render log timestamps in local time, with UTC still available | Demand: [k9s#1302](https://github.com/derailed/k9s/issues/1302) — **28 👍**, closed `not_planned`. Marketing: [stern](https://github.com/stern/stern) ships `--timezone`, defaulting to `Local`. **Notes:** we render the server's raw RFC3339 UTC prefix verbatim. `LogLineViewModel` already splits timestamp from message, so this is a formatting change on `DisplayText` and nothing else. **Copy and Download must keep writing the raw server line** — the existing doc-comment's reason (a log pasted into an incident ticket) applies doubly to a converted timestamp. `DateTimeOffset.ToLocalTime()` rather than `TimeZoneInfo` lookups, which want tzdata under NativeAOT on Linux | S | P3 | |
+| FEAT-41 | Send `fieldValidation=Strict` on server-side apply and surface a rejection the way a 409 conflict already is — *done when a misspelled or unknown field is refused with the server's own message rather than silently pruned* | **Demand, from a comparable architecture, and confirmed as our own gap.** [headlamp#7147](https://github.com/kubernetes-sigs/headlamp/issues/7147) (open) describes exactly this on the same request shape — SSA PATCH with no validation param: dry-run passes, apply "succeeds", the misspelled field vanishes, because the API server's default `Warn` mode reports pruned fields only in a response header nothing reads. `ClusterClient.Dynamic.cs`'s `ApplyYamlAsync` was checked against this and sends `fieldManager`/`force` only — the identical hole. **Notes:** one query parameter plus reading the response the same way a 409 already is; **not** a diff feature and needs none. Arguably a prerequisite for `FEAT-5`/`FEAT-28` being trustworthy at all — a dry-run diff built on `Warn`-mode validation shows a *clean* preview for the exact typo this catches, which is worse than no diff. Pre-1.27 servers may reject the param, so it wants a graceful fallback rather than a hard dependency | S | P1 | |
+| FEAT-42 | A resource-to-resource comparison view — select two existing objects, see their spec differences | **Marketing only, and thin even there — stated as such.** Aptakube markets "Resource Diff" as README bullet #3 and one bug report ([aptakube#559](https://github.com/aptakube/aptakube/issues/559)) confirms real usage, but no user-filed request or upvoted issue was found for it in any tracker. **Notes: this is not evidence for `FEAT-5`/`FEAT-28`** — it is a distinct, unfiled feature, and conflating the two is easy to do from the README alone (the report that proposed this row nearly did), which is why it is a row of its own rather than folded into either | M | P3 | |
 | FEAT-40 | A "clear" action on the log pane that empties the buffer without restarting the stream | Demand: [lens#5315](https://github.com/lensapp/lens/issues/5315) — 16 total / 9 👍, 8 comments, **open**. Marketing/parity: Headlamp shipped it in v0.20.0 ([#1061](https://github.com/kubernetes-sigs/headlamp/issues/1061)), Aptakube shipped it ([#281](https://github.com/aptakube/aptakube/issues/281)). **Notes:** today the buffer clears only implicitly inside `BeginLogStream`, so "clear and watch what happens next" means stopping and restarting the stream — which loses the follow and re-fetches the tail. `ClearLogBuffer()` exists and has one caller; this is a command over it. UI rule 10 applies: the log toolbar row is already full, so this probably belongs in the palette and a pane context menu rather than as a new chip | S | P3 | |
 
 FEAT-28, FEAT-29 and FEAT-30 come from [the KubeUI positioning
@@ -187,6 +189,40 @@ also records a useful negative: *nobody asks a desktop client to store logs* —
 see enough" request in the field asks for more of what the API server still has, so none of
 these rows are in tension with the no-stored-history non-goal.
 
+
+FEAT-41 and FEAT-42 come from [the create-and-edit research](research/2026-08-17-create-and-edit.md)
+(2026-08-17), which tested the **write** side of the app — the half still standing on
+hypotheses — and mostly moved existing rows rather than adding new ones. Its five amendments,
+with the existing rows deliberately left untouched:
+
+- **FEAT-12 (create / apply a local file) is the field's strongest convergence, and the brief
+  that commissioned the report guessed wrong about it.** Lens has shipped it since 5.0 (2021),
+  as have Aptakube, Headlamp and KubeUI; even k9s, which twice declined a *dialog*, ships a
+  working file-browse-and-apply path and had two users ask for the dialog anyway. The report
+  recommends raising it from P3 and splitting it: "paste or type YAML, apply it" is S-sized and
+  reuses the existing editor against a blank buffer, while a template library is a distinct
+  later feature every competitor shipped as a separate follow-on.
+- **FEAT-5 / FEAT-28 (dry-run, and the diff) are marketing only.** No user-filed demand in the
+  Lens, FreeLens, Aptakube or k9s trackers; Headlamp's was maintainer-authored and self-assigned
+  the same day. Aptakube's "Resource Diff" bullet does **not** support these rows — it is
+  FEAT-42, a different feature. Recommendation: do not raise them on this evidence, and sequence
+  FEAT-41 first regardless.
+- **FEAT-6 is real but under-scoped**: every product shipping multi-select uses it for restart
+  and trigger as much as delete (Headlamp shipped both in one PR; k9s's own motivating example
+  is bulk restart; Lens carries two open multi-year asks). FEAT-1's confirm strip already
+  generalized the actions, so a selection count above that strip is what the field converged on,
+  not a delete-only dialog.
+- **FEAT-8 and FEAT-13 move from hypothesis to confirmed**, with no scope change. FEAT-13 turns
+  out to be the best-evidenced row in the report — five shipped Aptakube issues plus three open
+  follow-ons — and its motivating complaint, the Age column pushed off-screen by wider ones, is
+  the same failure UI rule 14 already had to fix here once by re-cutting column minimums.
+
+Two limits the report states about itself: `api.github.com` was unavailable, so 👍 counts could
+not be read and demand is ranked by shipped-status, issue age, duplicate filings and
+user-vs-maintainer authorship instead; and it records a clean negative worth keeping — two
+editing-safety bug classes found in the field (Aptakube #299's live refresh clobbering an open
+edit, Lens #5879's tab content bleed) were checked against `YamlEditorTabViewModel` and
+`ClusterTabViewModel` and this app is already structurally immune to both.
 
 ### C. Distribution and adoption
 
