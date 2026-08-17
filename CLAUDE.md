@@ -9,17 +9,39 @@ the same change that breaks it.
 A fast, open-source (MIT) Kubernetes desktop client — the Kubernetes sibling of
 [pgNimbus](https://github.com/Shman4ik/pgNimbus). An alternative to Lens.
 
-The 2026 Kubernetes GUI market has the same hole the PostgreSQL GUI market had:
-Lens is subscription-only for commercial use (Mirantis moved exec/logs/shell
-into proprietary code in 6.3) and a heavy Electron app; OpenLens is dead;
-FreeLens (the surviving fork) is still Electron; Aptakube is fast and polished
-but paid/closed; Headlamp is web-first; k9s is a keyboard TUI. Nobody ships
-**truly fast + open source + modern native desktop UI**. kubeNimbus fills that
-gap: Aptakube's polish, NativeAOT startup speed, MIT licensed, Kubernetes-first.
+The 2026 Kubernetes GUI market has one crowded end and one thin one. Lens is
+subscription-gated for commercial use (Mirantis moved exec/logs/shell into
+proprietary code in 6.3) and a heavy Electron app; OpenLens is dead; FreeLens
+(the surviving fork) is still Electron, and so is Headlamp's desktop shell;
+Aptakube is fast and polished but closed and paid; k9s is a keyboard TUI.
+**The one true peer is [KubeUI](https://github.com/IvanJosipovic/KubeUI)** —
+MIT, Avalonia 12, .NET 10, actively released and feature-comparable; the only
+other native open-source client, [Seabird](https://github.com/getseabird/seabird)
+(Go/GTK4), has had no commit since August 2025. So the claim is **not** "nobody
+ships open source + native". KubeUI is **not** NativeAOT and cannot cheaply
+become so — it ships ReadyToRun self-contained on the reflection-based
+`KubernetesClient`, and generates CRD models with Roslyn at runtime — and that
+is where kubeNimbus differs measurably: **~156 ms to first window against
+~645 ms, a ~62 MB payload against a 382 MiB single file** (measured head to
+head, linux-x64, `docs/research/2026-08-17-kubeui-positioning.md`), plus **no
+telemetry** where KubeUI's is on by default. kubeNimbus is the narrower, faster,
+quieter one: Aptakube's polish, NativeAOT startup, MIT, Kubernetes-first.
 
-**Headline benchmark:** ~150 ms to first frame (vs Electron's seconds). NativeAOT
-publish is the *shipping* configuration, not an afterthought — every dependency
-choice must be AOT/trimming-compatible from day one.
+Where KubeUI is ahead and we are not: signed and notarized binaries, installers
+with auto-update, winget/Store/Homebrew distribution, server-side dry-run,
+schema-aware YAML completion and node drain. None of that is a reason to change
+course; all of it is a reason not to write a comparison table yet.
+
+**Headline benchmark:** ~150 ms to first frame (vs Electron's seconds) —
+`--smoke-test`, which waits for a real compositor tick, reported **103–108 ms**
+on a published linux-x64 binary. That is a *different event* from the ~156 ms
+above and not a contradiction of it: the head-to-head figure comes from a
+cross-app harness that polls for a **mapped window**, the only thing both apps
+could be measured on identically, and it therefore reads high for kubeNimbus —
+the comparison is deliberately the less flattering of the two. Both numbers are
+recorded in `docs/research/2026-08-17-kubeui-positioning.md`. NativeAOT publish
+is the *shipping* configuration, not an afterthought — every dependency choice
+must be AOT/trimming-compatible from day one.
 
 ## Tech stack
 

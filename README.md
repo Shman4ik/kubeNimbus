@@ -22,12 +22,14 @@
 
 ---
 
-> **Why another one?** The 2026 Kubernetes GUI market has a gap. Lens is
-> subscription-only for commercial use and heavy Electron; OpenLens is dead;
-> FreeLens is still Electron; Aptakube is polished but closed and paid;
-> Headlamp is web-first; k9s is a keyboard TUI. Nobody ships **fast + open
-> source + modern native desktop UI**. kubeNimbus does: Aptakube's polish,
-> NativeAOT startup speed, MIT licensed, Kubernetes-first.
+> **Why another one?** The 2026 Kubernetes GUI market is thin in one specific
+> place. Lens is subscription-gated for commercial use and heavy Electron;
+> OpenLens is dead; FreeLens is still Electron, and so is Headlamp's desktop
+> app; Aptakube is polished but closed and paid; k9s is a keyboard TUI.
+> [KubeUI](https://github.com/IvanJosipovic/KubeUI) is the closest thing to
+> kubeNimbus — also MIT, also Avalonia — and is the comparison worth making:
+> kubeNimbus is NativeAOT, opens in ~150 ms rather than ~650 ms, ships a ~62 MB
+> payload rather than 382 MiB, and sends no telemetry at all.
 
 ## Screenshots
 
