@@ -24,6 +24,25 @@
                 <ResourceInclude Source="avares://Nimbus.Ui/Theme/Icons.axaml" />
             </ResourceDictionary.MergedDictionaries>
 
+            <!-- The exec pane's terminal palette (SvcSystems.UI.Terminal reads these by
+                 name; anything unset falls back to its own xterm-256 table, which is what
+                 a shell script's colours are written against and is deliberately left
+                 alone). Only the two ends are ours: a terminal is dark in both themes,
+                 which is not laziness but a constraint — the control caches a resolved
+                 foreground brush inside each FormattedText and only clears that cache on
+                 a font change, so a live theme swap would repaint the cell backgrounds
+                 and leave every glyph the old colour. One palette, no half-swap. -->
+            <SolidColorBrush x:Key="SvcSystems.UI.TerminalColor0" Color="#0E1116" />
+            <SolidColorBrush x:Key="SvcSystems.UI.TerminalColor15" Color="#E6E8EB" />
+            <!-- Same ink as colour 15, for the status overlay ExecView draws over the
+                 terminal's own background — which is colour 0 and never the theme's. -->
+            <SolidColorBrush x:Key="TerminalForegroundBrush" Color="#E6E8EB" />
+            <!-- Blue is the third one, and it is not taste: xterm's #000080 on a dark
+                 background is the classic unreadable pair, and a colouring `ls` paints
+                 every directory with it. Every modern palette lifts it; so does this. -->
+            <SolidColorBrush x:Key="SvcSystems.UI.TerminalColor4" Color="#4C8DF5" />
+            <SolidColorBrush x:Key="SvcSystems.UI.TerminalColor12" Color="#7AA9FF" />
+
             <!-- Usage charts (metrics.k8s.io history, see Controls/Sparkline.cs). Fixed
                  hues so they read the same on both themes, and deliberately NOT the
                  ok/warn/error status colors: a CPU line is a measurement, not a verdict.

@@ -1,9 +1,24 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:KubeNimbus.App.ViewModels"
-             xmlns:conv="using:KubeNimbus.App.Converters"
+             xmlns:term="using:SvcSystems.UI.Terminal"
              x:Class="KubeNimbus.App.Views.ExecView"
              x:DataType="vm:ExecTabViewModel">
+
+  <UserControl.Resources>
+    <!-- Right-click menu, opened by hand from TerminalControl.ContextRequested: the
+         control raises its own event instead of the base ContextRequested, so the
+         standard ContextMenu attachment never fires. A menu rather than
+         RightClickAction.CopyOrPaste, which pastes on any right-click into an empty
+         selection — one stray click away from running whatever is on the clipboard
+         in someone's production container. -->
+    <ContextMenu x:Key="TerminalMenu">
+      <MenuItem Header="Copy" Click="OnCopyClick" />
+      <MenuItem Header="Paste" Click="OnPasteClick" />
+      <Separator />
+      <MenuItem Header="Select all" Click="OnSelectAllClick" />
+    </ContextMenu>
+  </UserControl.Resources>
 
   <!-- Two mutually exclusive contents, so the UserControl gets one child. -->
   <Panel>
@@ -21,11 +36,17 @@
     </StackPanel>
   </Border>
 
-  <Grid RowDefinitions="Auto,*,Auto" Margin="10,8,10,10" IsVisible="{Binding !IsDemo}">
+  <!-- One row of chrome, then the terminal (UI rule 10). The input box and its Send
+       button are gone: the terminal takes keystrokes itself, so a second row spent
+       retyping them into a TextBox was a row of dock height buying nothing. -->
+  <Grid RowDefinitions="Auto,*" Margin="10,8,10,10" IsVisible="{Binding !IsDemo}">
     <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,8">
       <Ellipse Grid.Column="0" Classes="statusDot" Classes.ok="{Binding IsConnected}" Classes.idle="{Binding !IsConnected}"
                VerticalAlignment="Center" Margin="0,0,8,0" />
+      <!-- Hidden while the overlay below is showing the same sentence, larger and
+           unabbreviated. The dot still carries the state either way. -->
       <TextBlock Grid.Column="1" Text="{Binding StatusMessage}" Opacity="0.75" FontSize="12" VerticalAlignment="Center"
+                 IsVisible="{Binding !IsStatusOverlayVisible}"
                  TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding StatusMessage}" />
 
       <!-- Shell box + reconnect. /bin/sh was hardcoded, so a bash-only or distroless
@@ -41,34 +62,24 @@
       </StackPanel>
     </Grid>
 
-    <Border Grid.Row="1" Classes="card" Padding="4">
-      <TextBox Name="OutputBox" Text="{Binding OutputText}" IsReadOnly="True" AcceptsReturn="True"
-               TextWrapping="NoWrap" Background="Transparent" BorderThickness="0"
-               FontFamily="Cascadia Mono,Consolas,monospace" FontSize="12" />
+    <!-- ClipToBounds because the terminal paints its own opaque background edge to
+         edge and would otherwise square off the card's rounded corners. -->
+    <Border Grid.Row="1" Classes="card" Padding="0" ClipToBounds="True">
+      <Panel>
+        <term:TerminalControl Name="Terminal" Model="{Binding Terminal}"
+                              FontFamily="Cascadia Mono,Consolas,DejaVu Sans Mono,monospace" FontSize="12" />
+
+        <!-- The blank-screen states (UI rule 9): connecting, no usable shell, a
+             session that ended before printing anything. A terminal with nothing in
+             it looks identical to a broken pane, so the status covers it until the
+             first byte arrives and then gets out of the way. -->
+        <Border IsVisible="{Binding IsStatusOverlayVisible}" Padding="24" IsHitTestVisible="False">
+          <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" TextAlignment="Center" FontSize="12"
+                     HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="520"
+                     Foreground="{StaticResource TerminalForegroundBrush}" Opacity="0.75" />
+        </Border>
+      </Panel>
     </Border>
-
-    <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto" Margin="0,8,0,0">
-      <!-- Control keys. Without them the pane was one-way: `tail -f` or `top` could be
-           started and never stopped, wedging the session until the tab was closed.
-           Ctrl+C / Ctrl+D / Tab on the input box do the same thing — these are the
-           discoverable copy of a gesture nobody would guess a text box supports. -->
-      <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4" Margin="0,0,8,0" VerticalAlignment="Center">
-        <Button Classes="chip" Padding="7,3" FontSize="11" Content="^C" IsEnabled="{Binding IsConnected}"
-                ToolTip.Tip="Interrupt the running command (Ctrl+C)"
-                Command="{Binding SendControlCommand}" CommandParameter="C" />
-        <Button Classes="chip" Padding="7,3" FontSize="11" Content="^D" IsEnabled="{Binding IsConnected}"
-                ToolTip.Tip="End of input — exits the shell (Ctrl+D)"
-                Command="{Binding SendControlCommand}" CommandParameter="D" />
-      </StackPanel>
-
-      <TextBox Grid.Column="1" Name="InputBox" Text="{Binding InputText}"
-               PlaceholderText="Type a command and press Enter · Ctrl+C interrupts · Tab completes"
-               FontFamily="Cascadia Mono,Consolas,monospace" />
-
-      <!-- Advanced-view only: Enter already sends, and the button restates it. -->
-      <Button Grid.Column="2" Classes="accent" Content="Send" Command="{Binding SendCommand}" Margin="8,0,0,0"
-              IsVisible="{Binding IsAdvancedView}" />
-    </Grid>
   </Grid>
   </Panel>
 </UserControl>

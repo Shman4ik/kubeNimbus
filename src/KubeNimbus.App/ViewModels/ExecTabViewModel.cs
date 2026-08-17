@@ -2,27 +2,38 @@ using System.Text;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using KubeNimbus.App.Terminal;
 using KubeNimbus.Core;
+using SvcSystems.UI.Terminal;
 
 namespace KubeNimbus.App.ViewModels;
 
 /// <summary>
-/// Interactive exec session for one container. A line-oriented terminal (no
-/// PTY rendering, ANSI escape codes stripped rather than colorized) — enough
-/// to run shell commands and read their output, which covers the MVP's
-/// "interactive terminal" bar without pulling in a full terminal-emulator control.
+/// Interactive exec session for one container, rendered by a real VT emulator
+/// (<see cref="TerminalControlModel"/> over XTerm.NET) rather than the
+/// ANSI-stripping scrollback this pane used to carry. The transport is unchanged —
+/// <see cref="ClusterClient.ExecAsync"/>'s WebSocket and the bash→sh→ash probe
+/// below — and everything above it is now bytes in, bytes out: the model owns the
+/// screen grid, colour, the alternate buffer, scrollback and selection, so
+/// <c>vi</c>, <c>top</c> and <c>mc</c> draw instead of unspooling escape codes.
 /// </summary>
 public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
 {
     /// <summary>
-    /// How often decoded output is folded into the terminal model and pushed to the
-    /// view. The pump used to post one awaited dispatcher call per 4 KB read and
-    /// re-materialize the whole 200 000-char buffer each time, which melted the UI
-    /// thread on <c>cat</c> of a large file; coalescing at frame rate costs nothing
-    /// perceptible and bounds the work per tick.
+    /// How often decoded output is fed into the terminal and repainted. The pump used
+    /// to post one awaited dispatcher call per 4 KB read, which melted the UI thread on
+    /// <c>cat</c> of a large file; coalescing at frame rate costs nothing perceptible
+    /// and bounds the work per tick. It matters more now, not less: every feed also
+    /// rebuilds the emulator's viewport and invalidates the surface.
     /// </summary>
     private static readonly TimeSpan OutputFlushInterval = TimeSpan.FromMilliseconds(50);
+
+    /// <summary>
+    /// Scrollback, in lines. Deliberately not <c>AppSettings.LogBufferLines</c>: that
+    /// setting is named, explained and tuned for the pod-log pane, and a terminal's
+    /// buffer is a different thing — a full-screen app repaints the same screen
+    /// thousands of times and none of it is scrollback anyone wants to keep.
+    /// </summary>
+    private const int ScrollbackLines = 5000;
 
     /// <summary>Null on the demo cluster — see <see cref="InspectorTabViewModelBase.IsDemo"/>.</summary>
     private readonly ClusterClient? _client;
@@ -31,33 +42,67 @@ public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
     private readonly string _container;
 
     /// <summary>
-    /// The terminal model. Touched <b>only</b> on the UI thread — the socket pump
-    /// hands raw text over through <see cref="_pending"/> instead, because
-    /// <see cref="TerminalOutputBuffer"/> is explicitly not thread-safe.
+    /// Decoded chunks waiting for the next flush. Guarded by its own lock: the socket
+    /// pump fills it off the UI thread and <see cref="FlushOutput"/> drains it on the
+    /// UI thread, which is what keeps <see cref="Terminal"/> single-threaded.
     /// </summary>
-    private readonly TerminalOutputBuffer _terminal = new();
-
-    /// <summary>Raw decoded chunks waiting for the next flush. Guarded by its own lock.</summary>
     private readonly List<string> _pending = [];
     private readonly Lock _pendingLock = new();
+
+    /// <summary>
+    /// Stateful UTF-8 decoder. A 4 KB socket read can end in the middle of a multi-byte
+    /// character, and a per-read <c>Encoding.UTF8.GetString</c> turns that into U+FFFD
+    /// permanently — the same class of bug the old parser's split-escape-sequence
+    /// handling existed to avoid. The decoder holds the partial bytes until the rest
+    /// arrives, so <see cref="TerminalControlModel.Feed(string)"/> only ever sees whole
+    /// characters.
+    /// </summary>
+    private readonly Decoder _decoder = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetDecoder();
 
     private DispatcherTimer? _flushTimer;
     private ExecSession? _session;
     private CancellationTokenSource? _cts;
 
+    /// <summary>Last geometry reported to the remote PTY, so a layout pass that doesn't change it writes nothing.</summary>
+    private (int Columns, int Rows)? _lastReportedSize;
+
+    /// <summary>Tail of the stdin write chain — see <see cref="OnUserInput"/>.</summary>
+    private Task _writes = Task.CompletedTask;
+
     public override string Key { get; }
 
-    [ObservableProperty]
-    private string _outputText = "";
-
-    [ObservableProperty]
-    private string _inputText = "";
+    /// <summary>
+    /// The terminal itself: screen grid, scrollback, selection and input encoding.
+    /// The view binds a <c>TerminalControl</c> to it; this view model feeds it the
+    /// pod's stdout and forwards its <see cref="TerminalControlModel.UserInput"/>
+    /// straight back down the same WebSocket.
+    /// </summary>
+    /// <remarks>
+    /// Touched <b>only</b> on the UI thread. It is an <c>AvaloniaObject</c> and it
+    /// repaints on every feed, so the socket pump hands text over through
+    /// <see cref="_pending"/> rather than calling it directly.
+    /// </remarks>
+    public TerminalControlModel Terminal { get; }
 
     [ObservableProperty]
     private bool _isConnected;
 
     [ObservableProperty]
     private string? _statusMessage;
+
+    /// <summary>
+    /// True once anything at all has been drawn. Until then the terminal is a blank
+    /// screen, which is indistinguishable from a broken pane — so the view covers it
+    /// with the status instead (UI rule 9). After the first byte the scrollback is
+    /// worth more than the notice, and the chrome row carries the state on its own.
+    /// </summary>
+    [ObservableProperty]
+    private bool _hasOutput;
+
+    /// <summary>True while the terminal is blank and therefore has nothing to say for itself.</summary>
+    public bool IsStatusOverlayVisible => !HasOutput && !IsDemo;
+
+    partial void OnHasOutputChanged(bool value) => OnPropertyChanged(nameof(IsStatusOverlayVisible));
 
     /// <summary>
     /// The one thing a demo cluster genuinely cannot do. Stated in place rather than
@@ -80,6 +125,10 @@ public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
         _podName = podName;
         _container = container;
         Key = $"exec:{@namespace}/{podName}/{container}:{Guid.NewGuid():N}";
+
+        Terminal = new TerminalControlModel(new TerminalOptions { Scrollback = ScrollbackLines });
+        Terminal.UserInput += OnUserInput;
+        Terminal.SizeChanged += OnTerminalSizeChanged;
 
         if (client is null)
         {
@@ -151,6 +200,13 @@ public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
                 ActiveShell = shell;
                 IsConnected = true;
                 StatusMessage = $"Connected to {_container} ({shell})";
+
+                // The control sized the model during layout, before there was a session
+                // to tell. Report it now or the shell runs at the engine's 80×24 default
+                // however wide the dock is — which is the whole reason `top` used to wrap.
+                _lastReportedSize = null;
+                ReportSize(Terminal.Terminal.Cols, Terminal.Terminal.Rows);
+
                 StartFlushTimer();
                 _ = PumpOutputAsync(token);
                 _ = WatchTerminalStatusAsync(status, token);
@@ -247,8 +303,15 @@ public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
         _session = null;
         IsConnected = false;
 
-        _terminal.Reset();
-        OutputText = "";
+        // A hard reset of the emulator, not a scroll. The previous session may have
+        // died inside `vi` — i.e. with the alternate buffer active, the cursor hidden
+        // and a colour still set — and inheriting that makes the new shell's first
+        // prompt invisible. The explicit buffer switch is belt to RIS's braces: the
+        // alternate buffer is the one piece of state that, left behind, renders the
+        // whole pane blank rather than merely odd.
+        Terminal.Terminal.SwitchToNormalBuffer();
+        Terminal.Feed("\u001bc");
+        HasOutput = false;
         lock (_pendingLock)
         {
             _pending.Clear();
@@ -266,9 +329,35 @@ public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
     }
 
     /// <summary>
-    /// Folds everything the pump has read since the last tick into the terminal model
-    /// and republishes the bound text. Runs on the UI thread, which is what makes
-    /// <see cref="_terminal"/>'s single-threaded contract hold.
+    /// Feeds output the way the socket pump does — through the same pending buffer and
+    /// the same <see cref="TerminalControlModel.Feed(string)"/> the live session uses.
+    /// It exists for the screenshot fixtures, which have no server to read from;
+    /// feeding the emulator behind this view model's back would let what a screenshot
+    /// shows drift from what a real session renders.
+    /// </summary>
+    public void Feed(string text)
+    {
+        Enqueue(text);
+        FlushOutput();
+    }
+
+    private void Enqueue(string text)
+    {
+        if (text.Length == 0)
+        {
+            return;
+        }
+
+        lock (_pendingLock)
+        {
+            _pending.Add(text);
+        }
+    }
+
+    /// <summary>
+    /// Folds everything the pump has read since the last tick into the emulator. Runs
+    /// on the UI thread, which is what makes <see cref="Terminal"/>'s single-threaded
+    /// contract hold; the control repaints from the model's own <c>UpdateUI</c> hook.
     /// </summary>
     private void FlushOutput()
     {
@@ -286,16 +375,10 @@ public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
 
         foreach (var chunk in chunks)
         {
-            _terminal.Feed(chunk);
+            Terminal.Feed(chunk);
         }
 
-        // Drain is the "did anything actually move" signal; the view binds one string,
-        // so the delta itself isn't applied incrementally yet — that needs the output
-        // control to support appending, which is still outstanding.
-        if (_terminal.Drain() is not null)
-        {
-            OutputText = _terminal.Snapshot();
-        }
+        HasOutput = true;
     }
 
     private async Task PumpOutputAsync(CancellationToken ct)
@@ -306,6 +389,11 @@ public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
         }
 
         var buffer = new byte[4096];
+
+        // One char per byte is the UTF-8 worst case (ASCII); multi-byte sequences and
+        // surrogate pairs both decode to fewer. The spare slot is insurance against a
+        // fallback character emitted for bytes held over from the previous read.
+        var characters = new char[buffer.Length + 1];
         try
         {
             while (!ct.IsCancellationRequested)
@@ -316,14 +404,11 @@ public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
                     break;
                 }
 
-                // Hand the raw text to the UI thread and return to the socket at once:
-                // decoding, control-code handling and trimming all happen on the flush
-                // tick, so a chatty container can't starve the read loop or the UI.
-                var text = Encoding.UTF8.GetString(buffer, 0, read);
-                lock (_pendingLock)
-                {
-                    _pending.Add(text);
-                }
+                // Hand the decoded text to the UI thread and return to the socket at
+                // once: the emulation, the repaint and the trimming all happen on the
+                // flush tick, so a chatty container can't starve the read loop or the UI.
+                var decoded = _decoder.GetChars(buffer, 0, read, characters, 0);
+                Enqueue(new string(characters, 0, decoded));
             }
         }
         catch (OperationCanceledException)
@@ -353,89 +438,45 @@ public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
         }
     }
 
-    [RelayCommand(CanExecute = nameof(IsLive))]
-    private async Task SendAsync()
+    /// <summary>
+    /// Everything typed into the terminal, already encoded by the emulator: printable
+    /// text as UTF-8, Ctrl+C as <c>0x03</c>, Ctrl+D as <c>0x04</c>, Tab as <c>0x09</c>,
+    /// arrows and function keys as the escape sequences the remote <c>TERM=xterm</c>
+    /// expects. The pane no longer parses or assembles any of that itself — which is
+    /// what makes a full-screen tool's keyboard work at all.
+    /// </summary>
+    private void OnUserInput(object? sender, TerminalUserInputEventArgs e) =>
+        // Chained rather than fired: two keystrokes arriving inside one write's flight
+        // would otherwise race for the stream and could reach the shell out of order,
+        // which reads as the terminal scrambling what was typed. The event is always
+        // raised on the UI thread, so appending to the chain preserves keystroke order
+        // by construction. WriteAsync swallows its own failures, so this never faults.
+        _writes = _writes.ContinueWith(_ => WriteAsync(e.Data), TaskScheduler.Default).Unwrap();
+
+    /// <summary>
+    /// The emulator's own geometry, reported after every layout change. Core has had
+    /// <c>ResizeAsync</c> since exec shipped and for a long time nothing called it, so
+    /// every session ran at the default 80×24 — which is why anything drawing a
+    /// full-width line wrapped regardless of how wide the dock was. The columns and
+    /// rows are the terminal's real ones now, not a division by an assumed cell size.
+    /// </summary>
+    private void OnTerminalSizeChanged(object? sender, TerminalSizeChangedEventArgs e) => ReportSize(e.Cols, e.Rows);
+
+    private void ReportSize(int columns, int rows)
     {
-        if (string.IsNullOrEmpty(InputText))
+        if (columns <= 0 || rows <= 0 || _lastReportedSize == (columns, rows))
         {
             return;
         }
 
-        var pending = InputText;
-        if (await WriteAsync(pending + "\n"))
-        {
-            // Only clear once the write actually landed — clearing first lost the
-            // typed command whenever the send failed.
-            InputText = "";
-        }
+        _lastReportedSize = (columns, rows);
+        _ = ResizeAsync(columns, rows);
     }
 
-    /// <summary>
-    /// Sends a raw control byte. Without these the pane was a one-way street: a
-    /// <c>tail -f</c> or a <c>top</c> could be started and then never stopped, so the
-    /// session wedged permanently and the only way out was closing the tab.
-    /// </summary>
-    /// <remarks>
-    /// They go straight to stdin as the control characters a PTY expects — the remote
-    /// terminal's line discipline turns ^C into SIGINT, ^D into EOF and ^\ into SIGQUIT.
-    /// Tab is sent unpaired so the remote shell's own completion answers.
-    /// </remarks>
-    [RelayCommand(CanExecute = nameof(IsLive))]
-    private Task SendControlAsync(string? key) => key switch
-    {
-        // ^C, ^D, ^Z, ^\ — the four a wedged session is reached with.
-        "C" => WriteAsync(""),
-        "D" => WriteAsync(""),
-        "Z" => WriteAsync(""),
-        "\\" => WriteAsync(""),
-
-        // Tab carries whatever has been typed so far, un-terminated, so the remote
-        // shell completes against it rather than against an empty line.
-        "Tab" => SendTabAsync(),
-        _ => Task.CompletedTask,
-    };
-
-    private async Task SendTabAsync()
-    {
-        var prefix = InputText;
-        if (await WriteAsync(prefix + "\t"))
-        {
-            // The shell echoes the completed text back, so the local box would
-            // otherwise end up holding it twice.
-            InputText = "";
-        }
-    }
-
-    private async Task<bool> WriteAsync(string text)
+    /// <summary>Tells the remote PTY how wide it is. A failure here is cosmetic and must not take out the session.</summary>
+    private async Task ResizeAsync(int columns, int rows)
     {
         if (_session is null || !IsConnected)
-        {
-            StatusMessage = "Not connected — the session has ended.";
-            return false;
-        }
-
-        try
-        {
-            await _session.StdIn.WriteAsync(Encoding.UTF8.GetBytes(text));
-            await _session.StdIn.FlushAsync();
-            return true;
-        }
-        catch (Exception ex)
-        {
-            StatusMessage = $"Send failed: {ex.Message}";
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// Tells the remote PTY how wide it is. Core has had <c>ResizeAsync</c> since exec
-    /// shipped and nothing ever called it, so every session ran at the default 80×24 —
-    /// which is why anything that draws a full-width line (top, htop, a table) wrapped
-    /// at 80 columns regardless of how wide the dock actually was.
-    /// </summary>
-    public async Task ResizeAsync(int columns, int rows)
-    {
-        if (_session is null || !IsConnected || columns <= 0 || rows <= 0)
         {
             return;
         }
@@ -450,10 +491,32 @@ public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
         }
     }
 
+    private async Task WriteAsync(ReadOnlyMemory<byte> payload)
+    {
+        if (_session is null || !IsConnected)
+        {
+            StatusMessage = "Not connected — the session has ended.";
+            return;
+        }
+
+        try
+        {
+            await _session.StdIn.WriteAsync(payload);
+            await _session.StdIn.FlushAsync();
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Send failed: {ex.Message}";
+        }
+    }
+
     public override async Task OnClosingAsync()
     {
         _flushTimer?.Stop();
         _flushTimer = null;
+
+        Terminal.UserInput -= OnUserInput;
+        Terminal.SizeChanged -= OnTerminalSizeChanged;
 
         if (_cts is not null)
         {

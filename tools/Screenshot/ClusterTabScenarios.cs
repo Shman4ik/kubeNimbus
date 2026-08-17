@@ -920,22 +920,137 @@ internal static class ClusterTabScenarios
         return tab;
     }
 
-    public static ClusterTabViewModel Exec()
+    /// <summary>
+    /// A shell session with colour in it. Fed as escape sequences through the pane's
+    /// own <see cref="ExecTabViewModel.Feed"/> — the same buffer and the same emulator
+    /// the socket pump feeds — so what renders here is what the API server's bytes
+    /// would render, not a screenshot-only approximation. This is the scenario that
+    /// would go grey again if the terminal control ever stopped being wired up.
+    /// </summary>
+    public static ClusterTabViewModel Exec() => BuildExec(
+        "/ # ls\r\n"
+        + "\u001b[1;34mbin\u001b[0m   \u001b[1;34metc\u001b[0m   \u001b[1;34musr\u001b[0m   "
+        + "\u001b[1;32mrun.sh\u001b[0m   report.log\r\n"
+        + "/ # ./run.sh --once\r\n"
+        + "\u001b[32mINFO \u001b[0m generating report for tenant=acme\r\n"
+        + "\u001b[33mWARN \u001b[0m cache miss, falling back to the API\r\n"
+        + "\u001b[31mERROR\u001b[0m upstream timed out after 5s\r\n"
+        + "/ # ");
+
+    /// <summary>
+    /// The state the whole FEAT-10 item exists for: a full-screen tool. The frame is
+    /// drawn the way <c>top</c> draws one — clear, home, then colour and reverse video
+    /// at addressed positions — which the ANSI-stripping pane this replaced could not
+    /// render at all (it printed the escape codes' remains as unspooling text).
+    /// <para>
+    /// The <c>ESC[7m</c> header renders <b>unhighlighted</b>, and that is not a mistake
+    /// in the fixture: reverse video with default colours is a defect in the terminal
+    /// control (CLAUDE.md, "The exec terminal"). Emitting what real <c>top</c> emits
+    /// keeps the screenshot honest, and it will start drawing a band by itself the day
+    /// that is fixed.
+    /// </para>
+    /// </summary>
+    public static ClusterTabViewModel ExecFullScreen() => BuildExec(
+        "\u001b[2J\u001b[H"
+        + "top - 14:02:11 up 3 days,  4:17,  load average: 0.32, 0.28, 0.24\r\n"
+        + "Tasks:   4 total,   1 running,   3 sleeping\r\n"
+        + "%Cpu(s):  \u001b[1;32m 6.2\u001b[0m us,  \u001b[1;33m 1.4\u001b[0m sy, "
+        + "\u001b[1;36m92.4\u001b[0m id\r\n"
+        + "MiB Mem :  \u001b[1m2048.0\u001b[0m total,  \u001b[1m 512.4\u001b[0m free,  "
+        + "\u001b[1m1024.8\u001b[0m used\r\n"
+        + "\r\n"
+        + "\u001b[7m  PID USER      PR  NI    VIRT    RES  S  %CPU  %MEM     TIME+ COMMAND"
+        + new string(' ', 40) + "\u001b[0m\r\n"
+        + "    1 root      20   0  712540  48120  S   6.0   2.3   0:03.44 report-generator\r\n"
+        + "   42 root      20   0    1652    964  S   0.0   0.1   0:00.02 sh\r\n"
+        + "   57 root      20   0    2216   1104  R   0.3   0.1   0:00.01 top\r\n");
+
+    /// <summary>
+    /// The same full-screen tool with the dock maximized — the README gallery's cell,
+    /// for the same reason <see cref="YamlEditorMaximized"/> is: a gallery image is
+    /// rendered at half the table's width, and a ~300px dock inside a 1280px window
+    /// shrinks to a band nobody can read. The process table is longer than
+    /// <see cref="ExecFullScreen"/>'s because a maximized <c>top</c> that filled three
+    /// rows of a forty-row screen would misrepresent the pane rather than flatter it.
+    /// </summary>
+    public static ClusterTabViewModel ExecFullScreenMaximized()
+    {
+        string[] processes =
+        [
+            "    1 root      20   0  712540  48120  S   6.0   2.3   0:03.44 report-generator",
+            "   14 root      20   0  198432  22104  S   2.1   1.0   0:01.09 access-log-tailer",
+            "   28 root      20   0  104880  11960  S   0.7   0.5   0:00.51 metrics-sidecar",
+            "   42 root      20   0    1652    964  S   0.0   0.1   0:00.02 sh",
+            "   57 root      20   0    2216   1104  R   0.3   0.1   0:00.01 top",
+            "   63 root      20   0   88104   9240  S   0.2   0.4   0:00.18 tenant-sync",
+            "   71 root      20   0   45012   5388  S   0.1   0.2   0:00.07 config-watch",
+            "   88 root      20   0   32760   4120  S   0.0   0.2   0:00.03 healthz",
+        ];
+
+        var tab = BuildExec(
+            "\u001b[2J\u001b[H"
+            + "top - 14:02:11 up 3 days,  4:17,  load average: 0.32, 0.28, 0.24\r\n"
+            + "Tasks:   8 total,   1 running,   7 sleeping,   0 stopped,   0 zombie\r\n"
+            + "%Cpu(s):  \u001b[1;32m 9.4\u001b[0m us,  \u001b[1;33m 1.4\u001b[0m sy, "
+            + "\u001b[1;36m89.2\u001b[0m id\r\n"
+            + "MiB Mem :  \u001b[1m2048.0\u001b[0m total,  \u001b[1m 512.4\u001b[0m free,  "
+            + "\u001b[1m1024.8\u001b[0m used,  \u001b[1m 510.8\u001b[0m buff/cache\r\n"
+            + "MiB Swap:  \u001b[1m   0.0\u001b[0m total,  \u001b[1m   0.0\u001b[0m free,  "
+            + "\u001b[1m   0.0\u001b[0m used.  \u001b[1m 892.1\u001b[0m avail Mem\r\n"
+            + "\r\n"
+            + "\u001b[7m  PID USER      PR  NI    VIRT    RES  S  %CPU  %MEM     TIME+ COMMAND"
+            + new string(' ', 40) + "\u001b[0m\r\n"
+            + string.Join("\r\n", processes) + "\r\n");
+
+        tab.IsInspectorMaximized = true;
+        return tab;
+    }
+
+    /// <summary>
+    /// The blank-terminal states, and the only one of them the harness can reach for
+    /// real: the offline client's three shell attempts all fail, so this is the actual
+    /// message <c>ConnectAsync</c> writes. A terminal with nothing in it is
+    /// indistinguishable from a broken pane, which is why the status covers it until
+    /// the first byte arrives (UI rule 9).
+    /// </summary>
+    public static ClusterTabViewModel ExecNoShell()
+    {
+        var tab = BaseTab();
+        var row = tab.Rows.First(r => r.Name.StartsWith("payment-service-report-generator", StringComparison.Ordinal));
+        var exec = new ExecTabViewModel(FixtureData.CreateOfflineClient(), "payments", row.Name, "app") { IsPreview = false };
+
+        for (var i = 0; i < 100 && exec.StatusMessage?.StartsWith("No usable shell", StringComparison.Ordinal) != true; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(10);
+        }
+
+        tab.InspectorTabs.Add(exec);
+        tab.SelectedInspectorTab = exec;
+        return tab;
+    }
+
+    private static ClusterTabViewModel BuildExec(string output)
     {
         var tab = BaseTab();
         var row = tab.Rows.First(r => r.Name.StartsWith("payment-service-report-generator", StringComparison.Ordinal));
         var client = FixtureData.CreateOfflineClient();
         var exec = new ExecTabViewModel(client, "payments", row.Name, "app") { IsPreview = false };
 
-        exec.OutputText =
-            "/ # ps aux\n" +
-            "PID   USER     TIME  COMMAND\n" +
-            "    1 root      0:03 report-generator --port=8080\n" +
-            "   42 root      0:00 /bin/sh\n" +
-            "/ # curl -s localhost:8080/healthz\n" +
-            "{\"status\":\"ok\",\"uptime\":\"3h12m\"}\n" +
-            "/ # ";
+        // Drain the offline client's three failed shell attempts first. Their
+        // continuations land on the same RunJobs() the capture pumps, so a status set
+        // before they finish is overwritten by "Unable to connect to the remote
+        // server" — the same trap HelmReleaseDetail documents, and the reason this
+        // pane's screenshot used to caption a working session with a connect failure.
+        for (var i = 0; i < 100 && exec.StatusMessage?.StartsWith("No usable shell", StringComparison.Ordinal) != true; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(10);
+        }
+
         exec.IsConnected = true;
+        exec.StatusMessage = "Connected to app (/bin/sh)";
+        exec.Feed(output);
 
         tab.InspectorTabs.Add(exec);
         tab.SelectedInspectorTab = exec;
