@@ -38,6 +38,8 @@ way in Preferences → Shortcut modifier.
 | Interrupt a command in the exec pane | Ctrl+C | Ctrl+C |
 | End input / exit the shell | Ctrl+D | Ctrl+D |
 | Complete a command in the exec pane | Tab | Tab |
+| Copy the terminal selection | Ctrl+Shift+C | Ctrl+Shift+C |
+| Paste into the terminal | Ctrl+Shift+V | Ctrl+Shift+V |
 | Follow the log stream | The Follow toggle, above the log pane | The Follow toggle, above the log pane |
 
 ## View & app

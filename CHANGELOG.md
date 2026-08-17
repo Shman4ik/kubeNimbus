@@ -14,6 +14,20 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Added
 
+- **A real terminal in the exec pane.** Exec now runs a full VT emulator instead
+  of stripping escape codes, so the tools people actually exec in for work:
+  `vi`, `top`, `htop`, `mc`, `less` and anything else that paints a screen draw
+  properly, in colour, with the cursor where the program put it. The pane
+  scrolls back, text can be selected with the mouse, and it tells the container
+  how wide it really is — so nothing wraps at 80 columns any more just because
+  the dock is wider than that. `Ctrl`+`C`, `Ctrl`+`D`, `Tab`, the arrow keys and
+  the function keys all reach the shell, which means the terminal — not
+  kubeNimbus — owns `Ctrl` chords while it has focus; **Copy and Paste are
+  `Ctrl`+`Shift`+`C` / `Ctrl`+`Shift`+`V`**, or right-click, as in any terminal
+  emulator. The command input box below the terminal is gone: you type into the
+  terminal itself. One known gap: highlighted text drawn with a terminal's
+  "reverse video" (`top`'s column header, `less`'s prompt line) currently renders
+  unhighlighted.
 - **Open a terminal on this cluster.** From the ☰ menu or `Ctrl`/`Cmd`+`K`,
   kubeNimbus starts your own terminal — Windows Terminal or conhost, Terminal on
   macOS, whatever `xdg-terminal-exec`/`$TERMINAL` resolves to on Linux — with

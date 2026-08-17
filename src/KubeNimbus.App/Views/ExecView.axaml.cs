@@ -1,48 +1,41 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Threading;
-using KubeNimbus.App.ViewModels;
+using SvcSystems.UI.Terminal;
 
 namespace KubeNimbus.App.Views;
 
 /// <summary>
-/// Keyboard handling for the exec pane, plus the PTY geometry report.
+/// The exec pane's host: focus, the clipboard gestures, and the right-click menu.
 /// </summary>
 /// <remarks>
-/// The control keys have to be intercepted here rather than bound as gestures: a
-/// focused <c>TextBox</c> handles Ctrl+C as Copy and swallows Tab as focus
-/// navigation, so both would reach the remote shell never. They are taken in the
-/// Tunnel phase for exactly that reason.
+/// Everything else about input now belongs to <see cref="TerminalControl"/>, which
+/// encodes keystrokes the way a terminal does — Ctrl+C as <c>0x03</c>, Tab as
+/// <c>0x09</c>, arrows and function keys as escape sequences — and raises them as
+/// bytes on the model. The pane used to hand-roll a subset of that on a
+/// <c>TextBox</c>, in a Tunnel handler, because a focused TextBox eats Ctrl+C as
+/// Copy and Tab as focus navigation.
+/// <para>
+/// The one consequence worth knowing: while the terminal has focus it marks
+/// Ctrl+&lt;letter&gt; handled, so the window's own Ctrl chords (the palette, the list
+/// filter) do not fire there. That is what a terminal is for — ^C has to reach the
+/// container — and it is why Copy and Paste are on Ctrl+Shift here, as they are in
+/// every terminal emulator.
+/// </para>
 /// </remarks>
 public partial class ExecView : UserControl
 {
-    /// <summary>
-    /// Nominal cell size for the monospace font at 12pt, used to convert the output
-    /// box's pixel size into the columns/rows the remote PTY is told about. An
-    /// approximation is fine and a measurement would be overkill: being within a
-    /// column of the truth is the difference between `top` wrapping and not.
-    /// </summary>
-    private const double CellWidth = 7.2;
-    private const double CellHeight = 16.0;
-
     public ExecView()
     {
         InitializeComponent();
 
-        // Tunnel: TextBox's own handlers would otherwise consume Ctrl+C and Tab first.
-        InputBox.AddHandler(KeyDownEvent, OnInputKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
-
-        OutputBox.PropertyChanged += (_, e) =>
-        {
-            if (e.Property == TextBox.TextProperty)
-            {
-                OutputBox.CaretIndex = OutputBox.Text?.Length ?? 0;
-            }
-        };
-
-        OutputBox.SizeChanged += (_, _) => ReportSize();
-        DataContextChanged += (_, _) => ReportSize();
+        // Tunnel: the control's own OnKeyDown runs in the bubble phase and would turn
+        // Ctrl+Shift+C into a plain ^C (its control-character mapping ignores Shift),
+        // so the clipboard pair has to be taken before it.
+        Terminal.AddHandler(KeyDownEvent, OnTerminalKeyDown, RoutingStrategies.Tunnel);
+        Terminal.ContextRequested += OnTerminalContextRequested;
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -51,66 +44,40 @@ public partial class ExecView : UserControl
 
         // A terminal you have to click before typing into is a terminal that looks
         // broken for the first second of every session.
-        Dispatcher.UIThread.Post(() => InputBox.Focus(), DispatcherPriority.Input);
-        ReportSize();
+        Dispatcher.UIThread.Post(() => Terminal.Focus(), DispatcherPriority.Input);
     }
 
-    private void ReportSize()
+    private void OnTerminalKeyDown(object? sender, KeyEventArgs e)
     {
-        if (DataContext is not ExecTabViewModel vm || OutputBox.Bounds.Width <= 0)
+        if (!e.KeyModifiers.HasFlag(KeyModifiers.Control) || !e.KeyModifiers.HasFlag(KeyModifiers.Shift))
         {
             return;
         }
 
-        var columns = (int)(OutputBox.Bounds.Width / CellWidth);
-        var rows = (int)(OutputBox.Bounds.Height / CellHeight);
-        _ = vm.ResizeAsync(columns, rows);
+        switch (e.Key)
+        {
+            case Key.C:
+                _ = Terminal.CopySelectionAsync();
+                e.Handled = true;
+                return;
+            case Key.V:
+                _ = Terminal.PasteFromClipboardAsync();
+                e.Handled = true;
+                return;
+        }
     }
 
-    private void OnInputKeyDown(object? sender, KeyEventArgs e)
+    private void OnTerminalContextRequested(object? sender, TerminalContextRequestedEventArgs e)
     {
-        if (DataContext is not ExecTabViewModel vm)
+        if (Resources["TerminalMenu"] is ContextMenu menu)
         {
-            return;
-        }
-
-        var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
-
-        // Ctrl+C with a selection is Copy, which is what anyone would expect from a
-        // text box; with nothing selected it is the interrupt, which is what anyone
-        // would expect from a terminal. Both readings are right in their own context.
-        if (ctrl && e.Key == Key.C && InputBox.SelectionStart == InputBox.SelectionEnd)
-        {
-            Send(vm, "C", e);
-            return;
-        }
-
-        if (ctrl && e.Key is Key.D or Key.Z)
-        {
-            Send(vm, e.Key == Key.D ? "D" : "Z", e);
-            return;
-        }
-
-        if (e.Key == Key.Tab && !ctrl)
-        {
-            Send(vm, "Tab", e);
-            return;
-        }
-
-        if (e.Key == Key.Enter && vm.SendCommand.CanExecute(null))
-        {
-            vm.SendCommand.Execute(null);
-            e.Handled = true;
+            menu.Open(Terminal);
         }
     }
 
-    private static void Send(ExecTabViewModel vm, string key, KeyEventArgs e)
-    {
-        if (vm.SendControlCommand.CanExecute(key))
-        {
-            vm.SendControlCommand.Execute(key);
-        }
+    private void OnCopyClick(object? sender, RoutedEventArgs e) => _ = Terminal.CopySelectionAsync();
 
-        e.Handled = true;
-    }
+    private void OnPasteClick(object? sender, RoutedEventArgs e) => _ = Terminal.PasteFromClipboardAsync();
+
+    private void OnSelectAllClick(object? sender, RoutedEventArgs e) => Terminal.SelectAll();
 }

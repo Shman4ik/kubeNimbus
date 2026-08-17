@@ -41,6 +41,13 @@
     <PackageReference Include="Avalonia.Controls.DataGrid" Version="12.1.2" />
     <PackageReference Include="Avalonia.AvaloniaEdit" Version="12.0.0" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <!-- The exec pane's terminal emulator: an Avalonia renderer (SvcSystems.UI.Terminal)
+         over a headless xterm.js port (XTerm.NET). See CLAUDE.md, "The exec terminal"
+         — the API is Feed(bytes)/UserInput/Resize with no PTY in the contract, which is
+         the only shape that fits bytes arriving over a WebSocket from the API server.
+         Verified AOT-clean (docs/research/2026-08-15-terminal-libraries.md and again on
+         the FEAT-10 pass); it pulls XTerm.NET -> Unicode.net + Wcwidth and nothing else. -->
+    <PackageReference Include="SvcSystems.UI.Terminal" Version="1.1.0" />
     <!-- DevTools/previewer inspection (Avalonia MCP). Debug-only so it never
          enters the NativeAOT release build. -->
     <PackageReference Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.3" Condition="'$(Configuration)' == 'Debug'" />

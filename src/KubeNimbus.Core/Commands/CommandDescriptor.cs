@@ -41,6 +41,8 @@ public enum CommandId
     ExecInterrupt,
     ExecEndInput,
     ExecComplete,
+    ExecCopy,
+    ExecPaste,
 
     // --- Cluster tools ---
     HelmReleases,

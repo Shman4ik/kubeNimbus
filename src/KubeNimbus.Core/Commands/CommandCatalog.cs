@@ -293,6 +293,30 @@ public static class CommandCatalog
             Chord = new(CommandKey.Tab),
             Surfaces = SheetOnly,
         },
+        new()
+        {
+            // Shift, and literal Ctrl again, for the same reason as the interrupt above:
+            // the terminal owns plain Ctrl+C, so the clipboard pair moves up one
+            // modifier exactly as it does in every terminal emulator. Nothing else in
+            // the app is on Ctrl+Shift, and these are handled in the exec pane only.
+            Id = CommandId.ExecCopy,
+            Title = "Copy the terminal selection",
+            Category = CommandCategory.Pods,
+            Scope = CommandScope.Exec,
+            IconKey = "ConsoleIconGeometry",
+            Chord = new(CommandKey.C, LiteralCtrl | ChordModifiers.Shift),
+            Surfaces = SheetOnly,
+        },
+        new()
+        {
+            Id = CommandId.ExecPaste,
+            Title = "Paste into the terminal",
+            Category = CommandCategory.Pods,
+            Scope = CommandScope.Exec,
+            IconKey = "ConsoleIconGeometry",
+            Chord = new(CommandKey.V, LiteralCtrl | ChordModifiers.Shift),
+            Surfaces = SheetOnly,
+        },
 
         // ---------------------------------------------------------------- Tools
         new()

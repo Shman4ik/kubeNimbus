@@ -51,7 +51,8 @@ must be AOT/trimming-compatible from day one.
   it for the reflection-based `KubernetesClient` — that one does not survive
   NativeAOT.
 - **KubeNimbus.App** — Avalonia 12 (Fluent theme, Inter font, DataGrid,
-  AvaloniaEdit for YAML), `CommunityToolkit.Mvvm` source generators
+  AvaloniaEdit for YAML, `SvcSystems.UI.Terminal` over `XTerm.NET` for the exec
+  pane — see "The exec terminal"), `CommunityToolkit.Mvvm` source generators
   (`[ObservableProperty]`/`[RelayCommand]`, no hand-written INPC).
   `AvaloniaUseCompiledBindingsByDefault=true`; no reflection bindings.
 - **KubeNimbus.Core.Tests** — TUnit on Microsoft.Testing.Platform. **NEVER add
@@ -642,7 +643,10 @@ Six things worth keeping:
    every cheat-sheet row must have a chord or a gesture note.
 5. **`ChordModifiers.Control` is literal Ctrl on every platform**, and the exec pane is
    why: `^C` and `^D` are terminal control characters, Control on macOS too, and Cmd+C
-   there is Copy. A test asserts both render as "Ctrl" even under the Cmd scheme.
+   there is Copy. A test asserts both render as "Ctrl" even under the Cmd scheme. The
+   pane's Copy/Paste pair is `Control | Shift` for the far side of the same argument —
+   the terminal owns plain Ctrl+C, so the clipboard has to move up a modifier, exactly
+   as it does in every terminal emulator.
 6. **The docs page is a golden file.** `ShortcutDocsTests` fails on any drift;
    `KUBENIMBUS_UPDATE_DOCS=1` regenerates it. A shortcut reference that can silently
    fall behind the app is worse than none.
@@ -658,12 +662,14 @@ Classes="chip"` docked right of the sidebar's filter box, tooltip carrying the
 explanation), because people who use both should find it where they left it.
 
 Off hides: the CPU/Memory columns and their sparklines, pod detail's Usage tab,
-the fleet toggle and Cluster column, the log toolbar's Wrap/Copy/Download, the
-exec pane's Send button, YAML force-apply, the sidebar's kind-count badges, and
-the Helm/RBAC palette entries. (The "Following &lt;container&gt;" caption used to
-ride the switch too; it is gone outright — the container strip names the
-container it is streaming and the log pane's own placeholder states say what the
-stream is doing, so it was a row of dock height spent restating both.)
+the fleet toggle and Cluster column, the log toolbar's Wrap/Copy/Download, YAML
+force-apply, the sidebar's kind-count badges, and the Helm/RBAC palette entries.
+(The "Following &lt;container&gt;" caption used to ride the switch too; it is gone
+outright — the container strip names the container it is streaming and the log
+pane's own placeholder states say what the stream is doing, so it was a row of
+dock height spent restating both. **The exec pane's Send button rode it and is
+gone with the pane's input box** — a real terminal takes the keystroke itself, so
+there is no longer a control to gate; see "The exec terminal".)
 On restores today's surface exactly — it is a hide/show switch, not a second
 layout, and `cluster-tab-workloads-list` / `cluster-tab-advanced-view` are the
 same fixture tab rendered both ways to keep that honest.
@@ -913,7 +919,8 @@ the App layer.
   `ServerSideApplyConflictException` for the UI to offer a force-apply retry.
 - **Exec** (`ClusterClient.Exec.cs`) uses `Kubernetes.MuxedStreamNamespacedPodExecAsync`
   — the one exec helper `KubernetesClient.Aot` *does* ship, because it's
-  WebSocket-based rather than SPDY and needed no reflection-based transport.
+  WebSocket-based rather than SPDY and needed no reflection-based transport. What the
+  App layer does with those bytes is a VT emulator now; see "The exec terminal".
 - **Port-forward** (`ClusterClient.PortForward.cs`) has no equivalent helper,
   so it opens a raw `WebSocketNamespacedPodPortForwardAsync` websocket per
   accepted local TCP connection (matching kubectl's own approach — the k8s
@@ -985,6 +992,103 @@ Six things are load-bearing:
 **Not shipped, deliberately:** rollout *status*/history/undo, pause/resume, and scaling
 from a row's inline editor. `kubectl rollout undo` needs ReplicaSet revision walking and
 is its own item; the rest are backlog candidates, not omissions this pass forgot.
+
+## The exec terminal
+
+The exec pane renders a real VT emulator: `SvcSystems.UI.Terminal` (the Avalonia
+control) over `XTerm.NET` (a headless port of xterm.js), both MIT. Before it, the pane
+was a `TextBox` fed by a hand-written scrollback that *stripped* ANSI — which is fine
+for `ls` and useless for everything people actually exec in for: `vi`, `top`, `mc`,
+`less`, `htop`, a bash reverse-i-search. There is no addressable screen in a scrollback,
+so a full-screen tool did not draw at all; it unspooled.
+
+**The transport did not change and must not.** `ClusterClient.ExecAsync`'s WebSocket,
+the channel-3 error read, the bash→sh→ash probe and its `Task.WhenAny` timeout are all
+exactly as they were — see the exec bullets above and `ExecTabViewModel.ProbeAsync`'s
+remarks, which are the record of two failures that cost a live debugging session each.
+What changed is only what happens to the bytes at either end.
+
+Seven things are load-bearing:
+
+1. **Why this package, and not one of the alternatives.** The field was surveyed in
+   [`docs/research/2026-08-15-terminal-libraries.md`](docs/research/2026-08-15-terminal-libraries.md):
+   XtermSharp has no Avalonia renderer, VtNetCore's belongs to a dead IDE,
+   `Iciclecreek.Avalonia.Terminal` bundles a PTY and is built around hosting a *local
+   process*. This one's whole contract is `Feed(bytes)` in, a `UserInput` event
+   carrying bytes out, `Resize(cols, rows)` — no PTY anywhere in it, which is the only
+   shape that fits bytes arriving over a WebSocket from an API server. It renders with
+   `DrawingContext` + `FormattedText`, the same argument as `Controls/Sparkline.cs`, and
+   `grep` finds no reflection in either assembly. It is also written by KubeUI's author,
+   i.e. by someone who hit this exact problem in this exact stack first.
+2. **The view model owns bytes, not text.** `ExecTabViewModel` feeds decoded output in
+   on a 50 ms `DispatcherTimer` tick (the same coalescing the old pane needed, and it
+   matters *more* now — every feed rebuilds the viewport and invalidates the surface)
+   and writes `UserInput`'s bytes straight to `StdIn`. Nothing in this app parses an
+   escape sequence, encodes a key or strips a control code any more, and nothing should
+   start again.
+3. **Decoding is stateful, and that is not a detail.** A 4 KB socket read can end
+   mid-character, and `Encoding.UTF8.GetString` per read turns that into U+FFFD
+   *permanently*. Confirmed against the real engine in this pass: feeding the euro
+   sign's three bytes as `GetString(b,0,1)` + `GetString(b,1,2)` renders `���`, while
+   the same bytes through a retained `Decoder` render `€`. So `_decoder` is a field,
+   not a local. (`TerminalControlModel.Feed(byte[])` has the per-call flaw internally,
+   which is why the pane calls the `string` overload.)
+4. **The keyboard belongs to the terminal while it has focus, on purpose.** The control
+   marks Ctrl+&lt;letter&gt;, Tab, Esc and F1–F10 handled, so the window's own chords —
+   the palette, the list filter, the cheat sheet — do not fire inside the exec pane.
+   That is the trade command-catalog rule 5 already describes from the other side: `^C`
+   has to reach the container, and an app that stole it would make the pane useless for
+   the one thing it is for. Copy and Paste therefore move up one modifier to
+   Ctrl+Shift+C/V, as they do in every terminal emulator, handled in a **Tunnel**
+   handler in `ExecView` because the control's own bubble-phase mapping ignores Shift
+   and would send a plain `^C`. Right-click opens a Copy/Paste/Select-all menu rather
+   than `RightClickAction.CopyOrPaste`, whose paste-on-empty-selection is one stray
+   click away from running the clipboard in someone's production container.
+5. **The pane is one row of chrome now** (UI rule 10): status dot, status, shell box,
+   reconnect — and the terminal. The input `TextBox`, its `^C`/`^D` chips and the
+   Advanced-view-gated **Send** button are all gone, because a terminal that takes
+   keystrokes makes a box you retype them into a row of dock height spent on nothing.
+   That removes the exec pane from the Advanced view's list entirely; the F1 sheet is
+   where those gestures are documented, and it now carries five exec rows rather than
+   three.
+6. **The palette is theme-independent, and that is a constraint rather than a taste.**
+   `Styles/Theme.axaml` sets `SvcSystems.UI.TerminalColor{0,15}` (the app's own near-black
+   and off-white) and lifts `{4,12}` because xterm's `#000080` blue on a dark background
+   is unreadable and a colouring `ls` paints every directory with it. Everything else is
+   the stock xterm-256 table, which is what a script's colours are written against. It
+   does **not** follow the light/dark switch: the control caches a resolved foreground
+   brush inside each `FormattedText` and only clears that cache on a font change, so a
+   live theme swap would repaint the cell backgrounds and leave every glyph the old
+   colour. One dark terminal in both themes beats a half-swapped one.
+7. **A blank terminal is a state, not a pane** (UI rule 9). Until the first byte lands,
+   `IsStatusOverlayVisible` covers the black rectangle with the status — "Connecting…",
+   "No usable shell in app — tried /bin/bash, /bin/sh, /bin/ash", "Session ended" —
+   and then gets out of the way, because after that the scrollback is worth more and the
+   chrome row carries the state anyway. The demo cluster is unchanged: no `ClusterClient`,
+   so `Border.demoUnavailable` and nothing else.
+
+**A defect in the dependency, found here and not fixed here.** Reverse video with
+*default* colours does not invert. `TerminalControlModel.CreateStyleKey` swaps the
+foreground and background when `IsInverse()`, but the swapped values are the sentinels
+256/257 ("default fg"/"default bg"), and `TerminalControl.ResolveColorBrush` resolves
+either sentinel by the `isForeground` flag alone — so both halves land back where they
+started and `ESC[7m` renders as ordinary text. Measured, not inferred: on defaults it
+resolves to `fg=palette[15] bg=palette[0]`, which is exactly what un-inverted text
+resolves to, while the same `ESC[7m` after an explicit `ESC[37;40m` resolves to
+`fg=palette[0] bg=palette[7]` and does invert. So it is `top`'s header, `less`'s prompt,
+vim's status line and mc's menu bar that render unhighlighted — the whole default-colour
+case — and `cluster-tab-exec-fullscreen` shows it: the fixture emits the `ESC[7m` real
+`top` emits, deliberately, so the screenshot tells the truth and starts drawing a band by
+itself the day this is fixed. There is no app-side hook (`ResolveColorBrush` is private
+and the render surface is a private nested class), so the fix is upstream or in a
+vendored copy.
+
+**If it goes unmaintained** — v1.1.0, one maintainer, ~35 stars — the fallback is
+vendoring, and it is a real one rather than a comforting sentence: MIT, ~2 850 lines
+across ten files, with the emulation proper in XTerm.NET underneath.
+`shared/nimbusUi` is where it would go, since "a terminal control" can be described
+without naming Kubernetes (the membership test), and pgNimbus would then have one too.
+Do **not** vendor it pre-emptively: the copy stops receiving fixes the day it is made.
 
 ## The machine's own terminal ("open a terminal on this cluster")
 
@@ -2719,3 +2823,64 @@ YAML apply were not driven under the changed scheme; both are ordinary catalog r
 the same rebuilt list as the four that were. And the drive-through is manual: there is no
 automated Xvfb gesture test, so this evidence is a session's record, not a check that
 re-runs.
+
+
+**Exec terminal pass (FEAT-10):** the exec pane renders a real VT emulator instead of
+stripping ANSI, so the full-screen tools people exec in for work at all. See "The exec
+terminal" above for the seven rules, the upstream defect it found, and the vendoring
+fallback. New: a `SvcSystems.UI.Terminal` package reference (→ `XTerm.NET/1.0.15` →
+`Unicode.net`, `Wcwidth` — the graph the research predicted, exactly),
+`ExecTabViewModel` rewritten around `TerminalControlModel` (bytes in on the same 50 ms
+flush tick, `UserInput` bytes straight back to `StdIn`, the emulator's own cols/rows to
+`ResizeAsync`), `ExecView` down to one chrome row plus the terminal, four terminal
+palette resources in `Styles/Theme.axaml`, two `ExecCopy`/`ExecPaste` catalog rows
+(Ctrl+Shift+C/V — the docs golden file regenerated), and two new screenshot scenarios
+(`cluster-tab-exec-fullscreen`, `cluster-tab-exec-no-shell`). **Deleted**:
+`Terminal/TerminalOutputBuffer.cs`, 419 lines of hand-written C0/CSI/OSC parsing whose
+own doc-comment admitted it was "not a VT emulator — no addressable screen grid, no
+colour attributes and no alternate buffer". Core is untouched: the WebSocket, the
+channel-3 read and the bash→sh→ash probe are byte-for-byte what they were.
+
+**`vi`, `top` and `mc` were actually run — against a local PTY, not a cluster.** There
+is no live cluster in this container (Docker's daemon starts, but pulling `rancher/k3s`
+still dies on a 403 from `production.cloudfront.docker.com`), so the acceptance
+criterion was reached the only other way it can be: a scratch harness started `script
+-q -c <program> /dev/null`, pumped its stdout through the *same* model the exec pane
+feeds, wrote the control's `UserInput` bytes back to its stdin, and rendered the control
+with Skia. `top` drew its full screen with columns aligned; `vim -u NONE -c 'syntax on'`
+drew a YAML file with syntax colour, `~` filler and a status line, entered the alternate
+buffer, and took typed input (`iHELLO` inserted, i.e. keystrokes round-tripped into a
+real program); `mc` drew both panels, the box drawing, the menu bar and the F-key bar in
+colour. That proves everything except the transport, which is the half that did not
+change.
+
+**Verified this session**: `dotnet build KubeNimbus.slnx` with **0 warnings** (the
+pre-existing CS8425 in `AsyncMergeTests.cs` appears only on a from-scratch test-project
+build and is untouched); **190/190 Core TUnit** and **27/27 App TUnit**, 0 failed, 0
+skipped, both via `--project` (no sandbox, so the Core count is the unit-only subset —
+the cluster-gated tests return early); all **50** scenarios × both themes rendered (100
+PNGs), including the three exec ones; the linux-x64 NativeAOT publish with **no new
+warnings beyond the known DataGrid IL2104/IL3053** — the new package contributes none,
+which is what the research had claimed for 1.0.3 and now holds for 1.1.0 — and
+`--smoke-test` on that published binary under Xvfb (`SMOKE-OK main window rendered at
+1280x800 after 351 ms`, exit 0). The emulator's own behaviour was pinned by a headless
+probe rather than by argument: `Ctrl+C → 0x03`, `Ctrl+D → 0x04`, `Tab → 0x09`,
+`Up → ESC [ A`, `Enter → 0x0D`, every one `handled=true`; `ESC[2J ESC[H` clears and
+homes, `ESC[3;10H` places text at row 3 column 10, `ESC[?1049h/l` enters and leaves the
+alternate buffer and restores what was under it, and `ESC c` (what Reconnect sends)
+empties the buffer. The same probe is where the reverse-video defect and the split-UTF-8
+result above come from.
+
+**Not verified, and the transport is the whole of it.** No exec session has been opened
+against an API server with this pane: `ExecAsync`, the probe and `ResizeAsync` are
+unchanged code, but "unchanged" is an argument, not a run. First things to do on a
+machine with a sandbox: exec into `demo-shop/shop-web` and confirm the shell's prompt
+arrives and `vi` opens; drag the dock splitter and confirm the remote PTY follows (the
+resize is now the emulator's real geometry, and `stty size` inside the container is the
+check); reconnect into a session left inside `vi` and confirm the reset lands; and
+confirm Ctrl+C interrupts a `tail -f` rather than merely being marked handled. Nothing
+has been driven by hand in the running app either — the pane cannot be opened without a
+cluster, and the demo tab renders its unavailable notice instead — so focus-on-open, the
+right-click menu and Ctrl+Shift+C/V are verified by construction and by the headless
+probe, not by a mouse. And the reverse-video defect is upstream and unfixed; `top`'s
+header renders unhighlighted today.
