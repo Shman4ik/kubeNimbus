@@ -143,6 +143,14 @@ it as the GitHub Release body, so headings must match tags exactly
   hides can never make it pop back into a filtered list — and clearing the
   filter always gives you back the current state of everything, including
   objects that appeared or changed while it was on.
+- **Changing the shortcut modifier while the app is open is now covered by
+  automated tests.** Preferences → Shortcut modifier already applied without a
+  restart — the shortcuts, the `F1` cheat sheet and every tooltip switch between
+  `Ctrl` and `Cmd` immediately, and the modifier you switched away from stops
+  working — and that behaviour was checked by hand against the running app for
+  the first time. The tests are there so the half that would fail silently
+  cannot come back: a modifier you have turned off continuing to work looks
+  exactly like the setting doing nothing.
 
 ### Fixed
 
