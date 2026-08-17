@@ -93,6 +93,10 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-demo-list", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
     ("cluster-tab-demo-pod-detail", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetail(), height: 1000)),
     ("cluster-tab-demo-exec-unavailable", () => HostInMainWindow(ClusterTabScenarios.DemoExecUnavailable())),
+    // The CRD printer-column pair: the same Certificate list without and with the
+    // advanced view, which is where the CRD's own `priority: 1` columns live.
+    ("cluster-tab-crd-printer-columns", () => HostInMainWindow(ClusterTabScenarios.DemoCrdPrinterColumns())),
+    ("cluster-tab-crd-printer-columns-wide", () => HostInMainWindow(ClusterTabScenarios.DemoCrdPrinterColumnsWide())),
     ("cluster-tab-demo-scale-unavailable", () => HostInMainWindow(ClusterTabScenarios.DemoScaleUnavailable())),
     ("cluster-tab-demo-terminal-unavailable",
         () => HostInMainWindow(ClusterTabScenarios.DemoTerminalUnavailable())),

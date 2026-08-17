@@ -10,6 +10,15 @@ namespace KubeNimbus.App.ViewModels;
 /// Details); which of them apply to the selected kind is decided by
 /// <see cref="ResourceStatusSummary"/> and applied in
 /// <see cref="Views.ClusterTabView"/>'s code-behind.
+///
+/// <para>
+/// A CRD gets a second set on top of that: the columns it declares for itself in
+/// <c>additionalPrinterColumns</c>, landing in <see cref="PrinterCells"/>. Those
+/// replace the generic Status/Details pair rather than joining it, because they are
+/// the CRD author's own answer to the same question and kubectl shows no other.
+/// Built-in kinds never have any — they are not CustomResourceDefinitions — so
+/// nothing about a Pod, Deployment, Node or Event list changes.
+/// </para>
 /// </summary>
 public sealed partial class ResourceRowViewModel : ObservableObject
 {
@@ -75,6 +84,37 @@ public sealed partial class ResourceRowViewModel : ObservableObject
 
     private int _restarts;
     private DateTimeOffset? _lastRestartAt;
+
+    /// <summary>
+    /// The cells for the selected kind's CRD-declared printer columns, in the order
+    /// <see cref="ClusterTabViewModel.VisiblePrinterColumns"/> lists them. A fixed
+    /// array of small observables rather than a variable list, because the grid's
+    /// printer columns are declared in XAML with compiled bindings
+    /// (<c>{Binding PrinterCells[3].Text}</c>) — a DataGridColumn is outside the visual
+    /// tree, so building the columns in code would mean building their bindings in code
+    /// too, and a code-built binding is a reflection binding, which NativeAOT is exactly
+    /// what this repo cannot accept. Slots past the current column count stay empty and
+    /// their columns stay hidden.
+    /// </summary>
+    public PrinterCellViewModel[] PrinterCells { get; } =
+        [.. Enumerable.Range(0, PrinterCellCount).Select(_ => new PrinterCellViewModel())];
+
+    /// <summary>
+    /// How many CRD printer columns the list can draw at once. Above every real CRD
+    /// surveyed while building this: the widest found (KEDA's ScaledObject, eleven
+    /// declared) needs nine once its own Age column is folded into the list's.
+    /// </summary>
+    public const int PrinterCellCount = 10;
+
+    private IReadOnlyList<PrinterColumn> _printerColumns = [];
+
+    /// <summary>
+    /// The timestamps behind any <c>type: date</c> printer cells, so the shared age
+    /// timer can re-render them. Without this a "Last Run" or "Expires" column would
+    /// freeze at whatever it said when the last watch event arrived — the exact bug the
+    /// list's own Age column has a timer to avoid.
+    /// </summary>
+    private readonly DateTimeOffset?[] _printerDates = new DateTimeOffset?[PrinterCellCount];
 
     /// <summary>
     /// Measured CPU/memory for this row, when the kind has any (pods and nodes)
@@ -150,7 +190,40 @@ public sealed partial class ResourceRowViewModel : ObservableObject
         Details = summary.Details;
         _restarts = summary.Restarts;
         _lastRestartAt = summary.LastRestartAt;
+        RefreshPrinterCells();
         RefreshTimes();
+    }
+
+    /// <summary>
+    /// Points this row at the printer columns the selected kind declares. Called once
+    /// when the row is created and again whenever the set changes — which is the
+    /// advanced-view switch adding or removing the CRD's own <c>priority: 1</c>
+    /// columns, and nothing else. Re-evaluating is pure JSON reading over the object
+    /// the row already holds: no fetch, no watch restart, no lost state, which is what
+    /// keeps that switch a display switch.
+    /// </summary>
+    public void SetPrinterColumns(IReadOnlyList<PrinterColumn> columns)
+    {
+        _printerColumns = columns;
+        RefreshPrinterCells();
+    }
+
+    private void RefreshPrinterCells()
+    {
+        var now = DateTimeOffset.UtcNow;
+        for (var i = 0; i < PrinterCellCount; i++)
+        {
+            if (i >= _printerColumns.Count)
+            {
+                _printerDates[i] = null;
+                PrinterCells[i].Text = "";
+                continue;
+            }
+
+            var column = _printerColumns[i];
+            _printerDates[i] = PrinterColumns.DateValue(column, Resource.Raw);
+            PrinterCells[i].Text = PrinterColumns.Evaluate(column, Resource.Raw, now);
+        }
     }
 
     /// <summary>
@@ -160,6 +233,15 @@ public sealed partial class ResourceRowViewModel : ObservableObject
     /// people type into a search box is a name they half-remember. Namespace is in
     /// because "All namespaces" is the default and "demo-shop" is how you narrow it
     /// without leaving the list.
+    ///
+    /// <para>
+    /// A CRD's printer cells are out for the same reason the status is. They are the
+    /// same *kind* of content — "True", "Ready", "1.15.2", a replica count — so
+    /// including them would make one-letter queries match most of a list, and would
+    /// change what the box matches from kind to kind, which is worse than either
+    /// answer on its own. The identity fields are the ones that mean the same thing
+    /// everywhere.
+    /// </para>
     /// </summary>
     public bool Matches(string query) =>
         Name.Contains(query, StringComparison.OrdinalIgnoreCase)
@@ -183,6 +265,16 @@ public sealed partial class ResourceRowViewModel : ObservableObject
             : _lastRestartAt is { } last
                 ? $"{_restarts} ({RelativeTime.Compact(now - last)} ago)"
                 : $"{_restarts}";
+
+        // A CRD's `type: date` columns are ages too, and a watch event is not what
+        // makes them change either.
+        for (var i = 0; i < PrinterCellCount; i++)
+        {
+            if (_printerDates[i] is { } at)
+            {
+                PrinterCells[i].Text = RelativeTime.Compact(now - at);
+            }
+        }
     }
 
     /// <summary>
@@ -222,30 +314,13 @@ public sealed partial class ResourceRowViewModel : ObservableObject
 }
 
 /// <summary>
-/// kubectl's AGE column, at one unit instead of two. kubectl's own
-/// <c>duration.HumanDuration</c> mixes units below its thresholds ("3d2h",
-/// "5m30s"); in a list two hundred rows deep that trailing unit is noise that
-/// differs on every row and stops the column lining up, and the exact timestamp
-/// is one tooltip away. If exact kubectl parity ever matters more than that,
-/// this is the one function to change.
+/// One CRD printer-column cell on one row. A tiny observable of its own rather than a
+/// string on the row, because the grid's printer columns are fixed slots bound with
+/// compiled bindings (<c>{Binding PrinterCells[2].Text}</c>): indexing an array is not
+/// itself observable, so the change notification has to come from the element.
 /// </summary>
-internal static class RelativeTime
+public sealed partial class PrinterCellViewModel : ObservableObject
 {
-    public static string Compact(TimeSpan elapsed)
-    {
-        // Clock skew, or a creationTimestamp in the future: "0s", never "-3s".
-        if (elapsed.Ticks <= 0)
-        {
-            return "0s";
-        }
-
-        return elapsed switch
-        {
-            { TotalSeconds: < 60 } => $"{(int)elapsed.TotalSeconds}s",
-            { TotalMinutes: < 60 } => $"{(int)elapsed.TotalMinutes}m",
-            { TotalHours: < 24 } => $"{(int)elapsed.TotalHours}h",
-            { TotalDays: < 365 } => $"{(int)elapsed.TotalDays}d",
-            _ => $"{(int)(elapsed.TotalDays / 365)}y",
-        };
-    }
+    [ObservableProperty]
+    private string _text = "";
 }

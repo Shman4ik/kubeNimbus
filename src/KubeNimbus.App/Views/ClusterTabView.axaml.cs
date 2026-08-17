@@ -7,6 +7,7 @@ using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using KubeNimbus.App.ViewModels;
+using KubeNimbus.Core;
 
 namespace KubeNimbus.App.Views;
 
@@ -18,9 +19,41 @@ public partial class ClusterTabView : UserControl
 
     private ClusterTabViewModel? _subscribed;
 
+    /// <summary>
+    /// The initial Header the XAML gives every CRD printer-column slot. It is a
+    /// sentinel, not a label: the slots are collected by it once, in the constructor,
+    /// and their headers are overwritten with the CRD's own column names from then on.
+    /// Header-matching is how every other column here is found (indices would silently
+    /// hide the wrong one after a reorder), and this keeps that property for columns
+    /// whose header is not a constant.
+    /// </summary>
+    private const string PrinterSlotHeader = "crd-printer-slot";
+
+    private readonly List<DataGridColumn> _printerSlots = [];
+
+    /// <summary>
+    /// The grid's own columns — everything except the CRD printer slots.
+    ///
+    /// <para>
+    /// Every <c>Apply*Columns</c> method below finds its columns by header text, and a
+    /// printer slot's header is a CRD author's string: cert-manager calls one of its
+    /// Certificate columns <b>Ready</b>, which the first cut of this matched as the
+    /// grid's own Ready column and promptly hid, so the CRD's most important column was
+    /// silently missing from the very list this feature exists to fix. The same trap is
+    /// one column name away for Status, Details, Restarts, CPU, Memory and Cluster. The
+    /// slots are therefore excluded from every header match, and only
+    /// <see cref="ApplyPrinterColumns"/> — which addresses them positionally — ever
+    /// touches them.
+    /// </para>
+    /// </summary>
+    private IEnumerable<DataGridColumn> FixedColumns =>
+        ResourceGrid.Columns.Where(c => !_printerSlots.Contains(c));
+
     public ClusterTabView()
     {
         InitializeComponent();
+
+        _printerSlots.AddRange(ResourceGrid.Columns.Where(c => c.Header as string == PrinterSlotHeader));
 
         // DataGrid's own class handler consumes Enter (commit-edit / move-down)
         // before a bubble-routed instance handler on the same element would ever
@@ -57,6 +90,7 @@ public partial class ClusterTabView : UserControl
         ApplyDockState();
         ApplyMetricsColumns();
         ApplyFleetColumn();
+        ApplyPrinterColumns();
         ApplySummaryColumns();
         ApplySidebarVisibility();
     }
@@ -121,6 +155,21 @@ public partial class ClusterTabView : UserControl
                  or nameof(ClusterTabViewModel.IsAdvancedView))
         {
             ApplyMetricsColumns();
+
+            // The advanced view is also this app's `-o wide`: it adds and removes a
+            // CRD's own priority-1 columns, so the printer slots (and, through them,
+            // whether the generic Status column is suppressed) have to follow it.
+            ApplyPrinterColumns();
+            ApplySummaryColumns();
+        }
+        else if (e.PropertyName is nameof(ClusterTabViewModel.PrinterColumns)
+                 or nameof(ClusterTabViewModel.VisiblePrinterColumns))
+        {
+            // The set arrives asynchronously the first time a CRD kind is opened (one
+            // GET of its CustomResourceDefinition), so this is the moment the list stops
+            // showing the generic Status column and starts showing the CRD's own.
+            ApplyPrinterColumns();
+            ApplySummaryColumns();
         }
         else if (e.PropertyName == nameof(ClusterTabViewModel.IsFleetView))
         {
@@ -128,6 +177,7 @@ public partial class ClusterTabView : UserControl
         }
         else if (e.PropertyName == nameof(ClusterTabViewModel.SelectedKind))
         {
+            ApplyPrinterColumns();
             ApplySummaryColumns();
         }
         else if (e.PropertyName == nameof(ClusterTabViewModel.IsSidebarVisible))
@@ -171,7 +221,7 @@ public partial class ClusterTabView : UserControl
     private void ApplyMetricsColumns()
     {
         var visible = Vm?.AreUsageColumnsVisible == true;
-        foreach (var column in ResourceGrid.Columns)
+        foreach (var column in FixedColumns)
         {
             if (column.Header is "CPU" or "Memory")
             {
@@ -192,16 +242,65 @@ public partial class ClusterTabView : UserControl
     private void ApplySummaryColumns()
     {
         var descriptor = Vm?.SelectedKind?.Descriptor;
-        foreach (var column in ResourceGrid.Columns)
+
+        // A CRD that declares its own printer columns has already answered the question
+        // Status and Details exist to answer, and kubectl shows no generic status
+        // beside them — so the two step aside rather than doubling up in a list that is
+        // already tight on width (UI rule 14). The 28px health dot stays: it is not one
+        // of kubectl's columns, it costs almost nothing, and it is the only thing
+        // carrying ResourceStatusSummary's health classification once the text column
+        // is gone. Built-in kinds never reach this branch — they are not CRDs, so
+        // VisiblePrinterColumns is always empty for them.
+        var hasPrinterColumns = Vm?.VisiblePrinterColumns.Count > 0;
+
+        foreach (var column in FixedColumns)
         {
             column.IsVisible = column.Header switch
             {
                 "Ready" => ResourceStatusSummary.ShowsReady(descriptor),
                 "Restarts" => ResourceStatusSummary.ShowsRestarts(descriptor),
-                "Details" => ResourceStatusSummary.ShowsDetails(descriptor),
-                "Status" or "" => ResourceStatusSummary.ShowsStatus(descriptor),
+                "Details" => !hasPrinterColumns && ResourceStatusSummary.ShowsDetails(descriptor),
+                "Status" => !hasPrinterColumns && ResourceStatusSummary.ShowsStatus(descriptor),
+                "" => ResourceStatusSummary.ShowsStatus(descriptor),
                 _ => column.IsVisible,
             };
+        }
+    }
+
+    /// <summary>
+    /// Labels and shows the grid's CRD printer-column slots from
+    /// <see cref="ClusterTabViewModel.VisiblePrinterColumns"/>, and hides the rest.
+    /// Same code-behind reason as every other column here — a DataGridColumn is outside
+    /// the visual tree, so it inherits no DataContext and cannot bind its own header or
+    /// visibility.
+    ///
+    /// <para>
+    /// Note the ordering constraint: this must run before <see cref="ApplySummaryColumns"/>
+    /// on every path, because that method reads the same set to decide whether the
+    /// generic Status column steps aside. They are called as a pair for that reason.
+    /// </para>
+    /// </summary>
+    private void ApplyPrinterColumns()
+    {
+        var columns = Vm?.VisiblePrinterColumns ?? [];
+
+        for (var i = 0; i < _printerSlots.Count; i++)
+        {
+            var slot = _printerSlots[i];
+            if (i < columns.Count)
+            {
+                // A plain string, not a TextBlock carrying the CRD's `description` as a
+                // tooltip: DataGridColumn is not a Control, so ToolTip.SetTip does not
+                // apply to it, and a Control header would opt the cell out of Fluent's
+                // own column-header template. The descriptions are short and mostly
+                // restate the name; the column header is not worth a styling regression.
+                slot.Header = columns[i].Name;
+                slot.IsVisible = true;
+            }
+            else
+            {
+                slot.IsVisible = false;
+            }
         }
     }
 
@@ -212,7 +311,7 @@ public partial class ClusterTabView : UserControl
     private void ApplyFleetColumn()
     {
         var visible = Vm?.IsFleetView == true;
-        foreach (var column in ResourceGrid.Columns)
+        foreach (var column in FixedColumns)
         {
             if (column.Header is "Cluster")
             {

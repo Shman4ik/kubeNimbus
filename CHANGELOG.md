@@ -14,6 +14,20 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Added
 
+- **Custom resources now show the columns their CRD asks for.** A
+  CustomResourceDefinition declares what a list of its objects should show —
+  cert-manager's Certificates want READY and SECRET, Flux's Kustomizations want
+  READY and STATUS, an Argo Rollout wants its replica counts — and `kubectl get`
+  has always honoured that. kubeNimbus showed all of them the same generic Status
+  column; now it shows the same columns `kubectl get <crd>` does, resolved live
+  from each object as the watch updates it. Turning on the advanced view is this
+  list's `-o wide`: it adds the columns the CRD itself marked as lower priority.
+  Nothing about built-in kinds changes — Pods, Deployments, Nodes and Events keep
+  exactly the columns they had. A CRD that declares no columns, a resource served
+  by an aggregated API, and a cluster where you cannot read CRDs all keep today's
+  list rather than showing an error. The demo cluster gained a set of cert-manager
+  Certificates so this is visible with no cluster at all.
+
 - **A real terminal in the exec pane.** Exec now runs a full VT emulator instead
   of stripping escape codes, so the tools people actually exec in for work:
   `vi`, `top`, `htop`, `mc`, `less` and anything else that paints a screen draw

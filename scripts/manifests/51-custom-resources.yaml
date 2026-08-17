@@ -1,10 +1,18 @@
 # Instances of the sandbox CRDs. Applied after the CRDs are Established
 # (sandbox-up waits), otherwise the API server has no endpoint for them yet.
+#
+# Between them these produce every printer-column state the app has to render:
+# a resolved string / integer / boolean, a priority-1 column that only appears in
+# the advanced view, a condition filter, a `type: date` column that is not the
+# creation timestamp, a declared Age (folded into the list's own), a column whose
+# path resolves to nothing, and a CRD that declares no columns at all.
 apiVersion: shop.kubenimbus.io/v1
 kind: Widget
 metadata:
   name: blue-widget
   namespace: demo-shop
+  labels:
+    shop.kubenimbus.io/colour: blue
 spec:
   sku: WDG-0001
   price: 1299
@@ -15,10 +23,24 @@ kind: Widget
 metadata:
   name: red-widget
   namespace: demo-shop
+  labels:
+    shop.kubenimbus.io/colour: red
 spec:
   sku: WDG-0002
   price: 899
   inStock: false
+---
+# No colour label: the priority-1 Colour column resolves to nothing on this row,
+# which must be an empty cell beside two populated ones.
+apiVersion: shop.kubenimbus.io/v1
+kind: Widget
+metadata:
+  name: unlabelled-widget
+  namespace: demo-shop
+spec:
+  sku: WDG-0003
+  price: 450
+  inStock: true
 ---
 apiVersion: factory.kubenimbus.io/v1beta1
 kind: Widget
@@ -36,3 +58,38 @@ metadata:
 spec:
   schedule: "0 2 * * *"
   destination: s3://sandbox-backups/nightly
+status:
+  itemCount: 412
+  lastRunTime: "2026-08-16T02:00:00Z"
+  conditions:
+    - type: Ready
+      status: "True"
+      message: Last backup completed successfully
+    - type: Running
+      status: "False"
+      message: Idle
+---
+# Not ready, and never run: the Ready cell says False and the "Last run" date cell
+# resolves to nothing, on the same row.
+apiVersion: demo.kubenimbus.io/v1
+kind: Backup
+metadata:
+  name: weekly-offsite
+spec:
+  schedule: "0 4 * * 0"
+  destination: s3://sandbox-backups/weekly
+status:
+  itemCount: 0
+  conditions:
+    - type: Ready
+      status: "False"
+      message: No completed run yet
+---
+# No status at all — every status-backed column on this row is an empty cell.
+apiVersion: demo.kubenimbus.io/v1
+kind: Backup
+metadata:
+  name: adhoc-pending
+spec:
+  schedule: "@daily"
+  destination: s3://sandbox-backups/adhoc

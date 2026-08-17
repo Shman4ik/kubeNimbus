@@ -364,7 +364,9 @@ Three rules about it:
    the column `MinWidth`s were re-cut to match (Name 136, Status 140, Ready 56,
    Restarts 78, CPU 98, Memory 106, sparklines 34). Check `cluster-tab-advanced-view`
    at its rendered 1280px, which is narrower than most real windows and is where this
-   fails first.
+   fails first. A CRD's own printer columns are a *variable* number of columns on that
+   same fixed width, and their answer to this is kubectl's own `priority` field rather
+   than another re-cut — see "CRD printer columns".
 
 15. **The two apps' command bars read the same left to right.** Not identical — the
    flexible middle column carries kubeNimbus's cluster tabs and pgNimbus's centred
@@ -506,8 +508,10 @@ Six rules:
    (`FixtureData.CreateOfflineClient`, for scenarios that want the *failed-connection*
    paths), and it is exactly the thing the app must not copy.
 3. **One dataset, not two.** `src/KubeNimbus.App/Demo/` owns it — `DemoData` (objects,
-   catalog, sidebar, Helm), `DemoLogs` (canned streams), `DemoUsage` (replayed metric
-   polls) — and `tools/Screenshot/FixtureData.cs` is now a passthrough to it. What a
+   catalog, sidebar, Helm, and the one CRD whose `additionalPrinterColumns` the demo
+   list draws — `crds.json` is a real-shaped `CustomResourceDefinition`, read through
+   the same `PrinterColumns.Parse` a live cluster's GET goes through), `DemoLogs`
+   (canned streams), `DemoUsage` (replayed metric polls) — and `tools/Screenshot/FixtureData.cs` is now a passthrough to it. What a
    screenshot shows and what a user clicking "Explore demo cluster" sees cannot drift
    apart. The JSON is an `EmbeddedResource` with an explicit `LogicalName`
    (`Demo.<file>.json`), same reasoning as `Yaml-Mode.xshd`: the lookup must not depend
@@ -663,7 +667,9 @@ explanation), because people who use both should find it where they left it.
 
 Off hides: the CPU/Memory columns and their sparklines, pod detail's Usage tab,
 the fleet toggle and Cluster column, the log toolbar's Wrap/Copy/Download, YAML
-force-apply, the sidebar's kind-count badges, and the Helm/RBAC palette entries.
+force-apply, the sidebar's kind-count badges, the Helm/RBAC palette entries, and a
+CRD's own `priority: 1` printer columns — that last one is the switch acting as
+kubectl's `-o wide`, which is the closest thing it has to a definition.
 (The "Following &lt;container&gt;" caption used to ride the switch too; it is gone
 outright — the container strip names the container it is streaming and the log
 pane's own placeholder states say what the stream is doing, so it was a row of
@@ -909,6 +915,9 @@ the App layer.
   (`ResourceDescriptor.AllowsVerb` answers true): descriptors built by hand — the
   well-known statics, the demo catalog, fixtures — carry none, and reading that as
   a prohibition would silently disable a feature everywhere except a live cluster.
+  Discovery says nothing about how a kind should be *printed*, which is why a CRD's
+  own columns come from a separate GET of the CustomResourceDefinition — see "CRD
+  printer columns" below.
 - **Server-side apply** (`ClusterClient.Dynamic.cs`) PATCHes with
   `Content-Type: application/apply-patch+yaml`; the body is JSON (valid JSON
   is valid YAML, so the API server's apply decoder accepts it) produced by
@@ -927,6 +936,93 @@ the App layer.
   websocket port-forward channel framing doesn't support multiplexing several
   local clients over one upstream connection) and pumps bytes with the
   channel-byte-prefix framing by hand.
+
+## CRD printer columns
+
+A CustomResourceDefinition declares the columns it wants a list of its objects to have
+(`spec.versions[].additionalPrinterColumns`), and kubectl honours them: `kubectl get
+certificates` prints READY / SECRET / AGE, not a generic status. This app printed the
+same generic Status column for every one of the ~70 CRD kinds a real cluster carries,
+which is the weakest surface in a client whose third hard rule is that CRDs are
+first-class. `PrinterColumns.cs` + `SimpleJsonPath.cs` + `ClusterClient.PrinterColumns.cs`
+(Core) read and evaluate them; `ResourceRowViewModel.PrinterCells` and
+`ClusterTabView.ApplyPrinterColumns` render them.
+
+**`ResourceStatusSummary` still owns every built-in kind, and the mechanism is the API,
+not a list.** A CRD's own name is required to be exactly `<plural>.<group>` and its
+group is required to be non-empty, so a kind names the object to fetch with no search —
+and nothing in the core group can be a CRD at all. A built-in, an aggregated API
+(`metrics.k8s.io` is not a CRD) and a user with no read access to `apiextensions.k8s.io`
+all come back empty from the same GET, and an empty set is exactly today's list. So the
+built-ins are not *excluded* from this; there is simply nothing to find for them.
+
+Seven things are load-bearing:
+
+1. **One GET per kind, lazily, cached per tab — not a list at connect.** A CRD object
+   carries its whole OpenAPI schema; listing them on a cluster with cert-manager, Argo
+   and Istio installed is tens of megabytes fetched to answer a question about kinds
+   nobody may open. The negative answer is cached too, or reselecting a built-in kind
+   would cost a 404 every time.
+2. **Asking the API server for a Table was considered and rejected.** `Accept:
+   application/json;as=Table` is what kubectl does and would give byte-identical columns
+   for CRDs *and* built-ins — but a Table row is rendered strings with no object behind
+   it, and this app's list is a **watch**, feeding the informer, the YAML editor, the row
+   actions and the status pill from the object itself. It would also take the built-ins
+   away from `ResourceStatusSummary`, which this change is not allowed to do.
+3. **The JSONPath subset includes the condition filter, and that is the point.**
+   `.status.conditions[?(@.type=="Ready")].status` is how cert-manager, Flux, KEDA *and*
+   Argo all spell their Ready column, so a subset without it would blank the single
+   most-wanted column on the most-installed CRDs. Supported: dotted fields, `['key']`
+   (the only way to reach a key containing a dot), `[n]`, `[*]`, and `==`/`!=` filters.
+   Anything else resolves to **no match**, which is the same outcome as an absent field:
+   an empty cell, never an exception on a watch tick. Only the *first* match is used,
+   matching the API server's own `tableconvertor` ("as we only support simple JSON path,
+   we can assume to have only one result").
+4. **`priority` is wired to the Advanced view.** kubectl shows `priority: 0` in the
+   default table and the rest only under `-o wide`; the CRD author has therefore already
+   marked which columns matter less, and this app already has one switch whose whole job
+   is "show me the busier layout". That is the answer to UI rule 14's width problem, and
+   it is a real one: KEDA declares **eleven** columns for a ScaledObject. Turning the
+   switch re-evaluates cells over objects the rows already hold — no refetch, no watch
+   restart, no lost selection, so it stays a display switch.
+5. **A declared `Age` over `.metadata.creationTimestamp` is dropped**, because the
+   list's own Age column *is* that column — recomputed live off the shared timer, with
+   the exact timestamp as a tooltip. An `Age` pointing anywhere else is kept. Any other
+   `type: date` column is re-rendered by that same timer (`PrinterColumns.DateValue`);
+   without it a "Last run" or "Expires" cell would freeze until the next watch event.
+6. **The generic Status and Details columns step aside when printer columns are
+   present** — kubectl shows no generic status beside them, and doubling up costs width
+   the list does not have. The 28px health dot stays: it is not one of kubectl's
+   columns, and it is what still carries `ResourceStatusSummary`'s classification.
+7. **In fleet mode the columns are the tab's own cluster's, and every row is evaluated
+   against them.** A table can only have one set of headers, so they come from the
+   cluster whose sidebar the kind was selected in; a member serving an older version
+   with a different shape resolves to blank cells rather than to a wrong value — the
+   same outcome an absent field already has.
+
+Two implementation traps, both hit while building this:
+
+- **The grid's printer columns are ten fixed slots declared in XAML, not columns built
+  in code.** A `DataGridColumn` is outside the visual tree, so a code-built column needs
+  a code-built binding — and a code-built binding is a *reflection* binding, which is
+  exactly what NativeAOT will not ship. The cells are therefore
+  `{Binding PrinterCells[3].Text}` compiled bindings against a fixed array of tiny
+  observables (indexing an array is not itself observable, which is why each cell is an
+  object rather than a string). Ten is above every real CRD surveyed; the surplus is
+  dropped in declaration order.
+- **A printer slot's header is a CRD author's string, and it collided.** Every
+  `Apply*Columns` method finds its columns by header text, and cert-manager calls one of
+  its Certificate columns **Ready** — so the first cut renamed a slot to "Ready",
+  `ApplySummaryColumns` matched it as the grid's own Ready column and hid it, and the
+  CRD's most important column was silently missing from the very list this feature
+  exists to fix. Only the screenshot showed it. `ClusterTabView.FixedColumns` excludes
+  the slots from every header match now; the same trap is one column name away for
+  Status, Details, Restarts, CPU, Memory and Cluster.
+
+The sandbox produces every one of these states — see `scripts/manifests/50-crds.yaml`
+(the shop Widget's mixed types plus a priority-1 column and one path that resolves to
+nothing, the demo Backup's condition filter and non-creationTimestamp date, and the
+factory Widget deliberately declaring **none**, which is the degradation path).
 
 ## Mutating workload actions (scale, rollout restart, delete)
 
@@ -1399,7 +1495,11 @@ StatefulSet with PVCs (Storage), a CronJob firing every minute (a visibly live
 watch), a whole `demo-broken` namespace of CrashLoopBackOff/ImagePullBackOff/
 unschedulable/never-Ready pods (the status pills and empty/error states of UI
 rule 9), three CRDs **two of which share the Kind `Widget` in different API
-groups** (the sidebar's group-aware filter), RBAC subjects including a dangling
+groups** (the sidebar's group-aware filter) whose `additionalPrinterColumns` between
+them produce every column state the list can render — mixed scalar types, a
+`priority: 1` column, a condition filter, a `type: date` that is not the creation
+timestamp, a declared `Age`, a path that resolves to nothing, and one CRD declaring
+**no** columns at all (the degradation path), RBAC subjects including a dangling
 binding, a `resourceNames`-narrowed rule and a ClusterRole bound by a *RoleBinding*
 (the access review, both directions), and a synthetic three-revision Helm release
 (history paging — k3s's own traefik releases are real but sit at revision 1).
@@ -2884,3 +2984,72 @@ cluster, and the demo tab renders its unavailable notice instead — so focus-on
 right-click menu and Ctrl+Shift+C/V are verified by construction and by the headless
 probe, not by a mouse. And the reverse-video defect is upstream and unfixed; `top`'s
 header renders unhighlighted today.
+
+**CRD printer-columns pass (FEAT-2):** a CRD list now wears the columns the CRD itself
+declares, so `kubectl get certificates` and this app's Certificate list show the same
+thing. See "CRD printer columns" above for the seven rules and the two traps. New:
+`PrinterColumns.cs`, `SimpleJsonPath.cs`, `ClusterClient.PrinterColumns.cs` and
+`RelativeTime.cs` in Core (+ 39 `PrinterColumnTests`), `PrinterCells` on
+`ResourceRowViewModel` with ten XAML-declared slot columns and
+`ClusterTabView.ApplyPrinterColumns` (+ 10 `ClusterTabPrinterColumnTests`), a
+cert-manager CRD and five Certificates in the demo dataset, printer columns on two of
+the three sandbox CRDs, and two screenshot scenarios
+(`cluster-tab-crd-printer-columns{,-wide}`). `RelativeTime` moved from beside the list
+row into Core because a `type: date` column is an age too, and Core is where "format a
+duration" belongs; nothing else about it changed.
+
+**The negative half of the acceptance criterion was measured, not argued.** "Built-in
+kinds are untouched" is the easiest thing here to break silently, so the whole harness
+was rendered from a worktree at the parent commit and diffed byte-for-byte against this
+one: **all 102 pre-existing PNGs are identical**, and the only new files are the four
+this pass adds. That covers every list, inspector and shell scenario in both themes.
+
+**The header collision is the bug worth remembering**, and only the screenshot found it.
+A printer slot's header becomes a CRD author's string, and cert-manager calls one of its
+Certificate columns **Ready** — which `ApplySummaryColumns` then matched as the grid's
+own Ready column and hid, so the most important column on the list this feature exists
+to fix was silently missing. `ClusterTabView.FixedColumns` now excludes the slots from
+every header match. The same trap sits one column name away from Status, Details,
+Restarts, CPU, Memory and Cluster.
+
+**Verified this session**: `dotnet build KubeNimbus.slnx` with **0 warnings**;
+**229/229 Core TUnit** and **37/37 App TUnit**, 0 failed, 0 skipped, both via
+`--project` (no sandbox here, so the Core count is the unit-only subset — the
+cluster-gated tests return early); all **53** scenarios × both themes rendered (106
+PNGs), including the two new ones; the byte-for-byte baseline diff above; the linux-x64
+NativeAOT publish with no new warnings beyond the known DataGrid IL2104/IL3053; and
+`--smoke-test` on that published binary under Xvfb (`SMOKE-OK main window rendered at
+1280x800 after 423 ms`, exit 0).
+
+**And `GetPrinterColumnsAsync` was actually driven over HTTP**, which the unit tests do
+not do: a scratch harness stood a `HttpListener` up as an API server and connected a
+real `ClusterClient` to it through a real kubeconfig. It asked for exactly
+`/apis/apiextensions.k8s.io/v1/customresourcedefinitions/certificates.cert-manager.io`
+and parsed the response into `[Ready, Secret, Issuer, Age]`; a **404**, a **403** and a
+**500 returning HTML** each came back with zero columns and no exception; and a
+core-group descriptor (`Pod`) made **no request at all**. That is the degradation
+contract this feature rests on, observed rather than reasoned about.
+
+**Not verified, and the live cluster is the whole of it.** No sandbox came up —
+`dockerd` starts here but every registry is blocked by this session's egress policy
+(Docker Hub's blob CDN answers 403, `registry.k8s.io` answers 403 on the manifest HEAD),
+so the acceptance criterion's own wording — *a CRD-heavy cluster shows the same columns
+`kubectl get` does* — has been reached against the demo dataset and a stand-in server,
+never against a real API server serving a real CRD. First things to do on a machine with
+a sandbox, in order: `kubectl get widgets.shop.kubenimbus.io -n demo-shop` and
+`kubectl get backups` beside the app's own lists and compare column for column,
+including the `-o wide` columns against the advanced view; confirm the Backup list's
+"Last run" cell ticks on its own (it rides the shared age timer, which no test drives);
+confirm the factory Widget — which declares no columns — still lists exactly as it did
+before; and check a cluster with a real cert-manager or Flux installed, where the
+condition-filter paths meet objects this repo did not write. Nothing has been driven by
+hand in the running app either: the two screenshots are the whole of the visual
+evidence, and a CRD with enough priority-0 columns to need horizontal scroll has not
+been looked at on screen.
+
+**One thing deliberately left**: the generated `design/screenshots/*.png` were not
+regenerated. They differ from a fresh render today, but they differ at the parent commit
+too — the Age column is a function of the real clock while the rest of the fixture is
+pinned to `FixtureNow`, so those files drift by themselves. Nothing this pass changes
+appears in any of them (the baseline diff above says so), and regenerating them would
+commit a date rather than a change.

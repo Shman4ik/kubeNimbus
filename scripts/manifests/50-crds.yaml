@@ -32,6 +32,13 @@ spec:
               type: object
               properties:
                 phase: { type: string }
+      # kubeNimbus drives the list's columns from these, exactly as kubectl does
+      # (see CLAUDE.md, "CRD printer columns"). Deliberately mixed: a string, an
+      # integer, a boolean, and one at priority 1 — which only appears with
+      # `kubectl get -o wide`, i.e. only in the app's advanced view. `Phase` reads
+      # a status subresource this manifest cannot write, so it also produces the
+      # "declared column that resolves to nothing" state, which must render as an
+      # empty cell rather than as an error.
       additionalPrinterColumns:
         - name: SKU
           type: string
@@ -39,6 +46,17 @@ spec:
         - name: Phase
           type: string
           jsonPath: .status.phase
+        - name: Price
+          type: integer
+          jsonPath: .spec.price
+        - name: In stock
+          type: boolean
+          jsonPath: .spec.inStock
+        - name: Colour
+          type: string
+          priority: 1
+          description: The colour label, only interesting in a wide listing
+          jsonPath: .metadata.labels['shop.kubenimbus.io/colour']
       subresources:
         status: {}
 ---
@@ -55,6 +73,10 @@ spec:
     kind: Widget
     shortNames: ["fwdg"]
   versions:
+    # No additionalPrinterColumns on purpose: this is the degradation path. A CRD
+    # that declares none must list exactly the way it did before printer columns
+    # existed — Namespace/Name/Status/Age, with ResourceStatusSummary's generic
+    # Status column back in place.
     - name: v1beta1
       served: true
       storage: true
@@ -93,3 +115,44 @@ spec:
               properties:
                 schedule: { type: string }
                 destination: { type: string }
+            status:
+              type: object
+              properties:
+                itemCount: { type: integer }
+                lastRunTime: { type: string, format: date-time }
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type: { type: string }
+                      status: { type: string }
+                      message: { type: string }
+      # This CRD has no `status` subresource, which is what lets 51-custom-resources
+      # write a real status — so it is the sandbox's producer for the two column
+      # shapes nothing else exercises: a condition filter
+      # (`[?(@.type=="Ready")]`, how cert-manager/Flux/KEDA/Argo all spell Ready)
+      # and a `type: date` column that is NOT metadata.creationTimestamp, which the
+      # list has to re-render off its shared age timer rather than only on a watch
+      # event. The declared Age is the third: kubeNimbus folds it into the list's
+      # own live Age column instead of drawing two.
+      additionalPrinterColumns:
+        - name: Ready
+          type: string
+          jsonPath: .status.conditions[?(@.type=="Ready")].status
+        - name: Schedule
+          type: string
+          jsonPath: .spec.schedule
+        - name: Items
+          type: integer
+          jsonPath: .status.itemCount
+        - name: Last run
+          type: date
+          jsonPath: .status.lastRunTime
+        - name: Destination
+          type: string
+          priority: 1
+          jsonPath: .spec.destination
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
