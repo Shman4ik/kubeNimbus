@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text;
 using System.Text.Json;
 
@@ -64,6 +65,11 @@ public sealed class ResourceDiff
         "metadata.generation",
     ];
 
+    /// <summary>The same three fields as the keys they are under <c>metadata</c>, so the
+    /// text diff and the field diff cannot start hiding different things.</summary>
+    private static readonly string[] BookkeepingMetadataKeys =
+        [.. BookkeepingPaths.Select(p => p["metadata.".Length..])];
+
     private ResourceDiff(IReadOnlyList<ResourceChange> changes, int totalChanges, int hiddenBookkeepingCount, bool isCreate)
     {
         Changes = changes;
@@ -116,6 +122,65 @@ public sealed class ResourceDiff
             total,
             hidden,
             isCreate);
+    }
+
+    /// <summary>
+    /// One side of a manifest as the text diff reads it: the object as YAML, with the
+    /// three server-bookkeeping fields removed. Null — the object does not exist yet —
+    /// is an empty document, which is what makes a create read as an all-added diff.
+    /// </summary>
+    /// <remarks>
+    /// The same three fields the field diff hides, and for a stronger reason here:
+    /// <c>metadata.managedFields</c> is routinely a third of a real object's serialized
+    /// length and changes on every apply, so a text diff over the raw documents would
+    /// open on the one section nobody wants to read. What was removed is still counted
+    /// and stated by the panel's footnote.
+    /// </remarks>
+    public static string ToDiffableYaml(JsonElement? value)
+    {
+        if (value is not { } element || element.ValueKind == JsonValueKind.Null || element.ValueKind == JsonValueKind.Undefined)
+        {
+            return "";
+        }
+
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            return YamlJson.ToYamlString(element);
+        }
+
+        // Utf8JsonWriter + JsonElement.WriteTo copies every kept subtree verbatim, with no
+        // reflection and no intermediate model — the same technique DynamicResource uses
+        // to inject kind/apiVersion.
+        var buffer = new ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            foreach (var property in element.EnumerateObject())
+            {
+                if (property.NameEquals("metadata") && property.Value.ValueKind == JsonValueKind.Object)
+                {
+                    writer.WritePropertyName("metadata");
+                    writer.WriteStartObject();
+                    foreach (var meta in property.Value.EnumerateObject())
+                    {
+                        if (!BookkeepingMetadataKeys.Contains(meta.Name, StringComparer.Ordinal))
+                        {
+                            meta.WriteTo(writer);
+                        }
+                    }
+
+                    writer.WriteEndObject();
+                    continue;
+                }
+
+                property.WriteTo(writer);
+            }
+
+            writer.WriteEndObject();
+        }
+
+        using var document = JsonDocument.Parse(buffer.WrittenMemory);
+        return YamlJson.ToYamlString(document.RootElement);
     }
 
     private static void Compare(string path, JsonElement before, JsonElement after, List<ResourceChange> sink, ref int hidden)
@@ -400,9 +465,11 @@ public sealed class ResourceDiff
 }
 
 /// <summary>
-/// The result of a server-side dry-run apply: what would change, and the object the
-/// server says it would end up with. The object is kept because the diff is a
-/// rendering of it — anything that later wants the whole previewed manifest (a
-/// side-by-side view, a copy button) has it without a second round trip.
+/// The result of a server-side dry-run apply: what would change, the object the server
+/// says it would end up with, and the object as it is now. Both documents are kept
+/// because the panel renders them as a line diff — the field-level
+/// <see cref="ResourceDiff"/> is the semantic summary of the same pair, and neither can
+/// be recomputed from the other without a second round trip.
 /// </summary>
-public sealed record ApplyPreview(ResourceDiff Diff, DynamicResource Previewed);
+/// <param name="Live">Null when the object does not exist yet, so the apply would create it.</param>
+public sealed record ApplyPreview(ResourceDiff Diff, DynamicResource Previewed, DynamicResource? Live);

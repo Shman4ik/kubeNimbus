@@ -187,7 +187,7 @@ public sealed partial class ClusterClient
 
         using var doc = JsonDocument.Parse(body);
         var previewed = DynamicResource.FromListItem(doc.RootElement, descriptor);
-        return new ApplyPreview(ResourceDiff.Between(live?.Raw, previewed.Raw), previewed);
+        return new ApplyPreview(ResourceDiff.Between(live?.Raw, previewed.Raw), previewed, live);
     }
 
     private async Task<string> SendApplyAsync(
