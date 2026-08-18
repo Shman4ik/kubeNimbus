@@ -150,6 +150,43 @@
                     </DockPanel>
                   </Border>
 
+                  <!-- Drain.
+                       Two checkboxes and nothing else. They are kubectl's force and
+                       delete-emptydir-data flags, and each one authorizes destroying
+                       something that does not come back — so they are off by default and
+                       the plan names, by pod, exactly what each one would unblock.
+                       Re-planning happens as they are ticked, from the pod list already
+                       read, so the refusal disappears in front of you rather than on
+                       confirm. -->
+                  <StackPanel Spacing="6" IsVisible="{Binding IsDrain}">
+                    <TextBlock Classes="statusText" Text="{Binding DrainPlan.Summary}"
+                               IsVisible="{Binding HasDrainPlan}" TextWrapping="Wrap" />
+
+                    <StackPanel Orientation="Horizontal" Spacing="16" IsVisible="{Binding IsEditable}">
+                      <CheckBox IsChecked="{Binding DrainForce}" Content="Evict unmanaged pods"
+                                ToolTip.Tip="kubectl --force. A pod no controller owns is destroyed, not moved: nothing recreates it." />
+                      <CheckBox IsChecked="{Binding DrainDeleteEmptyDirData}" Content="Delete emptyDir data"
+                                ToolTip.Tip="kubectl --delete-emptydir-data. An emptyDir lives on this node's disk and goes with the pod." />
+                    </StackPanel>
+
+                    <!-- Refusals, by name. The single most important thing on this strip:
+                         a drain that quietly took these pods is the silent data loss this
+                         whole classification exists to avoid. -->
+                    <Border Classes="infoBar warn" IsVisible="{Binding IsDrainBlocked}">
+                      <StackPanel Spacing="4">
+                        <TextBlock FontSize="12" TextWrapping="Wrap"
+                                   Text="These pods will not be evicted without the matching option above — nothing would bring them back:" />
+                        <ItemsControl ItemsSource="{Binding DrainBlockers}">
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="x:String">
+                              <TextBlock Text="{Binding}" FontSize="11.5" TextWrapping="Wrap" Margin="0,1" />
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                      </StackPanel>
+                    </Border>
+                  </StackPanel>
+
                   <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
                     <!-- Label above the input, never beside it: an Auto column has no gap of
                          its own, which is how "Local port" ended up touching its own text box
@@ -174,10 +211,18 @@
                          dismissed the strip there would read as "cancelled" over an action
                          that went through. -->
                     <Button Grid.Column="4" Margin="6,0,0,0" VerticalAlignment="Bottom" Content="Cancel"
-                            Command="{Binding DismissCommand}" IsVisible="{Binding !IsDone}"
-                            IsEnabled="{Binding IsEditable}" />
+                            Command="{Binding DismissCommand}"
+                            IsVisible="{Binding !IsDone}" IsEnabled="{Binding IsEditable}"
+                            IsHitTestVisible="{Binding CanDismiss}" />
                     <Button Grid.Column="4" Margin="6,0,0,0" VerticalAlignment="Bottom" Content="Close"
                             Command="{Binding DismissCommand}" IsVisible="{Binding IsDone}" />
+                    <!-- A running drain replaces Cancel outright. "Cancel" over a loop
+                         that is already evicting would read as undo, and there is no
+                         undo: Stop leaves the node cordoned with some pods moved, which
+                         is what the final message then says. -->
+                    <Button Grid.Column="3" Grid.ColumnSpan="2" Margin="8,0,0,0" VerticalAlignment="Bottom"
+                            HorizontalAlignment="Right" Classes="danger" Content="Stop draining"
+                            Command="{Binding StopDrainCommand}" IsVisible="{Binding IsDraining}" />
                   </Grid>
 
                   <TextBlock Classes="statusText warn" TextWrapping="Wrap" IsVisible="{Binding IsScalingToZero}"
@@ -190,6 +235,30 @@
                           Classes.success="{Binding IsSuccess}" Classes.error="{Binding IsError}">
                     <TextBlock Text="{Binding Message}" TextWrapping="Wrap" FontSize="12" />
                   </Border>
+
+                  <!-- The drain's own progress, one row per pod. Height-capped and
+                       scrollable: this strip sits above the list it is about, and a
+                       hundred-pod node must not push the list off screen. -->
+                  <ScrollViewer MaxHeight="150" IsVisible="{Binding DrainSteps.Count}">
+                    <ItemsControl ItemsSource="{Binding DrainSteps}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:DrainStepViewModel">
+                          <Grid ColumnDefinitions="Auto,260,*" Margin="0,1">
+                            <Ellipse Grid.Column="0" Classes="statusDot" Width="8" Height="8"
+                                     VerticalAlignment="Center" Margin="0,0,8,0"
+                                     Classes.ok="{Binding IsDone}"
+                                     Classes.warn="{Binding IsBlocked}"
+                                     Classes.error="{Binding IsFailed}" />
+                            <TextBlock Grid.Column="1" Text="{Binding PodKey}" FontSize="11.5"
+                                       FontFamily="Cascadia Mono,Consolas,monospace"
+                                       TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PodKey}" />
+                            <TextBlock Grid.Column="2" Text="{Binding Detail}" FontSize="11.5" Opacity="0.75"
+                                       TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Detail}" />
+                          </Grid>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </ScrollViewer>
                 </StackPanel>
               </Border>
             </DataTemplate>
@@ -355,6 +424,34 @@
                           ToolTip.Tip="Stamps the pod template so the controller rolls its pods — the same thing kubectl rollout restart does">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource RestartIconGeometry}" Width="13" Height="13" />
+                  </MenuItem.Icon>
+                </MenuItem>
+                <!-- Node actions. One slot for cordon/uncordon rather than two items with
+                     one of them always dead — the same "one control, swapped on the
+                     state" the port-forward pane's Start/Stop settled (UI rule 11).
+                     Exactly one of the pair is present, so nothing above or below moves.
+                     They appear only on a node: unlike scale and restart, whose kinds a
+                     reader might reasonably wonder about, "cordon this ConfigMap" is not
+                     a question anyone has. -->
+                <MenuItem Header="Cordon…" Command="{Binding CordonSelectedCommand}"
+                          IsVisible="{Binding CanCordonSelectedRow}"
+                          ToolTip.Tip="Stop scheduling new pods on this node. Its running pods stay put.">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource CordonIconGeometry}" Width="13" Height="13" />
+                  </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="Uncordon…" Command="{Binding UncordonSelectedCommand}"
+                          IsVisible="{Binding CanUncordonSelectedRow}"
+                          ToolTip.Tip="Put this node back into service — the scheduler starts using it again.">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource CheckIconGeometry}" Width="13" Height="13" />
+                  </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="Drain…" Command="{Binding DrainSelectedCommand}"
+                          IsVisible="{Binding CanDrainSelectedRow}"
+                          ToolTip.Tip="Cordon the node and evict the pods that may be evicted, honouring PodDisruptionBudgets">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource DrainIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
                 <Separator />

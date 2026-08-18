@@ -35,6 +35,15 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// </summary>
     private readonly Dictionary<string, FleetTarget> _fleetTargets = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// The core/v1 Pod descriptor per cluster (the empty key is this tab's own), as that
+    /// cluster's discovery reported it. Cached rather than fetched on demand because the
+    /// capability checks it feeds — can this node be drained, i.e. does this server serve
+    /// <c>pods/eviction</c> — are synchronous <c>CanExecute</c> answers, and because a
+    /// drain in an aggregated list has to evict through the row's <em>own</em> cluster.
+    /// </summary>
+    private readonly Dictionary<string, ResourceDescriptor> _podDescriptors = new(StringComparer.Ordinal);
+
     private CancellationTokenSource? _watchCts;
     private bool _metricsApiAvailable;
 
@@ -275,6 +284,12 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [NotifyCanExecuteChangedFor(nameof(DeleteSelectedCommand))]
     [NotifyCanExecuteChangedFor(nameof(ScaleSelectedCommand))]
     [NotifyCanExecuteChangedFor(nameof(RestartSelectedCommand))]
+    [NotifyPropertyChangedFor(nameof(CanCordonSelectedRow))]
+    [NotifyPropertyChangedFor(nameof(CanUncordonSelectedRow))]
+    [NotifyPropertyChangedFor(nameof(CanDrainSelectedRow))]
+    [NotifyCanExecuteChangedFor(nameof(CordonSelectedCommand))]
+    [NotifyCanExecuteChangedFor(nameof(UncordonSelectedCommand))]
+    [NotifyCanExecuteChangedFor(nameof(DrainSelectedCommand))]
     private ResourceRowViewModel? _selectedRow;
 
     /// <summary>
@@ -661,6 +676,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         Status = DemoBanner;
 
         var catalog = Demo.DemoData.BuildCatalog();
+        RecordPodDescriptor("", catalog);
         SidebarSections.Clear();
         _recentKinds.Clear();
         foreach (var section in Demo.DemoData.BuildSidebarSections(catalog))
@@ -712,6 +728,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
 
         var catalog = await Client.GetResourceCatalogAsync();
+        RecordPodDescriptor("", catalog);
         var sections = new Dictionary<string, SidebarSectionViewModel>(StringComparer.Ordinal);
         foreach (var title in SidebarGrouping.SectionOrder)
         {
@@ -1269,12 +1286,29 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                         () => ConnectionWarning = $"{member.ClusterName}: {ex.Message}"),
                     cancellationToken: token);
 
+                // The Pod descriptor of each member, for the same reason the target
+                // descriptor is per member: whether a node there can be drained is that
+                // server's answer, not this tab's. The catalogs are already cached on
+                // each client, so this costs nothing after the first list.
+                var memberPodCatalogs = new List<(string ClusterName, IReadOnlyList<ResourceDescriptor> Catalog)>();
+                foreach (var target in targets)
+                {
+                    memberPodCatalogs.Add((
+                        target.Member.ClusterName,
+                        await target.Member.Client.GetResourceCatalogAsync(token)));
+                }
+
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
                     _fleetTargets.Clear();
                     foreach (var target in targets)
                     {
                         _fleetTargets[target.Member.ClusterName] = target;
+                    }
+
+                    foreach (var (clusterName, catalog) in memberPodCatalogs)
+                    {
+                        RecordPodDescriptor(clusterName, catalog);
                     }
 
                     FleetSummary = $"{targets.Count} of {members.Count} clusters serve {descriptor.Kind}";
@@ -1327,6 +1361,25 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         clusterName.Length > 0 && _fleetTargets.TryGetValue(clusterName, out var target)
             ? target.Member.Client
             : Client;
+
+    /// <summary>Remembers a cluster's core/v1 Pod descriptor, verbs and subresources included.</summary>
+    private void RecordPodDescriptor(string clusterName, IReadOnlyList<ResourceDescriptor> catalog)
+    {
+        if (catalog.FirstOrDefault(d => d is { Group: "", Kind: "Pod" }) is { } pods)
+        {
+            _podDescriptors[clusterName] = pods;
+        }
+    }
+
+    /// <summary>
+    /// The Pod descriptor of the cluster a row came from — the tab's own outside fleet
+    /// mode. Null until that cluster's discovery has been read, which the drain
+    /// capability check correctly reads as "not offered yet" rather than as "cannot".
+    /// </summary>
+    private ResourceDescriptor? PodDescriptorFor(ResourceRowViewModel row) =>
+        _podDescriptors.TryGetValue(row.ClusterName, out var pods)
+            ? pods
+            : _podDescriptors.GetValueOrDefault("");
 
     /// <summary>
     /// The descriptor to use for a row. Resolved per cluster in fleet mode: the same
@@ -1897,6 +1950,63 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
     }
 
+    // ---------------------------------------------------------------- node actions
+    //
+    // Cordon, uncordon and drain, on the same armed strip as scale/restart/delete. They
+    // are node-only and they say so through the same kind of capability check the other
+    // three use — with one honest difference, argued in NodeActions.SupportsCordon: there
+    // is no discovery signal or object marker for "can be cordoned", because
+    // spec.unschedulable is a field of the core Node schema that an uncordoned node omits
+    // entirely. Drain adds the signal there *is* one for: whether this server serves
+    // pods/eviction.
+
+    /// <summary>True when the selected row is a core/v1 Node this server says is patchable.</summary>
+    public bool CanCordonSelectedRow =>
+        SelectedRow is { } row
+        && DescriptorFor(row) is { } descriptor
+        && NodeActions.SupportsCordon(descriptor)
+        && !NodeActions.IsCordoned(row.Resource);
+
+    /// <summary>
+    /// Uncordon is offered only for a node that <em>is</em> cordoned, and cordon only for
+    /// one that is not. Two commands, one slot: the menu shows whichever applies, which
+    /// is the "a control pair where one half is always disabled is one control" rule the
+    /// port-forward pane's Start/Stop settled (UI rule 11). Two commands rather than one
+    /// toggle so that neither the palette nor a test has to infer which way it would go.
+    /// </summary>
+    public bool CanUncordonSelectedRow =>
+        SelectedRow is { } row
+        && DescriptorFor(row) is { } descriptor
+        && NodeActions.SupportsCordon(descriptor)
+        && NodeActions.IsCordoned(row.Resource);
+
+    /// <summary>True when this cluster serves <c>pods/eviction</c> and the row is a node.</summary>
+    public bool CanDrainSelectedRow =>
+        SelectedRow is { } row
+        && DescriptorFor(row) is { } descriptor
+        && NodeActions.SupportsDrain(descriptor, PodDescriptorFor(row));
+
+    [RelayCommand(CanExecute = nameof(CanCordonSelectedRow))]
+    private void CordonSelected() => ArmRowAction(RowActionKind.Cordon);
+
+    [RelayCommand(CanExecute = nameof(CanUncordonSelectedRow))]
+    private void UncordonSelected() => ArmRowAction(RowActionKind.Uncordon);
+
+    /// <summary>
+    /// Arms a drain and reads the pods on the node so the strip can state what it would
+    /// do — and refuse, by name, for the pods that need an option nobody has given. The
+    /// plan is loaded before anything is evicted for the same reason the replica count is
+    /// read before a scale: the confirm has to be about something real.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanDrainSelectedRow))]
+    private async Task DrainSelectedAsync()
+    {
+        if (ArmRowAction(RowActionKind.Drain) is { } action)
+        {
+            await action.LoadDrainPlanAsync();
+        }
+    }
+
     /// <summary>
     /// Builds the pending action for the selected row, against that row's own client and
     /// descriptor (its cluster's, in fleet mode — an action that resolved either from the
@@ -1917,9 +2027,20 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             return null;
         }
 
+        // One action at a time, and a running one is never replaced. It matters most for
+        // a drain, whose eviction loop lives in the strip: re-arming over it would leave
+        // the loop running with nothing on screen reporting it. Portainer reached the
+        // same rule from the other direction (portainer#4006) — a drain should be issued
+        // to one node at a time, and a single-slot strip is what enforces that here.
+        if (PendingRowAction is { IsBusy: true } or { IsDraining: true })
+        {
+            return null;
+        }
+
         var action = new RowActionViewModel(
             kind, client, descriptor, row.Namespace, row.Name, row.ClusterName,
-            kind == RowActionKind.Scale ? WorkloadActions.DeclaredReplicas(row.Resource) : null);
+            kind == RowActionKind.Scale ? WorkloadActions.DeclaredReplicas(row.Resource) : null,
+            PodDescriptorFor(row));
 
         action.Dismissed = () =>
         {
@@ -2013,10 +2134,18 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             return;
         }
 
-        var isPod = descriptor.Kind == "Pod";
-        var key = isPod
-            ? PodDetailTabViewModel.KeyFor(row.ClusterName, row.Namespace, row.Name)
-            : YamlEditorTabViewModel.KeyFor(row.ClusterName, descriptor, row.Namespace, row.Name);
+        // Double-click = the default action for the kind (UI rule 2). A node's is its
+        // detail pane, not its manifest: conditions, taints and how full it is are what
+        // the double-click is for, and the YAML is one context-menu item away as it is
+        // for a pod.
+        var isPod = descriptor is { Kind: "Pod", Group: "" };
+        var isNode = NodeActions.IsNodeKind(descriptor);
+        var key = (isPod, isNode) switch
+        {
+            (true, _) => PodDetailTabViewModel.KeyFor(row.ClusterName, row.Namespace, row.Name),
+            (_, true) => NodeDetailTabViewModel.KeyFor(row.ClusterName, row.Name),
+            _ => YamlEditorTabViewModel.KeyFor(row.ClusterName, descriptor, row.Namespace, row.Name),
+        };
         var existing = InspectorTabs.FirstOrDefault(t => t.Key == key);
         if (existing is not null)
         {
@@ -2029,13 +2158,20 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             return;
         }
 
-        InspectorTabViewModelBase tab = isPod
-            ? new PodDetailTabViewModel(
+        InspectorTabViewModelBase tab = (isPod, isNode) switch
+        {
+            (true, _) => new PodDetailTabViewModel(
                 client, row, AddInspectorTab,
                 // Bound to this row's cluster so owner navigation stays on it.
                 (owner, namespaceHint) => OpenOwnerAsync(owner, namespaceHint, row.ClusterName),
-                row.ClusterName)
-            : new YamlEditorTabViewModel(client, descriptor, row.Namespace, row.Name, row.Resource.ToYaml(), row.ClusterName);
+                row.ClusterName),
+            (_, true) => new NodeDetailTabViewModel(
+                client, row, PodDescriptorFor(row),
+                (owner, namespaceHint) => OpenOwnerAsync(owner, namespaceHint, row.ClusterName),
+                row.ClusterName),
+            _ => new YamlEditorTabViewModel(
+                client, descriptor, row.Namespace, row.Name, row.Resource.ToYaml(), row.ClusterName),
+        };
 
         tab.IsPreview = preview;
         AddInspectorTab(tab, replacePreview: preview);
@@ -2193,6 +2329,12 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     public async ValueTask DisposeAsync()
     {
+        // A drain runs in this process and in this strip. Closing the tab stops it —
+        // which is the honest behaviour and the one the confirm warned about, but it has
+        // to be an explicit cancel rather than a task left running against a disposed
+        // client.
+        PendingRowAction?.CancelDrain();
+
         if (_watchCts is not null)
         {
             await _watchCts.CancelAsync();
