@@ -89,18 +89,28 @@ public static class DemoUsage
     /// </summary>
     public static void SeedRows(IReadOnlyList<ResourceRowViewModel> rows, DateTimeOffset? now = null)
     {
-        var byKey = DemoData.PodMetrics.ToDictionary(m => m.Key, StringComparer.Ordinal);
+        var byKey = new Dictionary<string, (long? Cpu, long? Memory)>(StringComparer.Ordinal);
+        foreach (var metrics in DemoData.PodMetrics)
+        {
+            byKey[metrics.Key] = SumContainerUsage(metrics);
+        }
+
+        // Nodes are cluster-scoped, so their DynamicResource key is "/<name>" — the same
+        // shape ClusterTabViewModel.StartMetricsPolling builds for a real NodeMetrics.
+        foreach (var node in DemoData.NodeUsage)
+        {
+            byKey[$"/{node.Name}"] = (node.CpuNanocores, node.MemoryBytes);
+        }
+
         for (var i = 0; i < rows.Count; i++)
         {
             var row = rows[i];
 
             // Fleet rows are cluster-qualified; the metrics fixtures are keyed by
             // namespace/name, so match on the object's own key.
-            var key = row.Resource.Key;
-            if (byKey.TryGetValue(key, out var metrics))
+            if (byKey.TryGetValue(row.Resource.Key, out var sample))
             {
-                var (cpu, memory) = SumContainerUsage(metrics);
-                Seed(row, i, cpu, memory, now);
+                Seed(row, i, sample.Cpu, sample.Memory, now);
             }
             else
             {

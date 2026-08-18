@@ -61,7 +61,13 @@ internal static class ClusterTabScenarios
 
         if (populateRows)
         {
-            foreach (var pod in FixtureData.Pods)
+            // The tab says it is showing the `payments` namespace, so it shows that
+            // namespace. The shared dataset also carries the kube-system pods the node
+            // surface needs (a DaemonSet pod, a static pod's mirror, an unmanaged pod
+            // and one with an emptyDir), and letting those into a namespace-scoped
+            // fixture would make every list scenario disagree with its own namespace
+            // picker — and would have silently rewritten a dozen committed screenshots.
+            foreach (var pod in FixtureData.Pods.Where(p => p.Namespace == "payments"))
             {
                 tab.Rows.Add(new ResourceRowViewModel(pod));
             }
@@ -348,7 +354,7 @@ internal static class ClusterTabScenarios
         var seed = 0;
         foreach (var cluster in new[] { "prod-payments", "prod-ledger", "staging-eu" })
         {
-            foreach (var pod in FixtureData.Pods)
+            foreach (var pod in FixtureData.Pods.Where(p => p.Namespace == "payments"))
             {
                 var row = new ResourceRowViewModel(pod, cluster);
                 tab.Rows.Add(row);
@@ -425,7 +431,7 @@ internal static class ClusterTabScenarios
         // which clears Rows and (with no live client behind the fixture) can't refill them.
         var pods = tab.SidebarSections.First(s => s.Title == "Workloads").Kinds.First(k => k.Descriptor.Kind == "Pod");
         tab.SelectKindCommand.Execute(pods);
-        foreach (var pod in FixtureData.Pods)
+        foreach (var pod in FixtureData.Pods.Where(p => p.Namespace == "payments"))
         {
             tab.Rows.Add(new ResourceRowViewModel(pod));
         }
@@ -593,6 +599,158 @@ internal static class ClusterTabScenarios
         tab.SelectedRow = tab.Rows.FirstOrDefault();
         tab.ScaleSelectedCommand.Execute(null);
         return tab;
+    }
+
+    // ------------------------------------------------------------------ nodes
+    //
+    // Every one of these runs on the demo cluster, which is where the node dataset lives
+    // (three nodes, one of them cordoned and under disk pressure). The plan, the
+    // classification, the arithmetic and the pane are all production code — only the
+    // eviction itself has no offline stand-in, which is exactly what the demo notice on
+    // the strip says.
+
+    private static ClusterTabViewModel NodeTab()
+    {
+        var tab = DemoTab();
+        var kind = tab.SidebarSections
+            .SelectMany(s => s.Kinds)
+            .First(k => k.Descriptor is { Group: "", Kind: "Node" });
+        tab.SelectKindCommand.Execute(kind);
+        return tab;
+    }
+
+    private static ClusterTabViewModel OpenNode(string name, int tabIndex = 0)
+    {
+        var tab = NodeTab();
+        tab.SelectedRow = tab.Rows.First(r => r.Name == name);
+        tab.OpenSelectedCommand.Execute(null);
+
+        if (tab.SelectedInspectorTab is NodeDetailTabViewModel detail)
+        {
+            detail.SelectedTabIndex = tabIndex;
+        }
+
+        return tab;
+    }
+
+    /// <summary>
+    /// The node list. What to look at: <c>Ready,SchedulingDisabled</c> on the cordoned
+    /// worker, coloured warn rather than ok — kubectl's own string, which
+    /// <c>ResourceStatusSummary.SummarizeNode</c> already produced before this item and
+    /// which had no detail pane behind it.
+    /// </summary>
+    public static ClusterTabViewModel NodeList() => NodeTab();
+
+    /// <summary>
+    /// Node detail's Overview: allocatable vs requested with a bar per resource,
+    /// conditions, taints and the kubelet block. The headroom figures are the production
+    /// arithmetic over the demo pods actually placed on this node — including the
+    /// scheduler's own rule that an init container floors rather than adds, and that a
+    /// finished Job pod holds nothing.
+    /// </summary>
+    public static ClusterTabViewModel NodeDetail() => OpenNode("demo-worker-1", tabIndex: 0);
+
+    /// <summary>The Pods tab: what is actually on the node, with each pod's own requests.</summary>
+    public static ClusterTabViewModel NodeDetailPods() => OpenNode("demo-worker-1", tabIndex: 1);
+
+    /// <summary>
+    /// The state the whole surface exists for: a node that is cordoned <em>and</em>
+    /// reporting disk pressure. Both halves of "nothing lands here" are on the pane —
+    /// the status pill and the scheduler's own <c>node.kubernetes.io/unschedulable</c>
+    /// taint — and the DiskPressure condition reads as a fault rather than as another
+    /// row of False.
+    /// </summary>
+    /// <remarks>
+    /// Maximized, because the taints are the half of this that the ~300px dock cuts off
+    /// and they are half of the point: the cordon and its taint are two different fields
+    /// saying the same thing, and a reader who sees only one of them wonders which is
+    /// real.
+    /// </remarks>
+    public static ClusterTabViewModel NodeDetailCordoned()
+    {
+        var tab = OpenNode("demo-worker-2", tabIndex: 0);
+        tab.IsInspectorMaximized = true;
+        return tab;
+    }
+
+    /// <summary>
+    /// A drain, armed and refusing. This is the single most important image of the item:
+    /// the plan is computed before anything is evicted, and the two pods that would be
+    /// destroyed rather than moved — one no controller owns, one whose <c>emptyDir</c>
+    /// goes with it — are named, with the option that would unblock each. Both are
+    /// off by default and the confirm is dead while either refusal stands.
+    /// </summary>
+    public static ClusterTabViewModel NodeDrainBlocked()
+    {
+        var tab = NodeTab();
+        tab.SelectedRow = tab.Rows.First(r => r.Name == "demo-worker-1");
+        tab.DrainSelectedCommand.Execute(null);
+        Drain(tab);
+        return tab;
+    }
+
+    /// <summary>
+    /// A drain in flight. The eviction loop needs an API server, so the strip's progress
+    /// is written in here — obviously-synthetic, like every other fixture — but every
+    /// state it renders is one <c>ClusterClient.DrainNodeAsync</c> really produces: an
+    /// accepted eviction, a pod a PodDisruptionBudget is holding back (which is
+    /// <em>correct</em> behaviour and must not read as a failure), and an RBAC refusal
+    /// that retrying will not fix. Stop replaces Cancel outright while this is running.
+    /// </summary>
+    public static ClusterTabViewModel NodeDrainRunning()
+    {
+        var tab = NodeDrainBlocked();
+        var action = tab.PendingRowAction!;
+        action.DrainForce = true;
+        action.DrainDeleteEmptyDirData = true;
+        action.IsDraining = true;
+        action.Message = "3 pods still on the node.";
+        AddSteps(action,
+            ("payments/payment-service-report-generator-7f9c8d6bcd-x7k2m", DrainStage.PodEvicted, "eviction accepted"),
+            ("payments/checkout-worker-5d8f7b9c4-qz9pl", DrainStage.PodBlocked,
+                "Cannot evict pod as it would violate the pod's disruption budget."),
+            ("kube-system/legacy-batch-runner", DrainStage.PodFailed,
+                "pods \"legacy-batch-runner\" is forbidden: User \"deploy-bot\" cannot create resource \"pods/eviction\""));
+        return tab;
+    }
+
+    /// <summary>
+    /// The state CLAUDE.md's node section calls the one that must never be implicit: a
+    /// drain stopped halfway. The node stays cordoned, some pods moved and some did not,
+    /// and the strip says exactly that plus what to do about it — which is the whole
+    /// answer to "this drain runs in a desktop app and the desktop app can be closed".
+    /// </summary>
+    public static ClusterTabViewModel NodeDrainStopped()
+    {
+        var tab = NodeDrainRunning();
+        var action = tab.PendingRowAction!;
+        action.IsDraining = false;
+        action.IsDone = true;
+        action.IsError = true;
+        action.Message =
+            "Drain stopped. 1 pod(s) were evicted and the rest were not; demo-worker-1 is still cordoned. "
+            + "Run the drain again to finish, or uncordon to put the node back into service as it is.";
+        return tab;
+    }
+
+    private static void AddSteps(
+        RowActionViewModel action, params (string Pod, DrainStage Stage, string Detail)[] steps)
+    {
+        foreach (var (pod, stage, detail) in steps)
+        {
+            action.DrainSteps.Add(new DrainStepViewModel(pod) { Stage = stage, Detail = detail });
+        }
+    }
+
+    /// <summary>
+    /// The demo drain's plan is loaded by an async command; the headless harness has to
+    /// let it land before capturing. It never touches the network — the pods come from
+    /// the shipped dataset — so one dispatcher drain is enough.
+    /// </summary>
+    private static void Drain(ClusterTabViewModel tab)
+    {
+        _ = tab;
+        Dispatcher.UIThread.RunJobs();
     }
 
     /// <summary>

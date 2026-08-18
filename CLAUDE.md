@@ -1307,6 +1307,162 @@ Six things are load-bearing:
 from a row's inline editor. `kubectl rollout undo` needs ReplicaSet revision walking and
 is its own item; the rest are backlog candidates, not omissions this pass forgot.
 
+## Node operations (detail, cordon / uncordon, drain)
+
+`ClusterClient.Nodes.cs` + `NodeActions.cs` + `NodeResources.cs` (Core) and
+`NodeDetailTabViewModel` + `NodeDetailView` (App) are the node surface: what a node says
+about itself, how much of it is already promised away, which pods are on it, and the
+three actions that take it out of service and put it back. The read-only half was
+half-present before this — `ResourceStatusSummary.SummarizeNode` already rendered
+`Ready,SchedulingDisabled` and `IsMeteredKind` already covered `Node` — with no pane
+behind it and no way to act on what it said.
+
+Double-clicking a node opens the detail pane rather than its manifest (UI rule 2), and
+the three actions land on FEAT-1's shared confirm strip (UI rule 17) from the row context
+menu and the command palette. Nothing new is always visible.
+
+### The read-only half
+
+- **Allocatable, not capacity, is the denominator.** Capacity includes what
+  `--system-reserved` and `--kube-reserved` hold back; a headroom figure computed against
+  it overstates the free room by exactly that much, and it is the figure someone decides
+  to drain on. Capacity is carried alongside so the gap is visible rather than lost.
+- **Requested is the scheduler's own formula**, not a sum of every container:
+  `max(sum(regular containers), max(init containers)) + spec.overhead`, with native
+  sidecars (init containers whose `restartPolicy` is `Always`) counted into the running
+  sum because they never exit. Summing init containers alongside the regular ones
+  overstates any node running Jobs; ignoring them understates a node mid-startup. Both
+  wrong answers are *plausible*, which is why `NodeResourcesTests` pins the formula in
+  both directions. Terminal pods are excluded, as `kubectl describe node` excludes them.
+- **A condition's polarity is read off `Ready`**, the one condition Kubernetes defines as
+  positive; everything else is a pressure condition, healthy when False. Reading it off a
+  list of known-bad condition types instead would classify a cloud provider's or
+  node-problem-detector's own condition as fine by default, which is the wrong way to be
+  wrong.
+- **Taints are shown even though the cordon flag is too**, because the scheduler enforces
+  `spec.unschedulable` by way of the `node.kubernetes.io/unschedulable` taint. A cordoned
+  node has both, and a reader shown only one of them wonders which is real.
+- **"Pods on this node" is one field-selected list with an explicit Refresh**, not a
+  second watch. `spec.nodeName=<node>` is server-side (the API server indexes it), and the
+  precedent for a one-shot inside an inspector pane is pod detail's Events tab. The node
+  object itself stays live: the pane tracks the same `ResourceRowViewModel` the list holds
+  and re-reads conditions, taints and the cordon flag on every watch tick, the same way
+  pod detail tracks its row.
+
+### Cordon, and the one honest exception to "capability from discovery"
+
+Cordon is a one-field merge patch of `spec.unschedulable`, structurally identical to
+FEAT-1's `restartedAt` patch, and uncordon writes an explicit `false` rather than a JSON
+`null` — a null would *remove* the field under RFC 7386, which means the same thing to the
+scheduler and is not what `kubectl uncordon` leaves behind.
+
+The capability check names the kind, and that is deliberate rather than a shortcut.
+Scale has a discovery signal (a `scale` subresource) and restart has an object signal (a
+pod template to stamp); cordon has **neither**. `spec.unschedulable` is a field of the core
+`v1.Node` schema, discovery says nothing about it, and an uncordoned node omits the field
+entirely — so "does the object have the field" answers false for exactly the nodes you
+would want to cordon. `NodeActions.SupportsCordon` therefore tests the kind *and* asks
+discovery the half it can answer: does this server say nodes are patchable. Drain adds the
+signal there *is* one for — whether the server serves `pods/eviction` — so a cluster
+without the Eviction API never sees the menu item at all.
+
+Cordon and uncordon are two commands in **one menu slot**: the menu shows whichever the
+node's current state makes meaningful. That is UI rule 11's "a control pair where one half
+is always disabled is one control", settled by the port-forward pane's Start/Stop, and it
+is why the menu still never shifts — exactly one of the pair is ever present.
+
+### Drain: what it does, and what it refuses
+
+There is no `k8s.io/kubectl/pkg/drain` to import here and `KubernetesClient.Aot` ships the
+eviction primitive and no drain helper, so the loop is ours. Every *decision* it makes is
+therefore pure and tested (`NodeActions.Plan`), and only the HTTP is in `ClusterClient`.
+The classification is kubectl's own filter order, and each entry is here because skipping
+it is a known way to break a cluster — the two marked below are the open silent-data-loss
+bug in a comparable CNCF client ([headlamp#7268](https://github.com/kubernetes-sigs/headlamp/issues/7268)):
+
+| Pod | What the drain does | Why |
+|---|---|---|
+| Already terminating | waited for, not evicted again | its 404 would read as a failure, and the node is not drained until it is gone |
+| **Mirror (static) pod** | skipped, always | the kubelet owns it from a file on disk and recreates it seconds later |
+| Succeeded / Failed | skipped | nothing is running; only a record is left |
+| **DaemonSet-owned** | skipped, and named in the plan | its controller ignores cordon; `kubectl` requires `--ignore-daemonsets`, and a gate whose only possible answer is yes is worse than a sentence saying what was left behind |
+| **No controller** | **refused** unless "Evict unmanaged pods" | nothing recreates it: draining destroys the workload (`kubectl --force`) |
+| **`emptyDir` volume** | **refused** unless "Delete emptyDir data" | node-local storage with no copy anywhere, deleted with the pod (`kubectl --delete-emptydir-data`) |
+
+Seven things are load-bearing:
+
+1. **The plan is computed and shown before anything is evicted, and a plan with refusals
+   does not run.** kubectl refuses the same way — it names every problem pod before it
+   touches one. Half a drain that then stops on a question is worse than the question
+   asked first. Ticking either option re-plans from the pod list already read, so the
+   refusal it clears disappears in front of you rather than on confirm.
+2. **Two options, not five.** `--ignore-daemonsets` has one possible answer and the plan
+   states what it left behind instead; `--disable-eviction` bypasses PodDisruptionBudgets
+   and this app will not offer that as a checkbox; `--timeout` is replaced by a drain you
+   can watch and stop. What is left are the two that authorize destroying something which
+   does not come back, and both are off by default.
+3. **The drain streams.** `DrainNodeAsync` is an `IAsyncEnumerable<DrainProgress>` — one
+   event per thing that happens — because its duration is not bounded by anything this app
+   controls. A **429 from a PodDisruptionBudget is correct behaviour**, can last minutes or
+   forever, and is indistinguishable from a hung window unless the pane says "blocked by a
+   PodDisruptionBudget, still retrying". It gets its own per-pod row and its own colour
+   (warn, not error). A 403 is separated from it deliberately: retrying will not fix that
+   one, so it is recorded as failed and not asked again.
+4. **The eviction loop polls, and that is a stated exception to hard rule 2.** It re-lists
+   the node's pods every 2s between passes. The loop's question is "is this specific set of
+   pods gone yet", which has a natural end (the set empties), it is scoped to the drain's
+   own `CancellationToken`, and re-listing is also how it notices a pod that appeared
+   *after* it started — a watch seeded once would not. It is what `kubectl drain`'s own
+   `waitForDelete` does. This is the second documented poll in the app, after the metrics
+   API.
+5. **Cordon happens first, always.** Evicting from a node that still accepts work is a way
+   to have the scheduler put the pod back on the same node.
+6. **A partial drain is a designed state, not an accident — this is the constraint that
+   cannot be engineered away.** The loop runs in the desktop app's own process: closing the
+   tab or quitting stops it, leaving the node cordoned with some pods moved and some not.
+   So (a) the confirm sentence says exactly that *before* anything starts, which is the one
+   thing someone must know; (b) the strip cannot be dismissed while a drain runs — Cancel
+   is replaced by **Stop draining**, because "Cancel" over a loop that is already evicting
+   reads as undo and there is no undo; (c) stopping reports how many pods moved, that the
+   node is still cordoned, and the two ways out (run it again, or uncordon and leave it as
+   it is); and (d) `ClusterTabViewModel.DisposeAsync` cancels the loop explicitly rather
+   than leaving a task running against a disposed client. `cluster-tab-node-drain-stopped`
+   is that state rendered.
+7. **One drain at a time, enforced by the single-slot strip.** `ArmRowAction` refuses to
+   replace an action that is busy or draining: re-arming over a running loop would leave it
+   evicting with nothing on screen reporting it. Portainer reached the same rule from the
+   other direction in [portainer#4006](https://github.com/portainer/portainer/issues/4006)
+   — a drain should be issued to one node at a time.
+
+**Eviction is posted as `policy/v1`**, which the API server has served since 1.22 and which
+`kubectl` itself sends; `policy/v1beta1` was removed in 1.25. A server too old for it
+answers with its own message, which the strip prints verbatim rather than this app guessing
+a second version to retry with. And because discovery gates the whole feature on
+`pods/eviction` existing, a 404 from that endpoint can only be about the pod — which is why
+it is read as "already gone", the outcome the caller wanted.
+
+**The demo cluster plans for real and refuses to evict** (demo rules 4 and 5). The
+classification is pure and the shipped dataset has pods on nodes, so the plan, the two
+refusals and the whole strip render offline exactly as they would against a cluster; only
+the eviction has no honest stand-in, and `RowActionViewModel.IsDemo` says so in place with
+the confirm disabled. The demo catalog's Pod descriptor therefore declares an `eviction`
+subresource for the same reason its Deployment declares `scale`: without it the demo would
+teach that kubeNimbus cannot drain a node, rather than that *this* cluster cannot.
+
+**Two defects were found by looking at the rendered strip and are worth remembering.** A
+compiled binding to a **method group** (`{Binding DrainPlan.Summary}` against
+`string Summary()`) renders the delegate's type name — ``System.Func`1[System.String]`` — with
+no error anywhere; `DrainPlan.Summary` is a property now. And `RowActionViewModel`'s target
+sentence tested its namespace for `null` where `ResourceRowViewModel.Namespace` is a
+non-nullable string, so every cluster-scoped object read "`Node/demo-worker-1 in `". That
+second one is pre-existing and applied to deleting a PersistentVolume or a Namespace too.
+
+**Not shipped, deliberately:** node shell (that is `kubectl debug node/`, a different
+feature), `--disable-eviction`, a `--grace-period` control (the option exists in
+`DrainOptions` and nothing sets it — a pod's shutdown window is a property of the app, not
+of whoever is draining), multi-node drain, and node labels/taints editing. The YAML editor
+already reaches all of the last one.
+
 ## The exec terminal
 
 The exec pane renders a real VT emulator: `SvcSystems.UI.Terminal` (the Avalonia
@@ -3324,3 +3480,76 @@ the severity section describe a *before* state whose code is now deleted, so the
 be re-measured from this tree; they are consistent with Avalonia's documented `UnsetValue`
 semantics and with the fixed panes now rendering legibly in both themes, which is the
 most that can be said from here.
+
+**Node-operations pass (FEAT-4):** the node surface — detail plus cordon / uncordon /
+drain. See "Node operations" above for the whole design, in particular the drain's
+classification table and the partial-drain lifetime story, which is the constraint that
+cannot be engineered away in a desktop client. New: `NodeActions.cs`, `NodeResources.cs`
+and `ClusterClient.Nodes.cs` in Core (+ 32 tests across `NodeActionsTests` and
+`NodeResourcesTests`), `NodeDetailTabViewModel` + `NodeDetailView` in the App layer, three
+new `RowActionKind`s and the drain's options/plan/progress on the existing confirm strip,
+three context-menu items and three palette entries, two app-local icons, three demo nodes
+plus the five kube-system pods the drain's classification needs, and seven screenshot
+scenarios (+ 14 `NodeActionTests` in `tests/KubeNimbus.App.Tests`).
+
+**The demonstration is the deliverable, not the passing run**, same discipline as VER-5 and
+VER-3. Five invariants were broken, run, and reverted:
+
+- **Cordon patching `spec.schedulable` instead of `spec.unschedulable`** (the exact silent
+  200) — **2 of 276 red**: `Expected to be equal to "{"spec":{"unschedulable":true}}"` and
+  the same for the uncordon body.
+- **Mirror pods no longer skipped, and `emptyDir` pods evicted without asking** — i.e.
+  headlamp#7268 reproduced deliberately — **3 red**: `Expected to be equal to SkippedMirror`,
+  `Expected to be equal to BlockedLocalData`, and the plan summary's `Expected to be 2`.
+- **Init containers summed alongside the regular ones, and terminal pods counted** —
+  **3 red**: `Expected to be within 0.0001 of 2` (the init-container floor),
+  `…of 0.7` (the native sidecar), and `…of 0.5` (a node otherwise reading as full of
+  finished Jobs).
+- **The eviction body sent `apiVersion: v1`** — **2 red** on the byte-for-byte body.
+- **`ArmRowAction` allowed a running action to be replaced** — **1 of 63 red** in the App
+  suite: `Expected to be the same reference`, i.e. an eviction loop orphaned with nothing on
+  screen reporting it.
+
+**Two defects were found by looking at the rendered strip rather than by any test**, and
+both are recorded in the section above: a compiled binding to a method group renders the
+delegate's type name with no error anywhere, and the strip's target sentence read
+"`Node/demo-worker-1 in `" for every cluster-scoped object (pre-existing — it applied to
+deleting a PersistentVolume too). A third was caught the same way: "Stop draining" was drawn
+*over* the still-visible Drain button, now one slot swapped on `IsPromptVisible`.
+
+**The negative half of the demo-data change was measured, not argued.** Enlarging the shared
+dataset is the one thing here that could silently rewrite a dozen committed images, so the
+whole harness was rendered from a worktree at the parent commit and diffed byte for byte:
+after scoping the three fixture list scenarios to the namespace they already claim to be
+showing, **exactly two of the 110 pre-existing PNGs differ**, and both are intended — the
+demo strip's notice now reads "Scale, restart, delete, cordon and drain …", cropped and
+compared line by line. (`cluster-tab-workload-logs.dark` also flapped, and was confirmed to
+flap between two renders of the *baseline* as well: its lines arrive on a timer.)
+
+**Verified this session**: `dotnet build KubeNimbus.slnx` with **0 new warnings** (the one
+warning is the pre-existing CS8425 in `AsyncMergeTests.cs`); **276/276 Core TUnit** and
+**63/63 App TUnit**, 0 failed, 0 skipped, both via `--project` (no sandbox here, so the Core
+count is the unit-only subset — the cluster-gated tests return early); the five break/revert
+runs above; all **62** scenarios × both themes rendered (124 PNGs) plus the baseline diff;
+the linux-x64 NativeAOT publish with no new warnings beyond the known DataGrid
+IL2104/IL3053; and `--smoke-test` on that published binary under Xvfb (`SMOKE-OK main window
+rendered at 1280x800 after 4535 ms`, exit 0).
+
+**Not verified, and the live half is all of it.** No cluster came up — `dockerd` starts in
+this container but the Docker Hub blob CDN answers 403 on the layer fetch
+(`production.cloudfront.docker.com`), as in most sessions — so **not one byte of this has
+crossed a real API server**: the cordon patch, the eviction POST, a real 429 from a
+PodDisruptionBudget, a real 403 on `pods/eviction`, and the re-list loop actually watching a
+node empty are all argued from the wire format, pinned by unit tests and rendered from the
+demo dataset. Nothing has been driven by hand in the running app either — the pane, the
+checkboxes and the Stop button are verified by construction, by unit test and in the
+headless harness, not by a mouse. First things to do on a machine with a sandbox, in order:
+cordon a node and confirm `kubectl get nodes` prints `SchedulingDisabled` and that nothing
+schedules there; drain the k3s node's `demo-shop` workloads with `kubectl get pods -w`
+beside it and confirm the pods roll rather than vanish at once; add a PodDisruptionBudget
+that forbids the eviction and confirm the pane reads "blocked", stays honest and can be
+stopped; confirm a static pod and the DaemonSet pods really are left behind; and check the
+403 path with a `kubectl --as` impersonated user that cannot create `pods/eviction`. The
+`design/screenshots/*.png` were deliberately **not** regenerated, for the reason the CRD
+pass recorded: they drift by themselves because Age is a function of the real clock, so
+regenerating them commits a date rather than a change.

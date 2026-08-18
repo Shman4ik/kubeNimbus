@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KubeNimbus.Core;
@@ -15,15 +16,33 @@ public enum RowActionKind
 
     /// <summary>Delete the object — for a controller-owned pod, that is how it is recreated.</summary>
     Delete,
+
+    /// <summary>Make a node unschedulable (<c>spec.unschedulable: true</c>).</summary>
+    Cordon,
+
+    /// <summary>Make a node schedulable again.</summary>
+    Uncordon,
+
+    /// <summary>Cordon a node and evict the pods that may be evicted from it.</summary>
+    Drain,
 }
 
 /// <summary>
 /// The armed state of one mutating action on one object: what it is about to do, the
-/// replica count when it needs one, whether it is running, and how it ended. It is the
-/// app's confirm step for scale / rollout restart / delete, and it is one view model
-/// for all three deliberately — the confirm sentence, the in-flight state, the RBAC
-/// 403 and the success line are identical work three times over otherwise, and three
-/// near-identical strips is exactly how they drift apart.
+/// replica count or the drain options when it needs them, whether it is running, and how
+/// it ended. It is the app's confirm step for scale / rollout restart / delete / cordon /
+/// uncordon / drain, and it is one view model for all six deliberately — the confirm
+/// sentence, the in-flight state, the RBAC 403 and the success line are identical work six
+/// times over otherwise, and six near-identical strips is exactly how they drift apart.
+///
+/// <para>
+/// Drain is the one that is not a single request. It streams
+/// (<see cref="ClusterClient.DrainNodeAsync"/>), it can run for minutes, and it can be
+/// stopped halfway — so this view model owns the drain's cancellation, refuses to be
+/// dismissed while one is running, and reports the partial state when one is stopped.
+/// See CLAUDE.md's "Node operations" section for why a partial drain has to be a
+/// designed state rather than an accident.
+/// </para>
 ///
 /// <para>
 /// It carries its own target (client, descriptor, namespace, name), captured when the
@@ -50,8 +69,17 @@ public sealed partial class RowActionViewModel : ObservableObject
     /// <summary>Null on the demo cluster — the action has no API server to talk to.</summary>
     private readonly ClusterClient? _client;
     private readonly ResourceDescriptor _descriptor;
+
+    /// <summary>The Pod kind's descriptor on this row's own cluster; only a drain needs it.</summary>
+    private readonly ResourceDescriptor? _podDescriptor;
     private readonly string? _namespace;
     private readonly string _name;
+
+    /// <summary>The pods on the node, as last listed — so re-planning after a checkbox
+    /// moves costs nothing and the plan can update as you tick.</summary>
+    private IReadOnlyList<DynamicResource> _podsOnNode = [];
+    private bool _planLoaded;
+    private CancellationTokenSource? _drainCts;
 
     public RowActionViewModel(
         RowActionKind kind,
@@ -60,16 +88,22 @@ public sealed partial class RowActionViewModel : ObservableObject
         string? @namespace,
         string name,
         string clusterName = "",
-        int? replicas = null)
+        int? replicas = null,
+        ResourceDescriptor? podDescriptor = null)
     {
         Kind = kind;
         _client = client;
         _descriptor = descriptor;
+        _podDescriptor = podDescriptor;
         _namespace = @namespace;
         _name = name;
         _replicas = replicas;
 
-        var where = @namespace is null ? "" : $" in {@namespace}";
+        // Empty as well as null: a cluster-scoped row (a Node, a PersistentVolume) has
+        // no namespace, and ResourceRowViewModel.Namespace is a non-nullable string, so
+        // the naive null check printed "Node/demo-worker-1 in " — visible only in a
+        // rendered strip, which is where it was found.
+        var where = string.IsNullOrEmpty(@namespace) ? "" : $" in {@namespace}";
         var cluster = clusterName.Length > 0 ? $" · {clusterName}" : "";
         Target = $"{descriptor.Kind}/{name}{where}{cluster}";
     }
@@ -83,6 +117,8 @@ public sealed partial class RowActionViewModel : ObservableObject
 
     public bool IsDelete => Kind == RowActionKind.Delete;
 
+    public bool IsDrain => Kind == RowActionKind.Drain;
+
     /// <summary>The sentence above the controls. States the consequence, not the API call.</summary>
     public string Question => Kind switch
     {
@@ -90,6 +126,19 @@ public sealed partial class RowActionViewModel : ObservableObject
         RowActionKind.Restart =>
             $"Restart {Target}? Its pods roll under the controller's own update strategy — surge, "
             + "maxUnavailable and PodDisruptionBudgets are all honored.",
+        RowActionKind.Cordon =>
+            $"Cordon {Target}? Nothing new will schedule on it. Pods already running stay where they are — "
+            + "that is what a drain is for.",
+        RowActionKind.Uncordon =>
+            $"Uncordon {Target}? The scheduler starts placing pods on it again.",
+        // The lifetime sentence is the important half and it is deliberately in the
+        // confirm rather than in a tooltip: a drain runs inside this app's process, so
+        // the one thing someone must know before starting one is what happens if they
+        // close it.
+        RowActionKind.Drain =>
+            $"Drain {Target}? It is cordoned first, then its pods are evicted one at a time, honouring "
+            + "PodDisruptionBudgets. The drain runs inside kubeNimbus — closing this tab or quitting stops "
+            + "it partway, leaving the node cordoned with some pods moved and some not.",
         _ => $"Delete {Target}? This cannot be undone.",
     };
 
@@ -97,19 +146,22 @@ public sealed partial class RowActionViewModel : ObservableObject
     {
         RowActionKind.Scale => "Scale",
         RowActionKind.Restart => "Restart",
+        RowActionKind.Cordon => "Cordon",
+        RowActionKind.Uncordon => "Uncordon",
+        RowActionKind.Drain => "Drain",
         _ => "Delete",
     };
 
     /// <summary>
-    /// True for the demo cluster. All three actions need a real API server, so the strip
-    /// says so in place and the confirm button is disabled — never a spinner that hangs
-    /// and never a silent no-op (CLAUDE.md's demo rule 5, UI rule 9).
+    /// True for the demo cluster. Every one of these actions needs a real API server, so
+    /// the strip says so in place and the confirm button is disabled — never a spinner
+    /// that hangs and never a silent no-op (CLAUDE.md's demo rule 5, UI rule 9).
     /// </summary>
     public bool IsDemo => _client is null;
 
     public const string DemoNotice =
-        "Scale, restart and delete change objects on a live API server — the demo cluster has none. "
-        + "Everything else about this step is exactly what a real cluster shows.";
+        "Scale, restart, delete, cordon and drain change objects on a live API server — the demo cluster "
+        + "has none. Everything else about this step is exactly what a real cluster shows.";
 
     /// <summary>
     /// The target replica count. Null while the authoritative read of the <c>scale</c>
@@ -130,6 +182,74 @@ public sealed partial class RowActionViewModel : ObservableObject
     /// <summary>Scaling to zero stops every pod. Legitimate and common — and worth saying out loud.</summary>
     public bool IsScalingToZero => IsScale && Replicas == 0;
 
+    // ------------------------------------------------------------------ drain
+    //
+    // Two options and nothing else. They are kubectl's --force and
+    // --delete-emptydir-data under plain-English names, and they are here rather than
+    // hidden because each one authorizes destroying something that does not come back:
+    // a pod nothing will recreate, and a directory that lives only on this node's disk.
+    // The other three flags kubectl carries are deliberately absent — --ignore-daemonsets
+    // has one possible answer and the plan states what it left behind instead,
+    // --disable-eviction bypasses PodDisruptionBudgets (this app will not offer that as a
+    // checkbox), and --timeout is replaced by a drain you can watch and stop.
+
+    /// <summary>Evict pods no controller owns. Off by default; without it they are refused by name.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DrainOptions))]
+    private bool _drainForce;
+
+    /// <summary>Evict pods with <c>emptyDir</c> volumes, deleting that data. Off by default.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DrainOptions))]
+    private bool _drainDeleteEmptyDirData;
+
+    public DrainOptions DrainOptions => new(DrainForce, DrainDeleteEmptyDirData);
+
+    /// <summary>The plan as last computed — what will be evicted, what is refused, what stays.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ConfirmCommand))]
+    [NotifyPropertyChangedFor(nameof(HasDrainPlan))]
+    [NotifyPropertyChangedFor(nameof(IsDrainBlocked))]
+    private DrainPlan? _drainPlan;
+
+    public bool HasDrainPlan => DrainPlan is not null;
+
+    /// <summary>True while at least one pod needs an option nobody has ticked. The confirm stays dead.</summary>
+    public bool IsDrainBlocked => DrainPlan is { IsBlocked: true };
+
+    /// <summary>One line per pod the drain is refusing to touch, naming the pod and why.</summary>
+    public ObservableCollection<string> DrainBlockers { get; } = [];
+
+    /// <summary>
+    /// The running log: one row per pod as the drain reaches it, plus the node-level
+    /// steps. It is the whole answer to "is this hung or is it working" — a drain held
+    /// by a PodDisruptionBudget is *correct* and can last minutes, and without a line
+    /// saying so it is indistinguishable from a frozen window.
+    /// </summary>
+    public ObservableCollection<DrainStepViewModel> DrainSteps { get; } = [];
+
+    /// <summary>True while the eviction loop is running, which is when the strip cannot be dismissed.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(StopDrainCommand))]
+    [NotifyPropertyChangedFor(nameof(CanDismiss))]
+    [NotifyPropertyChangedFor(nameof(IsPromptVisible))]
+    private bool _isDraining;
+
+    /// <summary>
+    /// Cancel/Close is live except while a drain is running, where the honest button is
+    /// Stop instead: dismissing a strip whose eviction loop kept running would leave a
+    /// mutating action with no surface at all.
+    /// </summary>
+    public bool CanDismiss => !IsDraining;
+
+    /// <summary>
+    /// Whether the confirm/cancel pair is on screen at all. A running drain takes their
+    /// slot for Stop, rather than leaving a dead Drain button under it — the same "one
+    /// slot, swapped on the state" the port-forward pane settled (UI rule 11). The first
+    /// rendering of this had Stop drawn over the confirm, which the screenshot caught.
+    /// </summary>
+    public bool IsPromptVisible => !IsDone && !IsDraining;
+
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ConfirmCommand))]
     [NotifyPropertyChangedFor(nameof(IsEditable))]
@@ -140,6 +260,7 @@ public sealed partial class RowActionViewModel : ObservableObject
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ConfirmCommand))]
     [NotifyPropertyChangedFor(nameof(IsEditable))]
+    [NotifyPropertyChangedFor(nameof(IsPromptVisible))]
     private bool _isDone;
 
     /// <summary>Inputs and the confirm are live only while the action is neither running nor finished.</summary>
@@ -161,7 +282,14 @@ public sealed partial class RowActionViewModel : ObservableObject
     /// <summary>Called when the strip should go away; set by the owning cluster tab.</summary>
     public Action? Dismissed { get; set; }
 
-    private bool CanConfirm => IsEditable && !IsDemo && (!IsScale || Replicas is not null);
+    private bool CanConfirm =>
+        IsEditable
+        && !IsDemo
+        && (!IsScale || Replicas is not null)
+        // A drain confirms against a plan, never against a guess: until the pods on the
+        // node have been read there is nothing to agree to, and a plan with refusals is
+        // one the drain will not run.
+        && (!IsDrain || DrainPlan is { IsBlocked: false });
 
     /// <summary>
     /// Reads the current scale before the user picks a new one. Deliberately the
@@ -200,11 +328,190 @@ public sealed partial class RowActionViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Lists the pods on the node and works out what a drain would do to each, before
+    /// anything is evicted. This is the whole of the safety design: the refusals
+    /// (a pod nothing would recreate, a pod whose <c>emptyDir</c> data goes with it) are
+    /// discovered and named <em>here</em>, where the answer is still "don't", rather than
+    /// halfway through an eviction loop where it is already too late for the pods behind
+    /// it.
+    /// </summary>
+    public async Task LoadDrainPlanAsync()
+    {
+        if (!IsDrain)
+        {
+            return;
+        }
+
+        if (_client is not { } client)
+        {
+            // The demo cluster plans for real. The classification is pure and the demo
+            // dataset has pods on nodes, so what renders offline is the production
+            // plan — including the two refusals — and only the eviction itself is
+            // unavailable (demo rules 4 and 5). A demo that showed an empty plan would
+            // teach that a drain has nothing to check.
+            _podsOnNode = [.. Demo.DemoData.Pods.Where(p =>
+                string.Equals(NodeActions.NodeNameOf(p), _name, StringComparison.Ordinal))];
+            _planLoaded = true;
+            RebuildDrainPlan();
+            return;
+        }
+
+        if (_podDescriptor is null)
+        {
+            return;
+        }
+
+        IsBusy = true;
+        Message = "Reading the pods on this node…";
+        try
+        {
+            _podsOnNode = await client.ListPodsOnNodeAsync(_podDescriptor, _name);
+            _planLoaded = true;
+            RebuildDrainPlan();
+            Message = null;
+        }
+        catch (Exception ex)
+        {
+            IsError = true;
+            Message = $"Could not read the pods on this node: {FirstLine(ex.Message)}";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// Re-plans from the pods already read. Ticking an option must change the plan on
+    /// screen immediately — the refusal it clears is the reason the box is being ticked,
+    /// and a plan that only updated on confirm would be asking someone to take it on
+    /// trust.
+    /// </summary>
+    partial void OnDrainForceChanged(bool value) => RebuildDrainPlan();
+
+    partial void OnDrainDeleteEmptyDirDataChanged(bool value) => RebuildDrainPlan();
+
+    private void RebuildDrainPlan()
+    {
+        // Never before the pods have been read: a plan over an empty list looks like a
+        // node with nothing on it, and it would enable the confirm.
+        if (!IsDrain || !_planLoaded)
+        {
+            return;
+        }
+
+        var plan = NodeActions.Plan(_podsOnNode, DrainOptions);
+        DrainPlan = plan;
+
+        DrainBlockers.Clear();
+        foreach (var pod in plan.Blocked)
+        {
+            DrainBlockers.Add($"{pod.Key} — {pod.Note}");
+        }
+    }
+
+    /// <summary>
+    /// The eviction loop, rendered as it happens. Every stage the stream reports lands
+    /// either on its own pod row or on the strip's message line; nothing is swallowed,
+    /// including the failures, because "which pods did not move" is the question a
+    /// half-finished drain exists to answer.
+    /// </summary>
+    private async Task RunDrainAsync(ClusterClient client)
+    {
+        if (_podDescriptor is null)
+        {
+            IsError = true;
+            Message = "This cluster's Pod kind has not been discovered yet, so there is nothing to evict through.";
+            return;
+        }
+
+        using var cts = new CancellationTokenSource();
+        _drainCts = cts;
+        IsDraining = true;
+        DrainSteps.Clear();
+
+        var rows = new Dictionary<string, DrainStepViewModel>(StringComparer.Ordinal);
+        var stopped = false;
+
+        try
+        {
+            await foreach (var progress in client.DrainNodeAsync(
+                _descriptor, _podDescriptor, _name, DrainOptions, cts.Token))
+            {
+                if (progress.Plan is { } plan)
+                {
+                    DrainPlan = plan;
+                }
+
+                if (progress.PodKey is { } key)
+                {
+                    if (!rows.TryGetValue(key, out var row))
+                    {
+                        rows[key] = row = new DrainStepViewModel(key);
+                        DrainSteps.Add(row);
+                    }
+
+                    row.Update(progress.Stage, progress.Message);
+                    continue;
+                }
+
+                Message = progress.Message;
+                IsError = progress.Stage is DrainStage.Refused or DrainStage.CompletedWithFailures;
+                IsSuccess = progress.Stage == DrainStage.Completed;
+
+                if (progress.Stage is DrainStage.Refused or DrainStage.Completed or DrainStage.CompletedWithFailures)
+                {
+                    IsDone = true;
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Stopped on purpose. Not an error and not a rollback — say exactly what the
+            // cluster is left in, which is the state CLAUDE.md's node section calls the
+            // one that must never be implicit.
+            stopped = true;
+        }
+        catch (Exception ex)
+        {
+            IsError = true;
+            Message = $"Drain failed: {FirstLine(ex.Message)}";
+            IsDone = true;
+        }
+        finally
+        {
+            IsDraining = false;
+            _drainCts = null;
+        }
+
+        if (stopped)
+        {
+            var moved = rows.Values.Count(r => r.Stage is DrainStage.PodEvicted or DrainStage.PodGone);
+            IsError = true;
+            IsSuccess = false;
+            Message =
+                $"Drain stopped. {moved} pod(s) were evicted and the rest were not; {_name} is still cordoned. "
+                + "Run the drain again to finish, or uncordon to put the node back into service as it is.";
+            IsDone = true;
+        }
+    }
+
     [RelayCommand(CanExecute = nameof(CanConfirm))]
     private async Task ConfirmAsync()
     {
         if (_client is not { } client)
         {
+            return;
+        }
+
+        if (Kind == RowActionKind.Drain)
+        {
+            // A drain is not one request: it owns its own busy state, its own
+            // cancellation and its own per-pod reporting.
+            IsError = false;
+            IsSuccess = false;
+            await RunDrainAsync(client);
             return;
         }
 
@@ -215,6 +522,8 @@ public sealed partial class RowActionViewModel : ObservableObject
         {
             RowActionKind.Scale => $"Scaling to {Replicas}…",
             RowActionKind.Restart => "Restarting…",
+            RowActionKind.Cordon => "Cordoning…",
+            RowActionKind.Uncordon => "Uncordoning…",
             _ => "Deleting…",
         };
 
@@ -232,6 +541,17 @@ public sealed partial class RowActionViewModel : ObservableObject
                     var at = DateTimeOffset.UtcNow;
                     await client.RestartWorkloadAsync(_descriptor, _namespace, _name, at);
                     Message = $"Restart requested — pod template stamped {WorkloadActions.FormatRestartedAt(at)}.";
+                    break;
+
+                case RowActionKind.Cordon:
+                    await client.SetNodeSchedulableAsync(_descriptor, _name, schedulable: false);
+                    Message =
+                        $"{_name} is cordoned. Its pods keep running — drain the node to move them.";
+                    break;
+
+                case RowActionKind.Uncordon:
+                    await client.SetNodeSchedulableAsync(_descriptor, _name, schedulable: true);
+                    Message = $"{_name} is schedulable again.";
                     break;
 
                 default:
@@ -258,12 +578,68 @@ public sealed partial class RowActionViewModel : ObservableObject
 
     /// <summary>Dismisses the strip — the cancel before the action, and the close after it.</summary>
     [RelayCommand]
-    private void Dismiss() => Dismissed?.Invoke();
+    private void Dismiss()
+    {
+        if (IsDraining)
+        {
+            // Belt and braces: the button is hidden while a drain runs, and the palette
+            // cannot reach this. A dismissed strip over a live eviction loop is the one
+            // outcome this whole design is trying not to have.
+            return;
+        }
+
+        Dismissed?.Invoke();
+    }
+
+    /// <summary>
+    /// Stops a running drain where it is. Not a rollback and not an error: the node
+    /// stays cordoned and whatever was evicted stays evicted, which is exactly what the
+    /// final message says.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(IsDraining))]
+    private void StopDrain() => _drainCts?.Cancel();
+
+    /// <summary>Cancels a drain this strip owns when the tab or the app is going away.</summary>
+    public void CancelDrain() => _drainCts?.Cancel();
 
     /// <summary>API-server messages run to several lines; an inline strip gets the first one.</summary>
     private static string FirstLine(string message)
     {
         var end = message.IndexOfAny(['\r', '\n']);
         return end < 0 ? message : message[..end];
+    }
+}
+
+/// <summary>
+/// One pod's row in a running drain: what the eviction loop last said about it, and how
+/// that should read. Its own type rather than a formatted string, because the state
+/// changes — a pod that a PodDisruptionBudget blocks now is very often evicted a minute
+/// later, and the row has to stop saying "blocked" when that happens.
+/// </summary>
+public sealed partial class DrainStepViewModel(string podKey) : ObservableObject
+{
+    public string PodKey { get; } = podKey;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsBlocked))]
+    [NotifyPropertyChangedFor(nameof(IsFailed))]
+    [NotifyPropertyChangedFor(nameof(IsDone))]
+    private DrainStage _stage;
+
+    [ObservableProperty]
+    private string _detail = "";
+
+    /// <summary>Held by a PodDisruptionBudget. Correct behaviour, so it reads as a wait, not a failure.</summary>
+    public bool IsBlocked => Stage == DrainStage.PodBlocked;
+
+    /// <summary>Refused in a way retrying will not fix — an RBAC 403, typically.</summary>
+    public bool IsFailed => Stage == DrainStage.PodFailed;
+
+    public bool IsDone => Stage is DrainStage.PodEvicted or DrainStage.PodGone;
+
+    internal void Update(DrainStage stage, string message)
+    {
+        Stage = stage;
+        Detail = message;
     }
 }

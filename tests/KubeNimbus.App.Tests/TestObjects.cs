@@ -44,6 +44,9 @@ internal static class TestObjects
     public static ResourceDescriptor PodDescriptor { get; } =
         new("", "v1", "Pod", "pods", "pod", Namespaced: true, ShortNames: ["po"], Categories: ["all"]);
 
+    public static ResourceDescriptor NodeDescriptor { get; } =
+        new("", "v1", "Node", "nodes", "node", Namespaced: false, ShortNames: ["no"], Categories: []);
+
     public static ResourceDescriptor ConfigMapDescriptor { get; } =
         new("", "v1", "ConfigMap", "configmaps", "configmap", Namespaced: true, ShortNames: ["cm"], Categories: []);
 

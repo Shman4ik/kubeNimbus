@@ -14,6 +14,34 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Added
 
+- **Node detail, and cordon / uncordon / drain.** Double-click a node to open a
+  pane showing its conditions, its taints, the version and image the kubelet
+  reports, and — the number you actually open a node for — how much of it the
+  scheduler has already promised away: CPU, memory and pod count as *requested
+  against allocatable*, with a bar and a percentage each. A second tab lists the
+  pods that are really on the node, with each pod's own CPU and memory requests,
+  and opens any of them. Right-click a node (or use the command palette) to
+  **cordon** it so nothing new schedules there, **uncordon** it to put it back,
+  or **drain** it.
+
+  The drain asks first and shows its plan before it touches anything: how many
+  pods it will evict, how many it will leave in place (DaemonSet pods, static
+  pods and finished pods, exactly as `kubectl drain` leaves them), and — by name —
+  any pod it *refuses* to evict, because evicting it would destroy something that
+  does not come back: a pod no controller owns, or a pod whose `emptyDir` data
+  lives only on that node's disk. Each refusal names the option that would allow
+  it, and ticking one updates the plan in front of you. While the drain runs you
+  see every pod as it goes: evicted, held back by a PodDisruptionBudget and still
+  being retried, or refused outright with the server's own reason. It runs inside
+  kubeNimbus, and says so before it starts — closing the tab or quitting stops it
+  partway, leaving the node cordoned with some pods moved; **Stop draining** does
+  the same on purpose and then tells you exactly what state the node is in and
+  how to finish or undo it.
+
+  The demo cluster ships three nodes — one of them cordoned and reporting disk
+  pressure — so the whole pane, the plan and its refusals work with no cluster at
+  all; only the eviction itself needs a real API server, and it says so in place.
+
 - **Tail every pod of a workload in one pane.** Right-click a Deployment,
   StatefulSet, DaemonSet, ReplicaSet, Job or Service (or anything else that names
   the pods it owns, custom resources included) and choose **Logs (all pods)** —

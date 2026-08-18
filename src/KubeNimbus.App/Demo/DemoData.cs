@@ -45,6 +45,7 @@ public static class DemoData
     private static readonly JsonDocument CrdCatalogDoc = Load("crd-catalog.json");
     private static readonly JsonDocument CrdsDoc = Load("crds.json");
     private static readonly JsonDocument CertificatesDoc = Load("certificates.json");
+    private static readonly JsonDocument NodesDoc = Load("nodes.json");
 
     private static JsonDocument Load(string fileName)
     {
@@ -64,6 +65,31 @@ public static class DemoData
 
     public static IReadOnlyList<DynamicResource> Events { get; } =
         [.. EventsDoc.RootElement.EnumerateArray().Select(e => new DynamicResource(e))];
+
+    /// <summary>
+    /// The demo cluster's three nodes: a tainted control plane, a healthy worker, and a
+    /// worker that is cordoned and reporting disk pressure. The third one exists because
+    /// it is the state the node surface is for — something is wrong with the machine,
+    /// scheduling has been stopped on it, and the question is whether its pods can be
+    /// moved. They also carry capacity and allocatable, which is what makes the
+    /// allocatable-vs-requested arithmetic in the detail pane show anything at all.
+    /// </summary>
+    public static IReadOnlyList<DynamicResource> Nodes { get; } =
+        [.. NodesDoc.RootElement.EnumerateArray().Select(e => new DynamicResource(e))];
+
+    /// <summary>
+    /// metrics.k8s.io NodeMetrics for the three demo nodes. Built as records rather
+    /// than fixture JSON for the same reason <see cref="HelmReleases"/> is: the parsing
+    /// is covered by unit tests and what this feeds is only the rendering. Without it a
+    /// demo node list in the advanced view would be a CPU/Memory column of nothing but
+    /// gaps, which reads as a broken metrics-server rather than as a demo.
+    /// </summary>
+    public static IReadOnlyList<NodeMetrics> NodeUsage { get; } =
+    [
+        new("demo-cp-1", 412_000_000L, 2_147_483_648L),
+        new("demo-worker-1", 1_930_000_000L, 6_442_450_944L),
+        new("demo-worker-2", 640_000_000L, 3_221_225_472L),
+    ];
 
     /// <summary>metrics.k8s.io PodMetrics — obviously-fake usage numbers, one entry per running pod in <see cref="Pods"/>.</summary>
     public static IReadOnlyList<DynamicResource> PodMetrics { get; } =
@@ -273,7 +299,11 @@ public static class DemoData
     {
         var result = new List<ResourceDescriptor>
         {
-            ResourceDescriptor.Pods,
+            // The Pod descriptor carries `eviction` for the same reason the three
+            // scalable kinds below carry `scale`: capability comes from discovery, so
+            // without it the demo cluster would hide Drain outright and teach that
+            // kubeNimbus cannot drain a node, rather than that *this* cluster cannot.
+            ResourceDescriptor.Pods with { Subresources = ["eviction", "log", "exec", "status"] },
             Descriptor("", "v1", "Service", "services", true),
             // The three kinds a real server declares a `scale` subresource for, carried
             // here too: capability comes from discovery (see WorkloadActions), so
@@ -392,6 +422,7 @@ public static class DemoData
             { Group: "", Kind: "Event" } => Events,
             { Group: "", Kind: "Secret" } => [Secret],
             { Group: "", Kind: "ConfigMap" } => ConfigMaps,
+            { Group: "", Kind: "Node" } => Nodes,
             { Group: "cert-manager.io", Kind: "Certificate" } => Certificates,
             _ => [],
         };
