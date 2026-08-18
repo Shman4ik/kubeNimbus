@@ -38,7 +38,7 @@ rather than here.
 
 | ID | Item | Prio | Size | Status | Rounds |
 |---|---|---|---|---|---|
-| FEAT-58 | Render the apply preview as a **text diff of the manifest**, VS Code style — inline by default, side by side on a toggle — instead of a list of field paths | P1 | M | ready | 0 |
+| FEAT-58 | Render the apply preview as a **text diff of the manifest**, VS Code style — inline by default, side by side on a toggle — instead of a list of field paths | P1 | M | in-progress | 0 |
 | VER-1 | With VER-2's runners in place, confirm `linux-x64`, `linux-arm64` and `osx-arm64` actually start after the `WindowIcons.Apply` fix, and record the result in CLAUDE.md | P0 | S | blocked | 1 |
 
 **FEAT-58 — what it is, and the design decisions already taken.** FEAT-5 shipped the
