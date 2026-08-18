@@ -354,7 +354,7 @@ internal static class ClusterTabScenarios
         var seed = 0;
         foreach (var cluster in new[] { "prod-payments", "prod-ledger", "staging-eu" })
         {
-            foreach (var pod in FixtureData.Pods)
+            foreach (var pod in FixtureData.Pods.Where(p => p.Namespace == "payments"))
             {
                 var row = new ResourceRowViewModel(pod, cluster);
                 tab.Rows.Add(row);
@@ -431,7 +431,7 @@ internal static class ClusterTabScenarios
         // which clears Rows and (with no live client behind the fixture) can't refill them.
         var pods = tab.SidebarSections.First(s => s.Title == "Workloads").Kinds.First(k => k.Descriptor.Kind == "Pod");
         tab.SelectKindCommand.Execute(pods);
-        foreach (var pod in FixtureData.Pods)
+        foreach (var pod in FixtureData.Pods.Where(p => p.Namespace == "payments"))
         {
             tab.Rows.Add(new ResourceRowViewModel(pod));
         }
