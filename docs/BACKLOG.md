@@ -38,7 +38,75 @@ rather than here.
 
 | ID | Item | Prio | Size | Status | Rounds |
 |---|---|---|---|---|---|
+| FEAT-58 | Render the apply preview as a **text diff of the manifest**, VS Code style — inline by default, side by side on a toggle — instead of a list of field paths | P1 | M | ready | 0 |
 | VER-1 | With VER-2's runners in place, confirm `linux-x64`, `linux-arm64` and `osx-arm64` actually start after the `WindowIcons.Apply` fix, and record the result in CLAUDE.md | P0 | S | blocked | 1 |
+
+**FEAT-58 — what it is, and the design decisions already taken.** FEAT-5 shipped the
+apply preview on 2026-08-18 and its panel lists *field paths*
+(`spec.template.spec.containers[worker].image`, old value above new). That is precise and
+compact, and it is not how anyone reads a manifest change: the reference point is
+`kubectl diff`, `git diff` and VS Code's own diff editor, all of which show the document
+with its changed lines in place. This row replaces the body of that panel; the request
+came with "take VS Code as the example", so that is the bar.
+
+*Done when* the panel shows the previewed manifest as a line diff — line numbers for both
+sides, changed lines tinted and marked, unchanged runs collapsed to a few lines of context
+with a "N unchanged lines" separator — inline by default, with a side-by-side mode on a
+toggle, both rendering correctly in the ~300px dock and maximized, in both themes.
+
+Nine things were settled while looking at the shipped panel, and writing them down here is
+the point of this note — none of them should be re-derived:
+
+1. **Diff the two YAML documents, not the editor's text.** Both sides still come from the
+   server (the live GET and the `dryRun=All` response, as FEAT-5's rule 1 requires), so
+   what changes is only the *rendering*: `DynamicResource.ToYaml()` on each side, then a
+   line diff. `ApplyPreview` already carries the previewed object; it will also need to
+   carry the live one, which `PreviewApplyAsync` reads and currently discards.
+2. **Strip the bookkeeping fields from both documents before diffing**, the same three
+   `ResourceDiff` already hides (`metadata.managedFields`, `resourceVersion`,
+   `generation`). `managedFields` alone is routinely a third of a real object and changes
+   on every apply, so a text diff over the raw documents would open on the one thing
+   nobody wants to read. The existing "n server bookkeeping fields hidden" footnote is what
+   keeps that honest and should stay.
+3. **`ResourceDiff` stays and keeps earning its place**, as the *semantic* summary: the
+   headline count ("the server would make 5 changes") is field-level and deliberately not a
+   line count, its list-matching by `name` is what stops an inserted container reading as
+   six changes, and its 21 tests pin behaviour this row must not regress. Keeping the field
+   list reachable as a third view mode is the suggested resolution — a `ListBox.segmented`
+   strip (Diff / Split / Fields), which is the control UI rule 10 already established for
+   exactly this and costs no extra row of chrome.
+4. **The diff algorithm belongs in Core** (`TextDiff.cs`), pure and tested, for the same
+   reason `ResourceDiff` does — hard rule 1, and a line diff is engine work a CLI would
+   want too. Trim the common prefix and suffix first (two serializations of nearly the same
+   object share almost everything), then run an LCS over what is left with an explicit cell
+   budget, falling back to "the middle was replaced" past it rather than allocating without
+   bound. That fallback is a state to render honestly, not to hide.
+5. **Collapsing is part of the feature, not a nicety.** A Deployment serializes to ~60
+   lines and a CRD to hundreds; three lines of context around each changed run, with the
+   skipped count stated, is what makes the panel readable at dock height.
+6. **Side-by-side needs alignment fillers**, which is the whole reason it is more than a
+   two-column layout: a deleted line on the left has to face a blank on the right. Derive
+   both modes from one row list so they cannot disagree about what changed.
+7. **The mode toggle is session-scoped and does not become a preference.** `ShowLogTimestamps`
+   and `WrapLogLines` are the precedent — a view toggle inside a pane, not a card on the
+   preferences page. FEAT-5's own `PreviewApplies` setting is unaffected.
+8. **The layout trap is already documented and cost two attempts**: the panel's grid row is
+   star-sized from `YamlEditorView.axaml.cs` while a diff is open and `Auto` when it is not.
+   An `Auto` row tall enough to read the diff leaves a zero-height editor at ~300px, and a
+   `MinHeight` on the editor overflows the dock and overlaps its own rows. A taller diff
+   body makes that pressure worse, so whatever this row does about it is a deliberate
+   decision — including, possibly, that a full-width diff wants the maximized dock and
+   should say so.
+9. **No syntax highlighting in the diff.** That means an AvaloniaEdit instance per side and
+   a colouring pass, which is a different feature; monospace plus a tinted line background
+   is what VS Code's own inline diff leans on anyway.
+
+Verification is the same shape as FEAT-5's and reaches just as far without a cluster: the
+diff engine is pure, so it is unit-testable outright (identical documents, an insert, a
+delete, a replace, a change at the first and last line, the budget fallback, the collapse
+boundaries); the panel renders in the screenshot harness in both themes and both modes; and
+`ApplyPreviewHttpTests` already covers the request. What still needs a real API server is
+unchanged and already recorded as VER-32/VER-33 — this row neither closes nor worsens it.
 
 **VER-1 is `blocked`, and it needs about thirty seconds of your time to unblock.**
 One third of it is done: `linux-x64` is confirmed starting on a real GitHub runner —
