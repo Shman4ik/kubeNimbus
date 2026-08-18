@@ -159,6 +159,11 @@ evidence, and it is worth doing before you commit to anything below P1.
 | FEAT-41 | Send `fieldValidation=Strict` on server-side apply and surface a rejection the way a 409 conflict already is — *done when a misspelled or unknown field is refused with the server's own message rather than silently pruned* | **Demand, from a comparable architecture, and confirmed as our own gap.** [headlamp#7147](https://github.com/kubernetes-sigs/headlamp/issues/7147) (open) describes exactly this on the same request shape — SSA PATCH with no validation param: dry-run passes, apply "succeeds", the misspelled field vanishes, because the API server's default `Warn` mode reports pruned fields only in a response header nothing reads. `ClusterClient.Dynamic.cs`'s `ApplyYamlAsync` was checked against this and sends `fieldManager`/`force` only — the identical hole. **Notes:** one query parameter plus reading the response the same way a 409 already is; **not** a diff feature and needs none. Arguably a prerequisite for `FEAT-5`/`FEAT-28` being trustworthy at all — a dry-run diff built on `Warn`-mode validation shows a *clean* preview for the exact typo this catches, which is worse than no diff. Pre-1.27 servers may reject the param, so it wants a graceful fallback rather than a hard dependency | S | P1 | |
 | FEAT-42 | A resource-to-resource comparison view — select two existing objects, see their spec differences | **Marketing only, and thin even there — stated as such.** Aptakube markets "Resource Diff" as README bullet #3 and one bug report ([aptakube#559](https://github.com/aptakube/aptakube/issues/559)) confirms real usage, but no user-filed request or upvoted issue was found for it in any tracker. **Notes: this is not evidence for `FEAT-5`/`FEAT-28`** — it is a distinct, unfiled feature, and conflating the two is easy to do from the README alone (the report that proposed this row nearly did), which is why it is a row of its own rather than folded into either | M | P3 | |
 | FEAT-40 | A "clear" action on the log pane that empties the buffer without restarting the stream | Demand: [lens#5315](https://github.com/lensapp/lens/issues/5315) — 16 total / 9 👍, 8 comments, **open**. Marketing/parity: Headlamp shipped it in v0.20.0 ([#1061](https://github.com/kubernetes-sigs/headlamp/issues/1061)), Aptakube shipped it ([#281](https://github.com/aptakube/aptakube/issues/281)). **Notes:** today the buffer clears only implicitly inside `BeginLogStream`, so "clear and watch what happens next" means stopping and restarting the stream — which loses the follow and re-fetches the tail. `ClearLogBuffer()` exists and has one caller; this is a command over it. UI rule 10 applies: the log toolbar row is already full, so this probably belongs in the palette and a pane context menu rather than as a new chip | S | P3 | |
+| FEAT-43 | Pod detail: render Conditions, Tolerations, QoS Class, Priority Class, Node Selector and each container's Liveness/Readiness/Startup probe config as structured, always-visible sections (not a raw `describe` text clone) | Marketing/table-stakes: shipped and unprompted in [Lens/OpenLens/FreeLens](https://raw.githubusercontent.com/lensapp/lens/master/packages/core/src/renderer/components/workloads-pods/pod-details.tsx) and [Headlamp](https://raw.githubusercontent.com/kubernetes-sigs/headlamp/main/frontend/src/components/pod/Details.tsx); `d` (Describe) is a documented [global k9s shortcut](https://raw.githubusercontent.com/derailed/k9s/master/README.md) across every kind | M | P1 | |
+| FEAT-44 | Surface container CPU/Memory **requests and limits as visible text** on pod detail's Usage tab (beside current/peak, with %-of-limit), not only in the container-chip hover tooltip | Demand: [lensapp/lens#4154](https://github.com/lensapp/lens/issues/4154), open since **Oct 2021**, explicit — *"not looking for graphs, just the number… what is configured for requests/limits"*; [lensapp/lens#8106](https://github.com/lensapp/lens/issues/8106), open, a **regression** report. Shipped-and-corrected: [FreeLens PR #971](https://github.com/freelensapp/freelens) added exactly this to the fork after years of it being missing upstream | S | P1 | |
+| FEAT-45 | Let an individual `configMapKeyRef`/`secretKeyRef` env row **open its source object**, the same "open the object it names" affordance the `envFrom` rows already have | Demand: [derailed/k9s#745](https://github.com/derailed/k9s/issues/745) (2020, user-filed, closed unshipped in the TUI — the want is real, the shape a terminal can't cheaply offer) | S | P2 | |
+| FEAT-46 | Service detail: a **"Targeted Pods"** section resolved from the Service's own selector | Marketing/table-stakes, confirmed via source: [Headlamp's Service `Details.tsx`](https://raw.githubusercontent.com/kubernetes-sigs/headlamp/main/frontend/src/components/service/Details.tsx) ships Targeted Pods + Endpoints + Endpoint Slices with no click required | M | P2 | |
+| FEAT-47 | PV ↔ PVC: show a PV's bound claim (namespace/name) and a PVC's bound volume, each opening the other object | Demand: [lensapp/lens#6425](https://github.com/lensapp/lens/issues/6425), open since Oct 2022, labelled `good first issue` by Lens's own maintainers — acknowledged-easy, still unshipped four years on | S | P3 | |
 
 FEAT-28, FEAT-29 and FEAT-30 come from [the KubeUI positioning
 research](research/2026-08-17-kubeui-positioning.md) (2026-08-17) and are competitor-parity
@@ -225,6 +230,39 @@ user-vs-maintainer authorship instead; and it records a clean negative worth kee
 editing-safety bug classes found in the field (Aptakube #299's live refresh clobbering an open
 edit, Lens #5879's tab content bleed) were checked against `YamlEditorTabViewModel` and
 `ClusterTabViewModel` and this app is already structurally immune to both.
+
+FEAT-43 – FEAT-47 come from [the pod/workload-detail research](research/2026-08-18-pod-workload-detail.md)
+(2026-08-18), which tested **FEAT-11**'s hypothesis and found it broadly right but
+mis-scoped: three of five competitors (the Lens/OpenLens/FreeLens lineage and
+Headlamp, confirmed against their own source) ship Conditions/Tolerations/QoS
+Class/Priority Class as a default, unprompted pod-detail surface, and k9s's `d`
+(Describe) is a documented global shortcut across every kind — that is marketing/
+table-stakes evidence, not upvoted-issue demand, since it predates these projects'
+issue trackers. **FEAT-11's own row is left untouched**; FEAT-43 narrows it to the
+half that is actually missing (kubeNimbus already ships a dedicated Events tab, so
+FEAT-11's "events digest" third is stale) and drops the "raw `describe` text"
+framing in favour of structured fields, which is what every competitor above
+actually renders and is the AOT-cheap version. The report's single strongest
+finding is **FEAT-44**, not FEAT-43: kubeNimbus already computes container
+requests/limits and hides them behind a hover tooltip, which is exactly the gap
+[lens#4154](https://github.com/lensapp/lens/issues/4154) has asked for since 2021
+and FreeLens shipped a fix for after Lens itself left it broken — a
+shipped-and-corrected signal, and a rendering-only fix on this app's own numbers.
+FEAT-45 and FEAT-47 close two narrow, already-half-built navigation gaps
+(individual env-var key refs, and PV↔PVC) that reuse the existing "open the
+object it names" affordance; FEAT-46 is UI-only on top of engine FEAT-3 already
+has, but would be kubeNimbus's first non-Pod object detail view and is sized
+accordingly. Three things the report found and deliberately did **not** turn into
+rows: a full relationship-graph view (popular as a Lens/FreeLens extension, but a
+different feature shape that sits uneasily against UI rules 1 and 10 — left for a
+human design decision); Ingress→Service made clickable (even Headlamp renders it
+as plain text); and ConfigMap/Secret→its-consumers in the *reverse* direction (no
+filed demand, and the one candidate here that would need a cluster-wide scan
+rather than a field already in hand). `api.github.com`'s search and per-repo
+endpoints were unavailable all session (scoped to this repo only), so — as a
+prior report recorded under the same constraint — nothing above cites a reaction
+count; ranking is by shipped status, issue age, duplicate filings and
+user-vs-maintainer authorship instead.
 
 ### C. Distribution and adoption
 
