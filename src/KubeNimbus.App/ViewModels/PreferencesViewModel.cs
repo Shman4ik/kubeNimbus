@@ -37,6 +37,10 @@ public sealed partial class PreferencesViewModel : ObservableObject
     [ObservableProperty]
     private bool _confirmDeletes;
 
+    /// <summary>Whether Apply shows the server's own dry-run diff before changing anything.</summary>
+    [ObservableProperty]
+    private bool _previewApplies;
+
     /// <summary>
     /// The kubeconfig files the user has pointed the app at, newest last. Paths only
     /// (CLAUDE.md rule 4) — this list is what gets re-resolved through the kubeconfig
@@ -66,6 +70,7 @@ public sealed partial class PreferencesViewModel : ObservableObject
         _logBufferLines = settings.LogBufferLines;
         _metricsPollSeconds = settings.MetricsPollSeconds;
         _confirmDeletes = settings.ConfirmDeletes;
+        _previewApplies = settings.PreviewApplies;
 
         RefreshKubeconfigPaths();
         _main.PropertyChanged += OnMainPropertyChanged;
@@ -173,4 +178,7 @@ public sealed partial class PreferencesViewModel : ObservableObject
 
     partial void OnConfirmDeletesChanged(bool value) =>
         App.Update(s => s with { ConfirmDeletes = value });
+
+    partial void OnPreviewAppliesChanged(bool value) =>
+        App.Update(s => s with { PreviewApplies = value });
 }

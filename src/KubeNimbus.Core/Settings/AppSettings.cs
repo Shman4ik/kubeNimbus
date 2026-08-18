@@ -125,6 +125,22 @@ public sealed record AppSettings
     /// </summary>
     public bool ConfirmDeletes { get; set; } = true;
 
+    /// <summary>
+    /// Whether Apply first asks the server what it would do — a <c>dryRun=All</c> apply,
+    /// diffed against the object as it stands — and shows that before anything changes.
+    /// On by default, for the same reason <see cref="ConfirmDeletes"/> is: a blind apply
+    /// into someone's cluster is the mutating action this app performs most often, and
+    /// the preview is the only thing that can show a defaulting webhook or another field
+    /// manager's conflict *before* the object moves rather than after.
+    ///
+    /// <para>
+    /// It costs one extra round trip per apply and one click. Turning it off restores the
+    /// straight-to-apply behaviour, which is a deliberate choice by someone who has
+    /// decided they want the speed — again exactly as with the delete confirm.
+    /// </para>
+    /// </summary>
+    public bool PreviewApplies { get; set; } = true;
+
     /// <summary>Default for <see cref="LogBufferLines"/>, and the value the app shipped with.</summary>
     public const int DefaultLogBufferLines = 4000;
 

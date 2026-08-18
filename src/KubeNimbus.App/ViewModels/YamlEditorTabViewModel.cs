@@ -85,6 +85,18 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
     [ObservableProperty]
     private string? _conflictDetails;
 
+    /// <summary>
+    /// The server's answer to "what would this apply do?", or null when nothing is
+    /// armed. Set by <see cref="ApplyCommand"/> when the preference is on; the panel it
+    /// drives carries the confirm, so Apply never mutates on the click that started it —
+    /// the same shape as the resource list's row-action strip (CLAUDE.md UI rule 17).
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPendingPreview))]
+    private ApplyPreviewViewModel? _pendingPreview;
+
+    public bool HasPendingPreview => PendingPreview is not null;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsEditorReadOnly))]
     private bool _isDeleted;
@@ -195,6 +207,10 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
     partial void OnYamlTextChanged(string value)
     {
         IsDirty = true;
+        // The preview answers a question about the exact text that produced it. Editing
+        // makes it a description of something that is no longer on screen, and a stale
+        // diff above a live editor is worse than no diff at all.
+        PendingPreview = null;
         if (!IsSecretValuesRevealed)
         {
             return;
@@ -422,11 +438,104 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
             : $"Copied {row.Key} to the clipboard.";
     }
 
+    /// <summary>
+    /// Apply. With "Preview before applying" on — the default — this asks the server what
+    /// the apply would do and shows it; the panel's own button is what changes anything.
+    ///
+    /// <para>
+    /// The setting is read here, at the moment the button is pressed, rather than cached
+    /// on the tab: someone who turns the preview back on after an apply surprised them
+    /// expects the very next apply to show one, not the next tab they open. Same rule,
+    /// same reason, as the delete confirm.
+    /// </para>
+    /// </summary>
     [RelayCommand(CanExecute = nameof(IsLive))]
-    private async Task ApplyAsync() => await ApplyCoreAsync(force: false);
+    private async Task ApplyAsync()
+    {
+        if (App.LoadSettings().PreviewApplies)
+        {
+            await PreviewCoreAsync(force: false);
+            return;
+        }
 
+        await ApplyCoreAsync(force: false);
+    }
+
+    /// <summary>
+    /// Take the conflicted fields from their current owner. Previewed like any other
+    /// apply when the preference is on, and that is the case where a preview earns the
+    /// most: what force-apply changes is precisely the fields somebody else is managing.
+    /// </summary>
     [RelayCommand(CanExecute = nameof(IsLive))]
-    private async Task ForceApplyAsync() => await ApplyCoreAsync(force: true);
+    private async Task ForceApplyAsync()
+    {
+        if (App.LoadSettings().PreviewApplies)
+        {
+            await PreviewCoreAsync(force: true);
+            return;
+        }
+
+        await ApplyCoreAsync(force: true);
+    }
+
+    /// <summary>Applies what the open preview was computed from.</summary>
+    [RelayCommand(CanExecute = nameof(IsLive))]
+    private async Task ConfirmPreviewAsync()
+    {
+        if (PendingPreview is not { } preview)
+        {
+            return;
+        }
+
+        await ApplyCoreAsync(preview.IsForce);
+    }
+
+    [RelayCommand]
+    private void CancelPreview()
+    {
+        PendingPreview = null;
+        StatusMessage = "Nothing was applied.";
+    }
+
+    private async Task PreviewCoreAsync(bool force)
+    {
+        if (_client is null)
+        {
+            return;
+        }
+
+        if (!IsSelfDescribing(YamlText))
+        {
+            StatusMessage = MissingTypeMessage;
+            return;
+        }
+
+        IsBusy = true;
+        PendingPreview = null;
+        ConflictDetails = null;
+        StatusMessage = null;
+        try
+        {
+            var preview = await _client.PreviewApplyAsync(_descriptor, _namespace, _name, YamlText, FieldManager, force);
+            PendingPreview = new ApplyPreviewViewModel(preview.Diff, force);
+        }
+        catch (ServerSideApplyConflictException ex)
+        {
+            // A conflict is an answer, not a failure of the preview — and it is the one
+            // this feature most wants to deliver before the object moves rather than after.
+            ConflictDetails = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            // Everything the server refuses — a validating webhook, a schema violation, an
+            // RBAC 403 — lands here having changed nothing, which is the point.
+            StatusMessage = $"Nothing was applied. The server refused the dry run: {ex.Message}";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
 
     private async Task ApplyCoreAsync(bool force)
     {
@@ -435,17 +544,14 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
             return;
         }
 
-        // Caught locally because the server's own complaint about a body with no
-        // apiVersion/kind ("Object 'Kind' is missing") reads like a cluster problem
-        // rather than something the editor can fix.
         if (!IsSelfDescribing(YamlText))
         {
-            StatusMessage = $"Nothing was applied: this document has no apiVersion:/kind:. Reload from the server, "
-                + $"or add apiVersion: {_descriptor.ApiVersion} and kind: {_descriptor.Kind}.";
+            StatusMessage = MissingTypeMessage;
             return;
         }
 
         IsBusy = true;
+        PendingPreview = null;
         ConflictDetails = null;
         StatusMessage = null;
         try
@@ -481,6 +587,8 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
         IsBusy = true;
         StatusMessage = null;
         ConflictDetails = null;
+        // A preview describes the text that produced it; reloading replaces that text.
+        PendingPreview = null;
         try
         {
             var current = await _client.ReadResourceAsync(_descriptor, _namespace, _name);
@@ -601,6 +709,15 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
         }
     }
 
+    /// <summary>
+    /// Caught locally because the server's own complaint about a body with no
+    /// apiVersion/kind ("Object 'Kind' is missing") reads like a cluster problem rather
+    /// than something the editor can fix.
+    /// </summary>
+    private string MissingTypeMessage =>
+        "Nothing was applied: this document has no apiVersion:/kind:. Reload from the server, "
+        + $"or add apiVersion: {_descriptor.ApiVersion} and kind: {_descriptor.Kind}.";
+
     /// <summary>What the delete confirmation names, so "Confirm delete" can't be ambiguous about its target.</summary>
     public string DeleteTargetDescription => _namespace is null
         ? $"{_descriptor.Kind}/{_name}"
@@ -630,6 +747,114 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
         var end = message.IndexOfAny(['\r', '\n']);
         return end < 0 ? message : message[..end];
     }
+}
+
+/// <summary>
+/// The server's dry-run answer, rendered for the panel above the editor: what would
+/// change, how many of those changes there were, and which button commits them.
+/// Built once from a <see cref="ResourceDiff"/> and never mutated — a new preview is a
+/// new instance, so nothing here needs change notification.
+/// </summary>
+public sealed class ApplyPreviewViewModel
+{
+    public ApplyPreviewViewModel(ResourceDiff diff, bool isForce)
+    {
+        IsForce = isForce;
+        IsEmpty = diff.IsEmpty;
+        IsCreate = diff.IsCreate;
+        Rows = [.. diff.Changes.Select(c => new DiffRowViewModel(c))];
+
+        Headline = diff switch
+        {
+            { IsCreate: true } => "This object is not on the server. Applying would create it:",
+            { IsEmpty: true } => "The server reports this apply would change nothing.",
+            { TotalChanges: 1 } => "The server would make 1 change:",
+            _ => $"The server would make {diff.TotalChanges} changes:",
+        };
+
+        // Both notes are about what is *not* on screen, which is exactly the kind of
+        // thing a diff must say out loud rather than leave the reader to notice.
+        var notes = new List<string>();
+        if (diff.IsTruncated)
+        {
+            notes.Add($"showing the first {diff.Changes.Count} of {diff.TotalChanges}");
+        }
+
+        if (diff.HiddenBookkeepingCount > 0)
+        {
+            notes.Add($"{diff.HiddenBookkeepingCount} server bookkeeping "
+                + $"{(diff.HiddenBookkeepingCount == 1 ? "field" : "fields")} hidden "
+                + "(managedFields, resourceVersion, generation)");
+        }
+
+        Footnote = notes.Count == 0 ? null : string.Join(" · ", notes);
+    }
+
+    public IReadOnlyList<DiffRowViewModel> Rows { get; }
+
+    public string Headline { get; }
+
+    public string? Footnote { get; }
+
+    public bool HasFootnote => Footnote is not null;
+
+    /// <summary>True when the server says nothing would change — the panel then has no rows to show.</summary>
+    public bool IsEmpty { get; }
+
+    public bool HasRows => Rows.Count > 0;
+
+    public bool IsCreate { get; }
+
+    /// <summary>Whether the apply this previews takes conflicted fields from their current owner.</summary>
+    public bool IsForce { get; }
+
+    /// <summary>
+    /// The confirm button says which apply it is. A force-apply reached through a
+    /// conflict must not confirm under the same word as an ordinary one — taking fields
+    /// away from another manager is the more consequential of the two.
+    /// </summary>
+    public string ConfirmLabel => IsForce ? "Force apply" : "Apply changes";
+}
+
+/// <summary>One line of the preview panel.</summary>
+public sealed class DiffRowViewModel
+{
+    public DiffRowViewModel(ResourceChange change)
+    {
+        Path = change.Path;
+        Kind = change.Kind;
+        Before = change.Before;
+        After = change.After;
+    }
+
+    public string Path { get; }
+
+    public ResourceChangeKind Kind { get; }
+
+    public string? Before { get; }
+
+    public string? After { get; }
+
+    /// <summary>
+    /// The sign column. A glyph as well as a colour, because colour alone carries
+    /// nothing for a reader who cannot tell red from green, and a diff is exactly the
+    /// place where the two directions must not be guessed.
+    /// </summary>
+    public string Marker => Kind switch
+    {
+        ResourceChangeKind.Added => "+",
+        ResourceChangeKind.Removed => "−",
+        _ => "~",
+    };
+
+    public bool IsAdded => Kind == ResourceChangeKind.Added;
+
+    public bool IsRemoved => Kind == ResourceChangeKind.Removed;
+
+    public bool IsChanged => Kind == ResourceChangeKind.Changed;
+
+    /// <summary>Only a changed value has two sides to separate.</summary>
+    public bool HasBothSides => IsChanged;
 }
 
 /// <summary>

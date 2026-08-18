@@ -14,6 +14,26 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Added
 
+- **Apply now shows what it would change, before it changes it.** Pressing Apply
+  in the YAML editor asks the API server to run the apply as a dry run and then
+  shows the difference between the object as it is and the object as the server
+  says it would be — field by field, old value above new. Nothing is written
+  until you press the second button.
+
+  Because both sides come from the server, the preview includes what your text
+  does not say: fields a defaulting webhook fills in, values a mutating
+  controller rewrites, and the API server's own validation, which now refuses a
+  bad manifest *before* the object moves rather than after. A field-manager
+  conflict shows up here too, with its force-apply confirming under its own
+  label. Server bookkeeping — `managedFields`, `resourceVersion`, `generation` —
+  is left out and counted, so a one-line change reads as a one-line change;
+  lists of containers, ports, env vars and volumes are matched by name, so
+  inserting one container no longer reports all of them as changed.
+
+  "The server reports this apply would change nothing" is its own answer, and
+  the whole step can be turned off in Preferences → *Preview before applying*
+  for anyone who wants Apply to go straight through as it used to.
+
 - **Node detail, and cordon / uncordon / drain.** Double-click a node to open a
   pane showing its conditions, its taints, the version and image the kubelet
   reports, and — the number you actually open a node for — how much of it the

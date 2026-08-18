@@ -111,6 +111,18 @@
                 </Grid>
             </Border>
 
+            <Border Classes="card" Padding="14,12" Margin="0,6,0,0">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Spacing="2" Margin="0,0,16,0">
+                        <TextBlock Classes="label" Text="Preview before applying" />
+                        <TextBlock Classes="hint" Text="Apply asks the server what it would do first, and shows the difference — including defaulting, admission webhooks and another field manager's conflicts — before the object changes. Costs one round trip and one click." />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="1" VerticalAlignment="Center"
+                                  OnContent="" OffContent=""
+                                  IsChecked="{Binding PreviewApplies}" />
+                </Grid>
+            </Border>
+
             <TextBlock Classes="sectionHeader" Text="LOGS AND METRICS" Margin="4,10,4,4" />
             <Border Classes="card" Padding="14,12">
                 <Grid ColumnDefinitions="*,Auto">

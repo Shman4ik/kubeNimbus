@@ -99,9 +99,10 @@ telemetry** where KubeUI's is on by default. kubeNimbus is the narrower, faster,
 quieter one: Aptakube's polish, NativeAOT startup, MIT, Kubernetes-first.
 
 Where KubeUI is ahead and we are not: signed and notarized binaries, installers
-with auto-update, winget/Store/Homebrew distribution, server-side dry-run,
-schema-aware YAML completion and node drain. None of that is a reason to change
-course; all of it is a reason not to write a comparison table yet.
+with auto-update, winget/Store/Homebrew distribution, and schema-aware YAML
+completion. Node drain and server-side dry-run were on that list and are not any
+more — see "Node operations" and "The apply preview" below. None of the rest is a
+reason to change course; all of it is a reason not to write a comparison table yet.
 
 **Headline benchmark:** ~150 ms to first frame (vs Electron's seconds) —
 `--smoke-test`, which waits for a real compositor tick, reported **103–108 ms**
@@ -779,7 +780,8 @@ There are **two** persisted files and the split is not arbitrary:
 - **`settings.json`** (`KubeNimbus.Core/Settings/`, `AppSettings` + `AppSettingsStore`)
   is *preferences* — what you chose once and expect to still be true next launch:
   theme, hotkey scheme, advanced view, sidebar visibility and expanded sections,
-  picked kubeconfig paths, log scrollback, metrics poll interval, delete confirmation.
+  picked kubeconfig paths, log scrollback, metrics poll interval, delete confirmation,
+  apply preview.
 - **`workspace.json`** (`KubeNimbus.App/WorkspaceStore.cs`) is *session* — what the
   window looked like: open tabs, pinned and recent contexts, environment overrides.
 
@@ -1653,6 +1655,81 @@ terminal emulator in this container — see the pass note in Current status):
   It wants `kubectl exec -it` as the command the terminal runs, which is a *fourth*
   per-platform argument shape on top of the three above — do not bolt it onto the
   no-arguments Linux path without re-reading rule 4 above.
+
+## The apply preview (server-side dry run)
+
+Apply used to be blind: the editor sent the document and reported what came back.
+`ClusterClient.PreviewApplyAsync` + `ResourceDiff.cs` (Core) and the panel under the
+editor (`ApplyPreviewViewModel`, UI rules 9 and 17) turn it into a two-step action —
+ask the server what it would do, then decide. The step is a preference
+(`AppSettings.PreviewApplies`, on by default), read **at the press** like the delete
+confirm and for the same reason.
+
+Seven things are load-bearing.
+
+1. **Both sides of the diff come from the server.** The live object is a GET; the other
+   side is the `dryRun=All` response. That is the entire difference between this and
+   diffing the editor's text against the object: the dry-run body has been through
+   defaulting, admission webhooks and every mutating controller in the chain, so a field
+   the cluster is going to add or rewrite is *in the diff*, and cannot be in a local one.
+   It is also why the preview is worth a round trip rather than being computed offline.
+2. **`dryRun=All` is the only value, and it is kubectl's own.** The API server runs every
+   admission stage and the whole validation chain and then discards instead of
+   persisting. A validating webhook's refusal, a schema violation and an RBAC 403
+   therefore all arrive here having changed nothing, which is the point — `PreviewCoreAsync`
+   prints the server's own sentence rather than a paraphrase.
+3. **A 409 conflict during the preview is an answer, not a failure.** It raises the same
+   `ServerSideApplyConflictException` a real apply does, so the conflict panel and its
+   force-apply appear *before* the object moves. Force-apply is previewed too, and that
+   is the case where a preview earns the most: what it changes is precisely the fields
+   somebody else is managing. The confirm button says `Force apply` rather than
+   `Apply changes` — the more consequential of the two applies must not be confirmed
+   under the same word.
+4. **Three fields are excluded and counted, not shown.** `metadata.managedFields` is the
+   apply's own bookkeeping and changes on every apply including one that changes nothing
+   else; `resourceVersion` and `generation` are the server's counters. Leaving them in is
+   what makes `kubectl diff` hard to read. The count is printed (`1 server bookkeeping
+   field hidden (…)`) because what a diff withholds has to be said out loud — a panel
+   that is quietly incomplete is the exact failure this feature exists to prevent one
+   level up.
+5. **Lists are matched by `name` where every element on both sides has a unique one.**
+   Containers, ports, env vars, volumes and volumeMounts all have that shape and it is
+   Kubernetes' own merge key for them. Without it, inserting one container at the front
+   reports *every* container as changed, which is the loudest noise source in a real
+   deployment diff. Duplicate names, unnamed objects and scalars fall back to index
+   pairing, because a wrong pairing invents changes. A pure reordering is reported as its
+   own line naming both sequences: it changes no element, and for `env` it is semantic.
+6. **The preview describes one exact document and dies with it.** Editing the text,
+   reloading, or applying clears it. A stale diff above a live editor is worse than no
+   diff — it is a wrong answer wearing the server's authority. `YamlEditorPreviewTests`
+   pins that, and the break was written and confirmed red before the test was called done.
+7. **The panel shares the dock with the editor, from code-behind.** Its row is star-sized
+   while a diff is open and `Auto` when it is not (or when the diff is empty, which is one
+   sentence and two buttons). Both of the obvious XAML answers were tried and rendered
+   wrong at the dock's default ~300px: an `Auto` row tall enough to read left a
+   zero-height editor, and a `MinHeight` on the editor pushed the grid past the dock and
+   overlapped its own rows. Mutating a `RowDefinition` is what `ClusterTabView.ApplyDockState`
+   already does, for the same reason. The panel itself is a `ContentControl` + inline
+   `DataTemplate`, never a `Border` with both `DataContext` and `x:DataType` — UI rule 17
+   records what that pair renders, which is nothing at all, silently.
+
+**The demo cluster is unchanged and needs no new refusal:** there is no `ClusterClient`,
+so Apply, force-apply and the preview are all already disabled by `CanExecute` under the
+editor's existing demo notice (demo rule 5).
+
+**What is not built, deliberately:** a side-by-side or full-manifest diff view (the
+previewed object is kept on `ApplyPreview` for whoever wants one), a preview for the row
+list's own scale/restart/delete actions (those already arm a strip that names exactly
+what they do), and `--dry-run=client`, which answers a question nobody has: the client's
+copy of the manifest is the text on screen.
+
+**One known gap, and it is somebody else's row rather than an oversight.** The apply
+still sends no `fieldValidation`, so the API server's default `Warn` mode silently
+*prunes* a misspelled or unknown field and reports it only in a response header nothing
+reads. A preview built on that shows a clean diff for exactly that typo — the edit simply
+is not in the dry-run body — which is a quieter failure than no preview at all. That is
+`FEAT-41` in `docs/BACKLOG.md` (one query parameter plus a graceful fallback for
+pre-1.27 servers), and shipping this pass raises its value rather than lowering it.
 
 ## Metrics (metrics.k8s.io)
 
@@ -3553,3 +3630,68 @@ stopped; confirm a static pod and the DaemonSet pods really are left behind; and
 `design/screenshots/*.png` were deliberately **not** regenerated, for the reason the CRD
 pass recorded: they drift by themselves because Age is a function of the real clock, so
 regenerating them commits a date rather than a change.
+
+
+**Apply-preview pass (FEAT-5):** the YAML editor's apply was blind — it sent the document
+and reported what came back. It now asks the server what the apply would do and shows the
+answer before anything changes. See "The apply preview (server-side dry run)" above for
+the seven rules. New: `ResourceDiff.cs` and `PreviewApplyAsync` in Core (+ 21
+`ResourceDiffTests` and 6 `ApplyPreviewHttpTests`), `ApplyPreviewViewModel` /
+`DiffRowViewModel` and the panel under the editor (+ 9 `YamlEditorPreviewTests`), an
+`AppSettings.PreviewApplies` preference with its own card on the preferences page, three
+diff-row style classes, and two screenshot scenarios
+(`cluster-tab-yaml-diff-{preview,no-change}`). No new gesture and no new always-visible
+control, so `docs/keyboard-shortcuts.md` is unchanged.
+
+**The request itself is observed rather than argued, which is new for this repo.**
+`ApplyPreviewHttpTests` stands an `HttpListener` up as an API server and points a real
+`ClusterClient` at it through a real kubeconfig, so `?fieldManager=kubenimbus&force=false&dryRun=All`,
+the `application/apply-patch+yaml` content type, the 409, the 404-means-create and a 422
+rejection are all things a test drove over HTTP. The pattern is worth reusing: several
+items in `docs/BACKLOG.md`'s verification-debt section are "the wire format is argued,
+never seen", and this closes that half of one of them without a cluster. What it still
+cannot reach is the half that needs a real API server — defaulting, admission webhooks
+and the server's own validation are precisely what the stand-in has no opinion about.
+
+**Three breaks were written and confirmed red before the tests were called done**, same
+discipline as VER-5 and VER-3. A preview that forgets `dryRun=All` — i.e. one that
+silently *applies* what it claims to be previewing — turned 2 of 303 red on the query
+string. Index pairing instead of the `name` merge key turned 4 red, including the
+container-inserted-at-the-front case the rule exists for. A preview surviving the edit
+that invalidated it turned 1 of 72 red. All three were reverted and the suites re-run.
+
+**Two layout defects were found by looking at the rendered panel**, not by any test, and
+both are in rule 7 above: an `Auto` row for the diff left the editor at zero height in
+the default ~300px dock, and giving the editor a `MinHeight` instead overflowed the grid
+so the header, the editor and the panel drew on top of each other. The star/`Auto`
+row-height switch in `YamlEditorView.axaml.cs` is the fix.
+
+**Verified this session**: `dotnet build KubeNimbus.slnx` with **0 warnings**; **303/303
+Core TUnit** and **72/72 App TUnit**, 0 failed, 0 skipped, both via `--project` (no
+sandbox here, so the Core count is the unit-only subset — the cluster-gated tests return
+early); the three break/revert runs above; all **64** scenarios × both themes rendered
+(128 PNGs) plus a byte-for-byte baseline diff against the parent commit — of the 124
+pre-existing PNGs exactly **two** differ, both `main-window-preferences.*` and both
+intended (the new settings card), while `cluster-tab-workload-logs.dark` and
+`cluster-tab-workload-logs-filtered-empty.light` were each confirmed to flap between two
+renders of the *same* tree, which is ENG-10 and not this change; the linux-x64 NativeAOT
+publish with no new warnings beyond the known DataGrid IL2104/IL3053; and `--smoke-test`
+on that published binary under Xvfb (`SMOKE-OK main window rendered at 1280x800 after
+448 ms`, exit 0).
+
+**Not verified, and it is the half that needs a cluster.** No sandbox came up — `dockerd`
+starts in this container but Docker Hub's blob CDN, ghcr.io and quay.io all answer 403, so
+**no dry-run apply has crossed a real API server**. Everything specific to a live cluster
+is therefore untouched by this evidence: that the API server accepts our apply body under
+`dryRun=All` and returns the object it would store, that a defaulting or mutating webhook
+shows up in the diff as this design claims (the single strongest argument for the feature,
+and the one thing a stand-in cannot fake), that a real field-manager conflict raises during
+the preview rather than only during the apply, and that the diff of a real Deployment is as
+readable as the fixture's. Nothing has been driven by hand in the running app either: the
+panel, its two buttons and the preference toggle are verified by construction, by unit test
+and in the headless harness, not by a mouse. First things to do on a machine with a
+sandbox, in order: edit a Deployment's image in the editor and confirm the preview names
+that field and nothing else; add `resources: {}` to a container and see what the cluster
+defaults into the diff; run `kubectl scale` on the same object from a terminal and then
+apply from the editor, to reach the conflict path from the outside; and turn the preference
+off and confirm Apply goes straight through as it did before.

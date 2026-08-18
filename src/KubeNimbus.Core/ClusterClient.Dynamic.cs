@@ -151,8 +151,65 @@ public sealed partial class ClusterClient
         bool force = false,
         CancellationToken cancellationToken = default)
     {
+        var body = await SendApplyAsync(
+            descriptor, @namespace, name, yaml, fieldManager, force, dryRun: false, cancellationToken).ConfigureAwait(false);
+
+        using var doc = JsonDocument.Parse(body);
+        return DynamicResource.FromListItem(doc.RootElement, descriptor);
+    }
+
+    /// <summary>
+    /// What the same apply would do, without doing it: the object is read as it is now,
+    /// the apply is sent with <c>dryRun=All</c>, and the two are diffed. Throws the same
+    /// <see cref="ServerSideApplyConflictException"/> a real apply would — a conflict is
+    /// exactly the thing worth learning before the object changes rather than after.
+    /// </summary>
+    /// <remarks>
+    /// Both sides of the diff come from the API server, which is what makes this
+    /// different from diffing the editor's text against the live object: the dry-run
+    /// response has been through defaulting, admission webhooks and every mutating
+    /// controller in the chain, so a field the cluster is going to add or rewrite shows
+    /// up here and cannot show up in a local diff. The live read is done first and its
+    /// 404 is not an error — it means the apply would create the object.
+    /// </remarks>
+    public async Task<ApplyPreview> PreviewApplyAsync(
+        ResourceDescriptor descriptor,
+        string? @namespace,
+        string name,
+        string yaml,
+        string fieldManager,
+        bool force = false,
+        CancellationToken cancellationToken = default)
+    {
+        var live = await ReadResourceAsync(descriptor, @namespace, name, cancellationToken).ConfigureAwait(false);
+        var body = await SendApplyAsync(
+            descriptor, @namespace, name, yaml, fieldManager, force, dryRun: true, cancellationToken).ConfigureAwait(false);
+
+        using var doc = JsonDocument.Parse(body);
+        var previewed = DynamicResource.FromListItem(doc.RootElement, descriptor);
+        return new ApplyPreview(ResourceDiff.Between(live?.Raw, previewed.Raw), previewed);
+    }
+
+    private async Task<string> SendApplyAsync(
+        ResourceDescriptor descriptor,
+        string? @namespace,
+        string name,
+        string yaml,
+        string fieldManager,
+        bool force,
+        bool dryRun,
+        CancellationToken cancellationToken)
+    {
         var json = YamlJson.ParseYamlToJson(yaml)?.ToJsonString() ?? "{}";
         var query = $"?fieldManager={Uri.EscapeDataString(fieldManager)}&force={(force ? "true" : "false")}";
+        if (dryRun)
+        {
+            // "All" is the only value the API server defines, and it is what kubectl's
+            // own --dry-run=server sends: run every admission stage and the whole
+            // validation chain, then discard instead of persisting.
+            query += "&dryRun=All";
+        }
+
         using var content = new StringContent(json, Encoding.UTF8, "application/apply-patch+yaml");
 
         using var response = await SendRequestAsync(
@@ -171,8 +228,7 @@ public sealed partial class ClusterClient
             throw KubernetesApiException.From(response.StatusCode, response.ReasonPhrase, body);
         }
 
-        using var doc = JsonDocument.Parse(body);
-        return DynamicResource.FromListItem(doc.RootElement, descriptor);
+        return body;
     }
 
     /// <summary>Deletes one object; treats "already gone" (404) as success.</summary>
