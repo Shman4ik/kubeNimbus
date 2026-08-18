@@ -265,6 +265,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [NotifyPropertyChangedFor(nameof(CanScaleSelectedRow))]
     [NotifyPropertyChangedFor(nameof(CanRestartSelectedRow))]
     [NotifyPropertyChangedFor(nameof(CanDeleteSelectedRow))]
+    [NotifyPropertyChangedFor(nameof(CanAggregateLogsForSelectedRow))]
+    [NotifyCanExecuteChangedFor(nameof(OpenWorkloadLogsCommand))]
     [NotifyCanExecuteChangedFor(nameof(OpenLogsCommand))]
     [NotifyCanExecuteChangedFor(nameof(OpenPreviousLogsCommand))]
     [NotifyCanExecuteChangedFor(nameof(ExecIntoSelectedCommand))]
@@ -1596,6 +1598,55 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         detail.SelectedDetailTabIndex = 0;
         detail.IsShowingPreviousLogs = previous;
+    }
+
+    /// <summary>
+    /// True when the selected object names the pods it owns — which is the honest test
+    /// for "can these be tailed as one stream", and is read off the object rather than
+    /// off a list of kinds, exactly as the scale/restart capability checks are. A
+    /// Deployment, StatefulSet, DaemonSet, ReplicaSet, Job, Service and a CRD that
+    /// declares a pod selector all qualify on the same evidence; a pod does not (it has
+    /// its own detail pane), and neither does an object whose selector is empty — see
+    /// <see cref="LabelSelector.ForPodsOf"/> for why an empty selector is refused rather
+    /// than read as "everything".
+    /// </summary>
+    public bool CanAggregateLogsForSelectedRow =>
+        SelectedRow is { } row && LabelSelector.ForPodsOf(row.Resource) is not null;
+
+    /// <summary>
+    /// One pane over every pod the selected workload owns. This is the gesture people
+    /// leave for <c>stern</c>: during a rolling deployment the pod going away and the
+    /// pod coming up are the same question, and reading them in two panes is reading
+    /// them in the wrong order.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanAggregateLogsForSelectedRow))]
+    private void OpenWorkloadLogs()
+    {
+        if (SelectedRow is not { } row
+            || DescriptorFor(row) is not { } descriptor
+            || LabelSelector.ForPodsOf(row.Resource) is not { } selector)
+        {
+            return;
+        }
+
+        // Null in demo mode, where the pane still works: its pods come out of the
+        // shipped dataset through the same LabelSelector.Matches the live path renders
+        // into a query — see InspectorTabViewModelBase.IsDemo.
+        var client = ClientFor(row);
+        if (client is null && !IsDemo)
+        {
+            return;
+        }
+
+        var key = WorkloadLogsTabViewModel.KeyFor(row.ClusterName, descriptor, row.Namespace, row.Name);
+        if (InspectorTabs.FirstOrDefault(t => t.Key == key) is { } existing)
+        {
+            existing.IsPreview = false;
+            SelectedInspectorTab = existing;
+            return;
+        }
+
+        AddInspectorTab(new WorkloadLogsTabViewModel(client, descriptor, row.Resource, selector, row.ClusterName));
     }
 
     [RelayCommand(CanExecute = nameof(IsPodRowSelected))]

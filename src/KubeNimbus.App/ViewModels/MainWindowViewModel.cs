@@ -946,6 +946,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
                     () => rowTab.PortForwardSelectedCommand.Execute(null));
             }
 
+            // Offered on whatever names the pods it owns, which is the same evidence the
+            // menu item is gated on — never on a list of kinds.
+            if (rowTab.CanAggregateLogsForSelectedRow)
+            {
+                yield return new PaletteItem(
+                    "Logs (all pods)", $"{where} · one stream across every pod", "LayersIconGeometry",
+                    () => rowTab.OpenWorkloadLogsCommand.Execute(null));
+            }
+
             // The mutating actions, gated on what this row's own kind and object
             // actually support (a scale subresource; a pod template to stamp) rather
             // than on a list of kinds — and offered only when they apply, for the same

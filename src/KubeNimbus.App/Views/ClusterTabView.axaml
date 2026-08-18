@@ -317,6 +317,15 @@
                 </MenuItem>
                 <MenuItem Header="Previous logs" Command="{Binding OpenPreviousLogsCommand}"
                           ToolTip.Tip="The crashed instance's logs — where a CrashLoopBackOff explains itself" />
+                <!-- Enabled for whatever names the pods it owns — a Deployment, a
+                     StatefulSet, a Service, a CRD with a pod selector — and disabled on
+                     a pod, whose own detail pane is the answer. -->
+                <MenuItem Header="Logs (all pods)" Command="{Binding OpenWorkloadLogsCommand}"
+                          ToolTip.Tip="Tail every pod this workload owns in one pane, colour-keyed by pod">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource LayersIconGeometry}" Width="13" Height="13" />
+                  </MenuItem.Icon>
+                </MenuItem>
                 <Separator />
                 <MenuItem Header="Exec" Command="{Binding ExecIntoSelectedCommand}">
                   <MenuItem.Icon>

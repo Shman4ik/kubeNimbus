@@ -213,6 +213,31 @@
         <Setter Property="Opacity" Value="0.6" />
     </Style>
 
+    <!-- Log severity colouring, as three classes rather than as a Foreground binding
+         through a converter — and the difference is not stylistic. It replaces
+         `LogSeverityToBrushConverter`, whose default case returned
+         `AvaloniaProperty.UnsetValue` on the strength of "unset means no value here, so
+         inheritance wins". Measured on the rendered pane, it does not: a line with a
+         Foreground *binding* that produces Unset falls back to `TextElement.Foreground`'s
+         own default, which is opaque black — so in the dark theme every line without a
+         severity keyword rendered black on a #080808 card, i.e. invisible. That is the
+         same symptom (and the same population of lines: nginx access logs, `log.Print`,
+         anything JSON) as the original null-brush bug the converter was written to fix;
+         Unset was a smaller version of the same mistake, and it survived because the
+         light theme's own text is nearly black too.
+         With classes there is no Foreground binding at all on an unclassified line, so it
+         inherits the way every other TextBlock in the window does. The three colours are
+         the converter's own, unchanged. -->
+    <Style Selector="SelectableTextBlock.logError">
+        <Setter Property="Foreground" Value="IndianRed" />
+    </Style>
+    <Style Selector="SelectableTextBlock.logWarn">
+        <Setter Property="Foreground" Value="{StaticResource AppWarningBrush}" />
+    </Style>
+    <Style Selector="SelectableTextBlock.logInfo">
+        <Setter Property="Foreground" Value="#4E9EF2" />
+    </Style>
+
     <!-- InfoBar: WinUI's inline status surface — a tinted, outlined block that states
          what the pane is currently doing. The alternative it replaces is a bare status
          dot next to a sentence, which carries the same information but only for

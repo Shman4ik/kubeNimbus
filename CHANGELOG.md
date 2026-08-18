@@ -14,6 +14,30 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Added
 
+- **Tail every pod of a workload in one pane.** Right-click a Deployment,
+  StatefulSet, DaemonSet, ReplicaSet, Job or Service (or anything else that names
+  the pods it owns, custom resources included) and choose **Logs (all pods)** —
+  also in the command palette — to get a single stream across every pod it owns,
+  with each line prefixed by its pod and coloured to match. Lines are merged on
+  the timestamps the server already sends, so a rolling deployment reads as one
+  story rather than as two logs you have to interleave by eye: the replica
+  draining and the replica coming up appear in order, in the same pane. Pods that
+  appear join the stream on their own; a pod that is deleted stops streaming and
+  keeps the lines it already sent, because what a terminating replica said last is
+  usually the reason you opened the pane. Click a pod's chip to hide or show just
+  that replica, filter the merged text as usual, and copy or download the result
+  with the pod names attached. Very large workloads stream their first 50 pods and
+  say so rather than opening hundreds of connections. Works on the demo cluster
+  with no cluster at all.
+
+### Fixed
+
+- **Log lines without a severity keyword were invisible in the dark theme.**
+  Anything the app did not classify as ERROR, WARN or INFO — nginx access logs,
+  plain `print` output, JSON lines, which is most real log output — was drawn in
+  black on the dark theme's near-black background, in the pod log pane. Light
+  theme was unaffected, which is why this went unnoticed.
+
 - **Custom resources now show the columns their CRD asks for.** A
   CustomResourceDefinition declares what a list of its objects should show —
   cert-manager's Certificates want READY and SECRET, Flux's Kustomizations want

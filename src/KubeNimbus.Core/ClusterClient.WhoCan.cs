@@ -209,7 +209,7 @@ public sealed partial class ClusterClient
     {
         try
         {
-            return await ListResourceOnceAsync(descriptor, @namespace, fieldSelector: null, ct).ConfigureAwait(false);
+            return await ListResourceOnceAsync(descriptor, @namespace, fieldSelector: null, cancellationToken: ct).ConfigureAwait(false);
         }
         catch (HttpRequestException ex)
         {

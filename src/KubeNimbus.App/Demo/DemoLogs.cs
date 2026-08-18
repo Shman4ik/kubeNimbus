@@ -41,6 +41,41 @@ internal static class DemoLogs
     public static IReadOnlyList<string> For(string podName, string containerName) =>
         (podName, containerName) switch
         {
+            // The other two replicas of payment-service-report-generator, and the reason
+            // they have streams of their own rather than falling through to the shared
+            // ("app") case below: the aggregated log pane's whole claim is that a rolling
+            // deployment reads as one stream, and three identical streams would
+            // demonstrate the merge machinery while proving nothing about the merge.
+            // These interleave with x7k2m's timestamps on purpose — m4v8s is the second
+            // pod of the OLD ReplicaSet and is drained by the rollout at 08:45:0x, and
+            // tq6rn is the NEW ReplicaSet's first pod coming up at 08:44:5x. Read in one
+            // pane, in time order, that is a rollout; read in three panes it is three
+            // unrelated logs.
+            ("payment-service-report-generator-7f9c8d6bcd-m4v8s", "app") =>
+            [
+                "2026-07-20T08:41:03.902Z INFO  starting report-generator v2.14.3 (commit 4b1e9ca, go1.23.4)",
+                "2026-07-20T08:41:04.180Z INFO  listening on :8080",
+                "2026-07-20T08:43:58.114Z GET /api/v1/reports/status 200 3.4ms",
+                "2026-07-20T08:44:22.601Z INFO  generated monthly-settlement report for merchant=harbour-foods (611ms)",
+                "2026-07-20T08:44:44.209Z uploaded reports/2026-07/harbour-foods.pdf (0.8 MiB)",
+                "2026-07-20T08:45:02.004Z received SIGTERM, draining (deployment rollout)",
+                "2026-07-20T08:45:02.005Z INFO  refusing new work; 2 in-flight reports remaining",
+                "2026-07-20T08:45:04.771Z INFO  in-flight work finished, closing listener",
+                "2026-07-20T08:45:04.930Z INFO  shutdown complete",
+            ],
+
+            ("payment-service-report-generator-8c1a4f2e91-tq6rn", "app") =>
+            [
+                "2026-07-20T08:44:52.118Z INFO  starting report-generator v2.15.0 (commit 9de41f7, go1.23.4)",
+                "2026-07-20T08:44:52.204Z loading configuration from /etc/report-generator/config.yaml",
+                "2026-07-20T08:44:52.410Z INFO  connected to postgres primary (payments-db.internal:5432)",
+                "2026-07-20T08:44:52.488Z INFO  listening on :8080",
+                """2026-07-20T08:44:57.330Z {"ts":"2026-07-20T08:44:57Z","msg":"scheduler tick","due":1,"lag_ms":8}""",
+                "2026-07-20T08:45:00.882Z GET /api/v1/reports/status 200 2.9ms",
+                "2026-07-20T08:45:05.117Z INFO  picked up 2 reports drained from a retiring replica",
+                "2026-07-20T08:45:08.440Z INFO  generated monthly-settlement report for merchant=harbour-foods (588ms)",
+            ],
+
             (_, "app") =>
             [
                 "2026-07-20T08:41:02.114Z INFO  starting report-generator v2.14.3 (commit 4b1e9ca, go1.23.4)",

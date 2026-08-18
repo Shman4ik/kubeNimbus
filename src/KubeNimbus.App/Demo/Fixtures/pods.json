@@ -43,6 +43,60 @@
     "kind": "Pod",
     "apiVersion": "v1",
     "metadata": {
+      "name": "payment-service-report-generator-7f9c8d6bcd-m4v8s",
+      "namespace": "payments",
+      "uid": "a1111111-1111-1111-1111-11111111111a",
+      "creationTimestamp": "2026-07-19T08:12:00Z",
+      "labels": { "app": "payment-service-report-generator", "pod-template-hash": "7f9c8d6bcd" },
+      "ownerReferences": [
+        { "apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "payment-service-report-generator-7f9c8d6bcd", "uid": "b1111111-1111-1111-1111-111111111111", "controller": true }
+      ]
+    },
+    "spec": {
+      "containers": [
+        { "name": "app", "image": "registry.internal/payments/report-generator:2.14.3", "ports": [{ "containerPort": 8080, "protocol": "TCP" }] },
+        { "name": "envoy-sidecar", "image": "envoyproxy/envoy:v1.29.2", "ports": [{ "containerPort": 15000, "protocol": "TCP" }] }
+      ]
+    },
+    "status": {
+      "phase": "Running",
+      "containerStatuses": [
+        { "name": "app", "ready": true, "restartCount": 0, "state": { "running": { "startedAt": "2026-07-19T08:12:06Z" } } },
+        { "name": "envoy-sidecar", "ready": true, "restartCount": 0, "state": { "running": { "startedAt": "2026-07-19T08:12:03Z" } } }
+      ]
+    }
+  },
+  {
+    "kind": "Pod",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "payment-service-report-generator-8c1a4f2e91-tq6rn",
+      "namespace": "payments",
+      "uid": "a1111111-1111-1111-1111-11111111111b",
+      "creationTimestamp": "2026-07-20T08:44:48Z",
+      "labels": { "app": "payment-service-report-generator", "pod-template-hash": "8c1a4f2e91" },
+      "ownerReferences": [
+        { "apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "payment-service-report-generator-8c1a4f2e91", "uid": "b1111111-1111-1111-1111-11111111111b", "controller": true }
+      ]
+    },
+    "spec": {
+      "containers": [
+        { "name": "app", "image": "registry.internal/payments/report-generator:2.15.0", "ports": [{ "containerPort": 8080, "protocol": "TCP" }] },
+        { "name": "envoy-sidecar", "image": "envoyproxy/envoy:v1.29.2", "ports": [{ "containerPort": 15000, "protocol": "TCP" }] }
+      ]
+    },
+    "status": {
+      "phase": "Running",
+      "containerStatuses": [
+        { "name": "app", "ready": true, "restartCount": 0, "state": { "running": { "startedAt": "2026-07-20T08:44:52Z" } } },
+        { "name": "envoy-sidecar", "ready": true, "restartCount": 0, "state": { "running": { "startedAt": "2026-07-20T08:44:50Z" } } }
+      ]
+    }
+  },
+  {
+    "kind": "Pod",
+    "apiVersion": "v1",
+    "metadata": {
       "name": "checkout-worker-5d8f7b9c4-qz9pl",
       "namespace": "payments",
       "uid": "a2222222-2222-2222-2222-222222222222",
