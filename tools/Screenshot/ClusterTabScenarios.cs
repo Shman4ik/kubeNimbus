@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Avalonia.Threading;
 using KubeNimbus.App.Demo;
 using KubeNimbus.App.ViewModels;
@@ -1124,6 +1125,74 @@ internal static class ClusterTabScenarios
         tab.IsInspectorMaximized = true;
         return tab;
     }
+
+    /// <summary>
+    /// The apply preview: the server's own dry-run answer, armed but not applied. The
+    /// diff is computed by the real <see cref="ResourceDiff"/> from two objects — the
+    /// fixture deployment and an edited copy of it — so what renders is what the engine
+    /// produces, not a hand-written list of rows. The one thing a fixture cannot supply
+    /// is the dry-run response itself, which needs an API server.
+    ///
+    /// <para>
+    /// Rendered maximized, because that is the state a diff worth reading is read in:
+    /// at the dock's default ~300px the preview and the editor split the height and one
+    /// row of the diff is visible at a time. The no-change scenario is the one that
+    /// shows that split.
+    /// </para>
+    /// </summary>
+    public static ClusterTabViewModel YamlEditorDiffPreview()
+    {
+        var tab = YamlEditor();
+        tab.IsInspectorMaximized = true;
+        if (tab.SelectedInspectorTab is YamlEditorTabViewModel yaml)
+        {
+            yaml.PendingPreview = new ApplyPreviewViewModel(
+                ResourceDiff.Between(FixtureLiveDeployment(), FixturePreviewedDeployment()), isForce: false);
+        }
+
+        return tab;
+    }
+
+    /// <summary>
+    /// The same panel when the server says the apply would change nothing — a distinct
+    /// state, and the answer to "did my edit actually do anything" (UI rule 9).
+    /// </summary>
+    public static ClusterTabViewModel YamlEditorDiffNoChange()
+    {
+        var tab = YamlEditor();
+        if (tab.SelectedInspectorTab is YamlEditorTabViewModel yaml)
+        {
+            yaml.PendingPreview = new ApplyPreviewViewModel(
+                ResourceDiff.Between(FixtureLiveDeployment(), FixtureLiveDeployment()), isForce: false);
+        }
+
+        return tab;
+    }
+
+    /// <summary>The object as the server holds it — including one bookkeeping field, so the panel's footnote is real.</summary>
+    private static JsonElement FixtureLiveDeployment() => JsonDocument.Parse("""
+        {"apiVersion":"apps/v1","kind":"Deployment",
+         "metadata":{"name":"checkout-worker","namespace":"payments","resourceVersion":"81523",
+                     "labels":{"app.kubernetes.io/name":"checkout-worker"}},
+         "spec":{"replicas":3,
+                 "template":{"spec":{"containers":[
+                    {"name":"worker","image":"registry.example.com/checkout:1.14.2",
+                     "resources":{"limits":{"memory":"512Mi"}}},
+                    {"name":"metrics-sidecar","image":"prom/statsd-exporter:v0.27.1"}]}}}}
+        """).RootElement.Clone();
+
+    /// <summary>What a dry-run apply would return: two edits of the user's, plus a limit the cluster defaults in.</summary>
+    private static JsonElement FixturePreviewedDeployment() => JsonDocument.Parse("""
+        {"apiVersion":"apps/v1","kind":"Deployment",
+         "metadata":{"name":"checkout-worker","namespace":"payments","resourceVersion":"81523",
+                     "managedFields":[{"manager":"kubenimbus","operation":"Apply"}],
+                     "labels":{"app.kubernetes.io/name":"checkout-worker","app.kubernetes.io/part-of":"payments"}},
+         "spec":{"replicas":5,
+                 "template":{"spec":{"containers":[
+                    {"name":"worker","image":"registry.example.com/checkout:1.15.0",
+                     "resources":{"limits":{"memory":"1Gi","cpu":"500m"}}},
+                    {"name":"metrics-sidecar","image":"prom/statsd-exporter:v0.27.1"}]}}}}
+        """).RootElement.Clone();
 
     /// <summary>A server-side apply conflict. Advanced, because force-apply — the only
     /// thing that resolves one from inside the app — is an advanced-view control.</summary>

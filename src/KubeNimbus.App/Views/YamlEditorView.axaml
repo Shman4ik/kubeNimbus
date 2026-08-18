@@ -6,7 +6,7 @@
              x:Class="KubeNimbus.App.Views.YamlEditorView"
              x:DataType="vm:YamlEditorTabViewModel">
 
-  <Grid RowDefinitions="Auto,*,Auto,Auto,Auto,Auto" Margin="10,8,10,10">
+  <Grid Name="Rows" RowDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto" Margin="10,8,10,10">
 
     <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto" Margin="0,0,0,8">
       <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
@@ -37,8 +37,8 @@
     </Grid>
 
     <!-- Row 1 is the editor's row, and the demo notice rides inside it rather than
-         claiming a row of its own: the grid's later rows (reveal panel, delete confirm,
-         conflict, status) are addressed by index. Viewing is the genuinely useful half
+         claiming a row of its own: the grid's later rows (apply preview, reveal panel,
+         delete confirm, conflict, status) are addressed by index. Viewing is the genuinely useful half
          and stays — the object renders with full syntax highlighting — but there is no
          API server to apply to or delete from. Reload/Apply/Delete disable themselves
          (CanExecute on the view model); this says why, rather than leaving three dead
@@ -60,10 +60,81 @@
       </Border>
     </DockPanel>
 
+
+    <!-- The server's own answer to "what would this apply do?", and the click that
+         commits it. It sits directly under the editor because it is about the text
+         above it, and it is present only while an apply is armed, so it costs nothing
+         the rest of the time (UI rules 1 and 17). Height-capped: this is a ~300px dock
+         and a 200-line diff would otherwise take the editor's whole share of it.
+
+         Its row is star-sized from code-behind while a preview is open and Auto when
+         it is not, so the diff and the editor split the dock rather than one evicting
+         the other: an Auto row tall enough to read left a zero-height editor at the
+         dock's default ~300px, and a MinHeight on the editor overflowed the dock and
+         overlapped its own rows. Mutating a RowDefinition in code-behind is the same
+         answer ClusterTabView.ApplyDockState reaches for, and for the same reason.
+
+         A ContentControl with an inline DataTemplate, NOT a Border carrying both
+         DataContext and x:DataType: x:DataType re-roots that element's own bindings
+         too, so the pair compiles and then renders nothing at all, silently. That is
+         the same trap the row-action strip fell into (UI rule 17). -->
+    <ContentControl Grid.Row="2" Content="{Binding PendingPreview}" IsVisible="{Binding HasPendingPreview}">
+      <ContentControl.ContentTemplate>
+        <DataTemplate x:DataType="vm:ApplyPreviewViewModel">
+          <Border Classes="card" Padding="10" Margin="0,8,0,0">
+            <DockPanel>
+              <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto">
+                <TextBlock Grid.Column="0" Text="{Binding Headline}" Classes="statusText" VerticalAlignment="Center"
+                           TextWrapping="Wrap" Margin="0,0,8,0" />
+                <Button Grid.Column="1" Classes="accent" Content="{Binding ConfirmLabel}"
+                        Command="{Binding $parent[UserControl].((vm:YamlEditorTabViewModel)DataContext).ConfirmPreviewCommand}" />
+                <Button Grid.Column="2" Content="Cancel" Margin="6,0,0,0"
+                        Command="{Binding $parent[UserControl].((vm:YamlEditorTabViewModel)DataContext).CancelPreviewCommand}" />
+              </Grid>
+
+              <TextBlock DockPanel.Dock="Bottom" Text="{Binding Footnote}" FontSize="11" Opacity="0.6"
+                         TextWrapping="Wrap" Margin="0,6,0,0" IsVisible="{Binding HasFootnote}" />
+
+              <ScrollViewer Margin="0,8,0,0" HorizontalScrollBarVisibility="Auto" IsVisible="{Binding HasRows}">
+                <ItemsControl ItemsSource="{Binding Rows}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:DiffRowViewModel">
+                      <Grid ColumnDefinitions="14,*" Margin="0,2">
+                        <!-- A glyph as well as a colour: the two directions of a diff are
+                             the last thing that should depend on telling red from green. -->
+                        <TextBlock Grid.Column="0" Text="{Binding Marker}" FontFamily="Cascadia Mono,Consolas,monospace"
+                                   FontSize="11.5" VerticalAlignment="Top"
+                                   Classes.diffAdded="{Binding IsAdded}" Classes.diffRemoved="{Binding IsRemoved}"
+                                   Classes.diffChanged="{Binding IsChanged}" />
+                        <StackPanel Grid.Column="1" Spacing="1">
+                          <TextBlock Text="{Binding Path}" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5"
+                                     Classes.diffAdded="{Binding IsAdded}" Classes.diffRemoved="{Binding IsRemoved}"
+                                     Classes.diffChanged="{Binding IsChanged}" />
+                          <!-- Old above new, the way every diff is read. Selectable,
+                               because a previewed value is routinely the thing someone
+                               is about to paste somewhere else. -->
+                          <SelectableTextBlock Text="{Binding Before}" FontFamily="Cascadia Mono,Consolas,monospace"
+                                               FontSize="11.5" TextWrapping="Wrap" Opacity="0.55"
+                                               TextDecorations="Strikethrough" IsVisible="{Binding !IsAdded}" />
+                          <SelectableTextBlock Text="{Binding After}" FontFamily="Cascadia Mono,Consolas,monospace"
+                                               FontSize="11.5" TextWrapping="Wrap" Opacity="0.85"
+                                               IsVisible="{Binding !IsRemoved}" />
+                        </StackPanel>
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </DockPanel>
+          </Border>
+        </DataTemplate>
+      </ContentControl.ContentTemplate>
+    </ContentControl>
+
     <!-- Decoded values. Height-capped and value-capped on purpose: this sits in a ~300px
          bottom dock, and a single 1 MiB Secret value would otherwise lay out in full to
          show one screenful of it. -->
-    <Border Grid.Row="2" Classes="card" Padding="10" Margin="0,8,0,0" MaxHeight="160"
+    <Border Grid.Row="3" Classes="card" Padding="10" Margin="0,8,0,0" MaxHeight="160"
             IsVisible="{Binding IsSecretValuesRevealed}">
       <DockPanel>
         <TextBlock DockPanel.Dock="Top" Text="{Binding RevealCaption}" FontSize="11" Opacity="0.6" TextWrapping="Wrap" />
@@ -103,7 +174,7 @@
     <!-- Delete step 2. Its own strip rather than a pair of buttons swapped into the
          header: at dock height the header is a crowded row, and "Confirm delete" has
          to name what it deletes. -->
-    <Border Grid.Row="3" Classes="card" Padding="10" Margin="0,8,0,0" IsVisible="{Binding IsConfirmingDelete}">
+    <Border Grid.Row="4" Classes="card" Padding="10" Margin="0,8,0,0" IsVisible="{Binding IsConfirmingDelete}">
       <Grid ColumnDefinitions="*,Auto,Auto">
         <TextBlock Grid.Column="0" Classes="statusText warn" TextWrapping="Wrap" VerticalAlignment="Center"
                    Text="{Binding DeleteTargetDescription, StringFormat='Delete {0}? This cannot be undone.'}" />
@@ -113,7 +184,7 @@
       </Grid>
     </Border>
 
-    <Border Grid.Row="4" Classes="card" Padding="10" Margin="0,8,0,0"
+    <Border Grid.Row="5" Classes="card" Padding="10" Margin="0,8,0,0"
             IsVisible="{Binding ConflictDetails, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
       <StackPanel Spacing="6">
         <TextBlock Text="Apply conflict — another field manager owns some of these fields." Classes="statusText warn" />
@@ -128,7 +199,7 @@
       </StackPanel>
     </Border>
 
-    <StackPanel Grid.Row="5" Spacing="4" Margin="0,6,0,0">
+    <StackPanel Grid.Row="6" Spacing="4" Margin="0,6,0,0">
       <TextBlock Classes="statusText warn" TextWrapping="Wrap" IsVisible="{Binding IsDeleted}"
                  Text="Deleted from the cluster — this tab is read-only. Reload checks whether it came back." />
       <TextBlock Classes="statusText warn" TextWrapping="Wrap" Text="{Binding StaleNotice}"

@@ -64,10 +64,17 @@ public partial class YamlEditorView : UserControl
         _syncing = false;
 
         _vm.PropertyChanged += OnVmPropertyChanged;
+        ApplyPreviewRowHeight();
     }
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(YamlEditorTabViewModel.HasPendingPreview))
+        {
+            ApplyPreviewRowHeight();
+            return;
+        }
+
         if (e.PropertyName != nameof(YamlEditorTabViewModel.YamlText) || _vm is null || _syncing || Editor.Text == _vm.YamlText)
         {
             return;
@@ -77,4 +84,28 @@ public partial class YamlEditorView : UserControl
         Editor.Text = _vm.YamlText;
         _syncing = false;
     }
+
+    /// <summary>
+    /// The apply preview shares the pane with the editor instead of displacing it. Star
+    /// while it is open (so the two split whatever height the dock has, each scrolling
+    /// inside its own share) and Auto — i.e. nothing — while it is not.
+    ///
+    /// <para>
+    /// In code-behind because the answer has to be a <see cref="RowDefinition"/> height:
+    /// an Auto row big enough to read the diff in left a zero-height editor at the dock's
+    /// default ~300px, and giving the editor a MinHeight instead pushed the whole grid
+    /// past the dock and overlapped its own rows. Same mechanism, same reason, as
+    /// <c>ClusterTabView.ApplyDockState</c>.
+    /// </para>
+    /// </summary>
+    private void ApplyPreviewRowHeight()
+    {
+        // Star only when there is a list to scroll. A preview that reports no changes is
+        // one sentence and two buttons, and a star row would give it a card of blank space.
+        var hasRows = _vm?.PendingPreview is { HasRows: true };
+        Rows.RowDefinitions[PreviewRowIndex].Height = hasRows ? new GridLength(1, GridUnitType.Star) : GridLength.Auto;
+    }
+
+    /// <summary>The grid row the apply preview occupies — row 0 is the header, row 1 the editor.</summary>
+    private const int PreviewRowIndex = 2;
 }

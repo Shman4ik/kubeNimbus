@@ -245,6 +245,23 @@
         <Setter Property="Foreground" Value="#4E9EF2" />
     </Style>
 
+    <!-- Apply-preview diff rows. Classes rather than a converter returning a brush, for
+         the reason the log severity colours are classes: a binding that produces no value
+         does not fall back to the inherited foreground, it falls back to
+         TextElement.Foreground's own default (opaque black), which is invisible on the
+         dark theme. An unclassified row here carries no Foreground binding at all.
+         Success/danger are the app's own tokens so the two themes stay in step; the
+         marker glyph carries the same information for anyone who cannot separate them. -->
+    <Style Selector="TextBlock.diffAdded">
+        <Setter Property="Foreground" Value="{StaticResource AppSuccessBrush}" />
+    </Style>
+    <Style Selector="TextBlock.diffRemoved">
+        <Setter Property="Foreground" Value="{StaticResource AppDangerBrush}" />
+    </Style>
+    <Style Selector="TextBlock.diffChanged">
+        <Setter Property="Foreground" Value="{StaticResource AppWarningBrush}" />
+    </Style>
+
     <!-- InfoBar: WinUI's inline status surface — a tinted, outlined block that states
          what the pane is currently doing. The alternative it replaces is a bare status
          dot next to a sentence, which carries the same information but only for
