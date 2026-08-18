@@ -99,7 +99,11 @@ public sealed partial class RowActionViewModel : ObservableObject
         _name = name;
         _replicas = replicas;
 
-        var where = @namespace is null ? "" : $" in {@namespace}";
+        // Empty as well as null: a cluster-scoped row (a Node, a PersistentVolume) has
+        // no namespace, and ResourceRowViewModel.Namespace is a non-nullable string, so
+        // the naive null check printed "Node/demo-worker-1 in " — visible only in a
+        // rendered strip, which is where it was found.
+        var where = string.IsNullOrEmpty(@namespace) ? "" : $" in {@namespace}";
         var cluster = clusterName.Length > 0 ? $" · {clusterName}" : "";
         Target = $"{descriptor.Kind}/{name}{where}{cluster}";
     }
@@ -228,6 +232,7 @@ public sealed partial class RowActionViewModel : ObservableObject
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StopDrainCommand))]
     [NotifyPropertyChangedFor(nameof(CanDismiss))]
+    [NotifyPropertyChangedFor(nameof(IsPromptVisible))]
     private bool _isDraining;
 
     /// <summary>
@@ -236,6 +241,14 @@ public sealed partial class RowActionViewModel : ObservableObject
     /// mutating action with no surface at all.
     /// </summary>
     public bool CanDismiss => !IsDraining;
+
+    /// <summary>
+    /// Whether the confirm/cancel pair is on screen at all. A running drain takes their
+    /// slot for Stop, rather than leaving a dead Drain button under it — the same "one
+    /// slot, swapped on the state" the port-forward pane settled (UI rule 11). The first
+    /// rendering of this had Stop drawn over the confirm, which the screenshot caught.
+    /// </summary>
+    public bool IsPromptVisible => !IsDone && !IsDraining;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ConfirmCommand))]
@@ -247,6 +260,7 @@ public sealed partial class RowActionViewModel : ObservableObject
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ConfirmCommand))]
     [NotifyPropertyChangedFor(nameof(IsEditable))]
+    [NotifyPropertyChangedFor(nameof(IsPromptVisible))]
     private bool _isDone;
 
     /// <summary>Inputs and the confirm are live only while the action is neither running nor finished.</summary>
@@ -324,7 +338,26 @@ public sealed partial class RowActionViewModel : ObservableObject
     /// </summary>
     public async Task LoadDrainPlanAsync()
     {
-        if (_client is not { } client || !IsDrain || _podDescriptor is null)
+        if (!IsDrain)
+        {
+            return;
+        }
+
+        if (_client is not { } client)
+        {
+            // The demo cluster plans for real. The classification is pure and the demo
+            // dataset has pods on nodes, so what renders offline is the production
+            // plan — including the two refusals — and only the eviction itself is
+            // unavailable (demo rules 4 and 5). A demo that showed an empty plan would
+            // teach that a drain has nothing to check.
+            _podsOnNode = [.. Demo.DemoData.Pods.Where(p =>
+                string.Equals(NodeActions.NodeNameOf(p), _name, StringComparison.Ordinal))];
+            _planLoaded = true;
+            RebuildDrainPlan();
+            return;
+        }
+
+        if (_podDescriptor is null)
         {
             return;
         }

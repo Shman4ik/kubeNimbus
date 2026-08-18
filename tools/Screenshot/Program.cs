@@ -104,6 +104,18 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-crd-printer-columns", () => HostInMainWindow(ClusterTabScenarios.DemoCrdPrinterColumns())),
     ("cluster-tab-crd-printer-columns-wide", () => HostInMainWindow(ClusterTabScenarios.DemoCrdPrinterColumnsWide())),
     ("cluster-tab-demo-scale-unavailable", () => HostInMainWindow(ClusterTabScenarios.DemoScaleUnavailable())),
+
+    // FEAT-4 — the node surface. All on the demo cluster, which is where the node
+    // dataset lives; the drain's progress states are the two the harness cannot produce
+    // for real (no API server to evict through) and are written in, exactly as the
+    // scale/exec/YAML fixtures are.
+    ("cluster-tab-node-list", () => HostInMainWindow(ClusterTabScenarios.NodeList())),
+    ("cluster-tab-node-detail", () => HostInMainWindow(ClusterTabScenarios.NodeDetail(), height: 1000)),
+    ("cluster-tab-node-detail-pods", () => HostInMainWindow(ClusterTabScenarios.NodeDetailPods(), height: 1000)),
+    ("cluster-tab-node-detail-cordoned", () => HostInMainWindow(ClusterTabScenarios.NodeDetailCordoned(), height: 1000)),
+    ("cluster-tab-node-drain-blocked", () => HostInMainWindow(ClusterTabScenarios.NodeDrainBlocked(), height: 1000)),
+    ("cluster-tab-node-drain-running", () => HostInMainWindow(ClusterTabScenarios.NodeDrainRunning(), height: 1000)),
+    ("cluster-tab-node-drain-stopped", () => HostInMainWindow(ClusterTabScenarios.NodeDrainStopped(), height: 1000)),
     ("cluster-tab-demo-terminal-unavailable",
         () => HostInMainWindow(ClusterTabScenarios.DemoTerminalUnavailable())),
     ("main-window", () => BuildMainWindowContent()),

@@ -203,7 +203,7 @@
 
                     <Button Grid.Column="3" Content="{Binding ConfirmLabel}" Classes="accent" Margin="8,0,0,0"
                             VerticalAlignment="Bottom" Command="{Binding ConfirmCommand}"
-                            IsVisible="{Binding !IsDone}" />
+                            IsVisible="{Binding IsPromptVisible}" />
                     <!-- Cancel before, Close after: one slot, swapped on the state, rather
                          than a live button beside a dead one (UI rule 11 again). Cancel goes
                          dead while the request is in flight, and that is the honest state:
@@ -212,8 +212,7 @@
                          that went through. -->
                     <Button Grid.Column="4" Margin="6,0,0,0" VerticalAlignment="Bottom" Content="Cancel"
                             Command="{Binding DismissCommand}"
-                            IsVisible="{Binding !IsDone}" IsEnabled="{Binding IsEditable}"
-                            IsHitTestVisible="{Binding CanDismiss}" />
+                            IsVisible="{Binding IsPromptVisible}" IsEnabled="{Binding IsEditable}" />
                     <Button Grid.Column="4" Margin="6,0,0,0" VerticalAlignment="Bottom" Content="Close"
                             Command="{Binding DismissCommand}" IsVisible="{Binding IsDone}" />
                     <!-- A running drain replaces Cancel outright. "Cancel" over a loop
@@ -239,7 +238,8 @@
                   <!-- The drain's own progress, one row per pod. Height-capped and
                        scrollable: this strip sits above the list it is about, and a
                        hundred-pod node must not push the list off screen. -->
-                  <ScrollViewer MaxHeight="150" IsVisible="{Binding DrainSteps.Count}">
+                  <ScrollViewer MaxHeight="150"
+                                IsVisible="{Binding DrainSteps.Count, Converter={x:Static conv:CountToBoolConverter.Instance}}">
                     <ItemsControl ItemsSource="{Binding DrainSteps}">
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:DrainStepViewModel">

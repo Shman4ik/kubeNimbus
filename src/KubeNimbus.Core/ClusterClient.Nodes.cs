@@ -168,7 +168,7 @@ public sealed partial class ClusterClient
 
         var pods = await ListPodsOnNodeAsync(podDescriptor, nodeName, cancellationToken).ConfigureAwait(false);
         var plan = NodeActions.Plan(pods, options);
-        yield return DrainProgress.At(DrainStage.Planned, plan.Summary()) with { Plan = plan };
+        yield return DrainProgress.At(DrainStage.Planned, plan.Summary) with { Plan = plan };
 
         if (plan.IsBlocked)
         {

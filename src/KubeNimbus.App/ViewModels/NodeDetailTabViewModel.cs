@@ -276,12 +276,11 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
         await _openPod(new OwnerRef("v1", "Pod", pod.Name, null, false), pod.Namespace);
     }
 
-    public override Task OnClosingAsync()
+    public override async Task OnClosingAsync()
     {
         _row.PropertyChanged -= OnRowChanged;
-        _cts.Cancel();
+        await _cts.CancelAsync();
         _cts.Dispose();
-        return Task.CompletedTask;
     }
 }
 

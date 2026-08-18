@@ -974,6 +974,30 @@ public sealed partial class MainWindowViewModel : ObservableObject
                     () => rowTab.RestartSelectedCommand.Execute(null));
             }
 
+            // Node actions, gated the same way: cordon/uncordon on which of the two the
+            // node's own spec.unschedulable makes meaningful, drain additionally on the
+            // server serving pods/eviction.
+            if (rowTab.CanCordonSelectedRow)
+            {
+                yield return new PaletteItem(
+                    "Cordon node…", $"{where} · stop scheduling new pods here", "CordonIconGeometry",
+                    () => rowTab.CordonSelectedCommand.Execute(null));
+            }
+
+            if (rowTab.CanUncordonSelectedRow)
+            {
+                yield return new PaletteItem(
+                    "Uncordon node…", $"{where} · put it back into service", "CheckIconGeometry",
+                    () => rowTab.UncordonSelectedCommand.Execute(null));
+            }
+
+            if (rowTab.CanDrainSelectedRow)
+            {
+                yield return new PaletteItem(
+                    "Drain node…", $"{where} · cordon, then evict its pods", "DrainIconGeometry",
+                    () => rowTab.DrainSelectedCommand.Execute(null));
+            }
+
             yield return new PaletteItem("Edit YAML", where, "CodeBracesIconGeometry",
                 () => rowTab.EditSelectedYamlCommand.Execute(null));
 

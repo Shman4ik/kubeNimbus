@@ -418,20 +418,32 @@ public sealed record DrainPlan(IReadOnlyList<DrainPodPlan> Pods)
     /// reader believing the node is empty afterwards, and on any real cluster it is not
     /// (DaemonSet and static pods stay, exactly as with kubectl).
     /// </summary>
-    public string Summary()
+    /// <remarks>
+    /// A property rather than a method because the strip binds to it, and a compiled
+    /// binding to a method group renders the <em>delegate's type name</em> —
+    /// <c>System.Func`1[System.String]</c> — with no error anywhere. Only the screenshot
+    /// showed it.
+    /// </remarks>
+    public string Summary
     {
-        var parts = new List<string>();
-        parts.Add(EvictCount == 1 ? "1 pod will be evicted" : $"{EvictCount} pods will be evicted");
-        if (WaitingCount > 0)
+        get
         {
-            parts.Add($"{WaitingCount} already terminating");
-        }
+            var parts = new List<string>
+            {
+                EvictCount == 1 ? "1 pod will be evicted" : $"{EvictCount} pods will be evicted",
+            };
 
-        if (SkippedCount > 0)
-        {
-            parts.Add($"{SkippedCount} left in place (DaemonSet, static or finished pods)");
-        }
+            if (WaitingCount > 0)
+            {
+                parts.Add($"{WaitingCount} already terminating");
+            }
 
-        return string.Join(" · ", parts) + ".";
+            if (SkippedCount > 0)
+            {
+                parts.Add($"{SkippedCount} left in place (DaemonSet, static or finished pods)");
+            }
+
+            return string.Join(" · ", parts) + ".";
+        }
     }
 }

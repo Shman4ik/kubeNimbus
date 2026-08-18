@@ -1,0 +1,278 @@
+[
+  {
+    "kind": "Node",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "demo-cp-1",
+      "uid": "e0000000-0000-0000-0000-000000000001",
+      "creationTimestamp": "2026-05-02T09:14:22Z",
+      "labels": {
+        "kubernetes.io/hostname": "demo-cp-1",
+        "kubernetes.io/os": "linux",
+        "kubernetes.io/arch": "amd64",
+        "node.kubernetes.io/instance-type": "n2-standard-8",
+        "topology.kubernetes.io/zone": "eu-west-1b",
+        "node-role.kubernetes.io/control-plane": ""
+      }
+    },
+    "spec": {
+      "podCIDR": "10.42.1.0/24",
+      "taints": [
+        {
+          "key": "node-role.kubernetes.io/control-plane",
+          "value": "",
+          "effect": "NoSchedule"
+        }
+      ]
+    },
+    "status": {
+      "capacity": {
+        "cpu": "4",
+        "memory": "8388608Ki",
+        "pods": "110",
+        "ephemeral-storage": "104845292Ki"
+      },
+      "allocatable": {
+        "cpu": "3800m",
+        "memory": "7488608Ki",
+        "pods": "110",
+        "ephemeral-storage": "96625420Ki"
+      },
+      "conditions": [
+        {
+          "type": "MemoryPressure",
+          "status": "False",
+          "reason": "KubeletHasSufficientMemory",
+          "message": "kubelet has sufficient memory available",
+          "lastHeartbeatTime": "2026-07-30T08:44:31Z",
+          "lastTransitionTime": "2026-07-11T06:05:12Z"
+        },
+        {
+          "type": "DiskPressure",
+          "status": "False",
+          "reason": "KubeletHasNoDiskPressure",
+          "message": "kubelet has no disk pressure",
+          "lastHeartbeatTime": "2026-07-30T08:44:31Z",
+          "lastTransitionTime": "2026-07-11T06:05:12Z"
+        },
+        {
+          "type": "PIDPressure",
+          "status": "False",
+          "reason": "KubeletHasSufficientPID",
+          "message": "kubelet has sufficient PID available",
+          "lastHeartbeatTime": "2026-07-30T08:44:31Z",
+          "lastTransitionTime": "2026-07-11T06:05:12Z"
+        },
+        {
+          "type": "Ready",
+          "status": "True",
+          "reason": "KubeletReady",
+          "message": "kubelet is posting ready status",
+          "lastHeartbeatTime": "2026-07-30T08:44:31Z",
+          "lastTransitionTime": "2026-07-11T06:05:12Z"
+        }
+      ],
+      "addresses": [
+        {
+          "type": "InternalIP",
+          "address": "10.0.1.11"
+        },
+        {
+          "type": "Hostname",
+          "address": "demo-cp-1"
+        }
+      ],
+      "nodeInfo": {
+        "architecture": "amd64",
+        "containerRuntimeVersion": "containerd://1.7.20",
+        "kernelVersion": "6.8.0-45-generic",
+        "kubeletVersion": "v1.31.2",
+        "osImage": "Ubuntu 24.04.1 LTS",
+        "operatingSystem": "linux"
+      }
+    }
+  },
+  {
+    "kind": "Node",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "demo-worker-1",
+      "uid": "e0000000-0000-0000-0000-000000000002",
+      "creationTimestamp": "2026-05-02T09:14:22Z",
+      "labels": {
+        "kubernetes.io/hostname": "demo-worker-1",
+        "kubernetes.io/os": "linux",
+        "kubernetes.io/arch": "amd64",
+        "node.kubernetes.io/instance-type": "n2-standard-8",
+        "topology.kubernetes.io/zone": "eu-west-1b"
+      }
+    },
+    "spec": {
+      "podCIDR": "10.42.1.0/24"
+    },
+    "status": {
+      "capacity": {
+        "cpu": "8",
+        "memory": "16777216Ki",
+        "pods": "110",
+        "ephemeral-storage": "104845292Ki"
+      },
+      "allocatable": {
+        "cpu": "7800m",
+        "memory": "15877216Ki",
+        "pods": "110",
+        "ephemeral-storage": "96625420Ki"
+      },
+      "conditions": [
+        {
+          "type": "MemoryPressure",
+          "status": "False",
+          "reason": "KubeletHasSufficientMemory",
+          "message": "kubelet has sufficient memory available",
+          "lastHeartbeatTime": "2026-07-30T08:44:31Z",
+          "lastTransitionTime": "2026-07-11T06:05:12Z"
+        },
+        {
+          "type": "DiskPressure",
+          "status": "False",
+          "reason": "KubeletHasNoDiskPressure",
+          "message": "kubelet has no disk pressure",
+          "lastHeartbeatTime": "2026-07-30T08:44:31Z",
+          "lastTransitionTime": "2026-07-11T06:05:12Z"
+        },
+        {
+          "type": "PIDPressure",
+          "status": "False",
+          "reason": "KubeletHasSufficientPID",
+          "message": "kubelet has sufficient PID available",
+          "lastHeartbeatTime": "2026-07-30T08:44:31Z",
+          "lastTransitionTime": "2026-07-11T06:05:12Z"
+        },
+        {
+          "type": "Ready",
+          "status": "True",
+          "reason": "KubeletReady",
+          "message": "kubelet is posting ready status",
+          "lastHeartbeatTime": "2026-07-30T08:44:31Z",
+          "lastTransitionTime": "2026-07-11T06:05:12Z"
+        }
+      ],
+      "addresses": [
+        {
+          "type": "InternalIP",
+          "address": "10.0.1.21"
+        },
+        {
+          "type": "Hostname",
+          "address": "demo-worker-1"
+        }
+      ],
+      "nodeInfo": {
+        "architecture": "amd64",
+        "containerRuntimeVersion": "containerd://1.7.20",
+        "kernelVersion": "6.8.0-45-generic",
+        "kubeletVersion": "v1.31.2",
+        "osImage": "Ubuntu 24.04.1 LTS",
+        "operatingSystem": "linux"
+      }
+    }
+  },
+  {
+    "kind": "Node",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "demo-worker-2",
+      "uid": "e0000000-0000-0000-0000-000000000003",
+      "creationTimestamp": "2026-05-02T09:14:22Z",
+      "labels": {
+        "kubernetes.io/hostname": "demo-worker-2",
+        "kubernetes.io/os": "linux",
+        "kubernetes.io/arch": "amd64",
+        "node.kubernetes.io/instance-type": "n2-standard-8",
+        "topology.kubernetes.io/zone": "eu-west-1b"
+      }
+    },
+    "spec": {
+      "podCIDR": "10.42.1.0/24",
+      "unschedulable": true,
+      "taints": [
+        {
+          "key": "node.kubernetes.io/unschedulable",
+          "value": "",
+          "effect": "NoSchedule"
+        },
+        {
+          "key": "workload",
+          "value": "batch",
+          "effect": "PreferNoSchedule"
+        }
+      ]
+    },
+    "status": {
+      "capacity": {
+        "cpu": "8",
+        "memory": "16777216Ki",
+        "pods": "110",
+        "ephemeral-storage": "104845292Ki"
+      },
+      "allocatable": {
+        "cpu": "7800m",
+        "memory": "15877216Ki",
+        "pods": "110",
+        "ephemeral-storage": "96625420Ki"
+      },
+      "conditions": [
+        {
+          "type": "MemoryPressure",
+          "status": "False",
+          "reason": "KubeletHasSufficientMemory",
+          "message": "kubelet has sufficient memory available",
+          "lastHeartbeatTime": "2026-07-30T08:44:31Z",
+          "lastTransitionTime": "2026-07-11T06:05:12Z"
+        },
+        {
+          "type": "DiskPressure",
+          "status": "True",
+          "reason": "KubeletHasDiskPressure",
+          "message": "kubelet has disk pressure",
+          "lastHeartbeatTime": "2026-07-30T08:44:31Z",
+          "lastTransitionTime": "2026-07-30T07:58:02Z"
+        },
+        {
+          "type": "PIDPressure",
+          "status": "False",
+          "reason": "KubeletHasSufficientPID",
+          "message": "kubelet has sufficient PID available",
+          "lastHeartbeatTime": "2026-07-30T08:44:31Z",
+          "lastTransitionTime": "2026-07-11T06:05:12Z"
+        },
+        {
+          "type": "Ready",
+          "status": "True",
+          "reason": "KubeletReady",
+          "message": "kubelet is posting ready status",
+          "lastHeartbeatTime": "2026-07-30T08:44:31Z",
+          "lastTransitionTime": "2026-07-11T06:05:12Z"
+        }
+      ],
+      "addresses": [
+        {
+          "type": "InternalIP",
+          "address": "10.0.1.22"
+        },
+        {
+          "type": "Hostname",
+          "address": "demo-worker-2"
+        }
+      ],
+      "nodeInfo": {
+        "architecture": "amd64",
+        "containerRuntimeVersion": "containerd://1.7.20",
+        "kernelVersion": "6.8.0-45-generic",
+        "kubeletVersion": "v1.31.1",
+        "osImage": "Ubuntu 24.04.1 LTS",
+        "operatingSystem": "linux"
+      }
+    }
+  }
+]

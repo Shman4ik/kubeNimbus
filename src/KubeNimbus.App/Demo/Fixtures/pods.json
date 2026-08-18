@@ -7,35 +7,132 @@
       "namespace": "payments",
       "uid": "a1111111-1111-1111-1111-111111111111",
       "creationTimestamp": "2026-07-19T08:12:00Z",
-      "labels": { "app": "payment-service-report-generator", "pod-template-hash": "7f9c8d6bcd" },
+      "labels": {
+        "app": "payment-service-report-generator",
+        "pod-template-hash": "7f9c8d6bcd"
+      },
       "ownerReferences": [
-        { "apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "payment-service-report-generator-7f9c8d6bcd", "uid": "b1111111-1111-1111-1111-111111111111", "controller": true }
+        {
+          "apiVersion": "apps/v1",
+          "kind": "ReplicaSet",
+          "name": "payment-service-report-generator-7f9c8d6bcd",
+          "uid": "b1111111-1111-1111-1111-111111111111",
+          "controller": true
+        }
       ]
     },
     "spec": {
+      "nodeName": "demo-worker-1",
       "containers": [
         {
-          "name": "app", "image": "registry.internal/payments/report-generator:2.14.3", "ports": [{ "containerPort": 8080, "protocol": "TCP" }],
+          "name": "app",
+          "image": "registry.internal/payments/report-generator:2.14.3",
+          "ports": [
+            {
+              "containerPort": 8080,
+              "protocol": "TCP"
+            }
+          ],
           "env": [
-            { "name": "LOG_LEVEL", "value": "info" },
-            { "name": "REPORT_CACHE_DIR", "value": "/var/cache/reports" },
-            { "name": "DB_PASSWORD", "valueFrom": { "secretKeyRef": { "name": "payments-db-creds", "key": "password" } } },
-            { "name": "DB_USERNAME", "valueFrom": { "secretKeyRef": { "name": "payments-db-creds", "key": "username" } } },
-            { "name": "FEATURE_FLAGS", "valueFrom": { "configMapKeyRef": { "name": "report-generator-config", "key": "flags" } } },
-            { "name": "POD_NAME", "valueFrom": { "fieldRef": { "fieldPath": "metadata.name" } } }
+            {
+              "name": "LOG_LEVEL",
+              "value": "info"
+            },
+            {
+              "name": "REPORT_CACHE_DIR",
+              "value": "/var/cache/reports"
+            },
+            {
+              "name": "DB_PASSWORD",
+              "valueFrom": {
+                "secretKeyRef": {
+                  "name": "payments-db-creds",
+                  "key": "password"
+                }
+              }
+            },
+            {
+              "name": "DB_USERNAME",
+              "valueFrom": {
+                "secretKeyRef": {
+                  "name": "payments-db-creds",
+                  "key": "username"
+                }
+              }
+            },
+            {
+              "name": "FEATURE_FLAGS",
+              "valueFrom": {
+                "configMapKeyRef": {
+                  "name": "report-generator-config",
+                  "key": "flags"
+                }
+              }
+            },
+            {
+              "name": "POD_NAME",
+              "valueFrom": {
+                "fieldRef": {
+                  "fieldPath": "metadata.name"
+                }
+              }
+            }
           ],
           "envFrom": [
-            { "configMapRef": { "name": "report-generator-common-config" } }
-          ]
+            {
+              "configMapRef": {
+                "name": "report-generator-common-config"
+              }
+            }
+          ],
+          "resources": {
+            "requests": {
+              "cpu": "250m",
+              "memory": "256Mi"
+            }
+          }
         },
-        { "name": "envoy-sidecar", "image": "envoyproxy/envoy:v1.29.2", "ports": [{ "containerPort": 15000, "protocol": "TCP" }] }
+        {
+          "name": "envoy-sidecar",
+          "image": "envoyproxy/envoy:v1.29.2",
+          "ports": [
+            {
+              "containerPort": 15000,
+              "protocol": "TCP"
+            }
+          ],
+          "resources": {
+            "requests": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            }
+          }
+        }
       ]
     },
     "status": {
       "phase": "Running",
       "containerStatuses": [
-        { "name": "app", "ready": true, "restartCount": 0, "state": { "running": { "startedAt": "2026-07-19T08:12:05Z" } } },
-        { "name": "envoy-sidecar", "ready": true, "restartCount": 0, "state": { "running": { "startedAt": "2026-07-19T08:12:02Z" } } }
+        {
+          "name": "app",
+          "ready": true,
+          "restartCount": 0,
+          "state": {
+            "running": {
+              "startedAt": "2026-07-19T08:12:05Z"
+            }
+          }
+        },
+        {
+          "name": "envoy-sidecar",
+          "ready": true,
+          "restartCount": 0,
+          "state": {
+            "running": {
+              "startedAt": "2026-07-19T08:12:02Z"
+            }
+          }
+        }
       ]
     }
   },
@@ -47,22 +144,80 @@
       "namespace": "payments",
       "uid": "a1111111-1111-1111-1111-11111111111a",
       "creationTimestamp": "2026-07-19T08:12:00Z",
-      "labels": { "app": "payment-service-report-generator", "pod-template-hash": "7f9c8d6bcd" },
+      "labels": {
+        "app": "payment-service-report-generator",
+        "pod-template-hash": "7f9c8d6bcd"
+      },
       "ownerReferences": [
-        { "apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "payment-service-report-generator-7f9c8d6bcd", "uid": "b1111111-1111-1111-1111-111111111111", "controller": true }
+        {
+          "apiVersion": "apps/v1",
+          "kind": "ReplicaSet",
+          "name": "payment-service-report-generator-7f9c8d6bcd",
+          "uid": "b1111111-1111-1111-1111-111111111111",
+          "controller": true
+        }
       ]
     },
     "spec": {
+      "nodeName": "demo-worker-1",
       "containers": [
-        { "name": "app", "image": "registry.internal/payments/report-generator:2.14.3", "ports": [{ "containerPort": 8080, "protocol": "TCP" }] },
-        { "name": "envoy-sidecar", "image": "envoyproxy/envoy:v1.29.2", "ports": [{ "containerPort": 15000, "protocol": "TCP" }] }
+        {
+          "name": "app",
+          "image": "registry.internal/payments/report-generator:2.14.3",
+          "ports": [
+            {
+              "containerPort": 8080,
+              "protocol": "TCP"
+            }
+          ],
+          "resources": {
+            "requests": {
+              "cpu": "250m",
+              "memory": "256Mi"
+            }
+          }
+        },
+        {
+          "name": "envoy-sidecar",
+          "image": "envoyproxy/envoy:v1.29.2",
+          "ports": [
+            {
+              "containerPort": 15000,
+              "protocol": "TCP"
+            }
+          ],
+          "resources": {
+            "requests": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            }
+          }
+        }
       ]
     },
     "status": {
       "phase": "Running",
       "containerStatuses": [
-        { "name": "app", "ready": true, "restartCount": 0, "state": { "running": { "startedAt": "2026-07-19T08:12:06Z" } } },
-        { "name": "envoy-sidecar", "ready": true, "restartCount": 0, "state": { "running": { "startedAt": "2026-07-19T08:12:03Z" } } }
+        {
+          "name": "app",
+          "ready": true,
+          "restartCount": 0,
+          "state": {
+            "running": {
+              "startedAt": "2026-07-19T08:12:06Z"
+            }
+          }
+        },
+        {
+          "name": "envoy-sidecar",
+          "ready": true,
+          "restartCount": 0,
+          "state": {
+            "running": {
+              "startedAt": "2026-07-19T08:12:03Z"
+            }
+          }
+        }
       ]
     }
   },
@@ -74,22 +229,80 @@
       "namespace": "payments",
       "uid": "a1111111-1111-1111-1111-11111111111b",
       "creationTimestamp": "2026-07-20T08:44:48Z",
-      "labels": { "app": "payment-service-report-generator", "pod-template-hash": "8c1a4f2e91" },
+      "labels": {
+        "app": "payment-service-report-generator",
+        "pod-template-hash": "8c1a4f2e91"
+      },
       "ownerReferences": [
-        { "apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "payment-service-report-generator-8c1a4f2e91", "uid": "b1111111-1111-1111-1111-11111111111b", "controller": true }
+        {
+          "apiVersion": "apps/v1",
+          "kind": "ReplicaSet",
+          "name": "payment-service-report-generator-8c1a4f2e91",
+          "uid": "b1111111-1111-1111-1111-11111111111b",
+          "controller": true
+        }
       ]
     },
     "spec": {
+      "nodeName": "demo-worker-2",
       "containers": [
-        { "name": "app", "image": "registry.internal/payments/report-generator:2.15.0", "ports": [{ "containerPort": 8080, "protocol": "TCP" }] },
-        { "name": "envoy-sidecar", "image": "envoyproxy/envoy:v1.29.2", "ports": [{ "containerPort": 15000, "protocol": "TCP" }] }
+        {
+          "name": "app",
+          "image": "registry.internal/payments/report-generator:2.15.0",
+          "ports": [
+            {
+              "containerPort": 8080,
+              "protocol": "TCP"
+            }
+          ],
+          "resources": {
+            "requests": {
+              "cpu": "250m",
+              "memory": "256Mi"
+            }
+          }
+        },
+        {
+          "name": "envoy-sidecar",
+          "image": "envoyproxy/envoy:v1.29.2",
+          "ports": [
+            {
+              "containerPort": 15000,
+              "protocol": "TCP"
+            }
+          ],
+          "resources": {
+            "requests": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            }
+          }
+        }
       ]
     },
     "status": {
       "phase": "Running",
       "containerStatuses": [
-        { "name": "app", "ready": true, "restartCount": 0, "state": { "running": { "startedAt": "2026-07-20T08:44:52Z" } } },
-        { "name": "envoy-sidecar", "ready": true, "restartCount": 0, "state": { "running": { "startedAt": "2026-07-20T08:44:50Z" } } }
+        {
+          "name": "app",
+          "ready": true,
+          "restartCount": 0,
+          "state": {
+            "running": {
+              "startedAt": "2026-07-20T08:44:52Z"
+            }
+          }
+        },
+        {
+          "name": "envoy-sidecar",
+          "ready": true,
+          "restartCount": 0,
+          "state": {
+            "running": {
+              "startedAt": "2026-07-20T08:44:50Z"
+            }
+          }
+        }
       ]
     }
   },
@@ -101,18 +314,47 @@
       "namespace": "payments",
       "uid": "a2222222-2222-2222-2222-222222222222",
       "creationTimestamp": "2026-07-20T02:40:00Z",
-      "labels": { "app": "checkout-worker" },
+      "labels": {
+        "app": "checkout-worker"
+      },
       "ownerReferences": [
-        { "apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "checkout-worker-5d8f7b9c4", "uid": "b2222222-2222-2222-2222-222222222222", "controller": true }
+        {
+          "apiVersion": "apps/v1",
+          "kind": "ReplicaSet",
+          "name": "checkout-worker-5d8f7b9c4",
+          "uid": "b2222222-2222-2222-2222-222222222222",
+          "controller": true
+        }
       ]
     },
-    "spec": { "containers": [ { "name": "worker", "image": "registry.internal/payments/checkout-worker:9.0.1" } ] },
+    "spec": {
+      "nodeName": "demo-worker-1",
+      "containers": [
+        {
+          "name": "worker",
+          "image": "registry.internal/payments/checkout-worker:9.0.1",
+          "resources": {
+            "requests": {
+              "cpu": "500m",
+              "memory": "512Mi"
+            }
+          }
+        }
+      ]
+    },
     "status": {
       "phase": "Running",
       "containerStatuses": [
         {
-          "name": "worker", "ready": false, "restartCount": 14,
-          "state": { "waiting": { "reason": "CrashLoopBackOff", "message": "back-off 5m0s restarting failed container" } }
+          "name": "worker",
+          "ready": false,
+          "restartCount": 14,
+          "state": {
+            "waiting": {
+              "reason": "CrashLoopBackOff",
+              "message": "back-off 5m0s restarting failed container"
+            }
+          }
         }
       ]
     }
@@ -125,13 +367,50 @@
       "namespace": "payments",
       "uid": "a3333333-3333-3333-3333-333333333333",
       "creationTimestamp": "2026-07-20T03:05:00Z",
-      "labels": { "job-name": "db-migration-job" },
+      "labels": {
+        "job-name": "db-migration-job"
+      },
       "ownerReferences": [
-        { "apiVersion": "batch/v1", "kind": "Job", "name": "db-migration-job", "uid": "b3333333-3333-3333-3333-333333333333", "controller": true }
+        {
+          "apiVersion": "batch/v1",
+          "kind": "Job",
+          "name": "db-migration-job",
+          "uid": "b3333333-3333-3333-3333-333333333333",
+          "controller": true
+        }
       ]
     },
-    "spec": { "containers": [ { "name": "migrate", "image": "registry.internal/payments/migrate:1.2.0" } ] },
-    "status": { "phase": "Succeeded", "containerStatuses": [ { "name": "migrate", "ready": false, "restartCount": 0, "state": { "terminated": { "reason": "Completed", "exitCode": 0 } } } ] }
+    "spec": {
+      "nodeName": "demo-worker-1",
+      "containers": [
+        {
+          "name": "migrate",
+          "image": "registry.internal/payments/migrate:1.2.0",
+          "resources": {
+            "requests": {
+              "cpu": "100m",
+              "memory": "128Mi"
+            }
+          }
+        }
+      ]
+    },
+    "status": {
+      "phase": "Succeeded",
+      "containerStatuses": [
+        {
+          "name": "migrate",
+          "ready": false,
+          "restartCount": 0,
+          "state": {
+            "terminated": {
+              "reason": "Completed",
+              "exitCode": 0
+            }
+          }
+        }
+      ]
+    }
   },
   {
     "kind": "Pod",
@@ -141,13 +420,31 @@
       "namespace": "payments",
       "uid": "a4444444-4444-4444-4444-444444444444",
       "creationTimestamp": "2026-07-20T03:20:00Z",
-      "labels": { "app": "fraud-detector" },
+      "labels": {
+        "app": "fraud-detector"
+      },
       "ownerReferences": [
-        { "apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "fraud-detector-6c7d9f8b5", "uid": "b4444444-4444-4444-4444-444444444444", "controller": true }
+        {
+          "apiVersion": "apps/v1",
+          "kind": "ReplicaSet",
+          "name": "fraud-detector-6c7d9f8b5",
+          "uid": "b4444444-4444-4444-4444-444444444444",
+          "controller": true
+        }
       ]
     },
-    "spec": { "containers": [ { "name": "model-server", "image": "registry.internal/ml/fraud-detector:4.1.0" } ] },
-    "status": { "phase": "Pending", "containerStatuses": [] }
+    "spec": {
+      "containers": [
+        {
+          "name": "model-server",
+          "image": "registry.internal/ml/fraud-detector:4.1.0"
+        }
+      ]
+    },
+    "status": {
+      "phase": "Pending",
+      "containerStatuses": []
+    }
   },
   {
     "kind": "Pod",
@@ -157,13 +454,55 @@
       "namespace": "payments",
       "uid": "a5555555-5555-5555-5555-555555555555",
       "creationTimestamp": "2026-07-15T11:00:00Z",
-      "labels": { "app": "redis-cache" },
+      "labels": {
+        "app": "redis-cache"
+      },
       "ownerReferences": [
-        { "apiVersion": "apps/v1", "kind": "StatefulSet", "name": "redis-cache", "uid": "b5555555-5555-5555-5555-555555555555", "controller": true }
+        {
+          "apiVersion": "apps/v1",
+          "kind": "StatefulSet",
+          "name": "redis-cache",
+          "uid": "b5555555-5555-5555-5555-555555555555",
+          "controller": true
+        }
       ]
     },
-    "spec": { "containers": [ { "name": "redis", "image": "redis:7.4-alpine", "ports": [{ "containerPort": 6379, "protocol": "TCP" }] } ] },
-    "status": { "phase": "Running", "containerStatuses": [ { "name": "redis", "ready": true, "restartCount": 2, "state": { "running": { "startedAt": "2026-07-18T09:00:00Z" } } } ] }
+    "spec": {
+      "nodeName": "demo-worker-2",
+      "containers": [
+        {
+          "name": "redis",
+          "image": "redis:7.4-alpine",
+          "ports": [
+            {
+              "containerPort": 6379,
+              "protocol": "TCP"
+            }
+          ],
+          "resources": {
+            "requests": {
+              "cpu": "200m",
+              "memory": "1Gi"
+            }
+          }
+        }
+      ]
+    },
+    "status": {
+      "phase": "Running",
+      "containerStatuses": [
+        {
+          "name": "redis",
+          "ready": true,
+          "restartCount": 2,
+          "state": {
+            "running": {
+              "startedAt": "2026-07-18T09:00:00Z"
+            }
+          }
+        }
+      ]
+    }
   },
   {
     "kind": "Pod",
@@ -174,12 +513,311 @@
       "uid": "a6666666-6666-6666-6666-666666666666",
       "creationTimestamp": "2026-07-20T04:01:00Z",
       "deletionTimestamp": "2026-07-20T04:15:00Z",
-      "labels": { "app": "notification-dispatcher" },
+      "labels": {
+        "app": "notification-dispatcher"
+      },
       "ownerReferences": [
-        { "apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "notification-dispatcher-8b6f5d7c9", "uid": "b6666666-6666-6666-6666-666666666666", "controller": true }
+        {
+          "apiVersion": "apps/v1",
+          "kind": "ReplicaSet",
+          "name": "notification-dispatcher-8b6f5d7c9",
+          "uid": "b6666666-6666-6666-6666-666666666666",
+          "controller": true
+        }
       ]
     },
-    "spec": { "containers": [ { "name": "dispatcher", "image": "registry.internal/payments/notification-dispatcher:3.3.3" } ] },
-    "status": { "phase": "Running", "containerStatuses": [ { "name": "dispatcher", "ready": true, "restartCount": 0, "state": { "running": { "startedAt": "2026-07-20T04:01:05Z" } } } ] }
+    "spec": {
+      "nodeName": "demo-worker-2",
+      "containers": [
+        {
+          "name": "dispatcher",
+          "image": "registry.internal/payments/notification-dispatcher:3.3.3",
+          "resources": {
+            "requests": {
+              "cpu": "150m",
+              "memory": "192Mi"
+            }
+          }
+        }
+      ]
+    },
+    "status": {
+      "phase": "Running",
+      "containerStatuses": [
+        {
+          "name": "dispatcher",
+          "ready": true,
+          "restartCount": 0,
+          "state": {
+            "running": {
+              "startedAt": "2026-07-20T04:01:05Z"
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "Pod",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "kube-proxy-demo-worker-1",
+      "namespace": "kube-system",
+      "uid": "c0000000-0000-0000-0000-000000000001",
+      "creationTimestamp": "2026-07-11T06:02:00Z",
+      "labels": {
+        "app": "kube-proxy-demo-worker"
+      },
+      "ownerReferences": [
+        {
+          "apiVersion": "apps/v1",
+          "kind": "DaemonSet",
+          "name": "kube-proxy",
+          "uid": "d0000000-0000-0000-0000-000000000001",
+          "controller": true
+        }
+      ]
+    },
+    "spec": {
+      "nodeName": "demo-worker-1",
+      "containers": [
+        {
+          "name": "app",
+          "image": "registry.k8s.io/kube-proxy:v1.31.2",
+          "resources": {
+            "requests": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            }
+          }
+        }
+      ]
+    },
+    "status": {
+      "phase": "Running",
+      "containerStatuses": [
+        {
+          "name": "app",
+          "ready": true,
+          "restartCount": 0,
+          "state": {
+            "running": {
+              "startedAt": "2026-07-11T06:02:00Z"
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "Pod",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "kube-proxy-demo-worker-2",
+      "namespace": "kube-system",
+      "uid": "c0000000-0000-0000-0000-000000000002",
+      "creationTimestamp": "2026-07-11T06:02:00Z",
+      "labels": {
+        "app": "kube-proxy-demo-worker"
+      },
+      "ownerReferences": [
+        {
+          "apiVersion": "apps/v1",
+          "kind": "DaemonSet",
+          "name": "kube-proxy",
+          "uid": "d0000000-0000-0000-0000-000000000001",
+          "controller": true
+        }
+      ]
+    },
+    "spec": {
+      "nodeName": "demo-worker-2",
+      "containers": [
+        {
+          "name": "app",
+          "image": "registry.k8s.io/kube-proxy:v1.31.2",
+          "resources": {
+            "requests": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            }
+          }
+        }
+      ]
+    },
+    "status": {
+      "phase": "Running",
+      "containerStatuses": [
+        {
+          "name": "app",
+          "ready": true,
+          "restartCount": 0,
+          "state": {
+            "running": {
+              "startedAt": "2026-07-11T06:02:00Z"
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "Pod",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "kube-apiserver-demo-cp-1",
+      "namespace": "kube-system",
+      "uid": "c0000000-0000-0000-0000-000000000003",
+      "creationTimestamp": "2026-07-11T06:02:00Z",
+      "labels": {
+        "app": "kube-apiserver-demo-cp"
+      },
+      "annotations": {
+        "kubernetes.io/config.mirror": "0f2a1c9e4b7d3a58",
+        "kubernetes.io/config.source": "file"
+      },
+      "ownerReferences": [
+        {
+          "apiVersion": "v1",
+          "kind": "Node",
+          "name": "demo-cp-1",
+          "uid": "n0000000-0000-0000-0000-000000000001",
+          "controller": true
+        }
+      ]
+    },
+    "spec": {
+      "nodeName": "demo-cp-1",
+      "containers": [
+        {
+          "name": "app",
+          "image": "registry.k8s.io/kube-apiserver:v1.31.2",
+          "resources": {
+            "requests": {
+              "cpu": "250m",
+              "memory": "512Mi"
+            }
+          }
+        }
+      ]
+    },
+    "status": {
+      "phase": "Running",
+      "containerStatuses": [
+        {
+          "name": "app",
+          "ready": true,
+          "restartCount": 0,
+          "state": {
+            "running": {
+              "startedAt": "2026-07-11T06:02:00Z"
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "Pod",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "legacy-batch-runner",
+      "namespace": "kube-system",
+      "uid": "c0000000-0000-0000-0000-000000000004",
+      "creationTimestamp": "2026-07-11T06:02:00Z",
+      "labels": {
+        "app": "legacy-batch"
+      }
+    },
+    "spec": {
+      "nodeName": "demo-worker-1",
+      "containers": [
+        {
+          "name": "app",
+          "image": "registry.internal/ops/batch-runner:0.9.4",
+          "resources": {
+            "requests": {
+              "cpu": "100m",
+              "memory": "128Mi"
+            }
+          }
+        }
+      ]
+    },
+    "status": {
+      "phase": "Running",
+      "containerStatuses": [
+        {
+          "name": "app",
+          "ready": true,
+          "restartCount": 0,
+          "state": {
+            "running": {
+              "startedAt": "2026-07-11T06:02:00Z"
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "Pod",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "metrics-scratch-cache-64d8f9b7c-lp4rz",
+      "namespace": "kube-system",
+      "uid": "c0000000-0000-0000-0000-000000000005",
+      "creationTimestamp": "2026-07-11T06:02:00Z",
+      "labels": {
+        "app": "metrics-scratch-cache-64d8f9b7c"
+      },
+      "ownerReferences": [
+        {
+          "apiVersion": "apps/v1",
+          "kind": "ReplicaSet",
+          "name": "metrics-scratch-cache-64d8f9b7c",
+          "uid": "r0000000-0000-0000-0000-000000000001",
+          "controller": true
+        }
+      ]
+    },
+    "spec": {
+      "nodeName": "demo-worker-1",
+      "containers": [
+        {
+          "name": "app",
+          "image": "registry.internal/ops/metrics-cache:1.2.0",
+          "resources": {
+            "requests": {
+              "cpu": "100m",
+              "memory": "256Mi"
+            }
+          }
+        }
+      ],
+      "volumes": [
+        {
+          "name": "scratch",
+          "emptyDir": {
+            "sizeLimit": "2Gi"
+          }
+        }
+      ]
+    },
+    "status": {
+      "phase": "Running",
+      "containerStatuses": [
+        {
+          "name": "app",
+          "ready": true,
+          "restartCount": 0,
+          "state": {
+            "running": {
+              "startedAt": "2026-07-11T06:02:00Z"
+            }
+          }
+        }
+      ]
+    }
   }
 ]
