@@ -3274,3 +3274,53 @@ too — the Age column is a function of the real clock while the rest of the fix
 pinned to `FixtureNow`, so those files drift by themselves. Nothing this pass changes
 appears in any of them (the baseline diff above says so), and regenerating them would
 commit a date rather than a change.
+
+**Multi-pod logs pass (FEAT-3):** one workload's pods tail into one pane, colour-keyed
+by pod — see "Multi-pod logs (one workload, one stream)" above for the eight rules, the
+per-pod tail decision and the reason the merge is two-stage rather than a true k-way
+one. New: `LabelSelector.cs` in Core (+ 15 `LabelSelectorTests`), a `labelSelector`
+parameter on `WatchResourceAsync`/`ListResourceOnceAsync` and an `extraQuery` on the
+watch engine, `WorkloadLogsTabViewModel` / `LogSourceViewModel` / `LogSourcePalette` and
+`WorkloadLogsView` in the App layer (+ 12 `WorkloadLogsTests`), a row context-menu entry
+and a palette entry, three demo `payment-service-report-generator` replicas across two
+ReplicaSets with interleaving canned streams, and two screenshot scenarios
+(`cluster-tab-workload-logs{,-filtered-empty}`).
+
+**A second bug was fixed here because the new pane runs through the same binding**, and
+it is the one recorded under "Log severity is three classes, not a brush binding":
+`LogSeverityToBrushConverter`'s `UnsetValue` default case falls back to
+`TextElement.Foreground`'s own opaque-black default rather than to the inherited
+foreground, so every log line with no severity keyword rendered **invisible on the dark
+theme** — most real output. Shipping the multi-pod pane over that converter would have
+reproduced it in the new surface on day one. The converter is deleted and severity is
+three style classes.
+
+**Verified this session** — and this record is the verifier's own re-run rather than a
+claim carried over, because the implementing session's report was lost to a restart
+before it could be recorded: `dotnet build KubeNimbus.slnx` with **0 new warnings** (the
+one warning is the pre-existing CS8425 in `AsyncMergeTests.cs`); **244/244 Core TUnit**
+and **49/49 App TUnit**, 0 failed, 0 skipped, both via `--project` (no sandbox here, so
+the Core count is the unit-only subset — the cluster-gated tests return early); all
+**55** scenarios × both themes rendered (110 PNGs), including the two new ones; the
+linux-x64 NativeAOT publish with no new warnings beyond the known DataGrid
+IL2104/IL3053; and `--smoke-test` on that published binary under Xvfb (`SMOKE-OK main
+window rendered at 1280x800 after 3718 ms`, exit 0). The acceptance criterion was
+checked at two levels rather than asserted: `WorkloadLogsTests` drives the real
+`Enqueue`/`Flush`/`OrderBatch` against a deliberately scrambled arrival order, and the
+demo rollout scenario was read line by line off the rendered PNG in both themes — the
+three replicas' lines interleave by their real RFC3339 instants rather than arriving
+grouped by pod.
+
+**Not verified, and the live half is all of it.** No cluster came up here (registry
+egress is blocked in this container, as it has been in most sessions), so **not one byte
+of this pane has crossed a real API server**: the `labelSelector` list+watch, the 50-pod
+concurrency cap against a genuinely large ReplicaSet, a dropped pod-list watch
+reconnecting, and above all an actual `kubectl rollout restart` watched through the pane
+are argued from the wire format, pinned by unit tests and rendered from the demo
+dataset — never observed. Nothing has been driven by hand in the running app either:
+the pod chips, the follow toggle and the filter are verified by construction, by unit
+test and in the headless harness, not by a mouse. And the pixel measurements quoted in
+the severity section describe a *before* state whose code is now deleted, so they cannot
+be re-measured from this tree; they are consistent with Avalonia's documented `UnsetValue`
+semantics and with the fixed panes now rendering legibly in both themes, which is the
+most that can be said from here.
