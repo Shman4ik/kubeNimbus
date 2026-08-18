@@ -93,6 +93,12 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-demo-list", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
     ("cluster-tab-demo-pod-detail", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetail(), height: 1000)),
     ("cluster-tab-demo-exec-unavailable", () => HostInMainWindow(ClusterTabScenarios.DemoExecUnavailable())),
+    // Multi-pod logs. Taller than the default for the same reason pod detail is: the
+    // whole point is how many merged lines you can read at once. The second shot is the
+    // filter's own empty state, which is a different next step from "no pods logged".
+    ("cluster-tab-workload-logs", () => HostInMainWindow(ClusterTabScenarios.DemoWorkloadLogs(), height: 1000)),
+    ("cluster-tab-workload-logs-filtered-empty",
+        () => HostInMainWindow(ClusterTabScenarios.DemoWorkloadLogs("checkout"))),
     // The CRD printer-column pair: the same Certificate list without and with the
     // advanced view, which is where the CRD's own `priority: 1` columns live.
     ("cluster-tab-crd-printer-columns", () => HostInMainWindow(ClusterTabScenarios.DemoCrdPrinterColumns())),

@@ -96,6 +96,9 @@ public sealed partial class ClusterClient : IDisposable
     /// <summary>
     /// Generic informer loop: paginated initial list (emitting Added per item
     /// after a Reset), then a resumable watch against <paramref name="listPath"/>.
+    /// <paramref name="extraQuery"/> is appended verbatim to the watch request's own
+    /// query string (it must already start with <c>&amp;</c> and be escaped); the
+    /// paginated list applies the same narrowing through <paramref name="listPage"/>.
     /// </summary>
     private async IAsyncEnumerable<ResourceEvent<T>> WatchAsync<T>(
         string listPath,
@@ -103,14 +106,15 @@ public sealed partial class ClusterClient : IDisposable
         Func<JsonElement, T?> deserialize,
         Func<T, string?> resourceVersionOf,
         Action<Exception>? connectionLost,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+        [EnumeratorCancellation] CancellationToken cancellationToken,
+        string extraQuery = "")
         where T : class
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var channel = Channel.CreateUnbounded<ResourceEvent<T>>(
             new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
 
-        var pump = PumpAsync(listPath, listPage, deserialize, resourceVersionOf, channel.Writer, connectionLost, linked.Token);
+        var pump = PumpAsync(listPath, listPage, deserialize, resourceVersionOf, channel.Writer, connectionLost, extraQuery, linked.Token);
         try
         {
             await foreach (var evt in channel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
@@ -139,6 +143,7 @@ public sealed partial class ClusterClient : IDisposable
         Func<T, string?> resourceVersionOf,
         ChannelWriter<ResourceEvent<T>> writer,
         Action<Exception>? connectionLost,
+        string extraQuery,
         CancellationToken ct)
         where T : class
     {
@@ -162,7 +167,7 @@ public sealed partial class ClusterClient : IDisposable
 
                     var relist = await StreamWatchAsync(
                         listPath, resourceVersion!, deserialize, resourceVersionOf, writer,
-                        rv => resourceVersion = rv, ct).ConfigureAwait(false);
+                        rv => resourceVersion = rv, extraQuery, ct).ConfigureAwait(false);
                     if (relist)
                     {
                         needRelist = true;
@@ -244,10 +249,11 @@ public sealed partial class ClusterClient : IDisposable
         Func<T, string?> resourceVersionOf,
         ChannelWriter<ResourceEvent<T>> writer,
         Action<string?> updateResourceVersion,
+        string extraQuery,
         CancellationToken ct)
         where T : class
     {
-        var query = $"?watch=true&allowWatchBookmarks=true&resourceVersion={Uri.EscapeDataString(resourceVersion)}";
+        var query = $"?watch=true&allowWatchBookmarks=true&resourceVersion={Uri.EscapeDataString(resourceVersion)}{extraQuery}";
         using var response = await SendStreamingGetAsync(listPath + query, ct).ConfigureAwait(false);
 
         if (response.StatusCode == System.Net.HttpStatusCode.Gone)

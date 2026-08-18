@@ -173,8 +173,15 @@
                       <!-- Selectable: reading a log usually ends in copying part of it into a
                            search box or a ticket, and a plain TextBlock made that impossible.
                            Same control HelmReleaseView already uses. -->
+                      <!-- Severity as classes, never as a Foreground binding: a binding that
+                           produces UnsetValue falls back to TextElement.Foreground's own
+                           default (opaque black), not to the inherited foreground, so every
+                           keyword-free line was invisible on the dark theme's card. See the
+                           `.logError`/`.logWarn`/`.logInfo` styles in Theme.axaml. -->
                       <SelectableTextBlock Text="{Binding DisplayText}" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11"
-                                           Foreground="{Binding Severity, Converter={x:Static conv:LogSeverityToBrushConverter.Instance}}"
+                                           Classes.logError="{Binding IsErrorLine}"
+                                           Classes.logWarn="{Binding IsWarnLine}"
+                                           Classes.logInfo="{Binding IsInfoLine}"
                                            TextWrapping="{Binding $parent[UserControl].((vm:PodDetailTabViewModel)DataContext).WrapLogLines, Converter={x:Static conv:BoolToTextWrappingConverter.Instance}}" />
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>

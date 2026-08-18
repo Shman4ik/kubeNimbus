@@ -230,6 +230,61 @@ internal static class ClusterTabScenarios
         return tab;
     }
 
+    /// <summary>
+    /// FEAT-3's whole claim in one image: every pod of a Deployment tailed in one pane,
+    /// each line keyed to its pod by colour and by a printed name. The demo dataset holds
+    /// three replicas of <c>payment-service-report-generator</c> and two of them belong to
+    /// the old ReplicaSet while the third belongs to the new one, so what this renders is
+    /// a rolling deployment read as a single stream — which is the item's acceptance
+    /// criterion, not a decorative choice of fixture.
+    /// </summary>
+    /// <remarks>
+    /// Built by running the real command on a real demo tab, so the selector is parsed
+    /// from the Deployment object, the pods are found through
+    /// <see cref="LabelSelector.Matches"/>, and the lines go through the same merge,
+    /// buffer and filter a live cluster's would.
+    /// </remarks>
+    public static ClusterTabViewModel DemoWorkloadLogs(string filter = "")
+    {
+        var tab = DemoTab();
+        var kind = tab.SidebarSections
+            .First(s => s.Title == "Workloads").Kinds
+            .First(k => k.Descriptor is { Group: "apps", Kind: "Deployment" });
+        tab.SelectKindCommand.Execute(kind);
+
+        tab.SelectedRow = tab.Rows.FirstOrDefault(r => r.Name == "payment-service-report-generator")
+            ?? tab.Rows.FirstOrDefault();
+        tab.OpenWorkloadLogsCommand.Execute(null);
+
+        DrainWorkloadLogs(tab);
+        if (tab.SelectedInspectorTab is WorkloadLogsTabViewModel logs)
+        {
+            logs.LogSearchText = filter;
+        }
+
+        return tab;
+    }
+
+    /// <summary>
+    /// Pumps the dispatcher until enough of the three replayed streams has landed to show
+    /// the merge doing its job. Deeper than <see cref="DrainDemoLogs"/>'s six lines on
+    /// purpose: the first lines of each pod are its own startup, and the interleaving only
+    /// becomes visible further in, which is exactly the part worth screenshotting.
+    /// </summary>
+    private static void DrainWorkloadLogs(ClusterTabViewModel tab)
+    {
+        if (tab.SelectedInspectorTab is not WorkloadLogsTabViewModel logs)
+        {
+            return;
+        }
+
+        for (var i = 0; i < 800 && logs.LogLines.Count < 22; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(10);
+        }
+    }
+
     /// <summary>Pumps the dispatcher until the demo log replay has produced something to render.</summary>
     private static void DrainDemoLogs(ClusterTabViewModel tab)
     {

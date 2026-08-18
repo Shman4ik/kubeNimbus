@@ -1,0 +1,132 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:KubeNimbus.App.ViewModels"
+             xmlns:conv="using:KubeNimbus.App.Converters"
+             x:Class="KubeNimbus.App.Views.WorkloadLogsView"
+             x:DataType="vm:WorkloadLogsTabViewModel">
+
+  <!-- Two rows of chrome and no more (UI rule 10), and neither of them repeats the
+       dock tab's own `Logs/<workload>` heading. Row 1 is the pod strip, which is both
+       the colour legend and the selector; row 2 is the filter and the display toggles.
+       The strip scrolls horizontally rather than wrapping, for the same reason pod
+       detail's container strip does: fifty replicas must cost the dock the same height
+       as three. -->
+  <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="10,8,10,10">
+
+    <!-- Pod strip. ToggleButtons bound to IsIncluded and to NOTHING else — a Command
+         beside a two-way IsChecked flips the property twice per click and lands where
+         it started (UI rule 8b); the view model listens for the property instead. -->
+    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+      <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+        <ItemsControl ItemsSource="{Binding Sources}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Orientation="Horizontal" Spacing="4" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:LogSourceViewModel">
+              <ToggleButton Classes="chip" Padding="8,3" IsChecked="{Binding IsIncluded}"
+                            ToolTip.Tip="{Binding Tooltip}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <!-- The colour key itself. A real brush off the view model, never a
+                       converter that can return null — a null Foreground is local, beats
+                       inheritance, and Avalonia's glyph draw early-returns on it, which
+                       is how log lines once rendered invisible. -->
+                  <Ellipse Width="8" Height="8" VerticalAlignment="Center" Fill="{Binding Brush}" />
+                  <TextBlock Text="{Binding ShortName}" FontSize="12" VerticalAlignment="Center"
+                             FontFamily="Cascadia Mono,Consolas,monospace" />
+                  <TextBlock Text="{Binding StateLabel}" FontSize="10" Opacity="0.55" VerticalAlignment="Center"
+                             IsVisible="{Binding HasStateLabel}" />
+                </StackPanel>
+              </ToggleButton>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+
+      <TextBlock Grid.Column="1" Text="{Binding Summary}" Classes="sectionHeader" VerticalAlignment="Center"
+                 Margin="10,0,0,0" />
+    </Grid>
+
+    <!-- Filter + display toggles. -->
+    <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+      <TextBox Grid.Column="0" Classes="filterbox" MaxWidth="340" HorizontalAlignment="Left" MinWidth="150"
+               Text="{Binding LogSearchText}" PlaceholderText="Filter logs…">
+        <TextBox.InnerLeftContent>
+          <PathIcon Data="{StaticResource MagnifyIconGeometry}" Width="11" Height="11" Opacity="0.5" Margin="8,0,0,0" />
+        </TextBox.InnerLeftContent>
+      </TextBox>
+
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+        <ToggleButton Classes="chip" Padding="6" IsChecked="{Binding IsFollowing}"
+                      ToolTip.Tip="Follow every pod (cancels all streams when toggled off)">
+          <PathIcon Data="{StaticResource PlayIconGeometry}" Width="12" Height="12" />
+        </ToggleButton>
+        <ToggleButton Classes="chip" Padding="6" IsChecked="{Binding ShowLogTimestamps}"
+                      ToolTip.Tip="Show timestamps — the merge orders on these, so they are how an out-of-order line is spotted">
+          <PathIcon Data="{StaticResource ClockOutlineIconGeometry}" Width="12" Height="12" />
+        </ToggleButton>
+        <ToggleButton Classes="chip" Padding="7,3" FontSize="11" IsVisible="{Binding IsAdvancedView}"
+                      IsChecked="{Binding WrapLogLines}" ToolTip.Tip="Wrap long lines" Content="Wrap" />
+        <Button Classes="toolbar" Command="{Binding CopyLogsCommand}" IsVisible="{Binding IsAdvancedView}"
+                ToolTip.Tip="Copy the visible lines, pod-prefixed and with timestamps" Padding="6">
+          <PathIcon Data="{StaticResource ContentCopyIconGeometry}" Width="13" Height="13" />
+        </Button>
+        <Button Classes="toolbar" Command="{Binding DownloadLogsCommand}" IsVisible="{Binding IsAdvancedView}"
+                ToolTip.Tip="Save the visible lines to a file, pod-prefixed and with timestamps" Padding="6">
+          <PathIcon Data="{StaticResource DownloadIconGeometry}" Width="13" Height="13" />
+        </Button>
+      </StackPanel>
+    </Grid>
+
+    <!-- Present only when the pod cap actually bit, so it costs nothing the rest of the
+         time (UI rule 1) and is impossible to miss when it matters (UI rule 11). -->
+    <Border Grid.Row="2" Classes="infoBar warn" Margin="0,0,0,6"
+            IsVisible="{Binding CapNotice, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}">
+      <TextBlock Text="{Binding CapNotice}" TextWrapping="Wrap" FontSize="11.5" />
+    </Border>
+
+    <Border Grid.Row="3" Classes="card" Padding="8">
+      <Grid>
+        <ScrollViewer Name="LogScroll" HorizontalScrollBarVisibility="Auto">
+          <ItemsControl ItemsSource="{Binding LogLines}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:LogLineViewModel">
+                <!-- The pod name is a fixed-width column so the messages line up down
+                     the pane; without it every line's text starts at a different x and
+                     a merged stream is harder to read than the separate ones were. -->
+                <Grid ColumnDefinitions="Auto,*">
+                  <TextBlock Grid.Column="0" Text="{Binding Source.ShortName}" Width="150" Margin="0,0,10,0"
+                             FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11"
+                             TextTrimming="CharacterEllipsis" VerticalAlignment="Top"
+                             Foreground="{Binding Source.Brush}" IsVisible="{Binding HasSource}"
+                             ToolTip.Tip="{Binding Source.PodName}" />
+                  <!-- Severity as classes rather than a Foreground binding — see the
+                       `.logError`/`.logWarn`/`.logInfo` styles in Theme.axaml for why a
+                       binding that produces UnsetValue is not safe on this property. -->
+                  <SelectableTextBlock Grid.Column="1" Text="{Binding DisplayText}"
+                                       FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11"
+                                       Classes.logError="{Binding IsErrorLine}"
+                                       Classes.logWarn="{Binding IsWarnLine}"
+                                       Classes.logInfo="{Binding IsInfoLine}"
+                                       TextWrapping="{Binding $parent[UserControl].((vm:WorkloadLogsTabViewModel)DataContext).WrapLogLines, Converter={x:Static conv:BoolToTextWrappingConverter.Instance}}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+
+        <!-- Every empty state says which one it is (UI rule 9) — "still finding pods",
+             "the selector matches nothing", "matched but silent", "everything hidden"
+             and "the filter matched none of the buffer" are five different next steps. -->
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6" MaxWidth="460"
+                    IsVisible="{Binding HasLogPlaceholder}">
+          <TextBlock Text="{Binding LogPlaceholder}" TextWrapping="Wrap" TextAlignment="Center" FontSize="12"
+                     Classes="statusText" Classes.warn="{Binding IsLogStatusProblem}"
+                     Classes.dim="{Binding !IsLogStatusProblem}" />
+        </StackPanel>
+      </Grid>
+    </Border>
+  </Grid>
+</UserControl>

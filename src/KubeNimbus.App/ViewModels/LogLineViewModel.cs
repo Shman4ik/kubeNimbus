@@ -28,18 +28,49 @@ public sealed partial class LogLineViewModel : ObservableObject
 
     public LogSeverity Severity { get; }
 
+    // Three bools rather than one Severity bound through a value converter, and the
+    // reason is in Theme.axaml beside the styles they drive: a Foreground *binding*
+    // that produces AvaloniaProperty.UnsetValue does not fall back to the inherited
+    // foreground, it falls back to TextElement.Foreground's own default of opaque
+    // black — which in the dark theme made every line with no severity keyword
+    // invisible. A class is set or it is not; an unclassified line carries no
+    // Foreground binding at all and inherits normally.
+    public bool IsErrorLine => Severity == LogSeverity.Error;
+
+    public bool IsWarnLine => Severity == LogSeverity.Warn;
+
+    public bool IsInfoLine => Severity == LogSeverity.Info;
+
+    /// <summary>
+    /// Which pod this line came from, in an aggregated (multi-pod) pane; null in the
+    /// single-pod log pane, where the container strip above already names the source and
+    /// a prefix on every line would only repeat it.
+    /// </summary>
+    public LogSourceViewModel? Source { get; }
+
+    public bool HasSource => Source is not null;
+
     [ObservableProperty]
     private bool _showTimestamp;
 
     public string DisplayText => ShowTimestamp && Timestamp is not null ? RawLine : Message;
 
-    public LogLineViewModel(string rawLine, bool showTimestamp)
+    public LogLineViewModel(string rawLine, bool showTimestamp, LogSourceViewModel? source = null)
     {
         RawLine = rawLine;
         (Timestamp, Message) = SplitTimestamp(rawLine);
         Severity = DetectSeverity(Message);
+        Source = source;
         _showTimestamp = showTimestamp;
     }
+
+    /// <summary>
+    /// The line's server timestamp as a sortable instant, or null when the leading token
+    /// was not one. The merge in an aggregated pane orders on this; the single-pod pane
+    /// never needs it, since one stream is already in order.
+    /// </summary>
+    public DateTimeOffset? At =>
+        Timestamp is { } timestamp && DateTimeOffset.TryParse(timestamp, out var parsed) ? parsed : null;
 
     partial void OnShowTimestampChanged(bool value) => OnPropertyChanged(nameof(DisplayText));
 
