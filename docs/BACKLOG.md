@@ -38,7 +38,7 @@ rather than here.
 
 | ID | Item | Prio | Size | Status | Rounds |
 |---|---|---|---|---|---|
-| FEAT-43 | Pod detail: Conditions, Tolerations, QoS Class, Priority Class, Node Selector and each container's probe config, as structured sections rather than a trip to the YAML | P1 | M | ready | 0 |
+| FEAT-43 | Pod detail: Conditions, Tolerations, QoS Class, Priority Class, Node Selector and each container's probe config, as structured sections rather than a trip to the YAML | P1 | M | in-progress | 0 |
 | FEAT-44 | Container CPU/memory **requests and limits as visible text** on the Usage tab, beside current and peak, with percent-of-limit | P1 | S | ready | 0 |
 | FEAT-41 | Send `fieldValidation=Strict` on server-side apply, with a graceful fallback for pre-1.27 servers — the apply preview's one known gap | P1 | S | ready | 0 |
 | FEAT-34 | Log follow reconnects the way a watch does, and says in place that it did | P1 | S | ready | 0 |
