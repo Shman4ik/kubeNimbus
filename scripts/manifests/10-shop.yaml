@@ -34,6 +34,17 @@ stringData:
   DATABASE_PASSWORD: sandbox-not-a-real-password
   API_TOKEN: sandbox-token-0000
 ---
+# Referenced by shop-web below so its pods carry a priority class name and a non-zero
+# priority — pod detail's Overview tab prints both, and nothing else in the sandbox
+# creates one. Never the global default: that would re-prioritize every other workload.
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: demo-shop-critical
+value: 100000
+globalDefault: false
+description: "Sandbox-only. Exists so shop-web's pods have a priority class to display."
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -51,6 +62,19 @@ spec:
       labels:
         app: shop-web
     spec:
+      # Pod detail's Overview tab reads all four of these, and nothing else in the
+      # sandbox produced any of them: a node selector that still schedules everywhere
+      # (every k3s node carries kubernetes.io/os=linux), a priority class, and a
+      # toleration alongside the two NoExecute/300s ones the DefaultTolerationSeconds
+      # admission plugin adds to every pod by itself.
+      priorityClassName: demo-shop-critical
+      nodeSelector:
+        kubernetes.io/os: linux
+      tolerations:
+        - key: dedicated
+          operator: Equal
+          value: demo-shop
+          effect: NoSchedule
       containers:
         - name: web
           image: nginx:1.27-alpine
@@ -79,9 +103,20 @@ spec:
           volumeMounts:
             - name: content
               mountPath: /usr/share/nginx/html
+          # Three probes of three different handler shapes on one container, because the
+          # Overview tab renders each one in kubectl's own shorthand and a single
+          # httpGet exercises one third of that formatting.
           readinessProbe:
             httpGet: { path: /, port: 80 }
             initialDelaySeconds: 2
+          livenessProbe:
+            tcpSocket: { port: 80 }
+            periodSeconds: 20
+            failureThreshold: 6
+          startupProbe:
+            httpGet: { path: /, port: 80 }
+            periodSeconds: 3
+            failureThreshold: 30
           resources:
             requests: { cpu: 10m, memory: 24Mi }
             limits: { cpu: 200m, memory: 128Mi }
@@ -98,6 +133,12 @@ spec:
               if [ $((i % 7)) -eq 0 ]; then echo "$(date -Iseconds) WARN  upstream slow (420ms)"; fi;
               if [ $((i % 23)) -eq 0 ]; then echo "$(date -Iseconds) ERROR upstream returned 502"; fi;
               sleep 3; done
+          # An exec probe, so switching container in the strip visibly switches the
+          # Overview tab's PROBES section to a different handler shape.
+          readinessProbe:
+            exec:
+              command: [sh, -c, "true"]
+            periodSeconds: 30
           resources:
             requests: { cpu: 5m, memory: 8Mi }
       volumes:

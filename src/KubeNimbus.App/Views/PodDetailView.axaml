@@ -98,6 +98,11 @@
         <ListBoxItem Content="Env" />
         <ListBoxItem Content="Events" />
         <ListBoxItem Content="Usage" IsVisible="{Binding IsAdvancedView}" />
+        <!-- Appended after Usage for the same reason Usage was appended after Events:
+             SelectedDetailTabIndex's existing values (Logs=0, Env=1, Events=2, Usage=3)
+             are depended on by ClusterTabViewModel.OpenLogs and by the screenshot
+             scenarios, so a new tab goes on the end and Overview is 4. -->
+        <ListBoxItem Content="Overview" />
       </ListBox>
 
       <!-- Logs: the filter takes the row's slack. It was a full-width row of its own,
@@ -456,6 +461,147 @@
             </StackPanel>
           </ScrollViewer>
         </Grid>
+      </TabItem>
+
+      <!-- Overview: the structured half of `kubectl describe pod`. Everything here used
+           to require opening the YAML editor and scrolling — which is a page of text to
+           answer "is this pod's readiness probe the reason it never goes Ready?". Read
+           out of the object the row already holds (PodDetails, Core); no extra GET, no
+           second watch. Not gated on the Advanced view: three of the five comparable
+           clients render exactly these fields unprompted, which is what "table stakes"
+           means. -->
+      <TabItem Header="Overview">
+        <ScrollViewer>
+          <StackPanel Spacing="8">
+
+            <!-- Scheduling. QoS and priority are one line each and belong beside the node
+                 selector, since all three answer "where can this run and what happens to
+                 it when the node is under pressure". -->
+            <Border Classes="card" Padding="12,10">
+              <StackPanel Spacing="6">
+                <TextBlock Classes="sectionHeader" Text="SCHEDULING" />
+
+                <Grid ColumnDefinitions="130,*" Margin="0,2">
+                  <TextBlock Grid.Column="0" Text="QoS class" FontSize="12" Opacity="0.6" VerticalAlignment="Center" />
+                  <SelectableTextBlock Grid.Column="1" Text="{Binding QosClass}" FontSize="12" VerticalAlignment="Center"
+                                       IsVisible="{Binding HasQosClass}" />
+                  <!-- The API server computes qosClass; an object without one never went
+                       through a server. Deriving it here would risk disagreeing with the
+                       value the eviction path actually uses. -->
+                  <TextBlock Grid.Column="1" Classes="statusText dim" FontSize="12" VerticalAlignment="Center"
+                             Text="not reported by the API server" IsVisible="{Binding !HasQosClass}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="130,*" Margin="0,2">
+                  <TextBlock Grid.Column="0" Text="Priority class" FontSize="12" Opacity="0.6" VerticalAlignment="Center" />
+                  <SelectableTextBlock Grid.Column="1" Text="{Binding PriorityText}" FontSize="12" VerticalAlignment="Center"
+                                       IsVisible="{Binding HasPriority}" />
+                  <TextBlock Grid.Column="1" Classes="statusText dim" FontSize="12" VerticalAlignment="Center"
+                             Text="none — scheduled at the cluster's default priority" IsVisible="{Binding !HasPriority}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="130,*" Margin="0,2">
+                  <TextBlock Grid.Column="0" Text="Node selector" FontSize="12" Opacity="0.6" VerticalAlignment="Top" Margin="0,3,0,0" />
+                  <TextBlock Grid.Column="1" Classes="statusText dim" FontSize="12" VerticalAlignment="Center"
+                             Text="none — any node that tolerates the pod's other constraints"
+                             IsVisible="{Binding !HasNodeSelector}" />
+                  <ItemsControl Grid.Column="1" ItemsSource="{Binding NodeSelector}" IsVisible="{Binding HasNodeSelector}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <WrapPanel Orientation="Horizontal" />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="core:PodNodeSelectorTerm">
+                        <!-- statusPill, not chip: `chip` is a Button/ToggleButton style
+                             and on a Border it compiles and silently styles nothing. A
+                             node-selector term is not clickable. -->
+                        <Border Classes="statusPill" Margin="0,0,4,4">
+                          <TextBlock Text="{Binding Display}" FontSize="11.5"
+                                     FontFamily="Cascadia Mono,Consolas,monospace" />
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </Grid>
+              </StackPanel>
+            </Border>
+
+            <!-- Conditions. Positive when True for the types Kubernetes defines that way,
+                 negative for DisruptionTarget, and deliberately grey — neither — for a
+                 type this app has not classified: see PodDetails.PolarityOf. -->
+            <Border Classes="card" Padding="12,10">
+              <StackPanel Spacing="6">
+                <TextBlock Classes="sectionHeader" Text="CONDITIONS" />
+                <TextBlock Classes="statusText dim" FontSize="12" TextWrapping="Wrap" IsVisible="{Binding !HasConditions}"
+                           Text="This pod reports no conditions yet — the scheduler and kubelet write them as it is admitted and started." />
+                <ItemsControl ItemsSource="{Binding Conditions}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:PodConditionViewModel">
+                      <Grid ColumnDefinitions="Auto,170,56,*" Margin="0,2">
+                        <Ellipse Grid.Column="0" Classes="statusDot" Width="8" Height="8"
+                                 VerticalAlignment="Center" Margin="0,0,8,0"
+                                 Fill="{Binding Health, Converter={x:Static conv:HealthToBrushConverter.Instance}}" />
+                        <TextBlock Grid.Column="1" Text="{Binding Type}" FontSize="12" VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Type}" />
+                        <TextBlock Grid.Column="2" Text="{Binding Status}" FontSize="12" Opacity="0.7" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="3" Text="{Binding Message}" FontSize="12" Opacity="0.75" VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Message}" />
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+
+            <!-- Tolerations, all of them — including the two NoExecute/300s ones the
+                 DefaultTolerationSeconds admission plugin adds to nearly every pod.
+                 Hiding those would make a pod that genuinely declares one look the same
+                 as one that does not. -->
+            <Border Classes="card" Padding="12,10">
+              <StackPanel Spacing="6">
+                <TextBlock Classes="sectionHeader" Text="TOLERATIONS" />
+                <TextBlock Classes="statusText dim" FontSize="12" TextWrapping="Wrap" IsVisible="{Binding !HasTolerations}"
+                           Text="No tolerations — this pod cannot be scheduled onto a tainted node." />
+                <ItemsControl ItemsSource="{Binding Tolerations}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="core:PodToleration">
+                      <SelectableTextBlock Text="{Binding Display}" FontSize="12" Margin="0,2"
+                                           FontFamily="Cascadia Mono,Consolas,monospace" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+
+            <!-- Probes, for the container the strip two rows up has selected — the same
+                 relationship the Environment tab has with it, so this section needs no
+                 picker of its own. The handler and timing wording is kubectl's, so a
+                 probe read here and one read in a terminal are visibly the same probe. -->
+            <Border Classes="card" Padding="12,10">
+              <StackPanel Spacing="6">
+                <TextBlock Classes="sectionHeader" Text="PROBES" />
+                <TextBlock Classes="statusText dim" FontSize="12" TextWrapping="Wrap" IsVisible="{Binding !HasProbes}"
+                           Text="This container declares no probes. Kubernetes will treat it as ready as soon as it starts." />
+                <ItemsControl ItemsSource="{Binding Probes}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="core:ContainerProbe">
+                      <Grid ColumnDefinitions="80,*" Margin="0,3">
+                        <TextBlock Grid.Column="0" Text="{Binding Kind}" FontSize="12" Opacity="0.6" VerticalAlignment="Top" />
+                        <StackPanel Grid.Column="1" Spacing="1">
+                          <SelectableTextBlock Text="{Binding Handler}" FontSize="12" TextWrapping="Wrap"
+                                               FontFamily="Cascadia Mono,Consolas,monospace" />
+                          <TextBlock Text="{Binding Timing}" FontSize="11" Opacity="0.55" TextWrapping="Wrap"
+                                     FontFamily="Cascadia Mono,Consolas,monospace" />
+                        </StackPanel>
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
       </TabItem>
     </TabControl>
   </Grid>

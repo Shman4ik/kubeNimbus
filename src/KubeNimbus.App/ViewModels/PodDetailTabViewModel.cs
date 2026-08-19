@@ -106,6 +106,49 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
 
     public IReadOnlyList<OwnerRef> Owners => _row.Resource.OwnerReferences;
 
+    // ------------------------------------------------------------- overview
+    //
+    // The Overview tab: the pod's own conditions, tolerations, node selector, QoS and
+    // priority class, and the selected container's probes. Everything here is read out
+    // of the object the list already holds (see PodDetails in Core) — no extra GET, no
+    // second watch — so it costs a parse per changed tick and nothing else.
+
+    public ObservableCollection<PodConditionViewModel> Conditions { get; } = [];
+
+    /// <summary>Every toleration, the two the DefaultTolerationSeconds plugin adds included — see <see cref="PodDetails.Placement"/>.</summary>
+    public ObservableCollection<PodToleration> Tolerations { get; } = [];
+
+    public ObservableCollection<PodNodeSelectorTerm> NodeSelector { get; } = [];
+
+    /// <summary>The selected container's liveness/readiness/startup probes, in that order.</summary>
+    public ObservableCollection<ContainerProbe> Probes { get; } = [];
+
+    /// <summary>Guaranteed / Burstable / BestEffort, as the API server computed it. Empty when the object carries none.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasQosClass))]
+    private string _qosClass = "";
+
+    public bool HasQosClass => QosClass.Length > 0;
+
+    /// <summary>The priority class name and the number the scheduler compares ("high-priority (100000)").</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPriority))]
+    private string _priorityText = "";
+
+    public bool HasPriority => PriorityText.Length > 0;
+
+    [ObservableProperty]
+    private bool _hasConditions;
+
+    [ObservableProperty]
+    private bool _hasTolerations;
+
+    [ObservableProperty]
+    private bool _hasNodeSelector;
+
+    [ObservableProperty]
+    private bool _hasProbes;
+
     /// <summary>
     /// Whole-pod usage over time (sum across containers), behind the Usage tab's two
     /// headline charts. The per-container windows hang off each
@@ -309,6 +352,11 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     {
         RefreshEnvironment();
 
+        // Probes are container-scoped, and the strip above the tabs is already their
+        // selector — the same relationship the Environment tab has with it, which is why
+        // the Overview tab needs no picker of its own (UI rule 10).
+        RefreshOverview();
+
         // The stream follows the picker. It used not to: switching container left the
         // old container's lines arriving under a header that named the new one, and
         // Download saved them under the new one's filename. Nothing about the pane
@@ -329,7 +377,102 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         }
     }
 
-    private void RefreshFromRow()
+    /// <summary>
+    /// Identity of what <see cref="RefreshOverview"/> last rendered. A watch tick on a
+    /// healthy pod is almost always a status refresh that changes none of these fields,
+    /// and rebuilding four ItemsControls per tick throws away scroll position and any
+    /// text selection someone was in the middle of making — the same reason the
+    /// Environment tab is signature-guarded.
+    /// </summary>
+    private int? _overviewSignature;
+
+    /// <summary>
+    /// Rebuilds the Overview tab from the object the row already holds. Conditions do
+    /// change with the watch — that is the point of showing them — so this is guarded on
+    /// the fields' own text rather than skipped.
+    /// </summary>
+    private void RefreshOverview()
+    {
+        var raw = _row.Resource.Raw;
+        var spec = raw.TryGetProperty("spec", out var s) && s.ValueKind == JsonValueKind.Object ? s : default;
+        var status = raw.TryGetProperty("status", out var st) && st.ValueKind == JsonValueKind.Object ? st : default;
+
+        var probeSource = SelectedContainer is { } selected && PodDetails.ContainerSpec(spec, selected.Name) is { } cs
+            ? ProbeText(cs)
+            : "";
+
+        var signature = HashCode.Combine(
+            RawTextOf(status, "conditions"),
+            RawTextOf(spec, "tolerations"),
+            RawTextOf(spec, "nodeSelector"),
+            RawTextOf(status, "qosClass"),
+            RawTextOf(spec, "priorityClassName"),
+            RawTextOf(spec, "priority"),
+            probeSource);
+
+        if (_overviewSignature == signature)
+        {
+            return;
+        }
+
+        _overviewSignature = signature;
+
+        Conditions.Clear();
+        foreach (var condition in PodDetails.Conditions(_row.Resource))
+        {
+            Conditions.Add(new PodConditionViewModel(condition));
+        }
+
+        var placement = PodDetails.Placement(_row.Resource);
+        QosClass = placement.QosClass;
+        PriorityText = placement.PriorityDisplay;
+
+        Tolerations.Clear();
+        foreach (var toleration in placement.Tolerations)
+        {
+            Tolerations.Add(toleration);
+        }
+
+        NodeSelector.Clear();
+        foreach (var term in placement.NodeSelector)
+        {
+            NodeSelector.Add(term);
+        }
+
+        Probes.Clear();
+        if (SelectedContainer is { } container)
+        {
+            foreach (var probe in PodDetails.Probes(_row.Resource, container.Name))
+            {
+                Probes.Add(probe);
+            }
+        }
+
+        HasConditions = Conditions.Count > 0;
+        HasTolerations = Tolerations.Count > 0;
+        HasNodeSelector = NodeSelector.Count > 0;
+        HasProbes = Probes.Count > 0;
+    }
+
+    /// <summary>The three probe blocks as text — the half of a container spec the Overview tab reads.</summary>
+    private static string ProbeText(JsonElement containerSpec) =>
+        string.Concat(
+            RawTextOf(containerSpec, "livenessProbe"),
+            RawTextOf(containerSpec, "readinessProbe"),
+            RawTextOf(containerSpec, "startupProbe"));
+
+    private static string RawTextOf(JsonElement owner, string property) =>
+        owner.ValueKind == JsonValueKind.Object && owner.TryGetProperty(property, out var value)
+            ? value.GetRawText()
+            : "";
+
+    /// <summary>
+    /// Re-reads everything this pane derives from the pod object. <c>internal</c> rather
+    /// than private for the same reason <c>ClusterTabViewModel.Apply</c> is: the watch's
+    /// own path posts it to the UI thread, and a test that cannot pump a dispatcher has to
+    /// be able to deliver a tick the way the watch does rather than against a copy of it.
+    /// </summary>
+    internal void RefreshFromRow()
     {
         var raw = _row.Resource.Raw;
         var status = raw.TryGetProperty("status", out var s) ? s : default;
@@ -344,6 +487,10 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
 
         if (!raw.TryGetProperty("spec", out var spec) || spec.ValueKind != JsonValueKind.Object)
         {
+            // Conditions live in status, so an object with no spec still has an Overview
+            // worth rendering — and one with no spec is exactly the object someone is
+            // trying to work out what happened to.
+            RefreshOverview();
             return;
         }
 
@@ -359,6 +506,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         SelectedContainer ??= Containers.FirstOrDefault(c => c.Role == ContainerRole.App) ?? Containers.FirstOrDefault();
 
         RefreshEnvironment();
+        RefreshOverview();
     }
 
     private static void ReadContainerStatuses(
@@ -1422,4 +1570,46 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         await _metricsCts.CancelAsync();
         _metricsCts.Dispose();
     }
+}
+
+/// <summary>
+/// One pod condition with its dot colour. The mapping is here rather than on
+/// <see cref="PodCondition"/> because <c>ResourceHealth</c>'s vocabulary is the App
+/// layer's and Core may not know it — the same split <c>NodeConditionViewModel</c> uses.
+/// </summary>
+public sealed class PodConditionViewModel
+{
+    public PodConditionViewModel(PodCondition condition)
+    {
+        ArgumentNullException.ThrowIfNull(condition);
+
+        Condition = condition;
+
+        // Three outcomes, not two. A condition type this app does not classify, and one
+        // whose status is Unknown, both render grey: claiming a readiness gate nobody has
+        // heard of is "fine" is a false reassurance to the one person who is reading this
+        // pane precisely because something is not.
+        Health = condition.IsProblem switch
+        {
+            true => ResourceHealth.Error,
+            false => ResourceHealth.Ok,
+            null => ResourceHealth.Idle,
+        };
+    }
+
+    public PodCondition Condition { get; }
+
+    public string Type => Condition.Type;
+
+    public string Status => Condition.Status;
+
+    /// <summary>The reason and message together — the message alone is often empty, and the reason alone is a token.</summary>
+    public string Message => Condition switch
+    {
+        { Message.Length: > 0, Reason.Length: > 0 } => $"{Condition.Reason} — {Condition.Message}",
+        { Message.Length: > 0 } => Condition.Message,
+        _ => Condition.Reason,
+    };
+
+    public string Health { get; }
 }
