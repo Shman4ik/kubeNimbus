@@ -90,6 +90,35 @@
               "cpu": "250m",
               "memory": "256Mi"
             }
+          },
+          "livenessProbe": {
+            "httpGet": {
+              "path": "/livez",
+              "port": 8080,
+              "scheme": "HTTP"
+            },
+            "initialDelaySeconds": 15,
+            "periodSeconds": 20,
+            "timeoutSeconds": 2,
+            "failureThreshold": 6
+          },
+          "readinessProbe": {
+            "httpGet": {
+              "path": "/healthz",
+              "port": 8080,
+              "scheme": "HTTP"
+            },
+            "initialDelaySeconds": 5,
+            "periodSeconds": 5,
+            "timeoutSeconds": 1,
+            "failureThreshold": 3
+          },
+          "startupProbe": {
+            "tcpSocket": {
+              "port": 8080
+            },
+            "periodSeconds": 3,
+            "failureThreshold": 30
           }
         },
         {
@@ -106,12 +135,76 @@
               "cpu": "50m",
               "memory": "64Mi"
             }
+          },
+          "readinessProbe": {
+            "exec": {
+              "command": [
+                "/bin/sh",
+                "-c",
+                "curl -sf localhost:15000/ready"
+              ]
+            },
+            "periodSeconds": 10
           }
         }
-      ]
+      ],
+      "tolerations": [
+        {
+          "key": "dedicated",
+          "operator": "Equal",
+          "value": "payments",
+          "effect": "NoSchedule"
+        },
+        {
+          "key": "node.kubernetes.io/not-ready",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
+        },
+        {
+          "key": "node.kubernetes.io/unreachable",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
+        }
+      ],
+      "nodeSelector": {
+        "kubernetes.io/os": "linux",
+        "workload-tier": "payments"
+      },
+      "priorityClassName": "payments-critical",
+      "priority": 100000
     },
     "status": {
       "phase": "Running",
+      "qosClass": "Burstable",
+      "conditions": [
+        {
+          "type": "PodReadyToStartContainers",
+          "status": "True",
+          "lastTransitionTime": "2026-07-19T08:12:00Z"
+        },
+        {
+          "type": "Initialized",
+          "status": "True",
+          "lastTransitionTime": "2026-07-19T08:12:00Z"
+        },
+        {
+          "type": "Ready",
+          "status": "True",
+          "lastTransitionTime": "2026-07-19T08:12:00Z"
+        },
+        {
+          "type": "ContainersReady",
+          "status": "True",
+          "lastTransitionTime": "2026-07-19T08:12:00Z"
+        },
+        {
+          "type": "PodScheduled",
+          "status": "True",
+          "lastTransitionTime": "2026-07-19T08:12:00Z"
+        }
+      ],
       "containerStatuses": [
         {
           "name": "app",
@@ -193,10 +286,52 @@
             }
           }
         }
+      ],
+      "tolerations": [
+        {
+          "key": "node.kubernetes.io/not-ready",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
+        },
+        {
+          "key": "node.kubernetes.io/unreachable",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
+        }
       ]
     },
     "status": {
       "phase": "Running",
+      "qosClass": "Burstable",
+      "conditions": [
+        {
+          "type": "PodReadyToStartContainers",
+          "status": "True",
+          "lastTransitionTime": "2026-07-19T08:12:00Z"
+        },
+        {
+          "type": "Initialized",
+          "status": "True",
+          "lastTransitionTime": "2026-07-19T08:12:00Z"
+        },
+        {
+          "type": "Ready",
+          "status": "True",
+          "lastTransitionTime": "2026-07-19T08:12:00Z"
+        },
+        {
+          "type": "ContainersReady",
+          "status": "True",
+          "lastTransitionTime": "2026-07-19T08:12:00Z"
+        },
+        {
+          "type": "PodScheduled",
+          "status": "True",
+          "lastTransitionTime": "2026-07-19T08:12:00Z"
+        }
+      ],
       "containerStatuses": [
         {
           "name": "app",
@@ -278,10 +413,52 @@
             }
           }
         }
+      ],
+      "tolerations": [
+        {
+          "key": "node.kubernetes.io/not-ready",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
+        },
+        {
+          "key": "node.kubernetes.io/unreachable",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
+        }
       ]
     },
     "status": {
       "phase": "Running",
+      "qosClass": "Burstable",
+      "conditions": [
+        {
+          "type": "PodReadyToStartContainers",
+          "status": "True",
+          "lastTransitionTime": "2026-07-20T08:44:48Z"
+        },
+        {
+          "type": "Initialized",
+          "status": "True",
+          "lastTransitionTime": "2026-07-20T08:44:48Z"
+        },
+        {
+          "type": "Ready",
+          "status": "True",
+          "lastTransitionTime": "2026-07-20T08:44:48Z"
+        },
+        {
+          "type": "ContainersReady",
+          "status": "True",
+          "lastTransitionTime": "2026-07-20T08:44:48Z"
+        },
+        {
+          "type": "PodScheduled",
+          "status": "True",
+          "lastTransitionTime": "2026-07-20T08:44:48Z"
+        }
+      ],
       "containerStatuses": [
         {
           "name": "app",
@@ -338,12 +515,62 @@
               "cpu": "500m",
               "memory": "512Mi"
             }
+          },
+          "livenessProbe": {
+            "grpc": {
+              "port": 9000,
+              "service": "checkout.Health"
+            },
+            "periodSeconds": 15,
+            "failureThreshold": 3
           }
+        }
+      ],
+      "tolerations": [
+        {
+          "key": "node.kubernetes.io/not-ready",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
+        },
+        {
+          "key": "node.kubernetes.io/unreachable",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
         }
       ]
     },
     "status": {
       "phase": "Running",
+      "qosClass": "Burstable",
+      "conditions": [
+        {
+          "type": "PodReadyToStartContainers",
+          "status": "True",
+          "lastTransitionTime": "2026-07-20T02:40:00Z"
+        },
+        {
+          "type": "Initialized",
+          "status": "True",
+          "lastTransitionTime": "2026-07-20T02:40:00Z"
+        },
+        {
+          "type": "Ready",
+          "status": "True",
+          "lastTransitionTime": "2026-07-20T02:40:00Z"
+        },
+        {
+          "type": "ContainersReady",
+          "status": "True",
+          "lastTransitionTime": "2026-07-20T02:40:00Z"
+        },
+        {
+          "type": "PodScheduled",
+          "status": "True",
+          "lastTransitionTime": "2026-07-20T02:40:00Z"
+        }
+      ],
       "containerStatuses": [
         {
           "name": "worker",
@@ -393,10 +620,52 @@
             }
           }
         }
+      ],
+      "tolerations": [
+        {
+          "key": "node.kubernetes.io/not-ready",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
+        },
+        {
+          "key": "node.kubernetes.io/unreachable",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
+        }
       ]
     },
     "status": {
       "phase": "Succeeded",
+      "qosClass": "Burstable",
+      "conditions": [
+        {
+          "type": "PodReadyToStartContainers",
+          "status": "True",
+          "lastTransitionTime": "2026-07-20T03:05:00Z"
+        },
+        {
+          "type": "Initialized",
+          "status": "True",
+          "lastTransitionTime": "2026-07-20T03:05:00Z"
+        },
+        {
+          "type": "Ready",
+          "status": "True",
+          "lastTransitionTime": "2026-07-20T03:05:00Z"
+        },
+        {
+          "type": "ContainersReady",
+          "status": "True",
+          "lastTransitionTime": "2026-07-20T03:05:00Z"
+        },
+        {
+          "type": "PodScheduled",
+          "status": "True",
+          "lastTransitionTime": "2026-07-20T03:05:00Z"
+        }
+      ],
       "containerStatuses": [
         {
           "name": "migrate",
@@ -443,6 +712,16 @@
     },
     "status": {
       "phase": "Pending",
+      "qosClass": "BestEffort",
+      "conditions": [
+        {
+          "type": "PodScheduled",
+          "status": "False",
+          "reason": "Unschedulable",
+          "message": "0/3 nodes are available: 1 node(s) had untolerated taint {node-role.kubernetes.io/control-plane: }, 2 Insufficient cpu. preemption: 0/3 nodes are available: 3 No preemption victims found for incoming pod.",
+          "lastTransitionTime": "2026-07-20T03:20:10Z"
+        }
+      ],
       "containerStatuses": []
     }
   },
@@ -484,12 +763,61 @@
               "cpu": "200m",
               "memory": "1Gi"
             }
+          },
+          "readinessProbe": {
+            "tcpSocket": {
+              "port": "redis"
+            },
+            "initialDelaySeconds": 10,
+            "periodSeconds": 10
           }
+        }
+      ],
+      "tolerations": [
+        {
+          "key": "node.kubernetes.io/not-ready",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
+        },
+        {
+          "key": "node.kubernetes.io/unreachable",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
         }
       ]
     },
     "status": {
       "phase": "Running",
+      "qosClass": "Burstable",
+      "conditions": [
+        {
+          "type": "PodReadyToStartContainers",
+          "status": "True",
+          "lastTransitionTime": "2026-07-15T11:00:00Z"
+        },
+        {
+          "type": "Initialized",
+          "status": "True",
+          "lastTransitionTime": "2026-07-15T11:00:00Z"
+        },
+        {
+          "type": "Ready",
+          "status": "True",
+          "lastTransitionTime": "2026-07-15T11:00:00Z"
+        },
+        {
+          "type": "ContainersReady",
+          "status": "True",
+          "lastTransitionTime": "2026-07-15T11:00:00Z"
+        },
+        {
+          "type": "PodScheduled",
+          "status": "True",
+          "lastTransitionTime": "2026-07-15T11:00:00Z"
+        }
+      ],
       "containerStatuses": [
         {
           "name": "redis",
@@ -539,10 +867,52 @@
             }
           }
         }
+      ],
+      "tolerations": [
+        {
+          "key": "node.kubernetes.io/not-ready",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
+        },
+        {
+          "key": "node.kubernetes.io/unreachable",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
+        }
       ]
     },
     "status": {
       "phase": "Running",
+      "qosClass": "Burstable",
+      "conditions": [
+        {
+          "type": "PodReadyToStartContainers",
+          "status": "True",
+          "lastTransitionTime": "2026-07-20T04:01:00Z"
+        },
+        {
+          "type": "Initialized",
+          "status": "True",
+          "lastTransitionTime": "2026-07-20T04:01:00Z"
+        },
+        {
+          "type": "Ready",
+          "status": "True",
+          "lastTransitionTime": "2026-07-20T04:01:00Z"
+        },
+        {
+          "type": "ContainersReady",
+          "status": "True",
+          "lastTransitionTime": "2026-07-20T04:01:00Z"
+        },
+        {
+          "type": "PodScheduled",
+          "status": "True",
+          "lastTransitionTime": "2026-07-20T04:01:00Z"
+        }
+      ],
       "containerStatuses": [
         {
           "name": "dispatcher",
@@ -591,10 +961,43 @@
             }
           }
         }
+      ],
+      "tolerations": [
+        {
+          "operator": "Exists"
+        }
       ]
     },
     "status": {
       "phase": "Running",
+      "qosClass": "BestEffort",
+      "conditions": [
+        {
+          "type": "PodReadyToStartContainers",
+          "status": "True",
+          "lastTransitionTime": "2026-07-11T06:02:00Z"
+        },
+        {
+          "type": "Initialized",
+          "status": "True",
+          "lastTransitionTime": "2026-07-11T06:02:00Z"
+        },
+        {
+          "type": "Ready",
+          "status": "True",
+          "lastTransitionTime": "2026-07-11T06:02:00Z"
+        },
+        {
+          "type": "ContainersReady",
+          "status": "True",
+          "lastTransitionTime": "2026-07-11T06:02:00Z"
+        },
+        {
+          "type": "PodScheduled",
+          "status": "True",
+          "lastTransitionTime": "2026-07-11T06:02:00Z"
+        }
+      ],
       "containerStatuses": [
         {
           "name": "app",
@@ -643,10 +1046,43 @@
             }
           }
         }
+      ],
+      "tolerations": [
+        {
+          "operator": "Exists"
+        }
       ]
     },
     "status": {
       "phase": "Running",
+      "qosClass": "BestEffort",
+      "conditions": [
+        {
+          "type": "PodReadyToStartContainers",
+          "status": "True",
+          "lastTransitionTime": "2026-07-11T06:02:00Z"
+        },
+        {
+          "type": "Initialized",
+          "status": "True",
+          "lastTransitionTime": "2026-07-11T06:02:00Z"
+        },
+        {
+          "type": "Ready",
+          "status": "True",
+          "lastTransitionTime": "2026-07-11T06:02:00Z"
+        },
+        {
+          "type": "ContainersReady",
+          "status": "True",
+          "lastTransitionTime": "2026-07-11T06:02:00Z"
+        },
+        {
+          "type": "PodScheduled",
+          "status": "True",
+          "lastTransitionTime": "2026-07-11T06:02:00Z"
+        }
+      ],
       "containerStatuses": [
         {
           "name": "app",

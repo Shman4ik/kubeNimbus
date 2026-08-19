@@ -660,6 +660,96 @@ lines that carry no severity keyword: nginx access logs, `log.Print`, anything J
 most real output — which is why `DemoLogs` is required to keep carrying them (demo rule 4)
 and why *looking at the dark screenshot* is not optional for anything that colours text.
 
+## Pod detail's Overview tab (conditions, tolerations, QoS, priority, probes)
+
+`PodDetails.cs` (Core) and pod detail's fifth tab render the structured half of
+`kubectl describe pod`: the pod's `status.conditions`, its `spec.tolerations`, its
+`spec.nodeSelector`, its QoS and priority class, and the selected container's
+liveness/readiness/startup probes. All of it was previously reachable only by opening the
+YAML editor and scrolling — a page of text to answer "is the readiness probe why this
+never goes Ready?" — while three of the five comparable clients (the Lens/OpenLens/
+FreeLens lineage and Headlamp, both confirmed against their own component source; k9s's
+`d` in its own idiom) render exactly these fields unprompted. See
+[`docs/research/2026-08-18-pod-workload-detail.md`](docs/research/2026-08-18-pod-workload-detail.md).
+
+**It is structured fields, not a `describe` text clone, and that is a cost decision as
+much as a design one.** kubectl's `describe` is a large Go `text/template`-shaped
+formatter; none of the competitors reimplement that prose, and reproducing it here would
+be a new formatter to maintain against a moving target. Reading the same `JsonElement`s
+`ReadContainerSpecs` already reads costs no dependency, no reflection and nothing at AOT
+time.
+
+Eight things are load-bearing.
+
+1. **Overview is tab index 4, appended after Usage.** `SelectedDetailTabIndex`'s existing
+   values (Logs=0, Env=1, Events=2, Usage=3) are depended on by
+   `ClusterTabViewModel.OpenLogs` and by the screenshot scenarios — which is exactly why
+   the Usage tab was appended after Events rather than inserted where it reads best. A
+   new tab goes on the end for the same reason, even though "overview" is the section
+   someone would put first. Usage's `IsVisible` gate does not move it: a hidden `TabItem`
+   keeps its index.
+2. **No new chrome, and no picker of its own** (UI rules 1 and 10). The tab adds one
+   entry to the strip that already exists and nothing to the row it shares; probes are
+   container-scoped and the container strip two rows up is already their selector, which
+   is the same relationship the Environment tab has with it. A section that kept showing
+   the first container's probes under the second container's name would be the bug the
+   log stream had before it followed the picker — `PodOverviewTests` pins that it follows.
+3. **Not gated on the Advanced view.** The switch's job is "hide what you did not come
+   here for"; this is what the field ships unprompted and what the item asked for as
+   always-visible. Nothing here polls, fetches or watches, so it costs nothing to leave on.
+4. **A pod's conditions are the opposite polarity from a node's, and unknown types get a
+   third answer.** `NodeCondition.IsProblem` reads polarity off `Ready` because a node's
+   other conditions are all pressure conditions; a pod's are mostly *positive* — the four
+   the scheduler and kubelet set, plus `PodReadyToStartContainers` — and `DisruptionTarget`
+   is the one Kubernetes defines the other way. A type on neither list comes back
+   `PodConditionPolarity.Unclassified` and renders grey rather than green:
+   a custom readiness gate is positive by construction but `PodResizePending` is not, and
+   a false reassurance is the wrong way to be wrong for the one person reading this pane
+   *because* something is wrong. `PodCondition.IsProblem` is therefore `bool?`, and an
+   `Unknown` status is the same third answer.
+5. **The QoS class is read, never derived.** It is a pure function of the containers'
+   requests and limits and could be recomputed, but the API server has already computed it
+   and the eviction path uses *its* value; a local one that disagreed would be worse than
+   an empty cell. An object carrying none never went through a server, and the pane says
+   so instead of inventing one.
+6. **Every toleration is listed, admission's own included.** The DefaultTolerationSeconds
+   plugin adds `node.kubernetes.io/not-ready` and `unreachable` (both `NoExecute`, 300s)
+   to nearly every pod. They are noise right up until the moment someone is comparing one
+   pod against another, at which point hiding them makes a pod that genuinely declares one
+   indistinguishable from one that does not. `PodToleration.Display` is kubectl's own
+   rendering, including the empty-key `op=Exists` form that tolerates everything and the
+   no-effect form that must not print a dangling colon.
+7. **A probe's timings are defaulted to the API server's own when the object omits them.**
+   The server defaults all five on admission, so a probe missing them has never been
+   through a server; printing `delay=0s timeout=1s period=10s #success=1 #failure=3` is
+   what that object *would* be given and what `kubectl describe` ends up showing for it.
+   Printing nothing would read as a probe with no configuration at all. The handler line
+   is kubectl's shorthand too (`http-get`, `exec [...]`, `tcp-socket`, `grpc`), so a probe
+   read here and one read in a terminal are visibly the same probe — and a named port is
+   printed **as written**, never resolved against the container's port list, because a
+   probe aimed at a port name that does not exist is precisely the failure being chased.
+8. **The rebuild is signature-guarded, and the guard is on content, not on "have we
+   rendered".** A watch tick on a healthy pod is almost always a status refresh that
+   changes none of these fields, and rebuilding four `ItemsControl`s per tick discards
+   scroll position and any half-made text selection — the same reason the Environment tab
+   is guarded. Guarding on first-render instead would swallow a condition *change*, which
+   is the whole reason the section exists; both mistakes were written and confirmed red
+   before `PodOverviewTests` was called done.
+
+**The demo dataset carries all of it** (demo rule 4): the report-generator pod the
+pod-detail scenarios open has conditions, a node selector, a priority class, three
+tolerations and three probe shapes across its two containers, and `fraud-detector` is the
+opposite state — one genuinely bad `PodScheduled: False` with the scheduler's own message,
+and every other section empty, which is the whole of UI rule 9 for this pane on one
+object. `legacy-batch-runner` deliberately still carries none of it. The sandbox gained
+the same states (`scripts/manifests/10-shop.yaml`: a `PriorityClass`, a node selector that
+still schedules everywhere, a toleration, and httpGet/tcpSocket/exec probes across
+shop-web's two containers) because nothing in it produced any of them before.
+
+**FEAT-44 is a separate row and is deliberately not here**: container requests/limits are
+already computed and are hidden in a hover tooltip on the Usage tab, which is a different
+gap with its own (older, louder) evidence.
+
 ## ConfigMaps are shown, Secrets are masked
 
 Pod detail's Environment tab treats the two reference kinds differently, and the
@@ -3801,3 +3891,70 @@ by tests and have never been *seen* on a several-hundred-line CRD. The panel at 
 default ~300px shows about three lines of diff, which `cluster-tab-yaml-diff-split` records
 honestly; whether that is enough, or whether the editor should give way entirely while a
 preview is armed, is a judgement worth making in front of a real cluster.
+
+**Pod-detail Overview pass (FEAT-43):** the pod's conditions, tolerations, node selector,
+QoS class, priority class and each container's probes are structured sections now rather
+than a trip to the YAML editor — see "Pod detail's Overview tab" above for the eight rules,
+in particular the condition-polarity one, which is deliberately the *opposite* default from
+the node surface's and has a third answer the node surface does not need. New:
+`PodDetails.cs` in Core (+ 14 `PodDetailsTests`), an Overview tab at index 4 in
+`PodDetailTabViewModel`/`PodDetailView` with `PodConditionViewModel` beside it (+ 4
+`PodOverviewTests` in `tests/KubeNimbus.App.Tests`), conditions/tolerations/node
+selector/QoS/priority/probes across the demo dataset's `payments` pods, the same states in
+`scripts/manifests/10-shop.yaml` (which needed a `PriorityClass` — nothing in the sandbox
+had one), and two screenshot scenarios. No new gesture and no new always-visible control,
+so `docs/keyboard-shortcuts.md` is unchanged.
+
+**Five breaks were written and confirmed red before the tests were called done**, same
+discipline as VER-5 and VER-3. Claiming an unclassified condition type is positive — the
+false-reassurance failure rule 4 exists to prevent — turned **1 of 335** red (`Expected to be
+equal to Unclassified`). Dropping `op=Exists` from a toleration's rendering turned **2** red,
+including the empty-key form that tolerates every node. Dropping the API server's own probe
+timing defaults turned **1** red. In the App suite: stopping the probe section following the
+container strip turned **1 of 83** red (`Expected to be empty`), and guarding the rebuild on
+"have we rendered once" instead of on the fields' own text turned **3** red — the headline
+one being `A_watch_tick_that_changes_a_condition_is_not_swallowed_by_the_rebuild_guard`,
+which is the guard swallowing exactly the tick someone opened the tab for. All five were
+reverted and both suites re-run.
+
+**The negative half was measured, not argued.** Enlarging the shared demo dataset is the one
+thing here that could silently rewrite committed images, so the whole harness was rendered
+from a worktree at the parent commit and diffed byte for byte: of the 132 pre-existing PNGs,
+**16 differ and every one of them is the new `Overview` chip in the tab strip** — the diff
+bounding box on `main-window`, `main-window-about` and `cluster-tab-pod-detail-events` is a
+~165×15 box at (513, 528), which is where that chip sits. `cluster-tab-workload-logs.{light,
+dark}` were confirmed to flap between two renders of the *baseline itself* (ENG-10), and
+`cluster-tab-demo-pod-detail` was confirmed to differ by one canned log line between a
+full-harness run and a single-scenario run **on the baseline tree as well as on this one** —
+its demo log replay is timer-driven, so it is the same nondeterminism and not this change.
+No committed PNG under `design/screenshots/` was regenerated, for the reason the CRD and
+node passes both recorded: Age is a function of the real clock, so those files drift by
+themselves and regenerating them commits a date rather than a change.
+
+**Verified this session**: `dotnet build KubeNimbus.slnx` with **0 new warnings** (the one
+warning is the pre-existing CS8425 in `AsyncMergeTests.cs`); **335/335 Core TUnit** and
+**83/83 App TUnit**, 0 failed, 0 skipped, both via `--project` (no sandbox here, so the Core
+count is the unit-only subset — the cluster-gated tests return early); the five break/revert
+runs above; all **68** scenarios × both themes rendered (136 PNGs) plus the baseline diff;
+the linux-x64 NativeAOT publish with no new warnings beyond the known DataGrid
+IL2104/IL3053; and `--smoke-test` on that published binary under Xvfb (`SMOKE-OK main window
+rendered at 1280x800 after 1078 ms`, exit 0).
+
+**Not verified, and the live half is all of it.** No cluster came up — `dockerd` starts in
+this container but Docker Hub's blob CDN still answers 403 on the layer fetch
+(`production.cloudfront.docker.com`), as in most sessions — so **no pod this pane has
+rendered has come from a real API server**. Everything specific to one is therefore
+untouched by this evidence: that a real cluster's `status.conditions` carry the transition
+times and messages this assumes, that the API server really does default all five probe
+timings so the fallback is a fallback rather than the common case, that `status.qosClass` is
+populated on every object worth reading, and above all that a *failing readiness probe* —
+the acceptance criterion's real subject — reads usefully here against a pod that is actually
+failing one. Nothing has been driven by hand in the running app either: the tab, its scroll
+and the container strip switching the PROBES section are verified by unit test and in the
+headless harness, not by a mouse. First things to do on a machine with a sandbox: open
+`demo-shop/shop-web` and compare the tab against `kubectl describe pod` line by line; break
+its readiness probe (point it at a path nginx does not serve) and watch `Ready` and
+`ContainersReady` flip in the pane on the watch's own tick; cordon or taint the k3s node and
+confirm the toleration list reads against it; and check a pod carrying a `DisruptionTarget`
+condition (start a drain from the node pane and open a pod mid-eviction), which is the one
+polarity in rule 4 that no fixture in this repo produces.

@@ -14,6 +14,20 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Added
 
+- **Pod detail has an Overview tab.** The pod's conditions, its tolerations, its
+  node selector, its QoS class and priority class, and the selected container's
+  liveness, readiness and startup probes — each as its own section, rather than
+  something to go and find in the YAML. The probe lines read the way
+  `kubectl describe` writes them (`http-get http://:8080/healthz`,
+  `delay=5s timeout=1s period=5s #success=1 #failure=3`), so a probe read here
+  and a probe read in a terminal are visibly the same probe.
+
+  A condition Kubernetes defines as good-when-true reads green when it is true
+  and red when it is not; `DisruptionTarget` reads the other way round; and a
+  condition type kubeNimbus does not recognise is shown in grey rather than
+  claimed to be healthy. Everything comes from the object already on screen —
+  no extra request, and it works on the demo cluster.
+
 - **Apply now shows what it would change, before it changes it.** Pressing Apply
   in the YAML editor asks the API server to run the apply as a dry run and then
   shows the difference between the object as it is and the object as the server

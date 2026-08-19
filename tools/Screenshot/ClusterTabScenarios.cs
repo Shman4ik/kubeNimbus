@@ -924,6 +924,52 @@ internal static class ClusterTabScenarios
         return tab;
     }
 
+    /// <summary>
+    /// Pod detail's Overview tab, populated: conditions, tolerations (the two the
+    /// DefaultTolerationSeconds plugin adds included), a node selector, QoS and priority
+    /// class, and the selected container's three probes.
+    /// </summary>
+    public static ClusterTabViewModel PodDetailOverview()
+    {
+        var tab = PodDetail();
+        if (tab.SelectedInspectorTab is PodDetailTabViewModel detail)
+        {
+            detail.SelectedDetailTabIndex = 4;
+        }
+
+        // Maximized, because four cards do not fit the dock's ~300px default and the
+        // dock's own maximize toggle is what this tab wants — the same call the exec and
+        // YAML scenarios make for the same reason. The unmaximized state is a scroll,
+        // which is correct and not worth a second image.
+        tab.IsInspectorMaximized = true;
+        return tab;
+    }
+
+    /// <summary>
+    /// The other half of the same tab, and the state someone actually opens it in: a pod
+    /// that will not schedule. One genuinely-bad condition with the scheduler's own
+    /// message, and every other section empty — which is the whole of UI rule 9 for this
+    /// pane, since "no tolerations" and "no probes" are answers rather than blanks.
+    /// </summary>
+    public static ClusterTabViewModel PodDetailOverviewUnschedulable()
+    {
+        var tab = BaseTab();
+        var row = tab.Rows.First(r => r.Name.StartsWith("fraud-detector", StringComparison.Ordinal));
+        tab.SelectedRow = row;
+
+        var detail = new PodDetailTabViewModel(
+            FixtureData.CreateOfflineClient(), row, _ => { }, (_, _) => Task.CompletedTask)
+        {
+            IsPreview = false,
+            SelectedDetailTabIndex = 4,
+        };
+
+        tab.InspectorTabs.Add(detail);
+        tab.SelectedInspectorTab = detail;
+        tab.IsInspectorMaximized = true;
+        return tab;
+    }
+
     /// <summary>Pod detail's Events tab — Type-colored pills and the "open involved object" chevron.</summary>
     public static ClusterTabViewModel PodDetailEvents()
     {
