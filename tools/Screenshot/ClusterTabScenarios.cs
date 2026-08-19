@@ -992,6 +992,47 @@ internal static class ClusterTabScenarios
         return tab;
     }
 
+    /// <summary>
+    /// The third condition polarity, which nothing in this repo rendered until now.
+    ///
+    /// <para>
+    /// A pod's conditions are mostly the *positive* ones the scheduler and kubelet set,
+    /// which is why <c>PodCondition.IsProblem</c> reads them the opposite way round from
+    /// a node's. Two cases break that, and this terminating pod carries both:
+    /// <c>DisruptionTarget</c>, the one type Kubernetes defines with the inverted
+    /// polarity — True means the pod is being evicted, so it must render as a problem
+    /// even though every other True on the card is green — and a custom readiness gate,
+    /// whose type is on neither list and must therefore come back
+    /// <c>Unclassified</c> and render grey rather than being guessed green.
+    /// </para>
+    ///
+    /// <para>
+    /// Both branches were reachable only in code before this scenario existed: no demo
+    /// object and no fixture produced either, so the grey dot and the inverted red one
+    /// had never appeared in a screenshot. That is the whole reason the shot is here —
+    /// a false green on this card is a false reassurance for the one person reading it
+    /// *because* something is wrong.
+    /// </para>
+    /// </summary>
+    public static ClusterTabViewModel PodDetailOverviewDisrupted()
+    {
+        var tab = BaseTab();
+        var row = tab.Rows.First(r => r.Name.StartsWith("notification-dispatcher", StringComparison.Ordinal));
+        tab.SelectedRow = row;
+
+        var detail = new PodDetailTabViewModel(
+            FixtureData.CreateOfflineClient(), row, _ => { }, (_, _) => Task.CompletedTask)
+        {
+            IsPreview = false,
+            SelectedDetailTabIndex = 4,
+        };
+
+        tab.InspectorTabs.Add(detail);
+        tab.SelectedInspectorTab = detail;
+        tab.IsInspectorMaximized = true;
+        return tab;
+    }
+
     /// <summary>Pod detail's Events tab — Type-colored pills and the "open involved object" chevron.</summary>
     public static ClusterTabViewModel PodDetailEvents()
     {

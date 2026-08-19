@@ -270,9 +270,10 @@ mean?* The list answers the first well and the second badly.
   as chips, tolerations as plain text lines, QoS/priority as label-value, probes as
   label + two-line value. Two of those are key/value lists rendered two ways.
   *Verdict: hierarchy/consistency. Cost: medium.*
-- **The section header is inside the card on Overview and outside it on Usage.**
-  `cluster-tab-pod-detail-usage.dark.png` puts `BY CONTAINER` above the cards;
-  Overview puts `SCHEDULING` within. *Verdict: consistency. Cost: trivial.*
+- ~~The section header is inside the card on Overview and outside it on Usage.~~
+  **Withdrawn.** `BY CONTAINER` heads a *repeating list of one card per container*, so
+  it cannot sit inside a card; `SCHEDULING` heads a single card's contents. The two
+  headers do different jobs and their placement follows from that.
 - **The container chip and the usage card print the same numbers.** Usage tab: the
   chip reads `app 11m · 64 MiB`; the card 340 px below reads `CPU 11m · peak 12m`
   and `MEM 64 MiB · peak 69.1 MiB`. *Verdict: duplication. Cost: low. Weak — the
@@ -316,18 +317,20 @@ mean?* The list answers the first well and the second badly.
 
 ### The YAML editor and apply preview — `cluster-tab-yaml-*`
 
-- **The panel repeats the dock tab's title, and this one is a named rule violation.**
+- **The panel repeats the dock tab's title.**
   `cluster-tab-yaml-diff-split.dark.png`: the dock tab reads
   `Deployment/checkout-worker` at y≈462 and the panel header reads
-  `Deployment/checkout-worker` again at y≈506. UI rule 10 states the case exactly —
-  *"the dock tab above already reads `Pod/<name>` / `Helm/<name>` / `Access/<ns>`,
-  so a row that repeats it is a row spent on nothing (this is why `HelmReleaseView`
-  and `RbacView` no longer have one)"*. Helm and RBAC were fixed; the YAML editor
-  was missed. Confirmed in light too (`cluster-tab-yaml-diff-preview.light.png`,
-  y≈132 vs y≈176). The row costs ~34 px, and on this screen the editor is reduced
-  to **two visible lines** and the diff to two — so it is roughly a 25 % cut of the
-  content in the pane where the dock is most contested.
-  *Verdict: duplication. Cost: trivial. The single cheapest real fix in this document.*
+  `Deployment/checkout-worker` again at y≈506; confirmed in light too
+  (`cluster-tab-yaml-diff-preview.light.png`, y≈132 vs y≈176).
+  **Correction, made while implementing this:** the first draft of this entry claimed
+  the row costs ~34 px and about a quarter of the pane's content, citing UI rule 10's
+  *"a row that repeats it is a row spent on nothing"*. That is wrong. Unlike
+  `HelmReleaseView` and `RbacView`, whose title rows held nothing else and were deleted
+  outright, this row also carries Reload, Apply and Delete — so it stays either way and
+  the saving is **horizontal, not vertical**. The finding survives as ordinary
+  duplication (the title takes the row's flexible column, squeezing the status texts
+  that share it on a long object name); the rule-violation framing does not.
+  *Verdict: duplication. Cost: trivial.*
 - **Two buttons labelled Apply, 100 px apart, doing different things.** Same screen:
   `Apply` (send the document) at x≈1127 y≈505, `Apply changes` (confirm the previewed
   apply) at x≈1084 y≈606. *Verdict: hierarchy. Cost: low — needs a wording call,
@@ -345,10 +348,11 @@ mean?* The list answers the first well and the second badly.
 
 - **`namespace payments` restates the dock tab `Access/payments`**, 40 px apart.
   *Verdict: duplication. Cost: trivial.*
-- **`Verify` has no affordance.** y≈288/379/470, x≈1205: bare text in the body
-  foreground, no border, no chip, nothing saying it is a control — against
-  DESIGN.md rule 5's *"anything clickable also gets `Cursor="Hand"` and a pressed
-  state"*. *Verdict: hierarchy. Cost: trivial.*
+- **`Verify` reads as a label.** y≈288/379/470, x≈1205: accent-coloured text with no
+  border and no background. It already carries `Classes="chip"` — the cause is that
+  `Button.chip` *rests* transparent, not that the class is missing — so the fix is the
+  one the codebase already uses for pod detail's owner chip, which was given an explicit
+  border for exactly this reason (UI rule 8). *Verdict: hierarchy. Cost: trivial.*
 - The scan disclaimer stays — see below.
 
 ### Preferences — `main-window-preferences`
@@ -396,8 +400,9 @@ Well done and mostly untouchable (below). One finding:
 
 ### The cheat sheet — `main-window-shortcuts`
 
-Clean. One nit: **`->` on the "Default action (pod -> logs, resource -> YAML, …)"
-row** where the access review uses `→`. *Verdict: consistency. Cost: trivial.*
+Clean. **One reported nit was withdrawn**: the "Default action" row was read off a
+downscaled image as using ASCII `->` where the access review uses `→`. Cropped at 3×
+it is `→` in both, and `CommandCatalog.cs:194` confirms it. No finding.
 
 ---
 
@@ -483,67 +488,104 @@ reasoned about here.
 
 ---
 
-## Ranked fixes
+## What shipped, and what did not
 
-### Group A — uncontroversial, local, removes no information
+Group A was implemented in the same pass. **Four of its twelve rows did not survive
+contact with the code**, and that is worth more than the eight that did — every one
+of them was a finding read off a rendered image that turned out to be wrong about
+its own cause. They are recorded here rather than quietly dropped.
 
-Ordered by value per unit of risk. Every one is a single view or a single style,
-none changes behaviour, none touches `shared/nimbusUi`.
+### Shipped
 
-| # | Fix | Screens | Evidence |
-|---|---|---|---|
-| A1 | Give `ResourceMeter` its own track brush at ≥3:1 against the card, instead of the 5 %-wash `HoverBackgroundBrush`. **Do not touch the token** — it is shared and drives every hover state in both apps | node detail ×3 | P1; `srgb(14,14,14)` on `srgb(8,8,8)` |
-| A2 | Delete the YAML editor's panel title row — the dock tab already says it, as UI rule 10 states and as `HelmReleaseView`/`RbacView` already do | yaml ×9 | `cluster-tab-yaml-diff-split.dark.png` y≈462 vs y≈506 |
-| A3 | `Pluralize` reads `descriptor.Plural` instead of guessing — `NetworkPolicys` → `NetworkPolicies` | every sidebar | `SidebarViewModels.cs:158` vs `DemoData.cs:324` |
-| A4 | Drop the status bar's copy of the content area's own message *(decided)* | demo ×15+, no-kubeconfig | P2 |
-| A5 | Move *"No files added…"* inside the empty kubeconfig box | preferences | y≈560–645 vs y≈661 |
-| A6 | Indent the CONDITIONS card's rows to match its siblings (x≈359, not 375) | node detail ×3 | node-detail-cordoned |
-| A7 | Put Overview's and Usage's section headers on the same side of the card | pod detail ×2 | overview vs usage |
-| A8 | Drop the RBAC pane's `namespace <ns>` caption — the dock tab says `Access/<ns>` | rbac ×2 | y≈172 vs y≈132 |
-| A9 | Give `Verify` a chip/button affordance | rbac ×2 | y≈288, x≈1205 |
-| A10 | `→` for `->` on the cheat sheet's default-action row | shortcuts | consistency with rbac |
-| A11 | Fold `Stop draining` onto the checkbox row | drain ×3 | 40 px row for one button |
-| A12 | Add fixtures for the three unrendered states above | new scenarios | see that section |
+| # | Fix | Effect, measured |
+|---|---|---|
+| A1 | `ResourceMeter` gets its own theme-split `MeterTrackBrush` instead of the 5 %-wash `HoverBackgroundBrush` | Dark track **srgb(14,14,14) → srgb(61,61,61)** on an srgb(8,8,8) card: **1.035:1 → 1.84:1**. Light **srgb(243) → srgb(210)** on srgb(249): **1.054:1 → 1.44:1**. The three tracks now visibly share a start *and* an end, so the row-to-row comparison the card exists for works; the Pods row reads as a small amount of a full track rather than as a short bar |
+| A13 | The health dot shows only where a CRD's printer columns have replaced the Status column | 28 px returned to the Name column on every list. `payment-service-report-generator-8c1a4f2e…` now renders `…-8c1a4f2e91-…`, i.e. far enough to show the ReplicaSet hash. The two pods that share a ReplicaSet are still identical on screen — only FEAT-66 fixes that |
+| A13b | The same dot removed from the Helm release grid | Caught by the byte-diff, not by the audit: that grid is a second `DataGrid` with its own hardcoded columns, so it kept the dot the resource list had just lost. Leaving it would have been a new inconsistency introduced by the fix |
+| A3 | `Pluralize` reads the server's plural and re-cases it, instead of appending "s" | `NetworkPolicys` → `NetworkPolicies`. Every Kind ending consonant+y was affected |
+| A2 | The YAML editor's duplicate title | Gone; Reload/Apply/Delete stay exactly where they were. Horizontal only — see the correction above |
+| A4 | The demo tab's status bar no longer repeats the `demoBar`'s sentence | `"Demo cluster — sample data that ships with kubeNimbus. Nothing is connected and none of these objects exist."` → `"Demo cluster — sample data, no connection."` in the status bar; the banner is untouched |
+| A5 | Preferences' empty kubeconfig box carries its own explanation | The sentence moved inside the 88 px box it explains, and the card got a row shorter |
+| A8 | The access review's `namespace <ns>` caption | Gone; the dock tab already reads `Access/<ns>` |
+| A9 | `Verify` gets a border | Reads as a control rather than as a label |
+| A12 | Two condition states nothing in the repo could render | `notification-dispatcher` now carries `DisruptionTarget: True` and a custom readiness gate, and `cluster-tab-pod-detail-overview-disrupted` renders them: the inverted-polarity condition draws **red** beside `True` while `Ready True` draws green, and the unclassified type draws **grey**. Both branches were previously reachable only in code |
 
-A1 and A2 are worth more than the other ten combined: A1 restores the function of a
-card that is currently decorative on the default theme, and A2 is a rule violation
-with two fixed precedents in the same codebase and a ~25 % content gain in the most
-contested pane.
+### Withdrawn, with the reason
 
-### Group B — needs a decision before anything is written
+| # | Claimed | What it actually was |
+|---|---|---|
+| A6 | The CONDITIONS card is indented 16 px from its siblings | **True but not cheaply fixable.** The dot cannot hang into the card's 12 px padding without sitting on the border, and indenting the sibling cards to match trades a within-card misalignment for a between-header one. Needs a design call → **ENG-27** |
+| A7 | Overview and Usage put their section headers on different sides | **Not a finding.** `BY CONTAINER` labels a repeating list of cards and cannot go inside one; `SCHEDULING` labels a single card's contents |
+| A10 | The cheat sheet uses `->` where the access review uses `→` | **Not a finding.** Misread from a downscaled image; it is `→` in both, and the catalog source confirms it |
+| A11 | Fold `Stop draining` onto the checkbox row | **Deliberately not done.** ~40 px in a transient state, against touching the confirm slot's state-swapping logic that UI rule 11 documents carefully → **ENG-28** |
 
-Questions, not proposals. Each already has the maintainer's three answers folded in
-where they apply.
+### And one regression, caught by the byte-diff
 
-1. **The namespace picker's multi-select** *(decided in principle — item 1)*. The
-   remaining question is scope: does "show all" replace the existing `All namespaces`
-   entry or sit beside it, and does the Namespace column hide itself when exactly one
-   namespace is selected, or stay always-on? The Name-truncation problem is only
-   actually fixed if the column can yield its width back in the single-namespace case.
-2. **The health dot where a Status column exists** *(decided — item 2)*. One
-   follow-up: the dot is currently the **only** status carrier on a CRD list whose
-   printer columns replace the generic Status column (`CLAUDE.md`: *"The 28px health
-   dot stays: it is not one of kubectl's columns, and it is what still carries
-   `ResourceStatusSummary`'s classification"*). Should it stay in that case?
-3. **The sidebar's per-section selection** — two rows can light up at once and the
-   Recent duplicate never does. The switcher solved the identical problem by going
-   flat. Is a flat sidebar acceptable, or should the sections coordinate selection
-   instead?
-4. **The sidebar icon** — cut it inside homogeneous sections and keep it in Recent,
-   where it genuinely varies? Or keep it everywhere as a scanning anchor?
-5. **The fleet list's ten columns** — build the horizontal scroll `CLAUDE.md` already
-   names as the answer, or group by cluster and drop the repeated Cluster cell?
-6. **Two buttons called Apply** in the YAML editor — rename which one? The confirm is
-   already `Force apply` in the force case, so the vocabulary exists.
-7. **The card border as a grouping device** (P5) — converge on the cheat sheet's
-   one-border-per-section, or keep per-item cards?
-8. **The switcher's always-visible pin** — hover-only, at a cost in discoverability?
-9. **The Advanced-view preference's five-line explanation** — shorten it, or is a
-   preference needing a paragraph a naming problem?
-10. **Absolute timestamps in the Helm `Updated` column** — switch to `RelativeTime`
-    like the list's Age, with the exact value on the tooltip?
+A4's second half — shortening the shell's `Status` so the no-kubeconfig status bar
+would stop repeating the empty-state card's heading — **was implemented, rendered,
+and reverted**. The two strings are not two strings: the card binds its *heading* to
+the same `Status` property, so the change replaced the card's own diagnosis with
+`"Searched 1 location(s) — see above."` pointing at nothing above it. Strictly worse
+than the duplication it removed. Splitting them needs a second property and a decision
+about the parse-failure branch, which the card also renders → **ENG-29**.
 
----
+This is the case for the byte-diff discipline in one paragraph: the change built
+cleanly, both suites stayed green, and the only thing that caught it was diffing the
+render and asking why a file had changed that had no business changing.
+
+## Filed rather than fixed
+
+Group B, plus the three withdrawn rows above, went to `docs/BACKLOG.md`'s Inbox with
+no priority — a human promotes, per that file's one rule. The maintainer's answers to
+the two open questions are folded in:
+
+- **FEAT-66** — a resizable and sortable grid. The chosen answer to the widest finding
+  here, and it subsumes the Name truncation, the clipped `Age` header and the
+  unrenderable eleven-column CRD.
+- **FEAT-67** — the namespace picker becomes a multi-select with a "show all" control,
+  which is what makes the Namespace column carry information rather than restate the
+  picker. The column itself stays.
+- **FEAT-68** the sidebar icon, **FEAT-69** two buttons called Apply, **FEAT-70** one
+  grouping device per group (P4 + P5), **FEAT-71** the switcher's always-visible pin,
+  **FEAT-72** the Helm timestamp, **FEAT-73** the two remaining dot-beside-text sites.
+- **ENG-26** the sidebar's per-section selection, **ENG-27** / **ENG-28** / **ENG-29**
+  as above. **ENG-6** was annotated rather than duplicated — it already owned the fleet
+  column question, and now carries this pass's measurements.
+
+The second open question was settled directly: the health dot **stays** on CRD lists
+whose printer columns have replaced the Status column, which is what A13 implements.
+
+## Verification
+
+- `dotnet build KubeNimbus.slnx`: 0 errors, and the only warning is the pre-existing
+  CS8425 in `AsyncMergeTests.cs`. No new warnings.
+- `dotnet test --project` on both suites: **335/335** Core and **97/97** App, 0 failed,
+  0 skipped. (No sandbox in this container, so the Core count is the unit-only subset —
+  the cluster-gated tests return early.)
+- The harness renders **140** PNGs (70 scenarios × 2 themes), up from 138.
+
+**The byte-diff, and every changed file accounted for:**
+
+| Bucket | Count | Why |
+|---|---|---|
+| New | 2 | `cluster-tab-pod-detail-overview-disrupted.{dark,light}` — the new scenario |
+| Changed, diff confined to the sidebar (x ≤ 320) | 12 | `NetworkPolicys` → `NetworkPolicies` only. These are the maximized-dock scenarios, where no list column is on screen |
+| Changed, diff extends into the content area | 124 | The same sidebar change plus the dot column's removal shifting every list column left; and, on the scenarios that show them, the YAML title, the RBAC caption and `Verify`, the preferences box, and the node meters |
+| Unchanged | 2 | `main-window-no-kubeconfig.{dark,light}` — the only two scenarios with no cluster tab, and the confirmation that the reverted regression is fully out |
+
+`cluster-tab-exec-fullscreen-maximized` is the cleanest single check: its diff is a
+**16 × 12 px box at (120, 513)**, which is exactly the `…Policys` → `…Policies` tail
+and nothing else.
+
+The sidebar-only bucket went from 16 to 12 when A13b landed, and the four that moved
+are precisely `cluster-tab-helm-releases.{dark,light}` and
+`cluster-tab-helm-release-detail.{dark,light}` — the Helm grid losing its own dot. A
+diff that moves an exact, predicted set of files is the check working.
+
+`design/screenshots/*.png` were deliberately **not** regenerated, for the reason the
+CRD, node and Overview passes all recorded: Age is computed from the real clock, so
+those files drift between any two runs and regenerating them commits a date rather
+than a change.
 
 ## Provenance
 

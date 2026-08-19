@@ -71,6 +71,21 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         "Demo cluster — sample data that ships with kubeNimbus. Nothing is connected and none of these objects exist.";
 
     /// <summary>
+    /// What the *status bar* says for a demo tab, and deliberately not
+    /// <see cref="DemoBanner"/>. The banner above the content area and the status bar
+    /// are simultaneously visible for the whole life of the tab, and both were printing
+    /// the identical 100-character sentence — the same sentence twice on one screen, and
+    /// three times on any screen that also arms the confirm strip.
+    ///
+    /// The banner is the copy that has to stay: demo rule 6 makes it the exception to
+    /// UI rule 1 precisely because it must be unmissable and persistent. So the status
+    /// bar reverts to its own register instead — the slot that reads
+    /// "Connected — Kubernetes v1.31.2." on a real tab says what this tab is instead of
+    /// a connection.
+    /// </summary>
+    public const string DemoStatus = "Demo cluster — sample data, no connection.";
+
+    /// <summary>
     /// Which environment this cluster is treated as — set by
     /// <see cref="MainWindowViewModel"/>, which owns the user's overrides. Drives the
     /// tab's colour and the production band under the command bar; the whole point
@@ -673,7 +688,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     private void ConnectDemo()
     {
         IsConnected = true;
-        Status = DemoBanner;
+        Status = DemoStatus;
 
         var catalog = Demo.DemoData.BuildCatalog();
         RecordPodDescriptor("", catalog);

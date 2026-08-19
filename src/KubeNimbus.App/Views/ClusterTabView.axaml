@@ -736,14 +736,14 @@
                      IsReadOnly="True" GridLinesVisibility="Horizontal" CanUserResizeColumns="True"
                      DoubleTapped="OnHelmRowDoubleTapped">
             <DataGrid.Columns>
-              <DataGridTemplateColumn Header="" Width="28">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
-                    <Ellipse Classes="statusDot" Fill="{Binding StatusHealth, Converter={x:Static conv:HealthToBrushConverter.Instance}}"
-                             HorizontalAlignment="Center" VerticalAlignment="Center" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
+              <!-- No health dot here, for the same reason the resource list no longer
+                   has one: this grid always shows its Status column, and that column is
+                   already colour-coded from the same StatusHealth *and* spells the word
+                   ("deployed", "failed", "superseded"). A dot beside it encoded the same
+                   fact a second time and bought 28px of nothing. The resource list keeps
+                   a dot in exactly one case — where a CRD's own printer columns have
+                   replaced the Status column, so the dot is the last thing carrying the
+                   classification — and this grid has no such case. -->
               <DataGridTemplateColumn Header="Namespace" Width="Auto" MinWidth="80">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">

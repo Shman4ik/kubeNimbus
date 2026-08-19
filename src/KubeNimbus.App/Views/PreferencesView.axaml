@@ -76,18 +76,28 @@
                         <TextBlock Classes="hint" Text="Files you have opened here, searched before $KUBECONFIG and the default location. kubeNimbus remembers the path only — never the contents — and re-reads the file each time it connects. Removing one here does not delete the file." />
                     </StackPanel>
 
-                    <Border Classes="layer" Padding="2" MinHeight="88">
-                        <ListBox ItemsSource="{Binding KubeconfigPaths}"
-                                 SelectedItem="{Binding SelectedKubeconfigPath}"
-                                 FontSize="12" />
-                    </Border>
-
                     <!-- Empty is a state, not a blank box (rule 7): with no picked file
                          the app is still reading $KUBECONFIG and ~/.kube/config, and
-                         someone looking at an empty list needs to know that. -->
-                    <TextBlock Classes="hint"
-                               Text="No files added. kubeNimbus is still reading $KUBECONFIG and the default location."
-                               IsVisible="{Binding !KubeconfigPaths.Count}" />
+                         someone looking at an empty list needs to know that.
+
+                         The sentence lives *inside* the border, which is the whole point
+                         and is what this got wrong before: it sat underneath, so the box
+                         it explained rendered as an 88px empty rectangle with the
+                         explanation outside it — which is the blank rectangle rule 9
+                         forbids, with the right words sitting next to it. -->
+                    <Border Classes="layer" Padding="2" MinHeight="88">
+                        <Panel>
+                            <ListBox ItemsSource="{Binding KubeconfigPaths}"
+                                     SelectedItem="{Binding SelectedKubeconfigPath}"
+                                     FontSize="12"
+                                     IsVisible="{Binding KubeconfigPaths.Count}" />
+                            <TextBlock Classes="hint" Margin="12" TextWrapping="Wrap"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       TextAlignment="Center"
+                                       Text="No files added. kubeNimbus is still reading $KUBECONFIG and the default location."
+                                       IsVisible="{Binding !KubeconfigPaths.Count}" />
+                        </Panel>
+                    </Border>
 
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Button Classes="soft" Content="Add file…" Command="{Binding AddKubeconfigCommand}" />

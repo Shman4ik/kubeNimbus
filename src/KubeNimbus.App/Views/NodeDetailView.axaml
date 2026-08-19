@@ -91,7 +91,7 @@
                                                 VerticalAlignment="Center"
                                                 RequestedPercent="{Binding RequestedPercentValue}"
                                                 LimitPercent="{Binding LimitPercentValue}"
-                                                TrackBrush="{DynamicResource HoverBackgroundBrush}"
+                                                TrackBrush="{DynamicResource MeterTrackBrush}"
                                                 FillBrush="{DynamicResource AppAccentBrush}"
                                                 LimitBrush="#552D7FF9"
                                                 MarkerBrush="{DynamicResource SystemControlForegroundBaseHighBrush}"

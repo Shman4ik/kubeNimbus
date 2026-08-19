@@ -24,6 +24,48 @@
                 <ResourceInclude Source="avares://Nimbus.Ui/Theme/Icons.axaml" />
             </ResourceDictionary.MergedDictionaries>
 
+            <!-- The node resource meter's unfilled track (Controls/ResourceMeter.cs).
+                 Theme-split, and it exists because the obvious token was wrong: this
+                 was `HoverBackgroundBrush`, which is #80808080 at Opacity 0.1 — a 5%
+                 wash designed to sit *under a pointer*, not to be the axis of a chart.
+                 Measured on the rendered dark card it came out srgb(14,14,14) on
+                 srgb(8,8,8): a contrast ratio of 1.035:1, i.e. invisible.
+
+                 That is not cosmetic. The track is the only thing showing where each
+                 row's bar *ends*, and "three bars of different lengths cannot be
+                 compared row to row" is the stated reason the row was re-cut to fixed
+                 number columns in the first place. With an invisible track the bars
+                 share a start and an unseen end, so the comparison the card exists for
+                 is defeated one layer below the layout that was fixed to deliver it.
+                 It is also why the Pods row — which correctly has no limit and so
+                 paints no limits extent — read as a *shorter* bar rather than an equal
+                 one, i.e. as missing data.
+
+                 The shared token must not be retuned to fix this: it drives every hover
+                 state in both Nimbus apps. The meter gets its own brush instead, and
+                 it is theme-split rather than one fixed tone: a track light enough to
+                 read on the dark card is a near-black bar on the light one, which would
+                 out-weigh the accent fill it is supposed to sit behind.
+
+                 Measured after the change: dark srgb(61,61,61) on srgb(8,8,8) — 1.84:1,
+                 up from 1.035:1; light srgb(210,210,210) on srgb(249,249,249) — 1.44:1,
+                 up from 1.054:1. Both are still under WCAG's 3:1 floor for a non-text
+                 graphic, and that is a deliberate stop rather than an oversight: 3:1
+                 needs roughly srgb(92) on the dark card and srgb(145) on the light one,
+                 and at srgb(145) the track stops reading as an empty channel and starts
+                 reading as a second filled bar competing with the accent. If that floor
+                 has to be met, the answer is an outline on the track rather than a
+                 heavier fill — a border carries the extent at full contrast without
+                 adding weight across the whole bar. -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="MeterTrackBrush" Color="#D2D2D2" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="MeterTrackBrush" Color="#3D3D3D" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+
             <!-- The exec pane's terminal palette (SvcSystems.UI.Terminal reads these by
                  name; anything unset falls back to its own xterm-256 table, which is what
                  a shell script's colours are written against and is deliberately left

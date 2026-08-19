@@ -63,6 +63,10 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-pod-detail-overview", () => HostInMainWindow(ClusterTabScenarios.PodDetailOverview(), height: 1000)),
     ("cluster-tab-pod-detail-overview-unschedulable",
         () => HostInMainWindow(ClusterTabScenarios.PodDetailOverviewUnschedulable(), height: 1000)),
+    // The inverted-polarity condition (DisruptionTarget) and the unclassified one, both
+    // of which had no object anywhere in the repo to render them — see the scenario.
+    ("cluster-tab-pod-detail-overview-disrupted",
+        () => HostInMainWindow(ClusterTabScenarios.PodDetailOverviewDisrupted(), height: 1000)),
     ("cluster-tab-pod-detail-usage", () => HostInMainWindow(ClusterTabScenarios.PodDetailUsage(), height: 1000)),
     ("cluster-tab-pod-detail-usage-unavailable", () => HostInMainWindow(ClusterTabScenarios.PodDetailUsageUnavailable())),
     ("cluster-tab-pod-detail-usage-unset", () => HostInMainWindow(ClusterTabScenarios.PodDetailUsageUnset())),
@@ -261,6 +265,10 @@ static Control BuildNoKubeconfigContent()
     vm.Tabs.Clear();
     vm.AvailableContexts.Clear();
     vm.HasContexts = false;
+    // What LoadContextsAsync sets for this state. It is also what the empty-state card
+    // renders as its heading — the card and the status bar bind the same property — so
+    // this one string is deliberately doing both jobs.
+    vm.KubeconfigSearchPathCount = 1;
     vm.Status = "No kubeconfig contexts found.";
     vm.KubeconfigSearchPaths = string.Join(
         System.Environment.NewLine,

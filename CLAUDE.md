@@ -2501,6 +2501,77 @@ The `Yaml-Mode.xshd` resource is safe: it is included with an explicit
 on the assembly name. Root namespace and `x:Class` values are unchanged and
 unaffected.
 
+## The status dot, and where it survives
+
+A resource row carries a health classification (`ResourceStatusSummary`) and, in most
+lists, a Status column that is *already* coloured from that same classification and
+also spells the word — `Running`, `CrashLoopBackOff`, `deployed`, `failed`. The 28px
+dot column beside it encoded the same fact a second time and bought nothing but width,
+on a list whose Name column was ellipsising object names to the point where two pods of
+one ReplicaSet rendered identically.
+
+So the dot now appears in **exactly one** case: where a CRD's own printer columns have
+replaced the generic Status column (see "CRD printer columns"), because there the dot is
+the last thing carrying `ResourceStatusSummary`'s verdict at all. That is the whole rule,
+and it lives in `ClusterTabView.ApplySummaryColumns` as
+`"" => hasPrinterColumns && ResourceStatusSummary.ShowsStatus(descriptor)`.
+
+Two things not to get wrong when touching this:
+
+- **The Helm release list is a second `DataGrid` with its own hardcoded columns**, not
+  driven by `ApplySummaryColumns`. It kept its dot when the resource list lost one, and
+  the byte-diff is what caught it — a fix that introduces the very inconsistency it was
+  removing. Any future column rule has to be applied to both grids or stated as applying
+  to one.
+- **A dot beside a *condition* is not this pattern and must not be folded into it.** On
+  pod and node Overview the dot carries polarity (`IsProblem`) while the word carries raw
+  status, and they disagree exactly when it matters: on `cluster-tab-node-detail-cordoned`
+  `DiskPressure  True` renders red while `Ready  True` renders green. Removing the dot
+  there would delete the classification; removing the word would hide what the API said.
+  The two sites that *are* still this pattern — the exec pane's dot beside "Connected
+  to…" and the switcher's dot beside its environment pill — are `FEAT-73`.
+
+## The meter track was invisible, and the token was the reason
+
+`Controls/ResourceMeter`'s unfilled track is what shows where each row's bar *ends*, and
+"three bars of different lengths cannot be compared row to row" is the stated reason the
+node card's row was re-cut to fixed number columns. It was painted with
+`HoverBackgroundBrush` — a **shared** token, `#80808080` at `Opacity="0.1"`, i.e. a 5%
+wash meant to sit under a pointer. Measured on the rendered dark card: `srgb(14,14,14)`
+on `srgb(8,8,8)`, a contrast ratio of **1.035:1**. The layout fix landed and the
+comparison it was supposed to deliver was defeated one layer below it, because the shared
+end could not be seen. The Pods row, which correctly has no limit and so paints no limits
+extent, read as a *shorter bar* — i.e. as missing data.
+
+`MeterTrackBrush` in `Styles/Theme.axaml` is the fix, and three things about it matter:
+
+1. **The shared token was not retuned.** `HoverBackgroundBrush` drives every hover state
+   in both Nimbus apps; the meter gets its own brush instead.
+2. **It is theme-split.** A track light enough to read on the dark card is a near-black
+   bar on the light one, out-weighing the accent fill it sits behind.
+3. **It still does not meet WCAG's 3:1 floor for a non-text graphic, and that is a
+   deliberate stop.** Achieved: dark `srgb(61,61,61)` on `srgb(8,8,8)` = **1.84:1**;
+   light `srgb(210,210,210)` on `srgb(249,249,249)` = **1.44:1**. 3:1 needs roughly
+   `srgb(92)` and `srgb(145)`, and at `srgb(145)` the track stops reading as an empty
+   channel and starts competing with the fill. If that floor has to be met, the answer is
+   an **outline** on the track rather than a heavier fill.
+
+The general lesson, which is the third time this repo has paid for it: a colour chosen
+for one job (a hover tint) silently becomes wrong when reused for another (a chart axis),
+and the failure is invisible in one theme. `docs/research/2026-08-19-visual-audit.md` has
+the measurements.
+
+## Sidebar labels come from the server's plural, and now actually do
+
+`SidebarKindViewModel.Pluralize` claimed to label rows from the server's own plural. It
+did not: it used `descriptor.Plural` only to test equality with the Kind and otherwise
+appended `"s"` (or `"es"` after s/x), so `NetworkPolicy` rendered as **`NetworkPolicys`**.
+Every Kind ending consonant+y was affected, which on a CRD-heavy cluster is a lot of them.
+It reads the plural now and re-cases it against the Kind's own capitalisation, so
+`NetworkPolicy` + `networkpolicies` gives `NetworkPolicies`; a plural sharing no prefix
+with the Kind falls back to the server's string as sent. A descriptor with no plural at
+all (the hand-built statics, fixtures) keeps the Kind as written.
+
 ## MVP scope (phase 1 — shipped, see Current status below)
 
 - [x] Context picker from kubeconfig (exec-plugin auth working).
@@ -4139,3 +4210,52 @@ maximized precisely because of that. First things to do on a machine with a sand
 `kubectl top pod --containers`; delete metrics-server and confirm the requests/limits stay
 readable under the notice; and check a BestEffort pod from `40-broken.yaml`, which is the
 "no request or limit set" line against a real object.
+
+**Visual-audit pass (cognitive load, 2026-08-19):** a review of all 69 screenshot
+scenarios in both themes, read off the rendered pixels rather than the code, followed by
+the uncontroversial half of its own findings. The report is
+`docs/research/2026-08-19-visual-audit.md`; the three substantive changes have sections
+of their own above ("The status dot…", "The meter track was invisible…", "Sidebar labels
+come from the server's plural…"). Also shipped: the YAML editor's duplicate title, the
+demo tab's status bar repeating the `demoBar` verbatim, the access review's `namespace
+<ns>` caption and its borderless `Verify`, and the preferences kubeconfig box that
+rendered as an 88px empty rectangle with its own explanation sitting outside it. Two
+condition states that no object in the repo could produce — `DisruptionTarget` (the one
+type with inverted polarity) and an unclassified custom readiness gate — were added to
+the demo dataset and are rendered by `cluster-tab-pod-detail-overview-disrupted`; both
+branches had been reachable only in code.
+
+**Four of the twelve planned fixes were withdrawn during implementation, and that is the
+part worth keeping.** Each was a finding read off a render that was wrong about its own
+cause: the YAML title row does *not* cost a row (it also holds Apply/Delete, so the gain
+is horizontal); `BY CONTAINER` cannot move inside a card because it heads a list of
+cards; the cheat sheet's arrow was already `→` and was misread from a downscaled image;
+and the CONDITIONS card's 16px indent has no clean fix, because the dot cannot hang into
+the card's 12px padding without sitting on the border. All four are filed rather than
+forgotten (`ENG-27`, `ENG-28`).
+
+**One regression was written, rendered and reverted**, and it is the argument for the
+byte-diff in a sentence. Shortening the shell's `Status` so the no-kubeconfig status bar
+would stop repeating the empty-state card's heading looked like removing a duplicate; the
+card binds its *heading* to that same property, so the change replaced the app's own
+diagnosis with "Searched 1 location(s) — see above." pointing at nothing above it. It
+built cleanly and both suites stayed green. What caught it was diffing the render and
+asking why a file had changed that had no business changing (`ENG-29`).
+
+**Verified this session**: `dotnet build KubeNimbus.slnx` with **0 new warnings** (the one
+warning is the pre-existing CS8425 in `AsyncMergeTests.cs`); **335/335 Core TUnit** and
+**97/97 App TUnit**, 0 failed, 0 skipped, both via `--project` (no sandbox here, so the
+Core count is the unit-only subset); and **140** PNGs rendered (70 scenarios × both
+themes) with every changed file accounted for — 2 new, 2 unchanged (the only two
+scenarios with no cluster tab, which is also the proof the reverted regression is fully
+out), 12 whose diff is confined to the sidebar, and 124 that also show a list. The
+cleanest single check is `cluster-tab-exec-fullscreen-maximized`, whose entire diff is a
+16×12px box at (120, 513) — exactly the `…Policys` → `…Policies` tail.
+
+**Not verified**: no live cluster (registry egress blocked), so everything here was read
+on demo data and fixtures — which for a pass that is entirely layout, colour and text is
+the right medium, but it means the CRD-heavy real-cluster cases the report calls out
+(KEDA's eleven printer columns, a sidebar of 70 real CRD plurals now going through the
+re-casing path) have still never been rendered. Nothing was driven by hand in the running
+app. `design/screenshots/*.png` were deliberately not regenerated: Age is computed from
+the real clock, so they drift by themselves.

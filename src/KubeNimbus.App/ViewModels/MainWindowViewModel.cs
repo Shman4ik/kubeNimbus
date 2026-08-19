@@ -490,6 +490,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
             HasContexts = AvailableContexts.Count > 0;
             RefreshSearchPaths();
+            // NOTE: `Status` is not only the status bar's text — the no-kubeconfig
+            // empty-state card binds its *heading* to this same property, so the
+            // apparent duplication between the card and the status bar is one string
+            // rendered twice, not two strings that happen to agree. Shortening it here
+            // therefore replaces the card's own diagnosis, which is the opposite of an
+            // improvement. Splitting the two needs a second property and a decision
+            // about the parse-failure case, which the card also shows; that is filed
+            // rather than done here.
             Status = HasContexts
                 ? $"{AvailableContexts.Count} context(s) available."
                 : "No kubeconfig contexts found.";
@@ -513,11 +521,23 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// found — and a picked file that has since been moved shows as <c>missing</c>
     /// instead of vanishing without explanation.
     /// </summary>
-    private void RefreshSearchPaths() =>
+    private void RefreshSearchPaths()
+    {
+        var candidates = Kubeconfig.CandidatePaths(_pickedKubeconfigPaths).ToList();
+        KubeconfigSearchPathCount = candidates.Count;
         KubeconfigSearchPaths = string.Join(
             Environment.NewLine,
-            Kubeconfig.CandidatePaths(_pickedKubeconfigPaths).Select(c =>
+            candidates.Select(c =>
                 $"{(c.Exists ? "found  " : "missing")}  {c.Path}   ({c.Source})"));
+    }
+
+    /// <summary>
+    /// How many locations the last load looked in. Nothing renders it yet — it is what a
+    /// split between the empty-state card's heading and the status bar's line would use;
+    /// see the note in <c>LoadContextsAsync</c> and the backlog row it points at.
+    /// </summary>
+    [ObservableProperty]
+    private int _kubeconfigSearchPathCount;
 
     [RelayCommand]
     private async Task ReloadContextsAsync()
