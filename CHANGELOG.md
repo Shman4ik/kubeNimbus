@@ -14,6 +14,15 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Added
 
+- **The node pane now shows limits as well as requests, on the same track.** Each
+  resource's bar carries the requested figure as its filled portion and the sum of
+  the pods' declared limits as a lighter extent with a marker where it falls, and
+  the row prints the limits total and what percentage of allocatable it is. Limits
+  that add up to more than the node has are ordinary overcommit rather than a
+  fault, so the marker pins at the end of the track in amber and the figure goes
+  amber with it — never silently clamped into looking like a node that is exactly
+  full. The pod-count row has no limit and shows none.
+
 - **Container requests and limits are readable on pod detail's Usage tab.** Each
   container's CPU and memory now print what it asks for and what it is capped at,
   underneath the current and peak readings, together with the current usage as a
@@ -110,6 +119,11 @@ it as the GitHub Release body, so headings must match tags exactly
   with no cluster at all.
 
 ### Fixed
+
+- **The node pane's resource bars are the same length as each other.** CPU, Memory
+  and Pods print different-width numbers, and the bars used to take whatever width
+  was left over after them, so the three tracks ended at three different places
+  and could not be compared row to row.
 
 - **Log lines without a severity keyword were invisible in the dark theme.**
   Anything the app did not classify as ERROR, WARN or INFO — nginx access logs,

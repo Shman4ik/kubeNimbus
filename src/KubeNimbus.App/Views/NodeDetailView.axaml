@@ -3,6 +3,7 @@
              xmlns:vm="using:KubeNimbus.App.ViewModels"
              xmlns:core="using:KubeNimbus.Core"
              xmlns:conv="using:KubeNimbus.App.Converters"
+             xmlns:controls="using:KubeNimbus.App.Controls"
              x:Class="KubeNimbus.App.Views.NodeDetailView"
              x:DataType="vm:NodeDetailTabViewModel">
 
@@ -60,30 +61,64 @@
                 <TextBlock Classes="statusText dim" IsVisible="{Binding !HasResourceSummary}"
                            Text="Counting the pods on this node…" />
 
+                <!-- Every column but the track is a *fixed* width, and that is the whole
+                     point of the layout rather than a tidiness preference. This row used
+                     to be `70,*,Auto` with the numbers in the Auto column, so the star
+                     column ended wherever that row's own text happened to stop: CPU,
+                     Memory and Pods print different-width figures, so the three tracks
+                     came out three different lengths — aligned at the left, ragged at the
+                     right — and three bars of different lengths cannot be compared row to
+                     row, which is the entire job of this card. Fixed number columns give
+                     every track the same start and the same end. -->
                 <ItemsControl ItemsSource="{Binding ResourceLines}" IsVisible="{Binding HasResourceSummary}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:NodeResourceLineViewModel">
-                      <Grid ColumnDefinitions="70,*,Auto" Margin="0,3" ToolTip.Tip="{Binding Tooltip}">
+                      <Grid ColumnDefinitions="62,*,76,12,76,46,168" Margin="0,3" ToolTip.Tip="{Binding Tooltip}">
                         <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="12" VerticalAlignment="Center" />
 
-                        <!-- Clamped at 100 even when the requests oversubscribe, which is
-                             legitimate and does happen: a bar that ran past its own track
-                             would say less than the percentage printed beside it already
-                             does. -->
-                        <ProgressBar Grid.Column="1" Margin="8,0" Height="6" Minimum="0" Maximum="100"
-                                     VerticalAlignment="Center"
-                                     Value="{Binding RequestedPercentValue}" />
+                        <!-- One track carrying both figures, not two stacked bars: a
+                             second bar per resource would triple the card's height in a
+                             ~300px dock (UI rule 10) to say something this axis already
+                             carries. The requested fill clamps at the track; the limit
+                             marker does not silently clamp — see ResourceMeter. The
+                             marker takes the theme's high-contrast foreground rather than
+                             a second accent: it is routinely drawn *on top of* the accent
+                             fill (limits below requested is ordinary — a limit sums only
+                             the containers that declare one), and accent-on-accent is
+                             invisible on the dark theme, which is where this repo has
+                             hidden colour bugs before. -->
+                        <controls:ResourceMeter Grid.Column="1" Margin="8,0" Height="8"
+                                                VerticalAlignment="Center"
+                                                RequestedPercent="{Binding RequestedPercentValue}"
+                                                LimitPercent="{Binding LimitPercentValue}"
+                                                TrackBrush="{DynamicResource HoverBackgroundBrush}"
+                                                FillBrush="{DynamicResource AppAccentBrush}"
+                                                LimitBrush="#552D7FF9"
+                                                MarkerBrush="{DynamicResource SystemControlForegroundBaseHighBrush}"
+                                                OverBrush="{DynamicResource AppWarningBrush}" />
 
-                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                          <TextBlock FontSize="12" FontFamily="Cascadia Mono,Consolas,monospace"
-                                     Text="{Binding RequestedText}" />
-                          <TextBlock FontSize="12" Opacity="0.55" Text="/" />
-                          <TextBlock FontSize="12" Opacity="0.7" FontFamily="Cascadia Mono,Consolas,monospace"
-                                     Text="{Binding AllocatableText}" />
-                          <TextBlock FontSize="12" MinWidth="42" TextAlignment="Right"
-                                     Classes="statusText" Classes.warn="{Binding IsTight}"
-                                     Text="{Binding RequestedPercentText}" />
-                        </StackPanel>
+                        <TextBlock Grid.Column="2" FontSize="12" VerticalAlignment="Center"
+                                   TextAlignment="Right" FontFamily="Cascadia Mono,Consolas,monospace"
+                                   Text="{Binding RequestedText}" />
+                        <TextBlock Grid.Column="3" FontSize="12" VerticalAlignment="Center"
+                                   TextAlignment="Center" Opacity="0.55" Text="/" />
+                        <TextBlock Grid.Column="4" FontSize="12" VerticalAlignment="Center"
+                                   TextAlignment="Right" Opacity="0.7"
+                                   FontFamily="Cascadia Mono,Consolas,monospace"
+                                   Text="{Binding AllocatableText}" />
+                        <TextBlock Grid.Column="5" FontSize="12" VerticalAlignment="Center"
+                                   TextAlignment="Right" Margin="6,0,0,0"
+                                   Classes="statusText" Classes.warn="{Binding IsTight}"
+                                   Text="{Binding RequestedPercentText}" />
+
+                        <!-- Empty for the pods row, which has no limit at all — so it
+                             renders no marker, no caption and no dangling separator
+                             rather than an empty slot the two rows above it fill. -->
+                        <TextBlock Grid.Column="6" FontSize="12" VerticalAlignment="Center"
+                                   TextAlignment="Right" Margin="10,0,0,0"
+                                   FontFamily="Cascadia Mono,Consolas,monospace"
+                                   Classes="statusText" Classes.warn="{Binding IsOvercommitted}"
+                                   Text="{Binding LimitSummaryText}" />
                       </Grid>
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
@@ -91,7 +126,7 @@
 
                 <TextBlock Classes="statusText dim" FontSize="11.5" TextWrapping="Wrap"
                            IsVisible="{Binding HasResourceSummary}"
-                           Text="Requested is what the scheduler has promised, not what is being used — a node can be full of requests and idle, or busy and mostly unrequested." />
+                           Text="Requested is what the scheduler has promised, not what is being used — a node can be full of requests and idle, or busy and mostly unrequested. The filled part of each track is requested; the tick is where the declared limits fall on the same scale, counting only the containers that set one. Limits past the track's end are ordinary overcommit, and the marker turns amber rather than sitting flush." />
               </StackPanel>
             </Border>
 

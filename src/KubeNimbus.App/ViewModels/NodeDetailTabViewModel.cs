@@ -307,11 +307,20 @@ public sealed class NodeResourceLineViewModel
         // bar cannot say "112%" and the number printed beside it already does.
         RequestedPercentValue = Math.Clamp(line.RequestedPercent ?? 0, 0, 100);
 
+        // The whole limits half of the row in one string, so a resource with no limit to
+        // report (the pods line, always) renders nothing rather than a caption over an
+        // empty figure or a dangling separator between two blanks.
+        LimitSummaryText = HasLimit
+            ? LimitPercentText.Length > 0
+                ? $"limits {LimitText} ({LimitPercentText})"
+                : $"limits {LimitText}"
+            : "";
+
         Tooltip = line.Allocatable is null
             ? $"{label}: this node did not report an allocatable {line.Resource}."
             : $"{label}\nallocatable {AllocatableText} (capacity {Format(line.Capacity, format)})\n"
               + $"requested {RequestedText} · free {FreeText}"
-              + (LimitText.Length > 0 ? $"\nlimits {LimitText}" : "");
+              + (HasLimit ? $"\nlimits {LimitText} ({LimitPercentText} of allocatable)" : "");
     }
 
     public string Label { get; }
@@ -332,8 +341,22 @@ public sealed class NodeResourceLineViewModel
 
     public bool HasLimit => LimitText.Length > 0;
 
+    /// <summary>
+    /// The limits half of the row, or the empty string when this resource has none — the
+    /// pods line, where <c>Limit: null</c> is the normal case rather than missing data.
+    /// </summary>
+    public string LimitSummaryText { get; }
+
     /// <summary>0–100, for the bar. The unclamped figure is <see cref="RequestedPercentText"/>.</summary>
     public double RequestedPercentValue { get; }
+
+    /// <summary>
+    /// Where the limit marker goes, as a percentage of allocatable, or null for a
+    /// resource with no limit. Deliberately <em>unclamped</em>: the meter needs to know
+    /// the limit is past the track's end so it can say so, and a value clamped here
+    /// would make an oversubscribed node render as exactly full.
+    /// </summary>
+    public double? LimitPercentValue => HasLimit ? Line.LimitPercent : null;
 
     public string Tooltip { get; }
 
@@ -343,6 +366,16 @@ public sealed class NodeResourceLineViewModel
     /// neighbour may have nowhere to put things.
     /// </summary>
     public bool IsTight => Line.RequestedPercent is > 90;
+
+    /// <summary>
+    /// The limits declared on this node add up to more than the node has. That is
+    /// ordinary overcommit rather than a fault — it is how most clusters are run, and it
+    /// is one of the things people open this card to find out — so it is warn-coloured on
+    /// the limits figure alone and never on the row: colouring the whole line would say
+    /// the node is in trouble, which it is not until the pods actually use what they are
+    /// allowed to.
+    /// </summary>
+    public bool IsOvercommitted => Line.LimitPercent is > 100;
 
     private static string Format(double? value, Func<double, string> format) =>
         value is { } number ? format(number) : "";

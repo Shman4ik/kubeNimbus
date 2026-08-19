@@ -1491,6 +1491,49 @@ menu and the command palette. Nothing new is always visible.
   overstates any node running Jobs; ignoring them understates a node mid-startup. Both
   wrong answers are *plausible*, which is why `NodeResourcesTests` pins the formula in
   both directions. Terminal pods are excluded, as `kubectl describe node` excludes them.
+- **Requested and the sum of the declared limits share one track, and the card says which
+  part is which.** The "allocatable vs requested" card draws one `Controls/ResourceMeter`
+  per resource — a hand-rolled `DrawingContext` control, same argument as `Sparkline`: the
+  requested figure as the filled portion, the limits total as a lighter extent on the same
+  axis with a 2px marker where it lands, and the absolute plus the percentage printed at
+  the right of the row (`NodeResourceLineViewModel.LimitSummaryText`). Limits were computed
+  by `NodeResources.Summarize` from the day the node pane shipped and were rendered
+  nowhere, which is a strange thing to withhold: how far a node's limits oversubscribe it
+  is one of the two questions the card exists to answer. It is **one track rather than two
+  stacked bars** because the dock is ~300px (UI rule 10) — a second bar per resource
+  triples the card's height to plot a second series on an axis that already carries it, and
+  two bars are harder to compare than one, not easier. Four consequences worth keeping:
+  - **The requested fill clamps at the track and the limit marker does not.** Limits past
+    allocatable are ordinary overcommit — it is how most clusters are run — so a limit over
+    100% pins its marker inside the track's right edge and draws it in the *warning* colour
+    rather than in the marker colour, and the printed percentage goes warn with it. Silently
+    clamping it would render an oversubscribed node as exactly full, which is a wrong answer
+    stated confidently. `LimitPercentValue` is therefore deliberately unclamped; the meter
+    is what decides how to draw a value past its end.
+  - **The pods row has no limit, and renders as though the concept does not exist for it.**
+    `Limit: null` is that line's normal case, not missing data, so there is no marker, no
+    extent, no caption and no dangling separator. A row that silently differs in *shape*
+    from the two above it is a bug; `NodeResourceLineTests` pins both halves.
+  - **Overcommitted limits do not make the row read as tight.** `IsTight` stays
+    `RequestedPercent > 90` — "the scheduler is nearly out of room", which is what a drain
+    of the neighbouring node depends on — and overcommit gets its own flag on the limits
+    figure alone. Colouring the whole row on it would say a normally run cluster is in
+    trouble, which it is not until the pods actually use what they are allowed to.
+  - **The marker takes the theme's high-contrast foreground, not a second accent.** Limits
+    below requested is ordinary (the limits total sums only the containers that declare
+    one), so the marker is routinely drawn *on top of* the accent fill, and accent-on-accent
+    is invisible on the dark theme. The footnote under the card states all of this in one
+    sentence, because a reader must not have to guess which part of the track is which.
+- **A `*` column beside an `Auto` column of variable-width text gives every row a
+  different bar length**, and that is what this card shipped with: the row was
+  `ColumnDefinitions="70,*,Auto"` with the numbers in the `Auto` column, so the star column
+  ended wherever each row's own text happened to stop. CPU, Memory and Pods print
+  different-width figures, so the three tracks came out three different lengths — aligned
+  at the left and ragged at the right — and bars of different lengths cannot be compared row
+  to row, which is the whole job of a small-multiples chart. Every column but the track is a
+  fixed width now. The trap generalizes to any `ItemsControl` whose rows mix a proportional
+  visual with per-row text, and it is invisible from the code: it only shows up in a
+  rendered screenshot, which is where it was reported from.
 - **A condition's polarity is read off `Ready`**, the one condition Kubernetes defines as
   positive; everything else is a pressure condition, healthy when False. Reading it off a
   list of known-bad condition types instead would classify a cloud provider's or
@@ -1605,6 +1648,15 @@ the eviction has no honest stand-in, and `RowActionViewModel.IsDemo` says so in 
 the confirm disabled. The demo catalog's Pod descriptor therefore declares an `eviction`
 subresource for the same reason its Deployment declares `scale`: without it the demo would
 teach that kubeNimbus cannot drain a node, rather than that *this* cluster cannot.
+
+**Both states of the resource card are in the shipped data** (demo rule 4). `demo-worker-1`
+is the ordinary shape — some pods declare limits, most do not, so the limits total lands
+*below* requested and the marker sits inside the fill — and `demo-worker-2` is
+overcommitted in both CPU and memory (109% of allocatable each), which is what renders the
+warn marker pinned at the track's end. `redis-cache-0` and `notification-dispatcher` carry
+the generous limits that produce it. The sandbox had nothing that oversubscribed a node
+either, so `shop-api` in `scripts/manifests/10-shop.yaml` now declares a limit far above
+its request; the scheduler never reads limits, so it schedules exactly as it did before.
 
 **Two defects were found by looking at the rendered strip and are worth remembering.** A
 compiled binding to a **method group** (`{Binding DrainPlan.Summary}` against
