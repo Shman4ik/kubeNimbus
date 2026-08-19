@@ -1659,13 +1659,20 @@ terminal emulator in this container — see the pass note in Current status):
 ## The apply preview (server-side dry run)
 
 Apply used to be blind: the editor sent the document and reported what came back.
-`ClusterClient.PreviewApplyAsync` + `ResourceDiff.cs` (Core) and the panel under the
-editor (`ApplyPreviewViewModel`, UI rules 9 and 17) turn it into a two-step action —
-ask the server what it would do, then decide. The step is a preference
+`ClusterClient.PreviewApplyAsync` + `ResourceDiff.cs` + `TextDiff.cs` (Core) and the panel
+under the editor (`ApplyPreviewViewModel`, UI rules 9 and 17) turn it into a two-step
+action — ask the server what it would do, then decide. The step is a preference
 (`AppSettings.PreviewApplies`, on by default), read **at the press** like the delete
 confirm and for the same reason.
 
-Seven things are load-bearing.
+The panel shows the **manifest itself, with its changed lines in place** — `kubectl
+diff`'s shape, `git diff`'s shape, VS Code's diff editor's shape. It shipped as a list of
+field paths (`spec.template.spec.containers[worker].image`, old above new), which is
+precise, compact, and not how anyone reads a manifest change; the field list is still
+there as the third view mode, because it is the only one of the three that knows a
+container was *inserted* rather than every container rewritten.
+
+Twelve things are load-bearing.
 
 1. **Both sides of the diff come from the server.** The live object is a GET; the other
    side is the `dryRun=All` response. That is the entire difference between this and
@@ -1703,23 +1710,74 @@ Seven things are load-bearing.
    reloading, or applying clears it. A stale diff above a live editor is worse than no
    diff — it is a wrong answer wearing the server's authority. `YamlEditorPreviewTests`
    pins that, and the break was written and confirmed red before the test was called done.
-7. **The panel shares the dock with the editor, from code-behind.** Its row is star-sized
-   while a diff is open and `Auto` when it is not (or when the diff is empty, which is one
-   sentence and two buttons). Both of the obvious XAML answers were tried and rendered
-   wrong at the dock's default ~300px: an `Auto` row tall enough to read left a
-   zero-height editor, and a `MinHeight` on the editor pushed the grid past the dock and
-   overlapped its own rows. Mutating a `RowDefinition` is what `ClusterTabView.ApplyDockState`
-   already does, for the same reason. The panel itself is a `ContentControl` + inline
-   `DataTemplate`, never a `Border` with both `DataContext` and `x:DataType` — UI rule 17
-   records what that pair renders, which is nothing at all, silently.
+7. **The panel shares the dock with the editor, from code-behind, and the diff gets three
+   quarters of it.** The preview's row is star-sized while a diff is open and `Auto` when
+   it is not (or when the diff is empty, which is one sentence and two buttons). Both of
+   the obvious XAML answers were tried and rendered wrong at the dock's default ~300px: an
+   `Auto` row tall enough to read left a zero-height editor, and a `MinHeight` on the
+   editor pushed the grid past the dock and overlapped its own rows. Mutating a
+   `RowDefinition` is what `ClusterTabView.ApplyDockState` already does, for the same
+   reason. The **3:1 weight is the line diff's own finding**: an even split left the
+   panel's chrome row and footnote consuming its entire share, so the diff body rendered
+   at *zero* height while the editor kept five lines nobody was reading — and the editor
+   cannot be anything but context here, because typing in it discards the preview by rule
+   6 below. Even at 3:1 the default dock shows about three lines and scrolls; the dock's
+   own maximize toggle sits directly above the panel and is what a long diff wants. The
+   panel itself is a `ContentControl` + inline `DataTemplate`, never a `Border` with both
+   `DataContext` and `x:DataType` — UI rule 17 records what that pair renders, which is
+   nothing at all, silently.
+8. **The line diff is over the two server documents, not over the editor's text.** Rule 1
+   is what makes the preview worth a round trip, and rendering it as text must not quietly
+   give that up: `ApplyPreview` carries the live object as well as the previewed one, and
+   each side is serialized by `ResourceDiff.ToDiffableYaml` — the object as YAML with the
+   same three bookkeeping fields removed. `managedFields` alone is routinely a third of a
+   real object and changes on every apply, so a text diff over the raw documents would
+   open on the one section nobody wants to read. What was removed is still counted and
+   stated by rule 4's footnote, which is the half that keeps the omission honest.
+9. **`TextDiff` is in Core, pure, and bounded on purpose.** Common prefix and suffix are
+   trimmed first — two serializations of nearly the same object share almost everything —
+   and only the middle goes through an LCS. The table is `(n+1) × (m+1)` ints, so it is
+   capped at a million cells; past that the middle is reported as one removal followed by
+   one insertion and `IsApproximate` is set, which the panel *states* in the footnote.
+   A diff that silently stops aligning is worse than one that admits it.
+   **The trimming hides the LCS from most tests, and that is worth knowing before writing
+   one**: an insert, a delete and a replace in an otherwise identical document are all
+   settled by the prefix/suffix trim alone, so replacing the LCS with index pairing left
+   the whole suite green. What catches it is a change at the top *and* at the bottom with
+   an insert between them — a manifest with an edited label and an edited replica count,
+   i.e. the ordinary case — and that is what
+   `An_insert_between_two_changed_ends_leaves_the_middle_untouched` is for.
+10. **Collapsing is part of the feature.** Three lines of context around each changed run,
+   the skipped count stated (`10 unchanged lines`), because a Deployment serializes to ~60
+   lines and a CRD to several hundred and the panel is a ~300px dock. A run of one line is
+   kept rather than collapsed — a "1 unchanged line" separator is the same height as the
+   line it replaces and says less. A diff with *nothing* in it produces no rows at all
+   rather than one gap covering the document: the first cut rendered `56 unchanged lines`
+   under "this apply would change nothing", which only the screenshot showed.
+11. **Side by side is derived from the same row list, never computed a second way.** A
+   removed run and the added run following it are zipped, and the shorter side gets
+   fillers — the blank a deleted line has to face is the whole reason this mode is more
+   than a two-column layout. Two independently built layouts can disagree about what
+   changed, which is the one thing a diff may not do. Long lines are trimmed with the full
+   text on the tooltip rather than wrapped: wrapping one side pushes it out of step with
+   the other.
+12. **The view mode is a session-scoped toggle on the tab, and no syntax highlighting.**
+   `Diff / Split / Fields` is a `ListBox.segmented` sharing the panel's one chrome row (UI
+   rule 10), and `YamlEditorTabViewModel.PreviewViewMode` holds it, so choosing side by
+   side once survives the next apply. It is deliberately not a preference — a view toggle
+   inside a pane, like the log pane's timestamps and wrap toggles. Highlighting the diff
+   would mean an AvaloniaEdit instance per side and a colouring pass, which is a different
+   feature; monospace plus a tinted line background is what VS Code's own inline diff
+   leans on anyway, and the marker glyph carries the direction for anyone who cannot
+   separate the two tints.
 
 **The demo cluster is unchanged and needs no new refusal:** there is no `ClusterClient`,
 so Apply, force-apply and the preview are all already disabled by `CanExecute` under the
 editor's existing demo notice (demo rule 5).
 
-**What is not built, deliberately:** a side-by-side or full-manifest diff view (the
-previewed object is kept on `ApplyPreview` for whoever wants one), a preview for the row
-list's own scale/restart/delete actions (those already arm a strip that names exactly
+**What is not built, deliberately:** syntax highlighting inside the diff (rule 12),
+word-level highlighting within a changed line, a copy-the-diff button, a preview for the
+row list's own scale/restart/delete actions (those already arm a strip that names exactly
 what they do), and `--dry-run=client`, which answers a question nobody has: the client's
 copy of the manifest is the text on screen.
 
@@ -3695,3 +3753,51 @@ that field and nothing else; add `resources: {}` to a container and see what the
 defaults into the diff; run `kubectl scale` on the same object from a terminal and then
 apply from the editor, to reach the conflict path from the outside; and turn the preference
 off and confirm Apply goes straight through as it did before.
+
+**Manifest-diff pass (FEAT-58):** the apply preview's body is the manifest now, not a list
+of field paths — the shape `kubectl diff`, `git diff` and VS Code's diff editor all show.
+See "The apply preview (server-side dry run)" above for the five rules this added (8–12).
+New: `TextDiff.cs` and `ResourceDiff.ToDiffableYaml` in Core (+ 18 `TextDiffTests`), a
+`Live` object on `ApplyPreview` — which `PreviewApplyAsync` already read and discarded —
+`DiffLineViewModel` / `DiffPairViewModel` and a `Diff / Split / Fields` strip on the panel's
+existing chrome row (+ 7 more `YamlEditorPreviewTests`), six diff style classes in
+`Styles/Theme.axaml`, and two screenshot scenarios (`cluster-tab-yaml-diff-split`, rendered
+at the dock's default height on purpose, and `-fields`). No new gesture and no new
+always-visible control, so `docs/keyboard-shortcuts.md` is unchanged.
+
+**Three things were found by breaking them, and one by looking at the screenshot.** The
+break/revert runs, same discipline as VER-5 and VER-3: replacing the LCS with index pairing
+turned **1 of 321 red** — and the interesting part is that it turned *nothing* red until the
+right test existed, because the prefix/suffix trim settles a lone insert, delete or replace
+by itself (see rule 9); dropping the bookkeeping strip from `ToDiffableYaml` turned **1 of
+321** and **1 of 79** red, in the Core and App suites respectively; and an off-by-one in the
+collapse context turned **2 of 321** red. The screenshot found the fourth: an unchanged
+document collapsed to one row reading `56 unchanged lines` underneath "this apply would
+change nothing", and separately that an even split of the dock left the diff body at *zero*
+height while the editor kept five lines nobody was reading — which is what the 3:1 row
+weight in `YamlEditorView.axaml.cs` is for.
+
+**Verified this session**: `dotnet build KubeNimbus.slnx` with **0 warnings**; **321/321
+Core TUnit** and **79/79 App TUnit**, 0 failed, 0 skipped, both via `--project` (no sandbox
+here, so the Core count is the unit-only subset — the cluster-gated tests return early); the
+four break/revert runs above; all **66** scenarios × both themes rendered (132 PNGs) plus a
+byte-for-byte baseline diff against the parent commit — of the 128 pre-existing PNGs exactly
+**four** differ, all of them the two `cluster-tab-yaml-diff-{preview,no-change}` pairs this
+change is about, while `cluster-tab-workload-logs.{light,dark}` and
+`cluster-tab-demo-pod-detail.light` were each confirmed to flap between two renders of the
+*baseline itself*, which is ENG-10 and not this change; the linux-x64 NativeAOT publish with
+no new warnings beyond the known DataGrid IL2104/IL3053; and `--smoke-test` on that published
+binary under Xvfb (`SMOKE-OK main window rendered at 1280x800 after 1101 ms`, exit 0).
+
+**Not verified.** The live half is unchanged from FEAT-5's and untouched by this pass — no
+sandbox came up here, so no dry-run apply has crossed a real API server and the diff of a
+*real* Deployment, with a real webhook's defaulting in it, has still only been argued. Two
+things are this pass's own gaps rather than inherited ones: nothing has been driven by hand
+in the running app, so the mode strip, the two-way `SelectedIndex` binding that carries the
+mode across previews and the split view's horizontal behaviour are verified by unit test and
+by rendering, not by a mouse; and the diff has only ever been rendered over fixture
+documents of ~60 lines, so the collapse boundaries and the cell budget's fallback are pinned
+by tests and have never been *seen* on a several-hundred-line CRD. The panel at the dock's
+default ~300px shows about three lines of diff, which `cluster-tab-yaml-diff-split` records
+honestly; whether that is enough, or whether the editor should give way entirely while a
+preview is armed, is a judgement worth making in front of a real cluster.

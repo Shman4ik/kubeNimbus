@@ -97,6 +97,24 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
 
     public bool HasPendingPreview => PendingPreview is not null;
 
+    /// <summary>The unified line diff — the default, and the way a manifest change is read.</summary>
+    public const int PreviewViewModeInline = 0;
+
+    /// <summary>The same diff as two aligned columns.</summary>
+    public const int PreviewViewModeSplit = 1;
+
+    /// <summary>The field-path list, which is the semantic summary of the same pair of objects.</summary>
+    public const int PreviewViewModeFields = 2;
+
+    /// <summary>
+    /// Which view of the preview is on screen. It lives on the tab rather than on the
+    /// preview so that choosing side-by-side once survives the next apply, and it is
+    /// deliberately not a preference: it is a view toggle inside a pane, the same kind of
+    /// thing as the log pane's timestamps and wrap toggles.
+    /// </summary>
+    [ObservableProperty]
+    private int _previewViewMode = PreviewViewModeInline;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsEditorReadOnly))]
     private bool _isDeleted;
@@ -517,7 +535,7 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
         try
         {
             var preview = await _client.PreviewApplyAsync(_descriptor, _namespace, _name, YamlText, FieldManager, force);
-            PendingPreview = new ApplyPreviewViewModel(preview.Diff, force);
+            PendingPreview = new ApplyPreviewViewModel(preview, force);
         }
         catch (ServerSideApplyConflictException ex)
         {
@@ -757,16 +775,40 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
 /// </summary>
 public sealed class ApplyPreviewViewModel
 {
-    public ApplyPreviewViewModel(ResourceDiff diff, bool isForce)
+    public ApplyPreviewViewModel(ApplyPreview preview, bool isForce)
     {
+        var diff = preview.Diff;
         IsForce = isForce;
-        IsEmpty = diff.IsEmpty;
         IsCreate = diff.IsCreate;
         Rows = [.. diff.Changes.Select(c => new DiffRowViewModel(c))];
+
+        // The line diff is over the two documents the server itself produced, with the
+        // bookkeeping fields stripped from both — never over the editor's text, which
+        // knows nothing about defaulting or admission (Core's ApplyPreview holds both).
+        var text = TextDiff.Between(
+            ResourceDiff.ToDiffableYaml(preview.Live?.Raw),
+            ResourceDiff.ToDiffableYaml(preview.Previewed.Raw));
+
+        // One collapsed row list, and the side-by-side view is derived from it rather
+        // than computed a second way: two layouts built independently can disagree about
+        // what changed, which is the one thing a diff may not do.
+        // Nothing changed means no body at all, not one row reading "56 unchanged lines":
+        // the whole document collapses to a single gap, and a gap under "this apply would
+        // change nothing" is a row of dock height spent restating it.
+        IReadOnlyList<TextDiffLine> collapsed = text.IsEmpty ? [] : text.Collapse();
+        Lines = [.. collapsed.Select(line => new DiffLineViewModel(line))];
+        SplitLines = [.. TextDiff.SideBySide(collapsed).Select(pair => new DiffPairViewModel(pair))];
+        LineSummary = text.IsEmpty ? "" : $"+{text.AddedCount} −{text.RemovedCount}";
+        IsEmpty = diff.IsEmpty && text.IsEmpty;
 
         Headline = diff switch
         {
             { IsCreate: true } => "This object is not on the server. Applying would create it:",
+            // A field diff that is empty while the text one is not means the server would
+            // write the same values in a different order. Saying "nothing would change"
+            // over a panel showing moved lines would read as a bug in the panel.
+            { IsEmpty: true } when !text.IsEmpty =>
+                "The server would change no field values — the lines below differ only in how the document is ordered.",
             { IsEmpty: true } => "The server reports this apply would change nothing.",
             { TotalChanges: 1 } => "The server would make 1 change:",
             _ => $"The server would make {diff.TotalChanges} changes:",
@@ -787,10 +829,30 @@ public sealed class ApplyPreviewViewModel
                 + "(managedFields, resourceVersion, generation)");
         }
 
+        // A diff that stopped aligning has to say so. The alternative — quietly showing a
+        // whole section as replaced — is a wrong answer wearing the server's authority.
+        if (text.IsApproximate)
+        {
+            notes.Add("too large to align line by line, so the changed section is shown as a replacement");
+        }
+
         Footnote = notes.Count == 0 ? null : string.Join(" · ", notes);
     }
 
+    /// <summary>The field-level changes — the Fields view mode, and the semantic summary
+    /// the headline counts. Kept beside the text diff, not replaced by it: its
+    /// list-matching by <c>name</c> is what stops an inserted container reading as six
+    /// changes, and a line count could never say that.</summary>
     public IReadOnlyList<DiffRowViewModel> Rows { get; }
+
+    /// <summary>The manifest as a unified line diff, unchanged runs already collapsed.</summary>
+    public IReadOnlyList<DiffLineViewModel> Lines { get; }
+
+    /// <summary>The same rows as two aligned columns, fillers included.</summary>
+    public IReadOnlyList<DiffPairViewModel> SplitLines { get; }
+
+    /// <summary>How many lines the diff adds and removes, e.g. <c>+7 −4</c>.</summary>
+    public string LineSummary { get; }
 
     public string Headline { get; }
 
@@ -801,7 +863,14 @@ public sealed class ApplyPreviewViewModel
     /// <summary>True when the server says nothing would change — the panel then has no rows to show.</summary>
     public bool IsEmpty { get; }
 
+    /// <summary>True when the Fields view has something to list.</summary>
     public bool HasRows => Rows.Count > 0;
+
+    /// <summary>
+    /// True when there is a diff to show at all — which is what decides whether the panel
+    /// gets a star-sized row and a view-mode strip, or is one sentence and two buttons.
+    /// </summary>
+    public bool HasBody => Lines.Count > 0;
 
     public bool IsCreate { get; }
 
@@ -855,6 +924,83 @@ public sealed class DiffRowViewModel
 
     /// <summary>Only a changed value has two sides to separate.</summary>
     public bool HasBothSides => IsChanged;
+}
+
+/// <summary>
+/// One row of the unified line diff: the two line numbers, the sign, and the text —
+/// or, for a collapsed run, how many unchanged lines are standing behind it.
+/// </summary>
+public sealed class DiffLineViewModel
+{
+    public DiffLineViewModel(TextDiffLine line)
+    {
+        Kind = line.Kind;
+        LeftNumber = line.LeftNumber?.ToString(CultureInfo.InvariantCulture) ?? "";
+        RightNumber = line.RightNumber?.ToString(CultureInfo.InvariantCulture) ?? "";
+        Text = line.Text;
+        SkippedCount = line.SkippedCount;
+    }
+
+    public TextDiffKind Kind { get; }
+
+    public string LeftNumber { get; }
+
+    public string RightNumber { get; }
+
+    public string Text { get; }
+
+    public int SkippedCount { get; }
+
+    /// <summary>
+    /// The sign column, as a glyph and not only a colour — the two directions of a diff
+    /// are the last thing that should depend on telling red from green.
+    /// </summary>
+    public string Marker => Kind switch
+    {
+        TextDiffKind.Added => "+",
+        TextDiffKind.Removed => "−",
+        _ => " ",
+    };
+
+    public bool IsAdded => Kind == TextDiffKind.Added;
+
+    public bool IsRemoved => Kind == TextDiffKind.Removed;
+
+    public bool IsSkipped => Kind == TextDiffKind.Skipped;
+
+    public bool IsLine => Kind != TextDiffKind.Skipped;
+
+    /// <summary>What a collapsed run says about itself. A gap that does not state its
+    /// size is a diff quietly withholding part of the document.</summary>
+    public string SkippedText => $"{SkippedCount} unchanged {(SkippedCount == 1 ? "line" : "lines")}";
+}
+
+/// <summary>
+/// One row of the side-by-side diff. Either half may be absent, which is the alignment
+/// filler: a deleted line on the left has to face a blank on the right.
+/// </summary>
+public sealed class DiffPairViewModel
+{
+    public DiffPairViewModel(TextDiffPair pair)
+    {
+        Left = pair.Left is null ? null : new DiffLineViewModel(pair.Left);
+        Right = pair.Right is null ? null : new DiffLineViewModel(pair.Right);
+        SkippedCount = pair.SkippedCount;
+    }
+
+    public DiffLineViewModel? Left { get; }
+
+    public DiffLineViewModel? Right { get; }
+
+    public int SkippedCount { get; }
+
+    public bool HasLeft => Left is not null;
+
+    public bool HasRight => Right is not null;
+
+    public bool IsSkipped => SkippedCount > 0;
+
+    public string SkippedText => $"{SkippedCount} unchanged {(SkippedCount == 1 ? "line" : "lines")}";
 }
 
 /// <summary>

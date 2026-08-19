@@ -87,7 +87,7 @@ public partial class YamlEditorView : UserControl
 
     /// <summary>
     /// The apply preview shares the pane with the editor instead of displacing it. Star
-    /// while it is open (so the two split whatever height the dock has, each scrolling
+    /// while a diff is open (so the two split whatever height the dock has, each scrolling
     /// inside its own share) and Auto — i.e. nothing — while it is not.
     ///
     /// <para>
@@ -100,12 +100,27 @@ public partial class YamlEditorView : UserControl
     /// </summary>
     private void ApplyPreviewRowHeight()
     {
-        // Star only when there is a list to scroll. A preview that reports no changes is
+        // Star only when there is a diff to scroll. A preview that reports no changes is
         // one sentence and two buttons, and a star row would give it a card of blank space.
-        var hasRows = _vm?.PendingPreview is { HasRows: true };
-        Rows.RowDefinitions[PreviewRowIndex].Height = hasRows ? new GridLength(1, GridUnitType.Star) : GridLength.Auto;
+        //
+        // Three stars against the editor's one while a diff is open, and that weight is this
+        // pass's own finding rather than a taste. An even split — which is what the field
+        // list had — leaves the panel's own chrome row and footnote eating its entire share
+        // at the dock's default ~300px: the diff body rendered at zero height while the
+        // editor kept five lines nobody was reading. The editor is context here and cannot
+        // be anything else, because typing in it discards the preview by design (CLAUDE.md's
+        // apply-preview rule 6), so the height belongs to the thing being read. Stars rather
+        // than a pixel height on either row, so maximizing the dock still scales both — a
+        // long diff wants the maximized dock, and the dock's own maximize toggle is already
+        // one click away above the panel.
+        var hasBody = _vm?.PendingPreview is { HasBody: true };
+        Rows.RowDefinitions[EditorRowIndex].Height = new GridLength(1, GridUnitType.Star);
+        Rows.RowDefinitions[PreviewRowIndex].Height = hasBody ? new GridLength(3, GridUnitType.Star) : GridLength.Auto;
     }
 
     /// <summary>The grid row the apply preview occupies — row 0 is the header, row 1 the editor.</summary>
     private const int PreviewRowIndex = 2;
+
+    /// <summary>The editor's row, whose share the diff takes three quarters of while one is open.</summary>
+    private const int EditorRowIndex = 1;
 }

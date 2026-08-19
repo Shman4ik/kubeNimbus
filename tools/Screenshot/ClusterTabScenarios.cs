@@ -1146,8 +1146,42 @@ internal static class ClusterTabScenarios
         tab.IsInspectorMaximized = true;
         if (tab.SelectedInspectorTab is YamlEditorTabViewModel yaml)
         {
-            yaml.PendingPreview = new ApplyPreviewViewModel(
-                ResourceDiff.Between(FixtureLiveDeployment(), FixturePreviewedDeployment()), isForce: false);
+            yaml.PendingPreview = new ApplyPreviewViewModel(FixturePreview(), isForce: false);
+        }
+
+        return tab;
+    }
+
+    /// <summary>
+    /// The same diff as two aligned columns, and deliberately <b>not</b> maximized: the
+    /// dock's default ~300px is where the panel's row heights fail first, and side by side
+    /// is the mode that asks the most of the width. The alignment fillers — the blank a
+    /// deleted line faces on the other side — are the whole reason this mode is more than
+    /// a two-column layout, and nothing but a rendering shows whether they line up.
+    /// </summary>
+    public static ClusterTabViewModel YamlEditorDiffSplit()
+    {
+        var tab = YamlEditor();
+        if (tab.SelectedInspectorTab is YamlEditorTabViewModel yaml)
+        {
+            yaml.PendingPreview = new ApplyPreviewViewModel(FixturePreview(), isForce: false);
+            yaml.PreviewViewMode = YamlEditorTabViewModel.PreviewViewModeSplit;
+        }
+
+        return tab;
+    }
+
+    /// <summary>
+    /// The field-path list — the third view mode, and the one that knows a container was
+    /// inserted rather than every container rewritten. It is what the panel showed before
+    /// the line diff existed, kept because a line count cannot say that.
+    /// </summary>
+    public static ClusterTabViewModel YamlEditorDiffFields()
+    {
+        var tab = YamlEditorDiffPreview();
+        if (tab.SelectedInspectorTab is YamlEditorTabViewModel yaml)
+        {
+            yaml.PreviewViewMode = YamlEditorTabViewModel.PreviewViewModeFields;
         }
 
         return tab;
@@ -1162,23 +1196,61 @@ internal static class ClusterTabScenarios
         var tab = YamlEditor();
         if (tab.SelectedInspectorTab is YamlEditorTabViewModel yaml)
         {
+            var live = FixtureLiveDeployment();
             yaml.PendingPreview = new ApplyPreviewViewModel(
-                ResourceDiff.Between(FixtureLiveDeployment(), FixtureLiveDeployment()), isForce: false);
+                new ApplyPreview(
+                    ResourceDiff.Between(live, live),
+                    DynamicResource.FromListItem(live, DeploymentDescriptor),
+                    DynamicResource.FromListItem(live, DeploymentDescriptor)),
+                isForce: false);
         }
 
         return tab;
     }
 
-    /// <summary>The object as the server holds it — including one bookkeeping field, so the panel's footnote is real.</summary>
+    /// <summary>
+    /// A dry-run answer assembled the way <c>ClusterClient.PreviewApplyAsync</c> assembles
+    /// one: the live object, the object the server says it would end up with, and the
+    /// field diff of the pair. The panel computes its line diff from the two documents, so
+    /// handing it only the diff would leave two of its three views empty.
+    /// </summary>
+    private static ApplyPreview FixturePreview()
+    {
+        var live = FixtureLiveDeployment();
+        var previewed = FixturePreviewedDeployment();
+        return new ApplyPreview(
+            ResourceDiff.Between(live, previewed),
+            DynamicResource.FromListItem(previewed, DeploymentDescriptor),
+            DynamicResource.FromListItem(live, DeploymentDescriptor));
+    }
+
+    /// <summary>
+    /// The object as the server holds it — including one bookkeeping field, so the panel's
+    /// footnote is real, and enough untouched spec for the line diff to have unchanged runs
+    /// worth collapsing. A four-line fixture would render a diff with no gaps in it, which
+    /// is the one part of the panel a screenshot is uniquely able to check.
+    /// </summary>
     private static JsonElement FixtureLiveDeployment() => JsonDocument.Parse("""
         {"apiVersion":"apps/v1","kind":"Deployment",
          "metadata":{"name":"checkout-worker","namespace":"payments","resourceVersion":"81523",
-                     "labels":{"app.kubernetes.io/name":"checkout-worker"}},
+                     "labels":{"app.kubernetes.io/name":"checkout-worker"},
+                     "annotations":{"deployment.kubernetes.io/revision":"7","kubenimbus.dev/owner":"payments-team"}},
          "spec":{"replicas":3,
-                 "template":{"spec":{"containers":[
+                 "selector":{"matchLabels":{"app":"checkout-worker"}},
+                 "strategy":{"type":"RollingUpdate","rollingUpdate":{"maxSurge":1,"maxUnavailable":0}},
+                 "template":{
+                   "metadata":{"labels":{"app":"checkout-worker"}},
+                   "spec":{"serviceAccountName":"checkout",
+                           "containers":[
                     {"name":"worker","image":"registry.example.com/checkout:1.14.2",
+                     "args":["--queue","checkout","--concurrency","4"],
+                     "ports":[{"name":"metrics","containerPort":9102}],
+                     "env":[{"name":"LOG_LEVEL","value":"info"},
+                            {"name":"QUEUE_URL","value":"amqp://broker.payments:5672"}],
+                     "readinessProbe":{"httpGet":{"path":"/healthz","port":9102},"periodSeconds":10},
                      "resources":{"limits":{"memory":"512Mi"}}},
-                    {"name":"metrics-sidecar","image":"prom/statsd-exporter:v0.27.1"}]}}}}
+                    {"name":"metrics-sidecar","image":"prom/statsd-exporter:v0.27.1",
+                     "ports":[{"name":"statsd","containerPort":9125}]}]}}}}
         """).RootElement.Clone();
 
     /// <summary>What a dry-run apply would return: two edits of the user's, plus a limit the cluster defaults in.</summary>
@@ -1186,12 +1258,24 @@ internal static class ClusterTabScenarios
         {"apiVersion":"apps/v1","kind":"Deployment",
          "metadata":{"name":"checkout-worker","namespace":"payments","resourceVersion":"81523",
                      "managedFields":[{"manager":"kubenimbus","operation":"Apply"}],
-                     "labels":{"app.kubernetes.io/name":"checkout-worker","app.kubernetes.io/part-of":"payments"}},
+                     "labels":{"app.kubernetes.io/name":"checkout-worker","app.kubernetes.io/part-of":"payments"},
+                     "annotations":{"deployment.kubernetes.io/revision":"7","kubenimbus.dev/owner":"payments-team"}},
          "spec":{"replicas":5,
-                 "template":{"spec":{"containers":[
+                 "selector":{"matchLabels":{"app":"checkout-worker"}},
+                 "strategy":{"type":"RollingUpdate","rollingUpdate":{"maxSurge":1,"maxUnavailable":0}},
+                 "template":{
+                   "metadata":{"labels":{"app":"checkout-worker"}},
+                   "spec":{"serviceAccountName":"checkout",
+                           "containers":[
                     {"name":"worker","image":"registry.example.com/checkout:1.15.0",
+                     "args":["--queue","checkout","--concurrency","4"],
+                     "ports":[{"name":"metrics","containerPort":9102}],
+                     "env":[{"name":"LOG_LEVEL","value":"info"},
+                            {"name":"QUEUE_URL","value":"amqp://broker.payments:5672"}],
+                     "readinessProbe":{"httpGet":{"path":"/healthz","port":9102},"periodSeconds":10},
                      "resources":{"limits":{"memory":"1Gi","cpu":"500m"}}},
-                    {"name":"metrics-sidecar","image":"prom/statsd-exporter:v0.27.1"}]}}}}
+                    {"name":"metrics-sidecar","image":"prom/statsd-exporter:v0.27.1",
+                     "ports":[{"name":"statsd","containerPort":9125}]}]}}}}
         """).RootElement.Clone();
 
     /// <summary>A server-side apply conflict. Advanced, because force-apply — the only

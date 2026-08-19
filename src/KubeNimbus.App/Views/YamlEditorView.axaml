@@ -3,6 +3,7 @@
              xmlns:vm="using:KubeNimbus.App.ViewModels"
              xmlns:ae="using:AvaloniaEdit"
              xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:kconv="using:KubeNimbus.App.Converters"
              x:Class="KubeNimbus.App.Views.YamlEditorView"
              x:DataType="vm:YamlEditorTabViewModel">
 
@@ -81,50 +82,153 @@
     <ContentControl Grid.Row="2" Content="{Binding PendingPreview}" IsVisible="{Binding HasPendingPreview}">
       <ContentControl.ContentTemplate>
         <DataTemplate x:DataType="vm:ApplyPreviewViewModel">
-          <Border Classes="card" Padding="10" Margin="0,8,0,0">
+          <!-- Padding and margins are tighter than the pane's other cards on purpose: at
+               the dock's default ~300px every 8px of chrome here is a line of the diff. -->
+          <Border Classes="card" Padding="8" Margin="0,6,0,0">
             <DockPanel>
-              <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto">
-                <TextBlock Grid.Column="0" Text="{Binding Headline}" Classes="statusText" VerticalAlignment="Center"
+              <!-- One row of chrome above the diff, and the view-mode strip is part of it
+                   (UI rule 10): the panel shares a ~300px dock with the editor, so a
+                   strip on a row of its own would be two log-lines' worth of height spent
+                   on three words. The strip is a ListBox.segmented for the same reason
+                   pod detail's is — it is this app's control for exactly this job. -->
+              <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,*,Auto,Auto">
+                <ListBox Grid.Column="0" Classes="segmented" IsVisible="{Binding HasBody}" Margin="0,0,8,0"
+                         SelectedIndex="{Binding $parent[UserControl].((vm:YamlEditorTabViewModel)DataContext).PreviewViewMode, Mode=TwoWay}">
+                  <ListBoxItem Content="Diff" ToolTip.Tip="The manifest as a unified line diff" />
+                  <ListBoxItem Content="Split" ToolTip.Tip="The same diff, old and new side by side" />
+                  <ListBoxItem Content="Fields" ToolTip.Tip="The changed fields by path, matched the way Kubernetes merges them" />
+                </ListBox>
+
+                <TextBlock Grid.Column="1" Text="{Binding LineSummary}" FontFamily="Cascadia Mono,Consolas,monospace"
+                           FontSize="11" Opacity="0.6" VerticalAlignment="Center" Margin="0,0,10,0"
+                           IsVisible="{Binding HasBody}" ToolTip.Tip="Lines added and removed" />
+
+                <TextBlock Grid.Column="2" Text="{Binding Headline}" Classes="statusText" VerticalAlignment="Center"
                            TextWrapping="Wrap" Margin="0,0,8,0" />
-                <Button Grid.Column="1" Classes="accent" Content="{Binding ConfirmLabel}"
+                <Button Grid.Column="3" Classes="accent" Content="{Binding ConfirmLabel}"
                         Command="{Binding $parent[UserControl].((vm:YamlEditorTabViewModel)DataContext).ConfirmPreviewCommand}" />
-                <Button Grid.Column="2" Content="Cancel" Margin="6,0,0,0"
+                <Button Grid.Column="4" Content="Cancel" Margin="6,0,0,0"
                         Command="{Binding $parent[UserControl].((vm:YamlEditorTabViewModel)DataContext).CancelPreviewCommand}" />
               </Grid>
 
               <TextBlock DockPanel.Dock="Bottom" Text="{Binding Footnote}" FontSize="11" Opacity="0.6"
-                         TextWrapping="Wrap" Margin="0,6,0,0" IsVisible="{Binding HasFootnote}" />
+                         TextWrapping="Wrap" Margin="0,4,0,0" IsVisible="{Binding HasFootnote}" />
 
-              <ScrollViewer Margin="0,8,0,0" HorizontalScrollBarVisibility="Auto" IsVisible="{Binding HasRows}">
-                <ItemsControl ItemsSource="{Binding Rows}">
-                  <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="vm:DiffRowViewModel">
-                      <Grid ColumnDefinitions="14,*" Margin="0,2">
-                        <!-- A glyph as well as a colour: the two directions of a diff are
-                             the last thing that should depend on telling red from green. -->
-                        <TextBlock Grid.Column="0" Text="{Binding Marker}" FontFamily="Cascadia Mono,Consolas,monospace"
-                                   FontSize="11.5" VerticalAlignment="Top"
-                                   Classes.diffAdded="{Binding IsAdded}" Classes.diffRemoved="{Binding IsRemoved}"
-                                   Classes.diffChanged="{Binding IsChanged}" />
-                        <StackPanel Grid.Column="1" Spacing="1">
-                          <TextBlock Text="{Binding Path}" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5"
+              <!-- Three views of one answer, one at a time. All three are built from the
+                   same pair of server documents, so they cannot disagree about what
+                   would change. -->
+              <Panel Margin="0,6,0,0">
+
+                <!-- Unified line diff: the default, and the shape kubectl diff, git and
+                     VS Code all show. It scrolls horizontally rather than wrapping —
+                     a wrapped line stops lining up with the numbers beside it. -->
+                <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                              IsVisible="{Binding $parent[UserControl].((vm:YamlEditorTabViewModel)DataContext).PreviewViewMode, Converter={x:Static kconv:IndexEqualsConverter.Instance}, ConverterParameter=0}">
+                  <ItemsControl ItemsSource="{Binding Lines}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:DiffLineViewModel">
+                        <Panel>
+                          <!-- A collapsed run says how much it is standing in for; a gap
+                               that does not state its size is a diff quietly withholding
+                               part of the document. -->
+                          <Border Classes="diffGap" IsVisible="{Binding IsSkipped}">
+                            <TextBlock Text="{Binding SkippedText}" FontSize="10.5" Opacity="0.55"
+                                       HorizontalAlignment="Center" />
+                          </Border>
+                          <Border Classes="diffLine" IsVisible="{Binding IsLine}"
+                                  Classes.diffLineAdded="{Binding IsAdded}" Classes.diffLineRemoved="{Binding IsRemoved}">
+                            <Grid ColumnDefinitions="32,32,13,*">
+                              <TextBlock Grid.Column="0" Classes="diffGutter" Text="{Binding LeftNumber}" />
+                              <TextBlock Grid.Column="1" Classes="diffGutter" Text="{Binding RightNumber}" />
+                              <TextBlock Grid.Column="2" Classes="diffText" Text="{Binding Marker}"
+                                         Classes.diffAdded="{Binding IsAdded}" Classes.diffRemoved="{Binding IsRemoved}" />
+                              <SelectableTextBlock Grid.Column="3" Classes="diffText" Text="{Binding Text}" />
+                            </Grid>
+                          </Border>
+                        </Panel>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+
+                <!-- Side by side. Two equal columns, so a long line is trimmed with its
+                     full text on the tooltip rather than wrapped: wrapping one side
+                     pushes it out of step with the other, which is the one thing this
+                     mode exists to keep. -->
+                <ScrollViewer IsVisible="{Binding $parent[UserControl].((vm:YamlEditorTabViewModel)DataContext).PreviewViewMode, Converter={x:Static kconv:IndexEqualsConverter.Instance}, ConverterParameter=1}">
+                  <ItemsControl ItemsSource="{Binding SplitLines}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:DiffPairViewModel">
+                        <Panel>
+                          <Border Classes="diffGap" IsVisible="{Binding IsSkipped}">
+                            <TextBlock Text="{Binding SkippedText}" FontSize="10.5" Opacity="0.55"
+                                       HorizontalAlignment="Center" />
+                          </Border>
+                          <Grid ColumnDefinitions="*,10,*" IsVisible="{Binding !IsSkipped}">
+                            <!-- The old side. An absent half is the alignment filler:
+                                 a deleted line has to face a blank. -->
+                            <Border Grid.Column="0" Classes="diffLine" Classes.diffLineRemoved="{Binding Left.IsRemoved}"
+                                    Classes.diffFiller="{Binding !HasLeft}">
+                              <Grid ColumnDefinitions="32,13,*" IsVisible="{Binding HasLeft}">
+                                <TextBlock Grid.Column="0" Classes="diffGutter" Text="{Binding Left.LeftNumber}" />
+                                <TextBlock Grid.Column="1" Classes="diffText" Text="{Binding Left.Marker}"
+                                           Classes.diffRemoved="{Binding Left.IsRemoved}" />
+                                <TextBlock Grid.Column="2" Classes="diffText" Text="{Binding Left.Text}"
+                                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Left.Text}" />
+                              </Grid>
+                            </Border>
+                            <Border Grid.Column="2" Classes="diffLine" Classes.diffLineAdded="{Binding Right.IsAdded}"
+                                    Classes.diffFiller="{Binding !HasRight}">
+                              <Grid ColumnDefinitions="32,13,*" IsVisible="{Binding HasRight}">
+                                <TextBlock Grid.Column="0" Classes="diffGutter" Text="{Binding Right.RightNumber}" />
+                                <TextBlock Grid.Column="1" Classes="diffText" Text="{Binding Right.Marker}"
+                                           Classes.diffAdded="{Binding Right.IsAdded}" />
+                                <TextBlock Grid.Column="2" Classes="diffText" Text="{Binding Right.Text}"
+                                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Right.Text}" />
+                              </Grid>
+                            </Border>
+                          </Grid>
+                        </Panel>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+
+                <!-- The field list: the semantic summary of the same two objects, and the
+                     only one of the three that knows a container was inserted rather than
+                     six of them rewritten. -->
+                <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                              IsVisible="{Binding $parent[UserControl].((vm:YamlEditorTabViewModel)DataContext).PreviewViewMode, Converter={x:Static kconv:IndexEqualsConverter.Instance}, ConverterParameter=2}">
+                  <ItemsControl ItemsSource="{Binding Rows}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:DiffRowViewModel">
+                        <Grid ColumnDefinitions="14,*" Margin="0,2">
+                          <!-- A glyph as well as a colour: the two directions of a diff are
+                               the last thing that should depend on telling red from green. -->
+                          <TextBlock Grid.Column="0" Text="{Binding Marker}" FontFamily="Cascadia Mono,Consolas,monospace"
+                                     FontSize="11.5" VerticalAlignment="Top"
                                      Classes.diffAdded="{Binding IsAdded}" Classes.diffRemoved="{Binding IsRemoved}"
                                      Classes.diffChanged="{Binding IsChanged}" />
-                          <!-- Old above new, the way every diff is read. Selectable,
-                               because a previewed value is routinely the thing someone
-                               is about to paste somewhere else. -->
-                          <SelectableTextBlock Text="{Binding Before}" FontFamily="Cascadia Mono,Consolas,monospace"
-                                               FontSize="11.5" TextWrapping="Wrap" Opacity="0.55"
-                                               TextDecorations="Strikethrough" IsVisible="{Binding !IsAdded}" />
-                          <SelectableTextBlock Text="{Binding After}" FontFamily="Cascadia Mono,Consolas,monospace"
-                                               FontSize="11.5" TextWrapping="Wrap" Opacity="0.85"
-                                               IsVisible="{Binding !IsRemoved}" />
-                        </StackPanel>
-                      </Grid>
-                    </DataTemplate>
-                  </ItemsControl.ItemTemplate>
-                </ItemsControl>
-              </ScrollViewer>
+                          <StackPanel Grid.Column="1" Spacing="1">
+                            <TextBlock Text="{Binding Path}" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5"
+                                       Classes.diffAdded="{Binding IsAdded}" Classes.diffRemoved="{Binding IsRemoved}"
+                                       Classes.diffChanged="{Binding IsChanged}" />
+                            <!-- Old above new, the way every diff is read. Selectable,
+                                 because a previewed value is routinely the thing someone
+                                 is about to paste somewhere else. -->
+                            <SelectableTextBlock Text="{Binding Before}" FontFamily="Cascadia Mono,Consolas,monospace"
+                                                 FontSize="11.5" TextWrapping="Wrap" Opacity="0.55"
+                                                 TextDecorations="Strikethrough" IsVisible="{Binding !IsAdded}" />
+                            <SelectableTextBlock Text="{Binding After}" FontFamily="Cascadia Mono,Consolas,monospace"
+                                                 FontSize="11.5" TextWrapping="Wrap" Opacity="0.85"
+                                                 IsVisible="{Binding !IsRemoved}" />
+                          </StackPanel>
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+              </Panel>
             </DockPanel>
           </Border>
         </DataTemplate>

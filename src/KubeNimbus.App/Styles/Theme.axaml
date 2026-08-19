@@ -262,6 +262,57 @@
         <Setter Property="Foreground" Value="{StaticResource AppWarningBrush}" />
     </Style>
 
+    <!-- The line diff's own surface. A changed line is tinted rather than only coloured,
+         because in a unified diff the sign column is one glyph wide and the eye finds the
+         run of tinted rows first — which is what VS Code's inline diff leans on, and what
+         lets this skip syntax highlighting entirely (an AvaloniaEdit instance per side and
+         a colouring pass is a different feature). The tints are low-alpha washes of the
+         same success/danger tokens the marker glyph takes its foreground from, so one pair
+         of values reads correctly on both themes. -->
+    <Style Selector="Border.diffLine">
+        <Setter Property="Padding" Value="0,1,4,1" />
+        <Setter Property="CornerRadius" Value="2" />
+    </Style>
+    <Style Selector="Border.diffLine.diffLineAdded">
+        <Setter Property="Background" Value="#2646A758" />
+    </Style>
+    <Style Selector="Border.diffLine.diffLineRemoved">
+        <Setter Property="Background" Value="#26E5484D" />
+    </Style>
+
+    <!-- Side-by-side alignment filler: the half of a row that has no line on this side.
+         Drawn, not left blank, so a deletion facing nothing reads as "nothing here" rather
+         than as the end of the diff. -->
+    <Style Selector="Border.diffLine.diffFiller">
+        <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}" />
+    </Style>
+
+    <!-- The separator standing in for a collapsed run of unchanged lines. -->
+    <Style Selector="Border.diffGap">
+        <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
+        <Setter Property="CornerRadius" Value="2" />
+        <Setter Property="Padding" Value="0,2" />
+        <Setter Property="Margin" Value="0,2" />
+    </Style>
+
+    <!-- Line numbers and line text. Monospace on both, so the two gutters stay one width
+         and the text below a change lines up with the text above it. -->
+    <Style Selector="TextBlock.diffGutter">
+        <Setter Property="FontFamily" Value="Cascadia Mono,Consolas,monospace" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Opacity" Value="0.45" />
+        <Setter Property="TextAlignment" Value="Right" />
+        <Setter Property="Margin" Value="0,0,6,0" />
+    </Style>
+    <Style Selector="TextBlock.diffText">
+        <Setter Property="FontFamily" Value="Cascadia Mono,Consolas,monospace" />
+        <Setter Property="FontSize" Value="11.5" />
+    </Style>
+    <Style Selector="SelectableTextBlock.diffText">
+        <Setter Property="FontFamily" Value="Cascadia Mono,Consolas,monospace" />
+        <Setter Property="FontSize" Value="11.5" />
+    </Style>
+
     <!-- InfoBar: WinUI's inline status surface — a tinted, outlined block that states
          what the pane is currently doing. The alternative it replaces is a bare status
          dot next to a sentence, which carries the same information but only for

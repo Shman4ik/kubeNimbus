@@ -17,8 +17,15 @@ it as the GitHub Release body, so headings must match tags exactly
 - **Apply now shows what it would change, before it changes it.** Pressing Apply
   in the YAML editor asks the API server to run the apply as a dry run and then
   shows the difference between the object as it is and the object as the server
-  says it would be — field by field, old value above new. Nothing is written
-  until you press the second button.
+  says it would be — as a diff of the manifest, with the changed lines in place,
+  line numbers on both sides and the untouched parts collapsed to a few lines of
+  context. Nothing is written until you press the second button.
+
+  The diff opens inline, the way `kubectl diff` and `git diff` read; a **Split**
+  toggle puts old and new side by side, and **Fields** lists the changed field
+  paths instead, which is the view that can tell you a container was inserted
+  rather than every container rewritten. Which one you pick sticks for as long
+  as the tab is open.
 
   Because both sides come from the server, the preview includes what your text
   does not say: fields a defaulting webhook fills in, values a mutating
