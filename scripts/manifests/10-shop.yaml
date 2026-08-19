@@ -194,8 +194,15 @@ spec:
                 secretKeyRef:
                   name: shop-credentials
                   key: DATABASE_PASSWORD
+          # A deliberately generous limit against a tiny request. Nothing else in the
+          # sandbox oversubscribes a node, so without this the node pane's overcommit
+          # state — limits summing past allocatable, which is how most real clusters are
+          # run and is one of the things people open that card to find — could only ever
+          # be seen in the demo dataset. The scheduler never looks at limits, so this
+          # schedules exactly as it did before.
           resources:
             requests: { cpu: 5m, memory: 16Mi }
+            limits: { cpu: "8", memory: 24Gi }
 ---
 apiVersion: v1
 kind: Service
