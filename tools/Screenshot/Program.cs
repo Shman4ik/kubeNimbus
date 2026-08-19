@@ -65,6 +65,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
         () => HostInMainWindow(ClusterTabScenarios.PodDetailOverviewUnschedulable(), height: 1000)),
     ("cluster-tab-pod-detail-usage", () => HostInMainWindow(ClusterTabScenarios.PodDetailUsage(), height: 1000)),
     ("cluster-tab-pod-detail-usage-unavailable", () => HostInMainWindow(ClusterTabScenarios.PodDetailUsageUnavailable())),
+    ("cluster-tab-pod-detail-usage-unset", () => HostInMainWindow(ClusterTabScenarios.PodDetailUsageUnset())),
     ("cluster-tab-yaml-editor", () => HostInMainWindow(ClusterTabScenarios.YamlEditor())),
     ("cluster-tab-yaml-editor-maximized", () => HostInMainWindow(ClusterTabScenarios.YamlEditorMaximized())),
     ("cluster-tab-yaml-diff-preview", () => HostInMainWindow(ClusterTabScenarios.YamlEditorDiffPreview())),

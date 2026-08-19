@@ -81,29 +81,39 @@ public sealed partial class ContainerViewModel(string name, string image) : Obse
     [NotifyPropertyChangedFor(nameof(UsageSummary))]
     [NotifyPropertyChangedFor(nameof(HasUsage))]
     [NotifyPropertyChangedFor(nameof(ResourcesTooltip))]
+    [NotifyPropertyChangedFor(nameof(CpuMeasuredText))]
+    [NotifyPropertyChangedFor(nameof(MemoryMeasuredText))]
+    [NotifyPropertyChangedFor(nameof(CpuResourceText))]
     private long? _cpuNanocores;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(UsageSummary))]
     [NotifyPropertyChangedFor(nameof(HasUsage))]
     [NotifyPropertyChangedFor(nameof(ResourcesTooltip))]
+    [NotifyPropertyChangedFor(nameof(CpuMeasuredText))]
+    [NotifyPropertyChangedFor(nameof(MemoryMeasuredText))]
+    [NotifyPropertyChangedFor(nameof(MemoryResourceText))]
     private long? _memoryBytes;
 
     /// <summary>Requests/limits from the pod spec — the context that makes a usage number mean something.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ResourcesTooltip))]
+    [NotifyPropertyChangedFor(nameof(CpuResourceText))]
     private long? _cpuRequestNanocores;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ResourcesTooltip))]
+    [NotifyPropertyChangedFor(nameof(CpuResourceText))]
     private long? _cpuLimitNanocores;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ResourcesTooltip))]
+    [NotifyPropertyChangedFor(nameof(MemoryResourceText))]
     private long? _memoryRequestBytes;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ResourcesTooltip))]
+    [NotifyPropertyChangedFor(nameof(MemoryResourceText))]
     private long? _memoryLimitBytes;
 
     /// <summary>
@@ -127,9 +137,11 @@ public sealed partial class ContainerViewModel(string name, string image) : Obse
 
     /// <summary>Peak over the window — the number a usage graph is actually read for.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CpuMeasuredText))]
     private string _peakCpuText = "—";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MemoryMeasuredText))]
     private string _peakMemoryText = "—";
 
     public bool HasUsage => CpuNanocores is not null || MemoryBytes is not null;
@@ -137,6 +149,67 @@ public sealed partial class ContainerViewModel(string name, string image) : Obse
     /// <summary>Compact one-liner under the container name: "12m · 45 MiB".</summary>
     public string UsageSummary =>
         HasUsage ? $"{Quantity.FormatCpu(CpuNanocores)} · {Quantity.FormatMemory(MemoryBytes)}" : "";
+
+    /// <summary>
+    /// The measured half of one Usage-tab column: "CPU  12m · peak 18m". Until a poll
+    /// lands — or on a cluster with no metrics-server at all — it is just the label,
+    /// because the requests/limits line underneath is still worth reading and a column
+    /// with no heading would not say which measure it belongs to.
+    /// </summary>
+    public string CpuMeasuredText => Measured("CPU", Quantity.FormatCpu(CpuNanocores), PeakCpuText);
+
+    public string MemoryMeasuredText => Measured("MEM", Quantity.FormatMemory(MemoryBytes), PeakMemoryText);
+
+    /// <summary>
+    /// The declared half: "request 250m · limit 500m · 4% of limit". Read off the pod
+    /// spec, so it says something on a cluster that serves no metrics at all — which is
+    /// the whole reason it is a line of text rather than a chart annotation.
+    /// </summary>
+    public string CpuResourceText => RequestLimit(
+        CpuRequestNanocores is null ? null : Quantity.FormatCpu(CpuRequestNanocores),
+        CpuLimitNanocores is null ? null : Quantity.FormatCpu(CpuLimitNanocores),
+        Quantity.Percent(CpuNanocores, CpuLimitNanocores));
+
+    public string MemoryResourceText => RequestLimit(
+        MemoryRequestBytes is null ? null : Quantity.FormatMemory(MemoryRequestBytes),
+        MemoryLimitBytes is null ? null : Quantity.FormatMemory(MemoryLimitBytes),
+        Quantity.Percent(MemoryBytes, MemoryLimitBytes));
+
+    private static string Measured(string label, string now, string peak) =>
+        now == "—" ? label : $"{label}  {now} · peak {peak}";
+
+    /// <summary>
+    /// Requests and limits are independently optional in Kubernetes, and a container
+    /// that declares neither is the commonest case of all (BestEffort). So each half
+    /// says so in words — "no request", "no limit" — rather than rendering a blank or a
+    /// zero, which would read as a request of nothing rather than as no request at all
+    /// (UI rule 9). The percentage is only offered where there is a limit to be a
+    /// percentage of, and a usage reading to compare against it.
+    /// </summary>
+    private static string RequestLimit(string? request, string? limit, double? percentOfLimit)
+    {
+        if (request is null && limit is null)
+        {
+            return "no request or limit set";
+        }
+
+        var text = $"{(request is null ? "no request" : $"request {request}")}"
+            + $" · {(limit is null ? "no limit" : $"limit {limit}")}";
+
+        return percentOfLimit is { } percent ? $"{text} · {FormatPercent(percent)} of limit" : text;
+    }
+
+    /// <summary>
+    /// A container using a fraction of a generous limit is the ordinary case, and
+    /// rounding it to "0%" reads as "measured nothing" rather than as "barely touching
+    /// it" — so anything above zero and under one percent says so instead.
+    /// </summary>
+    private static string FormatPercent(double percent) => percent switch
+    {
+        > 0 and < 1 => "<1%",
+        < 10 => $"{percent:0.#}%",
+        _ => $"{percent:0}%",
+    };
 
     /// <summary>Usage against requests/limits, for the container row's tooltip.</summary>
     public string ResourcesTooltip =>

@@ -186,6 +186,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
 
     /// <summary>True once at least one poll landed — the Usage tab shows a "collecting" state until then (UI rule 8).</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsCollectingUsage))]
     private bool _hasUsageSamples;
 
     /// <summary>
@@ -194,7 +195,30 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     /// identical otherwise and lead to very different next steps.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsCollectingUsage))]
     private bool _isMetricsUnavailable;
+
+    /// <summary>
+    /// Metrics are served here but nothing has arrived yet. The two "no charts" states
+    /// used to be mutually exclusive full-tab panels; they are notices above the
+    /// requests/limits section now, so each one needs to know the other is not showing.
+    /// </summary>
+    public bool IsCollectingUsage => !HasUsageSamples && !IsMetricsUnavailable;
+
+    /// <summary>
+    /// The tab strip's caption says how far back the charts go, and its "collecting…"
+    /// opening value contradicts the notice on a cluster that serves no metrics at all —
+    /// nothing is being collected there and nothing ever will be. Work in the generated
+    /// changed-partial rather than in a command, as UI rule 8b requires of anything a
+    /// control could also toggle.
+    /// </summary>
+    partial void OnIsMetricsUnavailableChanged(bool value)
+    {
+        if (value)
+        {
+            UsageWindowCaption = "";
+        }
+    }
 
     public string UsagePollHint =>
         $"metrics.k8s.io has no watch endpoint, so usage is polled every {MetricsPollInterval.TotalSeconds:0}s. "

@@ -360,28 +360,42 @@
         <!-- The "USAGE · last 30 min" header is on the tab strip's row: the tab is
              already labelled Usage, so only the window was ever news. -->
         <Grid>
-          <!-- No metrics API at all: say so, instead of a chart area that looks stuck loading. -->
-          <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8" MaxWidth="380"
-                      IsVisible="{Binding IsMetricsUnavailable}">
-            <PathIcon Data="{StaticResource AlertCircleIconGeometry}" Width="24" Height="24" Opacity="0.3" HorizontalAlignment="Center" />
-            <TextBlock Text="No usage data on this cluster" FontWeight="SemiBold" FontSize="13" HorizontalAlignment="Center" Opacity="0.75" />
-            <TextBlock Text="metrics.k8s.io isn't served here — install metrics-server to see CPU and memory."
-                       FontSize="12" Opacity="0.55" TextWrapping="Wrap" TextAlignment="Center" />
-          </StackPanel>
-
-          <!-- Metrics exist but the first poll hasn't landed yet. -->
-          <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8" MaxWidth="380"
-                      IsVisible="{Binding !HasUsageSamples}">
-            <TextBlock Text="Collecting samples…" FontWeight="SemiBold" FontSize="13" HorizontalAlignment="Center" Opacity="0.7"
-                       IsVisible="{Binding !IsMetricsUnavailable}" />
-            <TextBlock Text="{Binding UsagePollHint}" FontSize="11.5" Opacity="0.5" TextWrapping="Wrap" TextAlignment="Center"
-                       IsVisible="{Binding !IsMetricsUnavailable}" />
-          </StackPanel>
-
-          <ScrollViewer IsVisible="{Binding HasUsageSamples}">
+          <!-- The two "no charts" states are notices above the content now, not panels
+               instead of it: requests and limits come from the pod spec, so they are
+               readable on a cluster that serves no metrics at all, and a full-tab
+               "nothing to show here" would have hidden the numbers this tab is most
+               often opened for. State in an InfoBar, UI rule 11. -->
+          <ScrollViewer>
             <StackPanel Spacing="8">
-              <!-- Whole-pod totals, full width: the two numbers an on-call read starts from. -->
-              <Border Classes="card" Padding="12" ToolTip.Tip="{Binding PodCpuTooltip}">
+              <!-- No metrics API at all. -->
+              <Border Classes="infoBar" IsVisible="{Binding IsMetricsUnavailable}">
+                <DockPanel>
+                  <PathIcon DockPanel.Dock="Left" Data="{StaticResource AlertCircleIconGeometry}" Width="12" Height="12"
+                            VerticalAlignment="Top" Margin="0,2,8,0" />
+                  <StackPanel Spacing="2">
+                    <TextBlock Text="No usage data on this cluster" FontWeight="SemiBold" FontSize="12" />
+                    <TextBlock Text="metrics.k8s.io isn't served here — install metrics-server to see CPU and memory. Requests and limits below are read from the pod spec."
+                               FontSize="11.5" Opacity="0.7" TextWrapping="Wrap" />
+                  </StackPanel>
+                </DockPanel>
+              </Border>
+
+              <!-- Metrics exist but the first poll hasn't landed yet. -->
+              <Border Classes="infoBar" IsVisible="{Binding IsCollectingUsage}">
+                <DockPanel>
+                  <PathIcon DockPanel.Dock="Left" Data="{StaticResource AlertCircleIconGeometry}" Width="12" Height="12"
+                            VerticalAlignment="Top" Margin="0,2,8,0" />
+                  <StackPanel Spacing="2">
+                    <TextBlock Text="Collecting samples…" FontWeight="SemiBold" FontSize="12" />
+                    <TextBlock Text="{Binding UsagePollHint}" FontSize="11.5" Opacity="0.7" TextWrapping="Wrap" />
+                  </StackPanel>
+                </DockPanel>
+              </Border>
+
+              <!-- Whole-pod totals, full width: the two numbers an on-call read starts from.
+                   Measured, so they are only here once a poll has landed. -->
+              <Border Classes="card" Padding="12" ToolTip.Tip="{Binding PodCpuTooltip}"
+                      IsVisible="{Binding HasUsageSamples}">
                 <Grid RowDefinitions="Auto,Auto">
                   <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
                     <TextBlock Grid.Column="0" Text="CPU — pod total" FontSize="12" FontWeight="SemiBold" Opacity="0.8" />
@@ -399,7 +413,8 @@
                 </Grid>
               </Border>
 
-              <Border Classes="card" Padding="12" ToolTip.Tip="{Binding PodMemoryTooltip}">
+              <Border Classes="card" Padding="12" ToolTip.Tip="{Binding PodMemoryTooltip}"
+                      IsVisible="{Binding HasUsageSamples}">
                 <Grid RowDefinitions="Auto,Auto">
                   <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
                     <TextBlock Grid.Column="0" Text="Memory — pod total" FontSize="12" FontWeight="SemiBold" Opacity="0.8" />
@@ -428,30 +443,34 @@
                       <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,*">
                         <TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Text="{Binding Name}"
                                    FontSize="12" FontWeight="SemiBold" Opacity="0.8" Margin="0,0,0,6"
-                                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ResourcesTooltip}" />
+                                   TextTrimming="CharacterEllipsis" />
+                        <!-- Measured line, declared line, chart. The declared line is not
+                             hidden with the chart: what a container asks for and what it is
+                             capped at come from the pod spec, and are the numbers people
+                             open this tab for even on a cluster with no metrics-server. -->
                         <StackPanel Grid.Row="1" Grid.Column="0" Spacing="4" Margin="0,0,6,0"
                                     ToolTip.Tip="{Binding CpuChartTooltip}">
-                          <TextBlock FontSize="11" Opacity="0.6" FontFamily="Cascadia Mono,Consolas,monospace">
-                            <Run Text="CPU " />
-                            <Run Text="{Binding PeakCpuText}" />
-                            <Run Text=" peak" />
-                          </TextBlock>
+                          <TextBlock Text="{Binding CpuMeasuredText}" FontSize="11" Opacity="0.6"
+                                     FontFamily="Cascadia Mono,Consolas,monospace" TextTrimming="CharacterEllipsis" />
+                          <TextBlock Text="{Binding CpuResourceText}" FontSize="11" Opacity="0.75" TextWrapping="Wrap"
+                                     FontFamily="Cascadia Mono,Consolas,monospace" />
                           <controls:Sparkline Height="40" Values="{Binding CpuSeries}"
                                               Stroke="{StaticResource UsageCpuStrokeBrush}"
                                               AreaFill="{StaticResource UsageCpuAreaBrush}"
-                                              BaselineBrush="{StaticResource ChartBaselineBrush}" />
+                                              BaselineBrush="{StaticResource ChartBaselineBrush}"
+                                              IsVisible="{Binding HasUsage}" />
                         </StackPanel>
                         <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4" Margin="6,0,0,0"
                                     ToolTip.Tip="{Binding MemoryChartTooltip}">
-                          <TextBlock FontSize="11" Opacity="0.6" FontFamily="Cascadia Mono,Consolas,monospace">
-                            <Run Text="MEM " />
-                            <Run Text="{Binding PeakMemoryText}" />
-                            <Run Text=" peak" />
-                          </TextBlock>
+                          <TextBlock Text="{Binding MemoryMeasuredText}" FontSize="11" Opacity="0.6"
+                                     FontFamily="Cascadia Mono,Consolas,monospace" TextTrimming="CharacterEllipsis" />
+                          <TextBlock Text="{Binding MemoryResourceText}" FontSize="11" Opacity="0.75" TextWrapping="Wrap"
+                                     FontFamily="Cascadia Mono,Consolas,monospace" />
                           <controls:Sparkline Height="40" Values="{Binding MemorySeries}"
                                               Stroke="{StaticResource UsageMemoryStrokeBrush}"
                                               AreaFill="{StaticResource UsageMemoryAreaBrush}"
-                                              BaselineBrush="{StaticResource ChartBaselineBrush}" />
+                                              BaselineBrush="{StaticResource ChartBaselineBrush}"
+                                              IsVisible="{Binding HasUsage}" />
                         </StackPanel>
                       </Grid>
                     </Border>
