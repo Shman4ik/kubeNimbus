@@ -800,10 +800,10 @@ internal static class ClusterTabScenarios
         return tab;
     }
 
-    public static ClusterTabViewModel PodDetail(bool seedUsage = true)
+    public static ClusterTabViewModel PodDetail(bool seedUsage = true, string namePrefix = "payment-service-report-generator")
     {
         var tab = BaseTab();
-        var row = tab.Rows.First(r => r.Name.StartsWith("payment-service-report-generator", StringComparison.Ordinal));
+        var row = tab.Rows.First(r => r.Name.StartsWith(namePrefix, StringComparison.Ordinal));
         tab.SelectedRow = row;
 
         var client = FixtureData.CreateOfflineClient();
@@ -900,6 +900,27 @@ internal static class ClusterTabScenarios
     public static ClusterTabViewModel PodDetailUsage()
     {
         var tab = Advanced(PodDetail());
+        // Maximized: the per-container requests/limits are the point of this tab and sat
+        // below the fold of a ~300px dock, which is exactly how they stayed unread.
+        tab.IsInspectorMaximized = true;
+        if (tab.SelectedInspectorTab is PodDetailTabViewModel detail)
+        {
+            detail.SelectedDetailTabIndex = 3;
+        }
+
+        return tab;
+    }
+
+    /// <summary>
+    /// A container that declares neither a request nor a limit, on a pod that has never
+    /// run (the dataset's unschedulable fraud-detector, so no metrics of its own). Both
+    /// halves of the declared line therefore have to say so in words — the state UI rule 9
+    /// is about, and the commonest one there is on a real cluster.
+    /// </summary>
+    public static ClusterTabViewModel PodDetailUsageUnset()
+    {
+        var tab = Advanced(PodDetail(seedUsage: false, namePrefix: "fraud-detector"));
+        tab.IsInspectorMaximized = true;
         if (tab.SelectedInspectorTab is PodDetailTabViewModel detail)
         {
             detail.SelectedDetailTabIndex = 3;
@@ -915,6 +936,7 @@ internal static class ClusterTabScenarios
     public static ClusterTabViewModel PodDetailUsageUnavailable()
     {
         var tab = Advanced(PodDetail(seedUsage: false));
+        tab.IsInspectorMaximized = true;
         if (tab.SelectedInspectorTab is PodDetailTabViewModel detail)
         {
             detail.SelectedDetailTabIndex = 3;

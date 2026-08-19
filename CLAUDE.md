@@ -746,9 +746,74 @@ the same states (`scripts/manifests/10-shop.yaml`: a `PriorityClass`, a node sel
 still schedules everywhere, a toleration, and httpGet/tcpSocket/exec probes across
 shop-web's two containers) because nothing in it produced any of them before.
 
-**FEAT-44 is a separate row and is deliberately not here**: container requests/limits are
-already computed and are hidden in a hover tooltip on the Usage tab, which is a different
-gap with its own (older, louder) evidence.
+**Container requests and limits are the Usage tab's business, not this tab's** — see the
+next section. They were already computed when this tab shipped and were reachable only
+by hovering a chip, which is a different gap with its own (older, louder) evidence.
+
+## Requests and limits are text on the Usage tab
+
+`ContainerViewModel.CpuResourceText` / `MemoryResourceText` print what each container asks
+for and what it is capped at, under the measured line and above the sparkline, on pod
+detail's Usage tab. The numbers themselves are not new: `ReadContainerSpecs` has parsed
+`spec.containers[].resources` into the container row since the metrics pass, and the only
+place they were rendered was a hover tooltip — which is exactly what lens#4154 has been
+asking for since 2021 and what FreeLens shipped a fix for after Lens left it broken. So
+this is a rendering change on numbers the app already had.
+
+Six things are load-bearing.
+
+1. **A missing request and a missing limit are said in words, not left blank.** They are
+   independently optional in Kubernetes and a container declaring neither is the
+   commonest shape there is, so each half prints "no request" / "no limit" and the empty
+   pair collapses to one sentence, `no request or limit set`. A blank cell there reads as
+   a number this pane failed to fetch, and a zero reads as a request of nothing, which is
+   a different and much worse claim (UI rule 9). `ContainerResourceTextTests` pins all
+   four combinations, and the blank-instead-of-words break was written and confirmed red
+   before they were called done.
+2. **The percentage is offered only where there is a limit and a reading.** `Quantity
+   .Percent` already returns null for a zero or absent denominator; what is added here is
+   that anything above zero and under one percent prints `<1%` rather than rounding to
+   `0% of limit`, which reads as "measured nothing" for the ordinary case of a container
+   idling under a generous cap.
+3. **The declared line does not follow the metrics gate, and that is the whole point.**
+   Requests and limits come from the pod spec, so they are readable on a cluster that
+   serves no `metrics.k8s.io` at all — the case where they are worth *most*, because
+   nothing else on the tab has anything to say. The two "no charts" states are therefore
+   `Border.infoBar` notices stacked above the content (UI rule 11) rather than full-tab
+   panels shown *instead* of it, which is what they were: the old markup would have hidden
+   the numbers behind exactly the condition that makes them the only thing left. Gating
+   them on a measurement was the second break written and confirmed red.
+4. **The tab itself stays gated on the Advanced view, and that is deliberate rather than
+   an oversight.** The honest reading of the item is that requests and limits are not
+   metrics data, so ungating them from *metrics* is required; ungating the whole Usage tab
+   from the Advanced switch is a different change to a different rule — the switch's job
+   is "hide what you did not come here for", `SelectedDetailTabIndex`'s values are
+   load-bearing, and moving these numbers onto Overview instead would be redesigning the
+   item rather than implementing it. If a later pass concludes requests/limits belong on
+   an always-visible surface, Overview's placement section is where that argument goes.
+5. **`IsCollectingUsage` exists because the two notices are now stacked, not exclusive.**
+   Each has to know the other is not showing. And a cluster with no metrics API clears
+   `UsageWindowCaption`: the strip's "collecting…" beside a notice saying nothing is ever
+   going to be collected is a contradiction, and it is cleared from the generated
+   `OnIsMetricsUnavailableChanged` partial rather than from a command (UI rule 8b).
+6. **The chip's tooltip stays; the Usage card's copy of it goes.** Hovering a container
+   chip still summarises usage against requests and limits from any tab, which costs
+   nothing and is the quick-peek. The identical tooltip on the Usage card's *title* is
+   gone — the card body now states those numbers as text two lines below, and a tooltip
+   repeating the text under it is noise.
+
+**The demo dataset carries both sides** (demo rule 4): the report-generator pod's `app`
+container declares a CPU and memory limit, so the percentage renders, and its
+`envoy-sidecar` declares requests only, which is the commonest real shape. The
+unschedulable `fraud-detector` was already declaring no resources at all and is the third
+state, rendered by `cluster-tab-pod-detail-usage-unset`. The sandbox needed no change:
+`shop-web`'s two containers are already the request+limit / request-only pair, and
+`40-broken.yaml`'s `bad-image` and `unschedulable` pods declare neither.
+
+The three usage scenarios render **maximized** now. The per-container section sits below
+two full-width pod-total charts, so at the dock's default ~300px it was off screen — which
+is a small demonstration of the item's own complaint: numbers that exist and cannot be
+seen.
 
 ## ConfigMaps are shown, Secrets are masked
 
@@ -3958,3 +4023,67 @@ its readiness probe (point it at a path nginx does not serve) and watch `Ready` 
 confirm the toleration list reads against it; and check a pod carrying a `DisruptionTarget`
 condition (start a drain from the node pane and open a pod mid-eviction), which is the one
 polarity in rule 4 that no fixture in this repo produces.
+
+**Requests/limits pass (FEAT-44):** container requests and limits are visible text on pod
+detail's Usage tab now, beside the current and peak readings and with the current usage as
+a percentage of the limit — see "Requests and limits are text on the Usage tab" above for
+the six rules, in particular the one that keeps the declared numbers out of the metrics
+gate. This is a rendering change on numbers the app already parsed: `ReadContainerSpecs`
+has been reading `spec.containers[].resources` since the metrics pass, and the only place
+the result was rendered was a hover tooltip on the container chip. New:
+`ContainerViewModel.CpuMeasuredText` / `MemoryMeasuredText` / `CpuResourceText` /
+`MemoryResourceText`, `PodDetailTabViewModel.IsCollectingUsage` and its
+`OnIsMetricsUnavailableChanged` partial, a restructured Usage tab (two `infoBar` notices
+above the content rather than two panels instead of it), limits on the demo dataset's
+report-generator `app` container, one new screenshot scenario
+(`cluster-tab-pod-detail-usage-unset`), and 8 `ContainerResourceTextTests` in
+`tests/KubeNimbus.App.Tests`. No new gesture, no new always-visible control, so
+`docs/keyboard-shortcuts.md` is unchanged.
+
+**Two breaks were written and confirmed red before the tests were called done**, the usual
+discipline. Rendering a missing request or limit as a blank rather than in words — the UI
+rule 9 failure this whole item is about in miniature — turned **2 of 91** red in the App
+suite (`Expected "request 50m · no limit" but received "request 50m · limit "`). Gating the
+declared line on `HasUsage`, i.e. making requests and limits follow the metrics gate after
+all, turned **1 of 91** red. Both were reverted and the suite re-run.
+
+**A third defect was found by looking at the rendered tab rather than by any test**: the
+tab strip's window caption still read "collecting…" beside a notice saying this cluster
+serves no metrics at all and never will. It is cleared from the changed-partial now.
+
+**Verified this session**: `dotnet build KubeNimbus.slnx` with **0 warnings**; **335/335
+Core TUnit** and **91/91 App TUnit**, 0 failed, 0 skipped, both via `--project` (no sandbox
+here, so the Core count is the unit-only subset — the cluster-gated tests return early);
+the two break/revert runs above; all **69** scenarios × both themes rendered (138 PNGs);
+the linux-x64 NativeAOT publish with no new warnings beyond the known DataGrid
+IL2104/IL3053; and `--smoke-test` on that published binary under Xvfb (`SMOKE-OK main
+window rendered at 1280x800 after 925 ms`, exit 0).
+
+**The demo-dataset edit was measured, not argued.** The harness was rendered from a
+worktree at the parent commit and diffed byte for byte: of the 136 pre-existing PNGs,
+**four** differ and all four are the two usage scenarios in both themes (the new text, plus
+the maximized dock). Three more flagged and are the known timer-driven flap, not this
+change: `cluster-tab-demo-pod-detail.light` and `cluster-tab-workload-logs.light` were each
+confirmed to differ between two renders of the *baseline itself*, and the light log shot
+landed byte-identical to the baseline on a re-run; `cluster-tab-workload-logs.dark` differs
+on every run but only in the interleave and scroll position of its timer-driven canned
+streams — same three pods, same "24 lines", same content. That is ENG-10. The generated
+`design/screenshots/*.png` were deliberately not regenerated, for the reason the CRD, node
+and Overview passes all recorded: Age is a function of the real clock, so those files drift
+by themselves and regenerating them commits a date rather than a change.
+
+**Not verified, and the live half is all of it.** No cluster came up here, so no pod whose
+requests and limits this pane has rendered came from a real API server — that a real
+cluster's usage against a real limit lands where this arithmetic says, that a LimitRange's
+defaulted requests show up here as the object's own (they will: they are written into the
+spec on admission, but that is reasoning, not an observation), and that the percentage is
+worth reading on a container actually approaching its cap are all untested against a
+server. Nothing has been driven by hand in the running app either: the tab, its scroll at
+the dock's default height and the container strip are verified by unit test and in the
+headless harness, not by a mouse — and the default-height case is the one worth looking at,
+since the per-container section sits below two full-width charts and the screenshots are
+maximized precisely because of that. First things to do on a machine with a sandbox: open
+`demo-shop/shop-web` and compare the two containers against `kubectl describe pod` and
+`kubectl top pod --containers`; delete metrics-server and confirm the requests/limits stay
+readable under the notice; and check a BestEffort pod from `40-broken.yaml`, which is the
+"no request or limit set" line against a real object.

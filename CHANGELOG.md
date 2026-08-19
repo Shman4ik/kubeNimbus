@@ -14,6 +14,16 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Added
 
+- **Container requests and limits are readable on pod detail's Usage tab.** Each
+  container's CPU and memory now print what it asks for and what it is capped at,
+  underneath the current and peak readings, together with the current usage as a
+  percentage of the limit. They used to be reachable only by hovering a container
+  chip. A container that declares no request, no limit, or neither says so in
+  words rather than showing a blank — and because these numbers come from the pod
+  spec rather than from metrics, they stay readable on a cluster with no
+  metrics-server installed, where the notice explaining that now sits above them
+  instead of replacing the whole tab.
+
 - **Pod detail has an Overview tab.** The pod's conditions, its tolerations, its
   node selector, its QoS class and priority class, and the selected container's
   liveness, readiness and startup probes — each as its own section, rather than
