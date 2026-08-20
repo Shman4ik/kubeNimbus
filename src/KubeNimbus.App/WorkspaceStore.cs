@@ -29,18 +29,12 @@ public sealed record WorkspaceSettings(
     /// the user has corrected (or supplied) the guess. Always wins over the heuristic.</summary>
     Dictionary<string, string>? EnvironmentOverrides = null,
     /// <summary>
-    /// The single global "advanced view" switch: off (the default) hides the
-    /// controls that only a fraction of sessions ever need — usage columns, the
-    /// fleet toggle, the log toolbar's wrap/copy/download, exec's Send, YAML
-    /// force-apply, the sidebar's count badges and the Helm/RBAC palette entries.
-    /// One boolean rather than a preferences page of them, because the complaint
-    /// it answers ("too much stuff for every Kubernetes type") is about the whole
-    /// surface, not about any one control.
-    ///
-    /// Nullable with a null default like everything else added after
-    /// <c>(Theme, Tabs)</c>: a workspace.json written before this shipped simply
-    /// has no such property, and <see cref="WorkspaceStore.Normalize"/> settles it
-    /// on <c>false</c> rather than letting the JSON layer decide.
+    /// <b>Legacy.</b> The advanced-view switch used to live here before it moved to
+    /// <c>settings.json</c>, where it is a preference rather than a description of the
+    /// open session. Nothing reads this any more — not even the migration, since the
+    /// switch it recorded gated a different set of controls (see
+    /// <c>AppSettings.IsAdvancedView</c>). It is kept so a downgrade still finds the
+    /// property it expects; do not start reading it again.
     /// </summary>
     bool? IsAdvancedView = null,
     /// <summary>
@@ -122,8 +116,7 @@ public static class WorkspaceStore
         RecentContexts = settings.RecentContexts ?? [],
         EnvironmentOverrides = settings.EnvironmentOverrides ?? [],
 
-        // Off is the default and the whole point: an existing workspace must not
-        // silently opt into the busy layout just because it predates the switch.
+        // Legacy field, kept only so a downgrade finds it — see the record above.
         IsAdvancedView = settings.IsAdvancedView ?? false,
         KubeconfigPaths = settings.KubeconfigPaths ?? [],
         GridLayouts = settings.GridLayouts ?? [],

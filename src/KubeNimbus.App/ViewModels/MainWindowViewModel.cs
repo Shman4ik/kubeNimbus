@@ -182,6 +182,32 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private void SetSidebarVisible(bool value) => IsSidebarVisible = value;
 
     /// <summary>
+    /// The sidebar's width in DIPs, as the reader last dragged it. Shell-owned and
+    /// mirrored onto every tab, exactly like <see cref="IsSidebarVisible"/>: the
+    /// splitter lives inside one <c>ClusterTabView</c>, but a drag on one cluster's
+    /// sidebar has to move every other cluster's too — a width that reverted on each
+    /// tab switch would read as the drag not having stuck.
+    ///
+    /// <para>
+    /// Written by the view when a drag ends, not while it is in flight: persisting
+    /// every intermediate pixel would write the settings file dozens of times per
+    /// gesture.
+    /// </para>
+    /// </summary>
+    [ObservableProperty]
+    private double _sidebarWidth = AppSettings.DefaultSidebarWidth;
+
+    partial void OnSidebarWidthChanged(double value)
+    {
+        App.Update(s => s with { SidebarWidth = value });
+
+        foreach (var tab in Tabs)
+        {
+            tab.SidebarWidth = value;
+        }
+    }
+
+    /// <summary>
     /// Opens the preferences page. One instance, because every control on it applies
     /// immediately and a second copy would be two views of the same live state racing
     /// each other's writes — which the single overlay gives for free.
@@ -277,6 +303,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 tab.IsAdvancedView = IsAdvancedView;
                 tab.AdvancedViewChanged = value => IsAdvancedView = value;
                 tab.IsSidebarVisible = IsSidebarVisible;
+
+                // Value first, then the write-back, so stamping never round-trips
+                // through the shell — exactly as the advanced view above does it.
+                tab.SidebarWidth = SidebarWidth;
+                tab.SidebarWidthChanged = value => SidebarWidth = value;
             }
         };
 
@@ -312,6 +343,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 #pragma warning disable MVVMTK0034
         _isAdvancedView = preferences.IsAdvancedView;
         _isSidebarVisible = preferences.IsSidebarVisible;
+        _sidebarWidth = preferences.SidebarWidth;
 #pragma warning restore MVVMTK0034
 
         _environmentOverrides.Clear();
@@ -1049,7 +1081,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         // (SelfSubjectRulesReview, the RBAC object scan, SubjectAccessReview) with no
         // honest offline stand-in, and a palette entry that matches a search and then
         // refuses to run is worse than no match.
-        if (IsAdvancedView && SelectedTab is { IsConnected: true, IsDemo: false } connected)
+        if (SelectedTab is { IsConnected: true, IsDemo: false } connected)
         {
             yield return new PaletteItem(
                 "Access review — my permissions",
@@ -1072,18 +1104,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         if (SelectedTab is { } current)
         {
+            // Every section, including the ones the advanced view hides from the
+            // sidebar. The palette is a search: somebody typing "CustomResourceDefinition"
+            // has said which kind they want, and a match that then refuses to appear is
+            // the failure this app's own palette rules name. Same reasoning as the
+            // sidebar's own filter reaching into a hidden section.
             foreach (var section in current.SidebarSections)
             {
-                // Helm reaches the palette through the sidebar catalog like every
-                // other kind, so this is where its entry is gated. The sidebar
-                // section itself stays — it only exists on clusters that actually
-                // store releases, which is already the "is this worth showing?"
-                // test UI rule 1 asks for.
-                if (!IsAdvancedView && section.Title == SidebarGrouping.HelmSection)
-                {
-                    continue;
-                }
-
                 foreach (var kind in section.Kinds)
                 {
                     // Same-named kinds from different API groups carry their group

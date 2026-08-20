@@ -1,7 +1,13 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="KubeNimbus.App.App"
+             Name="kubeNimbus"
              RequestedThemeVariant="Default">
+  <!-- Name is what macOS titles the application menu with, and what its About, Hide
+       and Quit items are named after. Without it Avalonia supplies its own default and
+       the app introduces itself to every Mac user as "Avalonia". It is the product name
+       rather than the assembly name for the same reason <AssemblyName> is kubeNimbus:
+       this is the string a user sees. -->
 
   <Application.Styles>
     <FluentTheme />

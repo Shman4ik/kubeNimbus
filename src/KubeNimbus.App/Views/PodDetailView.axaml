@@ -97,7 +97,7 @@
         <ListBoxItem Content="Logs" />
         <ListBoxItem Content="Env" />
         <ListBoxItem Content="Events" />
-        <ListBoxItem Content="Usage" IsVisible="{Binding IsAdvancedView}" />
+        <ListBoxItem Content="Usage" />
         <!-- Appended after Usage for the same reason Usage was appended after Events:
              SelectedDetailTabIndex's existing values (Logs=0, Env=1, Events=2, Usage=3)
              are depended on by ClusterTabViewModel.OpenLogs and by the screenshot
@@ -137,15 +137,16 @@
             <PathIcon Data="{StaticResource ClockOutlineIconGeometry}" Width="12" Height="12" />
           </ToggleButton>
 
-          <!-- Advanced-view only: wrap, copy and download are all useful and none of
-               them is what you came here for. -->
-          <ToggleButton Classes="chip" Padding="7,3" FontSize="11" IsVisible="{Binding IsAdvancedView}"
+          <!-- Always present. These used to ride the advanced view, which meant the
+               one gesture for getting a log off the screen and into a bug report was
+               hidden by a switch about sidebar clutter. -->
+          <ToggleButton Classes="chip" Padding="7,3" FontSize="11"
                         IsChecked="{Binding WrapLogLines}" ToolTip.Tip="Wrap long lines" Content="Wrap" />
-          <Button Classes="toolbar" Command="{Binding CopyLogsCommand}" IsVisible="{Binding IsAdvancedView}"
+          <Button Classes="toolbar" Command="{Binding CopyLogsCommand}"
                   ToolTip.Tip="Copy the visible lines, with timestamps" Padding="6">
             <PathIcon Data="{StaticResource ContentCopyIconGeometry}" Width="13" Height="13" />
           </Button>
-          <Button Classes="toolbar" Command="{Binding DownloadLogsCommand}" IsVisible="{Binding IsAdvancedView}"
+          <Button Classes="toolbar" Command="{Binding DownloadLogsCommand}"
                   ToolTip.Tip="Save the visible lines to a file, with timestamps" Padding="6">
             <PathIcon Data="{StaticResource DownloadIconGeometry}" Width="13" Height="13" />
           </Button>
@@ -356,7 +357,7 @@
       <!-- Usage over time. Appended after Events so the existing tab indices
            (Logs=0, Env=1, Events=2) stay stable for the screenshot harness and
            any future deep link. -->
-      <TabItem Header="Usage" IsVisible="{Binding IsAdvancedView}">
+      <TabItem Header="Usage">
         <!-- The "USAGE · last 30 min" header is on the tab strip's row: the tab is
              already labelled Usage, so only the window was ever news. -->
         <Grid>

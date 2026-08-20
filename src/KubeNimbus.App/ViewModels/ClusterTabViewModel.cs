@@ -4,6 +4,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KubeNimbus.Core;
+using KubeNimbus.Core.Settings;
 
 namespace KubeNimbus.App.ViewModels;
 
@@ -297,7 +298,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// <summary>
     /// The comparer for the current sort, or null when the list is in arrival order.
     /// Rebuilt per sort pass rather than cached: it closes over the printer columns,
-    /// which the advanced-view switch changes underneath it.
+    /// which arrive asynchronously the first time a CRD kind is opened.
     /// </summary>
     private ResourceRowComparer? RowComparer =>
         SortColumnId is { } columnId && ResourceRowComparer.CanSort(columnId, VisiblePrinterColumns)
@@ -553,24 +554,32 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     /// <summary>
     /// The one global "advanced view" switch, mirrored onto every tab by
-    /// <see cref="MainWindowViewModel"/> (which owns it and persists it). Off — the
-    /// default — hides the controls only a fraction of sessions need; on restores
-    /// today's surface exactly. It is a *display* switch and nothing more: flipping
-    /// it must never restart a watch, refetch anything, or lose list/inspector
-    /// state, which is why every consumer below is a derived property rather than
-    /// something that re-runs <see cref="RestartWatch"/>.
+    /// <see cref="MainWindowViewModel"/> (which owns it and persists it). <b>On by
+    /// default.</b> It governs one thing: whether the sidebar shows the sections most
+    /// sessions never open — Cluster and CRDs, see
+    /// <see cref="SidebarGrouping.IsAdvancedSection"/>. Off gives a sidebar of the
+    /// kinds people actually browse; on shows the whole catalog.
     ///
+    /// <para>
+    /// It is a *display* switch and nothing more: flipping it must never restart a
+    /// watch, refetch anything, or lose list/inspector state. It is also confined to
+    /// the sidebar — it used to strip the list's usage columns, pod detail's Usage tab,
+    /// the fleet toggle, both log toolbars, YAML force-apply, the Helm and RBAC palette
+    /// entries and a CRD's own priority-1 columns, which answered a complaint about the
+    /// sidebar by hiding things all over the content area. Nothing new may be gated on
+    /// it outside the sidebar.
+    /// </para>
+    ///
+    /// <para>
     /// Bind this two-way and nothing else. A <c>ToggleButton</c> given BOTH an
     /// <c>IsChecked</c> binding and a toggling <c>Command</c> flips the property in
     /// <c>OnClick()</c> before the command runs, so an inverting command lands back
     /// on the original value — a guaranteed no-op, and a bug this repo has shipped
     /// before.
+    /// </para>
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(AreUsageColumnsVisible))]
-    [NotifyPropertyChangedFor(nameof(IsFleetToggleVisible))]
-    [NotifyPropertyChangedFor(nameof(VisiblePrinterColumns))]
-    private bool _isAdvancedView;
+    private bool _isAdvancedView = true;
 
     /// <summary>
     /// Write-back for the sidebar's advanced-view chip, set by
@@ -584,20 +593,13 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     partial void OnIsAdvancedViewChanged(bool value)
     {
+        // The sidebar is the whole of what this switch does now. It used to also strip
+        // the list's usage columns, pod detail's Usage tab, the fleet toggle, the log
+        // toolbars, YAML force-apply, the Helm and RBAC palette entries and a CRD's own
+        // priority-1 columns — i.e. it answered "too much in the sidebar" by hiding
+        // things all over the content area, where nothing was crowded and where what it
+        // hid was mostly what somebody had gone looking for.
         ApplySidebarChrome();
-
-        // The advanced view is this app's `kubectl get -o wide`: a CRD's own
-        // `priority: 1` columns join the list with it and leave with it. Re-evaluating
-        // is JSON reading over objects the rows already hold, so this stays a display
-        // switch — no fetch, no watch restart, no lost selection.
-        PushPrinterColumnsToRows();
-
-        // Tabs already open have to follow the switch live — the alternative is a
-        // force-apply button that stays on screen until the tab is reopened.
-        foreach (var tab in InspectorTabs)
-        {
-            tab.IsAdvancedView = value;
-        }
 
         AdvancedViewChanged?.Invoke(value);
     }
@@ -620,13 +622,42 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     private bool _isSidebarVisible = true;
 
     /// <summary>
-    /// The list's CPU/Memory columns (number + sparkline). Two conditions, not one:
-    /// the cluster has to actually serve metrics.k8s.io for the metered kind
-    /// (<see cref="AreMetricsVisible"/>), *and* the user has to have asked for the
-    /// busier layout. Read by <see cref="Views.ClusterTabView"/>'s code-behind —
-    /// a DataGridColumn is outside the visual tree and can't bind.
+    /// The shell's sidebar width, mirrored here for the same reason
+    /// <see cref="IsSidebarVisible"/> is. Read by <c>ClusterTabView</c>'s code-behind,
+    /// which owns the column: a GridSplitter writes <c>ColumnDefinition.Width</c>
+    /// directly and would fight a one-way binding, the same conflict
+    /// <c>ApplyDockState</c> has with the dock's rows.
     /// </summary>
-    public bool AreUsageColumnsVisible => AreMetricsVisible && IsAdvancedView;
+    [ObservableProperty]
+    private double _sidebarWidth = AppSettings.DefaultSidebarWidth;
+
+    /// <summary>
+    /// Write-back for a splitter drag, set by <see cref="MainWindowViewModel"/> as each
+    /// tab enters the strip — same shape as <see cref="AdvancedViewChanged"/> and for
+    /// the same reason. The width is global but the splitter is per tab, so the tab has
+    /// to tell the shell, which persists it and mirrors it onto the others.
+    ///
+    /// <para>
+    /// Without this the drag looks entirely correct and is lost: the column resizes,
+    /// this property follows it, and neither the other tabs nor <c>settings.json</c>
+    /// ever hear about it. That is what a headless drag probe reported, and it is not
+    /// something a screenshot can show.
+    /// </para>
+    /// </summary>
+    public Action<double>? SidebarWidthChanged { get; set; }
+
+    partial void OnSidebarWidthChanged(double value) => SidebarWidthChanged?.Invoke(value);
+
+    /// <summary>
+    /// The list's CPU/Memory columns (number + sparkline). One condition now: the
+    /// cluster has to actually serve metrics.k8s.io for the metered kind
+    /// (<see cref="AreMetricsVisible"/>). It used to also require the advanced view,
+    /// which meant the cluster's own usage numbers — the thing people open a resource
+    /// list to see — were off until a switch about sidebar clutter was found. Read by
+    /// <see cref="Views.ClusterTabView"/>'s code-behind: a DataGridColumn is outside
+    /// the visual tree and can't bind.
+    /// </summary>
+    public bool AreUsageColumnsVisible => AreMetricsVisible;
 
     // ------------------------------------------------- CRD printer columns
     //
@@ -651,14 +682,25 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     private IReadOnlyList<PrinterColumn> _printerColumns = [];
 
     /// <summary>
-    /// The columns the grid actually draws: priority-0 always, the CRD's own
-    /// <c>priority: 1</c> ones only in the advanced view (kubectl's <c>-o wide</c>
-    /// lever, wired to the switch this app already has), a declared Age folded into the
-    /// list's own live Age column, and the whole thing capped at the number of printer
-    /// slots the grid declares. See <see cref="PrinterColumns.Visible"/>.
+    /// The columns the grid actually draws: every column the CRD declares, priority-1
+    /// included, with a declared Age folded into the list's own live Age column and the
+    /// whole thing capped at the number of printer slots the grid declares. See
+    /// <see cref="PrinterColumns.Visible"/>.
+    ///
+    /// <para>
+    /// The priority-1 half used to ride the advanced view as this app's <c>-o wide</c>.
+    /// That switch is the sidebar's alone now, and a column a CRD's author declared is
+    /// exactly the content-area detail it may no longer withhold; a list wider than the
+    /// window is the reader's to re-cut, since every column is draggable (FEAT-66).
+    /// </para>
     /// </summary>
     public IReadOnlyList<PrinterColumn> VisiblePrinterColumns =>
-        KubeNimbus.Core.PrinterColumns.Visible(PrinterColumns, IsAdvancedView, ResourceRowViewModel.PrinterCellCount);
+        // Every declared column, priority included. The advanced view used to act as
+        // kubectl's `-o wide` here; it governs the sidebar only now, and a column the
+        // CRD's author declared is exactly the kind of content-area detail this switch
+        // is no longer allowed to withhold. A list wider than the window is the reader's
+        // to re-cut — every column is draggable (FEAT-66).
+        KubeNimbus.Core.PrinterColumns.Visible(PrinterColumns, includeLowPriority: true, ResourceRowViewModel.PrinterCellCount);
 
     partial void OnPrinterColumnsChanged(IReadOnlyList<PrinterColumn> value) => PushPrinterColumnsToRows();
 
@@ -783,14 +825,14 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     /// <summary>
     /// Hidden for Helm (releases aren't an API kind, so there's nothing to fan out)
-    /// and outside the advanced view — but never while aggregation is actually on.
-    /// Turning the advanced view off must not strand a tab in fleet mode with no
-    /// control to leave it: the exit stays on screen as long as there is something
-    /// to exit from, which also keeps the toggle a pure display switch (dropping
-    /// out of fleet mode would restart the watch).
+    /// and for the Argo dashboard. It used to also require the advanced view, with a
+    /// carve-out so that turning the switch off could not strand a tab in fleet mode
+    /// with no control to leave it; the switch is the sidebar's alone now, so both the
+    /// gate and the carve-out are gone and the toggle appears exactly when aggregating
+    /// would show something a single tab does not.
     /// </summary>
     public bool IsFleetToggleVisible =>
-        IsFleetViewAvailable && !IsHelmView && !IsArgoView && (IsAdvancedView || IsFleetView);
+        IsFleetViewAvailable && !IsHelmView && !IsArgoView;
 
     partial void OnIsHelmViewChanged(bool value)
     {
@@ -1118,11 +1160,23 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// sections changes (sidebar rebuild, Recent rebuild) and when the advanced view
     /// is toggled, because a freshly constructed section defaults to the plain layout.
     /// </summary>
-    private void ApplySidebarChrome()
+    internal void ApplySidebarChrome()
     {
+        // A filter is a deliberate search for one thing, so it reaches into the
+        // sections the advanced view hides: a query that matches a kind and then shows
+        // nothing is the "worse than no match" failure the palette's own rules name.
+        var filtering = (SidebarFilter ?? "").Trim().Length > 0;
+
         foreach (var section in SidebarSections)
         {
+            // The badge stays on the switch. "How much is hiding in here?" is a question
+            // about the catalog, so it belongs to the one control that governs the
+            // catalog — unlike everything else the switch used to hide, which was in the
+            // content area and had nothing to do with sidebar clutter.
             section.ShowKindCount = IsAdvancedView;
+
+            section.IsHiddenByBasicView =
+                !IsAdvancedView && !filtering && SidebarGrouping.IsAdvancedSection(section.Title);
 
             // Wired here rather than at construction because this runs after every
             // rebuild, and a section built during one must not record its state while
@@ -1288,6 +1342,12 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
             section.HasVisibleKinds = anyMatch;
             section.IsForceExpanded = filtering && anyMatch;
+
+            // The filter is an input to the advanced-view gate (see ApplySidebarChrome),
+            // so it is re-derived here rather than only on a rebuild — otherwise typing
+            // a query would leave the hidden sections hidden and the match unreachable.
+            section.IsHiddenByBasicView =
+                !IsAdvancedView && !filtering && SidebarGrouping.IsAdvancedSection(section.Title);
         }
     }
 
@@ -2766,12 +2826,6 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 _ = CloseInspectorTabAsync(previousPreview);
             }
         }
-
-        // The one funnel every inspector tab enters through, which is why the
-        // advanced-view mirror is stamped here rather than at each construction
-        // site: a tab kind added later inherits the gate instead of quietly
-        // shipping with it open.
-        tab.IsAdvancedView = IsAdvancedView;
 
         InspectorTabs.Add(tab);
         SelectedInspectorTab = tab;

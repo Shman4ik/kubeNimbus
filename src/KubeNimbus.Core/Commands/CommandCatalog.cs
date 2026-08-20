@@ -358,7 +358,7 @@ public static class CommandCatalog
         {
             Id = CommandId.ToggleAdvancedView,
             Title = "Advanced view",
-            CheatTitle = "Show or hide the advanced controls",
+            CheatTitle = "Show or hide the advanced sidebar sections",
             Category = CommandCategory.View,
             IconKey = "TuneIconGeometry",
             GestureNote = "The sliders icon, top of the sidebar",

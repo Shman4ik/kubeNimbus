@@ -47,7 +47,7 @@ way in Preferences → Shortcut modifier.
 | Action | Windows / Linux | macOS |
 | --- | --- | --- |
 | Open the command palette | Ctrl+K | Cmd+K |
-| Show or hide the advanced controls | The sliders icon, top of the sidebar | The sliders icon, top of the sidebar |
+| Show or hide the advanced sidebar sections | The sliders icon, top of the sidebar | The sliders icon, top of the sidebar |
 | Show or hide the resource sidebar | Ctrl+B | Cmd+B |
 | Maximize the inspector over the list | The inspector's expand icon | The inspector's expand icon |
 | Preferences… | Ctrl+, | Cmd+, |

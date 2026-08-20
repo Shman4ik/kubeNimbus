@@ -40,13 +40,15 @@ File.Delete(Path.Combine(WorkspaceStore.DirectoryOverride, "settings.json"));
 
 BuildAvaloniaApp().SetupWithoutStarting();
 
+
 var scenarios = new (string Name, Func<Control> Build)[]
 {
     ("cluster-tab-workloads-list", () => HostInMainWindow(ClusterTabScenarios.WorkloadsList())),
     // The before/after pair for the advanced view. Same tab, same seeded usage data —
-    // the only difference is the switch, which is the claim being made: it hides and
-    // shows, it does not build a second layout.
-    ("cluster-tab-advanced-view", () => HostInMainWindow(ClusterTabScenarios.AdvancedView())),
+    // the only difference is the switch, and what it may change is now exactly the
+    // sidebar: the Cluster and CRDs sections go, and the list, its usage columns and
+    // every other content-area control stay where they were.
+    ("cluster-tab-basic-sidebar", () => HostInMainWindow(ClusterTabScenarios.BasicSidebar())),
     ("cluster-tab-workloads-list-metrics", () => HostInMainWindow(ClusterTabScenarios.WorkloadsListWithMetrics())),
     ("cluster-tab-events-list", () => HostInMainWindow(ClusterTabScenarios.EventsList())),
     ("cluster-tab-fleet-list", () => HostInMainWindow(ClusterTabScenarios.FleetList(), height: 1000)),
@@ -120,7 +122,6 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // The CRD printer-column pair: the same Certificate list without and with the
     // advanced view, which is where the CRD's own `priority: 1` columns live.
     ("cluster-tab-crd-printer-columns", () => HostInMainWindow(ClusterTabScenarios.DemoCrdPrinterColumns())),
-    ("cluster-tab-crd-printer-columns-wide", () => HostInMainWindow(ClusterTabScenarios.DemoCrdPrinterColumnsWide())),
     ("cluster-tab-demo-scale-unavailable", () => HostInMainWindow(ClusterTabScenarios.DemoScaleUnavailable())),
 
     // FEAT-4 — the node surface. All on the demo cluster, which is where the node
