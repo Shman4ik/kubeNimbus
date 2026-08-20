@@ -438,7 +438,10 @@ Three rules about it:
    at its rendered 1280px, which is narrower than most real windows and is where this
    fails first. A CRD's own printer columns are a *variable* number of columns on that
    same fixed width, and their answer to this is kubectl's own `priority` field rather
-   than another re-cut — see "CRD printer columns".
+   than another re-cut — see "CRD printer columns". The minimums below are the layout a
+   list *opens* with; since FEAT-66 they are no longer the last word, because the reader
+   can drag any column and the choice is kept per kind — see "The resource grid is the
+   reader's to re-cut".
 
 15. **The two apps' command bars read the same left to right.** Not identical — the
    flexible middle column carries kubeNimbus's cluster tabs and pgNimbus's centred
@@ -1386,18 +1389,135 @@ Two implementation traps, both hit while building this:
   object rather than a string). Ten is above every real CRD surveyed; the surplus is
   dropped in declaration order.
 - **A printer slot's header is a CRD author's string, and it collided.** Every
-  `Apply*Columns` method finds its columns by header text, and cert-manager calls one of
-  its Certificate columns **Ready** — so the first cut renamed a slot to "Ready",
+  `Apply*Columns` method used to find its columns by header text, and cert-manager calls
+  one of its Certificate columns **Ready** — so the first cut renamed a slot to "Ready",
   `ApplySummaryColumns` matched it as the grid's own Ready column and hid it, and the
   CRD's most important column was silently missing from the very list this feature
-  exists to fix. Only the screenshot showed it. `ClusterTabView.FixedColumns` excludes
-  the slots from every header match now; the same trap is one column name away for
-  Status, Details, Restarts, CPU, Memory and Cluster.
+  exists to fix. Only the screenshot showed it. Header matching was the wrong identifier
+  and is **gone**: every column carries a `Tag` (`ResourceColumn`), the slots are
+  addressed by the CRD column they currently draw, and `ClusterTabView.FixedColumns`
+  still excludes them — see "The resource grid is the reader's to re-cut" below, which
+  is also what made the header stop being a constant for the app's own columns.
 
 The sandbox produces every one of these states — see `scripts/manifests/50-crds.yaml`
 (the shop Widget's mixed types plus a priority-1 column and one path that resolves to
 nothing, the demo Backup's condition filter and non-creationTimestamp date, and the
 factory Widget deliberately declaring **none**, which is the degradation path).
+
+## The resource grid is the reader's to re-cut
+
+Every column in the resource list can be dragged to a new width, a header click sorts
+by that column, and both are remembered per kind. `ResourceColumn` and
+`ResourceRowComparer` (App layer) are the identity and the ordering, `GridLayoutStore`
++ `WorkspaceSettings.GridLayouts` are the memory, and `ClusterTabView`'s code-behind is
+what connects them to the grid.
+
+It is the answer to the 2026-08-19 audit's widest finding, and the reason it is an
+answer rather than a re-cut of the numbers is arithmetic: the list has nine fixed
+columns at 1280px, so widening one narrows another, and a CRD can declare eleven of its
+own on top (KEDA's ScaledObject). Measured on the rendered fixture list, the Namespace
+column held ~110px of the same value on every row while two pods of one ReplicaSet
+ellipsised at exactly the character that told them apart. No single set of minimums
+survives all of that; which column matters is a property of the question being asked,
+which is why it belongs to whoever is asking.
+
+Twelve things are load-bearing.
+
+1. **Sorting orders `VisibleRows` and never `Rows`.** UI rule 13's invariant is that
+   `Rows` is the informer's own list in arrival order, and everything that produces
+   rows — the watch, the fleet merge, the demo dataset, the fixtures — writes to it
+   knowing nothing about the projection. Sorting it in place would look right and break
+   the informer underneath: the arrival order would be gone for good, so clearing the
+   sort could never come back to it. `ClusterTabSortTests` pins that, and the break was
+   written and confirmed red before the tests were called done.
+2. **The DataGrid's own sorting is not used, and cannot be.** It orders the collection
+   view behind `ItemsSource`, which is the list above. `ClusterTabView.OnGridSorting`
+   sets `e.Handled = true` and hands the click to `ClusterTabViewModel.ToggleSort`.
+3. **`CanUserSort="True"` on every column is what makes the click arrive at all.** These
+   are `DataGridTemplateColumn`s with no `SortMemberPath`, and Avalonia's `ProcessSort`
+   returns *before* raising `Sorting` for a column whose `CanUserSort` is false — which
+   is the default for a template column. Measured, not inferred: a headless probe over a
+   real grid saw zero `Sorting` events until the flag was set, and one per click after.
+4. **A column is compared by what it means, not by the string it renders.** Restarts is
+   a count (the cell carries "(43m ago)" with it, and "10" sorts above "9" as text), Age
+   is an instant, CPU and memory are the latest sample's nanocores and bytes, Ready is
+   the fraction "2/3" resolves to, and a CRD's `type: date` column is the instant behind
+   the age it prints. **Ascending Age means the youngest first**, which is the opposite
+   direction to the instants — the number people read is the age, not the timestamp.
+5. **A row with no value sorts after the rows that have one** in ascending order, rather
+   than as a zero or as an empty string above them. A pod that reports no CPU is not a
+   pod using none, and a ConfigMap has no Ready to be worst at. The tie-break is the row
+   key and is deliberately *not* reversed with the direction: it exists to make the
+   order total, and a tie-break that flipped would make the list jump for reasons the
+   sorted column cannot explain.
+6. **The third click clears the sort.** Two states would leave no way back to arrival
+   order, which on a live list is information — it is where the watch put a newly
+   created object.
+7. **The sort is maintained, not applied once.** A watch is a stream: an object created
+   while the list is sorted is inserted where the sort puts it (binary search, so a tick
+   on a 5000-row list costs a handful of comparisons), and a Modified that changes the
+   sorted value moves the row — the CrashLoopBackOff case on a list sorted by Status.
+   `RepositionRow` does nothing while the row is still between its neighbours, so an
+   ordinary status refresh moves nothing under the pointer. A list that quietly stops
+   being sorted seconds after it was sorted is worse than one that never was;
+   that break was written and confirmed red too. The **metrics poll** is the one event
+   that rewrites every row's sort key at once, and it re-orders the list *in place*
+   (`ResortVisibleRows`, an insertion pass) rather than rebuilding it: a rebuild raises a
+   Reset, a DataGrid answers a Reset by dropping the scroll position, and a CPU-sorted
+   list that jumped back to the top every fifteen seconds would be useless for the one
+   job a CPU sort has. That break was written and confirmed red as well.
+8. **A CRD column is identified by the CRD author's name for it, never by slot.** The
+   grid's printer columns are ten fixed positional slots, but the advanced view is this
+   app's `-o wide`: turning it on brings a CRD's `priority: 1` columns into the list in
+   declaration order, so every slot after the first of them draws a different column
+   than it did a moment earlier. A width or a sort keyed by slot would silently move to
+   a neighbour when that switch is flipped. A remembered sort by a column the kind no
+   longer declares falls back to arrival order rather than shuffling the list against
+   cells that are not there.
+9. **A star column and an Auto column do not keep a drag in the same place**, which is
+   why the stored width carries its unit. Measured on a real grid: dragging a `2*`
+   column leaves it a star column and rewrites the ratio (`2*` → `2.52*`), while
+   dragging an `Auto` column leaves its declared width alone and changes only what it
+   displays. So a star column is remembered as its ratio — which reproduces the same
+   proportional layout at any window width — and everything else as the pixels it ended
+   at, restored as an absolute width. A column nobody has dragged is reset to the width
+   the XAML declares, or a kind with no remembered layout would inherit the previous
+   kind's.
+10. **Only what actually changed during the drag is remembered.** There is no
+   column-resize event in Avalonia — the DataGrid changes the width from inside the
+   header's own pointer handling and tells nobody — so the gesture is bracketed instead:
+   snapshot every column on pointer press, compare on release, store the difference.
+   Storing every column instead would pin the Auto columns to whatever their content
+   happened to measure at that moment, which is a choice nobody made.
+11. **Widths and sort are one record with two writers, and neither may drop the other's
+   half.** Pixels are not view-model state, so the view owns the widths; the sort is
+   what orders the rows, so the view model owns it. Both go through
+   `GridLayoutStore.Update`, which takes a function over the stored layout and does a
+   read-modify-write **of the file** — never of a cached snapshot, exactly as
+   `App.Update` does and for the same reason: the shell writes the same workspace (tabs,
+   pins, environment overrides) from another path entirely.
+12. **This is session state, so it is `workspace.json` and not `settings.json`.** The
+   test is the one in "Settings, and what belongs in which file": deleting the workspace
+   should lose how the window looked and nothing else, and a column width is exactly
+   that. Keyed by `<group>/<Kind>` — not the version, because a cluster promoting a CRD
+   from v1beta1 to v1 is still the same list to whoever widened its Name column, and not
+   the cluster, so a width chosen for Pods holds everywhere.
+
+**The sort indicator is drawn into the header text, and that is not laziness.** Fluent's
+`:sortascending`/`:sortdescending` header pseudo-classes are set from the collection
+view's sort descriptions, which stay empty here *because* the sorting is ours — so the
+arrow has to be drawn rather than styled. A header template would mean a `Control` in
+place of a string, which opts the header cell out of Fluent's own column-header template
+(the same reason a printer column's `description` is not a header tooltip). The header
+therefore stops being a constant, which is the other half of why column identity moved
+to `Tag`.
+
+**Two things this deliberately does not do.** The Helm release list is a second grid with
+its own hardcoded columns and is untouched, so `FEAT-72` (its `Updated` column printing a
+clipped absolute timestamp) is not subsumed by this. And nothing here adds *horizontal
+scroll*: dragging redistributes the width the window has, so the fleet list's ten columns
+at 1280px still clip their rightmost headers (`ENG-6`) — a reader can now trade one of
+them away, which is a workaround and not the fix.
 
 ## Mutating workload actions (scale, rollout restart, delete)
 
@@ -4259,3 +4379,69 @@ the right medium, but it means the CRD-heavy real-cluster cases the report calls
 re-casing path) have still never been rendered. Nothing was driven by hand in the running
 app. `design/screenshots/*.png` were deliberately not regenerated: Age is computed from
 the real clock, so they drift by themselves.
+
+**Resizable and sortable grid pass (FEAT-66):** the resource list's columns can be
+dragged to any width and ordered by a header click, and both choices are remembered per
+kind — see "The resource grid is the reader's to re-cut" above for the twelve rules,
+including the two Avalonia behaviours the design turns on (a template column raises no
+`Sorting` event unless it carries `CanUserSort`, and a drag rewrites a star column's
+*ratio* while leaving an Auto column's declared width alone). New: `ResourceGridSort.cs`
+(`ResourceColumn` ids + `ResourceRowComparer`) and `GridLayoutStore.cs` in the App layer,
+`WorkspaceSettings.GridLayouts`, sort state and a sorted mirror in `ClusterTabViewModel`,
+a `Tag` on every grid column with the code-behind's four `Apply*Columns` passes moved off
+header matching onto it, `ApplyColumnLayout`/`ApplySortIndicator` in `ClusterTabView`, 24
+new tests across `ClusterTabSortTests` and `GridLayoutStoreTests`, and one screenshot
+scenario (`cluster-tab-list-sorted`). No new gesture and no new always-visible control,
+so `docs/keyboard-shortcuts.md` is unchanged.
+
+**The two Avalonia behaviours above were measured on a real grid rather than reasoned
+about**, and the first cut of this design was wrong about both. A headless probe drove
+actual pointer events at a real `DataGrid`: with `CanUserSort` left at its default the
+`Sorting` event never fired at all (so a header click did nothing, which is also what it
+did in this app before this pass), and a resize drag on a grid whose only star column was
+the one being dragged moved nothing — a star column can only take width from another star
+column, which is why the app's own list resizes and a two-column test grid did not. The
+same probe was then pointed at the **real** `ClusterTabView` inside a real `MainWindow`:
+clicking the Name header cycled ascending → descending → off with `Rows` unmoved
+throughout, dragging its edge took it from `2*` to `5.6*`, switching to ConfigMaps gave
+that kind its own declared widths back, and switching back to Pods restored both the
+width and the Status sort. A second process started against the same workspace came up
+with the list already ordered by Status and the Name column at `5.6*` — the restart half
+of "the choice survives", read out of the file by production code.
+
+**Verified this session**: `dotnet build KubeNimbus.slnx` with **0 warnings**; **335/335
+Core TUnit** and **121/121 App TUnit**, 0 failed, 0 skipped, both via `--project` (no
+sandbox here, so the Core count is the unit-only subset — the cluster-gated tests return
+early); the two break/revert runs above (sorting `Rows` instead of the projection turned
+**5 of 121** red, including the informer's own order after a delete; sorting only on the
+click rather than maintaining it turned **2 of 121** red, on the created-while-sorted and
+the modified-while-sorted cases; rebuilding on the metrics poll instead of re-ordering in
+place turned **1 of 121** red, on the Reset the DataGrid would have answered by scrolling
+to the top); all **71** scenarios × both themes rendered (142 PNGs)
+plus a byte-for-byte baseline diff against the parent commit — of the 140 pre-existing
+PNGs **none** differ for any reason this change is responsible for. Two classes of
+pre-existing nondeterminism do show up and were each pinned on the baseline tree itself:
+the timer-driven log panes (`cluster-tab-workload-logs.{light,dark}` and
+`cluster-tab-demo-pod-detail.dark`), which flap between two full runs of the *baseline*
+and land byte-identical between a second baseline run and a second run of this tree; and
+`cluster-tab-crd-printer-columns{,-wide}`, whose only difference is a demo Certificate's
+`type: date` cell reading `214d` where the earlier run read `213d` — that column is
+computed from the real clock, which is the same drift that keeps `design/screenshots`
+from being regenerated; the linux-x64
+NativeAOT publish with no new warnings beyond the known DataGrid IL2104/IL3053; and
+`--smoke-test` on that published binary under Xvfb (`SMOKE-OK main window rendered at
+1280x800 after 103 ms`, exit 0).
+
+**Not verified.** No live cluster (no registry is reachable from this container), so
+nothing here has ordered a list of real objects arriving from a real watch — which is the
+one place rule 7 above earns its keep: a busy namespace producing Modified events several
+times a second against a sorted list is a load and a jumpiness question that a fixture
+cannot ask. Nothing has been driven by a real mouse either: the pointer events above are
+synthetic (Avalonia headless), so the *feel* of the drag — the resize cursor appearing
+over the separator, the hit zone being five pixels wide at 100% and at 150% scaling — is
+unverified, and so is what a header click does on macOS with a trackpad. The persistence
+is per kind and unbounded: a session that opens two hundred kinds and drags one column in
+each writes two hundred entries into `workspace.json`, which nothing prunes. And the
+committed `design/screenshots/*.png` were deliberately not regenerated, for the reason
+every recent pass records: their Age column is a function of the real clock, so they drift
+by themselves and regenerating them commits a date rather than a change.

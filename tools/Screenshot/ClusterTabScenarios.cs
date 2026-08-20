@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Avalonia.Threading;
+using KubeNimbus.App;
 using KubeNimbus.App.Demo;
 using KubeNimbus.App.ViewModels;
 using KubeNimbus.Core;
@@ -765,6 +766,36 @@ internal static class ClusterTabScenarios
         tab.RowFilter = "check";
         tab.SelectedRow = tab.VisibleRows.FirstOrDefault();
         return tab;
+    }
+
+    /// <summary>
+    /// The list as the reader has re-cut it: sorted by a header click, with the Name
+    /// column dragged wider.
+    ///
+    /// <para>
+    /// Both are read back out of the workspace by production code — the sort by
+    /// <c>ClusterTabViewModel</c>'s own <c>SelectedKind</c> hook, the width by
+    /// <c>ClusterTabView.ApplyColumnLayout</c> — so this renders the restore path rather
+    /// than a grid set up by hand. Sorted by Age, which is the column whose text ("5m",
+    /// "16d") sorts wrongly if anything reads it as a string.
+    /// </para>
+    /// </summary>
+    public static ClusterTabViewModel SortedList()
+    {
+        var podKey = GridLayoutStore.KeyFor(
+            FixtureData.BuildCatalog().First(d => d is { Group: "", Kind: "Pod" }));
+        GridLayoutStore.Update(podKey, layout => layout with
+        {
+            SortColumn = ResourceColumn.Age,
+            SortDescending = true,
+            ColumnWidths = new Dictionary<string, GridColumnWidth>
+            {
+                [ResourceColumn.Name] = new(GridColumnWidth.Star, 9),
+                [ResourceColumn.Namespace] = new(GridColumnWidth.Pixels, 118),
+            },
+        });
+
+        return BaseTab();
     }
 
     /// <summary>

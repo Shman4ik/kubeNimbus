@@ -90,6 +90,12 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-rbac-who-can", () => HostInMainWindow(ClusterTabScenarios.RbacWhoCan(), height: 1000)),
     ("cluster-tab-rbac-who-can-empty", () => HostInMainWindow(ClusterTabScenarios.RbacWhoCan(empty: true))),
     ("cluster-tab-list-filtered", () => HostInMainWindow(ClusterTabScenarios.FilteredList())),
+    // A list the reader has re-cut: the Name column dragged wider (the audit's own
+    // complaint — two pods of one ReplicaSet rendering identically because the ellipsis
+    // fell on the discriminating suffix) and ordered by a header click, with the arrow
+    // saying which column and which way. Both come back out of the workspace, which is
+    // what makes this a render of the *restore* path and not of a hand-set grid.
+    ("cluster-tab-list-sorted", () => HostInMainWindow(ClusterTabScenarios.SortedList())),
     ("cluster-tab-list-filtered-empty", () => HostInMainWindow(ClusterTabScenarios.FilteredListEmpty())),
     // The mutating workload actions and their armed confirm strip.
     ("cluster-tab-row-action-scale", () => HostInMainWindow(ClusterTabScenarios.RowActionScale())),
@@ -166,6 +172,13 @@ return;
 void Capture(string name, ThemeVariant theme, Func<Control> build)
 {
     Application.Current!.RequestedThemeVariant = theme;
+
+    // Per-kind column widths and sort orders are persisted, so a scenario that seeds one
+    // (see SortedList) would otherwise leave it in the shared scratch workspace for
+    // every later scenario that lists the same kind. Cleared here rather than in the
+    // scenario, because the view reads the layout while the window is laid out — which
+    // is after the builder has returned.
+    WorkspaceStore.Save(WorkspaceStore.Load() with { GridLayouts = [] });
 
     var content = build();
     var window = content as Window ?? new Window

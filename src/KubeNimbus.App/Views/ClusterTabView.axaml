@@ -368,7 +368,9 @@
                survives the search box. -->
           <DataGrid Name="ResourceGrid"
                      ItemsSource="{Binding VisibleRows}" SelectedItem="{Binding SelectedRow}"
-                     IsReadOnly="True" GridLinesVisibility="Horizontal" CanUserResizeColumns="True"
+                     IsReadOnly="True" GridLinesVisibility="Horizontal"
+                     CanUserResizeColumns="True" CanUserSortColumns="True"
+                     Sorting="OnGridSorting"
                      DoubleTapped="OnRowDoubleTapped">
             <!-- Right-clicking a resource used to do nothing at all: the app had exactly
                  one context menu anywhere, and logs / exec / port-forward had no entry
@@ -469,7 +471,7 @@
               </MenuFlyout>
             </DataGrid.ContextFlyout>
             <DataGrid.Columns>
-              <DataGridTemplateColumn Header="" Width="28">
+              <DataGridTemplateColumn Header="" Tag="health" Width="28" CanUserResize="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <Ellipse Classes="statusDot" Fill="{Binding StatusHealth, Converter={x:Static conv:HealthToBrushConverter.Instance}}"
@@ -480,7 +482,7 @@
               <!-- Cluster: only meaningful in the aggregated fleet view, so
                    ClusterTabView.ApplyFleetColumn shows and hides it (same reason as
                    the usage columns — a DataGridColumn can't bind to the DataContext). -->
-              <DataGridTemplateColumn Header="Cluster" Width="Auto" MinWidth="120" IsVisible="False">
+              <DataGridTemplateColumn Header="Cluster" Tag="cluster" CanUserSort="True" Width="Auto" MinWidth="120" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding ClusterName}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ClusterName}"
@@ -488,14 +490,14 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Namespace" Width="Auto" MinWidth="80">
+              <DataGridTemplateColumn Header="Namespace" Tag="namespace" CanUserSort="True" Width="Auto" MinWidth="80">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding Namespace}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Namespace}" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Name" Width="2*" MinWidth="136">
+              <DataGridTemplateColumn Header="Name" Tag="name" CanUserSort="True" Width="2*" MinWidth="136">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" VerticalAlignment="Center" />
@@ -508,7 +510,7 @@
                    or hides each one. A DataGridColumn is outside the visual tree, so it
                    inherits no DataContext and cannot bind IsVisible itself — same reason
                    the Cluster and usage columns are handled there. -->
-              <DataGridTemplateColumn Header="Ready" Width="Auto" MinWidth="56" IsVisible="False">
+              <DataGridTemplateColumn Header="Ready" Tag="ready" CanUserSort="True" Width="Auto" MinWidth="56" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding ReadyText}" VerticalAlignment="Center"
@@ -516,7 +518,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Status" Width="*" MinWidth="140">
+              <DataGridTemplateColumn Header="Status" Tag="status" CanUserSort="True" Width="*" MinWidth="140">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <Border Classes="statusPill" Classes.ok="{Binding StatusHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=ok}"
@@ -531,7 +533,7 @@
               </DataGridTemplateColumn>
               <!-- What kubectl shows instead of a status for kinds that have none:
                    a Service's type/IP/ports, a ConfigMap's key count. -->
-              <DataGridTemplateColumn Header="Details" Width="*" MinWidth="150" IsVisible="False">
+              <DataGridTemplateColumn Header="Details" Tag="details" CanUserSort="True" Width="*" MinWidth="150" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding Details}" VerticalAlignment="Center" FontSize="11.5"
@@ -539,7 +541,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Restarts" Width="Auto" MinWidth="78" IsVisible="False">
+              <DataGridTemplateColumn Header="Restarts" Tag="restarts" CanUserSort="True" Width="Auto" MinWidth="78" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <!-- The count carries "(43m ago)": 200 restarts that stopped yesterday
@@ -563,7 +565,7 @@
                    A built-in kind never has any (it is not a CRD), which is what keeps
                    ResourceStatusSummary the sole owner of every column a Pod, Deployment,
                    Node or Event list shows. -->
-              <DataGridTemplateColumn Header="crd-printer-slot" Width="*" MinWidth="88" IsVisible="False">
+              <DataGridTemplateColumn Tag="crd-slot" CanUserSort="True" Width="*" MinWidth="88" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding PrinterCells[0].Text}" VerticalAlignment="Center" FontSize="11.5"
@@ -571,7 +573,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="crd-printer-slot" Width="*" MinWidth="88" IsVisible="False">
+              <DataGridTemplateColumn Tag="crd-slot" CanUserSort="True" Width="*" MinWidth="88" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding PrinterCells[1].Text}" VerticalAlignment="Center" FontSize="11.5"
@@ -579,7 +581,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="crd-printer-slot" Width="*" MinWidth="88" IsVisible="False">
+              <DataGridTemplateColumn Tag="crd-slot" CanUserSort="True" Width="*" MinWidth="88" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding PrinterCells[2].Text}" VerticalAlignment="Center" FontSize="11.5"
@@ -587,7 +589,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="crd-printer-slot" Width="*" MinWidth="88" IsVisible="False">
+              <DataGridTemplateColumn Tag="crd-slot" CanUserSort="True" Width="*" MinWidth="88" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding PrinterCells[3].Text}" VerticalAlignment="Center" FontSize="11.5"
@@ -595,7 +597,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="crd-printer-slot" Width="*" MinWidth="88" IsVisible="False">
+              <DataGridTemplateColumn Tag="crd-slot" CanUserSort="True" Width="*" MinWidth="88" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding PrinterCells[4].Text}" VerticalAlignment="Center" FontSize="11.5"
@@ -603,7 +605,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="crd-printer-slot" Width="*" MinWidth="88" IsVisible="False">
+              <DataGridTemplateColumn Tag="crd-slot" CanUserSort="True" Width="*" MinWidth="88" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding PrinterCells[5].Text}" VerticalAlignment="Center" FontSize="11.5"
@@ -611,7 +613,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="crd-printer-slot" Width="*" MinWidth="88" IsVisible="False">
+              <DataGridTemplateColumn Tag="crd-slot" CanUserSort="True" Width="*" MinWidth="88" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding PrinterCells[6].Text}" VerticalAlignment="Center" FontSize="11.5"
@@ -619,7 +621,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="crd-printer-slot" Width="*" MinWidth="88" IsVisible="False">
+              <DataGridTemplateColumn Tag="crd-slot" CanUserSort="True" Width="*" MinWidth="88" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding PrinterCells[7].Text}" VerticalAlignment="Center" FontSize="11.5"
@@ -627,7 +629,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="crd-printer-slot" Width="*" MinWidth="88" IsVisible="False">
+              <DataGridTemplateColumn Tag="crd-slot" CanUserSort="True" Width="*" MinWidth="88" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding PrinterCells[8].Text}" VerticalAlignment="Center" FontSize="11.5"
@@ -635,7 +637,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="crd-printer-slot" Width="*" MinWidth="88" IsVisible="False">
+              <DataGridTemplateColumn Tag="crd-slot" CanUserSort="True" Width="*" MinWidth="88" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding PrinterCells[9].Text}" VerticalAlignment="Center" FontSize="11.5"
@@ -647,7 +649,7 @@
                    metrics-server, so ClusterTabView.ApplyMetricsColumns shows and
                    hides them (a DataGridColumn isn't in the visual tree and can't
                    bind to the DataContext). -->
-              <DataGridTemplateColumn Header="CPU" Width="Auto" MinWidth="98" IsVisible="False">
+              <DataGridTemplateColumn Header="CPU" Tag="cpu" CanUserSort="True" Width="Auto" MinWidth="98" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <!-- Sparkline + current value: the number answers "how much now",
@@ -665,7 +667,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Memory" Width="Auto" MinWidth="106" IsVisible="False">
+              <DataGridTemplateColumn Header="Memory" Tag="memory" CanUserSort="True" Width="Auto" MinWidth="106" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <Grid ColumnDefinitions="*,Auto" ToolTip.Tip="{Binding MemoryTooltip}">
@@ -683,7 +685,7 @@
               <!-- Age, last, exactly where kubectl puts it. The text is a function of
                    wall-clock, not of the object, so it is recomputed by the one shared
                    timer in ClusterTabView — a watch event is not what makes it change. -->
-              <DataGridTemplateColumn Header="Age" Width="Auto" MinWidth="60">
+              <DataGridTemplateColumn Header="Age" Tag="age" CanUserSort="True" Width="Auto" MinWidth="60">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding AgeText}" VerticalAlignment="Center" ToolTip.Tip="{Binding AgeTooltip}"
