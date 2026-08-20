@@ -49,18 +49,26 @@ public sealed record AppSettings
     public string HotkeyScheme { get; set; } = "auto";
 
     /// <summary>
-    /// The single global "advanced view" switch. Off by default: it hides the controls
-    /// only a fraction of sessions need (usage columns and sparklines, the fleet
-    /// toggle, the log toolbar's wrap/copy/download, exec's Send, YAML force-apply,
-    /// the sidebar's count badges, the Helm/RBAC palette entries).
+    /// The single global "advanced view" switch: whether the sidebar shows the resource
+    /// sections most sessions never open — Cluster (the API machinery) and CRDs (the
+    /// catalog's long tail). <b>On by default</b>, so nothing is missing until somebody
+    /// asks for a shorter list.
+    ///
+    /// <para>
+    /// It used to hide content-area controls as well — the list's usage columns, pod
+    /// detail's Usage tab, the fleet toggle, both log toolbars, YAML force-apply, the
+    /// Helm and RBAC palette entries and a CRD's own priority-1 columns. That answered
+    /// a complaint about the sidebar by hiding things everywhere else, and what it hid
+    /// was mostly what somebody had deliberately gone looking for; the switch is the
+    /// sidebar's alone now.
+    /// </para>
     ///
     /// <para>
     /// Moved here from <c>workspace.json</c>: it is a preference, not a description of
-    /// the open session. <c>WorkspaceStore</c> still reads its old value once, so
-    /// nobody's existing choice is lost in the move.
+    /// the open session.
     /// </para>
     /// </summary>
-    public bool IsAdvancedView { get; set; }
+    public bool IsAdvancedView { get; set; } = true;
 
     /// <summary>
     /// Whether the cluster tab's resource-catalog sidebar is shown. On by default —
@@ -70,6 +78,28 @@ public sealed record AppSettings
     /// be hidden with no way back (rule 7).
     /// </summary>
     public bool IsSidebarVisible { get; set; } = true;
+
+    /// <summary>
+    /// The sidebar's width in DIPs, as the reader last dragged it.
+    ///
+    /// <para>
+    /// A fixed width rather than the proportion of the content area it used to be. A
+    /// star column re-divides on every window resize, so a sidebar sized to hold a
+    /// kind name at 1280px became a third of a 3840px window holding the same names in
+    /// the same 200px of text; the resource list is what should absorb the extra width,
+    /// which is what an absolute width gives. It lives beside
+    /// <see cref="IsSidebarVisible"/> — same control, same one global value — rather
+    /// than in the workspace's per-kind grid layouts, which are keyed by what is being
+    /// looked at where this is not.
+    /// </para>
+    ///
+    /// <para>
+    /// Clamped by <see cref="Normalized"/> like every other number here: the file is
+    /// user-writable, and a width past the window's own is a sidebar with no list
+    /// beside it and no visible way back.
+    /// </para>
+    /// </summary>
+    public double SidebarWidth { get; set; } = DefaultSidebarWidth;
 
     /// <summary>
     /// Sidebar sections expanded on connect, by title. Empty means "use each section's
@@ -157,13 +187,53 @@ public sealed record AppSettings
     /// </summary>
     public AppSettings Normalized() => this with
     {
-        Theme = Theme is "light" or "dark" or "system" ? Theme : "system",
-        HotkeyScheme = HotkeyScheme is "windows" or "mac" or "auto" ? HotkeyScheme : "auto",
+        Theme = Canonical(Theme, "system", "light", "dark", "system"),
+        HotkeyScheme = Canonical(HotkeyScheme, "auto", "windows", "mac", "auto"),
         ExpandedSidebarSections = ExpandedSidebarSections ?? [],
         KubeconfigPaths = KubeconfigPaths ?? [],
+        SidebarWidth = double.IsFinite(SidebarWidth)
+            ? Math.Clamp(SidebarWidth, MinSidebarWidth, MaxSidebarWidth)
+            : DefaultSidebarWidth,
         LogBufferLines = Math.Clamp(LogBufferLines, MinLogBufferLines, MaxLogBufferLines),
         MetricsPollSeconds = Math.Clamp(MetricsPollSeconds, MinMetricsPollSeconds, MaxMetricsPollSeconds),
     };
+
+    /// <summary>
+    /// Lower-cases <paramref name="value"/> and keeps it only if it is one of
+    /// <paramref name="allowed"/>, falling back to <paramref name="fallback"/>.
+    ///
+    /// <para>
+    /// Case-insensitive because the file is hand-editable and because this app has
+    /// already written the wrong casing into it once: the command bar's theme toggle
+    /// persisted the ThemeVariant names ("Dark"/"Light"), which this method rejected
+    /// and so silently reset to "system". Reading "Dark" as dark costs nothing and
+    /// means those files recover on the next launch instead of losing the choice.
+    /// </para>
+    /// </summary>
+    private static string Canonical(string? value, string fallback, params string[] allowed)
+    {
+        if (value is null)
+        {
+            return fallback;
+        }
+
+        var lower = value.ToLowerInvariant();
+        return Array.IndexOf(allowed, lower) >= 0 ? lower : fallback;
+    }
+
+    /// <summary>
+    /// What the sidebar opens at. 224 DIPs holds the longest built-in kind label
+    /// ("PodDisruptionBudgets") plus its icon and count badge, which is the width the
+    /// panel exists to have; the star width it replaced took ~24% of the content area,
+    /// i.e. over 900px on a 3840px window, to show the same text.
+    /// </summary>
+    public const double DefaultSidebarWidth = 224;
+
+    /// <summary>Narrower than this and the filter box has no room for a query.</summary>
+    public const double MinSidebarWidth = 150;
+
+    /// <summary>Wider than this and the resource list is the panel, not the sidebar.</summary>
+    public const double MaxSidebarWidth = 520;
 
     /// <summary>Below this the pane cannot hold one screen of a chatty container.</summary>
     public const int MinLogBufferLines = 200;

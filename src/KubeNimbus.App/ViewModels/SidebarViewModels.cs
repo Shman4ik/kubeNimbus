@@ -58,6 +58,24 @@ public sealed partial class SidebarSectionViewModel : ObservableObject
     [ObservableProperty]
     private bool _hasVisibleKinds = true;
 
+    /// <summary>
+    /// True while the advanced view is off and this is one of the sections it governs
+    /// (<see cref="SidebarGrouping.IsAdvancedSection"/>). Pushed down from
+    /// <see cref="ClusterTabViewModel"/> rather than read from a global, same as
+    /// <see cref="ShowKindCount"/>: a section built outside a tab — the screenshot
+    /// harness — then renders as the app's own default rather than as a hidden one.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isHiddenByBasicView;
+
+    /// <summary>
+    /// Whether the section appears at all. Two independent reasons not to: a filter
+    /// that nothing here matches, and the advanced view being off. They are folded here
+    /// rather than in the view so the section owns its own visibility, and so a rule
+    /// added later has one place to go.
+    /// </summary>
+    public bool IsSectionVisible => HasVisibleKinds && !IsHiddenByBasicView;
+
     public int KindCount => Kinds.Count;
 
     /// <summary>
@@ -86,6 +104,10 @@ public sealed partial class SidebarSectionViewModel : ObservableObject
     }
 
     partial void OnIsForceExpandedChanged(bool value) => OnPropertyChanged(nameof(ShowKinds));
+
+    partial void OnHasVisibleKindsChanged(bool value) => OnPropertyChanged(nameof(IsSectionVisible));
+
+    partial void OnIsHiddenByBasicViewChanged(bool value) => OnPropertyChanged(nameof(IsSectionVisible));
 
     [RelayCommand]
     private void ToggleExpanded() => IsExpanded = !IsExpanded;

@@ -47,6 +47,12 @@ internal static class ClusterTabScenarios
             tab.SidebarSections.Add(section);
         }
 
+        // The pass production runs at the end of every sidebar rebuild: it is what puts
+        // the kind-count badges on and applies the advanced view's section gate. The
+        // fixture adds its sections by hand rather than through discovery, so without
+        // this the sidebar renders as though the switch were off no matter what it says.
+        tab.ApplySidebarChrome();
+
         tab.NamespaceOptions.Add(ClusterTabViewModel.AllNamespaces);
         foreach (var ns in FixtureData.Namespaces)
         {
@@ -103,38 +109,38 @@ internal static class ClusterTabScenarios
     }
 
     /// <summary>
-    /// The default layout: advanced view off, which is what a fresh install opens on.
-    /// The usage data is seeded all the same — the columns are hidden by the switch,
-    /// not absent — so this and <see cref="AdvancedView"/> are a true before/after.
+    /// The default layout: advanced view on, which is what a fresh install opens on —
+    /// the whole sidebar catalog, and every content-area column the cluster can fill.
     /// </summary>
     public static ClusterTabViewModel WorkloadsList() => BaseTab();
 
     /// <summary>
-    /// The same tab with the advanced view on: usage columns and their sparklines
-    /// back, sidebar kind-count badges back. Turning it on must restore today's
-    /// surface exactly — it is a hide/show switch, not a second layout.
+    /// The same tab with the advanced view off: the Cluster and CRDs sections are gone
+    /// from the sidebar and everything else — the list, its usage columns, the whole
+    /// content area — is untouched. That second half is the claim worth rendering: the
+    /// switch used to take the usage columns, the fleet toggle and the log tools with
+    /// it, which is precisely what it no longer does.
     /// </summary>
-    public static ClusterTabViewModel AdvancedView() => Advanced(BaseTab());
+    public static ClusterTabViewModel BasicSidebar() => Basic(BaseTab());
 
     /// <summary>
-    /// Flips a fixture tab into the advanced view. Set *after* the sections and rows
-    /// are in place: the real <c>OnIsAdvancedViewChanged</c> is what pushes the
-    /// count badges onto the sections, so a tab that was already advanced before it
-    /// had any sections would render without them.
+    /// Turns the advanced view off on a fixture tab. Set *after* the sections are in
+    /// place: <c>OnIsAdvancedViewChanged</c> is what pushes the gate onto them, so a
+    /// tab flipped before it had any sections would render with all of them.
     /// </summary>
-    private static ClusterTabViewModel Advanced(ClusterTabViewModel tab)
+    private static ClusterTabViewModel Basic(ClusterTabViewModel tab)
     {
-        tab.IsAdvancedView = true;
+        tab.IsAdvancedView = false;
         return tab;
     }
 
-    /// <summary>Same pod list, with the CPU/Mem column populated — demonstrates the metrics.k8s.io-present path.
-    /// Advanced, because that is the only place those columns exist.</summary>
+    /// <summary>Same pod list, with the CPU/Mem column populated — demonstrates the
+    /// metrics.k8s.io-present path.</summary>
     public static ClusterTabViewModel WorkloadsListWithMetrics()
     {
         var tab = BaseTab(seedUsage: false);
         ApplyMetrics(tab);
-        return Advanced(tab);
+        return tab;
     }
 
     private static void ApplyMetrics(ClusterTabViewModel tab)
@@ -217,16 +223,15 @@ internal static class ClusterTabScenarios
     /// condition filter (<c>.status.conditions[?(@.type=="Ready")].status</c>), the
     /// object with no status at all rendering as an empty cell rather than an error, and
     /// AGE still being the list's own live column rather than the CRD's declared one.
+    ///
+    /// <para>
+    /// The CRD's two <c>priority: 1</c> columns (ISSUER and STATUS) are here too. They
+    /// used to need the advanced view — this app's <c>-o wide</c> — and had a scenario
+    /// of their own to render that; the switch governs the sidebar and nothing else now,
+    /// so every declared column is simply drawn and the pair collapses into this one.
+    /// </para>
     /// </summary>
     public static ClusterTabViewModel DemoCrdPrinterColumns() => SelectDemoCertificates(DemoTab());
-
-    /// <summary>
-    /// The same list with the advanced view on, which is this app's <c>-o wide</c>: the
-    /// CRD's two <c>priority: 1</c> columns (ISSUER and STATUS) join it, and leave again
-    /// when the switch goes off. A true before/after with the scenario above — same tab,
-    /// same objects, one switch.
-    /// </summary>
-    public static ClusterTabViewModel DemoCrdPrinterColumnsWide() => Advanced(SelectDemoCertificates(DemoTab()));
 
     private static ClusterTabViewModel SelectDemoCertificates(ClusterTabViewModel tab)
     {
@@ -372,7 +377,7 @@ internal static class ClusterTabScenarios
 
         // Aggregation is only reachable from the advanced view, so that is the state
         // this shot has to be in for the toggle and the Cluster column to read right.
-        return Advanced(tab);
+        return tab;
     }
 
     /// <summary>
@@ -987,11 +992,11 @@ internal static class ClusterTabScenarios
 
     private static void SeedPodUsage(PodDetailTabViewModel detail) => DemoUsage.SeedPod(detail, FixtureNow);
 
-    /// <summary>Pod detail's Usage tab — CPU/memory over the session's poll window, pod total plus per container.
-    /// Advanced, since the Usage tab only exists there.</summary>
+    /// <summary>Pod detail's Usage tab — CPU/memory over the session's poll window, pod
+    /// total plus per container.</summary>
     public static ClusterTabViewModel PodDetailUsage()
     {
-        var tab = Advanced(PodDetail());
+        var tab = PodDetail();
         // Maximized: the per-container requests/limits are the point of this tab and sat
         // below the fold of a ~300px dock, which is exactly how they stayed unread.
         tab.IsInspectorMaximized = true;
@@ -1011,7 +1016,7 @@ internal static class ClusterTabScenarios
     /// </summary>
     public static ClusterTabViewModel PodDetailUsageUnset()
     {
-        var tab = Advanced(PodDetail(seedUsage: false, namePrefix: "fraud-detector"));
+        var tab = PodDetail(seedUsage: false, namePrefix: "fraud-detector");
         tab.IsInspectorMaximized = true;
         if (tab.SelectedInspectorTab is PodDetailTabViewModel detail)
         {
@@ -1027,7 +1032,7 @@ internal static class ClusterTabScenarios
     /// </summary>
     public static ClusterTabViewModel PodDetailUsageUnavailable()
     {
-        var tab = Advanced(PodDetail(seedUsage: false));
+        var tab = PodDetail(seedUsage: false);
         tab.IsInspectorMaximized = true;
         if (tab.SelectedInspectorTab is PodDetailTabViewModel detail)
         {
@@ -1278,7 +1283,7 @@ internal static class ClusterTabScenarios
 
         // The only way into this pane is the palette's access-review entries, which
         // are advanced-view only.
-        return Advanced(tab);
+        return tab;
     }
 
     /// <summary>
@@ -1479,11 +1484,11 @@ internal static class ClusterTabScenarios
                      "ports":[{"name":"statsd","containerPort":9125}]}]}}}}
         """).RootElement.Clone();
 
-    /// <summary>A server-side apply conflict. Advanced, because force-apply — the only
-    /// thing that resolves one from inside the app — is an advanced-view control.</summary>
+    /// <summary>A server-side apply conflict, with the force-apply button that is the
+    /// only thing resolving one from inside the app.</summary>
     public static ClusterTabViewModel YamlEditorConflict()
     {
-        var tab = Advanced(YamlEditor());
+        var tab = YamlEditor();
         if (tab.SelectedInspectorTab is YamlEditorTabViewModel yaml)
         {
             yaml.ConflictDetails = "Field .spec.replicas is owned by field manager \"kubectl-scale\" (apply conflicts with your changes).";

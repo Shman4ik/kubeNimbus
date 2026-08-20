@@ -8,6 +8,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using KubeNimbus.App.ViewModels;
 using KubeNimbus.Core;
+using KubeNimbus.Core.Settings;
 
 namespace KubeNimbus.App.Views;
 
@@ -182,16 +183,9 @@ public partial class ClusterTabView : UserControl
             ApplyDockState();
         }
         else if (e.PropertyName is nameof(ClusterTabViewModel.AreMetricsVisible)
-                 or nameof(ClusterTabViewModel.AreUsageColumnsVisible)
-                 or nameof(ClusterTabViewModel.IsAdvancedView))
+                 or nameof(ClusterTabViewModel.AreUsageColumnsVisible))
         {
             ApplyMetricsColumns();
-
-            // The advanced view is also this app's `-o wide`: it adds and removes a
-            // CRD's own priority-1 columns, so the printer slots (and, through them,
-            // whether the generic Status column is suppressed) have to follow it.
-            ApplyPrinterColumns();
-            ApplySummaryColumns();
             ApplyColumnLayout();
         }
         else if (e.PropertyName is nameof(ClusterTabViewModel.PrinterColumns)
@@ -223,6 +217,11 @@ public partial class ClusterTabView : UserControl
         {
             ApplySidebarVisibility();
         }
+        else if (e.PropertyName == nameof(ClusterTabViewModel.SidebarWidth))
+        {
+            // A drag on another cluster's sidebar reaches this one through the shell.
+            ApplySidebarVisibility();
+        }
     }
 
     /// <summary>
@@ -241,11 +240,51 @@ public partial class ClusterTabView : UserControl
     private void ApplySidebarVisibility()
     {
         var visible = Vm?.IsSidebarVisible ?? true;
+        var width = Vm?.SidebarWidth ?? AppSettings.DefaultSidebarWidth;
 
         Sidebar.IsVisible = visible;
-        ContentColumns.ColumnDefinitions[0].Width = visible
-            ? new GridLength(0.65, GridUnitType.Star)
-            : new GridLength(0);
+        SidebarSplitter.IsVisible = visible;
+
+        var column = ContentColumns.ColumnDefinitions[0];
+
+        // The bounds live on the column rather than on the splitter because that is
+        // where a GridSplitter reads them: they are what stops a drag leaving the filter
+        // box too narrow to type a query into, or the resource list too narrow to read.
+        // Cleared while hidden, or a MinWidth would keep the collapsed column open.
+        column.MinWidth = visible ? AppSettings.MinSidebarWidth : 0;
+        column.MaxWidth = visible ? AppSettings.MaxSidebarWidth : 0;
+        column.Width = new GridLength(visible ? width : 0);
+    }
+
+    /// <summary>
+    /// Persists the sidebar's width when a drag ends, through the shell so every other
+    /// open cluster follows.
+    ///
+    /// <para>
+    /// On release rather than on every layout pass: a GridSplitter rewrites the column
+    /// width continuously while the pointer moves, and persisting each intermediate
+    /// value would write the settings file dozens of times per gesture. The same
+    /// bracketing the grid's own column drags use, and for the same reason.
+    /// </para>
+    /// </summary>
+    private void OnSidebarSplitterDragCompleted(object? sender, VectorEventArgs e)
+    {
+        if (Vm is not { } vm || !vm.IsSidebarVisible)
+        {
+            return;
+        }
+
+        var dragged = ContentColumns.ColumnDefinitions[0].Width;
+        if (!dragged.IsAbsolute)
+        {
+            return;
+        }
+
+        // Clamped here as well as on the column: AppSettings clamps what it stores, and
+        // a value that arrived past the bound would otherwise be written back as the
+        // shell's idea of the width while the column showed something else.
+        vm.SidebarWidth = Math.Clamp(
+            dragged.Value, AppSettings.MinSidebarWidth, AppSettings.MaxSidebarWidth);
     }
 
     /// <summary>

@@ -12,6 +12,35 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+### Changed
+
+- **The Advanced view now hides sidebar sections, and nothing else.** It used to
+  strip controls all over the content area — the CPU/memory columns and their
+  sparklines, pod detail's Usage tab, the all-clusters toggle, both log toolbars'
+  wrap/copy/download, YAML force-apply, the Helm and access-review commands, and a
+  CRD's own low-priority printer columns. All of those are now always available.
+  The switch governs the two sidebar sections most sessions never open — **Cluster**
+  (APIServices, CSRs, ClusterRoles, admission and flow control) and **CRDs** — and it
+  is **on by default**, so nothing is missing until you ask for a shorter list.
+  The sidebar's own filter and the command palette still reach every kind whatever
+  the switch says.
+- **The sidebar is narrower and you can drag it.** It used to take about a quarter of
+  the content area at every window size, which on a wide monitor was hundreds of
+  pixels showing the same short kind names. It now opens at a fixed 224px, resizes by
+  dragging its right edge, and remembers where you left it.
+- **macOS: the app is called kubeNimbus.** It introduced itself as "Avalonia" in the
+  menu bar, and its application menu was a placeholder. There is now a real menu bar —
+  application menu with About and Preferences, plus Cluster, View and Help — carrying
+  the same commands and the same shortcuts as the rest of the app.
+
+### Fixed
+
+- **The light/dark toggle could not leave dark.** It saved the chosen theme in a
+  spelling the settings file does not accept, so the app fell straight back to
+  following the operating system's theme. On a machine set to dark that made the
+  button look one-way: light → dark worked, dark → light did nothing. An existing
+  settings file written by the broken build is read correctly rather than reset.
+
 ## [0.2.0] - 2026-08-20
 
 ### Added

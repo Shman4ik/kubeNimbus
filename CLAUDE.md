@@ -315,9 +315,8 @@ Three rules about it:
    `TabControl.headerless` (the content) sharing one `Grid` row with the selected
    tab's tools, gated by `IndexEqualsConverter` on the same index the TabControl
    binds. The TabControl stays underneath because nothing else gives *both*
-   lazily-realized tab content and an index that survives a hidden tab — pod
-   detail's Usage rides the Advanced view, and `SelectedDetailTabIndex`
-   (Logs=0, Env=1, Events=2, Usage=3) is depended on by
+   lazily-realized tab content and an index that survives a hidden tab, and
+   `SelectedDetailTabIndex` (Logs=0, Env=1, Events=2, Usage=3) is depended on by
    `ClusterTabViewModel.OpenLogs` and the screenshot scenarios. A panel-level
    title row is the other thing to check for: the dock tab above already reads
    `Pod/<name>` / `Helm/<name>` / `Access/<ns>`, so a row that repeats it is a
@@ -441,7 +440,7 @@ Three rules about it:
    `10,0,10,0` in Theme.axaml. The gutter is not free — nine columns × 10px comes out
    of a fixed width, and the first cut pushed Age off the right edge at 1280px — so
    the column `MinWidth`s were re-cut to match (Name 136, Status 140, Ready 56,
-   Restarts 78, CPU 98, Memory 106, sparklines 34). Check `cluster-tab-advanced-view`
+   Restarts 78, CPU 98, Memory 106, sparklines 34). Check `cluster-tab-workloads-list`
    at its rendered 1280px, which is narrower than most real windows and is where this
    fails first. A CRD's own printer columns are a *variable* number of columns on that
    same fixed width, and their answer to this is kubectl's own `priority` field rather
@@ -793,14 +792,13 @@ Six things are load-bearing.
    panels shown *instead* of it, which is what they were: the old markup would have hidden
    the numbers behind exactly the condition that makes them the only thing left. Gating
    them on a measurement was the second break written and confirmed red.
-4. **The tab itself stays gated on the Advanced view, and that is deliberate rather than
-   an oversight.** The honest reading of the item is that requests and limits are not
-   metrics data, so ungating them from *metrics* is required; ungating the whole Usage tab
-   from the Advanced switch is a different change to a different rule — the switch's job
-   is "hide what you did not come here for", `SelectedDetailTabIndex`'s values are
-   load-bearing, and moving these numbers onto Overview instead would be redesigning the
-   item rather than implementing it. If a later pass concludes requests/limits belong on
-   an always-visible surface, Overview's placement section is where that argument goes.
+4. **The tab is no longer gated on anything but metrics.** It used to ride the Advanced
+   view as well, on the reasoning that the switch's job was "hide what you did not come
+   here for" — an argument that stopped holding when the switch became the sidebar's
+   alone. Requests and limits are not metrics data and were never the metrics gate's to
+   withhold; both gates are gone and the tab is always in the strip. `SelectedDetailTabIndex`'s
+   values (Logs=0, Env=1, Events=2, Usage=3, Overview=4) are still load-bearing, so the
+   tab keeps its index whatever else changes.
 5. **`IsCollectingUsage` exists because the two notices are now stacked, not exclusive.**
    Each has to know the other is not showing. And a cluster with no metrics API clears
    `UsageWindowCaption`: the strip's "collecting…" beside a notice saying nothing is ever
@@ -1042,49 +1040,171 @@ Six things worth keeping:
 
 ## The Advanced view
 
-One global persisted boolean, default **off**, mirrored onto every cluster tab
-and every inspector tab. It answers a complaint about the whole surface ("too
-much stuff for every Kubernetes type"), not about any one control, so it is one
-switch rather than a preferences page of them — the same shape as pgNimbus's
-`ShowAdvancedObjects`, in the same place (an icon-only `ToggleButton
-Classes="chip"` docked right of the sidebar's filter box, tooltip carrying the
-explanation), because people who use both should find it where they left it.
+One global persisted boolean, default **on**, mirrored onto every cluster tab. It
+governs exactly one thing: whether the sidebar shows the two sections most sessions
+never open — **Cluster** (the API machinery: APIServices, CSRs, ClusterRoles and the
+whole of flowcontrol, admissionregistration, apiregistration and coordination, 33 kinds
+on a bare k3s) and **CRDs** (the catalog's long tail, comfortably the longest section
+on any cluster running cert-manager, Argo or Istio). `SidebarGrouping.IsAdvancedSection`
+is the whole classification. It keeps its place — an icon-only `ToggleButton
+Classes="chip"` docked right of the sidebar's filter box, the same spot as pgNimbus's
+`ShowAdvancedObjects` — because people who use both should find it where they left it,
+and because that is now literally the panel it acts on.
 
-Off hides: the CPU/Memory columns and their sparklines, pod detail's Usage tab,
-the fleet toggle and Cluster column, the log toolbar's Wrap/Copy/Download, YAML
-force-apply, the sidebar's kind-count badges, the Helm/RBAC palette entries, and a
-CRD's own `priority: 1` printer columns — that last one is the switch acting as
-kubectl's `-o wide`, which is the closest thing it has to a definition.
-(The "Following &lt;container&gt;" caption used to ride the switch too; it is gone
-outright — the container strip names the container it is streaming and the log
-pane's own placeholder states say what the stream is doing, so it was a row of
-dock height spent restating both. **The exec pane's Send button rode it and is
-gone with the pane's input box** — a real terminal takes the keystroke itself, so
-there is no longer a control to gate; see "The exec terminal".)
-On restores today's surface exactly — it is a hide/show switch, not a second
-layout, and `cluster-tab-workloads-list` / `cluster-tab-advanced-view` are the
-same fixture tab rendered both ways to keep that honest.
+**It used to hide a great deal more, and removing that is the point of the current
+shape.** Off took the CPU/Memory columns and their sparklines, pod detail's Usage tab,
+the fleet toggle, both log toolbars' Wrap/Copy/Download, YAML force-apply, the Helm and
+RBAC palette entries, and a CRD's own `priority: 1` printer columns (the switch acting
+as kubectl's `-o wide`). So a complaint about a crowded *sidebar* was answered by hiding
+controls all over the *content area*, where nothing was crowded — and what it hid there
+was mostly what somebody had deliberately gone looking for: the cluster's own usage
+numbers, the one gesture that gets a log into a bug report, the only in-app resolution
+to an apply conflict, and columns a CRD's author had declared. All of those are
+unconditional now.
 
-Four things are load-bearing:
+Five things are load-bearing:
 
-- **It is a display switch and nothing else.** Flipping it must never restart a
-  watch, refetch anything, or lose list/inspector state — which is why every
-  consumer is a derived property, and why the fleet toggle stays visible while
-  aggregation is *on* even with the switch off (`IsFleetToggleVisible`).
-  Stranding a tab in fleet mode with no way out would mean the switch had
-  changed behaviour, not just visibility.
-- **Nothing it hides becomes unreachable.** Everything has a Ctrl/Cmd+K entry,
-  including the switch itself, which is what makes hiding by default safe.
+- **Nothing outside the sidebar may be gated on it again.** That is the rule the rework
+  exists to establish, and `SidebarAdvancedSectionTests` pins the negative half of it
+  (the usage columns and the fleet toggle survive the switch going off) precisely so a
+  re-gating shows up as a red test rather than as a control someone cannot find.
+- **It is a display switch and nothing else.** Flipping it must never restart a watch,
+  refetch anything, or lose list/inspector state.
+- **Nothing it hides becomes unreachable, and that is what makes hiding safe.** The
+  sidebar's own filter reaches into a hidden section — a query is a deliberate search
+  for one thing, and a match that then renders nothing is the "worse than no match"
+  failure the palette's rules already name — and every kind keeps its Ctrl/Cmd+K entry
+  whatever the switch says. `ApplySidebarChrome` and `ApplySidebarFilter` both derive
+  the gate, because the filter is one of its inputs.
 - **The shell owns it; tabs carry a mirror.** `MainWindowViewModel` persists it
-  (`WorkspaceSettings.IsAdvancedView`) and broadcasts; `ClusterTabViewModel` and
-  `InspectorTabViewModelBase` hold copies so views can use compiled bindings
-  against their own DataContext. It is stamped in `ClusterTabViewModel
-  .AddInspectorTab` — the one funnel every inspector tab enters through — so a
-  tab kind added later inherits the gate instead of shipping with it open,
-  which is exactly what the YAML editor's force-apply did before that existed.
-- **Adding a tab is what stamps it.** The screenshot harness therefore sets the
-  flag on the *shell* after adding the tab (`HostInMainWindow`), not on the tab;
-  setting it on the tab alone is silently overwritten.
+  (`AppSettings.IsAdvancedView`) and broadcasts; `ClusterTabViewModel` holds the copy the
+  sidebar binds. `InspectorTabViewModelBase` no longer carries one at all — with the
+  content area ungated, nothing read it, and a mirror nothing reads is the "setting
+  nothing reads" this file forbids.
+- **The kind-count badge stays on the switch.** "How much is hiding in here?" is a
+  question about the catalog, so it belongs to the control that governs the catalog.
+  It is pushed per section from `ApplySidebarChrome`, which is why the screenshot
+  harness has to call that after building its sections by hand — a fixture that skips
+  it renders the sidebar as though the switch were off however it is set.
+
+`cluster-tab-workloads-list` and `cluster-tab-basic-sidebar` are the same fixture tab
+rendered on and off, and what the pair has to show is as much the *sameness* of the
+content area as the difference in the sidebar. `cluster-tab-crd-printer-columns-wide`
+is gone: with every declared column always drawn it rendered identically to
+`cluster-tab-crd-printer-columns`.
+
+**The old value is deliberately not migrated.** `App.MigrateWorkspacePreferences` used
+to carry `WorkspaceSettings.IsAdvancedView` across; it no longer reads it, because that
+flag answered a question that no longer exists and most people never touched it — so
+migrating would have opted nearly everyone into the shorter sidebar on the strength of
+a default they never chose. The workspace property is kept unread so a downgrade still
+finds it.
+
+## The sidebar is 224px and the reader can drag it
+
+The catalog sidebar was a `0.65*` column, i.e. ~24% of the content area at every window
+size. That is a defensible width at 1280px and absurd at 3840, where it spent over 900
+pixels rendering the same ~200px of kind names — and the resource list, which is what
+wants a wide window, got whatever was left. It is an absolute width now
+(`AppSettings.DefaultSidebarWidth`, 224 DIPs: enough for `PodDisruptionBudgets` plus its
+icon and count badge), with a `GridSplitter` in the 8px gutter the sidebar's own right
+margin already left, so the handle costs no width of its own.
+
+Five things are load-bearing.
+
+1. **Column 0 is absolute and column 2 is star**, so a wider window goes entirely to the
+   list. That is the whole reason for the change; making the sidebar a star column again
+   undoes it.
+2. **The bounds live on the `ColumnDefinition`, not on the splitter**, because that is
+   where a GridSplitter reads them (`MinSidebarWidth` 150, `MaxSidebarWidth` 520). They
+   are cleared while the sidebar is hidden — a `MinWidth` would hold the collapsed column
+   open, and `ApplySidebarVisibility` collapsing the *column* rather than the panel is
+   what UI rule 12's sidebar toggle has always depended on.
+3. **The width is shell-owned and mirrored per tab**, exactly like `IsSidebarVisible`, and
+   a drag writes back through `ClusterTabViewModel.SidebarWidthChanged` — the same shape
+   as `AdvancedViewChanged`. **The write-back is the part that fails invisibly**: without
+   it the column resizes, the tab's own property follows, and neither the other tabs nor
+   `settings.json` ever hear about it, so the drag is silently lost on the next tab switch.
+   That is not something a screenshot can show, and it was caught by a headless drag probe
+   driving real pointer events at a real `ClusterTabView` — the same technique FEAT-66 used
+   on the grid's own column drags, and the reason to reach for it again.
+4. **It persists on `DragCompleted`, not per layout pass.** A GridSplitter rewrites the
+   width continuously while the pointer moves; persisting each intermediate value would
+   write the settings file dozens of times per gesture. Same bracketing as the grid's
+   column drags.
+5. **It is a preference, not workspace state**, and lives beside `IsSidebarVisible` in
+   `settings.json` — same control, same one global value. The per-kind column widths are
+   the ones in `workspace.json`, because those are keyed by what is being looked at and
+   this is not. `Normalized()` clamps it for the usual reason: the file is user-writable,
+   and a width past the window's own is a sidebar with no list beside it and no visible
+   way back.
+
+## macOS has a real menu bar, and the app is called kubeNimbus
+
+macOS puts a menu bar at the top of the screen whether an app asks for one or not, so
+the only question is whose commands it carries. It carried Avalonia's placeholder — a
+lone "About Avalonia" — which is why the app introduced itself to every Mac user under
+the framework's name. Two halves, and both are small:
+
+- **`Name="kubeNimbus"` on the `Application`** (App.axaml). Avalonia's macOS backend
+  feeds that to `SetupApplicationName`, and AppKit titles the app menu and names its
+  About, Hide and Quit items from it. The product name, not the assembly name, for the
+  same reason `<AssemblyName>` is `kubeNimbus`: it is a string a user reads.
+- **`Views/MacMenu.cs`**, a menu bar built in code and attached to the window and the
+  application. `NativeMenu.SetMenu(Application.Current, …)` replaces the placeholder app
+  menu (About + Preferences; Hide, Hide Others and Quit are AppKit's own and must not be
+  added again), and `NativeMenu.SetMenu(window, …)` supplies Cluster / View / Help.
+
+Four things about it:
+
+1. **It is macOS-only and gated on the platform, not left to be inert.** UI rule 12 says
+   this app has one row of chrome and the command bar is it; a menu bar is a second row
+   everywhere except macOS, where the OS supplies the row anyway. Win32 has no native menu
+   exporter, but **X11 does** — the freedesktop global-menu protocol — so an ungated menu
+   would quietly appear in a GNOME or KDE panel.
+2. **Every item is also reachable without it.** The ☰ menu and the palette already carry
+   all of them, so a Mac gains a familiar route and no platform gains a command.
+3. **Titles and gestures come from `CommandCatalog`**, and the menu is rebuilt on
+   `Hotkeys.Changed` for the same reason the window's key bindings are: a
+   `NativeMenuItem.Gesture` holds the modifier it was built with, so a menu built once
+   keeps printing the other platform's chord after someone changes the scheme.
+4. **Items act through `Click` handlers, not bound `Command`s.** Half of them belong to
+   the selected tab or to the window itself, and a NativeMenuItem built in code has no
+   binding to keep a captured command current — a menu rebuilt only on a scheme change
+   would otherwise act on whichever cluster was selected at build time. The two checkable
+   items (sidebar, advanced view) follow the shell through `PropertyChanged`, so the menu
+   and the command bar's own toggles cannot disagree while both are on screen.
+
+**Not done here:** a real `.app` bundle with an `Info.plist`. `release.yml` ships a bare
+osx-arm64 binary, so `CFBundleName` has nowhere to go; `Application.Name` is what the app
+menu reads either way, and bundling is its own item.
+
+## The theme toggle wrote a string nothing could read
+
+The command bar's light/dark button persisted the **ThemeVariant names** — `"Dark"` /
+`"Light"` — where `AppSettings` spells the setting `"dark"` / `"light"` / `"system"`.
+`Normalized()` rejected the miscased value and `App.ThemeFromString` read it as
+`ThemeVariant.Default`, so every click set the variant correctly and then, one line
+later, put the app back on the OS's own theme. On a machine whose OS is dark that is a
+toggle which enters dark and cannot leave — reported exactly that way, from a Mac, as
+"light → dark works and dark → light does not". It is not platform-specific: the same
+build fails the other direction on a light-mode OS, which is presumably why it survived.
+
+Three things came out of it, and the third is the general one:
+
+1. The toggle spells the variant with `App.ThemeToString` — the inverse function that
+   already existed — and writes it **once**, through `PersistTheme`. It used to assign
+   `Application.RequestedThemeVariant` itself *and* persist, and two writers for one
+   value is what let the second one silently undo the first.
+2. `AppSettings.Normalized()` canonicalizes case rather than rejecting it (`Canonical`,
+   which `HotkeyScheme` shares), so a `settings.json` written by the broken build
+   recovers on the next launch instead of losing the choice.
+3. **A validating store turns a stringly-typed mismatch into a silent revert.** The
+   clamping in `Normalized()` is right and is not the bug; the bug is that nothing
+   connected the one place that wrote the string to the one place that read it. Any new
+   setting spelled as a string wants its writer to go through the same helper its reader
+   does — `AppSettingsTests` pins the theme and hotkey pair, including the miscased
+   spellings, precisely because the failure mode is a control that appears to do nothing.
 
 ## The cluster switcher and environment colours
 
@@ -1363,13 +1483,15 @@ Seven things are load-bearing:
    an empty cell, never an exception on a watch tick. Only the *first* match is used,
    matching the API server's own `tableconvertor` ("as we only support simple JSON path,
    we can assume to have only one result").
-4. **`priority` is wired to the Advanced view.** kubectl shows `priority: 0` in the
-   default table and the rest only under `-o wide`; the CRD author has therefore already
-   marked which columns matter less, and this app already has one switch whose whole job
-   is "show me the busier layout". That is the answer to UI rule 14's width problem, and
-   it is a real one: KEDA declares **eleven** columns for a ScaledObject. Turning the
-   switch re-evaluates cells over objects the rows already hold — no refetch, no watch
-   restart, no lost selection, so it stays a display switch.
+4. **Every declared column is drawn, `priority: 1` included.** kubectl shows `priority: 0`
+   in the default table and the rest only under `-o wide`, and this app used to spell that
+   `-o wide` as the Advanced view. That gate is gone with the rework that confined the
+   Advanced view to the sidebar: a column the CRD's author declared is content, and a
+   reader who cannot see it has no way to know one was withheld. UI rule 14's width
+   problem is real — KEDA declares **eleven** columns for a ScaledObject — and its answer
+   is now FEAT-66's draggable columns, which is a lever the reader holds rather than one
+   they have to find. Ten slots is still the cap; the surplus is dropped in declaration
+   order.
 5. **A declared `Age` over `.metadata.creationTimestamp` is dropped**, because the
    list's own Age column *is* that column — recomputed live off the shared timer, with
    the exact timestamp as a tooltip. An `Age` pointing anywhere else is kept. Any other
@@ -1474,13 +1596,14 @@ Twelve things are load-bearing.
    list that jumped back to the top every fifteen seconds would be useless for the one
    job a CPU sort has. That break was written and confirmed red as well.
 8. **A CRD column is identified by the CRD author's name for it, never by slot.** The
-   grid's printer columns are ten fixed positional slots, but the advanced view is this
-   app's `-o wide`: turning it on brings a CRD's `priority: 1` columns into the list in
-   declaration order, so every slot after the first of them draws a different column
-   than it did a moment earlier. A width or a sort keyed by slot would silently move to
-   a neighbour when that switch is flipped. A remembered sort by a column the kind no
-   longer declares falls back to arrival order rather than shuffling the list against
-   cells that are not there.
+   grid's printer columns are ten fixed positional slots, and which column a slot draws
+   is a property of the kind in front of the reader — two kinds declaring different
+   columns put different things in slot 3. A width or a sort keyed by slot would silently
+   move to a neighbour on the next kind. (It used to shift under the Advanced view too,
+   which brought a CRD's `priority: 1` columns in and out mid-session; that gate is gone,
+   but slot identity was never the right key regardless.) A remembered sort by a column
+   the kind no longer declares falls back to arrival order rather than shuffling the list
+   against cells that are not there.
 9. **A star column and an Auto column do not keep a drag in the same place**, which is
    why the stored width carries its unit. Measured on a real grid: dragging a `2*`
    column leaves it a star column and rewrites the ratio (`2*` → `2.52*`), while
@@ -4634,4 +4757,95 @@ dashboard, the context menus, the prune checkbox and the detail pane's chevrons 
 verified by unit test and by rendering, not by a mouse. And the committed
 `design/screenshots/*.png` were deliberately not regenerated, for the reason every recent
 pass records — their Age column is a function of the real clock, so they drift by
+themselves.
+
+**UI-report pass (theme toggle, macOS menu, sidebar width, Advanced view):** four
+complaints from someone running the app on a Mac, and the first one is a real defect
+rather than a preference. See "The theme toggle wrote a string nothing could read",
+"macOS has a real menu bar, and the app is called kubeNimbus", "The sidebar is 224px and
+the reader can drag it" and the rewritten "The Advanced view" above for the rules; what
+follows is the evidence.
+
+**The theme bug was a stringly-typed mismatch, and it is not macOS-specific.** The
+command bar's toggle persisted `"Dark"`/`"Light"` where `AppSettings` spells the setting
+`"dark"`/`"light"`, so `Normalized()` rejected it and the app went straight back to
+following the OS. On a dark-mode Mac that reads exactly as reported — light → dark
+appears to work, dark → light does nothing — and on a light-mode machine it fails the
+other way, which is presumably how it survived. The toggle now writes through
+`App.ThemeToString` once instead of assigning the variant *and* persisting it, and
+`Normalized()` canonicalizes case so a file written by the broken build recovers rather
+than losing the choice.
+
+**The Advanced view rework is mostly deletion.** `InspectorTabViewModelBase` lost its
+`IsAdvancedView` mirror outright — with the content area ungated nothing read it — along
+with the stamping line in `AddInspectorTab`, the `NotifyPropertyChangedFor` chain, the
+`-o wide` argument to `PrinterColumns.Visible`, the `IsAdvancedView` arm of
+`ClusterTabView`'s property-changed handler, and the gates in `PodDetailView`,
+`WorkloadLogsView`, `YamlEditorView` and two palette blocks. What replaced them is one
+classification (`SidebarGrouping.IsAdvancedSection`) and one pushed-down flag
+(`SidebarSectionViewModel.IsHiddenByBasicView`, folded with the filter's own
+`HasVisibleKinds` into `IsSectionVisible`). The old workspace value is deliberately not
+migrated — see the section above for why carrying it forward would opt nearly everyone
+into a shorter sidebar on the strength of a default they never chose.
+
+**Five breaks were written, run and reverted**, the usual discipline. Making the theme
+parse case-sensitively again turned **4 of 380** Core tests red on exactly the miscased
+spellings. Stopping the sidebar filter from reaching into a hidden section turned
+`A_filter_reaches_into_a_hidden_section` red; re-gating the usage columns on the switch
+turned `The_switch_does_not_touch_the_list` red — the two assertions that exist to make a
+re-gating visible. Dropping `SidebarWidthChanged` turned `A_width_change_reaches_the_shell`
+red. All reverted and both suites re-run.
+
+**The splitter was driven, not assumed, and that found the one real defect in this
+pass.** A headless probe drove real pointer events at the real `ClusterTabView` inside a
+real `MainWindow` — the technique FEAT-66 used on the grid's own column drags. It
+reported the column resizing correctly (224 → 284, clamped at 520 and at 150, collapsing
+to 0 when the sidebar is hidden and restoring afterwards) **and the width never reaching
+the shell or `settings.json`**: the write-back from tab to shell was missing, so every
+drag was silently lost on the next tab switch. That is invisible in a screenshot and in
+every static test; `ClusterTabViewModel.SidebarWidthChanged` is the fix, pinned by
+`SidebarWidthTests`. After it, the same probe reports `persisted settings.SidebarWidth =
+284`. The probe was deleted afterwards rather than committed.
+
+**One regression was caught by looking at the render.** Repointing `ApplySidebarChrome`
+dropped the `ShowKindCount` assignment entirely, so the sidebar's count badges vanished
+in every scenario — the build was clean and both suites stayed green. The badge belongs
+on this switch (it is a question about the catalog, and the switch governs the catalog),
+so it was restored rather than made unconditional. Fixing it exposed a second thing worth
+keeping: the screenshot harness builds its sections by hand and so never ran the chrome
+pass at all — it only ever looked right because the old default was *off*. `ApplySidebarChrome`
+is `internal` now with `InternalsVisibleTo("Screenshot")`, and `BaseTab` calls it, which
+is the same "drive the real entry point" rule the harness follows everywhere else.
+
+**Two screenshot scenarios changed meaning and one is gone.** `cluster-tab-advanced-view`
+is now `cluster-tab-basic-sidebar` and renders the switch **off**, which is the state
+worth looking at; the pair with `cluster-tab-workloads-list` has to show as much sameness
+in the content area as difference in the sidebar. `cluster-tab-crd-printer-columns-wide`
+was deleted: with every declared column always drawn it rendered identically to
+`cluster-tab-crd-printer-columns`.
+
+**Verified this session**: `dotnet build KubeNimbus.slnx` with **0 warnings**;
+**380/380 Core TUnit** and **149/149 App TUnit**, 0 failed, 0 skipped, both via
+`--project` (no sandbox here, so the Core count is the unit-only subset — the
+cluster-gated tests return early); the five break/revert runs above; the splitter probe;
+all **73** scenarios × both themes rendered (146 PNGs) with the sidebar, the CRD list and
+the basic/advanced pair read off the images rather than asserted; `docs/keyboard-shortcuts.md`
+regenerated through `KUBENIMBUS_UPDATE_DOCS=1`; the linux-x64 NativeAOT publish with no
+new warnings beyond the known DataGrid IL2104/IL3053; and `--smoke-test` on that published
+binary under Xvfb (`SMOKE-OK main window rendered at 1280x800 after 4216 ms`, exit 0).
+
+**Not verified, and the macOS half is the whole of it.** There is no Mac here, so the
+menu bar has **never been seen**: that `Application.Name` really does title the app menu,
+that AppKit appends Hide/Quit rather than duplicating what `MacMenu` adds, that the
+Cluster/View/Help menus appear at all from an unbundled binary, and that the two
+checkable items show their checkmarks are all argued from the platform's documented
+behaviour and from Avalonia's `SetupApplicationName`, never observed. The theme fix is
+equally untested *on a Mac*, though the mechanism is platform-independent and is pinned
+by `AppSettingsTests`. Nothing has been driven by a real mouse either — the splitter
+probe's pointer events are synthetic, so the resize cursor over the 8px handle, the hit
+zone at 150% scaling, and how the drag feels on a trackpad are unverified. And no live
+cluster came up (no registry is reachable from this container), so the narrower sidebar
+has never been seen against a real 70-CRD catalog, which is the case it was cut for.
+`design/screenshots/*.png` were deliberately not regenerated, for the reason every recent
+pass records: their Age column is a function of the real clock, so they drift by
 themselves.

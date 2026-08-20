@@ -72,29 +72,43 @@ public class ClusterTabPrinterColumnTests
     // ------------------------------------------------------------ the column set
 
     /// <summary>
-    /// The default list is kubectl's default table: priority-0 columns only, and the
-    /// declared Age folded into the list's own live Age column.
+    /// Every column the CRD declares, priority-1 included, with the declared Age folded
+    /// into the list's own live Age column.
+    ///
+    /// <para>
+    /// The priority-1 half used to be withheld until the advanced view was on — this
+    /// app's <c>-o wide</c>. That switch governs the sidebar and nothing else now, so a
+    /// column the CRD's author declared is always drawn: a reader who cannot see the
+    /// Issuer of a Certificate has no way to know a column was withheld, and the width
+    /// it costs is theirs to re-cut (FEAT-66).
+    /// </para>
     /// </summary>
     [Test]
-    public async Task Default_view_shows_priority_zero_columns_without_the_declared_age()
+    public async Task Every_declared_column_is_shown_without_the_declared_age()
     {
         var tab = TabWithCertificates();
 
-        await Assert.That(string.Join(",", tab.VisiblePrinterColumns.Select(c => c.Name))).IsEqualTo("Ready,Secret");
+        await Assert.That(string.Join(",", tab.VisiblePrinterColumns.Select(c => c.Name)))
+            .IsEqualTo("Ready,Secret,Issuer");
     }
 
-    /// <summary>The advanced view is this app's <c>-o wide</c>, in both directions.</summary>
+    /// <summary>
+    /// The advanced view no longer touches the list. This is the negative half of the
+    /// rule above and the one worth pinning: it is the assertion that fails if anything
+    /// re-gates a content-area column on that switch.
+    /// </summary>
     [Test]
-    public async Task Advanced_view_adds_and_then_removes_the_low_priority_columns()
+    public async Task The_advanced_view_does_not_change_the_column_set()
     {
         var tab = TabWithCertificates();
+
+        tab.IsAdvancedView = false;
+        await Assert.That(string.Join(",", tab.VisiblePrinterColumns.Select(c => c.Name)))
+            .IsEqualTo("Ready,Secret,Issuer");
 
         tab.IsAdvancedView = true;
         await Assert.That(string.Join(",", tab.VisiblePrinterColumns.Select(c => c.Name)))
             .IsEqualTo("Ready,Secret,Issuer");
-
-        tab.IsAdvancedView = false;
-        await Assert.That(string.Join(",", tab.VisiblePrinterColumns.Select(c => c.Name))).IsEqualTo("Ready,Secret");
     }
 
     // ------------------------------------------------------------------- cells
@@ -135,23 +149,21 @@ public class ClusterTabPrinterColumnTests
     }
 
     /// <summary>
-    /// The advanced view is a display switch: flipping it re-evaluates the cells against
-    /// objects the rows already hold — no refetch, no watch restart, and the rows
-    /// themselves survive, which is what "hide/show, not a second layout" means here.
+    /// A priority-1 cell carries its value like any other, and the advanced view leaves
+    /// both the cells and the row objects alone.
     /// </summary>
     [Test]
-    public async Task Toggling_the_advanced_view_reshuffles_cells_without_replacing_rows()
+    public async Task A_low_priority_cell_carries_its_value_whatever_the_advanced_view_says()
     {
         var tab = TabWithCertificates();
         var row = tab.Rows[0];
 
-        tab.IsAdvancedView = true;
-
-        await Assert.That(tab.Rows[0]).IsSameReferenceAs(row);
         await Assert.That(Cells(row, 3)).IsEqualTo("True | checkout-tls | internal-ca");
 
         tab.IsAdvancedView = false;
-        await Assert.That(Cells(row, 3)).IsEqualTo("True | checkout-tls | ");
+
+        await Assert.That(tab.Rows[0]).IsSameReferenceAs(row);
+        await Assert.That(Cells(row, 3)).IsEqualTo("True | checkout-tls | internal-ca");
     }
 
     /// <summary>

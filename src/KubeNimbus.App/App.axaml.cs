@@ -107,7 +107,7 @@ public partial class App : Application
         // A brand-new install has nothing to migrate. Writing a file here anyway would
         // be harmless, but not writing one keeps "no settings file" meaning "never
         // configured anything", which is what the migration guard reads next launch.
-        if (workspace is { Theme: null, IsAdvancedView: not true } &&
+        if (workspace is { Theme: null } &&
             (workspace.KubeconfigPaths is null || workspace.KubeconfigPaths.Count == 0))
         {
             return;
@@ -119,12 +119,20 @@ public partial class App : Application
             // uses the lowercase strings pgNimbus already persists, so the two apps'
             // files say the same thing.
             Theme = workspace.Theme switch { "Dark" => "dark", "Light" => "light", _ => "system" },
-            IsAdvancedView = workspace.IsAdvancedView ?? false,
+            // Deliberately not migrated. The workspace's flag answered a question that
+            // no longer exists — it gated usage columns, log toolbars, force-apply and
+            // the Helm/RBAC palette entries, none of which the advanced view touches
+            // any more — so carrying the value forward would apply an old answer to a
+            // new question. It takes AppSettings' own default (on) instead.
             KubeconfigPaths = [.. workspace.KubeconfigPaths ?? []],
         });
     }
 
-    private static ThemeVariant ThemeFromString(string? theme) => theme switch
+    // Lower-cased first: AppSettings.Normalized() already canonicalizes what comes off
+    // disk, but SetTheme takes a string straight from a caller, and a mismatch here
+    // reads as Default — i.e. as "follow the OS", which is indistinguishable from the
+    // toggle not working at all.
+    private static ThemeVariant ThemeFromString(string? theme) => theme?.ToLowerInvariant() switch
     {
         "light" => ThemeVariant.Light,
         "dark" => ThemeVariant.Dark,

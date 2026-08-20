@@ -53,6 +53,17 @@ public partial class MainWindow : Window
             UpdateThemeIcon();
             ApplyBackdrop();
         };
+
+        // The macOS menu bar, built against the view model. Hooked on DataContextChanged
+        // rather than in the constructor because App sets the DataContext in an object
+        // initializer, i.e. after this runs. No-op on every other platform.
+        DataContextChanged += (_, _) =>
+        {
+            if (Vm is { } vm)
+            {
+                MacMenu.Attach(this, vm);
+            }
+        };
         ActualThemeVariantChanged += (_, _) =>
         {
             UpdateThemeIcon();
@@ -135,15 +146,31 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnToggleThemeClick(object? sender, RoutedEventArgs e)
-    {
-        if (Application.Current is not { } app)
-        {
-            return;
-        }
+    /// <summary>
+    /// The command bar's light/dark toggle. It flips the <em>actual</em> variant rather
+    /// than the requested one, so the first click off "follow the system" goes to the
+    /// opposite of what is on screen rather than to whatever the OS is set to.
+    ///
+    /// <para>
+    /// The chosen variant is spelled by <see cref="App.ThemeToString"/> and not by a
+    /// literal here. It used to write "Dark"/"Light" — the ThemeVariant names — which
+    /// <c>AppSettings.Normalized()</c> rejects and <c>App.ThemeFromString</c> reads as
+    /// <see cref="ThemeVariant.Default"/>: every click set the variant correctly and
+    /// then, one line later, put the app straight back onto the OS's own theme. On a
+    /// machine whose OS is dark that is a toggle which can enter dark and never leave.
+    /// </para>
+    /// </summary>
+    private void OnToggleThemeClick(object? sender, RoutedEventArgs e) => ToggleTheme();
 
-        app.RequestedThemeVariant = ActualThemeVariant == ThemeVariant.Dark ? ThemeVariant.Light : ThemeVariant.Dark;
-        Vm?.PersistTheme(app.RequestedThemeVariant == ThemeVariant.Dark ? "Dark" : "Light");
+    /// <summary>Internal so the macOS View menu drives the same path as the bar's button.</summary>
+    internal void ToggleTheme()
+    {
+        var chosen = ActualThemeVariant == ThemeVariant.Dark ? ThemeVariant.Light : ThemeVariant.Dark;
+
+        // SetTheme applies the variant to the Application as well as persisting it, so
+        // there is deliberately no second write to RequestedThemeVariant here: two
+        // writers for one value is what let the bug above hide.
+        Vm?.PersistTheme(App.ThemeToString(chosen));
     }
 
     private void UpdateThemeIcon()

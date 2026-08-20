@@ -31,6 +31,12 @@
          cannot move to Core (hard rule 1), so the alternative to this line is a
          stand-in reproduction of the logic — which would pin nothing. -->
     <InternalsVisibleTo Include="KubeNimbus.App.Tests" />
+
+    <!-- The screenshot harness builds cluster tabs by hand, so it needs the same
+         "the sidebar has just been rebuilt" pass production runs after discovery.
+         Reimplementing it there is how a fixture starts rendering something the app
+         never does. -->
+    <InternalsVisibleTo Include="Screenshot" />
   </ItemGroup>
 
   <ItemGroup>

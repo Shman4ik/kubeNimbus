@@ -300,13 +300,15 @@
       <StackPanel Spacing="6">
         <TextBlock Text="Apply conflict — another field manager owns some of these fields." Classes="statusText warn" />
         <TextBlock Text="{Binding ConflictDetails}" TextWrapping="Wrap" FontSize="11" Opacity="0.8" />
-        <!-- Expert affordance, gated by the shell's global "Advanced view" switch
-             (mirrored onto every inspector tab): force-apply takes those fields away
-             from their owner. -->
+        <!-- Force-apply takes those fields away from their owner, so it says so and is
+             offered only here, inside the conflict panel that explains what it would do.
+             It used to be gated on the advanced view as well, which put the resolution
+             to a conflict behind a switch about sidebar clutter — and the conflict is
+             the one state in which this button is the answer. -->
         <Button Content="Force apply" HorizontalAlignment="Left" IsEnabled="{Binding !IsBusy}"
-                IsVisible="{Binding IsAdvancedView}" Command="{Binding ForceApplyCommand}" />
-        <TextBlock Text="Reload and re-apply your change, or enable Advanced view to take ownership of these fields."
-                   FontSize="11" Opacity="0.7" TextWrapping="Wrap" IsVisible="{Binding !IsAdvancedView}" />
+                Command="{Binding ForceApplyCommand}" />
+        <TextBlock Text="Reload and re-apply your change, or force apply to take ownership of these fields."
+                   FontSize="11" Opacity="0.7" TextWrapping="Wrap" />
       </StackPanel>
     </Border>
 

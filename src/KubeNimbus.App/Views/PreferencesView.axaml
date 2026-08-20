@@ -45,7 +45,7 @@
                 <Grid ColumnDefinitions="*,Auto">
                     <StackPanel Spacing="2" Margin="0,0,16,0">
                         <TextBlock Classes="label" Text="Advanced view" />
-                        <TextBlock Classes="hint" Text="Shows the controls only some sessions need: CPU/memory columns and sparklines, the pod Usage tab, the all-clusters toggle, the log toolbar's wrap/copy/download, YAML force-apply, sidebar kind counts, and the Helm and access-review commands. Everything it hides stays reachable from the command palette." />
+                        <TextBlock Classes="hint" Text="Shows the sidebar sections most sessions never open — Cluster (API machinery: APIServices, CSRs, ClusterRoles, admission and flow control) and CRDs. On by default; turn it off for a sidebar of the kinds you actually browse. Nothing becomes unreachable: the sidebar's own filter and the command palette still find every kind." />
                     </StackPanel>
                     <ToggleSwitch Grid.Column="1" VerticalAlignment="Center"
                                   OnContent="" OffContent=""

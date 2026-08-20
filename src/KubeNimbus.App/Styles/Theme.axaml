@@ -257,6 +257,19 @@
         <Setter Property="Background" Value="{StaticResource AppSelectionBrush}" />
     </Style>
 
+    <!-- The sidebar's drag handle. Same treatment as the dock's: invisible until
+         hovered, because a permanent rule between the sidebar and the list is a line
+         nobody asked for (UI rule 1) and the 8px gutter it sits in already separates
+         them. The hand cursor is what says it is draggable at all (UI rule 8). -->
+    <Style Selector="GridSplitter.sidebar">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="VerticalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="GridSplitter.sidebar:pointerover">
+        <Setter Property="Background" Value="{StaticResource AppSelectionBrush}" />
+    </Style>
+
     <!-- Form field caption, Fluent's label-above-the-input pattern (WinUI "Caption"
          at 12px, de-emphasized). Beside-the-input labels are what put "Local port"
          hard against its own text box in the port-forward pane: a label column sized

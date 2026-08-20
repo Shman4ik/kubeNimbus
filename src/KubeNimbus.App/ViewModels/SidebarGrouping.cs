@@ -178,6 +178,28 @@ public static class SidebarGrouping
     public static bool IsExpandedByDefault(string section) =>
         section is not ("Config" or ClusterSection or "CRDs");
 
+    /// <summary>
+    /// Whether a section is one the advanced view governs — i.e. one most sessions
+    /// never open.
+    ///
+    /// <para>
+    /// <b>Cluster</b> is the API machinery: APIServices, CSRs, ClusterRoles and the
+    /// whole of flowcontrol, admissionregistration, apiregistration and coordination,
+    /// which on a bare k3s is 33 kinds. <b>CRDs</b> is the catalog's own long tail —
+    /// on a cluster running cert-manager, Argo and Istio it is comfortably the longest
+    /// section there is. Between them they are most of what makes a real cluster's
+    /// sidebar unreadable, and neither is where anybody starts.
+    /// </para>
+    ///
+    /// <para>
+    /// Everything else stays: Workloads, Network, Config and Storage are what the app
+    /// is for, and Argo and Helm are only present at all on a cluster that has them —
+    /// a section gated on evidence is already narrow enough (UI rule 1).
+    /// </para>
+    /// </summary>
+    public static bool IsAdvancedSection(string section) =>
+        section is ClusterSection or "CRDs";
+
     /// <summary>Sidebar section for Helm releases — appended after the discovery-driven ones.</summary>
     public const string HelmSection = "Helm";
 

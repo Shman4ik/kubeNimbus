@@ -67,13 +67,13 @@
                       ToolTip.Tip="Show timestamps — the merge orders on these, so they are how an out-of-order line is spotted">
           <PathIcon Data="{StaticResource ClockOutlineIconGeometry}" Width="12" Height="12" />
         </ToggleButton>
-        <ToggleButton Classes="chip" Padding="7,3" FontSize="11" IsVisible="{Binding IsAdvancedView}"
+        <ToggleButton Classes="chip" Padding="7,3" FontSize="11"
                       IsChecked="{Binding WrapLogLines}" ToolTip.Tip="Wrap long lines" Content="Wrap" />
-        <Button Classes="toolbar" Command="{Binding CopyLogsCommand}" IsVisible="{Binding IsAdvancedView}"
+        <Button Classes="toolbar" Command="{Binding CopyLogsCommand}"
                 ToolTip.Tip="Copy the visible lines, pod-prefixed and with timestamps" Padding="6">
           <PathIcon Data="{StaticResource ContentCopyIconGeometry}" Width="13" Height="13" />
         </Button>
-        <Button Classes="toolbar" Command="{Binding DownloadLogsCommand}" IsVisible="{Binding IsAdvancedView}"
+        <Button Classes="toolbar" Command="{Binding DownloadLogsCommand}"
                 ToolTip.Tip="Save the visible lines to a file, pod-prefixed and with timestamps" Padding="6">
           <PathIcon Data="{StaticResource DownloadIconGeometry}" Width="13" Height="13" />
         </Button>

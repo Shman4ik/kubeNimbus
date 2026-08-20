@@ -7,11 +7,18 @@
              x:Class="KubeNimbus.App.Views.ClusterTabView"
              x:DataType="vm:ClusterTabViewModel">
 
-  <!-- Named because ApplySidebarVisibility mutates column 0's width from code-behind:
-       hiding a Grid child does not collapse the column it occupies, so the width is
-       what has to move, and it is a star value the layout owns — the same reason
-       ApplyDockState mutates row heights rather than binding them. -->
-  <Grid Name="ContentColumns" ColumnDefinitions="0.65*,2*">
+  <!-- Named because ApplySidebarVisibility and ApplySidebarWidth mutate column 0's
+       width from code-behind: hiding a Grid child does not collapse the column it
+       occupies, so the width is what has to move, and a GridSplitter writes that width
+       directly and would fight a one-way binding — the same reason ApplyDockState
+       mutates row heights rather than binding them.
+
+       The width is an absolute one now, not the 0.65* it used to be. A star column
+       re-divides on every window resize, so a sidebar sized to hold a kind name at
+       1280px was taking ~24% of a 3840px window to show the same 200px of text; the
+       resource list is what should absorb a wider window. Column 1 stays star so it
+       takes every pixel the sidebar does not. -->
+  <Grid Name="ContentColumns" ColumnDefinitions="224,Auto,*">
 
     <!-- Sidebar: sits directly on the shell tone, Files-style — no card chrome. -->
     <Grid Name="Sidebar" Grid.Column="0" RowDefinitions="Auto,*" Margin="0,0,8,0">
@@ -19,9 +26,10 @@
       <!-- Filter row, with the advanced-view switch docked right of it — same placement
            and same shape as pgNimbus's SchemaTreePanel, because it answers the same
            complaint ("too much of it, all the time") and people who use both should
-           find it in the same place. It is a ToggleButton with a two-way IsChecked and
-           NO Command: the two together cancel each other out (see the note on
-           ClusterTabViewModel.IsAdvancedView). -->
+           find it in the same place. The switch is *this panel's*: it governs which
+           sections the sidebar shows and nothing outside it. It is a ToggleButton with
+           a two-way IsChecked and NO Command: the two together cancel each other out
+           (see the note on ClusterTabViewModel.IsAdvancedView). -->
       <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="4,0,4,8">
         <TextBox Grid.Column="0" Classes="filterbox"
                   Text="{Binding SidebarFilter}" PlaceholderText="Filter resources…">
@@ -39,7 +47,7 @@
         </TextBox>
         <ToggleButton Grid.Column="1" Classes="chip" Padding="5" Margin="6,0,0,0" VerticalAlignment="Center"
                       IsChecked="{Binding IsAdvancedView}"
-                      ToolTip.Tip="Advanced view — also show CPU/memory columns and graphs, the fleet toggle, log tools, force-apply, and the Helm &amp; RBAC commands">
+                      ToolTip.Tip="Advanced view — show the Cluster and CRDs sections. On by default; turn it off for a sidebar of the kinds you actually browse. The filter and the command palette still reach everything.">
           <PathIcon Data="{StaticResource TuneIconGeometry}" Width="14" Height="14" />
         </ToggleButton>
       </Grid>
@@ -48,7 +56,7 @@
         <ItemsControl ItemsSource="{Binding SidebarSections}">
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:SidebarSectionViewModel">
-              <StackPanel Margin="0,0,0,8" IsVisible="{Binding HasVisibleKinds}">
+              <StackPanel Margin="0,0,0,8" IsVisible="{Binding IsSectionVisible}">
                 <Border Classes="sectionHeaderRow" Tapped="OnSidebarSectionTapped">
                   <Grid ColumnDefinitions="Auto,*,Auto">
                     <PathIcon Grid.Column="0" Data="{StaticResource ChevronRightIconGeometry}" Width="10" Height="10"
@@ -91,11 +99,20 @@
       </ScrollViewer>
     </Grid>
 
+    <!-- The sidebar's drag handle. Sized to the 8px gutter the sidebar's own right
+         margin already leaves, so it adds no width — it makes a gap that was there
+         anyway draggable. Min/Max come from AppSettings so the drag cannot leave the
+         filter box too narrow to type in, or the resource list too narrow to read;
+         ClusterTabView.axaml.cs persists where it ends up. -->
+    <GridSplitter Grid.Column="1" Name="SidebarSplitter" Classes="sidebar" Width="8"
+                  ResizeDirection="Columns" ResizeBehavior="PreviousAndNext"
+                  DragCompleted="OnSidebarSplitterDragCompleted" />
+
     <!-- Content: raised layer, Files-style. Resource list on top, inspector docks
          along the bottom (Lens-style) so logs / exec / YAML get the full content
          width instead of a cramped sidecar. Row heights are managed in code-behind
          (ApplyDockState) to support the draggable splitter + maximize + collapse. -->
-    <Border Grid.Column="1" Classes="layer">
+    <Border Grid.Column="2" Classes="layer">
       <DockPanel>
 
         <!-- Demo banner. Present for the whole life of a demo tab and absent entirely
