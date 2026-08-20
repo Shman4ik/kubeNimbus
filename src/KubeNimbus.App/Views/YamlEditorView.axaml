@@ -10,7 +10,14 @@
   <Grid Name="Rows" RowDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto" Margin="10,8,10,10">
 
     <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto" Margin="0,0,0,8">
-      <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+      <!-- No title here: the dock tab directly above already reads
+           `Deployment/checkout-worker`, and this printed it again 44px lower, which is
+           the panel-level title UI rule 10 removed from HelmReleaseView and RbacView.
+           Unlike those two the row itself has to stay — it carries Reload/Apply/Delete —
+           so what this buys is the row's whole flexible column back for the status
+           texts, which on a long object name were being squeezed by a duplicate of the
+           tab above them. Column 0 is left empty deliberately, so the tools stay
+           right-aligned exactly where they were. -->
 
       <!-- Every in-flight state says so: an editor that silently swaps its text under
            you is indistinguishable from one that lost your edit (CLAUDE.md UI rule 9). -->

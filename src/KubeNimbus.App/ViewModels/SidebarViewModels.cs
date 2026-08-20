@@ -155,14 +155,51 @@ public sealed partial class SidebarKindViewModel(ResourceDescriptor descriptor, 
     /// to any CRD Kind that is already plural — which nothing in a hardcoded list of
     /// exceptions could ever cover, since the kinds come from the cluster.
     /// </summary>
+    /// <summary>
+    /// The row's label: the server's own plural, re-cased to the Kind's shape.
+    ///
+    /// It reads <see cref="ResourceDescriptor.Plural"/> rather than guessing, because
+    /// guessing is wrong for a whole class of kinds and was: the previous version used
+    /// the plural only to test equality with the Kind and then appended "s" (or "es"
+    /// after s/x), which renders <c>NetworkPolicy</c> as "NetworkPolicys". Every Kind
+    /// ending consonant+y is affected, and on a CRD-heavy cluster that is a lot of
+    /// them — Policy, Registry, Gateway, Repository. The server has already answered
+    /// this question correctly (<c>networkpolicies</c>), so the only job here is
+    /// casing: discovery reports the plural lowercased, and the sidebar renders Kind
+    /// casing.
+    ///
+    /// Re-casing is done by walking the Kind and the plural together while they agree
+    /// case-insensitively, which restores the Kind's own capitalisation over the part
+    /// they share and leaves the server's suffix alone — "NetworkPolicy" +
+    /// "networkpolicies" gives "NetworkPolicies". A plural that shares no prefix with
+    /// the Kind (nothing in Kubernetes does this, but a CRD may) falls back to the
+    /// server's string as sent, which is still the truth about that resource.
+    /// </summary>
     private static string Pluralize(ResourceDescriptor descriptor)
     {
         var kind = descriptor.Kind;
-        if (string.Equals(descriptor.Plural, kind, StringComparison.OrdinalIgnoreCase))
+        var plural = descriptor.Plural;
+
+        // Descriptors built by hand — the well-known statics, fixtures — may carry no
+        // plural at all. Nothing to re-case against, so keep the Kind as written.
+        if (string.IsNullOrEmpty(plural))
         {
             return kind;
         }
 
-        return kind.EndsWith('s') || kind.EndsWith('x') ? kind + "es" : kind + "s";
+        if (string.Equals(plural, kind, StringComparison.OrdinalIgnoreCase))
+        {
+            return kind;
+        }
+
+        var shared = 0;
+        while (shared < kind.Length
+               && shared < plural.Length
+               && char.ToLowerInvariant(kind[shared]) == char.ToLowerInvariant(plural[shared]))
+        {
+            shared++;
+        }
+
+        return shared == 0 ? plural : string.Concat(kind.AsSpan(0, shared), plural.AsSpan(shared));
     }
 }

@@ -18,8 +18,11 @@
         <ListBoxItem Content="Bindings" IsVisible="{Binding HasSubject}" />
         <ListBoxItem Content="Who can…" />
       </ListBox>
+      <!-- No `namespace <ns>` caption here: the dock tab above already reads
+           `Access/<ns>`, and restating it 40px lower is the panel-level title row UI
+           rule 10 removed from this very view, in miniature. The subject pill stays —
+           it is the one thing on this row the tab does not carry. -->
       <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="10,0,0,0" VerticalAlignment="Center">
-        <TextBlock Text="{Binding ReviewNamespace, StringFormat='namespace {0}'}" Opacity="0.6" FontSize="12" VerticalAlignment="Center" />
         <Border Classes="statusPill" IsVisible="{Binding HasSubject}">
           <TextBlock Text="{Binding SubjectText}" FontSize="11.5" />
         </Border>
@@ -197,7 +200,12 @@
                             <TextBlock Text="wildcard" FontSize="11" />
                           </Border>
                         </StackPanel>
+                        <!-- Bordered, for the same reason pod detail's owner chip is:
+                             `Button.chip` rests with no background and no border, so at
+                             the far end of a row of prose this read as a label rather
+                             than as the one control on the row (UI rule 8). -->
                         <Button Grid.Column="1" Classes="chip" Padding="8,3" FontSize="11.5"
+                                BorderThickness="1" BorderBrush="{StaticResource CardBorderBrush}"
                                 Content="Verify" Command="{Binding VerifyCommand}"
                                 IsEnabled="{Binding !IsVerifying}"
                                 ToolTip.Tip="Ask the API server directly (SubjectAccessReview)" />

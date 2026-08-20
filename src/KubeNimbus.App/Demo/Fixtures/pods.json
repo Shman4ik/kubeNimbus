@@ -931,6 +931,20 @@
           "type": "PodScheduled",
           "status": "True",
           "lastTransitionTime": "2026-07-20T04:01:00Z"
+        },
+        {
+          "type": "DisruptionTarget",
+          "status": "True",
+          "lastTransitionTime": "2026-08-19T09:14:31Z",
+          "reason": "EvictionByEvictionAPI",
+          "message": "Pod was evicted by the eviction API: draining node demo-worker-1"
+        },
+        {
+          "type": "cloud.example.com/load-balancer-ready",
+          "status": "True",
+          "lastTransitionTime": "2026-08-19T09:02:07Z",
+          "reason": "TargetGroupRegistered",
+          "message": "Registered with target group tg-payments-notify"
         }
       ],
       "containerStatuses": [

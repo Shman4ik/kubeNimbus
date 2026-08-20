@@ -246,11 +246,8 @@ public partial class ClusterTabView : UserControl
         // A CRD that declares its own printer columns has already answered the question
         // Status and Details exist to answer, and kubectl shows no generic status
         // beside them — so the two step aside rather than doubling up in a list that is
-        // already tight on width (UI rule 14). The 28px health dot stays: it is not one
-        // of kubectl's columns, it costs almost nothing, and it is the only thing
-        // carrying ResourceStatusSummary's health classification once the text column
-        // is gone. Built-in kinds never reach this branch — they are not CRDs, so
-        // VisiblePrinterColumns is always empty for them.
+        // already tight on width (UI rule 14). Built-in kinds never reach this branch —
+        // they are not CRDs, so VisiblePrinterColumns is always empty for them.
         var hasPrinterColumns = Vm?.VisiblePrinterColumns.Count > 0;
 
         foreach (var column in FixedColumns)
@@ -261,7 +258,15 @@ public partial class ClusterTabView : UserControl
                 "Restarts" => ResourceStatusSummary.ShowsRestarts(descriptor),
                 "Details" => !hasPrinterColumns && ResourceStatusSummary.ShowsDetails(descriptor),
                 "Status" => !hasPrinterColumns && ResourceStatusSummary.ShowsStatus(descriptor),
-                "" => ResourceStatusSummary.ShowsStatus(descriptor),
+                // The 28px health dot, and it now shows *only* where the Status column
+                // has stepped aside for a CRD's own printer columns. Beside a Status
+                // pill it was the same fact twice in the same row — the pill is already
+                // colour-coded by the same classification and also spells the word, so
+                // the dot added a second encoding of it and no more. Where printer
+                // columns replace Status the dot is the last thing carrying
+                // ResourceStatusSummary's verdict at all, which is exactly why it stays
+                // there and only there.
+                "" => hasPrinterColumns && ResourceStatusSummary.ShowsStatus(descriptor),
                 _ => column.IsVisible,
             };
         }
