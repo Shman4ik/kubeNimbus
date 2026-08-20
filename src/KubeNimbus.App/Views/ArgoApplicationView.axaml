@@ -119,14 +119,21 @@
             <ItemsControl ItemsSource="{Binding Resources}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:ArgoResourceRowViewModel">
-                  <Grid ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,2">
+                  <!-- The bottom margin is doing real work. A row is two lines — the object
+                       and its group/namespace — and they sat 16px apart while consecutive
+                       rows sat 19px apart, so the two gaps were indistinguishable and the
+                       qualifier read as belonging to the row *below* it. Rows have to be
+                       separated by more than their own lines are, or a list of them reads as
+                       one block of text running together. -->
+                  <Grid ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,0,0,12">
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
                       <TextBlock FontSize="12.5" TextTrimming="CharacterEllipsis">
                         <Run Text="{Binding Kind}" FontWeight="SemiBold" />
                         <Run Text="/" />
                         <Run Text="{Binding Name}" />
                       </TextBlock>
-                      <TextBlock Text="{Binding Qualifier}" Classes="statusText dim" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Text="{Binding Qualifier}" Classes="statusText dim" FontSize="11"
+                                 TextTrimming="CharacterEllipsis" />
                     </StackPanel>
                     <Border Grid.Column="1" Classes="statusPill" VerticalAlignment="Center" Margin="8,0,0,0"
                             Classes.ok="{Binding SyncHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=ok}"

@@ -2283,7 +2283,16 @@ Nine things are load-bearing.
    it means writing `status.operationState.phase`, which is a status-subresource patch and
    its own item.
 
-**One rendering trap, found by looking at the screenshot.** Maximizing the inspector
+**Two rendering defects, both found by looking at the rendered pane rather than by any
+test.** The second is the more general one: the detail pane's resource rows are two lines
+each (the object, then its group and namespace), and they shipped with 16px between the
+two lines of a row and 19px between consecutive rows — so the two gaps were
+indistinguishable and every qualifier read as belonging to the row *below* it. **Rows have
+to be separated by more than their own lines are**, or a list of them reads as one block of
+running text; the row's bottom margin is what fixes it, and the trap applies to any
+multi-line `ItemsControl` row in this app.
+
+Maximizing the inspector
 works by setting the list row's height to 0, and a `Grid` does not clip its children —
 the resource list and the Helm browser get away with it because a `DataGrid` clips
 itself, but the dashboard's summary card is an ordinary `Border` and went on painting
@@ -4581,12 +4590,16 @@ case, which is the one the two-pill design exists for. Dropping the dashboard's 
 ordering turned **1 of 137** red in the App suite. All three were reverted and both suites
 re-run.
 
-**One defect was found by looking at the rendered pane rather than by any test**, and it
-generalizes: maximizing the inspector sets the list row's height to 0, and a `Grid` does
-not clip its children — the resource list and the Helm browser get away with it only
+**Two defects were found by looking at the rendered panes rather than by any test**, and
+both generalize. Maximizing the inspector sets the list row's height to 0, and a `Grid`
+does not clip its children — the resource list and the Helm browser get away with it only
 because a `DataGrid` clips itself, so the dashboard's summary card went on painting
-straight through the maximized dock. `ClipToBounds="True"` is the fix and the rule for
-anything else that ever occupies that slot.
+straight through the maximized dock; `ClipToBounds="True"` is the fix and the rule for
+anything else that ever occupies that slot. And the detail pane's two-line resource rows
+were separated from each other by less than their own two lines were separated internally
+(19px against 16px), so each qualifier grouped with the row beneath it and the list read as
+one run-on block — reported off the screenshot, fixed by the row's bottom margin, and true
+of any multi-line row template.
 
 **Verified this session**: `dotnet build KubeNimbus.slnx` with **0 new warnings** (the one
 warning is the pre-existing CS8425 in `AsyncMergeTests.cs`); **364/364 Core TUnit** and
