@@ -52,7 +52,16 @@ public sealed record WorkspaceSettings(
     /// storage. A path that has since gone away is reported as missing by
     /// <c>Kubeconfig.CandidatePaths</c> rather than failing the load.
     /// </summary>
-    List<string>? KubeconfigPaths = null);
+    List<string>? KubeconfigPaths = null,
+    /// <summary>
+    /// Per-kind resource-list layout — what each column was dragged to and which column
+    /// the list is sorted by — keyed by <c>&lt;group&gt;/&lt;Kind&gt;</c>
+    /// (<see cref="GridLayoutStore.KeyFor"/>). Session state, on the same test as the
+    /// open tabs: it is what the window looked like, not what the app should do.
+    /// Nullable with a null default like everything else added after
+    /// <c>(Theme, Tabs)</c>.
+    /// </summary>
+    Dictionary<string, GridLayout>? GridLayouts = null);
 
 [JsonSerializable(typeof(WorkspaceSettings))]
 internal sealed partial class WorkspaceJsonContext : JsonSerializerContext;
@@ -67,7 +76,7 @@ public static class WorkspaceStore
     /// <summary>Recents past this are noise — the switcher's search covers the long tail.</summary>
     public const int MaxRecentContexts = 8;
 
-    private static WorkspaceSettings Empty => new(null, [], [], [], [], false, []);
+    private static WorkspaceSettings Empty => new(null, [], [], [], [], false, [], []);
 
     /// <summary>
     /// Overrides where the workspace is read from and written to. Set by the
@@ -117,6 +126,7 @@ public static class WorkspaceStore
         // silently opt into the busy layout just because it predates the switch.
         IsAdvancedView = settings.IsAdvancedView ?? false,
         KubeconfigPaths = settings.KubeconfigPaths ?? [],
+        GridLayouts = settings.GridLayouts ?? [],
     };
 
     public static void Save(WorkspaceSettings settings)

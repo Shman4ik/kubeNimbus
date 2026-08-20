@@ -50,8 +50,19 @@ internal static class TestObjects
     public static ResourceDescriptor ConfigMapDescriptor { get; } =
         new("", "v1", "ConfigMap", "configmaps", "configmap", Namespaced: true, ShortNames: ["cm"], Categories: []);
 
-    /// <summary>A real pod object, parsed from JSON exactly as a watch frame would be.</summary>
-    public static DynamicResource Pod(string @namespace, string name, string phase = "Running")
+    /// <summary>
+    /// A real pod object, parsed from JSON exactly as a watch frame would be. The
+    /// optional arguments exist for the sort tests, which need rows that differ in the
+    /// values the list's columns are ordered by — a restart count, a creation instant,
+    /// a readiness — rather than only in their names.
+    /// </summary>
+    public static DynamicResource Pod(
+        string @namespace,
+        string name,
+        string phase = "Running",
+        int restarts = 0,
+        string created = "2026-08-01T10:00:00Z",
+        bool ready = true)
     {
         var json = $$"""
         {
@@ -61,15 +72,40 @@ internal static class TestObjects
             "name": "{{name}}",
             "namespace": "{{@namespace}}",
             "uid": "{{@namespace}}-{{name}}",
-            "creationTimestamp": "2026-08-01T10:00:00Z"
+            "creationTimestamp": "{{created}}"
           },
           "spec": { "containers": [ { "name": "app" } ] },
           "status": {
             "phase": "{{phase}}",
             "containerStatuses": [
-              { "name": "app", "ready": true, "restartCount": 0, "state": { "running": {} } }
+              { "name": "app", "ready": {{(ready ? "true" : "false")}}, "restartCount": {{restarts}}, "state": { "running": {} } }
             ]
           }
+        }
+        """;
+
+        using var document = JsonDocument.Parse(json);
+        return new DynamicResource(document.RootElement.Clone());
+    }
+
+    /// <summary>
+    /// A ConfigMap — an object of a kind that has no Ready, no Status and no restart
+    /// count, which is what makes it the "nothing in that column" case the sort has to
+    /// place deliberately rather than as a zero.
+    /// </summary>
+    public static DynamicResource ConfigMap(string @namespace, string name)
+    {
+        var json = $$"""
+        {
+          "apiVersion": "v1",
+          "kind": "ConfigMap",
+          "metadata": {
+            "name": "{{name}}",
+            "namespace": "{{@namespace}}",
+            "uid": "{{@namespace}}-{{name}}",
+            "creationTimestamp": "2026-08-01T10:00:00Z"
+          },
+          "data": { "key": "value" }
         }
         """;
 

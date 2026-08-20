@@ -20,30 +20,45 @@ public partial class ClusterTabView : UserControl
     private ClusterTabViewModel? _subscribed;
 
     /// <summary>
-    /// The initial Header the XAML gives every CRD printer-column slot. It is a
-    /// sentinel, not a label: the slots are collected by it once, in the constructor,
-    /// and their headers are overwritten with the CRD's own column names from then on.
-    /// Header-matching is how every other column here is found (indices would silently
-    /// hide the wrong one after a reorder), and this keeps that property for columns
-    /// whose header is not a constant.
+    /// The <c>Tag</c> the XAML gives every CRD printer-column slot. A sentinel, not an
+    /// id: the slots are collected by it once, in the constructor, and each one is then
+    /// addressed by the name of whatever CRD column it is currently drawing
+    /// (<see cref="_slotIds"/>).
     /// </summary>
-    private const string PrinterSlotHeader = "crd-printer-slot";
+    private const string PrinterSlotTag = "crd-slot";
 
     private readonly List<DataGridColumn> _printerSlots = [];
+
+    /// <summary>
+    /// The id each printer slot is currently drawing — <c>crd:&lt;the CRD's own column
+    /// name&gt;</c>, or null for a slot that is drawing nothing. Refreshed by
+    /// <see cref="ApplyPrinterColumns"/>, which is the only thing that decides what a
+    /// slot holds.
+    /// </summary>
+    private readonly string?[] _slotIds;
+
+    /// <summary>The header text a column shows before the sort indicator is added.</summary>
+    private readonly Dictionary<DataGridColumn, string> _labels = [];
+
+    /// <summary>
+    /// The width each column is declared with in XAML, so a kind with no remembered
+    /// width gets the layout it shipped with rather than the previous kind's.
+    /// </summary>
+    private readonly Dictionary<DataGridColumn, DataGridLength> _declaredWidths = [];
 
     /// <summary>
     /// The grid's own columns — everything except the CRD printer slots.
     ///
     /// <para>
-    /// Every <c>Apply*Columns</c> method below finds its columns by header text, and a
-    /// printer slot's header is a CRD author's string: cert-manager calls one of its
-    /// Certificate columns <b>Ready</b>, which the first cut of this matched as the
-    /// grid's own Ready column and promptly hid, so the CRD's most important column was
-    /// silently missing from the very list this feature exists to fix. The same trap is
-    /// one column name away for Status, Details, Restarts, CPU, Memory and Cluster. The
-    /// slots are therefore excluded from every header match, and only
-    /// <see cref="ApplyPrinterColumns"/> — which addresses them positionally — ever
-    /// touches them.
+    /// Every <c>Apply*Columns</c> method below finds its columns by <c>Tag</c>. It used
+    /// to find them by header text, and that was the wrong identifier twice over. A
+    /// printer slot's header is a <em>CRD author's</em> string: cert-manager calls one
+    /// of its Certificate columns <b>Ready</b>, which the first cut of this matched as
+    /// the grid's own Ready column and promptly hid, so the CRD's most important column
+    /// was silently missing from the very list that feature exists to fix. And the
+    /// header is no longer a constant for the app's own columns either — the sort
+    /// indicator is drawn into it. The slots are still excluded from the fixed set,
+    /// because only <see cref="ApplyPrinterColumns"/> decides what they show.
     /// </para>
     /// </summary>
     private IEnumerable<DataGridColumn> FixedColumns =>
@@ -53,7 +68,22 @@ public partial class ClusterTabView : UserControl
     {
         InitializeComponent();
 
-        _printerSlots.AddRange(ResourceGrid.Columns.Where(c => c.Header as string == PrinterSlotHeader));
+        _printerSlots.AddRange(ResourceGrid.Columns.Where(c => c.Tag as string == PrinterSlotTag));
+        _slotIds = new string?[_printerSlots.Count];
+
+        foreach (var column in ResourceGrid.Columns)
+        {
+            _labels[column] = column.Header as string ?? "";
+            _declaredWidths[column] = column.Width;
+        }
+
+        // A column resize has no event of its own — Avalonia's DataGrid changes the
+        // column's width from inside the header's pointer handling and tells nobody —
+        // so the gesture is bracketed instead: snapshot on press, compare on release.
+        // Both handlers are on the grid rather than on the headers, which are created
+        // and recycled by the template.
+        ResourceGrid.AddHandler(PointerPressedEvent, OnGridPointerPressedForResize, RoutingStrategies.Tunnel);
+        ResourceGrid.AddHandler(PointerReleasedEvent, OnGridPointerReleased, RoutingStrategies.Tunnel);
 
         // DataGrid's own class handler consumes Enter (commit-edit / move-down)
         // before a bubble-routed instance handler on the same element would ever
@@ -93,6 +123,7 @@ public partial class ClusterTabView : UserControl
         ApplyPrinterColumns();
         ApplySummaryColumns();
         ApplySidebarVisibility();
+        ApplyColumnLayout();
     }
 
     /// <summary>
@@ -161,6 +192,7 @@ public partial class ClusterTabView : UserControl
             // whether the generic Status column is suppressed) have to follow it.
             ApplyPrinterColumns();
             ApplySummaryColumns();
+            ApplyColumnLayout();
         }
         else if (e.PropertyName is nameof(ClusterTabViewModel.PrinterColumns)
                  or nameof(ClusterTabViewModel.VisiblePrinterColumns))
@@ -170,15 +202,22 @@ public partial class ClusterTabView : UserControl
             // showing the generic Status column and starts showing the CRD's own.
             ApplyPrinterColumns();
             ApplySummaryColumns();
+            ApplyColumnLayout();
         }
         else if (e.PropertyName == nameof(ClusterTabViewModel.IsFleetView))
         {
             ApplyFleetColumn();
+            ApplyColumnLayout();
         }
         else if (e.PropertyName == nameof(ClusterTabViewModel.SelectedKind))
         {
             ApplyPrinterColumns();
             ApplySummaryColumns();
+
+            // The kind's own remembered widths, and the sort the view model has just
+            // restored for it — the two halves of one stored layout, applied from the
+            // one notification that says which kind is in front of the reader.
+            ApplyColumnLayout();
         }
         else if (e.PropertyName == nameof(ClusterTabViewModel.IsSidebarVisible))
         {
@@ -223,7 +262,7 @@ public partial class ClusterTabView : UserControl
         var visible = Vm?.AreUsageColumnsVisible == true;
         foreach (var column in FixedColumns)
         {
-            if (column.Header is "CPU" or "Memory")
+            if (column.Tag is ResourceColumn.Cpu or ResourceColumn.Memory)
             {
                 column.IsVisible = visible;
             }
@@ -252,12 +291,12 @@ public partial class ClusterTabView : UserControl
 
         foreach (var column in FixedColumns)
         {
-            column.IsVisible = column.Header switch
+            column.IsVisible = column.Tag switch
             {
-                "Ready" => ResourceStatusSummary.ShowsReady(descriptor),
-                "Restarts" => ResourceStatusSummary.ShowsRestarts(descriptor),
-                "Details" => !hasPrinterColumns && ResourceStatusSummary.ShowsDetails(descriptor),
-                "Status" => !hasPrinterColumns && ResourceStatusSummary.ShowsStatus(descriptor),
+                ResourceColumn.Ready => ResourceStatusSummary.ShowsReady(descriptor),
+                ResourceColumn.Restarts => ResourceStatusSummary.ShowsRestarts(descriptor),
+                ResourceColumn.Details => !hasPrinterColumns && ResourceStatusSummary.ShowsDetails(descriptor),
+                ResourceColumn.Status => !hasPrinterColumns && ResourceStatusSummary.ShowsStatus(descriptor),
                 // The 28px health dot, and it now shows *only* where the Status column
                 // has stepped aside for a CRD's own printer columns. Beside a Status
                 // pill it was the same fact twice in the same row — the pill is already
@@ -266,7 +305,7 @@ public partial class ClusterTabView : UserControl
                 // columns replace Status the dot is the last thing carrying
                 // ResourceStatusSummary's verdict at all, which is exactly why it stays
                 // there and only there.
-                "" => hasPrinterColumns && ResourceStatusSummary.ShowsStatus(descriptor),
+                ResourceColumn.Health => hasPrinterColumns && ResourceStatusSummary.ShowsStatus(descriptor),
                 _ => column.IsVisible,
             };
         }
@@ -299,11 +338,15 @@ public partial class ClusterTabView : UserControl
                 // apply to it, and a Control header would opt the cell out of Fluent's
                 // own column-header template. The descriptions are short and mostly
                 // restate the name; the column header is not worth a styling regression.
+                _labels[slot] = columns[i].Name;
+                _slotIds[i] = ResourceColumn.Printer(columns[i].Name);
                 slot.Header = columns[i].Name;
                 slot.IsVisible = true;
             }
             else
             {
+                _labels[slot] = "";
+                _slotIds[i] = null;
                 slot.IsVisible = false;
             }
         }
@@ -318,11 +361,189 @@ public partial class ClusterTabView : UserControl
         var visible = Vm?.IsFleetView == true;
         foreach (var column in FixedColumns)
         {
-            if (column.Header is "Cluster")
+            if (column.Tag is ResourceColumn.Cluster)
             {
                 column.IsVisible = visible;
             }
         }
+    }
+
+    // ------------------------------------------------------------------ the grid
+    // Column widths and sort order, per kind. A fixed re-cut of the column widths
+    // trades one column's truncation for another's — the audit measured two pods of
+    // one ReplicaSet rendering identically because the Name ellipsis fell exactly on
+    // the discriminating suffix, while the Namespace column beside it spent 110px on
+    // the same value repeated down every row — and no single set of numbers survives a
+    // CRD that declares eleven columns of its own. So the widths are the reader's to
+    // set, and what they set is remembered for that kind.
+
+    /// <summary>
+    /// The id a column is addressed by: its <c>Tag</c>, except for a printer slot,
+    /// which is addressed by the CRD column it is currently drawing (a slot number
+    /// would move under the advanced-view switch — see <see cref="ResourceColumn.Printer"/>).
+    /// Null for a column that identifies nothing right now: an empty printer slot.
+    /// </summary>
+    private string? ColumnId(DataGridColumn column)
+    {
+        var slot = _printerSlots.IndexOf(column);
+        return slot >= 0 ? _slotIds[slot] : column.Tag as string;
+    }
+
+    /// <summary>
+    /// A header click. The DataGrid's own sorting is deliberately not used — it orders
+    /// the collection view behind <c>ItemsSource</c>, and this list's items are the
+    /// informer's rows, whose order UI rule 13 pins as the watch's own. Handling the
+    /// event stops that and hands the click to
+    /// <see cref="ClusterTabViewModel.ToggleSort"/>, which orders <c>VisibleRows</c>
+    /// (the rendered projection) and nothing else.
+    ///
+    /// <para>
+    /// The event only fires at all because every column carries
+    /// <c>CanUserSort="True"</c>: these are template columns with no
+    /// <c>SortMemberPath</c>, and Avalonia's <c>ProcessSort</c> returns before raising
+    /// <c>Sorting</c> for a column whose <c>CanUserSort</c> is false — which is the
+    /// default for a template column, and is why clicking a header did nothing at all
+    /// before this.
+    /// </para>
+    /// </summary>
+    private void OnGridSorting(object? sender, DataGridColumnEventArgs e)
+    {
+        e.Handled = true;
+
+        if (Vm is { } vm && ColumnId(e.Column) is { } id && id != ResourceColumn.Health)
+        {
+            vm.ToggleSort(id);
+            ApplySortIndicator();
+        }
+    }
+
+    /// <summary>
+    /// Draws the sort arrow into the sorted column's header.
+    ///
+    /// <para>
+    /// Fluent's own <c>:sortascending</c>/<c>:sortdescending</c> header pseudo-classes
+    /// are set from the collection view's sort descriptions, which stay empty here
+    /// precisely because the sorting is ours — so the indicator has to be drawn rather
+    /// than styled. Into the header <em>text</em>, rather than through a header
+    /// template: a templated header is a <c>Control</c> in place of a string, which
+    /// opts the cell out of Fluent's own column-header template (the same reason a
+    /// printer column's description is not a header tooltip).
+    /// </para>
+    /// </summary>
+    private void ApplySortIndicator()
+    {
+        var sorted = Vm?.SortColumnId;
+        var arrow = Vm?.SortDescending == true ? " \u2193" : " \u2191";
+
+        foreach (var column in ResourceGrid.Columns)
+        {
+            if (!_labels.TryGetValue(column, out var label) || label.Length == 0)
+            {
+                continue;
+            }
+
+            column.Header = sorted is not null && ColumnId(column) == sorted ? label + arrow : label;
+        }
+    }
+
+    /// <summary>
+    /// The widths of every identifiable column, as they are right now. Star columns are
+    /// read as their star value and everything else as its rendered pixels, because
+    /// that is what each kind of column keeps across a drag: Avalonia re-derives a star
+    /// column's ratio (2* becomes 2.52*) and leaves an Auto column's declared width
+    /// alone, changing only what it displays.
+    /// </summary>
+    private Dictionary<string, GridColumnWidth> CurrentWidths()
+    {
+        var widths = new Dictionary<string, GridColumnWidth>(StringComparer.Ordinal);
+        foreach (var column in ResourceGrid.Columns)
+        {
+            if (!column.IsVisible || ColumnId(column) is not { } id || id == ResourceColumn.Health)
+            {
+                continue;
+            }
+
+            widths[id] = column.Width.IsStar
+                ? new GridColumnWidth(GridColumnWidth.Star, Math.Round(column.Width.Value, 4))
+                : new GridColumnWidth(GridColumnWidth.Pixels, Math.Round(column.ActualWidth, 1));
+        }
+
+        return widths;
+    }
+
+    private Dictionary<string, GridColumnWidth>? _widthsAtPress;
+
+    private void OnGridPointerPressedForResize(object? sender, PointerPressedEventArgs e) =>
+        _widthsAtPress = e.GetCurrentPoint(ResourceGrid).Properties.IsLeftButtonPressed ? CurrentWidths() : null;
+
+    /// <summary>
+    /// The other half of the drag bracket: whatever changed width between the press and
+    /// the release was dragged, and only that is remembered. Saving every column
+    /// instead would pin the Auto columns to whatever their content happened to measure
+    /// at that moment, which is a choice nobody made.
+    /// </summary>
+    private void OnGridPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        var before = _widthsAtPress;
+        _widthsAtPress = null;
+
+        if (before is null || Vm?.GridLayoutKey is not { } key)
+        {
+            return;
+        }
+
+        var changed = new Dictionary<string, GridColumnWidth>(StringComparer.Ordinal);
+        foreach (var (id, width) in CurrentWidths())
+        {
+            if (!before.TryGetValue(id, out var was) || was.Unit != width.Unit
+                || Math.Abs(was.Value - width.Value) > 0.5)
+            {
+                changed[id] = width;
+            }
+        }
+
+        if (changed.Count == 0)
+        {
+            return;
+        }
+
+        GridLayoutStore.Update(key, layout =>
+        {
+            var widths = new Dictionary<string, GridColumnWidth>(layout.Widths, StringComparer.Ordinal);
+            foreach (var (id, width) in changed)
+            {
+                widths[id] = width;
+            }
+
+            return layout with { ColumnWidths = widths };
+        });
+    }
+
+    /// <summary>
+    /// Puts the selected kind's remembered widths back, and resets every other column to
+    /// the width the XAML declares — a kind nobody has dragged must show its own layout,
+    /// not the one left behind by the kind before it. Runs after the visibility passes,
+    /// since a hidden column's width is not a width anyone chose.
+    /// </summary>
+    private void ApplyColumnLayout()
+    {
+        var widths = Vm?.GridLayoutKey is { } key ? GridLayoutStore.Load(key).Widths : null;
+
+        foreach (var column in ResourceGrid.Columns)
+        {
+            var stored = widths is not null && ColumnId(column) is { } id && widths.TryGetValue(id, out var width)
+                ? width
+                : null;
+
+            column.Width = stored switch
+            {
+                { Unit: GridColumnWidth.Star } => new DataGridLength(stored.Value, DataGridLengthUnitType.Star),
+                { Unit: GridColumnWidth.Pixels } => new DataGridLength(stored.Value, DataGridLengthUnitType.Pixel),
+                _ => _declaredWidths.TryGetValue(column, out var declared) ? declared : column.Width,
+            };
+        }
+
+        ApplySortIndicator();
     }
 
     /// <summary>

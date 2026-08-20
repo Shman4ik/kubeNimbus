@@ -150,6 +150,30 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     private SidebarKindViewModel? _selectedKind;
 
     /// <summary>
+    /// Restores the sort this kind was last left in, and nothing else. Column widths are
+    /// the view's own half of the same record — pixels are not view-model state — and
+    /// <c>ClusterTabView</c> applies them from the same key off the same notification.
+    ///
+    /// <para>
+    /// In the property's own changed hook rather than in <see cref="SelectKindCommand"/>
+    /// because the sidebar is not the only thing that sets the kind: the palette, the
+    /// Recent section and the screenshot harness all assign it directly, and a
+    /// restore that only happened on one of those paths would look like the choice
+    /// being forgotten at random.
+    /// </para>
+    /// </summary>
+    partial void OnSelectedKindChanged(SidebarKindViewModel? value)
+    {
+        var layout = value is { IsHelmReleases: false, Descriptor: { } descriptor }
+            ? GridLayoutStore.Load(GridLayoutStore.KeyFor(descriptor))
+            : GridLayout.Empty;
+
+        // persist: false — this is reading a choice back, not making one, and writing it
+        // straight back would turn every kind ever opened into a stored layout.
+        SetSort(layout.SortColumn, layout.SortDescending, persist: false);
+    }
+
+    /// <summary>
     /// Every row the watch knows about — the informer's own view of the cluster.
     /// Added/Modified/Deleted are applied against this by key, so nothing may be
     /// removed from it for display reasons: a row filtered out of sight has to stay
@@ -203,22 +227,212 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     private bool MatchesRowFilter(ResourceRowViewModel row) => _rowQuery.Length == 0 || row.Matches(_rowQuery);
 
+    /// <summary>
+    /// Which column the list is ordered by (a <see cref="ResourceColumn"/> id), or null
+    /// for the watch's own arrival order — which is the default and a real third state,
+    /// not "unsorted by accident": it is the order the informer holds the objects in,
+    /// and clicking a header a third time comes back to it.
+    /// </summary>
+    [ObservableProperty]
+    private string? _sortColumnId;
+
+    [ObservableProperty]
+    private bool _sortDescending;
+
+    /// <summary>
+    /// The header-click cycle: this column ascending, this column descending, then off.
+    /// Three states rather than the two a DataGrid gives by default, because the third
+    /// is the only way back to arrival order — and on a live list that order is
+    /// information, not noise (it is what puts a newly created object where the watch
+    /// put it).
+    /// </summary>
+    internal void ToggleSort(string columnId)
+    {
+        if (!string.Equals(SortColumnId, columnId, StringComparison.Ordinal))
+        {
+            SetSort(columnId, descending: false);
+        }
+        else if (!SortDescending)
+        {
+            SetSort(columnId, descending: true);
+        }
+        else
+        {
+            SetSort(null, descending: false);
+        }
+    }
+
+    /// <summary>
+    /// Sets the sort and re-orders what is on screen. Persisted per kind, so the choice
+    /// survives switching to another kind and back (and a restart) — see
+    /// <see cref="GridLayoutStore"/>.
+    /// </summary>
+    internal void SetSort(string? columnId, bool descending, bool persist = true)
+    {
+        SortColumnId = columnId;
+        SortDescending = descending;
+        RebuildVisibleRows();
+
+        if (persist && GridLayoutKey is { } key)
+        {
+            GridLayoutStore.Update(key, layout => layout with
+            {
+                SortColumn = columnId,
+                SortDescending = descending,
+            });
+        }
+    }
+
+    /// <summary>
+    /// The key this kind's column widths and sort are remembered under, or null where
+    /// there is nothing to remember: no kind selected, or the Helm browser, which is a
+    /// different grid with its own columns.
+    /// </summary>
+    internal string? GridLayoutKey =>
+        !IsHelmView && SelectedKind?.Descriptor is { } descriptor ? GridLayoutStore.KeyFor(descriptor) : null;
+
+    /// <summary>
+    /// The comparer for the current sort, or null when the list is in arrival order.
+    /// Rebuilt per sort pass rather than cached: it closes over the printer columns,
+    /// which the advanced-view switch changes underneath it.
+    /// </summary>
+    private ResourceRowComparer? RowComparer =>
+        SortColumnId is { } columnId && ResourceRowComparer.CanSort(columnId, VisiblePrinterColumns)
+            ? new ResourceRowComparer(columnId, SortDescending, VisiblePrinterColumns)
+            : null;
+
     private void RebuildVisibleRows()
     {
+        // The selection is restored rather than left to the DataGrid, which clears it on
+        // a Clear() — losing the row someone had selected because they typed into the
+        // search box (or sorted the list they were reading) is a small bug with a
+        // disproportionate cost: the row actions and the inspector all hang off it.
+        var selected = SelectedRow;
+
         VisibleRows.Clear();
-        foreach (var row in Rows)
+
+        var comparer = RowComparer;
+        if (comparer is null)
         {
-            if (MatchesRowFilter(row))
+            foreach (var row in Rows)
+            {
+                if (MatchesRowFilter(row))
+                {
+                    VisibleRows.Add(row);
+                }
+            }
+        }
+        else
+        {
+            var sorted = Rows.Where(MatchesRowFilter).ToList();
+            sorted.Sort(comparer);
+            foreach (var row in sorted)
             {
                 VisibleRows.Add(row);
             }
+        }
+
+        if (selected is not null && VisibleRows.Contains(selected))
+        {
+            SelectedRow = selected;
         }
 
         RecomputeListEmpty();
     }
 
     /// <summary>
-    /// Mirrors <see cref="Rows"/> into <see cref="VisibleRows"/> through the filter.
+    /// Where a row belongs in the sorted list — a binary search, so a watch tick on a
+    /// sorted 5000-row list costs a handful of comparisons rather than a re-sort.
+    /// </summary>
+    private int SortedIndexFor(ResourceRowViewModel row, ResourceRowComparer comparer, int limit = -1)
+    {
+        var low = 0;
+        var high = limit < 0 ? VisibleRows.Count : limit;
+        while (low < high)
+        {
+            var middle = (low + high) / 2;
+            if (comparer.Compare(VisibleRows[middle], row) <= 0)
+            {
+                low = middle + 1;
+            }
+            else
+            {
+                high = middle;
+            }
+        }
+
+        return low;
+    }
+
+    /// <summary>
+    /// Re-orders the rendered list in place, without clearing it. An insertion pass
+    /// rather than a sort: each out-of-order row is moved to where it belongs among the
+    /// rows above it, so a nearly-sorted list costs one comparison per row and a list
+    /// that has not moved at all costs nothing but the comparisons.
+    ///
+    /// <para>
+    /// The point is what it does <em>not</em> raise. Rebuilding raises a Reset, and a
+    /// DataGrid answers a Reset by dropping the selection and the scroll position — which
+    /// is fine for a header click (the reader just asked for a new order) and unusable
+    /// for the metrics poll, which would otherwise throw a CPU-sorted list back to the
+    /// top every fifteen seconds.
+    /// </para>
+    /// </summary>
+    internal void ResortVisibleRows()
+    {
+        if (RowComparer is not { } comparer)
+        {
+            return;
+        }
+
+        for (var i = 1; i < VisibleRows.Count; i++)
+        {
+            var row = VisibleRows[i];
+            if (comparer.Compare(VisibleRows[i - 1], row) <= 0)
+            {
+                continue;
+            }
+
+            VisibleRows.RemoveAt(i);
+            VisibleRows.Insert(SortedIndexFor(row, comparer, i), row);
+        }
+    }
+
+    /// <summary>
+    /// Moves a row that a watch event has just changed back to where the sort says it
+    /// belongs — a Modified can change the very value the list is ordered by (a pod
+    /// going CrashLoopBackOff while the list is sorted by Status is the case that
+    /// matters), and a sorted list that quietly stops being sorted is worse than an
+    /// unsorted one. Does nothing while the row is still in order, so a status refresh
+    /// that changes nothing relevant moves nothing on screen.
+    /// </summary>
+    private void RepositionRow(ResourceRowViewModel row)
+    {
+        if (RowComparer is not { } comparer)
+        {
+            return;
+        }
+
+        var index = VisibleRows.IndexOf(row);
+        if (index < 0)
+        {
+            return;
+        }
+
+        var inOrder = (index == 0 || comparer.Compare(VisibleRows[index - 1], row) <= 0)
+            && (index == VisibleRows.Count - 1 || comparer.Compare(row, VisibleRows[index + 1]) <= 0);
+        if (inOrder)
+        {
+            return;
+        }
+
+        VisibleRows.RemoveAt(index);
+        VisibleRows.Insert(Math.Min(SortedIndexFor(row, comparer), VisibleRows.Count), row);
+    }
+
+    /// <summary>
+    /// Mirrors <see cref="Rows"/> into <see cref="VisibleRows"/> through the filter and
+    /// the sort.
     /// Rows only ever appends (watch, fleet merge, demo dataset) or removes by object,
     /// so those two cases are handled incrementally and a watch tick on a filtered
     /// list costs one match, not a rescan; anything else — a Clear, an insert in the
@@ -230,11 +444,24 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         {
             case NotifyCollectionChangedAction.Add
                 when e.NewItems is { } added && e.NewStartingIndex + added.Count == Rows.Count:
+                var comparer = RowComparer;
                 foreach (var row in added.OfType<ResourceRowViewModel>())
                 {
-                    if (MatchesRowFilter(row))
+                    if (!MatchesRowFilter(row))
+                    {
+                        continue;
+                    }
+
+                    // Appended in arrival order, or inserted where the sort puts it —
+                    // a sorted list that appends new objects at the bottom is a list
+                    // that stops being sorted the moment anything is created.
+                    if (comparer is null)
                     {
                         VisibleRows.Add(row);
+                    }
+                    else
+                    {
+                        VisibleRows.Insert(SortedIndexFor(row, comparer), row);
                     }
                 }
 
@@ -503,6 +730,15 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         foreach (var row in Rows)
         {
             row.SetPrinterColumns(columns);
+        }
+
+        // A sort by one of those columns has to be re-run against the new set: the
+        // cells it orders by have just been re-evaluated, and the column may have
+        // stopped being declared at all — in which case the list falls back to arrival
+        // order rather than pretending to be sorted by something that is not there.
+        if (SortColumnId is { } columnId && ResourceColumn.PrinterName(columnId) is not null)
+        {
+            RebuildVisibleRows();
         }
     }
 
@@ -1507,6 +1743,16 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 row.ClearUsage();
             }
         }
+
+        // A poll rewrites the very values a CPU- or memory-sorted list is ordered by, and
+        // it rewrites every row at once — so unlike a watch tick, which changes one row,
+        // this re-orders the whole list. In place, though (see ResortVisibleRows): a
+        // rebuild would raise a Reset, and a list that jumped back to the top every 15
+        // seconds would be unusable for the one job a CPU sort exists for.
+        if (SortColumnId is ResourceColumn.Cpu or ResourceColumn.Memory)
+        {
+            ResortVisibleRows();
+        }
     }
 
     /// <summary>
@@ -1536,6 +1782,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 if (_rowsByKey.TryGetValue(resource.Key, out var existing))
                 {
                     existing.Update(resource);
+                    RepositionRow(existing);
                 }
                 else
                 {
@@ -1595,6 +1842,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 if (_rowsByKey.TryGetValue(addedKey, out var existing))
                 {
                     existing.Update(added);
+                    RepositionRow(existing);
                 }
                 else
                 {

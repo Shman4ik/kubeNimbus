@@ -86,6 +86,30 @@ public sealed partial class ResourceRowViewModel : ObservableObject
     private DateTimeOffset? _lastRestartAt;
 
     /// <summary>
+    /// kubectl's RESTARTS count as a number. <see cref="RestartsText"/> is the rendered
+    /// form and carries "(43m ago)" with it, so sorting by the column has to read this
+    /// instead — "10" sorts above "9" as text.
+    /// </summary>
+    public int Restarts => _restarts;
+
+    /// <summary>
+    /// The most recent metrics reading, or null when this kind has none, the cluster
+    /// runs no metrics-server, or the sample has not landed yet. Null rather than zero
+    /// for the reason the sparkline breaks its line across gaps: a subject that reports
+    /// nothing is not a subject using nothing.
+    /// </summary>
+    public long? LatestCpuNanocores => History.Latest?.CpuNanocores;
+
+    public long? LatestMemoryBytes => History.Latest?.MemoryBytes;
+
+    /// <summary>
+    /// The instant behind a <c>type: date</c> printer cell, whose text is an age off the
+    /// shared timer. Sorting that column by its text would order "9m" above "5d".
+    /// </summary>
+    public DateTimeOffset? PrinterDate(int index) =>
+        index >= 0 && index < PrinterCellCount ? _printerDates[index] : null;
+
+    /// <summary>
     /// The cells for the selected kind's CRD-declared printer columns, in the order
     /// <see cref="ClusterTabViewModel.VisiblePrinterColumns"/> lists them. A fixed
     /// array of small observables rather than a variable list, because the grid's
