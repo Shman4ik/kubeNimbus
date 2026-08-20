@@ -1,0 +1,226 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:KubeNimbus.App.ViewModels"
+             xmlns:core="using:KubeNimbus.Core"
+             xmlns:conv="using:KubeNimbus.App.Converters"
+             xmlns:aconv="using:Avalonia.Data.Converters"
+             x:Class="KubeNimbus.App.Views.ArgoApplicationView"
+             x:DataType="vm:ArgoApplicationTabViewModel">
+
+  <!-- One row of chrome (UI rule 10): the tab strip, the selected tab's own caption, and
+       reload. No title row — the dock tab above already reads `Argo/<name>`. -->
+  <Grid RowDefinitions="Auto,*" Margin="10,8,10,10">
+
+    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,0,0,6">
+      <ListBox Grid.Column="0" Name="ArgoTabStrip" Classes="segmented" SelectedIndex="{Binding SelectedTabIndex}">
+        <ListBoxItem Content="Overview" />
+        <ListBoxItem Content="Resources" />
+        <ListBoxItem Content="Conditions" />
+        <ListBoxItem Content="History" />
+      </ListBox>
+      <TextBlock Grid.Column="1" Classes="statusText dim" Margin="10,0,0,0" VerticalAlignment="Center"
+                 Text="{Binding ResourceSummary}" TextTrimming="CharacterEllipsis"
+                 IsVisible="{Binding SelectedTabIndex, Converter={x:Static conv:IndexEqualsConverter.Instance}, ConverterParameter=1}" />
+      <TextBlock Grid.Column="2" Text="Loading…" Opacity="0.55" FontSize="12" VerticalAlignment="Center"
+                 Margin="0,0,8,0" IsVisible="{Binding IsLoading}" />
+      <Button Grid.Column="3" Classes="toolbar" Command="{Binding ReloadCommand}" Padding="6"
+              IsEnabled="{Binding !IsDemo}"
+              ToolTip.Tip="Re-read this Application from the cluster. To ask Argo to re-compare it against Git, use Refresh on the list.">
+        <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="14" Height="14" />
+      </Button>
+    </Grid>
+
+    <Border Grid.Row="1" Classes="infoBar error" VerticalAlignment="Top"
+            IsVisible="{Binding ErrorMessage, Converter={x:Static aconv:ObjectConverters.IsNotNull}}">
+      <TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap" FontSize="12" />
+    </Border>
+
+    <TabControl Grid.Row="1" Classes="headerless" SelectedIndex="{Binding SelectedTabIndex}"
+                IsVisible="{Binding ErrorMessage, Converter={x:Static aconv:ObjectConverters.IsNull}}">
+
+      <TabItem Header="Overview">
+        <ScrollViewer>
+          <StackPanel Spacing="8">
+            <Border Classes="card" Padding="12,10">
+              <StackPanel Spacing="8">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Border Classes="statusPill"
+                          Classes.ok="{Binding SyncHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=ok}"
+                          Classes.warn="{Binding SyncHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=warn}">
+                    <TextBlock Text="{Binding SyncText}" FontSize="11.5" />
+                  </Border>
+                  <Border Classes="statusPill"
+                          Classes.ok="{Binding HealthHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=ok}"
+                          Classes.warn="{Binding HealthHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=warn}"
+                          Classes.error="{Binding HealthHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=error}">
+                    <TextBlock Text="{Binding HealthText}" FontSize="11.5" />
+                  </Border>
+                  <TextBlock Text="{Binding Application.ShortRevision}" VerticalAlignment="Center" Opacity="0.75"
+                             FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" />
+                </StackPanel>
+
+                <!-- Argo's own words about why it is unhealthy. It is the one line on this
+                     pane that usually names the actual failure, so it is above the fields
+                     rather than in a tooltip. -->
+                <TextBlock Classes="statusText warn" TextWrapping="Wrap"
+                           Text="{Binding Application.HealthMessage}"
+                           IsVisible="{Binding Application.HealthMessage, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}" />
+
+                <Grid ColumnDefinitions="150,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+                  <TextBlock Grid.Row="0" Grid.Column="0" Classes="fieldLabel" Text="Project" Margin="0,3" />
+                  <SelectableTextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Application.Project}" FontSize="12" Margin="0,3" />
+
+                  <TextBlock Grid.Row="1" Grid.Column="0" Classes="fieldLabel" Text="Repository" Margin="0,3" />
+                  <SelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Application.RepoUrl}" FontSize="12"
+                                       TextWrapping="Wrap" Margin="0,3" />
+
+                  <TextBlock Grid.Row="2" Grid.Column="0" Classes="fieldLabel" Text="Target" Margin="0,3" />
+                  <SelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Application.SourceSummary}" FontSize="12" Margin="0,3" />
+
+                  <TextBlock Grid.Row="3" Grid.Column="0" Classes="fieldLabel" Text="Destination" Margin="0,3" />
+                  <SelectableTextBlock Grid.Row="3" Grid.Column="1" FontSize="12" Margin="0,3"
+                                       Text="{Binding Application.DestinationNamespace}" />
+
+                  <TextBlock Grid.Row="4" Grid.Column="0" Classes="fieldLabel" Text="Cluster" Margin="0,3" />
+                  <SelectableTextBlock Grid.Row="4" Grid.Column="1" FontSize="12" Margin="0,3"
+                                       Text="{Binding Application.DestinationServer}" TextWrapping="Wrap" />
+
+                  <TextBlock Grid.Row="5" Grid.Column="0" Classes="fieldLabel" Text="Sync policy" Margin="0,3" />
+                  <SelectableTextBlock Grid.Row="5" Grid.Column="1" FontSize="12" Margin="0,3"
+                                       Text="{Binding Application.SyncPolicySummary}" />
+                </Grid>
+              </StackPanel>
+            </Border>
+
+            <!-- The last operation, which is what "did my sync work?" is asking about.
+                 Absent entirely on an Application nothing has ever synced, rather than a
+                 card of empty fields. -->
+            <Border Classes="card" Padding="12,10"
+                    IsVisible="{Binding Application.OperationPhase, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}">
+              <StackPanel Spacing="6">
+                <TextBlock Classes="sectionHeader" Text="LAST OPERATION" />
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                  <TextBlock Text="{Binding Application.OperationPhase}" FontSize="12" FontWeight="SemiBold"
+                             VerticalAlignment="Center" />
+                  <TextBlock Text="{Binding Application.OperationFinishedAt}" Classes="statusText dim"
+                             VerticalAlignment="Center" />
+                </StackPanel>
+                <SelectableTextBlock Text="{Binding Application.OperationMessage}" FontSize="12" TextWrapping="Wrap"
+                                     Opacity="0.8" />
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <TabItem Header="Resources">
+        <Grid>
+          <ScrollViewer IsVisible="{Binding HasResources}">
+            <ItemsControl ItemsSource="{Binding Resources}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:ArgoResourceRowViewModel">
+                  <Grid ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,2">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                      <TextBlock FontSize="12.5" TextTrimming="CharacterEllipsis">
+                        <Run Text="{Binding Kind}" FontWeight="SemiBold" />
+                        <Run Text="/" />
+                        <Run Text="{Binding Name}" />
+                      </TextBlock>
+                      <TextBlock Text="{Binding Qualifier}" Classes="statusText dim" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <Border Grid.Column="1" Classes="statusPill" VerticalAlignment="Center" Margin="8,0,0,0"
+                            Classes.ok="{Binding SyncHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=ok}"
+                            Classes.warn="{Binding SyncHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=warn}">
+                      <TextBlock Text="{Binding SyncText}" FontSize="11.5" />
+                    </Border>
+                    <Border Grid.Column="2" Classes="statusPill" VerticalAlignment="Center" Margin="6,0,0,0"
+                            IsVisible="{Binding HasHealth}"
+                            Classes.ok="{Binding HealthHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=ok}"
+                            Classes.warn="{Binding HealthHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=warn}"
+                            Classes.error="{Binding HealthHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=error}">
+                      <TextBlock Text="{Binding HealthText}" FontSize="11.5" />
+                    </Border>
+                    <!-- The chevron the owner chips and the events feed already use: a
+                         Deployment Argo reports as Degraded is one click from its own
+                         manifest rather than a search of the list. -->
+                    <Button Grid.Column="3" Classes="chip" Padding="4" Margin="6,0,0,0" VerticalAlignment="Center"
+                            Command="{Binding OpenCommand}" ToolTip.Tip="Open this resource">
+                      <PathIcon Data="{StaticResource ChevronRightIconGeometry}" Width="11" Height="11" />
+                    </Button>
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+
+          <TextBlock Classes="statusText dim" TextWrapping="Wrap" MaxWidth="420" TextAlignment="Center"
+                     HorizontalAlignment="Center" VerticalAlignment="Center"
+                     Text="{Binding EmptyResourcesNotice}" IsVisible="{Binding !HasResources}" />
+        </Grid>
+      </TabItem>
+
+      <TabItem Header="Conditions">
+        <Grid>
+          <ScrollViewer IsVisible="{Binding HasConditions}">
+            <ItemsControl ItemsSource="{Binding Conditions}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="core:ArgoCondition">
+                  <Border Classes="card" Padding="10,8" Margin="0,2">
+                    <StackPanel Spacing="4">
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Ellipse Classes="statusDot" VerticalAlignment="Center"
+                                 Classes.error="{Binding IsProblem}" Classes.ok="{Binding !IsProblem}" />
+                        <TextBlock Text="{Binding Type}" FontWeight="SemiBold" FontSize="12.5" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding LastTransitionAt}" Classes="statusText dim" VerticalAlignment="Center" />
+                      </StackPanel>
+                      <SelectableTextBlock Text="{Binding Message}" FontSize="12" TextWrapping="Wrap" Opacity="0.85" />
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+
+          <TextBlock Text="Argo reports no conditions on this Application." Classes="statusText dim"
+                     HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding !HasConditions}" />
+        </Grid>
+      </TabItem>
+
+      <TabItem Header="History">
+        <Grid>
+          <DataGrid ItemsSource="{Binding History}" IsReadOnly="True" GridLinesVisibility="Horizontal"
+                    CanUserResizeColumns="True" IsVisible="{Binding HasHistory}">
+            <DataGrid.Columns>
+              <DataGridTemplateColumn Header="ID" Width="Auto" MinWidth="56">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="core:ArgoRevision">
+                    <TextBlock Text="{Binding Id}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Revision" Width="Auto" MinWidth="90">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="core:ArgoRevision">
+                    <TextBlock Text="{Binding ShortRevision}" VerticalAlignment="Center"
+                               FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5"
+                               ToolTip.Tip="{Binding Revision}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Deployed" Width="*" MinWidth="160">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="core:ArgoRevision">
+                    <TextBlock Text="{Binding DeployedAt}" Opacity="0.75" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+            </DataGrid.Columns>
+          </DataGrid>
+
+          <TextBlock Text="This Application has never been deployed by Argo." Classes="statusText dim"
+                     HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding !HasHistory}" />
+        </Grid>
+      </TabItem>
+    </TabControl>
+  </Grid>
+</UserControl>

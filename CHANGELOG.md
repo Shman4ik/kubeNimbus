@@ -14,6 +14,30 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Added
 
+- **Argo CD is in the sidebar.** A cluster running Argo CD gets an **Argo**
+  section, with a GitOps dashboard at the top of it: every Application on the
+  cluster, the counts across all of them (Applications, Synced, Healthy, Out of
+  sync, Degraded, Missing, Progressing), and a list ordered by what needs looking
+  at first. Sync status and health are shown as two separate pills, because they
+  answer different questions — an Application can be perfectly synced and
+  degraded, which is exactly the case worth finding.
+
+  Opening one shows what Git says it should be, what Argo made of that, every
+  object Argo manages for it with its own sync and health, its conditions, and its
+  deployment history. Any managed object is one click from its own manifest.
+
+  **Sync** and **Refresh from Git** are on the row's context menu and in the
+  command palette. Both ask for a confirmation first, and Sync's *Prune* option —
+  the half of a sync that deletes resources which have left Git — is off unless
+  you turn it on.
+
+  It needs no Argo CD API server, no URL, no `argocd` binary and no second login:
+  Argo keeps its Applications in the cluster as ordinary custom resources, so
+  everything here goes through the same Kubernetes connection the rest of the app
+  uses. An Argo CD that is only reachable from inside the cluster works fine.
+  It also works on the built-in demo cluster, which now ships seven sample
+  Applications.
+
 - **The node pane now shows limits as well as requests, on the same track.** Each
   resource's bar carries the requested figure as its filled portion and the sum of
   the pods' declared limits as a lighter extent with a marker where it falls, and

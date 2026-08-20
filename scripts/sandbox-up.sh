@@ -138,7 +138,7 @@ else
     done
   done
 
-  for f in 10-shop.yaml 20-data.yaml 30-batch.yaml 40-broken.yaml 50-crds.yaml; do
+  for f in 10-shop.yaml 20-data.yaml 30-batch.yaml 40-broken.yaml 50-crds.yaml 70-argocd-crds.yaml; do
     note "$f"
     kube apply -f "/kubenimbus-manifests/$f" >/dev/null
   done
@@ -146,11 +146,14 @@ else
   # CRs need their CRD's endpoint to exist first.
   kube wait --for=condition=Established \
     crd/widgets.shop.kubenimbus.io crd/widgets.factory.kubenimbus.io \
-    crd/backups.demo.kubenimbus.io --timeout=60s >/dev/null
+    crd/backups.demo.kubenimbus.io crd/applications.argoproj.io crd/appprojects.argoproj.io \
+    --timeout=60s >/dev/null
   note '51-custom-resources.yaml'
   kube apply -f /kubenimbus-manifests/51-custom-resources.yaml >/dev/null
   note '60-rbac.yaml'
   kube apply -f /kubenimbus-manifests/60-rbac.yaml >/dev/null
+  note '71-argocd-applications.yaml'
+  kube apply -f /kubenimbus-manifests/71-argocd-applications.yaml >/dev/null
 
   # k3s stores its own bundled charts as real Helm release Secrets, but each at
   # revision 1. This one carries three revisions so the release history view has

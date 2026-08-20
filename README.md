@@ -187,6 +187,16 @@ permissions via `SelfSubjectRulesReview`, where a ServiceAccount's access comes
 from, and cluster-wide **who can do X** with one-click `SubjectAccessReview`
 confirmation.
 
+**GitOps** — a cluster running **Argo CD** gets its own sidebar section with a
+dashboard over every Application: the cluster-wide counts, a list ordered by what
+needs attention, and sync status and health as two separate pills, because an
+Application can be perfectly synced and still degraded. Open one for its source,
+destination, managed resources, conditions and deployment history — and **Sync**
+or **Refresh from Git** it from the row, with an explicit confirm and prune off
+by default. It reads and writes Argo's own custom resources over the Kubernetes
+connection you already have: no Argo API server, no URL to paste, no `argocd`
+binary, no second login.
+
 **Fleet** — an "All clusters" toggle aggregating any kind across every
 connected cluster into one list, with a Cluster column and an honest
 "n of m clusters serve X" when a kind isn't available everywhere.
@@ -217,6 +227,9 @@ it's been exercised:
   unavailable there by nature. It's for seeing the app, not for practising
   against.
 - Helm is read-only — install, upgrade and rollback stay Helm's job.
+- Argo CD support covers browsing, syncing and refreshing Applications. Creating
+  or editing them is a YAML edit like any other custom resource, and terminating
+  a sync that is already running is not offered.
 - Usage history is session-scoped and capped at 30 minutes **by design**.
   Long-range metrics is Prometheus's job, and a permanent non-goal here.
 

@@ -164,7 +164,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// </summary>
     partial void OnSelectedKindChanged(SidebarKindViewModel? value)
     {
-        var layout = value is { IsHelmReleases: false, Descriptor: { } descriptor }
+        var layout = value is { IsHelmReleases: false, IsArgoDashboard: false, Descriptor: { } descriptor }
             ? GridLayoutStore.Load(GridLayoutStore.KeyFor(descriptor))
             : GridLayout.Empty;
 
@@ -285,11 +285,14 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     /// <summary>
     /// The key this kind's column widths and sort are remembered under, or null where
-    /// there is nothing to remember: no kind selected, or the Helm browser, which is a
+    /// there is nothing to remember: no kind selected, or one of the two browsers that
+    /// replace the resource list entirely — Helm and the Argo dashboard — each of which is a
     /// different grid with its own columns.
     /// </summary>
     internal string? GridLayoutKey =>
-        !IsHelmView && SelectedKind?.Descriptor is { } descriptor ? GridLayoutStore.KeyFor(descriptor) : null;
+        !IsHelmView && !IsArgoView && SelectedKind?.Descriptor is { } descriptor
+            ? GridLayoutStore.KeyFor(descriptor)
+            : null;
 
     /// <summary>
     /// The comparer for the current sort, or null when the list is in arrival order.
@@ -532,6 +535,9 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [NotifyCanExecuteChangedFor(nameof(CordonSelectedCommand))]
     [NotifyCanExecuteChangedFor(nameof(UncordonSelectedCommand))]
     [NotifyCanExecuteChangedFor(nameof(DrainSelectedCommand))]
+    [NotifyPropertyChangedFor(nameof(CanSyncSelectedArgoApplication))]
+    [NotifyCanExecuteChangedFor(nameof(SyncArgoApplicationCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RefreshArgoApplicationCommand))]
     private ResourceRowViewModel? _selectedRow;
 
     /// <summary>
@@ -783,9 +789,40 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// to exit from, which also keeps the toggle a pure display switch (dropping
     /// out of fleet mode would restart the watch).
     /// </summary>
-    public bool IsFleetToggleVisible => IsFleetViewAvailable && !IsHelmView && (IsAdvancedView || IsFleetView);
+    public bool IsFleetToggleVisible =>
+        IsFleetViewAvailable && !IsHelmView && !IsArgoView && (IsAdvancedView || IsFleetView);
 
-    partial void OnIsHelmViewChanged(bool value) => OnPropertyChanged(nameof(IsFleetToggleVisible));
+    partial void OnIsHelmViewChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsFleetToggleVisible));
+        OnPropertyChanged(nameof(IsResourceListVisible));
+    }
+
+    /// <summary>
+    /// Whether the generic resource list is the thing in the content area. Two browsers can
+    /// replace it — Helm and the Argo dashboard — and a single computed property is what
+    /// keeps that from being a pair of negated bindings on every element in the list's half
+    /// of the view, which is the shape that silently gets one of the two wrong when a third
+    /// is added.
+    /// </summary>
+    public bool IsResourceListVisible => !IsHelmView && !IsArgoView;
+
+    /// <summary>
+    /// True while the Argo CD dashboard is selected: the content area swaps the generic
+    /// resource list for every Application on the cluster, counted and ordered by what needs
+    /// attention. Applications <em>are</em> an API kind, so unlike the Helm browser this is
+    /// not standing in for something that cannot be watched — it is a different question
+    /// about the same objects, and the ordinary Applications list is still one row below it
+    /// in the sidebar.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isArgoView;
+
+    partial void OnIsArgoViewChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsFleetToggleVisible));
+        OnPropertyChanged(nameof(IsResourceListVisible));
+    }
 
     /// <summary>
     /// "4 of 5 clusters · payments" — how many clusters are actually behind the rows
@@ -828,6 +865,68 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     [ObservableProperty]
     private bool _isHelmEmpty;
+
+    // ------------------------------------------------------------ Argo CD dashboard
+    //
+    // Every Application on the cluster, with the sync and health Argo itself reports, the
+    // seven counts across all of them, and the two actions Argo's own UI leads with. It is
+    // read from the Kubernetes API and nothing else — see ClusterClient.ArgoCd.cs.
+
+    public ObservableCollection<ArgoApplicationRowViewModel> ArgoApplications { get; } = [];
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanSyncSelectedArgoApplication))]
+    [NotifyCanExecuteChangedFor(nameof(SyncArgoApplicationCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RefreshArgoApplicationCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenArgoApplicationCommand))]
+    private ArgoApplicationRowViewModel? _selectedArgoApplication;
+
+    [ObservableProperty]
+    private bool _isArgoLoading;
+
+    [ObservableProperty]
+    private bool _isArgoEmpty;
+
+    /// <summary>
+    /// The seven counts across every Application on the cluster — the numbers Argo CD's own
+    /// dashboard opens on. Null until the first read completes, which is what keeps the
+    /// summary strip off screen rather than showing seven zeros while the list loads.
+    /// </summary>
+    /// <remarks>
+    /// Named for the numbers rather than for the type it holds, because a property called
+    /// <c>ArgoSummary</c> would shadow <see cref="Core.ArgoSummary"/> inside this class and
+    /// make <c>ArgoSummary.Of(…)</c> stop compiling.
+    /// </remarks>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ArgoAttentionSummary))]
+    private ArgoSummary? _argoCounts;
+
+    /// <summary>
+    /// "2 need attention" — or the all-clear. Stated rather than left to be counted off the
+    /// pills, because "is anything wrong right now" is the single question this whole view
+    /// exists to answer, and on a cluster with sixty Applications it is not answerable by
+    /// looking.
+    /// </summary>
+    public string ArgoAttentionSummary
+    {
+        get
+        {
+            if (ArgoCounts is not { } summary)
+            {
+                return "";
+            }
+
+            if (summary.Total == 0)
+            {
+                return "";
+            }
+
+            var attention = ArgoApplications.Count(a => a.NeedsAttention);
+            return attention == 0
+                ? $"All {summary.Total} Applications are synced and healthy."
+                : $"{attention} of {summary.Total} need attention — degraded, missing or out of sync.";
+        }
+    }
 
     public ObservableCollection<InspectorTabViewModelBase> InspectorTabs { get; } = [];
 
@@ -1007,6 +1106,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
 
         SidebarGrouping.LabelAmbiguousKinds(SidebarSections);
+        SidebarGrouping.AddArgoDashboard(SidebarSections, catalog);
         await AddHelmSectionIfPresentAsync();
         ApplySidebarChrome();
         ApplySidebarFilter();
@@ -1250,14 +1350,218 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         {
             StopWatch();
             IsHelmView = true;
+            IsArgoView = false;
             AreMetricsVisible = false;
             PrinterColumns = []; // Helm releases are not an API kind and have no CRD behind them.
             _ = RefreshHelmReleasesAsync();
             return;
         }
 
+        if (kind.IsArgoDashboard)
+        {
+            StopWatch();
+            IsHelmView = false;
+            IsArgoView = true;
+            AreMetricsVisible = false;
+
+            // The dashboard's columns are its own — Argo's sync and health, not a CRD's
+            // printer columns — so the printer slots are cleared exactly as the Helm
+            // browser clears them.
+            PrinterColumns = [];
+            _ = ReloadArgoAsync();
+            return;
+        }
+
         IsHelmView = false;
+        IsArgoView = false;
         RestartWatch();
+    }
+
+    /// <summary>
+    /// The Application kind's descriptor on this cluster, or null when Argo CD is not
+    /// installed. Read from the discovery catalog the sidebar was built from, so the version
+    /// is whatever this server serves.
+    /// </summary>
+    private ResourceDescriptor? ArgoApplicationDescriptor()
+    {
+        var catalog = SidebarSections
+            .SelectMany(s => s.Kinds)
+            .Select(k => k.Descriptor);
+
+        return ArgoCd.ApplicationDescriptor(catalog);
+    }
+
+    /// <summary>
+    /// Reloads the Argo dashboard. Cluster-wide rather than namespace-scoped, deliberately:
+    /// Applications almost always live in one namespace (<c>argocd</c>) while the workloads
+    /// they manage are spread across the rest, so a dashboard that followed the namespace
+    /// picker would be empty everywhere except the one place nobody browses.
+    /// </summary>
+    [RelayCommand]
+    private async Task ReloadArgoAsync()
+    {
+        if (Client is null && !IsDemo)
+        {
+            return;
+        }
+
+        if (ArgoApplicationDescriptor() is not { } descriptor)
+        {
+            IsArgoEmpty = true;
+            return;
+        }
+
+        IsArgoLoading = true;
+        IsArgoEmpty = false;
+        var previous = SelectedArgoApplication?.Application.Key;
+        ArgoApplications.Clear();
+        try
+        {
+            var applications = Client is null
+                ? Demo.DemoData.ArgoApplications
+                : await Client.ListArgoApplicationsAsync(descriptor);
+
+            // No cluster name: the dashboard is this tab's own cluster. The fleet toggle is
+            // hidden here for the same reason it is hidden in the Helm browser — aggregating
+            // GitOps state across clusters is a different (and much bigger) question than
+            // aggregating one kind's rows.
+            foreach (var row in applications
+                .Select(a => new ArgoApplicationRowViewModel(a, descriptor))
+                .OrderBy(ArgoApplicationRowViewModel.Rank)
+                .ThenBy(r => r.Application.Key, StringComparer.Ordinal))
+            {
+                ArgoApplications.Add(row);
+            }
+
+            ArgoCounts = ArgoSummary.Of(applications);
+
+            // A refresh must not move the selection: somebody reading one Application's
+            // detail while the list reloads has not asked to be moved to the worst one.
+            SelectedArgoApplication =
+                ArgoApplications.FirstOrDefault(a => a.Application.Key == previous)
+                ?? ArgoApplications.FirstOrDefault();
+        }
+        catch (Exception ex)
+        {
+            ConnectionWarning = $"Could not read Argo CD Applications: {ex.Message}";
+        }
+        finally
+        {
+            IsArgoLoading = false;
+            IsArgoEmpty = ArgoApplications.Count == 0;
+            OnPropertyChanged(nameof(ArgoAttentionSummary));
+        }
+    }
+
+    private bool HasSelectedArgoApplication => SelectedArgoApplication is not null;
+
+    /// <summary>Double-click / Enter on an Application row: opens its resources, conditions and history.</summary>
+    [RelayCommand(CanExecute = nameof(HasSelectedArgoApplication))]
+    private void OpenArgoApplication()
+    {
+        if (SelectedArgoApplication is not { } row || (Client is null && !IsDemo))
+        {
+            return;
+        }
+
+        var key = ArgoApplicationTabViewModel.KeyFor(row.ClusterName, row.Namespace, row.Name);
+        if (InspectorTabs.FirstOrDefault(t => t.Key == key) is { } existing)
+        {
+            existing.IsPreview = false;
+            SelectedInspectorTab = existing;
+            return;
+        }
+
+        AddInspectorTab(
+            new ArgoApplicationTabViewModel(
+                Client,
+                row.Descriptor,
+                row.Application,
+                (owner, namespaceHint) => OpenOwnerAsync(owner, namespaceHint, row.ClusterName),
+                row.ClusterName),
+            replacePreview: false);
+    }
+
+    /// <summary>
+    /// The Application a sync or refresh would act on: the dashboard's selected row while the
+    /// dashboard is showing, and otherwise the selected row of an ordinary Applications list.
+    /// Two entry points to one action, because the ordinary list is still there and a menu
+    /// item that worked in one of them and not the other would be the harder thing to explain.
+    /// </summary>
+    private (ClusterClient? Client, ResourceDescriptor Descriptor, string Namespace, string Name, string Cluster)?
+        ArgoActionTarget()
+    {
+        if (IsArgoView)
+        {
+            return SelectedArgoApplication is { } row
+                ? (ClientForCluster(row.ClusterName), row.Descriptor, row.Namespace, row.Name, row.ClusterName)
+                : null;
+        }
+
+        if (SelectedRow is { } selected
+            && DescriptorFor(selected) is { } descriptor
+            && ArgoCd.SupportsSync(descriptor))
+        {
+            return (ClientFor(selected), descriptor, selected.Namespace, selected.Name, selected.ClusterName);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Whether a sync or refresh is offered at all. The kind is named inside
+    /// <see cref="ArgoCd.SupportsSync"/>, and that is the honest exception argued there:
+    /// <c>operation</c> is a field of Argo's own schema, so neither discovery nor the object
+    /// can answer this the way a <c>scale</c> subresource or a pod template can.
+    /// </summary>
+    public bool CanSyncSelectedArgoApplication => ArgoActionTarget() is not null;
+
+    /// <summary>
+    /// "argocd/checkout" — what a sync or refresh would act on, for the palette's subtitle.
+    /// Null when neither surface has an Application selected, which is the same condition
+    /// <see cref="CanSyncSelectedArgoApplication"/> reports and is why the palette can gate
+    /// on either one.
+    /// </summary>
+    public string? ArgoActionLabel =>
+        ArgoActionTarget() is { } target ? $"{target.Namespace}/{target.Name}" : null;
+
+    [RelayCommand(CanExecute = nameof(CanSyncSelectedArgoApplication))]
+    private void SyncArgoApplication() => ArmArgoAction(RowActionKind.ArgoSync);
+
+    [RelayCommand(CanExecute = nameof(CanSyncSelectedArgoApplication))]
+    private void RefreshArgoApplication() => ArmArgoAction(RowActionKind.ArgoRefresh);
+
+    private void ArmArgoAction(RowActionKind kind)
+    {
+        if (ArgoActionTarget() is not { } target)
+        {
+            return;
+        }
+
+        // Null only on the demo cluster, where the strip renders its refusal in place rather
+        // than the action silently doing nothing (demo rule 5).
+        if (target.Client is null && !IsDemo)
+        {
+            return;
+        }
+
+        if (PendingRowAction is { IsBusy: true } or { IsDraining: true })
+        {
+            return;
+        }
+
+        var action = new RowActionViewModel(
+            kind, target.Client, target.Descriptor, target.Namespace, target.Name, target.Cluster);
+
+        action.Dismissed = () =>
+        {
+            if (ReferenceEquals(PendingRowAction, action))
+            {
+                PendingRowAction = null;
+            }
+        };
+
+        PendingRowAction = action;
     }
 
     /// <summary>Reloads the Helm release list for the selected namespace.</summary>
@@ -1375,6 +1679,12 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         {
             _ = RefreshHelmReleasesAsync();
         }
+        else if (IsArgoView)
+        {
+            // Deliberately nothing. The Argo dashboard is cluster-wide (see ReloadArgoAsync),
+            // so the namespace picker does not narrow it — and re-reading the same list on
+            // every namespace change would be work nobody asked for.
+        }
         else
         {
             RestartWatch();
@@ -1387,6 +1697,10 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         if (IsHelmView)
         {
             _ = RefreshHelmReleasesAsync();
+        }
+        else if (IsArgoView)
+        {
+            _ = ReloadArgoAsync();
         }
         else
         {

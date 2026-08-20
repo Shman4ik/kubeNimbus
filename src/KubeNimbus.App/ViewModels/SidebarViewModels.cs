@@ -107,6 +107,15 @@ public sealed partial class SidebarKindViewModel(ResourceDescriptor descriptor, 
     /// </summary>
     public bool IsHelmReleases => ReferenceEquals(Descriptor, SidebarGrouping.HelmReleaseDescriptor);
 
+    /// <summary>
+    /// True for the synthetic Argo CD entry, which swaps the content area for the GitOps
+    /// dashboard — every Application on the cluster, counted and ordered by what needs
+    /// attention — instead of starting a watch on one kind in one namespace. Applications
+    /// are a real API kind and keep their own row directly below this one, so nothing here
+    /// takes the ordinary list away.
+    /// </summary>
+    public bool IsArgoDashboard => ReferenceEquals(Descriptor, SidebarGrouping.ArgoDashboardDescriptor);
+
     [ObservableProperty]
     private bool _isSelected;
 

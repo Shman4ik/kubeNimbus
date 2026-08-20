@@ -89,7 +89,14 @@ surfaces non-empty — that's the selection criterion.
 | `40-broken.yaml` | CrashLoopBackOff, ImagePullBackOff, unschedulable Pending pod, never-Ready pod | the error/warn status pills, `0/1 Ready` vs Pending distinction, Events |
 | `50-crds.yaml` + `51-custom-resources.yaml` | three CRDs — **two share the Kind `Widget` in different API groups** — plus instances, namespaced and cluster-scoped | discovery-driven CRD section, group-aware sidebar filter, short-name filter (`wdg`, `bkp`) |
 | `60-rbac.yaml` | ServiceAccounts, Role/RoleBinding, ClusterRole/ClusterRoleBinding, and one **dangling** binding whose Role doesn't exist | RBAC access review, both the "what may I do" and "where does this come from" directions |
+| `70-argocd-crds.yaml` + `71-argocd-applications.yaml` | a **stand-in** Argo CD Application/AppProject CRD pair and five Applications covering Synced+Healthy, Synced+Degraded, OutOfSync, Missing and never-compared | the Argo sidebar section, the GitOps dashboard's counts and attention ordering, the Application detail pane, and the sync/refresh patches (which really do land on the object) |
 | `helm-release.template.json` | a synthetic `checkout` release at **three revisions** (values, rendered manifest, notes) | Helm release list, values/manifest/notes tabs, revision history |
+
+The Argo pair is a *shape*, not an installation: nothing reconciles those Applications, so
+a sync writes `operation` and no controller picks it up, and a refresh annotation stays
+where it is put. To test against real Argo CD, **delete both CRDs first** — they claim the
+same names — and then install it the usual way (`kubectl create namespace argocd &&
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml`).
 
 Metrics come free: k3s ships metrics-server, so `metrics.k8s.io` is live and the
 CPU/Memory columns, usage sparklines and the Usage tab populate on their own. To

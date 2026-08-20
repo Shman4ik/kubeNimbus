@@ -136,6 +136,14 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-node-drain-stopped", () => HostInMainWindow(ClusterTabScenarios.NodeDrainStopped(), height: 1000)),
     ("cluster-tab-demo-terminal-unavailable",
         () => HostInMainWindow(ClusterTabScenarios.DemoTerminalUnavailable())),
+
+    // Argo CD. The dashboard is the headline shot: two independent pills per row, the
+    // seven counts, and the attention ordering that puts a Synced-but-Degraded
+    // Application at the top.
+    ("cluster-tab-argo-dashboard", () => HostInMainWindow(ClusterTabScenarios.ArgoDashboard())),
+    ("cluster-tab-argo-application-detail",
+        () => HostInMainWindow(ClusterTabScenarios.ArgoApplicationDetail(), height: 1000)),
+    ("cluster-tab-argo-sync-unavailable", () => HostInMainWindow(ClusterTabScenarios.ArgoSyncUnavailable())),
     ("main-window", () => BuildMainWindowContent()),
     ("main-window-no-kubeconfig", () => BuildNoKubeconfigContent()),
     ("main-window-shortcuts", () => BuildMainWindowContent(openShortcuts: true)),

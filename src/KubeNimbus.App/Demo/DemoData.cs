@@ -46,6 +46,7 @@ public static class DemoData
     private static readonly JsonDocument CrdsDoc = Load("crds.json");
     private static readonly JsonDocument CertificatesDoc = Load("certificates.json");
     private static readonly JsonDocument NodesDoc = Load("nodes.json");
+    private static readonly JsonDocument ArgoApplicationsDoc = Load("argo-applications.json");
 
     private static JsonDocument Load(string fileName)
     {
@@ -159,7 +160,30 @@ public static class DemoData
         return [];
     }
 
-    public static readonly string[] Namespaces = ["default", "kube-system", "monitoring", "payments"];
+    /// <summary>
+    /// The demo cluster's Argo CD Applications, as objects rather than as records: the
+    /// dashboard reads them through the same <see cref="ArgoCd.ReadApplication"/> a live
+    /// cluster's list goes through, so what renders offline is what the parser produces.
+    ///
+    /// <para>
+    /// Seven of them, and the set is chosen to cover every state the dashboard classifies —
+    /// the two that are easy to get wrong being Synced-but-Degraded (<c>fraud-detector</c>:
+    /// Git applied cleanly and the pods are failing, which is what "health outranks sync"
+    /// exists for) and an Application Argo cannot compare at all (<c>risk-scoring</c>: an
+    /// unreachable repository, no resources, and a ComparisonError condition that is the only
+    /// thing explaining the blank). Without those two the demo would only ever show the
+    /// states that agree with each other.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<ArgoApplication> ArgoApplications { get; } =
+        [.. ArgoApplicationsDoc.RootElement.EnumerateArray()
+            .Select(e => ArgoCd.ReadApplication(new DynamicResource(e)))];
+
+    /// <summary>The raw Application objects, for the ordinary Applications list and the YAML editor.</summary>
+    public static IReadOnlyList<DynamicResource> ArgoApplicationObjects { get; } =
+        [.. ArgoApplicationsDoc.RootElement.EnumerateArray().Select(e => new DynamicResource(e))];
+
+    public static readonly string[] Namespaces = ["argocd", "default", "kube-system", "monitoring", "payments"];
 
     /// <summary>
     /// Stands in for a GET against the API server. Used by the demo Environment tab's
@@ -405,6 +429,10 @@ public static class DemoData
 
         var result = SidebarGrouping.SectionOrder.Select(t => sections[t]).Where(s => s.Kinds.Count > 0).ToArray();
         SidebarGrouping.LabelAmbiguousKinds(result);
+
+        // The demo catalog carries Argo CD's kinds, so the dashboard row appears — through
+        // the same call and the same gate a real cluster's sidebar goes through.
+        SidebarGrouping.AddArgoDashboard(result, catalog);
         return result;
     }
 
@@ -424,6 +452,7 @@ public static class DemoData
             { Group: "", Kind: "ConfigMap" } => ConfigMaps,
             { Group: "", Kind: "Node" } => Nodes,
             { Group: "cert-manager.io", Kind: "Certificate" } => Certificates,
+            { Group: "argoproj.io", Kind: "Application" } => ArgoApplicationObjects,
             _ => [],
         };
 

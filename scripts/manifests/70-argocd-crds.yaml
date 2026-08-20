@@ -1,0 +1,94 @@
+# Argo CD, as a shape — NOT an Argo CD installation.
+#
+# The Argo section of the sidebar, the GitOps dashboard and the Application detail pane
+# are all read from ordinary custom resources, so the sandbox can produce every state
+# they render without running Argo's controllers: this file declares an Application CRD
+# with the same group, kind, versions, printer columns and (loosely) the same schema Argo
+# declares, and a handful of Application objects covering the states the dashboard
+# classifies. Nothing reconciles them, so the objects sit exactly as written.
+#
+# What this DOES exercise against a real API server: discovery finding the Application
+# kind, the sidebar bucketing argoproj.io into its own section, the dashboard's parse,
+# counts and ordering, the detail pane, and — genuinely — the sync and refresh PATCHes,
+# which really do land on the object (a refresh annotation stays put here, where a real
+# Argo would clear it; a sync writes `operation` and nothing picks it up).
+#
+# What it does NOT exercise: anything Argo's own controllers do. To test against real
+# Argo, install it (`kubectl create namespace argocd && kubectl apply -n argocd -f
+# https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml`) —
+# and DELETE this file's CRD first, because it claims the same name and a real install
+# would overwrite it (or fail) rather than merge with it.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: applications.argoproj.io
+  annotations:
+    kubenimbus.io/note: >-
+      Sandbox stand-in for Argo CD's own Application CRD. Delete before installing real Argo CD.
+spec:
+  group: argoproj.io
+  scope: Namespaced
+  names:
+    plural: applications
+    singular: application
+    kind: Application
+    shortNames: ["app", "apps"]
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          # Argo's real schema is thousands of lines; preserving unknown fields keeps the
+          # objects in 71-argocd-applications.yaml faithful without copying it.
+          #
+          # Real Argo declares a `status` subresource here and this stand-in deliberately
+          # does not: with the subresource on, `kubectl apply` silently drops the `status`
+          # block of every object, so all five Applications would come back Unknown/Unknown
+          # and the sandbox would produce exactly one of the states it exists to produce.
+          x-kubernetes-preserve-unknown-fields: true
+      additionalPrinterColumns:
+        # Argo's own columns, so `kubectl get applications` and the ordinary Applications
+        # list in the app agree — the dashboard is a different view of the same objects.
+        - name: Sync Status
+          type: string
+          jsonPath: .status.sync.status
+        - name: Health Status
+          type: string
+          jsonPath: .status.health.status
+        - name: Revision
+          type: string
+          jsonPath: .status.sync.revision
+          priority: 1
+---
+# A second argoproj.io kind, so the Argo sidebar section holds more than one row and the
+# dashboard row is visibly distinct from the kinds under it.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: appprojects.argoproj.io
+  annotations:
+    kubenimbus.io/note: >-
+      Sandbox stand-in for Argo CD's own AppProject CRD. Delete before installing real Argo CD.
+spec:
+  group: argoproj.io
+  scope: Namespaced
+  names:
+    plural: appprojects
+    singular: appproject
+    kind: AppProject
+    shortNames: ["appproj"]
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd
