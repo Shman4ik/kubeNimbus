@@ -1028,6 +1028,23 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
         }
 
+        // Argo CD's two actions. Their own block rather than one inside the selected-row
+        // section above, because they have two sources: the GitOps dashboard's selected
+        // Application (where the resource list has no selection at all) and an ordinary
+        // Applications list's selected row. The tab resolves whichever is showing, so this
+        // asks it rather than testing for a row.
+        if (SelectedTab is { CanSyncSelectedArgoApplication: true } argoTab
+            && argoTab.ArgoActionLabel is { } argoWhere)
+        {
+            yield return new PaletteItem(
+                "Argo CD: sync…", $"{argoWhere} · apply the revision Git declares", "SyncIconGeometry",
+                () => argoTab.SyncArgoApplicationCommand.Execute(null));
+
+            yield return new PaletteItem(
+                "Argo CD: refresh from Git…", $"{argoWhere} · re-compare, change nothing", "RefreshIconGeometry",
+                () => argoTab.RefreshArgoApplicationCommand.Execute(null));
+        }
+
         // IsDemo excluded: the access review is three real API-server calls
         // (SelfSubjectRulesReview, the RBAC object scan, SubjectAccessReview) with no
         // honest offline stand-in, and a palette entry that matches a search and then

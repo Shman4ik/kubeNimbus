@@ -1,0 +1,167 @@
+# Synced and Healthy — the ordinary state, and what most of a real dashboard looks like.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: shop-web
+  namespace: argocd
+spec:
+  project: shop
+  source:
+    repoURL: https://github.com/example-org/sandbox-manifests.git
+    path: apps/shop-web
+    targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: demo-shop
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+status:
+  sync: { status: Synced, revision: 8f3c1d94b27ae5106f4e2c0b9a7d3e51c8b6042f }
+  health: { status: Healthy }
+  resources:
+    - group: apps
+      version: v1
+      kind: Deployment
+      namespace: demo-shop
+      name: shop-web
+      status: Synced
+      health: { status: Healthy }
+    - version: v1
+      kind: Service
+      namespace: demo-shop
+      name: shop-web
+      status: Synced
+      health: { status: Healthy }
+  history:
+    - id: 7
+      revision: 8f3c1d94b27ae5106f4e2c0b9a7d3e51c8b6042f
+      deployedAt: "2026-08-18T09:14:00Z"
+---
+# Synced but Degraded — the case the dashboard's two independent pills exist for, and the
+# one a single Status column cannot express: Git applied cleanly, the workload is failing.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: shop-api
+  namespace: argocd
+spec:
+  project: shop
+  source:
+    repoURL: https://github.com/example-org/sandbox-manifests.git
+    path: apps/shop-api
+    targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: demo-shop
+  syncPolicy:
+    automated: { selfHeal: true }
+status:
+  sync: { status: Synced, revision: 8f3c1d94b27ae5106f4e2c0b9a7d3e51c8b6042f }
+  health:
+    status: Degraded
+    message: 'Deployment "shop-api" exceeded its progress deadline'
+  resources:
+    - group: apps
+      version: v1
+      kind: Deployment
+      namespace: demo-shop
+      name: shop-api
+      status: Synced
+      health: { status: Degraded }
+    - version: v1
+      kind: ConfigMap
+      namespace: demo-shop
+      name: shop-config
+      status: Synced
+---
+# OutOfSync and Healthy — somebody changed the cluster by hand and what they left works.
+# Manual sync policy, so this is the object to press Sync on.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: batch-jobs
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/example-org/sandbox-manifests.git
+    path: apps/batch
+    targetRevision: release-1.4
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: demo-batch
+status:
+  sync: { status: OutOfSync, revision: c41f0b8e29d7a6350f1b8c4d20e97a5b3f6d81c0 }
+  health: { status: Healthy }
+  resources:
+    - group: batch
+      version: v1
+      kind: CronJob
+      namespace: demo-batch
+      name: minute-ticker
+      status: OutOfSync
+      health: { status: Healthy }
+---
+# Missing — declared in Git, absent from the cluster.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: reporting
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/example-org/sandbox-manifests.git
+    path: apps/reporting
+    targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: demo-batch
+status:
+  sync: { status: OutOfSync }
+  health: { status: Missing }
+  resources:
+    - group: apps
+      version: v1
+      kind: Deployment
+      namespace: demo-batch
+      name: reporting
+      status: OutOfSync
+      health: { status: Missing }
+---
+# No status at all: an Application Argo has never managed to compare, with the condition
+# that is the only thing explaining the blank. This is the degradation path — every field
+# the pane reads has to come back empty rather than throwing.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: unreachable-repo
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://git.internal.example.invalid/platform/thing.git
+    path: deploy
+    targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+status:
+  health: { status: Unknown }
+  conditions:
+    - type: ComparisonError
+      message: "rpc error: code = Unknown desc = failed to list refs: dial tcp: lookup git.internal.example.invalid: no such host"
+      lastTransitionTime: "2026-08-19T11:02:00Z"
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: shop
+  namespace: argocd
+spec:
+  description: The sandbox shop stack
+  sourceRepos: ["https://github.com/example-org/sandbox-manifests.git"]
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: demo-shop
+

@@ -46,6 +46,9 @@
     <DataTemplate DataType="vm:HelmReleaseTabViewModel">
       <views:HelmReleaseView />
     </DataTemplate>
+    <DataTemplate DataType="vm:ArgoApplicationTabViewModel">
+      <views:ArgoApplicationView />
+    </DataTemplate>
     <DataTemplate DataType="vm:ExecTabViewModel">
       <views:ExecView />
     </DataTemplate>

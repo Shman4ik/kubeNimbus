@@ -646,6 +646,9 @@ public partial class ClusterTabView : UserControl
     private void OnHelmRowDoubleTapped(object? sender, TappedEventArgs e) =>
         Vm?.OpenSelectedHelmReleaseCommand.Execute(null);
 
+    private void OnArgoRowDoubleTapped(object? sender, TappedEventArgs e) =>
+        Vm?.OpenArgoApplicationCommand.Execute(null);
+
     /// <summary>
     /// Ctrl/Cmd+F, routed here by <see cref="MainWindow"/> — the gesture is registered
     /// on the window because the key can arrive with focus anywhere in the shell, and a
@@ -653,9 +656,11 @@ public partial class ClusterTabView : UserControl
     /// </summary>
     public void FocusRowFilter()
     {
-        if (Vm is not { IsHelmView: false })
+        if (Vm is not { IsResourceListVisible: true })
         {
-            return; // the box isn't in the Helm browser, and focusing a hidden TextBox is a dead keystroke
+            // The box belongs to the resource list; the Helm browser and the Argo dashboard
+            // replace that list entirely, and focusing a hidden TextBox is a dead keystroke.
+            return;
         }
 
         RowFilterBox.Focus();

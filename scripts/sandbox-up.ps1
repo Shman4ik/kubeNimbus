@@ -188,18 +188,21 @@ else {
         }
     }
 
-    foreach ($file in '10-shop.yaml', '20-data.yaml', '30-batch.yaml', '40-broken.yaml', '50-crds.yaml') {
+    foreach ($file in '10-shop.yaml', '20-data.yaml', '30-batch.yaml', '40-broken.yaml', '50-crds.yaml', '70-argocd-crds.yaml') {
         Write-Note $file
         $null = Invoke-Kubectl apply -f "/kubenimbus-manifests/$file"
     }
 
     # CRs need their CRD's endpoint to exist first.
     $null = Invoke-Kubectl wait --for=condition=Established crd/widgets.shop.kubenimbus.io `
-        crd/widgets.factory.kubenimbus.io crd/backups.demo.kubenimbus.io --timeout=60s
+        crd/widgets.factory.kubenimbus.io crd/backups.demo.kubenimbus.io `
+        crd/applications.argoproj.io crd/appprojects.argoproj.io --timeout=60s
     Write-Note '51-custom-resources.yaml'
     $null = Invoke-Kubectl apply -f /kubenimbus-manifests/51-custom-resources.yaml
     Write-Note '60-rbac.yaml'
     $null = Invoke-Kubectl apply -f /kubenimbus-manifests/60-rbac.yaml
+    Write-Note '71-argocd-applications.yaml'
+    $null = Invoke-Kubectl apply -f /kubenimbus-manifests/71-argocd-applications.yaml
 
     # --- Synthetic Helm release --------------------------------------------
     # k3s stores its own bundled charts (traefik, coredns...) as real Helm

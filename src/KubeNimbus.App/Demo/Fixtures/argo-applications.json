@@ -1,0 +1,258 @@
+[
+  {
+    "apiVersion": "argoproj.io/v1alpha1",
+    "kind": "Application",
+    "metadata": {
+      "name": "checkout",
+      "namespace": "argocd",
+      "creationTimestamp": "2026-03-04T10:12:00Z"
+    },
+    "spec": {
+      "project": "payments",
+      "source": {
+        "repoURL": "https://github.com/example-org/platform-manifests.git",
+        "path": "apps/checkout/overlays/prod",
+        "targetRevision": "main"
+      },
+      "destination": { "server": "https://kubernetes.default.svc", "namespace": "payments" },
+      "syncPolicy": { "automated": { "prune": true, "selfHeal": true } }
+    },
+    "status": {
+      "sync": { "status": "Synced", "revision": "8f3c1d94b27ae5106f4e2c0b9a7d3e51c8b6042f" },
+      "health": { "status": "Healthy" },
+      "reconciledAt": "2026-07-30T08:41:12Z",
+      "operationState": {
+        "phase": "Succeeded",
+        "message": "successfully synced (all tasks run)",
+        "startedAt": "2026-07-30T08:40:51Z",
+        "finishedAt": "2026-07-30T08:41:09Z"
+      },
+      "resources": [
+        { "version": "v1", "kind": "Service", "namespace": "payments", "name": "checkout", "status": "Synced", "health": { "status": "Healthy" } },
+        { "group": "apps", "version": "v1", "kind": "Deployment", "namespace": "payments", "name": "checkout", "status": "Synced", "health": { "status": "Healthy" } },
+        { "version": "v1", "kind": "ConfigMap", "namespace": "payments", "name": "checkout-config", "status": "Synced" },
+        { "group": "networking.k8s.io", "version": "v1", "kind": "Ingress", "namespace": "payments", "name": "checkout", "status": "Synced", "health": { "status": "Healthy" } }
+      ],
+      "history": [
+        { "id": 41, "revision": "1a0b7cf9e6d4835201ac9b3f7e15d240c6a83b19", "deployedAt": "2026-07-21T14:02:00Z" },
+        { "id": 42, "revision": "5d27ea01c93b6478fe1d0a852c37b94f6e0d1a83", "deployedAt": "2026-07-26T09:31:00Z" },
+        { "id": 43, "revision": "8f3c1d94b27ae5106f4e2c0b9a7d3e51c8b6042f", "deployedAt": "2026-07-30T08:41:09Z" }
+      ]
+    }
+  },
+  {
+    "apiVersion": "argoproj.io/v1alpha1",
+    "kind": "Application",
+    "metadata": {
+      "name": "fraud-detector",
+      "namespace": "argocd",
+      "creationTimestamp": "2026-04-18T07:55:00Z"
+    },
+    "spec": {
+      "project": "payments",
+      "source": {
+        "repoURL": "https://github.com/example-org/platform-manifests.git",
+        "path": "apps/fraud-detector/overlays/prod",
+        "targetRevision": "main"
+      },
+      "destination": { "server": "https://kubernetes.default.svc", "namespace": "payments" },
+      "syncPolicy": { "automated": { "selfHeal": true } }
+    },
+    "status": {
+      "sync": { "status": "Synced", "revision": "8f3c1d94b27ae5106f4e2c0b9a7d3e51c8b6042f" },
+      "health": {
+        "status": "Degraded",
+        "message": "Deployment \"fraud-detector\" exceeded its progress deadline"
+      },
+      "reconciledAt": "2026-07-30T08:39:44Z",
+      "operationState": {
+        "phase": "Succeeded",
+        "message": "successfully synced (all tasks run)",
+        "startedAt": "2026-07-30T06:12:03Z",
+        "finishedAt": "2026-07-30T06:12:31Z"
+      },
+      "resources": [
+        { "group": "apps", "version": "v1", "kind": "Deployment", "namespace": "payments", "name": "fraud-detector", "status": "Synced", "health": { "status": "Degraded" } },
+        { "version": "v1", "kind": "Service", "namespace": "payments", "name": "fraud-detector", "status": "Synced", "health": { "status": "Healthy" } },
+        { "version": "v1", "kind": "ServiceAccount", "namespace": "payments", "name": "fraud-detector", "status": "Synced" }
+      ],
+      "history": [
+        { "id": 17, "revision": "5d27ea01c93b6478fe1d0a852c37b94f6e0d1a83", "deployedAt": "2026-07-26T09:33:10Z" },
+        { "id": 18, "revision": "8f3c1d94b27ae5106f4e2c0b9a7d3e51c8b6042f", "deployedAt": "2026-07-30T06:12:31Z" }
+      ]
+    }
+  },
+  {
+    "apiVersion": "argoproj.io/v1alpha1",
+    "kind": "Application",
+    "metadata": {
+      "name": "ledger-api",
+      "namespace": "argocd",
+      "creationTimestamp": "2026-02-11T13:20:00Z"
+    },
+    "spec": {
+      "project": "payments",
+      "source": {
+        "repoURL": "https://github.com/example-org/platform-manifests.git",
+        "path": "apps/ledger-api/overlays/prod",
+        "targetRevision": "release-2.14"
+      },
+      "destination": { "server": "https://kubernetes.default.svc", "namespace": "payments" }
+    },
+    "status": {
+      "sync": { "status": "OutOfSync", "revision": "c41f0b8e29d7a6350f1b8c4d20e97a5b3f6d81c0" },
+      "health": { "status": "Healthy" },
+      "reconciledAt": "2026-07-30T08:42:02Z",
+      "operationState": {
+        "phase": "Succeeded",
+        "message": "successfully synced (all tasks run)",
+        "startedAt": "2026-07-28T17:04:00Z",
+        "finishedAt": "2026-07-28T17:04:28Z"
+      },
+      "resources": [
+        { "group": "apps", "version": "v1", "kind": "Deployment", "namespace": "payments", "name": "ledger-api", "status": "OutOfSync", "health": { "status": "Healthy" } },
+        { "version": "v1", "kind": "Service", "namespace": "payments", "name": "ledger-api", "status": "Synced", "health": { "status": "Healthy" } },
+        { "group": "autoscaling", "version": "v2", "kind": "HorizontalPodAutoscaler", "namespace": "payments", "name": "ledger-api", "status": "Synced", "health": { "status": "Healthy" } }
+      ],
+      "history": [
+        { "id": 88, "revision": "c41f0b8e29d7a6350f1b8c4d20e97a5b3f6d81c0", "deployedAt": "2026-07-28T17:04:28Z" }
+      ]
+    }
+  },
+  {
+    "apiVersion": "argoproj.io/v1alpha1",
+    "kind": "Application",
+    "metadata": {
+      "name": "notification-dispatcher",
+      "namespace": "argocd",
+      "creationTimestamp": "2026-05-30T11:47:00Z"
+    },
+    "spec": {
+      "project": "payments",
+      "source": {
+        "repoURL": "https://github.com/example-org/platform-manifests.git",
+        "path": "apps/notification-dispatcher/overlays/prod",
+        "targetRevision": "main"
+      },
+      "destination": { "server": "https://kubernetes.default.svc", "namespace": "payments" },
+      "syncPolicy": { "automated": { "prune": true, "selfHeal": true } }
+    },
+    "status": {
+      "sync": { "status": "OutOfSync", "revision": "8f3c1d94b27ae5106f4e2c0b9a7d3e51c8b6042f" },
+      "health": { "status": "Progressing", "message": "Waiting for rollout to finish: 1 of 3 updated replicas are available" },
+      "reconciledAt": "2026-07-30T08:44:50Z",
+      "operationState": {
+        "phase": "Running",
+        "message": "waiting for healthy state of apps/Deployment/notification-dispatcher",
+        "startedAt": "2026-07-30T08:44:31Z"
+      },
+      "resources": [
+        { "group": "apps", "version": "v1", "kind": "Deployment", "namespace": "payments", "name": "notification-dispatcher", "status": "OutOfSync", "health": { "status": "Progressing" } },
+        { "version": "v1", "kind": "Service", "namespace": "payments", "name": "notification-dispatcher", "status": "Synced", "health": { "status": "Healthy" } }
+      ],
+      "history": [
+        { "id": 9, "revision": "5d27ea01c93b6478fe1d0a852c37b94f6e0d1a83", "deployedAt": "2026-07-26T09:35:00Z" }
+      ]
+    }
+  },
+  {
+    "apiVersion": "argoproj.io/v1alpha1",
+    "kind": "Application",
+    "metadata": {
+      "name": "monitoring-stack",
+      "namespace": "argocd",
+      "creationTimestamp": "2026-01-09T08:05:00Z"
+    },
+    "spec": {
+      "project": "platform",
+      "sources": [
+        {
+          "repoURL": "https://prometheus-community.github.io/helm-charts",
+          "chart": "kube-prometheus-stack",
+          "targetRevision": "62.3.0"
+        },
+        {
+          "repoURL": "https://github.com/example-org/platform-manifests.git",
+          "path": "apps/monitoring/values",
+          "targetRevision": "main"
+        }
+      ],
+      "destination": { "server": "https://kubernetes.default.svc", "namespace": "monitoring" },
+      "syncPolicy": { "automated": {} }
+    },
+    "status": {
+      "sync": { "status": "Synced", "revision": "62.3.0" },
+      "health": { "status": "Healthy" },
+      "reconciledAt": "2026-07-30T08:38:19Z",
+      "operationState": {
+        "phase": "Succeeded",
+        "message": "successfully synced (all tasks run)",
+        "startedAt": "2026-07-29T22:10:00Z",
+        "finishedAt": "2026-07-29T22:11:47Z"
+      },
+      "resources": [
+        { "group": "apps", "version": "v1", "kind": "Deployment", "namespace": "monitoring", "name": "kube-prometheus-stack-operator", "status": "Synced", "health": { "status": "Healthy" } },
+        { "group": "apps", "version": "v1", "kind": "StatefulSet", "namespace": "monitoring", "name": "prometheus-kube-prometheus-stack-prometheus", "status": "Synced", "health": { "status": "Healthy" } },
+        { "group": "monitoring.coreos.com", "version": "v1", "kind": "ServiceMonitor", "namespace": "monitoring", "name": "kube-prometheus-stack-apiserver", "status": "Synced" }
+      ],
+      "history": [
+        { "id": 205, "revision": "62.3.0", "deployedAt": "2026-07-29T22:11:47Z" }
+      ]
+    }
+  },
+  {
+    "apiVersion": "argoproj.io/v1alpha1",
+    "kind": "Application",
+    "metadata": {
+      "name": "settlement-batch",
+      "namespace": "argocd",
+      "creationTimestamp": "2026-07-29T19:31:00Z"
+    },
+    "spec": {
+      "project": "payments",
+      "source": {
+        "repoURL": "https://github.com/example-org/platform-manifests.git",
+        "path": "apps/settlement-batch/overlays/prod",
+        "targetRevision": "main"
+      },
+      "destination": { "server": "https://kubernetes.default.svc", "namespace": "payments" }
+    },
+    "status": {
+      "sync": { "status": "OutOfSync", "revision": "8f3c1d94b27ae5106f4e2c0b9a7d3e51c8b6042f" },
+      "health": { "status": "Missing" },
+      "reconciledAt": "2026-07-30T08:40:02Z",
+      "resources": [
+        { "group": "batch", "version": "v1", "kind": "CronJob", "namespace": "payments", "name": "settlement-batch", "status": "OutOfSync", "health": { "status": "Missing" } },
+        { "version": "v1", "kind": "ConfigMap", "namespace": "payments", "name": "settlement-batch-config", "status": "OutOfSync" }
+      ]
+    }
+  },
+  {
+    "apiVersion": "argoproj.io/v1alpha1",
+    "kind": "Application",
+    "metadata": {
+      "name": "risk-scoring",
+      "namespace": "argocd",
+      "creationTimestamp": "2026-07-30T08:12:00Z"
+    },
+    "spec": {
+      "project": "payments",
+      "source": {
+        "repoURL": "https://git.internal.example.org/platform/risk-scoring.git",
+        "path": "deploy",
+        "targetRevision": "main"
+      },
+      "destination": { "server": "https://kubernetes.default.svc", "namespace": "payments" }
+    },
+    "status": {
+      "health": { "status": "Unknown" },
+      "conditions": [
+        {
+          "type": "ComparisonError",
+          "message": "rpc error: code = Unknown desc = failed to list refs: dial tcp: lookup git.internal.example.org: no such host",
+          "lastTransitionTime": "2026-07-30T08:43:11Z"
+        }
+      ]
+    }
+  }
+]

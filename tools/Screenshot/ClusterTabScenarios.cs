@@ -603,6 +603,67 @@ internal static class ClusterTabScenarios
         return tab;
     }
 
+    // ---------------------------------------------------------------- Argo CD
+    //
+    // All three run on the demo cluster, which is where the Argo dataset lives — seven
+    // Applications covering every state the dashboard classifies. The parse, the counts,
+    // the ordering and both panes are production code; only the sync and refresh requests
+    // have no offline stand-in, which is exactly what the strip's notice says.
+
+    private static ClusterTabViewModel ArgoTab()
+    {
+        var tab = DemoTab();
+        var kind = tab.SidebarSections
+            .SelectMany(s => s.Kinds)
+            .First(k => k.IsArgoDashboard);
+        tab.SelectKindCommand.Execute(kind);
+        return tab;
+    }
+
+    /// <summary>
+    /// The GitOps dashboard. What to look at: the seven counts, the attention line under
+    /// them, and the ordering — <c>fraud-detector</c> at the top because it is Synced and
+    /// Degraded, which is the case the two independent pills exist for (a single Status
+    /// column would have to pick one of the two and be wrong about the other).
+    /// </summary>
+    public static ClusterTabViewModel ArgoDashboard() => ArgoTab();
+
+    /// <summary>
+    /// One Application's detail pane, opened on the degraded one. Maximized: the managed
+    /// resources sit under the overview card, and at the dock's default ~300px the thing
+    /// this pane exists to show — <em>which</em> resource is degraded — is below the fold.
+    /// </summary>
+    public static ClusterTabViewModel ArgoApplicationDetail()
+    {
+        var tab = ArgoTab();
+        tab.SelectedArgoApplication = tab.ArgoApplications.First(a => a.Name == "fraud-detector");
+        tab.OpenArgoApplicationCommand.Execute(null);
+
+        if (tab.SelectedInspectorTab is ArgoApplicationTabViewModel detail)
+        {
+            // The Resources tab, which is the one carrying the answer. The strip and the
+            // TabControl both bind to this index, so this is exactly what a click does.
+            detail.SelectedTabIndex = ArgoApplicationTabViewModel.ResourcesTabIndex;
+        }
+
+        tab.IsInspectorMaximized = true;
+        return tab;
+    }
+
+    /// <summary>
+    /// The armed sync on the demo cluster: the confirm sentence, the prune checkbox — the
+    /// half of a sync that deletes — and the in-place refusal. This is the one Argo
+    /// scenario that runs the real command path end to end, since the demo path is designed
+    /// to work without a client.
+    /// </summary>
+    public static ClusterTabViewModel ArgoSyncUnavailable()
+    {
+        var tab = ArgoTab();
+        tab.SelectedArgoApplication = tab.ArgoApplications.First(a => a.Name == "ledger-api");
+        tab.SyncArgoApplicationCommand.Execute(null);
+        return tab;
+    }
+
     // ------------------------------------------------------------------ nodes
     //
     // Every one of these runs on the demo cluster, which is where the node dataset lives

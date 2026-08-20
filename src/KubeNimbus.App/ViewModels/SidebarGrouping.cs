@@ -139,12 +139,33 @@ public static class SidebarGrouping
             return ClusterSection;
         }
 
+        if (ArgoCd.IsArgoKind(descriptor))
+        {
+            return ArgoSection;
+        }
+
         // Unrecognized group → CRDs, with nothing hardcoded about which CRDs exist.
         return ConfigGroups.Contains(descriptor.Group) ? "Config" : "CRDs";
     }
 
+    /// <summary>
+    /// Argo's own section, so its kinds stop being ~8 more rows in a CRDs section that
+    /// already runs past a hundred. It is the same group-driven bucketing every other
+    /// section uses — <c>argoproj.io</c> is one API group — rather than a special case for
+    /// one product, and a cluster with no Argo installed never sees it (a section with no
+    /// kinds is not added).
+    ///
+    /// <para>
+    /// The group is Argo's <em>whole</em> family, so a cluster running Argo Rollouts or Argo
+    /// Workflows lands their kinds here too. That is why the section is "Argo" and the
+    /// dashboard row inside it is "Argo CD": filing a Workflow under a heading that says
+    /// Argo CD would be wrong, and filing it back in CRDs would be worse.
+    /// </para>
+    /// </summary>
+    public const string ArgoSection = "Argo";
+
     public static readonly string[] SectionOrder =
-        ["Workloads", "Network", "Config", "Storage", ClusterSection, "CRDs"];
+        ["Workloads", "Network", "Config", "Storage", ClusterSection, ArgoSection, "CRDs"];
 
     /// <summary>
     /// Which sections a fresh connection opens expanded. Config, Cluster and CRDs
@@ -182,6 +203,64 @@ public static class SidebarGrouping
         new("helm.sh", "v1", "Release", "releases", "release", Namespaced: true, ShortNames: [], Categories: []);
 
     /// <summary>
+    /// Synthetic descriptor for the Argo CD dashboard row, which sits at the top of the Argo
+    /// section above that cluster's real Argo kinds. Unlike the Helm entry it is not standing
+    /// in for something that isn't an API kind — Applications very much are, and they have
+    /// their own row right underneath. It exists because the <em>dashboard</em> is not a list
+    /// of one kind: it is every Application on the cluster, counted and ordered by what needs
+    /// looking at, which is a different question from "show me the Applications in this
+    /// namespace" and is the one Argo CD's own UI opens on.
+    ///
+    /// <para>
+    /// The empty plural is deliberate: <see cref="SidebarKindViewModel.Pluralize"/> falls back
+    /// to the Kind when there is nothing to re-case against, so the row reads "Argo CD" rather
+    /// than a pluralized version of it. The group is real, so the sidebar filter finds this
+    /// row by typing "argo" exactly as it finds the kinds below it.
+    /// </para>
+    /// </summary>
+    /// <remarks>
+    /// Declared cluster-scoped, and that is the one field here doing real work: the content
+    /// header's namespace picker binds its <c>IsEnabled</c> to the selected kind's
+    /// <c>Namespaced</c>, and the dashboard is cluster-wide (Applications live in one
+    /// namespace while what they manage is spread across the rest). So the picker greys
+    /// itself out with no extra binding, rather than offering a choice that changes nothing.
+    /// </remarks>
+    public static readonly ResourceDescriptor ArgoDashboardDescriptor =
+        new(ArgoCd.Group, "v1alpha1", "Argo CD", "", "", Namespaced: false, ShortNames: [], Categories: []);
+
+    /// <summary>
+    /// Puts the Argo CD dashboard at the top of the Argo section, on a cluster that serves
+    /// the Application kind. Gated on the kind rather than on the group, and that difference
+    /// is the point: Argo Rollouts and Argo Workflows are also <c>argoproj.io</c>, so a
+    /// cluster running one of those has an Argo section with no Argo CD in it — and a GitOps
+    /// dashboard over a cluster with no Applications would be a row that opens on nothing.
+    ///
+    /// <para>
+    /// No probe and no extra request: the discovery catalog has already been fetched for the
+    /// sidebar, so this is the same evidence the metrics gate and the CRD printer columns use.
+    /// A cluster where Argo CD is installed <em>after</em> the tab connected picks the row up
+    /// on the next reconnect, exactly as the Helm section does.
+    /// </para>
+    /// </summary>
+    public static void AddArgoDashboard(
+        IEnumerable<SidebarSectionViewModel> sections, IEnumerable<ResourceDescriptor> catalog)
+    {
+        ArgumentNullException.ThrowIfNull(sections);
+
+        if (ArgoCd.ApplicationDescriptor(catalog) is null)
+        {
+            return;
+        }
+
+        if (sections.FirstOrDefault(s => s.Title == ArgoSection) is not { } section)
+        {
+            return;
+        }
+
+        section.Kinds.Insert(0, new SidebarKindViewModel(ArgoDashboardDescriptor, IconKeyFor(ArgoSection)));
+    }
+
+    /// <summary>
     /// Labels same-named kinds within a section with their API group. On a real
     /// cluster the CRDs section routinely holds several kinds sharing a name
     /// (Backup from velero.io and from postgresql.cnpg.io; Cluster from
@@ -208,6 +287,7 @@ public static class SidebarGrouping
     public static string IconKeyFor(string section) => section switch
     {
         HelmSection => "LayersIconGeometry",
+        ArgoSection => "SourceBranchIconGeometry",
         RecentSection => "ClockOutlineIconGeometry",
         "Workloads" => "CubeOutlineIconGeometry",
         "Network" => "LinkIconGeometry",

@@ -187,6 +187,14 @@
                     </Border>
                   </StackPanel>
 
+                  <!-- Prune, on a sync only. It is the half of a sync that deletes —
+                       resources that have left Git are removed from the cluster — so it gets
+                       the same treatment as the drain's two destructive options above: off
+                       by default, on screen rather than in a menu, and said in words. -->
+                  <CheckBox IsChecked="{Binding ArgoPrune}" Content="Prune resources removed from Git"
+                            IsVisible="{Binding IsArgoSync}" IsEnabled="{Binding IsEditable}"
+                            ToolTip.Tip="Argo's --prune. Objects the Application no longer declares are deleted from the cluster." />
+
                   <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
                     <!-- Label above the input, never beside it: an Auto column has no gap of
                          its own, which is how "Local port" ended up touching its own text box
@@ -336,7 +344,7 @@
                left it), and the "12 of 87" beside it states that the list is short on
                purpose. Hidden in the Helm browser, which is a different list. -->
           <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="8" Margin="12,0,0,0"
-                      VerticalAlignment="Center" IsVisible="{Binding !IsHelmView}">
+                      VerticalAlignment="Center" IsVisible="{Binding IsResourceListVisible}">
             <TextBlock Text="{Binding RowFilterSummary}" FontSize="11" Opacity="0.55" VerticalAlignment="Center"
                        IsVisible="{Binding IsRowFiltering}" />
             <TextBox Name="RowFilterBox" Classes="filterbox" Width="230"
@@ -361,8 +369,8 @@
           </Button>
         </Grid>
 
-        <!-- Resource list (hidden while the Helm browser is showing) -->
-        <Grid Grid.Row="1" IsVisible="{Binding !IsHelmView}">
+        <!-- Resource list (hidden while the Helm browser or the Argo dashboard is showing) -->
+        <Grid Grid.Row="1" IsVisible="{Binding IsResourceListVisible}">
           <!-- VisibleRows, not Rows: the watch keeps applying its events against the
                full list (see ClusterTabViewModel.Rows) while this renders whatever
                survives the search box. -->
@@ -454,6 +462,24 @@
                           ToolTip.Tip="Cordon the node and evict the pods that may be evicted, honouring PodDisruptionBudgets">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource DrainIconGeometry}" Width="13" Height="13" />
+                  </MenuItem.Icon>
+                </MenuItem>
+                <!-- Argo CD, on an ordinary Applications list. Present only for that kind,
+                     for the same reason cordon is present only on a node: "sync this
+                     ConfigMap" is not a question anyone has. The dashboard's own rows carry
+                     the identical pair, and both arm the same strip. -->
+                <MenuItem Header="Sync…" Command="{Binding SyncArgoApplicationCommand}"
+                          IsVisible="{Binding CanSyncSelectedArgoApplication}"
+                          ToolTip.Tip="Ask Argo CD to apply the revision this Application targets">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource SyncIconGeometry}" Width="13" Height="13" />
+                  </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="Refresh from Git…" Command="{Binding RefreshArgoApplicationCommand}"
+                          IsVisible="{Binding CanSyncSelectedArgoApplication}"
+                          ToolTip.Tip="Ask Argo to re-compare this Application against Git. Changes nothing on the cluster.">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
                 <Separator />
@@ -813,6 +839,185 @@
             <TextBlock Text="No Helm releases found" FontWeight="SemiBold" FontSize="13" HorizontalAlignment="Center" Opacity="0.7" />
             <TextBlock Text="{Binding SelectedNamespace, StringFormat='in {0}'}" FontSize="12" Opacity="0.5" HorizontalAlignment="Center" />
           </StackPanel>
+        </Grid>
+
+        <!-- Argo CD dashboard: the same slot again, shown when the synthetic Argo entry is
+             selected. Two pills per row rather than one Status column, because sync and
+             health are independent — an Application can be Synced and Degraded, or OutOfSync
+             and Healthy, and a single column cannot say both. No leading health dot: the
+             pills are already colour-coded from the same classification *and* spell the
+             word, which is exactly the double encoding the resource list dropped its dot to
+             avoid. -->
+        <!-- ClipToBounds, and it is not cosmetic: maximizing the inspector works by setting
+             this row's height to 0 (ClusterTabView.ApplyDockState), and a Grid does not clip
+             its children by default. The list and the Helm browser get away with it because
+             a DataGrid clips itself; this one's summary card is an ordinary Border, so
+             without this it goes on painting straight through the maximized dock — which is
+             what the first render of it did. -->
+        <Grid Grid.Row="1" IsVisible="{Binding IsArgoView}" RowDefinitions="Auto,*" ClipToBounds="True">
+
+          <!-- The seven counts Argo CD's own dashboard opens on, plus the one sentence that
+               answers "is anything wrong right now" without counting pills. Absent until the
+               first read completes, so the strip never shows seven zeros while loading. -->
+          <Border Grid.Row="0" Classes="card" Padding="12,10" Margin="0,0,0,8"
+                  IsVisible="{Binding ArgoCounts, Converter={x:Static aconv:ObjectConverters.IsNotNull}}">
+            <StackPanel Spacing="8">
+              <StackPanel Orientation="Horizontal" Spacing="18">
+                <StackPanel>
+                  <TextBlock Classes="fieldLabel" Text="Applications" />
+                  <TextBlock Text="{Binding ArgoCounts.Total}" FontSize="18" FontWeight="SemiBold" />
+                </StackPanel>
+                <StackPanel>
+                  <TextBlock Classes="fieldLabel" Text="Synced" />
+                  <TextBlock Text="{Binding ArgoCounts.Synced}" FontSize="18" FontWeight="SemiBold" />
+                </StackPanel>
+                <StackPanel>
+                  <TextBlock Classes="fieldLabel" Text="Healthy" />
+                  <TextBlock Text="{Binding ArgoCounts.Healthy}" FontSize="18" FontWeight="SemiBold" />
+                </StackPanel>
+                <StackPanel>
+                  <TextBlock Classes="fieldLabel" Text="Out of sync" />
+                  <TextBlock Text="{Binding ArgoCounts.OutOfSync}" FontSize="18" FontWeight="SemiBold" Classes="statusText warn" />
+                </StackPanel>
+                <StackPanel>
+                  <TextBlock Classes="fieldLabel" Text="Degraded" />
+                  <TextBlock Text="{Binding ArgoCounts.Degraded}" FontSize="18" FontWeight="SemiBold" Classes="statusText error" />
+                </StackPanel>
+                <StackPanel>
+                  <TextBlock Classes="fieldLabel" Text="Missing" />
+                  <TextBlock Text="{Binding ArgoCounts.Missing}" FontSize="18" FontWeight="SemiBold" Classes="statusText error" />
+                </StackPanel>
+                <StackPanel>
+                  <TextBlock Classes="fieldLabel" Text="Progressing" />
+                  <TextBlock Text="{Binding ArgoCounts.Progressing}" FontSize="18" FontWeight="SemiBold" />
+                </StackPanel>
+              </StackPanel>
+              <TextBlock Classes="statusText" Text="{Binding ArgoAttentionSummary}" TextWrapping="Wrap"
+                         IsVisible="{Binding ArgoAttentionSummary, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}" />
+            </StackPanel>
+          </Border>
+
+          <Grid Grid.Row="1">
+            <DataGrid Name="ArgoGrid"
+                       ItemsSource="{Binding ArgoApplications}" SelectedItem="{Binding SelectedArgoApplication}"
+                       IsReadOnly="True" GridLinesVisibility="Horizontal" CanUserResizeColumns="True"
+                       DoubleTapped="OnArgoRowDoubleTapped">
+              <!-- The two actions Argo's own UI leads with, on the row rather than on a
+                   toolbar (UI rule 1). Both arm the confirm strip above the list rather than
+                   firing on the click — a sync applies whatever Git currently says to a live
+                   cluster, which is at least as consequential as a rollout restart. -->
+              <DataGrid.ContextFlyout>
+                <MenuFlyout>
+                  <MenuItem Header="Sync…" Command="{Binding SyncArgoApplicationCommand}"
+                            ToolTip.Tip="Ask Argo CD to apply the revision this Application targets">
+                    <MenuItem.Icon>
+                      <PathIcon Data="{StaticResource SyncIconGeometry}" Width="13" Height="13" />
+                    </MenuItem.Icon>
+                  </MenuItem>
+                  <MenuItem Header="Refresh…" Command="{Binding RefreshArgoApplicationCommand}"
+                            ToolTip.Tip="Ask Argo to re-compare this Application against Git. Changes nothing on the cluster.">
+                    <MenuItem.Icon>
+                      <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="13" Height="13" />
+                    </MenuItem.Icon>
+                  </MenuItem>
+                  <Separator />
+                  <MenuItem Header="Open" Command="{Binding OpenArgoApplicationCommand}"
+                            ToolTip.Tip="Managed resources, conditions and deployment history" />
+                </MenuFlyout>
+              </DataGrid.ContextFlyout>
+              <DataGrid.Columns>
+                <DataGridTemplateColumn Header="Application" Width="2*" MinWidth="150">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate x:DataType="vm:ArgoApplicationRowViewModel">
+                      <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"
+                                 ToolTip.Tip="{Binding Tooltip}" VerticalAlignment="Center" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Project" Width="Auto" MinWidth="90">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate x:DataType="vm:ArgoApplicationRowViewModel">
+                      <TextBlock Text="{Binding Project}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Sync" Width="Auto" MinWidth="104">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate x:DataType="vm:ArgoApplicationRowViewModel">
+                      <Border Classes="statusPill"
+                              Classes.ok="{Binding SyncHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=ok}"
+                              Classes.warn="{Binding SyncHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=warn}"
+                              Classes.error="{Binding SyncHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=error}">
+                        <TextBlock Text="{Binding SyncText}" FontSize="11.5" />
+                      </Border>
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Health" Width="Auto" MinWidth="104">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate x:DataType="vm:ArgoApplicationRowViewModel">
+                      <Border Classes="statusPill"
+                              Classes.ok="{Binding HealthHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=ok}"
+                              Classes.warn="{Binding HealthHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=warn}"
+                              Classes.error="{Binding HealthHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=error}"
+                              ToolTip.Tip="{Binding Application.HealthMessage}">
+                        <TextBlock Text="{Binding HealthText}" FontSize="11.5" />
+                      </Border>
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Revision" Width="Auto" MinWidth="82">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate x:DataType="vm:ArgoApplicationRowViewModel">
+                      <TextBlock Text="{Binding Revision}" VerticalAlignment="Center" Opacity="0.8"
+                                 FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Destination" Width="Auto" MinWidth="100">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate x:DataType="vm:ArgoApplicationRowViewModel">
+                      <TextBlock Text="{Binding Destination}" TextTrimming="CharacterEllipsis"
+                                 ToolTip.Tip="{Binding Destination}" VerticalAlignment="Center" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Source" Width="*" MinWidth="130">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate x:DataType="vm:ArgoApplicationRowViewModel">
+                      <TextBlock Text="{Binding SourceSummary}" TextTrimming="CharacterEllipsis"
+                                 ToolTip.Tip="{Binding RepoUrl}" VerticalAlignment="Center" FontSize="11.5" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Policy" Width="Auto" MinWidth="110">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate x:DataType="vm:ArgoApplicationRowViewModel">
+                      <TextBlock Text="{Binding SyncPolicy}" VerticalAlignment="Center" FontSize="11.5" Opacity="0.8"
+                                 TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SyncPolicy}" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+              </DataGrid.Columns>
+            </DataGrid>
+
+            <TextBlock Text="Reading Argo CD Applications…" Opacity="0.5" FontSize="13"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       IsVisible="{Binding IsArgoLoading}" />
+
+            <!-- Argo installed, no Applications yet: its own state, and a different problem
+                 from "Argo is not here" — which never reaches this view at all, because the
+                 sidebar row only exists on a cluster that serves the Application kind. -->
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" MaxWidth="360"
+                        IsVisible="{Binding IsArgoEmpty}">
+              <PathIcon Data="{StaticResource SourceBranchIconGeometry}" Width="28" Height="28" Opacity="0.25"
+                        HorizontalAlignment="Center" />
+              <TextBlock Text="No Argo CD Applications on this cluster" FontWeight="SemiBold" FontSize="13"
+                         HorizontalAlignment="Center" Opacity="0.7" />
+              <TextBlock TextWrapping="Wrap" TextAlignment="Center" FontSize="12" Opacity="0.5"
+                         Text="Argo CD is installed — it serves the Application kind — but nothing has been registered with it yet, or this account cannot read the namespace they live in." />
+            </StackPanel>
+          </Grid>
         </Grid>
 
         <!-- Drag handle between the list and the bottom dock. -->

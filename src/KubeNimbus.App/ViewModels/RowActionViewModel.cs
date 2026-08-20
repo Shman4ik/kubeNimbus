@@ -25,6 +25,12 @@ public enum RowActionKind
 
     /// <summary>Cordon a node and evict the pods that may be evicted from it.</summary>
     Drain,
+
+    /// <summary>Ask Argo CD to reconcile an Application with the revision Git declares.</summary>
+    ArgoSync,
+
+    /// <summary>Ask Argo CD to re-compare an Application against Git, changing nothing.</summary>
+    ArgoRefresh,
 }
 
 /// <summary>
@@ -119,6 +125,18 @@ public sealed partial class RowActionViewModel : ObservableObject
 
     public bool IsDrain => Kind == RowActionKind.Drain;
 
+    /// <summary>True for the sync, which is the one Argo action with a decision attached to it.</summary>
+    public bool IsArgoSync => Kind == RowActionKind.ArgoSync;
+
+    /// <summary>
+    /// Delete resources that have left Git as part of the sync — Argo's own prune, and the
+    /// half of a sync that removes things rather than adding them. Off by default and stated
+    /// in the confirm, the same treatment the drain's two destructive options get: pruning is
+    /// ordinary GitOps and is also how a sync destroys something.
+    /// </summary>
+    [ObservableProperty]
+    private bool _argoPrune;
+
     /// <summary>The sentence above the controls. States the consequence, not the API call.</summary>
     public string Question => Kind switch
     {
@@ -139,6 +157,15 @@ public sealed partial class RowActionViewModel : ObservableObject
             $"Drain {Target}? It is cordoned first, then its pods are evicted one at a time, honouring "
             + "PodDisruptionBudgets. The drain runs inside kubeNimbus — closing this tab or quitting stops "
             + "it partway, leaving the node cordoned with some pods moved and some not.",
+        // Both Argo sentences say what the cluster does next rather than what this app is
+        // about to send, because in both cases the app's part ends immediately: Argo's
+        // controller does the work and reports it back through the watch, seconds later.
+        RowActionKind.ArgoSync =>
+            $"Sync {Target}? Argo CD applies the revision the Application targets, under its own sync options. "
+            + "kubeNimbus asks; Argo does the work and reports back on the Application.",
+        RowActionKind.ArgoRefresh =>
+            $"Refresh {Target}? Argo re-compares it against Git. Nothing on the cluster changes — this only "
+            + "updates what Argo thinks the difference is.",
         _ => $"Delete {Target}? This cannot be undone.",
     };
 
@@ -149,6 +176,8 @@ public sealed partial class RowActionViewModel : ObservableObject
         RowActionKind.Cordon => "Cordon",
         RowActionKind.Uncordon => "Uncordon",
         RowActionKind.Drain => "Drain",
+        RowActionKind.ArgoSync => "Sync",
+        RowActionKind.ArgoRefresh => "Refresh",
         _ => "Delete",
     };
 
@@ -160,8 +189,9 @@ public sealed partial class RowActionViewModel : ObservableObject
     public bool IsDemo => _client is null;
 
     public const string DemoNotice =
-        "Scale, restart, delete, cordon and drain change objects on a live API server — the demo cluster "
-        + "has none. Everything else about this step is exactly what a real cluster shows.";
+        "Scale, restart, delete, cordon, drain and the Argo CD actions all change objects on a live API "
+        + "server — the demo cluster has none. Everything else about this step is exactly what a real "
+        + "cluster shows.";
 
     /// <summary>
     /// The target replica count. Null while the authoritative read of the <c>scale</c>
@@ -524,6 +554,8 @@ public sealed partial class RowActionViewModel : ObservableObject
             RowActionKind.Restart => "Restarting…",
             RowActionKind.Cordon => "Cordoning…",
             RowActionKind.Uncordon => "Uncordoning…",
+            RowActionKind.ArgoSync => "Asking Argo to sync…",
+            RowActionKind.ArgoRefresh => "Asking Argo to refresh…",
             _ => "Deleting…",
         };
 
@@ -552,6 +584,27 @@ public sealed partial class RowActionViewModel : ObservableObject
                 case RowActionKind.Uncordon:
                     await client.SetNodeSchedulableAsync(_descriptor, _name, schedulable: true);
                     Message = $"{_name} is schedulable again.";
+                    break;
+
+                // Both of these report a *request*, not a result, and the wording is
+                // deliberate: the API server accepting the patch means Argo has been asked.
+                // What it then did lands in status.operationState some seconds later and
+                // reaches the list through the watch, so a message claiming "synced" here
+                // would be asserting something this app has not observed.
+                case RowActionKind.ArgoSync:
+                    await client.SyncArgoApplicationAsync(_descriptor, _namespace, _name, ArgoPrune);
+                    Message = ArgoPrune
+                        ? "Sync requested, with prune. Argo reports progress on the Application — the list "
+                          + "follows it as the watch reports it."
+                        : "Sync requested. Argo reports progress on the Application — the list follows it as "
+                          + "the watch reports it.";
+                    break;
+
+                case RowActionKind.ArgoRefresh:
+                    await client.RefreshArgoApplicationAsync(_descriptor, _namespace, _name);
+                    Message =
+                        "Refresh requested. Argo clears the annotation once it has re-compared, so there is "
+                        + "nothing on the object to watch — the sync status updates when it is done.";
                     break;
 
                 default:
