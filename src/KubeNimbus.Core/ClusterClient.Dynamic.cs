@@ -140,7 +140,9 @@ public sealed partial class ClusterClient
     /// Server-side apply: PATCH with Content-Type application/apply-patch+yaml
     /// (the API server's apply decoder happily accepts JSON there too — valid
     /// JSON is valid YAML). Throws <see cref="ServerSideApplyConflictException"/>
-    /// on a 409 field-manager conflict so the caller can offer force-apply.
+    /// on a 409 field-manager conflict so the caller can offer force-apply, and
+    /// <see cref="ServerSideApplyValidationException"/> when strict field validation
+    /// refuses an unknown field.
     /// </summary>
     public async Task<DynamicResource> ApplyYamlAsync(
         ResourceDescriptor descriptor,
@@ -187,7 +189,8 @@ public sealed partial class ClusterClient
 
         using var doc = JsonDocument.Parse(body);
         var previewed = DynamicResource.FromListItem(doc.RootElement, descriptor);
-        return new ApplyPreview(ResourceDiff.Between(live?.Raw, previewed.Raw), previewed, live);
+        return new ApplyPreview(
+            ResourceDiff.Between(live?.Raw, previewed.Raw), previewed, live, StrictValidation: _supportsFieldValidation);
     }
 
     private async Task<string> SendApplyAsync(
@@ -201,6 +204,62 @@ public sealed partial class ClusterClient
         CancellationToken cancellationToken)
     {
         var json = YamlJson.ParseYamlToJson(yaml)?.ToJsonString() ?? "{}";
+        var path = descriptor.ItemPath(@namespace, name);
+
+        var strict = _supportsFieldValidation;
+        var (status, reason, body) = await SendApplyOnceAsync(path, json, fieldManager, force, dryRun, strict, cancellationToken)
+            .ConfigureAwait(false);
+
+        var message = ExtractStatusMessage(body);
+
+        // Order matters: a strict rejection is classified *before* the parameter is
+        // suspected, so a manifest that happens to contain the word "fieldValidation"
+        // in an unknown field cannot be read as a server that does not know the
+        // parameter — which would retry without it and then apply the very typo this
+        // exists to refuse.
+        if (status is System.Net.HttpStatusCode.BadRequest && !LooksLikeFieldValidationRejection(message)
+            && strict && MentionsFieldValidationParameter(message))
+        {
+            // A server too old for `fieldValidation` (pre-1.27, or an aggregated API
+            // server or proxy that decodes query parameters strictly) refuses the
+            // request outright. Applying must still be possible, so the parameter is
+            // dropped and the request retried once — which silently gives up strictness
+            // for the rest of this connection. SupportsFieldValidation is what says so,
+            // and the editor prints it rather than letting the loss go unmentioned.
+            _supportsFieldValidation = false;
+            (status, reason, body) = await SendApplyOnceAsync(path, json, fieldManager, force, dryRun, strict: false, cancellationToken)
+                .ConfigureAwait(false);
+            message = ExtractStatusMessage(body);
+        }
+
+        if (status == System.Net.HttpStatusCode.Conflict)
+        {
+            throw new ServerSideApplyConflictException(message, body);
+        }
+
+        if (status is System.Net.HttpStatusCode.BadRequest or System.Net.HttpStatusCode.UnprocessableEntity
+            && LooksLikeFieldValidationRejection(message))
+        {
+            throw new ServerSideApplyValidationException(message, body);
+        }
+
+        if ((int)status is < 200 or > 299)
+        {
+            throw KubernetesApiException.From(status, reason, body);
+        }
+
+        return body;
+    }
+
+    private async Task<(System.Net.HttpStatusCode Status, string? Reason, string Body)> SendApplyOnceAsync(
+        string path,
+        string json,
+        string fieldManager,
+        bool force,
+        bool dryRun,
+        bool strict,
+        CancellationToken cancellationToken)
+    {
         var query = $"?fieldManager={Uri.EscapeDataString(fieldManager)}&force={(force ? "true" : "false")}";
         if (dryRun)
         {
@@ -210,26 +269,56 @@ public sealed partial class ClusterClient
             query += "&dryRun=All";
         }
 
+        if (strict)
+        {
+            // Without this the API server runs its default `Warn` mode, which *prunes* a
+            // misspelled or unknown field and reports it only in a response header
+            // nothing reads — so the apply "succeeds" having dropped the edit, and the
+            // dry-run preview built on the same request shows a clean diff for exactly
+            // that typo. Strict makes the server refuse instead, in its own words.
+            query += "&fieldValidation=Strict";
+        }
+
         using var content = new StringContent(json, Encoding.UTF8, "application/apply-patch+yaml");
 
         using var response = await SendRequestAsync(
-            HttpMethod.Patch, descriptor.ItemPath(@namespace, name) + query, content,
+            HttpMethod.Patch, path + query, content,
             HttpCompletionOption.ResponseContentRead, cancellationToken).ConfigureAwait(false);
 
         var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-
-        if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
-        {
-            throw new ServerSideApplyConflictException(ExtractStatusMessage(body), body);
-        }
-
-        if (!response.IsSuccessStatusCode)
-        {
-            throw KubernetesApiException.From(response.StatusCode, response.ReasonPhrase, body);
-        }
-
-        return body;
+        return (response.StatusCode, response.ReasonPhrase, body);
     }
+
+    /// <summary>
+    /// Whether the server accepted <c>fieldValidation=Strict</c>. True until one refuses
+    /// it, after which every apply on this connection runs in the API server's default
+    /// <c>Warn</c> mode — i.e. an unknown field is pruned rather than refused, which is
+    /// the honest cost of the fallback and is stated in the UI rather than hidden.
+    /// </summary>
+    public bool SupportsFieldValidation => _supportsFieldValidation;
+
+    private volatile bool _supportsFieldValidation = true;
+
+    /// <summary>
+    /// Whether a refusal is the server complaining about the <c>fieldValidation</c>
+    /// parameter itself. There is no distinct status code for it — an unsupported query
+    /// parameter and an unknown manifest field are both 400 — so the parameter's own name
+    /// in the message is the signal, and it is only consulted once the message has been
+    /// ruled out as a strict-decoding error.
+    /// </summary>
+    private static bool MentionsFieldValidationParameter(string message) =>
+        message.Contains("fieldValidation", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether a refusal is strict field validation doing its job. The three wordings are
+    /// the API server's own: <c>strict decoding error</c> from the decoder, <c>unknown
+    /// field</c> from the field-validation path, and <c>field not declared in schema</c>
+    /// from apply's typed-patch conversion.
+    /// </summary>
+    private static bool LooksLikeFieldValidationRejection(string message) =>
+        message.Contains("strict decoding error", StringComparison.OrdinalIgnoreCase)
+        || message.Contains("unknown field", StringComparison.OrdinalIgnoreCase)
+        || message.Contains("field not declared in schema", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Deletes one object; treats "already gone" (404) as success.</summary>
     public async Task DeleteResourceAsync(
@@ -259,6 +348,24 @@ public sealed partial class ClusterClient
     /// <summary>The Status <c>message</c>, or the body verbatim when it isn't one.</summary>
     private static string ExtractStatusMessage(string body) =>
         KubernetesApiException.ReadStatusMessage(body) ?? body;
+}
+
+/// <summary>
+/// Raised when the API server refuses an apply because the document carries a field it
+/// does not know — the outcome <c>fieldValidation=Strict</c> exists to produce. Without
+/// the parameter the server's default <c>Warn</c> mode prunes that field and answers 200,
+/// so a misspelling is applied as a deletion of whatever it meant to set and nothing on
+/// screen says so. <see cref="Exception.Message"/> is the server's own sentence, which
+/// names the field; <see cref="StatusJson"/> is the raw Status body.
+///
+/// <para>
+/// Deliberately not a subclass of the conflict exception and not offered a retry: unlike
+/// a 409 there is nothing to force. The document has to be corrected.
+/// </para>
+/// </summary>
+public sealed class ServerSideApplyValidationException(string message, string statusJson) : Exception(message)
+{
+    public string StatusJson { get; } = statusJson;
 }
 
 /// <summary>

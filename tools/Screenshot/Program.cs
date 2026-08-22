@@ -78,6 +78,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-yaml-diff-split", () => HostInMainWindow(ClusterTabScenarios.YamlEditorDiffSplit())),
     ("cluster-tab-yaml-diff-fields", () => HostInMainWindow(ClusterTabScenarios.YamlEditorDiffFields())),
     ("cluster-tab-yaml-diff-no-change", () => HostInMainWindow(ClusterTabScenarios.YamlEditorDiffNoChange())),
+    ("cluster-tab-yaml-validation-rejected", () => HostInMainWindow(ClusterTabScenarios.YamlEditorValidationRejected())),
     ("cluster-tab-yaml-conflict", () => HostInMainWindow(ClusterTabScenarios.YamlEditorConflict())),
     ("cluster-tab-yaml-secret-masked", () => HostInMainWindow(ClusterTabScenarios.YamlEditorSecretMasked())),
     ("cluster-tab-yaml-secret-revealed", () => HostInMainWindow(ClusterTabScenarios.YamlEditorSecretRevealed())),

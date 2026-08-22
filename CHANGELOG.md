@@ -14,6 +14,15 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Changed
 
+- **A misspelled field in a manifest is now refused instead of quietly dropped.**
+  Applying YAML asks the API server for strict field validation, so a typo like
+  `contaienrs:` comes back as the server's own message naming the field — before, the
+  server pruned the unknown field, reported success, and the apply silently did not do
+  what the document said. The apply preview asks the same way, so the refusal arrives
+  before anything changes. A server too old to accept the request (roughly Kubernetes
+  before 1.27) still applies normally, and the editor says out loud that unknown fields
+  are being dropped rather than refused on that cluster.
+
 - **The Advanced view now hides sidebar sections, and nothing else.** It used to
   strip controls all over the content area — the CPU/memory columns and their
   sparklines, pod detail's Usage tab, the all-clusters toggle, both log toolbars'

@@ -472,4 +472,12 @@ public sealed class ResourceDiff
 /// be recomputed from the other without a second round trip.
 /// </summary>
 /// <param name="Live">Null when the object does not exist yet, so the apply would create it.</param>
-public sealed record ApplyPreview(ResourceDiff Diff, DynamicResource Previewed, DynamicResource? Live);
+/// <param name="StrictValidation">
+/// False when this server refused <c>fieldValidation=Strict</c> and the dry run therefore
+/// ran in the API server's default <c>Warn</c> mode — in which an unknown or misspelled
+/// field is pruned rather than refused, so it is missing from the previewed object and
+/// the diff below is clean about exactly the typo strict validation would have caught.
+/// A preview that cannot make that promise has to say so.
+/// </param>
+public sealed record ApplyPreview(
+    ResourceDiff Diff, DynamicResource Previewed, DynamicResource? Live, bool StrictValidation = true);

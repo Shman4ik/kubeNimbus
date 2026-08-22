@@ -86,6 +86,16 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
     private string? _conflictDetails;
 
     /// <summary>
+    /// The API server's own sentence refusing a field it does not know — strict field
+    /// validation doing its job. Its own state rather than a line in
+    /// <see cref="StatusMessage"/>, for the reason the conflict panel has one: it names a
+    /// field in the document above and the reader has to act on it, and unlike a conflict
+    /// there is nothing to force — the fix is an edit. Nothing was applied when this is set.
+    /// </summary>
+    [ObservableProperty]
+    private string? _validationDetails;
+
+    /// <summary>
     /// The server's answer to "what would this apply do?", or null when nothing is
     /// armed. Set by <see cref="ApplyCommand"/> when the preference is on; the panel it
     /// drives carries the confirm, so Apply never mutates on the click that started it —
@@ -531,6 +541,7 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
         IsBusy = true;
         PendingPreview = null;
         ConflictDetails = null;
+        ValidationDetails = null;
         StatusMessage = null;
         try
         {
@@ -542,6 +553,13 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
             // A conflict is an answer, not a failure of the preview — and it is the one
             // this feature most wants to deliver before the object moves rather than after.
             ConflictDetails = ex.Message;
+        }
+        catch (ServerSideApplyValidationException ex)
+        {
+            // So is a rejected field, and it is the one the preview would otherwise be
+            // silently wrong about: in the server's default Warn mode the typo is pruned
+            // and the diff comes back clean.
+            ValidationDetails = ex.Message;
         }
         catch (Exception ex)
         {
@@ -571,6 +589,7 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
         IsBusy = true;
         PendingPreview = null;
         ConflictDetails = null;
+        ValidationDetails = null;
         StatusMessage = null;
         try
         {
@@ -578,11 +597,15 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
             YamlText = applied.ToYaml();
             IsDirty = false;
             StaleNotice = null;
-            StatusMessage = $"Applied at {DateTimeOffset.Now:T}.";
+            StatusMessage = $"Applied at {DateTimeOffset.Now:T}.{LooseValidationSuffix}";
         }
         catch (ServerSideApplyConflictException ex)
         {
             ConflictDetails = ex.Message;
+        }
+        catch (ServerSideApplyValidationException ex)
+        {
+            ValidationDetails = ex.Message;
         }
         catch (Exception ex)
         {
@@ -606,6 +629,9 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
         StatusMessage = null;
         ConflictDetails = null;
         // A preview describes the text that produced it; reloading replaces that text.
+        // So does a refused field: the sentence names a field in a document that is about
+        // to be thrown away, and leaving it above the server's copy would accuse it.
+        ValidationDetails = null;
         PendingPreview = null;
         try
         {
@@ -728,6 +754,16 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
     }
 
     /// <summary>
+    /// What an apply says when this server refused <c>fieldValidation=Strict</c> and the
+    /// request went through without it. Empty in the ordinary case, so a normal apply
+    /// reads exactly as it always did — but a lost guarantee has to be printed somewhere,
+    /// and the alternative is an editor that quietly stopped catching typos.
+    /// </summary>
+    private string LooseValidationSuffix => _client is { SupportsFieldValidation: false }
+        ? " This server rejected strict field validation, so an unknown or misspelled field is dropped rather than refused."
+        : "";
+
+    /// <summary>
     /// Caught locally because the server's own complaint about a body with no
     /// apiVersion/kind ("Object 'Kind' is missing") reads like a cluster problem rather
     /// than something the editor can fix.
@@ -834,6 +870,17 @@ public sealed class ApplyPreviewViewModel
         if (text.IsApproximate)
         {
             notes.Add("too large to align line by line, so the changed section is shown as a replacement");
+        }
+
+        // The loudest of the three, and the only one about the diff's own trustworthiness:
+        // in the server's default Warn mode an unknown field is pruned before the dry run
+        // ever produces this object, so the diff below is clean about exactly the typo
+        // strict validation would have refused. A preview that cannot promise that must
+        // not stay silent about it.
+        if (!preview.StrictValidation)
+        {
+            notes.Add("this server rejected strict field validation, so an unknown or misspelled field "
+                + "is dropped here rather than refused");
         }
 
         Footnote = notes.Count == 0 ? null : string.Join(" · ", notes);

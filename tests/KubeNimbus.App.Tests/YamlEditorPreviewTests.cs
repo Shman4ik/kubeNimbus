@@ -323,4 +323,35 @@ public class YamlEditorPreviewTests
         await Assert.That(editor.ConfirmPreviewCommand.CanExecute(null)).IsFalse();
         await Assert.That(editor.ForceApplyCommand.CanExecute(null)).IsFalse();
     }
+
+    /// <summary>
+    /// A preview taken on a server that refused <c>fieldValidation=Strict</c> has to say
+    /// so, because in the API server's default <c>Warn</c> mode an unknown field is pruned
+    /// before the dry run produces the object — so the diff on screen is clean about
+    /// exactly the typo strict validation exists to refuse. A footnote is the same place
+    /// the panel already admits what it is not showing.
+    /// </summary>
+    [Test]
+    public async Task A_preview_that_could_not_be_strict_says_so()
+    {
+        var loose = Preview("""{"spec":{"replicas":1}}""", """{"spec":{"replicas":2}}""") with { StrictValidation = false };
+
+        var panel = new ApplyPreviewViewModel(loose, isForce: false);
+
+        await Assert.That(panel.HasFootnote).IsTrue();
+        await Assert.That(panel.Footnote!).Contains("rejected strict field validation");
+    }
+
+    /// <summary>
+    /// And the ordinary case says nothing extra: a caveat printed under every preview is
+    /// one nobody reads when it matters.
+    /// </summary>
+    [Test]
+    public async Task A_strict_preview_carries_no_validation_caveat()
+    {
+        var panel = new ApplyPreviewViewModel(
+            Preview("""{"spec":{"replicas":1}}""", """{"spec":{"replicas":2}}"""), isForce: false);
+
+        await Assert.That(panel.Footnote ?? "").DoesNotContain("strict field validation");
+    }
 }
