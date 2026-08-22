@@ -38,7 +38,7 @@ rather than here.
 
 | ID | Item | Prio | Size | Status | Rounds |
 |---|---|---|---|---|---|
-| FEAT-41 | Send `fieldValidation=Strict` on server-side apply, with a graceful fallback for pre-1.27 servers — the apply preview's one known gap | P1 | S | ready | 0 |
+| FEAT-41 | Send `fieldValidation=Strict` on server-side apply, with a graceful fallback for pre-1.27 servers — the apply preview's one known gap | P1 | S | in-progress | 0 |
 | FEAT-34 | Log follow reconnects the way a watch does, and says in place that it did | P1 | S | ready | 0 |
 | FEAT-31 | Tail and since controls on the log pane, answering the history question for the single-pod and multi-pod panes at once | P1 | S | ready | 0 |
 | FEAT-32 | Structured (JSON) log rendering: detect a JSON line, colour its keys, keep the raw line reachable | P1 | M | ready | 0 |
