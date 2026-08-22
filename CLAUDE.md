@@ -2238,13 +2238,59 @@ row list's own scale/restart/delete actions (those already arm a strip that name
 what they do), and `--dry-run=client`, which answers a question nobody has: the client's
 copy of the manifest is the text on screen.
 
-**One known gap, and it is somebody else's row rather than an oversight.** The apply
-still sends no `fieldValidation`, so the API server's default `Warn` mode silently
-*prunes* a misspelled or unknown field and reports it only in a response header nothing
-reads. A preview built on that shows a clean diff for exactly that typo — the edit simply
-is not in the dry-run body — which is a quieter failure than no preview at all. That is
-`FEAT-41` in `docs/BACKLOG.md` (one query parameter plus a graceful fallback for
-pre-1.27 servers), and shipping this pass raises its value rather than lowering it.
+**The apply asks for strict field validation, and says so when it cannot get it**
+(`FEAT-41`). Without `fieldValidation=Strict` the API server runs its default `Warn`
+mode, which *prunes* a misspelled or unknown field and reports it only in a response
+header nothing reads: the apply answers 200 having dropped the edit, and the preview
+built on the same request shows a clean diff for exactly that typo, because the field
+is not in the dry-run body either. That is a quieter failure than having no preview at
+all, which is why it was a prerequisite for this feature being trustworthy rather than a
+nicety. Both halves of `SendApplyAsync` — the real apply and `dryRun=All` — now carry the
+parameter, so the refusal arrives before the object changes. Five things are
+load-bearing.
+
+1. **A refused field is its own exception and its own panel, and neither offers a
+   button.** `ServerSideApplyValidationException` is shaped like
+   `ServerSideApplyConflictException` — the server's own sentence, which names the field,
+   plus the raw Status — and lands in `YamlEditorTabViewModel.ValidationDetails` as an
+   `infoBar` under the editor (UI rules 9 and 11). What it deliberately does *not* have is
+   the conflict panel's Force apply: a 409 has something to force, and a rejected field
+   has nothing but an edit. A retry control here would be a button offering to apply the
+   typo.
+2. **The rejection is classified from the message, because there is no other signal.**
+   An unknown query parameter and an unknown manifest field are both HTTP 400.
+   `LooksLikeFieldValidationRejection` matches the API server's own three wordings —
+   `strict decoding error`, `unknown field`, `field not declared in schema` (apply's typed
+   patch conversion) — and is checked at 400 *and* 422, since the two paths do not agree
+   on the code.
+3. **The strict rejection is ruled out before the parameter is suspected, and the order is
+   the whole safety of the fallback.** A document carrying an unknown field literally
+   named `fieldValidation` produces a 400 whose message mentions the word, and a fallback
+   that read that as an old server would drop the parameter, retry, and apply the very
+   typo the strict request had just caught. `A_rejected_field_named_like_the_parameter_is_not_read_as_an_old_server`
+   pins it, and swapping the order was written and confirmed red.
+4. **The pre-1.27 fallback is one retry, remembered per connection, and it silently loses
+   strictness — which is why it is never silent in the UI.** A 400 that mentions
+   `fieldValidation` and is not a strict rejection means this server (or a proxy or
+   aggregated API server in front of it) decodes query parameters strictly and does not
+   know this one; the apply is sent again without it so applying stays possible, and
+   `ClusterClient.SupportsFieldValidation` goes false for the rest of the connection so
+   the doomed first request is not repeated on every apply. From then on the server is
+   back in `Warn` mode — an unknown field is pruned exactly as before this shipped — so
+   `ApplyPreview.StrictValidation` carries that into the panel's footnote and a successful
+   apply appends the same sentence to its status line. A degradation nobody is told about
+   is the failure this whole item is about, one level up.
+   **The honest half is what this cannot detect at all**: a server that *ignores* an
+   unrecognized parameter rather than rejecting it answers 200 and looks identical to a
+   strict one, so strictness is lost with no signal anywhere. kubectl's answer is its
+   `QueryParamVerifier`, which reads the OpenAPI document for the endpoint and asks
+   whether `fieldValidation` is a declared parameter; that is a second round trip and a
+   second parser, and it is deliberately not built here. If a real pre-1.25 server ever
+   turns out to behave that way in practice, that verifier is the fix — not a heuristic.
+5. **`ApplyPreview` gained the flag rather than the panel querying the client.** The
+   preview describes one exact request; whether *that* request was strict is a property of
+   it, not of whatever the connection has learned since. The default is `true`, so every
+   fixture and test that builds a preview by hand keeps meaning "strict".
 
 ## Metrics (metrics.k8s.io)
 
@@ -4849,3 +4895,69 @@ has never been seen against a real 70-CRD catalog, which is the case it was cut 
 `design/screenshots/*.png` were deliberately not regenerated, for the reason every recent
 pass records: their Age column is a function of the real clock, so they drift by
 themselves.
+
+**Strict field validation pass (FEAT-41):** the apply and its preview send
+`fieldValidation=Strict`, so a misspelled or unknown field is refused in the API server's
+own words instead of being pruned into a 200 — see the additions to "The apply preview
+(server-side dry run)" above for the five rules, in particular why the strict rejection is
+classified *before* the parameter is suspected and what the pre-1.27 fallback silently
+costs. It is the gap that section previously named as somebody else's row, and it was the
+one thing that could make a dry-run diff wrong in the same direction as no diff at all:
+in `Warn` mode the typo is dropped before the dry run produces the object, so the preview
+comes back clean about exactly the edit that is not going to happen.
+
+New: `fieldValidation=Strict` on both halves of `SendApplyAsync` with a one-shot retry
+without it, `ClusterClient.SupportsFieldValidation`, `ServerSideApplyValidationException`,
+`ApplyPreview.StrictValidation`, `YamlEditorTabViewModel.ValidationDetails` and the
+`infoBar` panel it drives, a footnote and an apply-status sentence for the degraded case,
+six `ApplyPreviewHttpTests`, two `YamlEditorPreviewTests`, and one screenshot scenario
+(`cluster-tab-yaml-validation-rejected`). No new gesture and no new always-visible
+control, so `docs/keyboard-shortcuts.md` is unchanged.
+
+**The request is observed rather than argued**, which is what `ApplyPreviewHttpTests`
+exists for: a loopback `HttpListener` answers a real `ClusterClient` built from a real
+kubeconfig, so the query string, the retry and the exact number of PATCHes are read off
+the wire. The stub gained a queue per endpoint — the first PATCH refuses the parameter,
+the retry succeeds — which is the only way to drive a fallback at all.
+
+**Four breaks were written and confirmed red before the tests were called done.** Never
+sending the parameter turned **4 of 386** red, all on the query string; note that it did
+*not* turn the two rejection tests red, because those pin the classification rather than
+the parameter, and that is the honest limit of a stand-in server. Suspecting the parameter
+before ruling out a strict rejection — the fallback applying the typo it just caught —
+turned **1 of 386** red (`Expected to be 1 but found 2`, i.e. a second PATCH went out).
+Not remembering the fallback turned **3 of 386** red. Dropping the preview's
+lost-strictness footnote turned **1 of 151** red in the App suite. All four were reverted
+and both suites re-run.
+
+**Verified this session**: `dotnet build KubeNimbus.slnx` with **0 warnings**; **386/386
+Core TUnit** and **151/151 App TUnit**, 0 failed, 0 skipped, both via `--project` (no
+sandbox here, so the Core count is the unit-only subset — the cluster-gated tests return
+early); the four break/revert runs above; all **74** scenarios × both themes rendered (148
+PNGs) plus a byte-for-byte baseline diff against the parent commit — of the 146
+pre-existing PNGs **none** differ for any reason this change is responsible for, and the
+two that flagged (`cluster-tab-workload-logs.{light,dark}`) were confirmed to differ
+between two renders of the *baseline itself*, which is ENG-10; the linux-x64 NativeAOT
+publish with no new warnings beyond the known DataGrid IL2104/IL3053; and `--smoke-test`
+on that published binary under Xvfb. The new panel was read off the rendered PNG in both
+themes rather than asserted — the server's sentence wraps, nothing is clipped at the
+dock's default height, and there is no button beside it.
+
+**Not verified, and it is the half that needs a cluster.** No sandbox came up (no registry
+is reachable from this container), so **no API server has ever answered one of these
+requests**: that a real server accepts `fieldValidation=Strict` on an apply-patch at all,
+that it refuses a misspelled field in one of the three wordings this classifies on rather
+than a fourth, and — the acceptance criterion in its own words — that typing `contaienrs:`
+into the editor against a live cluster produces the panel above are all argued from the
+API's documented behaviour and observed only against a stand-in. The pre-1.27 fallback is
+in the same position twice over: no server old enough to reject the parameter exists here,
+and the *silent-ignore* case cannot be observed anywhere, because by construction it looks
+exactly like success (see rule 4's honest half). Nothing has been driven by hand in the
+running app either — the panel is verified by unit test and by rendering, not by a mouse.
+First things to do on a machine with a sandbox: misspell a field on `demo-shop/shop-web`
+and compare the refusal against `kubectl apply --server-side --validate=strict`; check a
+CRD as well as a built-in, since apply's typed-patch conversion is what produces the
+`field not declared in schema` wording; and confirm a *valid* apply is unaffected, which is
+the regression this parameter could most plausibly cause. `design/screenshots/*.png` were
+deliberately not regenerated, for the reason every recent pass records: their Age column is
+a function of the real clock, so they drift by themselves.

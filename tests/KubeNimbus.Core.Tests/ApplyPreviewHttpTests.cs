@@ -66,7 +66,7 @@ public class ApplyPreviewHttpTests
         var preview = await client.PreviewApplyAsync(Deployments, "shop", "web", ApplyYaml, "kubenimbus");
 
         var patch = server.Requests.Single(r => r.Method == "PATCH");
-        await Assert.That(patch.Query).IsEqualTo("?fieldManager=kubenimbus&force=false&dryRun=All");
+        await Assert.That(patch.Query).IsEqualTo("?fieldManager=kubenimbus&force=false&dryRun=All&fieldValidation=Strict");
         await Assert.That(patch.ContentType).IsEqualTo("application/apply-patch+yaml; charset=utf-8");
         // The body is the editor's YAML as JSON — valid JSON is valid YAML, so the
         // server's apply decoder takes it either way.
@@ -93,7 +93,7 @@ public class ApplyPreviewHttpTests
         using var client = server.Connect();
         await client.ApplyYamlAsync(Deployments, "shop", "web", ApplyYaml, "kubenimbus");
 
-        await Assert.That(server.Requests.Single().Query).IsEqualTo("?fieldManager=kubenimbus&force=false");
+        await Assert.That(server.Requests.Single().Query).IsEqualTo("?fieldManager=kubenimbus&force=false&fieldValidation=Strict");
     }
 
     [Test]
@@ -107,7 +107,7 @@ public class ApplyPreviewHttpTests
         await client.PreviewApplyAsync(Deployments, "shop", "web", ApplyYaml, "kubenimbus", force: true);
 
         await Assert.That(server.Requests.Single(r => r.Method == "PATCH").Query)
-            .IsEqualTo("?fieldManager=kubenimbus&force=true&dryRun=All");
+            .IsEqualTo("?fieldManager=kubenimbus&force=true&dryRun=All&fieldValidation=Strict");
     }
 
     /// <summary>
@@ -174,6 +174,147 @@ public class ApplyPreviewHttpTests
         await Assert.That(thrown!.Message).Contains("Invalid value: -1");
     }
 
+    private const string DeploymentPath = "/apis/apps/v1/namespaces/shop/deployments/web";
+
+    /// <summary>What the API server answers a misspelled field with once strict validation is on.</summary>
+    private const string UnknownFieldStatus = """
+        {"kind":"Status","status":"Failure","reason":"BadRequest","code":400,
+         "message":"failed to create typed patch object (shop/web; apps/v1, Kind=Deployment): .spec.replicaz: field not declared in schema"}
+        """;
+
+    /// <summary>
+    /// What a server too old for the parameter answers: the same 400, about the query
+    /// parameter rather than about the document. There is no other signal to tell the two
+    /// apart, which is why the message is read.
+    /// </summary>
+    private const string UnsupportedParameterStatus = """
+        {"kind":"Status","status":"Failure","reason":"BadRequest","code":400,
+         "message":"Unrecognized query parameter: fieldValidation"}
+        """;
+
+    /// <summary>
+    /// The acceptance criterion, on the preview path: a field the server does not know is
+    /// refused in the server's own words rather than pruned into a clean-looking diff.
+    /// </summary>
+    [Test]
+    public async Task An_unknown_field_is_refused_during_the_preview()
+    {
+        using var server = new StubApiServer();
+        server.Respond("GET", DeploymentPath, HttpStatusCode.OK, LiveDeployment);
+        server.Respond("PATCH", DeploymentPath, HttpStatusCode.BadRequest, UnknownFieldStatus);
+
+        using var client = server.Connect();
+
+        var thrown = await Assert.ThrowsAsync<ServerSideApplyValidationException>(
+            async () => await client.PreviewApplyAsync(Deployments, "shop", "web", ApplyYaml, "kubenimbus"));
+
+        await Assert.That(thrown!.Message).Contains(".spec.replicaz");
+        // Refused, not retried: the fallback must not read a rejected *field* as a
+        // rejected *parameter*, which would apply the typo the strict request just caught.
+        await Assert.That(server.Requests.Count(r => r.Method == "PATCH")).IsEqualTo(1);
+        await Assert.That(client.SupportsFieldValidation).IsTrue();
+    }
+
+    /// <summary>And on the real apply, which is where the field would otherwise be pruned.</summary>
+    [Test]
+    public async Task An_unknown_field_is_refused_on_a_real_apply()
+    {
+        using var server = new StubApiServer();
+        server.Respond("PATCH", DeploymentPath, HttpStatusCode.BadRequest, UnknownFieldStatus);
+
+        using var client = server.Connect();
+
+        var thrown = await Assert.ThrowsAsync<ServerSideApplyValidationException>(
+            async () => await client.ApplyYamlAsync(Deployments, "shop", "web", ApplyYaml, "kubenimbus"));
+
+        await Assert.That(thrown!.Message).Contains("field not declared in schema");
+    }
+
+    /// <summary>
+    /// A strict decoding error that happens to name a field *called* fieldValidation is
+    /// still a rejected field, not a rejected parameter. The classification order is what
+    /// keeps those apart, and getting it wrong applies the very document being refused.
+    /// </summary>
+    [Test]
+    public async Task A_rejected_field_named_like_the_parameter_is_not_read_as_an_old_server()
+    {
+        using var server = new StubApiServer();
+        server.Respond("PATCH", DeploymentPath, HttpStatusCode.BadRequest, """
+            {"kind":"Status","status":"Failure","reason":"BadRequest","code":400,
+             "message":"Deployment in version \"v1\" cannot be handled as a Deployment: strict decoding error: unknown field \"spec.fieldValidation\""}
+            """);
+
+        using var client = server.Connect();
+
+        await Assert.ThrowsAsync<ServerSideApplyValidationException>(
+            async () => await client.ApplyYamlAsync(Deployments, "shop", "web", ApplyYaml, "kubenimbus"));
+
+        await Assert.That(server.Requests.Count).IsEqualTo(1);
+        await Assert.That(client.SupportsFieldValidation).IsTrue();
+    }
+
+    /// <summary>
+    /// The pre-1.27 fallback: a server that refuses the parameter gets the same apply
+    /// again without it, so applying stays possible. What it costs is strictness, and
+    /// <see cref="ClusterClient.SupportsFieldValidation"/> is what says so out loud.
+    /// </summary>
+    [Test]
+    public async Task A_server_that_rejects_the_parameter_gets_the_apply_again_without_it()
+    {
+        using var server = new StubApiServer();
+        server.Respond("PATCH", DeploymentPath, HttpStatusCode.BadRequest, UnsupportedParameterStatus);
+        server.Respond("PATCH", DeploymentPath, HttpStatusCode.OK, PreviewedDeployment);
+
+        using var client = server.Connect();
+        await client.ApplyYamlAsync(Deployments, "shop", "web", ApplyYaml, "kubenimbus");
+
+        await Assert.That(server.Requests.Select(r => r.Query)).IsEquivalentTo([
+            "?fieldManager=kubenimbus&force=false&fieldValidation=Strict",
+            "?fieldManager=kubenimbus&force=false",
+        ]);
+        await Assert.That(client.SupportsFieldValidation).IsFalse();
+    }
+
+    /// <summary>
+    /// And it is asked only once. A retry per apply would double every request on an old
+    /// server, and — worse — would leave the two halves of one apply disagreeing about
+    /// whether the preview above it was strict.
+    /// </summary>
+    [Test]
+    public async Task A_server_that_rejected_the_parameter_is_not_asked_again()
+    {
+        using var server = new StubApiServer();
+        server.Respond("PATCH", DeploymentPath, HttpStatusCode.BadRequest, UnsupportedParameterStatus);
+        server.Respond("PATCH", DeploymentPath, HttpStatusCode.OK, PreviewedDeployment);
+
+        using var client = server.Connect();
+        await client.ApplyYamlAsync(Deployments, "shop", "web", ApplyYaml, "kubenimbus");
+        await client.ApplyYamlAsync(Deployments, "shop", "web", ApplyYaml, "kubenimbus");
+
+        await Assert.That(server.Requests.Count).IsEqualTo(3);
+        await Assert.That(server.Requests[2].Query).IsEqualTo("?fieldManager=kubenimbus&force=false");
+    }
+
+    /// <summary>
+    /// A preview taken on such a server says it was not strict, because in the server's
+    /// default Warn mode the unknown field is pruned before the dry run produces the
+    /// object — so this diff is clean about exactly what strict validation would refuse.
+    /// </summary>
+    [Test]
+    public async Task A_preview_on_a_server_without_the_parameter_reports_that_it_was_not_strict()
+    {
+        using var server = new StubApiServer();
+        server.Respond("GET", DeploymentPath, HttpStatusCode.OK, LiveDeployment);
+        server.Respond("PATCH", DeploymentPath, HttpStatusCode.BadRequest, UnsupportedParameterStatus);
+        server.Respond("PATCH", DeploymentPath, HttpStatusCode.OK, PreviewedDeployment);
+
+        using var client = server.Connect();
+        var preview = await client.PreviewApplyAsync(Deployments, "shop", "web", ApplyYaml, "kubenimbus");
+
+        await Assert.That(preview.StrictValidation).IsFalse();
+        await Assert.That(preview.Diff.IsEmpty).IsFalse();
+    }
+
     private sealed record StubRequest(string Method, string Path, string Query, string? ContentType, string Body);
 
     /// <summary>
@@ -185,7 +326,8 @@ public class ApplyPreviewHttpTests
     private sealed class StubApiServer : IDisposable
     {
         private readonly HttpListener _listener = new();
-        private readonly Dictionary<string, (HttpStatusCode Status, string Body)> _responses = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, List<(HttpStatusCode Status, string Body)>> _responses = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, int> _served = new(StringComparer.Ordinal);
         private readonly List<StubRequest> _requests = [];
         private readonly string _directory;
         private readonly Task _pump;
@@ -231,8 +373,24 @@ public class ApplyPreviewHttpTests
             }
         }
 
-        public void Respond(string method, string path, HttpStatusCode status, string body) =>
-            _responses[$"{method} {path}"] = (status, body);
+        /// <summary>
+        /// Queues one answer for this method and path. Calling it twice for the same
+        /// endpoint answers the first request with the first entry and every request
+        /// after that with the last — which is what the strict-validation fallback needs:
+        /// the first PATCH is refused for carrying <c>fieldValidation</c>, the retry
+        /// without it succeeds, and any later apply gets the same success.
+        /// </summary>
+        public void Respond(string method, string path, HttpStatusCode status, string body)
+        {
+            var key = $"{method} {path}";
+            if (!_responses.TryGetValue(key, out var queued))
+            {
+                queued = [];
+                _responses[key] = queued;
+            }
+
+            queued.Add((status, body));
+        }
 
         public ClusterClient Connect() => ClusterClient.Connect(new ClusterContext(
             Name: "stub",
@@ -264,9 +422,17 @@ public class ApplyPreviewHttpTests
                         context.Request.HttpMethod, path, context.Request.Url.Query, context.Request.ContentType, body));
                 }
 
-                var (status, responseBody) = _responses.TryGetValue($"{context.Request.HttpMethod} {path}", out var canned)
-                    ? canned
-                    : (HttpStatusCode.NotFound, """{"kind":"Status","code":404,"message":"no stub for this request"}""");
+                var key = $"{context.Request.HttpMethod} {path}";
+                (HttpStatusCode Status, string Body) answer =
+                    (HttpStatusCode.NotFound, """{"kind":"Status","code":404,"message":"no stub for this request"}""");
+                if (_responses.TryGetValue(key, out var canned))
+                {
+                    var served = _served.TryGetValue(key, out var n) ? n : 0;
+                    answer = canned[Math.Min(served, canned.Count - 1)];
+                    _served[key] = served + 1;
+                }
+
+                var (status, responseBody) = answer;
 
                 var bytes = Encoding.UTF8.GetBytes(responseBody);
                 context.Response.StatusCode = (int)status;

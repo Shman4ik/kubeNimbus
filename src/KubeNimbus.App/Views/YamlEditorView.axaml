@@ -7,7 +7,7 @@
              x:Class="KubeNimbus.App.Views.YamlEditorView"
              x:DataType="vm:YamlEditorTabViewModel">
 
-  <Grid Name="Rows" RowDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto" Margin="10,8,10,10">
+  <Grid Name="Rows" RowDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto,Auto" Margin="10,8,10,10">
 
     <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto" Margin="0,0,0,8">
       <!-- No title here: the dock tab directly above already reads
@@ -312,7 +312,24 @@
       </StackPanel>
     </Border>
 
-    <StackPanel Grid.Row="6" Spacing="4" Margin="0,6,0,0">
+    <!-- Strict field validation refusing a field the server does not know. Its own
+         panel rather than a line of status text, for the reason the conflict panel above
+         has one: the server's sentence names a field in the document and the reader has
+         to go and fix it. It carries no button, which is the difference from a conflict —
+         there is nothing to force, and offering a retry here would be offering to apply
+         the typo. An infoBar rather than a card, because this is a state (UI rule 11). -->
+    <Border Grid.Row="6" Classes="infoBar error" Margin="0,8,0,0"
+            IsVisible="{Binding ValidationDetails, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
+      <StackPanel Spacing="6">
+        <TextBlock Text="Nothing was applied — the server rejected a field it does not recognise."
+                   Classes="statusText" />
+        <SelectableTextBlock Text="{Binding ValidationDetails}" TextWrapping="Wrap" FontSize="11" Opacity="0.85" />
+        <TextBlock Text="Correct the field above and apply again. A misspelled field would otherwise be dropped silently."
+                   FontSize="11" Opacity="0.7" TextWrapping="Wrap" />
+      </StackPanel>
+    </Border>
+
+    <StackPanel Grid.Row="7" Spacing="4" Margin="0,6,0,0">
       <TextBlock Classes="statusText warn" TextWrapping="Wrap" IsVisible="{Binding IsDeleted}"
                  Text="Deleted from the cluster — this tab is read-only. Reload checks whether it came back." />
       <TextBlock Classes="statusText warn" TextWrapping="Wrap" Text="{Binding StaleNotice}"

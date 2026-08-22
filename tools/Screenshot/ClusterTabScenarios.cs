@@ -1415,6 +1415,26 @@ internal static class ClusterTabScenarios
     }
 
     /// <summary>
+    /// Strict field validation refusing a field the server does not know — the state the
+    /// editor used to have no way to reach, because the API server's default Warn mode
+    /// pruned the field and answered 200. Nothing was applied, the server's own sentence
+    /// names the field, and there is deliberately no button: unlike a conflict there is
+    /// nothing to force.
+    /// </summary>
+    public static ClusterTabViewModel YamlEditorValidationRejected()
+    {
+        var tab = YamlEditor();
+        if (tab.SelectedInspectorTab is YamlEditorTabViewModel yaml)
+        {
+            yaml.ValidationDetails =
+                "failed to create typed patch object (payments/checkout-worker; apps/v1, Kind=Deployment): "
+                + ".spec.template.spec.contaienrs: field not declared in schema";
+        }
+
+        return tab;
+    }
+
+    /// <summary>
     /// A dry-run answer assembled the way <c>ClusterClient.PreviewApplyAsync</c> assembles
     /// one: the live object, the object the server says it would end up with, and the
     /// field diff of the pair. The panel computes its line diff from the two documents, so
