@@ -202,7 +202,12 @@ jobs:
           name: ${{ steps.version.outputs.name }}
           path: dist/*
           if-no-files-found: error
-          retention-days: 7
+          # Same-run hand-off to the "release" job, which republishes every file
+          # as a GitHub Release asset — and Release assets do not count against
+          # the Actions storage allowance, so a second week-long copy here buys
+          # nothing. A workflow_dispatch test run (no "release" job) still
+          # leaves the packages downloadable for the rest of the day.
+          retention-days: 1
 
   release:
     name: Publish release

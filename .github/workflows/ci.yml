@@ -11,9 +11,13 @@ permissions:
   contents: read
 
 # A push supersedes whatever was still running for the same ref — no point
-# burning runners on a commit nobody will look at again.
+# burning runners on a commit nobody will look at again. Keyed on the head
+# *branch* rather than github.ref because both triggers fire for a claude/**
+# branch with an open PR: the push run is refs/heads/claude/x and the PR run is
+# refs/pull/N/merge, so a github.ref group put them in different buckets and ran
+# the whole job twice for one commit.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event.pull_request.head.ref || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -62,13 +66,21 @@ jobs:
       - name: Render screenshots (XAML smoke test)
         run: dotnet run --project tools/Screenshot -c Release --no-build -- "${{ runner.temp }}/screenshots"
 
+      # Only when the render step went red. The images are a smoke-test
+      # by-product, not a deliverable: on a green run nobody opens them, and at
+      # ~14 MB a run this single artifact was holding over a gigabyte against a
+      # 0.5 GB Actions storage allowance. if-no-files-found is "ignore" for the
+      # same reason the condition is failure(): the usual failure is the render
+      # itself throwing, which leaves the directory empty, and a missing
+      # diagnostic must not turn one red step into two.
       - name: Upload screenshots
+        if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: screenshots
           path: ${{ runner.temp }}/screenshots
-          if-no-files-found: error
-          retention-days: 7
+          if-no-files-found: ignore
+          retention-days: 3
 
   aot:
     name: NativeAOT publish (linux-x64)

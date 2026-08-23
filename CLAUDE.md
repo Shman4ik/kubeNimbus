@@ -2873,6 +2873,44 @@ reads a real context name rather than "No kubeconfig contexts"; that is a real
 state, but it is not what these scenarios are about and it makes every shot
 look like a failed connection.
 
+Its PNGs upload as a CI artifact **only when the render step went red**
+(`if: failure()`, `if-no-files-found: ignore`, `retention-days: 3`). That is
+not stinginess about disk — see the Actions storage budget below — it is what
+the artifact is for: a green render is a smoke test that passed, and nobody
+has ever downloaded 58 PNGs to confirm it. `if-no-files-found` has to be
+`ignore` rather than `error` precisely because the common failure is the
+render throwing, which leaves the directory empty; a missing diagnostic must
+not turn one red step into two.
+
+## Actions storage is a 0.5 GB budget (2026-08)
+
+The account's included GitHub Actions storage is **0.5 GB**, shared with
+pgNimbus, and it is a *standing* budget: an artifact counts for every day it
+stays alive, not once per run. This repo's `screenshots` artifact alone held
+**1.34 GB** — ~20 CI runs a day at ~14 MB each, kept 7 days, uploaded
+unconditionally. So:
+
+1. **Every `upload-artifact` sets `retention-days`**, and the release
+   packages get **1**, not 7. The `release` job downloads them in the same run
+   and republishes every file as a GitHub Release asset, and Release assets do
+   not count against the Actions allowance — a week-long second copy buys
+   nothing. A day still leaves a `workflow_dispatch` dry run's packages
+   downloadable, which is the only case where `release` never runs.
+2. **Diagnostic artifacts upload on `failure()` only** (the screenshots
+   above).
+3. **`concurrency` groups key on `github.event.pull_request.head.ref ||
+   github.ref`**, never on `github.ref` alone. CI triggers on both a
+   `claude/**` push and the PR for that same branch; keyed on `github.ref`
+   those are `refs/heads/claude/x` and `refs/pull/N/merge`, two different
+   groups, so the whole job ran twice for one commit — two sets of runner
+   minutes and two artifacts.
+
+Retention is **not retroactive**. Lowering it leaves already-uploaded
+artifacts on their original clock, so a change like this has to be paired with
+a one-time purge of the backlog (`gh api repos/OWNER/REPO/actions/artifacts`
+→ `DELETE`). The repo default is set to 7 days as a backstop for uploads that
+forget rule 1.
+
 ## Releasing
 
 Tag-driven, `.github/workflows/release.yml`. The procedure is written for
