@@ -16,11 +16,12 @@ One command to get a throwaway Kubernetes cluster, pre-loaded with demo
 workloads, that kubeNimbus and the integration tests can be pointed at.
 
 ```powershell
-./scripts/sandbox-up.ps1          # Windows / pwsh
+./scripts/sandbox-up.ps1          # Windows / pwsh, native Docker Desktop
+./scripts/sandbox-up.ps1 -Wsl     # Windows / pwsh, Docker Engine inside WSL2 (no Docker Desktop)
 ```
 
 ```bash
-./scripts/sandbox-up.sh           # Linux / macOS
+./scripts/sandbox-up.sh           # Linux / macOS, or from inside a WSL2 distro's own bash
 ```
 
 Requires Docker. Takes ~40s cold (image pull), ~15s warm. Writes the kubeconfig
@@ -46,6 +47,33 @@ starts from scratch.
 | `-Force` / `--force` | off | let `-InstallKubeconfig` replace an existing `~/.kube/config` (backed up first) |
 | `-Recreate` / `--recreate` | off | delete an existing container first |
 | `-SkipApps` / `--skip-apps` | off | bare cluster, no demo workloads |
+| `-Wsl` (`sandbox-up.ps1`/`sandbox-down.ps1` only) | off | route every docker call through `wsl.exe docker ...` instead of a native Windows docker.exe |
+| `-WslDistribution` | WSL default | which distro `-Wsl` targets (`wsl -d <name>`) |
+
+## Docker without Docker Desktop (WSL2)
+
+Docker Desktop is not required. Docker Engine can run directly inside a WSL2
+distro, per Microsoft's own tutorial:
+<https://learn.microsoft.com/windows/wsl/tutorials/wsl-containers>. Short
+version, in an Ubuntu-on-WSL2 shell:
+
+```bash
+sudo apt-get update && sudo apt-get install -y docker.io
+sudo usermod -aG docker "$USER"      # avoid sudo on every docker call; re-open the shell after
+sudo service docker start            # or enable systemd in /etc/wsl.conf and `sudo systemctl enable --now docker`
+```
+
+Two ways to drive it from there:
+
+- **From inside WSL bash**: `./scripts/sandbox-up.sh` unmodified — it is already
+  the Linux twin, and `docker` there is the WSL-hosted engine. `dotnet run` still
+  runs on the Windows side, pointed at `.sandbox/kubeconfig.yaml` (WSL2 forwards
+  `localhost:6550` to Windows automatically).
+- **From Windows pwsh**: `./scripts/sandbox-up.ps1 -Wsl` shells every docker
+  command out to `wsl.exe docker ...`, so the rest of the workflow — the
+  kubeconfig path, `$env:KUBECONFIG`, `dotnet run` — is unchanged. Pass
+  `-WslDistribution <name>` if it isn't your default distro. Tear down the same
+  way: `./scripts/sandbox-down.ps1 -Wsl`.
 
 ## The classic path (`~/.kube/config`)
 

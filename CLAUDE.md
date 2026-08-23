@@ -2604,6 +2604,18 @@ Re-running reuses a live container and re-applies the manifests. `-Name`/`-Port`
 the fleet views for real. See [`scripts/README.md`](scripts/README.md) for the
 full flag table.
 
+**Docker Desktop is not required.** `-Wsl` on both `.ps1` scripts routes every
+docker call through `wsl.exe docker ...` instead — for Docker Engine installed
+directly inside a WSL2 distro
+([tutorial](https://learn.microsoft.com/windows/wsl/tutorials/wsl-containers)),
+with no Windows Docker Desktop at all. The one thing that needed care: `docker
+cp` takes a Windows host path (the manifests dir) that a WSL-side docker client
+can't resolve, so `-Wsl` translates it through `wsl wslpath -u` first — every
+other call only ever passes container names and in-container paths, which need
+no translation. `dotnet run`/`$env:KUBECONFIG` stay exactly as below; WSL2
+forwards `localhost:<port>` to Windows automatically. See
+[`scripts/README.md`](scripts/README.md#docker-without-docker-desktop-wsl2).
+
 `-InstallKubeconfig` additionally copies it to `~/.kube/config`. That matters
 because `$KUBECONFIG` only reaches processes started from a shell that has it
 set — an app launched from Explorer, a shortcut or Visual Studio sees nothing
