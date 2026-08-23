@@ -46,10 +46,23 @@
 .PARAMETER SkipApps
     Bring up a bare cluster, apply no demo workloads.
 
+.PARAMETER Wsl
+    Run every docker command through `wsl.exe docker ...` instead of a native
+    Windows docker.exe — for Docker Engine installed inside a WSL2 distro per
+    https://learn.microsoft.com/windows/wsl/tutorials/wsl-containers, with no
+    Docker Desktop involved. Host-path arguments (the manifests dir) are
+    translated to their /mnt/... form via `wsl wslpath -u` first.
+
+.PARAMETER WslDistribution
+    WSL distro to target (passed as `wsl -d <name>`). Only meaningful with
+    -Wsl. Default: WSL's own default distro.
+
 .EXAMPLE
     ./scripts/sandbox-up.ps1
 .EXAMPLE
     ./scripts/sandbox-up.ps1 -Recreate -Port 6551 -Name kubenimbus-sandbox-b
+.EXAMPLE
+    ./scripts/sandbox-up.ps1 -Wsl
 #>
 [CmdletBinding()]
 param(
@@ -60,7 +73,9 @@ param(
     [switch] $InstallKubeconfig,
     [switch] $Force,
     [switch] $Recreate,
-    [switch] $SkipApps
+    [switch] $SkipApps,
+    [switch] $Wsl,
+    [string] $WslDistribution
 )
 
 $ErrorActionPreference = 'Stop'
@@ -72,6 +87,36 @@ if (-not $Kubeconfig) { $Kubeconfig = Join-Path $repoRoot '.sandbox/kubeconfig.y
 
 function Write-Step([string] $Message) { Write-Host "==> $Message" -ForegroundColor Cyan }
 function Write-Note([string] $Message) { Write-Host "    $Message" -ForegroundColor DarkGray }
+
+# When -Wsl is set, every `docker` call in this script below is routed through
+# `wsl.exe docker ...` — a function shadows the external docker.exe for the
+# rest of this process, so nothing below needs to know which one is in play.
+# $LASTEXITCODE still flows through: it's set by the `&` call inside the
+# function and untouched by returning from it.
+if ($Wsl) {
+    # `$input |` matters: this script pipes YAML into `docker exec -i ... kubectl
+    # apply -f -`, and a function with no pipeline input touches $input nowhere
+    # near the external process's stdin unless it's forwarded explicitly.
+    function docker {
+        if ($WslDistribution) {
+            $input | & wsl.exe -d $WslDistribution docker @args
+        }
+        else {
+            $input | & wsl.exe docker @args
+        }
+    }
+}
+
+function ConvertTo-DockerHostPath([string] $WindowsPath) {
+    if (-not $Wsl) { return $WindowsPath }
+    $wslPathArgs = @('wslpath', '-u', $WindowsPath)
+    if ($WslDistribution) { $wslPathArgs = @('-d', $WslDistribution) + $wslPathArgs }
+    $translated = (& wsl.exe @wslPathArgs).Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $translated) {
+        throw "wsl wslpath -u '$WindowsPath' failed to translate the manifests path."
+    }
+    return $translated
+}
 
 function Invoke-Kubectl {
     param([Parameter(ValueFromRemainingArguments)] [string[]] $KubectlArgs)
@@ -86,7 +131,10 @@ function Invoke-Kubectl {
 Write-Step 'Checking Docker'
 $null = docker version --format '{{.Server.Version}}' 2>&1
 if ($LASTEXITCODE -ne 0) {
-    throw 'Docker is not available or the daemon is not running. Start Docker Desktop and retry.'
+    if ($Wsl) {
+        throw "Docker is not available inside WSL (wsl.exe docker failed). Check that Docker Engine is installed and dockerd is running in the target distro — see scripts/README.md."
+    }
+    throw 'Docker is not available or the daemon is not running. Start Docker Desktop and retry (or pass -Wsl to use Docker Engine inside WSL2 instead).'
 }
 
 $existing = (docker ps -a --filter "name=^/$Name$" --format '{{.Names}} {{.State}}') -join ''
@@ -172,7 +220,8 @@ else {
     # --- Demo workloads -----------------------------------------------------
     Write-Step 'Applying demo workloads'
     docker exec $Name rm -rf /kubenimbus-manifests | Out-Null
-    docker cp $manifestDir "${Name}:/kubenimbus-manifests" | Out-Null
+    $manifestSource = ConvertTo-DockerHostPath $manifestDir
+    docker cp $manifestSource "${Name}:/kubenimbus-manifests" | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'docker cp of the manifests failed.' }
 
     Write-Note '00-namespaces.yaml'
