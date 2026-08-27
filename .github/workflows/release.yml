@@ -204,6 +204,12 @@ jobs:
         if: matrix.archive == 'zip'
         shell: pwsh
         run: |
+          # Compress-Archive does not create the destination's parent directory
+          # and fails outright when it is missing — which is what happened on
+          # every win-x64 release run until v0.3.0, three steps after the binary
+          # had already been built and smoke-tested. The tar leg below has always
+          # created it; this one silently did not.
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
           Compress-Archive -Path "staging/${{ steps.version.outputs.name }}" `
                            -DestinationPath "dist/${{ steps.version.outputs.name }}.zip" `
                            -CompressionLevel Optimal
