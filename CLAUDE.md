@@ -2916,6 +2916,26 @@ unconditionally. So:
    share a group with this repo's default-branch runs and — with
    `cancel-in-progress` — let an outside PR cancel them.
 
+4. **CodeQL analyses `main` and a weekly schedule, never a pull request**
+   (`.github/workflows/codeql.yml`). GitHub's "default setup" runs it on every
+   PR too, which put three more checks — the slowest of them a full C# build —
+   in front of every merge, on a repository whose PRs are small and frequent and
+   whose CodeQL findings are almost never about the lines a PR touches. The
+   trade is stated in the workflow: a vulnerability introduced by a PR is
+   reported after it lands rather than before, while dependency risk — the
+   likelier source — is still gated *on* the PR by `NuGetAudit`, which fails the
+   ordinary build. The build mode for C# is **manual** rather than autobuild:
+   autobuild guesses a build command, and its guess for a `.slnx` on a preview
+   SDK is exactly the kind of thing that starts failing silently months later.
+   Default setup has to be switched off in repository settings for this workflow
+   to run at all — the two cannot coexist.
+
+**Only `Build & test` is a required check.** The branch ruleset on `main`
+requires a PR and that one job; `NativeAOT publish (linux-x64)` still runs on
+every PR and is still worth reading, but it does not hold the merge, because it
+is the slow half of the wait and an AOT regression cannot reach anybody without
+going through `release.yml`, which publishes *and launches* every RID.
+
 Retention is **not retroactive**. Lowering it leaves already-uploaded
 artifacts on their original clock, so a change like this has to be paired with
 a one-time purge of the backlog (`gh api repos/OWNER/REPO/actions/artifacts`
