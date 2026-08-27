@@ -125,7 +125,10 @@ public class TerminalLauncherTests
         await Assert.That(fileName).DoesNotContain(":");
         await Assert.That(fileName).DoesNotContain("/");
         await Assert.That(fileName).DoesNotContain("\\");
-        await Assert.That(Path.GetDirectoryName(plan.OverlayPath)).IsEqualTo(State);
+        // Path.Combine joins with the host's separator, so "/state" plus a file name reads
+        // back as "\state" on Windows. The claim here is which directory the overlay lands
+        // in, not which slash the host spells it with.
+        await Assert.That(Path.GetDirectoryName(plan.OverlayPath)?.Replace('\\', '/')).IsEqualTo(State);
     }
 
     // -------------------------------------------------------------- the candidates
@@ -227,14 +230,17 @@ public class TerminalLauncherTests
         var second = Path.Combine(root, "b");
         Directory.CreateDirectory(first);
         Directory.CreateDirectory(second);
-        await File.WriteAllTextAsync(Path.Combine(second, "kubectl"), "");
+        var kubectl = HostExecutable("kubectl");
+        await File.WriteAllTextAsync(Path.Combine(second, kubectl), "");
 
-        await Assert.That(TerminalLauncher.FindExecutable("kubectl", $"{first}:{second}", null, windows: false))
-            .IsEqualTo(Path.Combine(second, "kubectl"));
+        await Assert.That(TerminalLauncher.FindExecutable(
+                "kubectl", HostPath(first, second), null, windows: HostIsWindows))
+            .IsEqualTo(Path.Combine(second, kubectl)).IgnoringCase();
 
-        await File.WriteAllTextAsync(Path.Combine(first, "kubectl"), "");
-        await Assert.That(TerminalLauncher.FindExecutable("kubectl", $"{first}:{second}", null, windows: false))
-            .IsEqualTo(Path.Combine(first, "kubectl"));
+        await File.WriteAllTextAsync(Path.Combine(first, kubectl), "");
+        await Assert.That(TerminalLauncher.FindExecutable(
+                "kubectl", HostPath(first, second), null, windows: HostIsWindows))
+            .IsEqualTo(Path.Combine(first, kubectl)).IgnoringCase();
     }
 
     [Test]
@@ -284,10 +290,12 @@ public class TerminalLauncherTests
     public async Task FindExecutableSurvivesAJunkPathEntry()
     {
         var root = TempTree();
-        await File.WriteAllTextAsync(Path.Combine(root, "kubectl"), "");
+        var kubectl = HostExecutable("kubectl");
+        await File.WriteAllTextAsync(Path.Combine(root, kubectl), "");
 
-        await Assert.That(TerminalLauncher.FindExecutable("kubectl", $"\0bad:{root}", null, windows: false))
-            .IsEqualTo(Path.Combine(root, "kubectl"));
+        await Assert.That(TerminalLauncher.FindExecutable(
+                "kubectl", HostPath("\0bad", root), null, windows: HostIsWindows))
+            .IsEqualTo(Path.Combine(root, kubectl)).IgnoringCase();
     }
 
     /// <summary>Windows has no Homebrew; the extra directories are a Unix answer to a Unix problem.</summary>
@@ -326,6 +334,28 @@ public class TerminalLauncherTests
             TerminalLauncher.DirectoryOverride = previous;
         }
     }
+
+    /// <summary>
+    /// The PATH separator this host's own rules use. <see cref="TerminalLauncher.FindExecutable"/>
+    /// takes it from its <c>windows:</c> flag, and a Windows PATH entry (<c>C:\Users\…</c>)
+    /// contains the POSIX one — so a test that hardcodes <c>:</c> while handing over real
+    /// directories composes two pieces of junk on Windows and asserts against a mangled
+    /// path. The tests below need directories that exist, because the probe is a
+    /// <c>File.Exists</c>, so the directories are the host's and the rules under test are
+    /// the host's too. The cross-platform half — that the Windows rules are decidable from
+    /// Linux and vice versa — is covered by <see cref="FindExecutableAppliesPathExtOnWindows"/>,
+    /// which needs one PATH entry and therefore no separator at all.
+    /// </summary>
+    private static readonly bool HostIsWindows = OperatingSystem.IsWindows();
+
+    private static string HostPath(params string[] entries) =>
+        string.Join(HostIsWindows ? ';' : ':', entries);
+
+    /// <summary>
+    /// On Windows the name on PATH carries no extension and PATHEXT supplies it, so a
+    /// file the probe can actually find has to be written as one.
+    /// </summary>
+    private static string HostExecutable(string name) => HostIsWindows ? name + ".exe" : name;
 
     private static string TempTree()
     {
