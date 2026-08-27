@@ -3008,7 +3008,14 @@ direct download; the GitHub Release archives stay exactly as they are.
 [`scripts/windows/build-msix.ps1`](scripts/windows/build-msix.ps1) and uploads
 it as the `windows-msix` artifact. Five things are load-bearing.
 
-1. **The package is not a Release asset, and that is deliberate.** A
+1. **The package is not a Release asset, and that is deliberate — and the way it
+   leaks onto one is the `release` job's download step.** That job hands
+   everything under `artifacts/` to `gh release create`, so a bare
+   `download-artifact` collects `windows-msix` along with the archives; v0.3.1
+   shipped exactly that, a self-signed `.msix` offered for public download and
+   missing from `SHA256SUMS.txt` because the checksum step never saw it. The
+   step carries `pattern: kubeNimbus-*` for that reason.
+   As for why it must not be there: A
    self-signed MSIX cannot be installed by anyone who has not first trusted the
    certificate, so publishing it beside the zip would offer a download that
    fails for every person who takes it. It is a workflow artifact instead, and

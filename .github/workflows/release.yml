@@ -283,10 +283,20 @@ jobs:
             echo "prerelease=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # `pattern` is load-bearing, not tidiness: without it this step also collects
+      # `windows-msix`, and the next steps hand everything in `artifacts/` to
+      # `gh release create`. v0.3.1 published that way — a self-signed .msix, which
+      # nobody can install without first trusting a throwaway certificate, offered
+      # for download beside the four archives and absent from SHA256SUMS.txt
+      # because the checksum step never saw it. The MSIX exists for Partner Center
+      # only; the Store re-signs it during certification. Artifact names are
+      # `kubeNimbus-<version>-<rid>`, so this pattern takes the archives and
+      # nothing else.
       - name: Download artifacts
         uses: actions/download-artifact@v8
         with:
           path: artifacts
+          pattern: kubeNimbus-*
           merge-multiple: true
 
       # One SHA256SUMS.txt beside the archives, rather than a .sha256 per file:
