@@ -60,16 +60,21 @@ fixture data — real views, synthetic clusters.</sub>
 
 ## Download
 
-Grab the archive for your platform from the
+Grab the installer or the portable archive for your platform from the
 [latest release](https://github.com/Shman4ik/kubeNimbus/releases/latest).
 Builds are self-contained NativeAOT binaries — **no .NET runtime to install**.
 
-| Platform | Archive |
-|---|---|
-| Windows x64 | `kubeNimbus-<version>-win-x64.zip` |
-| Linux x64 | `kubeNimbus-<version>-linux-x64.tar.gz` |
-| Linux arm64 | `kubeNimbus-<version>-linux-arm64.tar.gz` |
-| macOS Apple Silicon | `kubeNimbus-<version>-osx-arm64.tar.gz` |
+| Platform | Installer | Portable |
+|---|---|---|
+| Windows x64 | `kubeNimbus-<version>-win-x64.msi` | `kubeNimbus-<version>-win-x64.zip` |
+| macOS Apple Silicon | `kubeNimbus-<version>-osx-arm64.dmg` | `kubeNimbus-<version>-osx-arm64.tar.gz` |
+| Linux x64 | `kubeNimbus-<version>-linux-x64.deb` or `.AppImage` | `kubeNimbus-<version>-linux-x64.tar.gz` |
+| Linux arm64 | `kubeNimbus-<version>-linux-arm64.deb` or `.AppImage` | `kubeNimbus-<version>-linux-arm64.tar.gz` |
+
+The installers add a Start-menu entry or desktop launcher and an icon; the
+portable archives are the same binary with nothing to install. Every package is
+launched by CI on its own platform before the release is created, and the MSI is
+additionally installed, run and uninstalled there.
 
 Intel Macs aren't published yet — [build from source](#building-from-source),
 it's one command.
@@ -80,14 +85,37 @@ doesn't have, so your OS will object the first time:
 <details>
 <summary><b>Windows</b></summary>
 
-Unblock the zip before extracting (Properties → Unblock), or run
-`Unblock-File kubeNimbus-<version>-win-x64.zip` in PowerShell. Extract and run
-`kubeNimbus.exe`. SmartScreen will show "Windows protected your PC" — click
+**MSI.** Double-click it. The install is per-user into
+`%LocalAppData%\kubeNimbus`, so it never asks for administrator rights, and it
+adds a Start-menu entry. Installing a newer version replaces the old one in
+place; uninstall from Settings → Apps.
+
+**Zip.** Unblock it before extracting (Properties → Unblock, or `Unblock-File
+kubeNimbus-<version>-win-x64.zip` in PowerShell), then run `kubeNimbus.exe`.
+
+Either way SmartScreen shows "Windows protected your PC" the first time — click
 **More info → Run anyway**.
 </details>
 
 <details>
 <summary><b>Linux</b></summary>
+
+**Debian/Ubuntu (`.deb`)** — pulls in the X11 and fontconfig libraries it needs
+and registers a desktop launcher:
+
+```bash
+sudo apt install ./kubeNimbus-<version>-linux-x64.deb
+kubenimbus
+```
+
+**AppImage** — nothing to install, runs on any distribution:
+
+```bash
+chmod +x kubeNimbus-<version>-linux-x64.AppImage
+./kubeNimbus-<version>-linux-x64.AppImage
+```
+
+**Tarball**:
 
 ```bash
 tar -xzf kubeNimbus-<version>-linux-x64.tar.gz
@@ -95,12 +123,20 @@ cd kubeNimbus-<version>-linux-x64
 ./kubeNimbus
 ```
 
-Needs a desktop session (X11, or Wayland via XWayland). On a minimal image you
-may need `libx11-6`, `libsm6`, `libice6` and `fontconfig`.
+All three need a desktop session (X11, or Wayland via XWayland). Outside the
+`.deb`, a minimal image may be missing `libx11-6`, `libsm6`, `libice6` and
+`fontconfig`.
 </details>
 
 <details>
 <summary><b>macOS</b></summary>
+
+**DMG.** Open it and drag **kubeNimbus** to Applications. The app is signed
+ad-hoc rather than with a Developer ID, so the first launch has to be
+right-click → **Open** → **Open** (double-clicking gives a dialog with no way
+past it). After that it opens normally.
+
+**Tarball.** The same binary without a bundle, for launching from a terminal:
 
 ```bash
 tar -xzf kubeNimbus-<version>-osx-arm64.tar.gz
@@ -108,10 +144,6 @@ cd kubeNimbus-<version>-osx-arm64
 xattr -dr com.apple.quarantine .
 ./kubeNimbus
 ```
-
-Gatekeeper quarantines downloaded unsigned binaries; the `xattr` line clears
-it. This build is a plain executable, not an `.app` bundle yet, so launch it
-from a terminal.
 </details>
 
 <details>
@@ -219,7 +251,8 @@ Full detail, including *why* each piece is built the way it is, lives in
 kubeNimbus is **pre-1.0**, and the first public release is honest about where
 it's been exercised:
 
-- Binaries are unsigned (see above).
+- Binaries and installers are unsigned (see above). There is no auto-update:
+  a new version is a new download.
 - Windows has had the most hands-on use. The Linux and macOS builds are
   produced and AOT-verified by CI but have seen much less real-world testing.
 - The demo cluster is a fixed sample set, not a simulator: nothing in it

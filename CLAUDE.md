@@ -98,10 +98,11 @@ head, linux-x64, `docs/research/2026-08-17-kubeui-positioning.md`), plus **no
 telemetry** where KubeUI's is on by default. kubeNimbus is the narrower, faster,
 quieter one: Aptakube's polish, NativeAOT startup, MIT, Kubernetes-first.
 
-Where KubeUI is ahead and we are not: signed and notarized binaries, installers
-with auto-update, winget/Store/Homebrew distribution, and schema-aware YAML
-completion. Node drain and server-side dry-run were on that list and are not any
-more — see "Node operations" and "The apply preview" below. None of the rest is a
+Where KubeUI is ahead and we are not: signed and notarized binaries, auto-update,
+winget/Store/Homebrew distribution, and schema-aware YAML completion. Node drain,
+server-side dry-run and *installers* were on that list and are not any more — see
+"Node operations", "The apply preview" and "Installers" below; what is left of the
+installer gap is auto-update and a certificate, not the packages themselves. None of the rest is a
 reason to change course; all of it is a reason not to write a comparison table yet.
 
 **Headline benchmark:** ~150 ms to first frame (vs Electron's seconds) —
@@ -1175,9 +1176,13 @@ Four things about it:
    items (sidebar, advanced view) follow the shell through `PropertyChanged`, so the menu
    and the command bar's own toggles cannot disagree while both are on screen.
 
-**Not done here:** a real `.app` bundle with an `Info.plist`. `release.yml` ships a bare
-osx-arm64 binary, so `CFBundleName` has nowhere to go; `Application.Name` is what the app
-menu reads either way, and bundling is its own item.
+**The `.app` bundle exists now** and is built by `scripts/macos/build-app-bundle.sh` — see
+"Installers" under Releasing. `installer/macos/Info.plist.template` is where `CFBundleName`,
+`CFBundleIdentifier` and `CFBundleExecutable` live, and its `CFBundleExecutable` must stay
+`kubeNimbus` (the assembly name). `Application.Name` is still what the app menu reads, so
+nothing here depends on the bundle; the bundle is what gives the app a Dock icon, a
+Spotlight entry and a home in /Applications. The `.tar.gz` still ships the bare binary
+beside it, and that is the one this section's behaviour was verified against.
 
 ## The theme toggle wrote a string nothing could read
 
@@ -1287,7 +1292,8 @@ tests/KubeNimbus.Core.Tests  TUnit unit + integration tests; the latter skip wit
 tests/KubeNimbus.App.Tests   TUnit view-model tests. No Avalonia app, no cluster, no display.
 tools/Screenshot           Headless visual-verification harness. Dev-only.
 design/                    Logo sources (SVG) + generated masters/store/screenshots.
-scripts/                   Sandbox cluster bootstrap + the icon/logo pipeline.
+installer/                 Packaging inputs: WiX MSI, macOS Info.plist, .desktop, MSIX manifest.
+scripts/                   Sandbox bootstrap, the icon/logo pipeline, and the installer builds.
 ```
 
 Public-facing docs, each with one job — don't duplicate content between them:
@@ -2992,8 +2998,68 @@ design decisions behind it are here.
   pre-release.** kubeNimbus is pre-1.0 and the release page should say so.
 - **Binaries are unsigned** (no certificates), so every release body repeats
   the SmartScreen/Gatekeeper workaround. Don't drop that footer.
+- **Every platform ships an installer beside the portable archive**, and each
+  one is *installed and launched* in CI before the release exists — see below.
 - `workflow_dispatch` with `dry_run: true` builds and archives all four RIDs
   without creating anything public — use it after touching the workflow.
+
+### Installers (MSI, .dmg, .deb, .AppImage)
+
+A zip and a tarball are what a developer wants. Everyone else expects an
+installer, and until this every platform's instructions in the README ended in
+"extract it and run the binary from a terminal" — which on macOS was not even
+optional, since an unbundled binary has no Dock icon, no app name and no way to
+be launched from Spotlight. `release.yml` now builds, per RID:
+
+- **MSI** (`installer/windows/Product.wxs`, WiX 5). Per-user into
+  `%LocalAppData%\kubeNimbus`, no elevation: the MSI is unsigned until there is
+  a certificate, and per-machine plus unsigned is a much rougher UAC and
+  SmartScreen experience than per-user plus unsigned. The app needs no
+  machine-wide state to justify the trade. **The `UpgradeCode` is fixed
+  forever** — regenerating it makes a new MSI install *beside* the old version
+  instead of upgrading it.
+- **`.app` + `.dmg`** (`scripts/macos/build-app-bundle.sh`). The bundle is
+  **ad-hoc signed**, and that is not decoration: a quarantined bundle with no
+  signature at all is reported as *"kubeNimbus is damaged and can't be opened"*,
+  which reads as a corrupt download and cannot be cleared by right-click →
+  Open, while an ad-hoc signature fails the same Gatekeeper check as *"Apple
+  cannot check it for malicious software"*, which is true and which the normal
+  right-click → Open path clears. Apple Silicon also refuses to execute
+  unsigned code at all. The `/Applications` symlink in the volume is what stops
+  people running the app off a read-only disk image.
+- **`.deb` + `.AppImage`** (`scripts/linux/build-packages.sh`). The `.deb`
+  declares the seven X11 libraries Avalonia dlopens plus fontconfig and
+  freetype; the AppImage's `AppRun` is a symlink rather than a wrapper script,
+  because NativeAOT resolves its side-car `.so` files relative to
+  `/proc/self/exe` and needs nothing exported. The `.tar.gz` is still built by
+  the workflow itself, so the script deliberately does not produce one.
+
+Three things about this are load-bearing:
+
+1. **Each package is smoke-launched through its own installed path**, not just
+   after publishing. The launch check on the publish output (see "The launch
+   check") proves the binary starts; it says nothing about what an installer can
+   break, which is a different list: a file missing from the WiX component
+   group, a bundle layout Gatekeeper refuses, a `Depends` line one library short
+   of what the X11 backend loads. The MSI leg is the strongest — it installs,
+   runs `%LocalAppData%\kubeNimbus\kubeNimbus.exe --smoke-test`, and
+   uninstalls, because leaving the product registered would make the next run
+   hit an upgrade path instead of a clean first install. The `.deb` leg is the
+   second: `apt` resolves the control file's own `Depends`, so a forgotten
+   library fails on a runner rather than on a minimal desktop.
+2. **The packages are written into `dist/`**, which is where the existing
+   checksum and upload steps already look. Nothing about `SHA256SUMS.txt` or the
+   release job needed a per-format branch.
+3. **The MSIX is now excluded from the release by an artifact `pattern`.** The
+   workflow has always *said* the Store package is not a Release asset, and the
+   release job downloaded every artifact in the run, so v0.3.1 attached a
+   self-signed `.msix` that nobody could install. `pattern: kubeNimbus-*` is
+   what makes the comment true; the MSIX artifact keeps its own name and its
+   14-day retention.
+
+**Not done:** winget manifests, a Homebrew cask, and signing/notarization of any
+kind. The first two are distribution channels that need this to exist first; the
+third needs a paid certificate and an Apple Developer account.
 
 ### Microsoft Store (MSIX)
 
