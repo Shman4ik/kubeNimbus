@@ -149,6 +149,41 @@ jobs:
         shell: bash
         run: ./publish/${{ matrix.rid }}/kubeNimbus --smoke-test
 
+      # ---------------------------------------------------------------------
+      # Microsoft Store package (win-x64 only). Built from the same publish
+      # output the archive is staged from, so the Store gets exactly the binary
+      # that just passed the launch check above.
+      #
+      # Deliberately NOT attached to the GitHub Release: the package is signed
+      # with an ephemeral self-signed certificate, which nobody can install
+      # without trusting that certificate first — the Store re-signs with its
+      # own trusted certificate during certification, which is the whole point
+      # of the channel. It ships as a CI artifact because Partner Center
+      # submission is a manual download-and-upload. See CLAUDE.md, "Microsoft
+      # Store (MSIX)".
+      # ---------------------------------------------------------------------
+      - name: Build MSIX (Microsoft Store submission)
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: >-
+          scripts/windows/build-msix.ps1
+          -PublishDir publish/win-x64
+          -Version ${{ steps.version.outputs.version }}
+          -Output kubeNimbus-${{ steps.version.outputs.version }}-win-x64.msix
+
+      - name: Upload MSIX artifact
+        if: matrix.rid == 'win-x64'
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-msix
+          path: kubeNimbus-*.msix
+          if-no-files-found: error
+          # The one artifact with no Release asset behind it: Partner Center
+          # submission is manual, so it has to outlive the run rather than being
+          # a same-run hand-off like the archives below. Two weeks, against the
+          # account's 0.5 GB standing Actions storage budget (see CLAUDE.md).
+          retention-days: 14
+
       # The AOT output carries .pdb/.dbg sidecars that quadruple the download
       # and are of no use to anyone who isn't debugging a stripped binary.
       - name: Stage archive contents

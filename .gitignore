@@ -5,6 +5,9 @@ artifacts/
 TestResults/
 *.binlog
 
+# Agent worktrees (.claude/worktrees/** are throwaway checkouts of this repo)
+.claude/worktrees/
+
 # IDE
 .vs/
 .idea/

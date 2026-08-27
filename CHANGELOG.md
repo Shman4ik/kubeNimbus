@@ -12,6 +12,12 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-27
+
+The first release published to GitHub and to the Microsoft Store. The 0.1.0 and
+0.2.0 sections below were tagged in the changelog but never cut as releases,
+so there is nothing to download for them.
+
 ### Changed
 
 - **A misspelled field in a manifest is now refused instead of quietly dropped.**
@@ -497,5 +503,5 @@ First public release. Everything below is new.
 - Usage history is session-scoped and bounded at 30 minutes by design. Long-range
   metrics history is a non-goal — that's Prometheus's job.
 
-[Unreleased]: https://github.com/Shman4ik/kubeNimbus/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.1.0
+[Unreleased]: https://github.com/Shman4ik/kubeNimbus/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.3.0
