@@ -1301,6 +1301,7 @@ Public-facing docs, each with one job — don't duplicate content between them:
 | `CODE_OF_CONDUCT.md` | Contributor Covenant 2.1, unmodified apart from the contact address. |
 | `CLAUDE.md` (this file) | Whoever is changing the code. The engineering contract and the *why* behind every rule. |
 | `docs/BACKLOG.md` | What is queued, and the state the backlog loop runs from — see below. |
+| `docs/PRE-LAUNCH-CHECKLIST.md` | One-time: making the repo public, cutting the first release, and the Microsoft Store submission. Delete it once the launch is behind us. |
 
 ## The backlog loop
 
@@ -2943,6 +2944,64 @@ design decisions behind it are here.
   the SmartScreen/Gatekeeper workaround. Don't drop that footer.
 - `workflow_dispatch` with `dry_run: true` builds and archives all four RIDs
   without creating anything public — use it after touching the workflow.
+
+### Microsoft Store (MSIX)
+
+The Store is how an unsigned free project buys out of SmartScreen for $0: an
+uploaded package is **re-signed by Microsoft with its own trusted certificate**
+during certification, so the upload only needs a throwaway self-signed
+certificate to satisfy MSIX's "must be signed" rule — not a purchased
+Authenticode one. It is an *additional* channel, not a replacement for the
+direct download; the GitHub Release archives stay exactly as they are.
+
+`release.yml`'s `win-x64` leg packs the publish output into a `.msix` via
+[`scripts/windows/build-msix.ps1`](scripts/windows/build-msix.ps1) and uploads
+it as the `windows-msix` artifact. Five things are load-bearing.
+
+1. **The package is not a Release asset, and that is deliberate.** A
+   self-signed MSIX cannot be installed by anyone who has not first trusted the
+   certificate, so publishing it beside the zip would offer a download that
+   fails for every person who takes it. It is a workflow artifact instead, and
+   the only one carrying more than a day of retention (14 days), because
+   Partner Center submission is a manual download-and-upload rather than a
+   same-run hand-off. That is a stated exception to the retention rule under
+   "Actions storage is a 0.5 GB budget".
+2. **The identity is fixed and must never be edited.**
+   [`installer/msix/Package.appxmanifest`](installer/msix/Package.appxmanifest)
+   carries this repo's reserved Partner Center product identity —
+   `DmitriiShmanev.kubeNimbus` / `CN=04FDF7B0-6D86-4EB7-B798-21CD434897BC`,
+   Store ID `9MZ3C28M65PB`. A mismatch is rejected at upload, and the failure
+   would otherwise surface only after a full release run, which is why
+   `build-msix.ps1` refuses outright if the placeholder text is still there.
+   The publisher CN is the same GUID pgNimbus uses because both apps are under
+   one Partner Center account; that is correct, not a copy-paste error.
+3. **Plain Win32 / Desktop Bridge, not Windows App SDK.** The app is a
+   NativeAOT executable with no WinUI dependency, so the manifest declares
+   `EntryPoint="Windows.FullTrustApplication"` and the `runFullTrust`
+   capability, and nothing else. `Executable` is `kubeNimbus.exe` — the
+   assembly name, which is the product name (see the section below).
+4. **`makepri` is what makes the tile assets take effect.** The 25 files in
+   `src/KubeNimbus.App/Assets/Msix/` are scale- and targetsize-qualified
+   (`Square44x44Logo.scale-200.png`,
+   `Square44x44Logo.targetsize-48_altform-unplated.png`, …), and `makeappx`
+   infers no resource map from filenames alone: without a compiled
+   `resources.pri`, Windows resolves only the scale-100 entries and silently
+   backplates or upscales the icon on the taskbar, Start and the install
+   dialog, while the other 20 files sit in the package unused. The script also
+   strips `createconfig`'s default auto-split, which would scatter the
+   qualified resources into `resources.scale-*.pri` side files that only an
+   AppxBundle's manifest could reference — this is one flat package.
+5. **The version is 4-part with the last field zero.** `ConvertTo-MsixVersion`
+   drops any prerelease suffix (`0.3.0-rc.1` → `0.3.0.0`), because MSIX
+   versions are numeric-only and Store convention reserves the revision field.
+   Two prereleases of one version therefore collide in the Store; bump the
+   patch rather than relying on a suffix for a Store submission.
+
+**Submission is manual and not automated.** Download `windows-msix` from the
+release run, upload the `.msix` in Partner Center → kubeNimbus → Packages, and
+submit for certification. Moving to the Store submission API would need its own
+Entra ID app registration under the Partner Center account (free, unrelated to
+paid signing) and is not worth it before the second or third release.
 
 ### The app's assembly name is `kubeNimbus`, not `KubeNimbus.App`
 

@@ -165,6 +165,21 @@ Run it with `workflow_dispatch` and `dry_run: true` to build and archive
 everything without creating a release — worth doing once if you've touched the
 workflow.
 
+### Microsoft Store submission (manual)
+
+The same run also packs the `win-x64` output into a `.msix` and uploads it as
+the `windows-msix` workflow artifact (14-day retention — it is the one artifact
+with no Release asset behind it). It is not attached to the GitHub Release,
+because the package is signed with a throwaway self-signed certificate that
+nobody can install against; the Store re-signs it during certification.
+
+To ship a Store update: download `windows-msix` from the release run, then
+upload the `.msix` in
+[Partner Center](https://partner.microsoft.com/dashboard) → kubeNimbus →
+Packages, and submit for certification. Identity values live in
+`installer/msix/Package.appxmanifest` and must never be edited — see CLAUDE.md,
+"Microsoft Store (MSIX)".
+
 Note that the release binaries are **unsigned**: code signing needs
 certificates this project does not have. Users get a SmartScreen prompt on
 Windows and a Gatekeeper quarantine on macOS; the README says so and explains

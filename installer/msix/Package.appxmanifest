@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Template rendered by scripts/windows/build-msix.ps1, which stages this file
+  (with $VERSION$ substituted for a 4-part x.y.z.0 version) as AppxManifest.xml
+  next to the win-x64 publish output before `makeappx pack`.
+
+  Identity/Publisher come from the Package/Identity/Name and
+  Package/Identity/Publisher values Partner Center assigned when the app name
+  was reserved (Store submission > product identity page) — they must match
+  exactly, and Publisher must match the CN of whatever certificate signs the
+  package (self-signed for local/CI builds; the Microsoft Store re-signs with
+  its own trusted certificate during certification, so the upload cert's trust
+  chain itself does not matter).
+
+  The values below are this repo's reserved Partner Center product identity
+  (Store ID 9MZ3C28M65PB, <https://apps.microsoft.com/detail/9MZ3C28M65PB>).
+  Do not edit them: a mismatch is rejected at upload. See CLAUDE.md,
+  "Microsoft Store (MSIX)".
+-->
+<Package
+    xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+    xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+    xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+    IgnorableNamespaces="uap rescap">
+
+  <Identity
+      Name="DmitriiShmanev.kubeNimbus"
+      Publisher="CN=04FDF7B0-6D86-4EB7-B798-21CD434897BC"
+      Version="$VERSION$" />
+
+  <Properties>
+    <DisplayName>kubeNimbus</DisplayName>
+    <PublisherDisplayName>Dmitrii Shmanev</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <!-- Plain Win32 / Desktop Bridge: kubeNimbus is a NativeAOT executable with
+         no WinUI or Windows App SDK dependency, so it needs the full-trust
+         entry point rather than a packaged app model. -->
+    <Application Id="kubeNimbus" Executable="kubeNimbus.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+          DisplayName="kubeNimbus"
+          Description="A fast, open-source Kubernetes desktop client"
+          Square150x150Logo="Assets\Square150x150Logo.png"
+          Square44x44Logo="Assets\Square44x44Logo.png"
+          BackgroundColor="transparent" />
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>
