@@ -2588,7 +2588,27 @@ closes, so no tab keeps watching a disposed client.
 Integration tests run against a **real local Kubernetes cluster**, not mocks.
 The suite auto-discovers `./.sandbox/kubeconfig.yaml` (git-ignored — it holds
 cluster CA + client certs) or `$KUBENIMBUS_TEST_KUBECONFIG`. Tests **skip
-cleanly** (return) when no cluster is reachable, so CI without one stays green.
+cleanly** when no cluster is reachable, so CI without one stays green.
+
+Two things about that gate, both learned the hard way (`SandboxCluster.cs`):
+
+- **A kubeconfig on disk is not evidence of a cluster.** `.sandbox/kubeconfig.yaml`
+  outlives the container it was written for, so on a machine where Docker is simply
+  not running the file still parses and still names a server nothing is listening on.
+  Gating on the file's existence therefore turned "no sandbox today" into 14 failures
+  and two 30-second timeouts. The gate is a **reachability probe** — one
+  `GetServerVersionAsync` with a 5s budget, run once per suite run and shared by every
+  test — and it catches only the ways a cluster can be *unusable from here* (nothing
+  listening, TLS that cannot be established, no answer in time, a kubeconfig with no
+  credentials). An authorization failure or a malformed response means a server did
+  answer, so it propagates into the test that provoked it rather than becoming a
+  silent skip.
+- **A skipped test must be reported as skipped, not as a pass.** The gated tests used
+  to `return` early, which the runner counts as success — so a run that talked to no
+  cluster at all was indistinguishable from one that exercised a real API server, and
+  this file's own status notes have twice recorded the first as if it were the second.
+  `SandboxCluster.TryGetContextAsync` calls TUnit's `Skip.Test(reason)` instead, so the
+  summary reads `succeeded: 370, skipped: 16` and names why.
 
 **Use the script** (`scripts/sandbox-up.ps1`, or `scripts/sandbox-up.sh` on
 Linux/macOS — Docker required). It starts single-node k3s in Docker, writes
