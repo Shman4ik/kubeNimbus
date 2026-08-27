@@ -12,11 +12,25 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-08-27
+
+The first release with downloads. Everything listed under 0.3.0 below is in it —
+that tag's build failed while archiving the Windows binary, so it never produced
+a release.
+
+### Fixed
+
+- **The release pipeline could not package the Windows build.** The step that zips
+  it wrote into a directory it never created, so the Windows archive failed after
+  the binary had already been built and tested, and the release was abandoned
+  rather than published half-finished. The other three platforms were unaffected.
+
 ## [0.3.0] - 2026-08-27
 
-The first release published to GitHub and to the Microsoft Store. The 0.1.0 and
-0.2.0 sections below were tagged in the changelog but never cut as releases,
-so there is nothing to download for them.
+Tagged but never published: the build failed while archiving the Windows binary,
+and 0.3.1 above is where all of this actually shipped. The 0.1.0 and 0.2.0
+sections below were never cut as releases either, so there is nothing to
+download for any of the three.
 
 ### Changed
 
@@ -503,5 +517,5 @@ First public release. Everything below is new.
 - Usage history is session-scoped and bounded at 30 minutes by design. Long-range
   metrics history is a non-goal — that's Prometheus's job.
 
-[Unreleased]: https://github.com/Shman4ik/kubeNimbus/compare/v0.3.0...HEAD
-[0.3.0]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.3.0
+[Unreleased]: https://github.com/Shman4ik/kubeNimbus/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.3.1
