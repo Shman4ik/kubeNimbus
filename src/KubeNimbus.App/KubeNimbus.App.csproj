@@ -53,7 +53,7 @@
          the only shape that fits bytes arriving over a WebSocket from the API server.
          Verified AOT-clean (docs/research/2026-08-15-terminal-libraries.md and again on
          the FEAT-10 pass); it pulls XTerm.NET -> Unicode.net + Wcwidth and nothing else. -->
-    <PackageReference Include="SvcSystems.UI.Terminal" Version="1.1.0" />
+    <PackageReference Include="SvcSystems.UI.Terminal" Version="1.1.1" />
     <!-- DevTools/previewer inspection (Avalonia MCP). Debug-only so it never
          enters the NativeAOT release build. -->
     <PackageReference Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.3" Condition="'$(Configuration)' == 'Debug'" />
