@@ -2899,12 +2899,22 @@ unconditionally. So:
    downloadable, which is the only case where `release` never runs.
 2. **Diagnostic artifacts upload on `failure()` only** (the screenshots
    above).
-3. **`concurrency` groups key on `github.event.pull_request.head.ref ||
-   github.ref`**, never on `github.ref` alone. CI triggers on both a
-   `claude/**` push and the PR for that same branch; keyed on `github.ref`
-   those are `refs/heads/claude/x` and `refs/pull/N/merge`, two different
-   groups, so the whole job ran twice for one commit — two sets of runner
-   minutes and two artifacts.
+3. **One commit gets one CI run, and the *trigger list* is what holds that,
+   not the concurrency group.** `ci.yml` used to trigger on pushes to
+   `claude/**` as well as on the PR for that same branch, and the two events
+   ran the whole job twice for one commit — two sets of runner minutes and two
+   artifacts. The concurrency key was believed to prevent it and cannot: a push
+   yields `refs/heads/claude/x` where the PR event yields `claude/x`, so they
+   are different groups by construction. The push trigger is `main` only now,
+   which is also pgNimbus's shape; branch work is built through its PR, which
+   is the run the branch ruleset requires anyway, and the cost is that a branch
+   pushed with no PR open is not built until one is.
+   The group stays `github.event.pull_request.head.ref || github.ref` and the
+   two sides stay in **different namespaces on purpose**. Normalising them (to
+   `github.ref_name`) would be a regression now the repository is public: a
+   fork's PR from its own `main` reports `head.ref` as `main`, which would
+   share a group with this repo's default-branch runs and — with
+   `cancel-in-progress` — let an outside PR cancel them.
 
 Retention is **not retroactive**. Lowering it leaves already-uploaded
 artifacts on their original clock, so a change like this has to be paired with
