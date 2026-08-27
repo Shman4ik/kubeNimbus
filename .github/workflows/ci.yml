@@ -1,8 +1,15 @@
 name: CI
 
+# A commit gets exactly one CI run, and the trigger list is what enforces that
+# rather than the concurrency group below. `claude/**` used to be on the push
+# list as well, so a branch with an open PR fired both events and ran the whole
+# job twice for one commit — observed on PR #66, two runs each carrying both
+# jobs. Branch work is built through its PR, which is also the run the branch
+# ruleset on main requires, so the push trigger has nothing left to add there.
+# The cost, stated: a branch pushed with no PR open is not built until one is.
 on:
   push:
-    branches: [main, 'claude/**']
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -10,12 +17,13 @@ on:
 permissions:
   contents: read
 
-# A push supersedes whatever was still running for the same ref — no point
-# burning runners on a commit nobody will look at again. Keyed on the head
-# *branch* rather than github.ref because both triggers fire for a claude/**
-# branch with an open PR: the push run is refs/heads/claude/x and the PR run is
-# refs/pull/N/merge, so a github.ref group put them in different buckets and ran
-# the whole job twice for one commit.
+# A newer commit supersedes whatever was still running for the same PR, so a
+# force-push burst leaves one run instead of five. The two sides of the
+# expression deliberately land in *different* namespaces — a PR keys on a bare
+# branch name, a push on `refs/heads/…` — and normalising them would be a
+# regression now that this repository is public: a fork's PR from its own `main`
+# reports `head.ref` as "main", which would then share a group with this repo's
+# default-branch runs and let an outside PR cancel them.
 concurrency:
   group: ci-${{ github.event.pull_request.head.ref || github.ref }}
   cancel-in-progress: true

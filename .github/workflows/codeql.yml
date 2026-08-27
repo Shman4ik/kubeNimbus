@@ -1,0 +1,81 @@
+name: CodeQL
+
+# Security analysis, deliberately off the PR path.
+#
+# This replaces GitHub's "default setup", which runs CodeQL on every pull
+# request as well as on the default branch. That put three more checks in front
+# of every merge — the slowest of them a full C# build — on a repository whose
+# PRs are small and frequent, and CodeQL's findings are almost never about the
+# few lines a PR touches. Analysing `main` after the merge, plus a weekly sweep
+# that catches new queries against unchanged code, finds the same things a day
+# later at a fraction of the wait.
+#
+# The trade, stated: a vulnerability introduced by a PR is reported after it
+# lands rather than before. Dependency risk — the likelier source by far — is
+# still gated *on* the PR by NuGetAudit (NU1902-NU1904 are errors, see
+# Directory.Build.props), which fails the ordinary build.
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Monday 04:17 UTC. Off the hour on purpose: scheduled workflows queue
+    # behind everyone else's on the hour and can be delayed by many minutes.
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      # Uploading results to the Security tab.
+      security-events: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # `actions` covers the workflows in this directory — which is where a
+          # supply-chain mistake in this repo would most plausibly live.
+          - { language: actions, build-mode: none }
+          - { language: python,  build-mode: none }
+          - { language: csharp,  build-mode: manual }
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # The SDK has to be in place before the manual build below, and pinned by
+      # global.json for the same reason every other workflow pins it: the runner
+      # image's default SDK is not the one this repo is built with.
+      - name: Set up .NET
+        if: matrix.build-mode == 'manual'
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      # Manual rather than autobuild: autobuild guesses at the build command and
+      # its guess for a .slnx solution on a preview SDK is exactly the kind of
+      # thing that fails silently months later. This is the same command
+      # CONTRIBUTING.md tells a human to run.
+      - name: Build
+        if: matrix.build-mode == 'manual'
+        run: dotnet build KubeNimbus.slnx -c Release
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}

@@ -2899,12 +2899,42 @@ unconditionally. So:
    downloadable, which is the only case where `release` never runs.
 2. **Diagnostic artifacts upload on `failure()` only** (the screenshots
    above).
-3. **`concurrency` groups key on `github.event.pull_request.head.ref ||
-   github.ref`**, never on `github.ref` alone. CI triggers on both a
-   `claude/**` push and the PR for that same branch; keyed on `github.ref`
-   those are `refs/heads/claude/x` and `refs/pull/N/merge`, two different
-   groups, so the whole job ran twice for one commit — two sets of runner
-   minutes and two artifacts.
+3. **One commit gets one CI run, and the *trigger list* is what holds that,
+   not the concurrency group.** `ci.yml` used to trigger on pushes to
+   `claude/**` as well as on the PR for that same branch, and the two events
+   ran the whole job twice for one commit — two sets of runner minutes and two
+   artifacts. The concurrency key was believed to prevent it and cannot: a push
+   yields `refs/heads/claude/x` where the PR event yields `claude/x`, so they
+   are different groups by construction. The push trigger is `main` only now,
+   which is also pgNimbus's shape; branch work is built through its PR, which
+   is the run the branch ruleset requires anyway, and the cost is that a branch
+   pushed with no PR open is not built until one is.
+   The group stays `github.event.pull_request.head.ref || github.ref` and the
+   two sides stay in **different namespaces on purpose**. Normalising them (to
+   `github.ref_name`) would be a regression now the repository is public: a
+   fork's PR from its own `main` reports `head.ref` as `main`, which would
+   share a group with this repo's default-branch runs and — with
+   `cancel-in-progress` — let an outside PR cancel them.
+
+4. **CodeQL analyses `main` and a weekly schedule, never a pull request**
+   (`.github/workflows/codeql.yml`). GitHub's "default setup" runs it on every
+   PR too, which put three more checks — the slowest of them a full C# build —
+   in front of every merge, on a repository whose PRs are small and frequent and
+   whose CodeQL findings are almost never about the lines a PR touches. The
+   trade is stated in the workflow: a vulnerability introduced by a PR is
+   reported after it lands rather than before, while dependency risk — the
+   likelier source — is still gated *on* the PR by `NuGetAudit`, which fails the
+   ordinary build. The build mode for C# is **manual** rather than autobuild:
+   autobuild guesses a build command, and its guess for a `.slnx` on a preview
+   SDK is exactly the kind of thing that starts failing silently months later.
+   Default setup has to be switched off in repository settings for this workflow
+   to run at all — the two cannot coexist.
+
+**Only `Build & test` is a required check.** The branch ruleset on `main`
+requires a PR and that one job; `NativeAOT publish (linux-x64)` still runs on
+every PR and is still worth reading, but it does not hold the merge, because it
+is the slow half of the wait and an AOT regression cannot reach anybody without
+going through `release.yml`, which publishes *and launches* every RID.
 
 Retention is **not retroactive**. Lowering it leaves already-uploaded
 artifacts on their original clock, so a change like this has to be paired with
