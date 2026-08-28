@@ -305,6 +305,14 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
                 // and throw away the buffered lines a reconnect has no way to refetch.
                 // A pod that really went away during the gap is caught by its own log
                 // stream ending, which the API server does when the pod does.
+                //
+                // Nor does it end the "resolving" state: a Reset is the *start* of a
+                // list, so clearing here renders "no pods match this selector" for as
+                // long as the list request takes (UI rule 18). Synced below is the end.
+                IsResolvingPods = true;
+                break;
+
+            case ResourceEventType.Synced:
                 IsResolvingPods = false;
                 break;
 

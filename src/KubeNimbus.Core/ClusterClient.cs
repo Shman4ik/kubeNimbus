@@ -161,6 +161,14 @@ public sealed partial class ClusterClient : IDisposable
                     {
                         await writer.WriteAsync(ResourceEvent<T>.Reset, ct).ConfigureAwait(false);
                         resourceVersion = await ListAndEmitAsync(listPage, writer, ct).ConfigureAwait(false);
+
+                        // The initial list is complete. Reset was the *start* of it, so
+                        // this is the only frame that can honestly end a "loading" state:
+                        // an empty namespace produces a Reset and no Added at all, so a
+                        // consumer with nothing else to wait for is left choosing between
+                        // a spinner that never stops and an empty list rendered while the
+                        // list request is still in flight (UI rule 18).
+                        await writer.WriteAsync(ResourceEvent<T>.Synced, ct).ConfigureAwait(false);
                         needRelist = false;
                         backoff = InitialBackoff;
                     }

@@ -448,7 +448,9 @@ Three rules about it:
    than another re-cut — see "CRD printer columns". The minimums below are the layout a
    list *opens* with; since FEAT-66 they are no longer the last word, because the reader
    can drag any column and the choice is kept per kind — see "The resource grid is the
-   reader's to re-cut".
+   reader's to re-cut". Nor is any of them `Width="Auto"` any more, and the measurement
+   behind that has its own section: "An Auto DataGrid column ratchets, and only one grid
+   can afford it".
 
 15. **The two apps' command bars read the same left to right.** Not identical — the
    flexible middle column carries kubeNimbus's cluster tabs and pgNimbus's centred
@@ -521,6 +523,40 @@ Three rules about it:
    **own** bindings too, so that combination compiles against the wrong type and renders
    *nothing at all*, silently — which is how the first cut of this shipped past the
    compiler and was caught only by looking at the screenshot.
+18. **While the app is waiting, it says it is waiting — and it never shows a verdict it
+   does not have yet.** This is rule 9 sharpened by a report from a real, distant
+   cluster: clicking Pods there rendered the "No pods found" panel for several seconds
+   and then filled in with pods. Nothing was slow that had to be fast; what was wrong is
+   that the app answered a question it had not finished asking. Four parts, and the first
+   is the one that generalizes:
+   - **A state that means "I have started" must not be read as "I have finished".** The
+     informer writes its `Reset` frame *before* it issues the list request, and
+     `ClusterTabViewModel.Apply` used to end the loading state on whatever frame arrived
+     first. So Reset cleared the flag, cleared the rows, and `IsListEmpty` went true — an
+     empty-namespace verdict, delivered while the request was still in flight. The fix is
+     a frame that means what the state needs: `ResourceEventType.Synced`, written after
+     the last page of the initial list. Reset now turns loading back *on* (a 410-Gone
+     relist is a load too), Synced turns it off, and so does the first row, because the
+     list paginates and hiding page one behind a spinner until page four lands is the
+     same unresponsiveness facing the other way. `WorkloadLogsTabViewModel` had the
+     identical bug in `IsResolvingPods` and got the identical fix.
+   - **Every wait ends, including the ones that end badly.** A watch that throws must
+     clear the loading state on its way out, or a reported failure renders as a window
+     that looks busy for ever. Both `catch` arms in `RestartWatch`/`StartFleetWatch` do.
+   - **The waiting state names what is being waited for and shows that something is still
+     happening.** "Loading Pods… in payments" over an indeterminate `ProgressBar`, laid
+     out in the same shape as the empty state directly below it, so the transition from
+     waiting to a verdict changes the words rather than the page. A bare "Loading…" is
+     understandable and still says nothing about whether the app is stuck.
+   - **This is not testable by screenshot, and that is why it survived.** `Rows`,
+     `IsListEmpty` and `IsListLoading` are mutually consistent in every frame a PNG can
+     capture; only the *order* of the frames differs between a correct implementation and
+     the shipped one, and on a sandbox at localhost that order plays out in a few
+     milliseconds. `ClusterTabLoadingStateTests` pins it, and the sandbox-gated
+     `WatchPods_emits_synced_after_the_initial_list_and_after_its_objects` pins the frame
+     itself against a real API server. **A distant cluster is a different product from a
+     local one**, and anything gated on a round trip has to be reasoned about with a
+     second of latency in it.
 
 [fluent-basics]: https://learn.microsoft.com/en-us/windows/apps/design/basics/
 
@@ -1655,6 +1691,51 @@ clipped absolute timestamp) is not subsumed by this. And nothing here adds *hori
 scroll*: dragging redistributes the width the window has, so the fleet list's ten columns
 at 1280px still clip their rightmost headers (`ENG-6`) — a reader can now trade one of
 them away, which is a workaround and not the fix.
+
+## An Auto DataGrid column ratchets, and only one grid can afford it
+
+No column in the **resource list** is `Width="Auto"`, and the reason is measured rather
+than argued. Reported from a real cluster as "the text in Details jumps randomly"; the
+probe that reproduced it drove real pointer-free layout passes over the real
+`ClusterTabView` inside a real `MainWindow` and printed every column's `ActualWidth`.
+
+Two facts came out of it, and the second is the one nobody expects:
+
+1. **An Auto column takes its width off the top, so widening one narrows every other
+   column at once.** Making a single row's namespace longer took Namespace from **113px
+   to 294px** and, in the same pass, Name 240 → 136, Ready 81 → 78, Restarts 93 → 78,
+   CPU 117 → 98, Memory 138 → 106 and Age 68 → 60. One cell's text moved eight columns.
+2. **It never shrinks back.** Setting that namespace to `"x"` left the column at 294.
+   Avalonia's DataGrid sizes an Auto column to the widest cell it has *ever realized*, so
+   on a virtualized list every long value that scrolls into view permanently widens that
+   column and permanently narrows the rest.
+
+Which makes the resource list the worst possible host for one: it virtualizes over
+thousands of rows, a live watch rewrites cells under the reader, and `RefreshTimes` — a
+wall-clock timer with no watch event and no user action behind it — rewrites Age and
+Restarts on a tick. The third experiment measured that directly: `RestartsText` gaining
+`"(43m ago)"` moved Restarts 93 → 108, Memory 138 → 131 and Age 68 → 60. Text shifting
+sideways for no reason the reader can see is exactly the report.
+
+So the list's columns are one of two kinds. **Bounded, monospace cells get a fixed
+width** — Ready 84, Restarts 112, Age 72, CPU 118, Memory 132, Namespace 130, Cluster 150
+— sized from what the Auto pass had measured for the same content, headers included (72
+was tried for Ready first and clipped its own header to `Read`, which only the rendered
+screenshot showed). **Everything whose content wants the window's spare width is a star
+column** — Name, Status, Details, the CRD printer slots. Both are stable under any cell
+change; fixed also means a wider window feeds the columns that need it instead of
+padding a Namespace column full of the same word, which is the same argument the 224px
+sidebar settled.
+
+**The Helm and Argo grids keep `Auto`, deliberately, and that is a scope statement rather
+than an oversight** — this file already records that a column rule has to be applied to
+both grids or stated as applying to one. They are short, one-shot lists over a small
+fixed vocabulary of states, so their Auto columns reach their widest on the first render
+and effectively stop; there is no virtualized tail to ratchet through and no timer
+rewriting a cell. Fixing their widths was tried and measurably rendered *worse* — the
+Helm list clipped its `Rev` header, its status pill and the right-hand end of `Updated`,
+none of which it does today. The cost of leaving them is bounded to a few pixels in one
+column on a state transition.
 
 ## Mutating workload actions (scale, rollout restart, delete)
 
@@ -5200,3 +5281,76 @@ CRD as well as a built-in, since apply's typed-patch conversion is what produces
 the regression this parameter could most plausibly cause. `design/screenshots/*.png` were
 deliberately not regenerated, for the reason every recent pass records: their Age column is
 a function of the real clock, so they drift by themselves.
+
+**Remote-cluster responsiveness pass (2026-08-28):** two complaints from someone running
+the app against a real, distant cluster — "you click Pods, you see an empty list, and only
+several seconds later the data appears", and "the text in Details jumps around at random".
+Both were real, both are invisible on a sandbox at localhost, and neither could have been
+caught by a screenshot. See UI rule 18 and "An Auto DataGrid column ratchets, and only one
+grid can afford it" above for the rules they produced.
+
+**The empty list was the app answering before it had asked.** The informer writes its
+`Reset` frame *before* it issues the list request, and `ClusterTabViewModel.Apply` ended
+the loading state on whatever frame arrived first — so Reset cleared the flag, cleared the
+rows, and `IsListEmpty` went true, rendering "No pods found" for the entire duration of a
+round trip. `ResourceEventType.Synced` is the fix: written after the last page of the
+initial list, it is the only frame that can honestly settle an empty namespace. Reset now
+turns loading back *on*, the first row turns it off early (the list paginates), and both
+`catch` arms clear it, because a watch that ended is not a watch that is still loading.
+`WorkloadLogsTabViewModel.IsResolvingPods` had the identical bug and got the identical fix.
+The waiting state itself now names the kind and the namespace over an indeterminate
+`ProgressBar`, laid out in the same shape as the empty state below it.
+
+**The jumping text was `Width="Auto"`, and the probe is the deliverable.** A headless probe
+over the real `ClusterTabView` in a real `MainWindow` printed every column's `ActualWidth`
+across three mutations. Making one row's namespace longer took Namespace **113 → 294px**
+and moved seven other columns in the same pass (Name 240 → 136, Memory 138 → 106, Age
+68 → 60); setting it back to `"x"` left the column at **294** — an Auto column sizes to the
+widest cell it has ever realized and never shrinks. The third experiment caught the version
+with no user action behind it at all: `RestartsText` gaining `"(43m ago)"` on the shared
+wall-clock timer moved Restarts 93 → 108, Memory 138 → 131 and Age 68 → 60. After the
+change the same probe reports every column identical across all three mutations. The probe
+was deleted rather than committed.
+
+**Three findings from looking at renders rather than at code.** Fixing Ready at 72px
+clipped its own header to `Read` — a fixed width has to fit the header, which Auto did for
+free. And fixing the **Helm and Argo** grids the same way measurably rendered them *worse*
+(the Helm list clipped its `Rev` header, its status pill and the end of `Updated`), so both
+keep `Auto` and the scope is stated: they are short one-shot lists over a small fixed
+vocabulary, with no virtualized tail to ratchet through and no timer rewriting a cell.
+
+**Three breaks were written and confirmed red before the tests were called done.** Ending
+the loading state on Reset — the shipped bug — turned **3 of 157** App tests red. Not
+emitting `Synced` turned the new Core integration test red against the live cluster, and
+did so as a 60-second timeout rather than an assertion, which is the failure mode stated
+honestly: without that frame the spinner never stops. And one *existing* test had encoded
+the bug — `Empty_list_and_empty_filter_are_distinct_states` asserted that a bare Reset
+settles the empty state, with a comment saying that is "how the settled-empty state is
+actually reached". It goes through Synced now.
+
+**Verified this session**: `dotnet build KubeNimbus.slnx` with **0 warnings**; **387/387
+Core TUnit** and **157/157 App TUnit**, 0 failed and **0 skipped** — the sandbox was up, so
+the cluster-gated tests really ran against a live k3s API server, the new `Synced` frame
+included; the probe runs above; all **74** scenarios × both themes rendered (148 PNGs) plus
+a byte-for-byte baseline diff against the parent commit, which is worth recording because
+two full baseline runs came out **byte-identical** (a *filtered* run does not — scenario
+ordering shares scratch state, so only compare full runs). 112 of the 148 differ and every
+one of them is the resource list's column widths; the Helm and Argo shots are byte-identical
+to the baseline, which is what makes the scope statement above checkable. The **win-x64
+NativeAOT publish** with no new warnings beyond the known DataGrid IL2104/IL3053, and
+`--smoke-test` on that binary exiting 0. The eight committed `design/screenshots/*.png`
+**were** regenerated this time, breaking with the recent convention deliberately: the
+column layout is the literal subject of the hero image, so a stale one is worse than the
+Age-column date drift those files carry.
+
+**Not verified, and it is the case that produced the report.** There is no distant cluster
+here — the sandbox is a container on localhost, where the whole gap this pass is about
+plays out in a few milliseconds — so the *ordering* is proven (the Core test asserts
+Reset → Added… → Synced against a real API server) while the *experience* is not: nobody
+has watched the new "Loading Pods… in payments" panel sit there for the second or two it
+was written for. Nor has any of this been driven by hand in the running app: the loading
+panel, the ProgressBar and the drag behaviour of the now-fixed-width columns are verified
+by unit test, by the layout probe and by rendering, not by a mouse. The first thing to do
+against a real remote cluster is the reported gesture itself — click Pods on a namespace
+with a few hundred objects and confirm the panel names the kind, stays until rows arrive,
+and that nothing shifts sideways afterwards while the Age column ticks.

@@ -286,15 +286,24 @@ public class ClusterTabRowFilterTests
     {
         var tab = TestObjects.Tab();
 
-        // A watch that starts and syncs an empty namespace: Reset, then no items. This
-        // is how the settled-empty state is actually reached — a tab that has never
-        // watched anything shows no empty card, which is right (there is no list yet to
-        // be empty), so asserting on a bare constructor would be asserting on nothing.
+        // A watch that starts and syncs an empty namespace: Reset, then no items, then
+        // Synced. This is how the settled-empty state is actually reached — a tab that
+        // has never watched anything shows no empty card, which is right (there is no
+        // list yet to be empty), so asserting on a bare constructor would be asserting
+        // on nothing. The Synced is load-bearing and this test used to omit it: Reset is
+        // written before the list request goes out, so settling on it is what made a
+        // distant cluster render "No pods found" while its list was still in flight
+        // (UI rule 18, ClusterTabLoadingStateTests).
         tab.IsListLoading = true;
         await Assert.That(tab.IsListEmpty).IsFalse();
         await Assert.That(tab.IsFilterEmpty).IsFalse();
 
         tab.Apply(ResourceEvent<DynamicResource>.Reset);
+
+        await Assert.That(tab.IsListEmpty).IsFalse();
+        await Assert.That(tab.IsFilterEmpty).IsFalse();
+
+        tab.Apply(ResourceEvent<DynamicResource>.Synced);
 
         await Assert.That(tab.IsListEmpty).IsTrue();
         await Assert.That(tab.IsFilterEmpty).IsFalse();

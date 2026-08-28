@@ -513,6 +513,20 @@
                 </MenuItem>
               </MenuFlyout>
             </DataGrid.ContextFlyout>
+            <!-- No column here is Width="Auto", and that is deliberate: an Avalonia
+                 DataGrid sizes an Auto column to the widest cell it has ever realized
+                 and never shrinks it back, and every Auto column takes its width off the
+                 top before the star columns divide what is left. So one long namespace
+                 scrolling into view permanently widens that column and permanently
+                 narrows every other one — measured on this grid, a single longer value
+                 moved eight columns at once and did not move them back. Bounded,
+                 monospace cells (Ready, Restarts, Age, CPU, Memory) get a fixed width;
+                 everything else is a fixed or star column that trims with a tooltip.
+                 The Helm and Argo grids below deliberately keep Auto: they are short,
+                 one-shot lists whose cells are not rewritten under the reader, so their
+                 columns reach their widest on the first render and effectively stop —
+                 and fixing their widths measurably rendered them worse. See CLAUDE.md,
+                 "An Auto DataGrid column ratchets, and only one grid can afford it". -->
             <DataGrid.Columns>
               <DataGridTemplateColumn Header="" Tag="health" Width="28" CanUserResize="False">
                 <DataGridTemplateColumn.CellTemplate>
@@ -525,7 +539,7 @@
               <!-- Cluster: only meaningful in the aggregated fleet view, so
                    ClusterTabView.ApplyFleetColumn shows and hides it (same reason as
                    the usage columns — a DataGridColumn can't bind to the DataContext). -->
-              <DataGridTemplateColumn Header="Cluster" Tag="cluster" CanUserSort="True" Width="Auto" MinWidth="120" IsVisible="False">
+              <DataGridTemplateColumn Header="Cluster" Tag="cluster" CanUserSort="True" Width="150" MinWidth="120" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding ClusterName}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ClusterName}"
@@ -533,7 +547,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Namespace" Tag="namespace" CanUserSort="True" Width="Auto" MinWidth="80">
+              <DataGridTemplateColumn Header="Namespace" Tag="namespace" CanUserSort="True" Width="130" MinWidth="80">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding Namespace}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Namespace}" VerticalAlignment="Center" />
@@ -553,7 +567,7 @@
                    or hides each one. A DataGridColumn is outside the visual tree, so it
                    inherits no DataContext and cannot bind IsVisible itself — same reason
                    the Cluster and usage columns are handled there. -->
-              <DataGridTemplateColumn Header="Ready" Tag="ready" CanUserSort="True" Width="Auto" MinWidth="56" IsVisible="False">
+              <DataGridTemplateColumn Header="Ready" Tag="ready" CanUserSort="True" Width="84" MinWidth="70" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding ReadyText}" VerticalAlignment="Center"
@@ -584,7 +598,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Restarts" Tag="restarts" CanUserSort="True" Width="Auto" MinWidth="78" IsVisible="False">
+              <DataGridTemplateColumn Header="Restarts" Tag="restarts" CanUserSort="True" Width="112" MinWidth="78" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <!-- The count carries "(43m ago)": 200 restarts that stopped yesterday
@@ -692,7 +706,7 @@
                    metrics-server, so ClusterTabView.ApplyMetricsColumns shows and
                    hides them (a DataGridColumn isn't in the visual tree and can't
                    bind to the DataContext). -->
-              <DataGridTemplateColumn Header="CPU" Tag="cpu" CanUserSort="True" Width="Auto" MinWidth="98" IsVisible="False">
+              <DataGridTemplateColumn Header="CPU" Tag="cpu" CanUserSort="True" Width="118" MinWidth="98" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <!-- Sparkline + current value: the number answers "how much now",
@@ -710,7 +724,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Memory" Tag="memory" CanUserSort="True" Width="Auto" MinWidth="106" IsVisible="False">
+              <DataGridTemplateColumn Header="Memory" Tag="memory" CanUserSort="True" Width="132" MinWidth="106" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <Grid ColumnDefinitions="*,Auto" ToolTip.Tip="{Binding MemoryTooltip}">
@@ -728,7 +742,7 @@
               <!-- Age, last, exactly where kubectl puts it. The text is a function of
                    wall-clock, not of the object, so it is recomputed by the one shared
                    timer in ClusterTabView — a watch event is not what makes it change. -->
-              <DataGridTemplateColumn Header="Age" Tag="age" CanUserSort="True" Width="Auto" MinWidth="60">
+              <DataGridTemplateColumn Header="Age" Tag="age" CanUserSort="True" Width="72" MinWidth="60">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding AgeText}" VerticalAlignment="Center" ToolTip.Tip="{Binding AgeTooltip}"
@@ -739,9 +753,20 @@
             </DataGrid.Columns>
           </DataGrid>
 
-          <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8"
+          <!-- Waiting is a state, and it has to name what it is waiting for and show
+               that something is still happening (UI rule 18). A bare "Loading…" and,
+               worse, the empty state that used to render in its place are the two ways
+               a slow list reads as a broken one. The shape deliberately mirrors the
+               empty state below it — same layout, same second line — so the transition
+               from waiting to a verdict changes the words and not the page. -->
+          <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" MaxWidth="320"
                       IsVisible="{Binding IsListLoading}">
-            <TextBlock Text="Loading…" Opacity="0.5" HorizontalAlignment="Center" FontSize="13" />
+            <ProgressBar IsIndeterminate="True" Width="150" HorizontalAlignment="Center" />
+            <TextBlock Text="{Binding SelectedKind.DisplayName, StringFormat='Loading {0}…'}"
+                       FontWeight="SemiBold" FontSize="13" HorizontalAlignment="Center" Opacity="0.7" />
+            <TextBlock Text="{Binding SelectedNamespace, StringFormat='in {0}'}" FontSize="12" Opacity="0.5"
+                       HorizontalAlignment="Center"
+                       IsVisible="{Binding SelectedKind.Descriptor.Namespaced}" />
           </StackPanel>
 
           <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" MaxWidth="320"
