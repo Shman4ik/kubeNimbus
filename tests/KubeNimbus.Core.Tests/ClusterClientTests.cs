@@ -72,6 +72,45 @@ public class ClusterClientTests
         await Assert.That(pods).IsNotEmpty();
     }
 
+    /// <summary>
+    /// The frame that ends a loading state. Reset is written before the list request is
+    /// issued, so it says only that a sync has started; Synced says every object that
+    /// existed when it started has been delivered. The order matters as much as the
+    /// existence: a Synced that arrived before the objects would settle the UI onto an
+    /// empty list, which is the bug this frame was added to fix (UI rule 18).
+    /// </summary>
+    [Test]
+    [Timeout(60_000)]
+    public async Task WatchPods_emits_synced_after_the_initial_list_and_after_its_objects(CancellationToken ct)
+    {
+        using var client = await ConnectAsync();
+        if (client is null)
+        {
+            return;
+        }
+
+        var frames = new List<ResourceEventType>();
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        await foreach (var evt in client.WatchPodsAsync("kube-system", cancellationToken: cts.Token))
+        {
+            frames.Add(evt.Type);
+            if (evt.Type == ResourceEventType.Synced)
+            {
+                await cts.CancelAsync();
+                break;
+            }
+        }
+
+        await Assert.That(frames).IsNotEmpty();
+        await Assert.That(frames[0]).IsEqualTo(ResourceEventType.Reset);
+        await Assert.That(frames[^1]).IsEqualTo(ResourceEventType.Synced);
+
+        // kube-system always has pods, so the sync must have carried some — a Synced
+        // straight after the Reset would mean the list had not actually been read.
+        await Assert.That(frames.Count(f => f == ResourceEventType.Added)).IsGreaterThan(0);
+    }
+
     [Test]
     [Timeout(60_000)]
     public async Task PodMetrics_report_usage_when_the_cluster_has_metrics_server(CancellationToken ct)

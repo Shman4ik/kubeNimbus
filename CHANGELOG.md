@@ -29,6 +29,19 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Fixed
 
+- **A resource list no longer says a namespace is empty while it is still
+  loading it.** Selecting a kind against a distant cluster showed the "No pods
+  found" panel for as long as the list request took — a second or more — and
+  only then filled in with the pods. The list now says what it is loading, and
+  in which namespace, until either the first row arrives or the server confirms
+  there is nothing there. A watch that reconnects, or one that fails outright,
+  reaches the same states instead of flashing an empty list or spinning forever.
+- **List columns no longer shift sideways on their own.** A column sized to its
+  content grew to fit the widest value that had ever scrolled into view and
+  never shrank back, and every such growth narrowed all the other columns at
+  once — so scrolling, a watch update, or just the Age and Restarts cells
+  ticking over would move text the reader was in the middle of reading. Columns
+  now keep the width they open with, and can still be dragged to any other.
 - **Releases no longer attach the Microsoft Store package.** The `.msix` is
   signed with a throwaway certificate for Partner Center and cannot be installed
   by anyone who downloads it, but it was being published as a release asset

@@ -1856,7 +1856,16 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             }
             catch (Exception ex)
             {
-                Dispatcher.UIThread.Post(() => Status = $"Watch ended: {ex.Message}");
+                // A watch that ended is not a watch that is still loading. Leaving the
+                // spinner up here would turn a reported failure into a window that looks
+                // busy forever, which is the same lie the empty-list state used to tell
+                // in the other direction (UI rule 18).
+                Dispatcher.UIThread.Post(() =>
+                {
+                    Status = $"Watch ended: {ex.Message}";
+                    IsListLoading = false;
+                    RecomputeListEmpty();
+                });
             }
         }, token);
 
@@ -1970,7 +1979,12 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             }
             catch (Exception ex)
             {
-                Dispatcher.UIThread.Post(() => Status = $"Fleet watch ended: {ex.Message}");
+                Dispatcher.UIThread.Post(() =>
+                {
+                    Status = $"Fleet watch ended: {ex.Message}";
+                    IsListLoading = false;
+                    RecomputeListEmpty();
+                });
             }
         }, token);
     }
@@ -2142,17 +2156,33 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// </summary>
     internal void Apply(ResourceEvent<DynamicResource> evt)
     {
-        IsListLoading = false;
-
         switch (evt.Type)
         {
             case ResourceEventType.Reset:
+                // A Reset is the *start* of a list, not the end of one, so it turns the
+                // loading state back on rather than off. Ending it here is what made a
+                // distant cluster render "No pods found" for the whole duration of the
+                // list request — the empty state and the loading state swapped places,
+                // which is the exact failure UI rule 18 exists to prevent. Synced below
+                // is the honest end; the first row arriving is the other one.
+                IsListLoading = true;
                 Rows.Clear();
                 _rowsByKey.Clear();
                 ConnectionWarning = null;
                 break;
 
+            case ResourceEventType.Synced:
+                // Everything that existed when the sync started has been delivered. For
+                // an empty namespace this is the only frame that ever arrives, so it is
+                // what settles "no objects" against "not there yet".
+                IsListLoading = false;
+                break;
+
             case ResourceEventType.Added or ResourceEventType.Modified when evt.Resource is { } resource:
+                // The first row is enough to stop waiting: the list paginates, and
+                // hiding page one behind a spinner until page four lands is the same
+                // unresponsiveness in the other direction.
+                IsListLoading = false;
                 if (_rowsByKey.TryGetValue(resource.Key, out var existing))
                 {
                     existing.Update(resource);
@@ -2169,6 +2199,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 break;
 
             case ResourceEventType.Deleted when evt.Resource is { } resource:
+                IsListLoading = false;
                 if (_rowsByKey.Remove(resource.Key, out var removed))
                 {
                     Rows.Remove(removed);
@@ -2191,11 +2222,18 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// </summary>
     internal void ApplyFleet(FleetResourceEvent tagged)
     {
-        IsListLoading = false;
         var cluster = tagged.ClusterName;
 
         switch (tagged.Event.Type)
         {
+            case ResourceEventType.Synced:
+                // Any one member finishing its list is enough to stop waiting: partial
+                // is the normal state of a fleet view and the header already says how
+                // many clusters are in it, so holding the spinner for the slowest
+                // member would hide four healthy lists behind the fifth.
+                IsListLoading = false;
+                break;
+
             case ResourceEventType.Reset:
                 foreach (var key in _rowsByKey
                     .Where(entry => string.Equals(entry.Value.ClusterName, cluster, StringComparison.Ordinal))
@@ -2212,6 +2250,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 break;
 
             case ResourceEventType.Added or ResourceEventType.Modified when tagged.Event.Resource is { } added:
+                IsListLoading = false;
                 var addedKey = ResourceRowViewModel.KeyFor(cluster, added.Key);
                 if (_rowsByKey.TryGetValue(addedKey, out var existing))
                 {
@@ -2229,6 +2268,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 break;
 
             case ResourceEventType.Deleted when tagged.Event.Resource is { } deleted:
+                IsListLoading = false;
                 if (_rowsByKey.Remove(ResourceRowViewModel.KeyFor(cluster, deleted.Key), out var gone))
                 {
                     Rows.Remove(gone);
