@@ -182,6 +182,10 @@ workflow.
 
 ### Microsoft Store submission (manual)
 
+kubeNimbus is [listed on the Store](https://apps.microsoft.com/detail/9MZ3C28M65PB) (product ID `9MZ3C28M65PB`), so this is
+now an update path rather than a first submission — and the README points
+Windows users at it first, because the Store copy is signed.
+
 The same run also packs the `win-x64` output into a `.msix` and uploads it as
 the `windows-msix` workflow artifact (14-day retention — it is the one artifact
 with no Release asset behind it). It is not attached to the GitHub Release,

@@ -15,6 +15,7 @@
 <p align="center">
   <a href="https://github.com/Shman4ik/kubeNimbus/actions/workflows/ci.yml"><img src="https://github.com/Shman4ik/kubeNimbus/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/Shman4ik/kubeNimbus/releases/latest"><img src="https://img.shields.io/github/v/release/Shman4ik/kubeNimbus?include_prereleases&sort=semver" alt="Latest release"></a>
+  <a href="https://apps.microsoft.com/detail/9MZ3C28M65PB"><img src="https://img.shields.io/badge/Microsoft%20Store-install-0078D4?logo=windows" alt="Microsoft Store"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT licensed"></a>
   <img src="https://img.shields.io/badge/.NET-10-512BD4" alt=".NET 10">
   <img src="https://img.shields.io/badge/NativeAOT-shipping%20config-success" alt="NativeAOT">
@@ -60,7 +61,13 @@ fixture data — real views, synthetic clusters.</sub>
 
 ## Download
 
-Grab the installer or the portable archive for your platform from the
+**On Windows, install from the
+[Microsoft Store](https://apps.microsoft.com/detail/9MZ3C28M65PB).** It is the
+same app, re-signed by Microsoft during certification, so it installs and
+updates with no SmartScreen prompt and no unsigned-binary workaround.
+
+Everywhere else — and on Windows if you would rather not use the Store — grab
+the installer or the portable archive for your platform from the
 [latest release](https://github.com/Shman4ik/kubeNimbus/releases/latest).
 Builds are self-contained NativeAOT binaries — **no .NET runtime to install**.
 
@@ -79,11 +86,15 @@ additionally installed, run and uninstalled there.
 Intel Macs aren't published yet — [build from source](#building-from-source),
 it's one command.
 
-**The binaries are unsigned.** Code signing needs certificates this project
-doesn't have, so your OS will object the first time:
+**Downloads from this page are unsigned** — code signing needs certificates
+this project doesn't have, so your OS will object the first time. (The Store
+build above is signed by Microsoft and does none of this.)
 
 <details>
 <summary><b>Windows</b></summary>
+
+**Store.** `winget install --id 9MZ3C28M65PB --source msstore` or the
+[listing](https://apps.microsoft.com/detail/9MZ3C28M65PB) — signed, and nothing below applies.
 
 **MSI.** Double-click it. The install is per-user into
 `%LocalAppData%\kubeNimbus`, so it never asks for administrator rights, and it
@@ -251,8 +262,9 @@ Full detail, including *why* each piece is built the way it is, lives in
 kubeNimbus is **pre-1.0**, and the first public release is honest about where
 it's been exercised:
 
-- Binaries and installers are unsigned (see above). There is no auto-update:
-  a new version is a new download.
+- Binaries and installers downloaded from Releases are unsigned (see above),
+  and there is no auto-update — a new version is a new download. The Microsoft
+  Store build is signed and updates itself; it is Windows-only.
 - Windows has had the most hands-on use. The Linux and macOS builds are
   produced and AOT-verified by CI but have seen much less real-world testing.
 - The demo cluster is a fixed sample set, not a simulator: nothing in it

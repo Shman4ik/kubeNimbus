@@ -14,6 +14,10 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Added
 
+- **kubeNimbus is on the Microsoft Store.** Windows can install it from the
+  [Store listing](https://apps.microsoft.com/detail/9MZ3C28M65PB), which is the same build re-signed by Microsoft during
+  certification — no SmartScreen prompt, and it updates itself. The downloads on
+  the Releases page are unchanged and stay unsigned.
 - **Installers for every platform.** Releases now carry an MSI for Windows, a
   `.dmg` for macOS and a `.deb` and `.AppImage` for Linux, beside the portable
   archives that were the only option before. The Windows install is per-user and

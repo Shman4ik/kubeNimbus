@@ -3070,6 +3070,13 @@ certificate to satisfy MSIX's "must be signed" rule — not a purchased
 Authenticode one. It is an *additional* channel, not a replacement for the
 direct download; the GitHub Release archives stay exactly as they are.
 
+**The app is live on the Store**: <https://apps.microsoft.com/detail/9MZ3C28M65PB> (product ID `9MZ3C28M65PB`). That makes
+it the only signed way to get kubeNimbus, which is why the README leads Windows
+users there and treats the Release downloads as the alternative — and it is why
+the identity values below are now load-bearing for an *update* rather than for a
+first submission: a package whose identity does not match the listing is
+rejected at upload, and there is a listing to be rejected against now.
+
 `release.yml`'s `win-x64` leg packs the publish output into a `.msix` via
 [`scripts/windows/build-msix.ps1`](scripts/windows/build-msix.ps1) and uploads
 it as the `windows-msix` artifact. Five things are load-bearing.
