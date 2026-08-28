@@ -12,6 +12,28 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+### Added
+
+- **kubeNimbus is on the Microsoft Store.** Windows can install it from the
+  [Store listing](https://apps.microsoft.com/detail/9MZ3C28M65PB), which is the same build re-signed by Microsoft during
+  certification — no SmartScreen prompt, and it updates itself. The downloads on
+  the Releases page are unchanged and stay unsigned.
+- **Installers for every platform.** Releases now carry an MSI for Windows, a
+  `.dmg` for macOS and a `.deb` and `.AppImage` for Linux, beside the portable
+  archives that were the only option before. The Windows install is per-user and
+  needs no administrator rights; the macOS app is a real `.app` bundle you drag
+  to Applications, ad-hoc signed so Gatekeeper says what is actually wrong
+  instead of calling the download damaged; the `.deb` registers a desktop
+  launcher and pulls in the libraries it needs. CI installs and launches each
+  package on its own platform before a release is created.
+
+### Fixed
+
+- **Releases no longer attach the Microsoft Store package.** The `.msix` is
+  signed with a throwaway certificate for Partner Center and cannot be installed
+  by anyone who downloads it, but it was being published as a release asset
+  anyway.
+
 ## [0.3.1] - 2026-08-27
 
 The first release with downloads. Everything listed under 0.3.0 below is in it —
