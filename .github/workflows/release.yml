@@ -81,6 +81,13 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "name=kubeNimbus-$version-${{ matrix.rid }}" >> "$GITHUB_OUTPUT"
+          # Windows Installer versions are numeric only — a prerelease label is
+          # not a version it can compare, and WiX warns that honouring one is
+          # "unpredictable and undefined" (measured: `wix build -d
+          # Version=0.4.0-rc.1` emits WIX1148 three times and still produces an
+          # MSI). So the MSI carries the numeric part and the file name keeps
+          # the full version, exactly as the MSIX packaging already does.
+          echo "msi_version=${version%%-*}" >> "$GITHUB_OUTPUT"
 
       # -p:Version overrides Directory.Build.props's VersionPrefix, so the tag —
       # not the checked-in value — is what ends up stamped in the binary.
@@ -148,6 +155,144 @@ jobs:
         timeout-minutes: 5
         shell: bash
         run: ./publish/${{ matrix.rid }}/kubeNimbus --smoke-test
+
+      # ---------------------------------------------------------------------
+      # Installers. A zip and a tarball are what a developer wants; an MSI, a
+      # .dmg and a .deb/.AppImage are what everyone else expects, and until this
+      # every platform's instructions ended in "extract it and run the binary
+      # from a terminal".
+      #
+      # Each format is built from the publish output the launch check above has
+      # already run, and each is then smoke-launched AGAIN through its own
+      # installed path — because what an installer can break is exactly what
+      # publishing cannot: a file missing from the component group, a bundle
+      # layout Gatekeeper refuses, a Depends list one library short of what the
+      # X11 backend loads. The packages land in dist/, so the checksum and
+      # upload steps below pick them up with no per-format wiring.
+      # ---------------------------------------------------------------------
+      - name: Build MSI (WiX)
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 5.*
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          # PublishDir and IconFile must be absolute: WiX resolves relative -d
+          # values against the .wxs file's own directory, not the cwd.
+          wix build installer/windows/Product.wxs `
+            -d PublishDir=${{ github.workspace }}\publish\win-x64 `
+            -d Version=${{ steps.version.outputs.msi_version }} `
+            -d IconFile=${{ github.workspace }}\src\KubeNimbus.App\Assets\app.ico `
+            -arch x64 `
+            -o dist/${{ steps.version.outputs.name }}.msi
+
+      # Installs it the way a user does — per-user and unelevated, so this needs
+      # no admin runner — launches what landed in %LocalAppData%, and uninstalls
+      # again: leaving the product registered would make a re-run of this job
+      # hit an upgrade path instead of a clean first install.
+      - name: Install check (MSI)
+        if: matrix.rid == 'win-x64'
+        timeout-minutes: 10
+        shell: pwsh
+        run: |
+          $msi = (Resolve-Path "dist/${{ steps.version.outputs.name }}.msi").Path
+          $log = "msi-install.log"
+          $install = Start-Process msiexec -ArgumentList "/i", "`"$msi`"", "/qn", "/l*v", $log -Wait -PassThru
+          if ($install.ExitCode -ne 0) {
+            Get-Content $log -Tail 60
+            throw "msiexec /i failed with $($install.ExitCode)"
+          }
+
+          $installed = Join-Path $env:LOCALAPPDATA "kubeNimbus\kubeNimbus.exe"
+          if (-not (Test-Path $installed)) { throw "The MSI installed, but $installed is not there" }
+
+          # Start-Process for the same reason the launch check above uses it:
+          # kubeNimbus.exe is WinExe, and PowerShell does not wait for a
+          # GUI-subsystem child invoked with the call operator.
+          $p = Start-Process -FilePath $installed -ArgumentList '--smoke-test' `
+                             -Wait -PassThru -NoNewWindow `
+                             -RedirectStandardOutput msi-smoke-out.txt `
+                             -RedirectStandardError msi-smoke-err.txt
+          Get-Content msi-smoke-out.txt, msi-smoke-err.txt -ErrorAction SilentlyContinue
+          if ($p.ExitCode -ne 0) {
+            throw "The installed MSI does not start: --smoke-test exited $($p.ExitCode)"
+          }
+
+          $uninstall = Start-Process msiexec -ArgumentList "/x", "`"$msi`"", "/qn" -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw "msiexec /x failed with $($uninstall.ExitCode)" }
+
+      - name: Build .app bundle + .dmg
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          chmod +x scripts/macos/build-app-bundle.sh
+          ./scripts/macos/build-app-bundle.sh \
+            publish/${{ matrix.rid }} '${{ steps.version.outputs.version }}' ${{ matrix.rid }} dist
+
+      # Mounts the image and runs the app out of it the way a user first meets
+      # it, so a bundle missing its executable, a plist key or the ad-hoc
+      # signature fails here rather than on somebody's desktop. The signature is
+      # what decides whether Gatekeeper calls a quarantined download "damaged"
+      # (unrecoverable without a terminal) or "cannot be checked for malicious
+      # software" (right-click -> Open clears it), so it is asserted rather than
+      # assumed to have survived hdiutil.
+      - name: Install check (.dmg)
+        if: runner.os == 'macOS'
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          dmg=$(ls dist/*.dmg | head -1)
+          mount_point=$(mktemp -d)
+          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mount_point"
+          trap 'hdiutil detach "$mount_point" -quiet || true' EXIT
+          ls -la "$mount_point"
+
+          app=$(find "$mount_point" -maxdepth 1 -name '*.app' | head -1)
+          [ -n "$app" ] || { echo "::error::no .app bundle in the mounted image" >&2; exit 1; }
+
+          [ -L "$mount_point/Applications" ] || {
+            echo "::error::.dmg is missing the /Applications symlink" >&2
+            exit 1
+          }
+
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign -dv "$app" 2>&1 | tee codesign.txt
+          grep -q 'Signature=adhoc' codesign.txt || {
+            echo "::error::the app bundle in the .dmg is not signed" >&2
+            exit 1
+          }
+
+          "$app/Contents/MacOS/kubeNimbus" --smoke-test
+
+      - name: Build .deb + .AppImage
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          chmod +x scripts/linux/build-packages.sh
+          ./scripts/linux/build-packages.sh \
+            publish/${{ matrix.rid }} '${{ steps.version.outputs.version }}' ${{ matrix.rid }} dist
+
+      # The .deb leg is the one that earns its runtime: apt resolves the
+      # package's own Depends list, so a library the X11 backend loads and the
+      # control file forgot fails here rather than on a minimal desktop install.
+      # The AppImage runs with --appimage-extract-and-run because the runners
+      # have no FUSE. The .tar.gz is deliberately not re-smoked: it is the same
+      # staged bytes the launch check above already ran.
+      - name: Install check (.deb, .AppImage)
+        if: runner.os == 'Linux'
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="${{ steps.version.outputs.name }}"
+          smoke() { xvfb-run -a --server-args="-screen 0 1280x800x24" "$@" --smoke-test; }
+
+          chmod +x "dist/$base.AppImage"
+          smoke "./dist/$base.AppImage" --appimage-extract-and-run
+
+          sudo apt-get install -y "./dist/$base.deb"
+          smoke /usr/bin/kubenimbus
+          sudo apt-get remove -y kubenimbus
 
       # ---------------------------------------------------------------------
       # Microsoft Store package (win-x64 only). Built from the same publish
@@ -283,15 +428,12 @@ jobs:
             echo "prerelease=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # `pattern` is load-bearing, not tidiness: without it this step also collects
-      # `windows-msix`, and the next steps hand everything in `artifacts/` to
-      # `gh release create`. v0.3.1 published that way — a self-signed .msix, which
-      # nobody can install without first trusting a throwaway certificate, offered
-      # for download beside the four archives and absent from SHA256SUMS.txt
-      # because the checksum step never saw it. The MSIX exists for Partner Center
-      # only; the Store re-signs it during certification. Artifact names are
-      # `kubeNimbus-<version>-<rid>`, so this pattern takes the archives and
-      # nothing else.
+      # Only the per-RID package artifacts, which are all named
+      # kubeNimbus-<version>-<rid>. The pattern is what keeps `windows-msix` out
+      # of the release: it is signed with an ephemeral self-signed certificate
+      # for Partner Center, so anyone downloading it from a release page has a
+      # package they cannot install. Every release up to and including v0.3.1
+      # attached it anyway, because this step took every artifact in the run.
       - name: Download artifacts
         uses: actions/download-artifact@v8
         with:

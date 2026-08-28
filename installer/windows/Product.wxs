@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Built via: wix build installer/windows/Product.wxs
+               -d PublishDir=<absolute path to the dotnet publish output>
+               -d Version=<x.y.z, no leading v>
+               -d IconFile=<absolute path to app.ico>
+               -arch x64
+               -o kubeNimbus-<version>-win-x64.msi
+
+  PublishDir and IconFile MUST be absolute paths: WiX resolves relative -d
+  values against this .wxs file's own directory rather than the caller's
+  working directory, so a relative one silently points at installer/windows/.
+
+  Per-user install (no elevation) into %LocalAppData%\kubeNimbus. Deliberate:
+  the MSI is unsigned until there is a code-signing certificate, and
+  per-machine plus unsigned is a far rougher UAC/SmartScreen experience than
+  per-user plus unsigned. kubeNimbus needs no machine-wide state — it reads
+  the user's own kubeconfig and writes only under the user's config directory.
+
+  The UpgradeCode below is fixed FOREVER. Regenerating it breaks in-place
+  upgrades across versions: a new MSI with a different UpgradeCode does not
+  recognise the installed product and lands beside it instead of replacing it.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="kubeNimbus"
+           Manufacturer="kubeNimbus"
+           Version="$(var.Version)"
+           UpgradeCode="29a90bce-dcfd-4567-b2fc-da434722f319"
+           Scope="perUser">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of kubeNimbus is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="AppIcon.ico" SourceFile="$(var.IconFile)" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/Shman4ik/kubeNimbus" />
+    <Property Id="ARPNOMODIFY" Value="1" />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="INSTALLFOLDER" Name="kubeNimbus" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ProgramMenuDir" Name="kubeNimbus">
+        <Component Id="ApplicationShortcut" Guid="bc7ffc3a-e3a0-419f-961e-13913c3427ce">
+          <Shortcut Id="ApplicationStartMenuShortcut"
+                    Name="kubeNimbus"
+                    Description="A fast, open-source Kubernetes desktop client"
+                    Target="[INSTALLFOLDER]kubeNimbus.exe"
+                    WorkingDirectory="INSTALLFOLDER"
+                    Icon="AppIcon.ico" />
+          <RemoveFolder Id="RemoveProgramMenuDir" Directory="ProgramMenuDir" On="uninstall" />
+          <RegistryValue Root="HKCU"
+                         Key="Software\kubeNimbus\kubeNimbus"
+                         Name="installed"
+                         Type="integer"
+                         Value="1"
+                         KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="MainFeature" Title="kubeNimbus" Level="1">
+      <ComponentGroupRef Id="PublishedFiles" />
+      <ComponentRef Id="ApplicationShortcut" />
+    </Feature>
+  </Package>
+
+  <Fragment>
+    <ComponentGroup Id="PublishedFiles" Directory="INSTALLFOLDER">
+      <!-- .pdb debug symbols are dev-only (crash dumps, symbol servers) and add
+           tens of megabytes with no benefit to anyone installing the MSI. -->
+      <Files Include="$(var.PublishDir)\**">
+        <Exclude Files="$(var.PublishDir)\**\*.pdb" />
+      </Files>
+    </ComponentGroup>
+  </Fragment>
+</Wix>

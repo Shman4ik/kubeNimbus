@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=kubeNimbus
+GenericName=Kubernetes Client
+Comment=A fast, open-source Kubernetes desktop client
+Exec=__EXEC__
+Icon=kubenimbus
+Terminal=false
+Categories=Development;System;Monitor;
+Keywords=kubernetes;k8s;kubectl;cluster;container;devops;
+StartupWMClass=kubeNimbus

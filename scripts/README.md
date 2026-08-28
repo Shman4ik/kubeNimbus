@@ -1,14 +1,37 @@
 # Scripts
 
 `sandbox-*` bring up a throwaway Kubernetes cluster to develop and test
-against (below). The other two directories are the logo/icon pipeline, which
-is documented in full in [`design/LOGO-ASSETS.md`](../design/LOGO-ASSETS.md):
+against (below). The rest is the logo/icon pipeline, documented in full in
+[`design/LOGO-ASSETS.md`](../design/LOGO-ASSETS.md), plus the release packaging:
 
 | Script | Rebuilds |
 |---|---|
 | `design/make-masters.ps1` | `design/masters/**` from `design/logo*.svg` (needs Inkscape) |
 | `windows/make-app-icons.ps1` | `src/KubeNimbus.App/Assets/**` — `app.ico`, window icons, MSIX tiles |
 | `windows/make-store-logos.ps1` | `design/store/**` — Partner Center listing images |
+
+## Packaging scripts
+
+Called by `.github/workflows/release.yml` on a tag, and runnable by hand
+against any `dotnet publish` output — which is how to check a packaging change
+without cutting a release. Each takes the same four arguments:
+`<publish-dir> <version> <rid> <out-dir>`.
+
+| Script | Builds | Runs on |
+|---|---|---|
+| `linux/build-packages.sh` | `.deb` and `.AppImage` | Linux (`dpkg-deb`; downloads `appimagetool`) |
+| `macos/build-app-bundle.sh` | `kubeNimbus.app` and a drag-to-Applications `.dmg` | macOS (`sips`, `iconutil`, `hdiutil`, `codesign`) |
+| `windows/build-msix.ps1` | `.msix` for Microsoft Store submission | Windows (Windows SDK `makeappx`/`makepri`) |
+
+The MSI has no wrapper script — it is one `wix build` over
+[`installer/windows/Product.wxs`](../installer/windows/Product.wxs), and the
+exact invocation (including why two of its `-d` values must be absolute paths)
+is in that file's own comment and in the release workflow.
+
+```bash
+dotnet publish src/KubeNimbus.App -c Release -r linux-x64 -p:PublishAot=true -o publish/app
+./scripts/linux/build-packages.sh publish/app 0.0.0-dev linux-x64 dist
+```
 
 ## Sandbox scripts
 
