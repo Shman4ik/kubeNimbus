@@ -3023,14 +3023,20 @@ unconditionally. So:
    share a group with this repo's default-branch runs and — with
    `cancel-in-progress` — let an outside PR cancel them.
 
-4. **CodeQL analyses `main` and a weekly schedule, never a pull request**
-   (`.github/workflows/codeql.yml`). GitHub's "default setup" runs it on every
-   PR too, which put three more checks — the slowest of them a full C# build —
-   in front of every merge, on a repository whose PRs are small and frequent and
-   whose CodeQL findings are almost never about the lines a PR touches. The
-   trade is stated in the workflow: a vulnerability introduced by a PR is
-   reported after it lands rather than before, while dependency risk — the
-   likelier source — is still gated *on* the PR by `NuGetAudit`, which fails the
+4. **CodeQL runs on a weekly schedule only, never a pull request and never a
+   push** (`.github/workflows/codeql.yml`). GitHub's "default setup" runs it on
+   every PR, which put three more checks — the slowest of them a full C#
+   build — in front of every merge, on a repository whose PRs are small and
+   frequent and whose CodeQL findings are almost never about the lines a PR
+   touches. It ran on push to `main` for a while too, which meant a merge fired
+   both `CI` and `CodeQL`, and a release tag on top of that made three workflow
+   runs show up for one release cycle — visibly more than pgNimbus's two (`CI`
+   on the merge, `Release` on the tag), which carries no CodeQL at all.
+   Scheduled-only keeps the weekly sweep (new queries against unchanged code)
+   without adding a run to either path a human is watching. The trade is stated
+   in the workflow: a vulnerability introduced by a merge is reported up to a
+   week later rather than the same day, while dependency risk — the likelier
+   source — is still gated *on* the PR by `NuGetAudit`, which fails the
    ordinary build. The build mode for C# is **manual** rather than autobuild:
    autobuild guesses a build command, and its guess for a `.slnx` on a preview
    SDK is exactly the kind of thing that starts failing silently months later.

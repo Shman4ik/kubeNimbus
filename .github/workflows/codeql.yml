@@ -1,22 +1,25 @@
 name: CodeQL
 
-# Security analysis, deliberately off the PR path.
+# Security analysis, deliberately off the PR path and off every merge too.
 #
 # This replaces GitHub's "default setup", which runs CodeQL on every pull
 # request as well as on the default branch. That put three more checks in front
 # of every merge — the slowest of them a full C# build — on a repository whose
 # PRs are small and frequent, and CodeQL's findings are almost never about the
-# few lines a PR touches. Analysing `main` after the merge, plus a weekly sweep
-# that catches new queries against unchanged code, finds the same things a day
-# later at a fraction of the wait.
+# few lines a PR touches.
 #
-# The trade, stated: a vulnerability introduced by a PR is reported after it
-# lands rather than before. Dependency risk — the likelier source by far — is
-# still gated *on* the PR by NuGetAudit (NU1902-NU1904 are errors, see
+# It used to also run on push to main, which meant a merge into main fired both
+# CI and CodeQL, and a release tag on top of that meant three workflow runs for
+# one release cycle — visibly more than pgNimbus's two (CI on merge, Release on
+# tag), which has no CodeQL at all. Scheduled-only keeps the weekly sweep (which
+# catches new queries against unchanged code) without adding a run to either
+# path a human is actually watching.
+#
+# The trade, stated: a vulnerability introduced by a merge is reported up to a
+# week later rather than the same day. Dependency risk — the likelier source by
+# far — is still gated *on* the PR by NuGetAudit (NU1902-NU1904 are errors, see
 # Directory.Build.props), which fails the ordinary build.
 on:
-  push:
-    branches: [main]
   schedule:
     # Monday 04:17 UTC. Off the hour on purpose: scheduled workflows queue
     # behind everyone else's on the hour and can be delayed by many minutes.
