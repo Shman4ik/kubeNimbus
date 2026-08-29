@@ -12,6 +12,8 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-08-29
+
 ### Added
 
 - **kubeNimbus is on the Microsoft Store.** Windows can install it from the

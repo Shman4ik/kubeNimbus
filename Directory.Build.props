@@ -18,7 +18,7 @@
        binary. Bump it in the same commit that dates the CHANGELOG section
        (see CONTRIBUTING.md, "Cutting a release"). -->
   <PropertyGroup>
-    <VersionPrefix>0.3.1</VersionPrefix>
+    <VersionPrefix>0.3.2</VersionPrefix>
     <Product>kubeNimbus</Product>
     <Authors>Shman4ik</Authors>
     <Copyright>Copyright (c) 2026 Shman4ik</Copyright>
