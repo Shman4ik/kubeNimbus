@@ -1393,6 +1393,31 @@ mark's geometry was derived. Three rules matter here:
    pwsh scripts/windows/make-store-logos.ps1   # design/store/**  (only if the mark changed)
    ```
 
+   **Superseded 2026-08: `design/logo.af` is the master now and the SVGs are
+   generated too.** Draw in the `.af`, run `scripts/design/dump-af.js` through
+   the Affinity MCP, then `python scripts/design/af-to-svg.py` (which writes
+   `logo.svg` *and* `logo-dark.svg`) ahead of the four steps above. `logo.svg`
+   being hand-edited is exactly why the bridge exists: it had drifted into
+   Inkscape ids and 21 namespace attributes, the wrong class on its own light
+   field, and a `logo-dark.svg` that no longer matched it path for path although
+   both headers claimed they were the same bytes with two values exchanged.
+   Deriving one file from another is what makes a claim like that checkable.
+
+1b. **The base and the broom are shared with pgNimbus and are not this repo's to
+   change alone.** The plate (`r=512`), the light field (`r=360`) and the whole
+   of `#brand-broom` — geometry, position in the 1024 grid, and its 39.451
+   clearance halo — are identical in both marks, byte for byte. The mascot is the
+   free variable and is deliberately *not* normalised: not its ink area, its
+   bounding box, its line weight, or whether it crosses onto the plate (the
+   elephant does and needs its halo to stay readable there; the helm does not).
+   The four family rules and the evidence behind them are in
+   [`design/LOGO.md`](design/LOGO.md), duplicated verbatim in pgNimbus's copy;
+   **a change to any of them is a change to both repositories and a pair of
+   PRs**, the same discipline `shared/nimbusUi` already has. Verify a broom edit
+   by rendering both marks and diffing a region containing broom and plate but
+   no mascot: zero differing pixels, not "close". kubeNimbus's field was `r=380`
+   and its broom ×1.013916 until that check was run for the first time.
+
 2. **There are three marks, not one, and that is deliberate.** `logo.svg` (full
    mark) is rendered at 32px and up; at 24px its eight helm spokes land ~1px
    apart and at 16px the helm reads as a filled circle, so `logo-small.svg`

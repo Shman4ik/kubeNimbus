@@ -5,31 +5,94 @@
 > which icon size, what ships where, which scripts to re-run), see
 > [`LOGO-ASSETS.md`](LOGO-ASSETS.md).
 
-> **Status: `logo.svg` / `logo-dark.svg` are the master. The generator that
-> produced their first draft is gone.** The mark was originally traced out of a
-> raster by a dependency-free Node toolchain (a PNG decoder, a marching-squares
-> tracer, a Schneider curve fitter, a measurement pass), then taken through
-> Inkscape: every `<mask>`, `<use>`, `transform` and `var()` baked out, each
-> module reduced to plain paths in the root coordinate system, and three trace
-> artifacts cut out by hand (see "The flattening pass" below). That made
-> re-running the generator *destructive* — it would have overwritten the
-> flattening — so the generator, the source raster and the raster-diff harness
-> were retired and deleted rather than left as a loaded gun. They are in this
-> branch's history if they are ever wanted back.
+> **Status: `design/logo.af` is the master. `logo.svg` and `logo-dark.svg` are
+> generated from it** by `scripts/design/dump-af.js` → `scripts/design/af-to-svg.py`,
+> the same two-step bridge pgNimbus uses. Draw in the `.af`; the SVGs are
+> overwritten, so a hand edit to one survives exactly until the next person
+> regenerates.
 >
-> **Practical consequence: `logo.svg` is now edited by hand, in a vector
-> editor.** Nothing regenerates it. What the scripts in
-> [`LOGO-ASSETS.md`](LOGO-ASSETS.md) regenerate is everything *downstream* of it.
+> This replaced a period when `logo.svg` *was* the master and was hand-edited,
+> and that period is why the bridge exists. The file had been round-tripped
+> through Inkscape until it carried 21 `sodipodi:`/`inkscape:` attributes, ids
+> like `path2`/`circle1-9`, the wrong class on its own light field (`ink`,
+> rescued only by an inline style), and a `logo-dark.svg` that no longer matched
+> it path for path — despite both files' headers claiming they were "the same
+> bytes with two values exchanged". Nothing detected any of that, because
+> nothing derived one from the other.
+>
+> The mark's *first* draft came from a dependency-free Node toolchain (a PNG
+> decoder, a marching-squares tracer, a Schneider curve fitter, a measurement
+> pass) and was then flattened by hand (see "The flattening pass" below). That
+> made re-running the tracer destructive, so it and its source raster were
+> retired and deleted rather than left as a loaded gun. They are in this repo's
+> history if they are ever wanted back. The `.af` carries the flattened result.
 
-The rest of this file is why the geometry is what it is: the numbers, the helm
-rebuild, the crossing, and the dead ends — the things a future edit needs to
-know and cannot recover by looking at the paths.
+The rest of this file is why the geometry is what it is: the family rules, the
+numbers, the helm rebuild, the crossing, and the dead ends — the things a future
+edit needs to know and cannot recover by looking at the paths.
 
 | File | What it is |
 |---|---|
-| `logo.svg` | the mark, ~9.6 KB, `viewBox="0 0 1024 1024"` |
-| `logo-dark.svg` | same geometry, `.ink`/`.paper` swapped |
-| `logo-small.svg`, `logo-micro.svg` (+ `-dark`) | the 24px and 16px marks — separate geometry, see [`LOGO-ASSETS.md`](LOGO-ASSETS.md) Part 0 |
+| `logo.af` | **the master**, the only hand-drawn file |
+| `logo.svg` | generated: the mark, `viewBox="0 0 1024 1024"` |
+| `logo-dark.svg` | generated: the same bytes, `.ink`/`.paper` values exchanged |
+| `logo-small.svg`, `logo-micro.svg` (+ `-dark`, `-plated`) | generated: the 24px and 16px marks — separate geometry, see [`LOGO-ASSETS.md`](LOGO-ASSETS.md) Part 0 |
+
+## The Nimbus family rules
+
+> **These four rules are shared with pgNimbus and are duplicated verbatim in
+> [`pgNimbus/design/LOGO.md`](https://github.com/Shman4ik/pgNimbus/blob/main/design/LOGO.md).
+> A change to any of them is a change to both repositories and a pair of PRs.**
+> They were written after the two marks were measured against each other for
+> the first time and found to disagree on three of the four.
+
+A Nimbus mark is **a plate, a light field, a shared broom, and one mascot.**
+What makes the family is the first three plus the rules of construction. It is
+explicitly *not* a common silhouette — the mascots are different objects and are
+meant to look it.
+
+**1. The base is fixed, and it is not a free choice.** 1024 × 1024 canvas; plate
+`r=512` full bleed in `.ink` `#242B36`; light field `r=360` concentric in
+`.paper` `#F5F7FA`, leaving a 152-wide dark ring. The ratio 360/512 = 0.703125
+is measured off pgNimbus's raster-era master, not picked. kubeNimbus carried
+`r=380` until this pass — a 132 ring against a 152 one, which is the single most
+visible difference when the two marks sit side by side, and it had no
+derivation behind it.
+
+**2. The broom is one drawing, in both files, at the same place.** Not "the same
+shape at each mark's own scale": the same coordinates in the same 1024 grid,
+down to the rounding of the SVG's two-decimal output. Its clearance halo is
+`stroke-width` **39.451**, round cap and join, `.paper`, drawn *under* the ink.
+kubeNimbus's copy had been uniformly resized to ×1.013916 at some point and
+never reconciled — detectable because the halo stroke had gone 39.451 → 40 by
+exactly the factor the outlines had, which is the fingerprint of one resize
+handle, not of two independent decisions. **Any edit to the broom is an edit to
+both repositories.** Verify it the way this pass did: render both marks and diff
+a region containing broom and plate but no mascot — it should come out at zero
+differing pixels, not "close".
+
+**3. Each module carries its own clearance halo, so it is liftable.** A module
+whose legibility depends on a notch cut out of `#base` is not a module: hide
+`#base` and it falls apart, because the missing part was never an object, it was
+a hole. Every group must survive being dropped onto an arbitrary background.
+
+**4. The mascot is the free variable, and deliberately so.** It is not
+normalised across the family — not its ink area, not its bounding box, not its
+line weight, and not whether it crosses the field's rim onto the plate. Measured
+today: the elephant is 586 × 455 with 3.76% of the canvas inked, drawn at line
+weight 21.5, reaching 437 from centre so that it crosses onto the plate and
+relies on its halo to stay readable there; the helm is 411 × 375 with 5.28%
+inked, line weight ~34, reaching only 296 and sitting wholly inside the field.
+Both are correct. A mascot is a different object with different anatomy, and
+forcing one of these numbers onto the other would damage whichever mascot lost
+the argument without making the pair read as more related — the plate, the field
+and the broom already do that work.
+
+The consequence worth stating, because it is the rule people break: **make a new
+mark by copying the base and the broom and drawing only the mascot.** Do not
+start by scaling an existing mark to taste; that is precisely how kubeNimbus's
+broom and field drifted, and neither drift was noticed for as long as nobody put
+the two marks next to each other and measured.
 
 ## The shape of the file
 
@@ -215,10 +278,14 @@ Two warnings survive the tooling:
   symmetry to enforce, and the generated raster got it wrong. pgNimbus's
   elephant is line art with no symmetry to enforce, and should be **traced, not
   rebuilt**. The helm is the exception, not the pattern.
-- **The pgNimbus master is a different kind of file and none of this applies to
-  it.** It is one compound path where the broom and the elephant are *negative
-  space* carved out of the disc, and the white showing through is the page. It
-  is already vector; do not rasterise it to feed a tracer.
+- **pgNimbus is now the same kind of file as this one** — an Affinity master
+  with a `base` / `mascot-*` / `brand-broom` layer tree, exported by the same
+  two-step bridge — so the two are directly comparable and the family rules
+  above are checkable. This used to say the opposite, and it was true when it
+  was written: pgNimbus was a single compound path where the broom and the
+  elephant were *negative space* carved out of the disc, with the page showing
+  through. Nothing about that file is left. Do not rasterise either master to
+  feed a tracer.
 
 ## Dead ends — do not retry
 

@@ -5,15 +5,37 @@ generates it, and where it's consumed. How the mark's *geometry* was derived
 from the source raster is a different question, answered by
 [`LOGO.md`](LOGO.md) — this file is the plumbing on top of it.
 
-Pipeline model: kubeNimbus's mark is **vector**, so unlike pgNimbus (whose
-masters are hand-drawn bitmaps and whose scripts only assemble them) the
-masters here are *generated* — every raster in `design/masters/` comes out of
-`scripts/design/make-masters.ps1`. The per-size hand work that pgNimbus does in
-a bitmap editor is done once, in SVG: there are **three** marks, and which one
-feeds which size is the load-bearing decision (see below).
+Pipeline model: **one drawing feeds everything.** The mark is drawn once in
+`design/logo.af`, exported to `design/logo.svg` (+ its dark twin), and every
+other file in the repo is rendered from that. Nothing under `design/masters/`,
+`design/store/` or `src/KubeNimbus.App/Assets/` is hand-edited — and, since this
+pass, neither are the SVGs.
+
+```
+design/logo.af                     Affinity, the editable master
+  → scripts/design/dump-af.js      geometry out to JSON (run via the Affinity MCP)
+  → scripts/design/af-to-svg.py    design/logo.svg + design/logo-dark.svg
+  → scripts/design/make-small-masters.py   design/logo-{small,micro}*.svg
+  → scripts/design/make-masters.ps1        design/masters/**
+  → scripts/windows/make-app-icons.ps1     src/KubeNimbus.App/Assets/**
+  → scripts/windows/make-store-logos.ps1   design/store/**
+```
+
+What this replaced, and why it is worth the two extra steps: `logo.svg` used to
+be the hand-edited master. It drifted — Inkscape ids and 21 editor-namespace
+attributes, the wrong class on its own light field, and a `logo-dark.svg` that
+no longer matched it path for path even though both headers claimed they were
+the same bytes with two values exchanged. Deriving one file from another is what
+makes a claim like that checkable instead of aspirational. This is also now the
+same shape as pgNimbus's pipeline, which matters because the two marks share the
+broom — see [`LOGO.md`](LOGO.md) for the family rules.
+
+The per-size hand work that a bitmap workflow would need is still done once, in
+SVG: there are **three** marks, and which one feeds which size is the
+load-bearing decision (see below).
 
 - **Part 0 — Why there are three masters**
-- **Part 1 — Sources** (`design/*.svg`, the only hand-edited files)
+- **Part 1 — Sources** (`design/logo.af`, the only hand-drawn file)
 - **Part 2 — Generated masters** (`design/masters/`)
 - **Part 3 — Shipped outputs** (`src/KubeNimbus.App/Assets/`)
 - **Part 4 — The scripts** (source → output mapping)
@@ -81,14 +103,16 @@ bitmap editor. **Do not "simplify" the pipeline by rendering every size from
 
 ---
 
-## Part 1 — Sources: `design/*.svg`
+## Part 1 — Sources: `design/logo.af`
 
-The **only** hand-edited art. Everything else in this document is generated.
+The **only** hand-drawn art. Everything else in this document is generated,
+the SVGs included.
 
 | File | What it is |
 |---|---|
-| `logo.svg` | the full mark, `viewBox="0 0 1024 1024"`, flattened plain paths — see [`LOGO.md`](LOGO.md) |
-| `logo-dark.svg` | same bytes, `.ink`/`.paper` exchanged |
+| `logo.af` | **the master** — Affinity, layer tree mirroring the generated SVG one-for-one |
+| `logo.svg` | generated: the full mark, `viewBox="0 0 1024 1024"`, flattened plain paths — see [`LOGO.md`](LOGO.md) |
+| `logo-dark.svg` | generated: same bytes, `.ink`/`.paper` exchanged |
 | `logo-small.svg` / `-dark` | simplified mark for 24px, no disc, transparent |
 | `logo-micro.svg` / `-dark` | simplified mark for 16px, no disc, transparent |
 | `logo-small-plated.svg` | the 24px mark on the full mark's disc — `app.ico` only |
@@ -107,13 +131,18 @@ All six share one colour contract: `.ink` `#242B36` and `.paper` `#F5F7FA`
 (plus `.ink-s`/`.paper-s` where the value is a stroke), with the literal value
 repeated in a `fill`/`stroke` attribute so tools that ignore `<style>` still
 render. A `*-dark.svg` is its light twin with the two values exchanged and
-nothing else changed — if you edit geometry, edit both (or regenerate the dark
-twin with the same two-way swap). The small and micro masters use only `.ink`
-and `.ink-s`: with the disc gone there is no paper left in them.
+nothing else changed — and it is now *generated* rather than maintained
+alongside, which is the only reason that sentence is reliably true. It was not:
+the two files had diverged path for path while both headers claimed otherwise.
+The small and micro masters use only `.ink` and `.ink-s`: with the disc gone
+there is no paper left in them.
 
-`logo.svg` and `logo-dark.svg` are hand-edited — traced from a raster once and
-then hand-finished, with the tracer retired rather than left able to overwrite
-that work (see [`LOGO.md`](LOGO.md)). Edit them in a vector editor.
+`logo.svg` and `logo-dark.svg` are generated from `design/logo.af` by
+[`scripts/design/dump-af.js`](../scripts/design/dump-af.js) →
+[`scripts/design/af-to-svg.py`](../scripts/design/af-to-svg.py) — the mark was
+traced from a raster once and hand-finished, with the tracer retired, and the
+flattened result now lives in the `.af` (see [`LOGO.md`](LOGO.md)). Draw in the
+`.af`; do not edit the SVGs.
 
 The **six small/micro files are generated**, by
 [`scripts/design/make-small-masters.py`](../scripts/design/make-small-masters.py),
@@ -237,6 +266,30 @@ alone don't do anything either: a pack step has to compile them into
 
 ## Part 4 — The scripts (source → output)
 
+### `scripts/design/dump-af.js` (run through the Affinity MCP)
+Dumps `design/logo.af`'s geometry to `~/Desktop/kubenimbus-logo-dump.json`.
+Affinity scripts can only write to the Desktop, hence the destination. It picks
+the document by **repository directory as well as filename** — pgNimbus's master
+is also called `logo.af` and the two are routinely open side by side, so
+matching on the filename alone dumps whichever the editor happens to list first.
+
+### `scripts/design/af-to-svg.py` (any OS, stdlib only)
+Run after `dump-af.js`. Bakes every node transform into the path data and writes
+`design/logo.svg` plus `design/logo-dark.svg` (the same bytes, two values
+exchanged).
+
+```
+logo.af ── dump ──► kubenimbus-logo-dump.json ──► logo.svg ──► logo-dark.svg
+```
+
+Two differences from pgNimbus's otherwise-identical copy, both load-bearing:
+it **accumulates ancestor transforms** rather than reading only a leaf's own
+(Affinity puts a transform wherever the edit was made — transform a group and
+the group carries it, and a leaf-only reader silently emits the untransformed
+geometry), and it **carries a stroke width through that transform**, because a
+scaled clearance halo is a different weight and the family's 39.451 is exact.
+It refuses a non-uniform scale rather than guess which width to report.
+
 ### `scripts/design/make-small-masters.py` (Python 3.8+, stdlib only)
 Derives the 24px and 16px marks from `logo.svg`. Run after any change to the
 full mark's broom, **before** `make-masters.ps1`.
@@ -308,15 +361,19 @@ one-off. Not wired into any build; the Partner Center upload is manual.
 ### The full refresh
 
 ```powershell
+# 1. with design/logo.af open in Affinity, run scripts/design/dump-af.js
+#    through the Affinity MCP (it writes the dump to your Desktop)
+python scripts/design/af-to-svg.py          # design/logo.svg + logo-dark.svg
 python scripts/design/make-small-masters.py # design/logo-{small,micro}*.svg
 pwsh scripts/design/make-masters.ps1        # design/masters/**
 pwsh scripts/windows/make-app-icons.ps1     # src/KubeNimbus.App/Assets/**
 pwsh scripts/windows/make-store-logos.ps1   # design/store/**
 ```
 
-The first step is only needed when `logo.svg`'s broom changed; the other three
-after any `design/logo*.svg` edit. They must run in that order — each one eats
-the previous one's output.
+They must run in that order — each one eats the previous one's output. The
+small-masters step is only strictly needed when the broom changed, but it is
+cheap and running it unconditionally is what keeps "the small icon looks like
+the logo" a property you re-run rather than one you eyeball.
 
 There is no macOS `.icns` step yet — kubeNimbus has no `.app`/`.dmg` packaging.
 When it gets one, the masters already cover every iconset slot (16/32/256 exact,
