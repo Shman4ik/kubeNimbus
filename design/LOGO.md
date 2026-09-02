@@ -36,7 +36,9 @@ edit needs to know and cannot recover by looking at the paths.
 | `logo.af` | **the master**, the only hand-drawn file |
 | `logo.svg` | generated: the mark, `viewBox="0 0 1024 1024"` |
 | `logo-dark.svg` | generated: the same bytes, `.ink`/`.paper` values exchanged |
-| `logo-small.svg`, `logo-micro.svg` (+ `-dark`, `-plated`) | generated: the 24px and 16px marks — separate geometry, see [`LOGO-ASSETS.md`](LOGO-ASSETS.md) Part 0 |
+| `logo-small.af` | **a second master**, hand-drawn: the 24px mark, same 1024 grid, no plate |
+| `logo-small.svg` (+ `-dark`, `-plated`) | generated from `logo-small.af` |
+| `logo-micro.svg` (+ `-dark`, `-plated`) | generated from `logo.svg` by script — the 16px mark, see [`LOGO-ASSETS.md`](LOGO-ASSETS.md) Part 0 |
 
 ## The Nimbus family rules
 

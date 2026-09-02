@@ -5,17 +5,18 @@ generates it, and where it's consumed. How the mark's *geometry* was derived
 from the source raster is a different question, answered by
 [`LOGO.md`](LOGO.md) — this file is the plumbing on top of it.
 
-Pipeline model: **one drawing feeds everything.** The mark is drawn once in
-`design/logo.af`, exported to `design/logo.svg` (+ its dark twin), and every
-other file in the repo is rendered from that. Nothing under `design/masters/`,
+Pipeline model: **two drawings feed everything.** The mark is drawn in
+`design/logo.af` and, for 24px, again in `design/logo-small.af`; every other
+file in the repo is rendered from those two. Nothing under `design/masters/`,
 `design/store/` or `src/KubeNimbus.App/Assets/` is hand-edited — and, since this
 pass, neither are the SVGs.
 
 ```
-design/logo.af                     Affinity, the editable master
+design/logo.af  +  design/logo-small.af     Affinity, the editable masters
   → scripts/design/dump-af.js      geometry out to JSON (run via the Affinity MCP)
-  → scripts/design/af-to-svg.py    design/logo.svg + design/logo-dark.svg
-  → scripts/design/make-small-masters.py   design/logo-{small,micro}*.svg
+  → scripts/design/af-to-svg.py            design/logo.svg + design/logo-dark.svg
+  → scripts/design/af-to-small-svgs.py     design/logo-small*.svg
+  → scripts/design/make-small-masters.py   design/logo-micro*.svg  (from logo.svg)
   → scripts/design/make-masters.ps1        design/masters/**
   → scripts/windows/make-app-icons.ps1     src/KubeNimbus.App/Assets/**
   → scripts/windows/make-store-logos.ps1   design/store/**
@@ -56,15 +57,31 @@ subtle:
 | 24 | eight spokes land ~1px apart; broom bristles vanish | ❌ grey blob |
 | 16 | helm reads as a filled circle | ❌ unrecognisable |
 
-So the small sizes get their own marks, drawn in the same 1024 grid so they
-stay on-brand and stay re-renderable:
+So the small sizes get their own marks, in the same 1024 grid so they stay
+on-brand and stay re-renderable:
 
-- **`logo-small.svg`** (24px) — a bold helm (six rays, heavy rim, fat hub, six
-  stub pegs) beside the broom, filling the whole tile.
-- **`logo-micro.svg`** (16px) — four rays on the cardinal axes, no pegs, every
-  stroke wider again, same broom.
+- **`logo-small.svg`** (24px) — **hand-drawn**, in `design/logo-small.af`. The
+  full mark's own composition: the helm at the full mark's own centre with the
+  broom crossing it from the lower left, six rays instead of eight, a heavy
+  rim, a hub with its bore still cut, four stub pegs, and a clearance gap of
+  ~45 units (≈1.05px at 24) where the broom passes.
+- **`logo-micro.svg`** (16px) — **script-derived** from `logo.svg` by
+  `make-small-masters.py`: four rays on the cardinal axes, no pegs, every
+  stroke wider again, the helm whole and the broom moved clear of it rather
+  than cutting it.
 
-Two rules separate them from the full mark, and both are deliberate:
+**Why one is drawn and the other is generated.** The 24px mark was generated
+too, and the output was a mark that shared its broom with the full one and
+nothing else — the helm came from a parameter table and the composition
+(wheel in one corner, broom in the other) was the script's, chosen by searching
+for a placement at which the broom cleared the helm entirely. At 24px there is
+room to say what the logo actually says, and hand-drawing it is what says it.
+At 16px there is not: the mark is four rays and a broom on a 16-pixel tile, a
+chopped rim reads as a rendering fault rather than as depth, and the script's
+answer is still the right one. Rendering a 24px drawing at 16 was tried and is
+worse than the generated micro at that size — measured, not assumed.
+
+Two rules separate both of them from the full mark, and both are deliberate:
 
 **No disc.** The full mark's disc is a plate, and a plate costs ~20% of the
 tile in each direction at every size. At 24px that is the difference between
@@ -74,19 +91,31 @@ Windows and MSIX icon slots want in the first place. The cost is that they no
 longer carry their own background: on a surface the ink cannot survive, the
 `-dark` twin is not optional, it is the asset.
 
-**The broom is `logo.svg`'s own geometry**, not a redrawn wedge — the same
-`#broom-bristles` and `#broom-handle` paths, scaled. That became possible only
-once the full mark's broom stopped being negative space cut out of the light
-field (see [`LOGO.md`](LOGO.md)); before that there was no handle to lift. Two
-concessions to the pixel grid, neither a redesign: the paths are fattened by a
-stroke so the hairline gaps around the ferrule fuse instead of turning to mud,
-and the ferrule notch is replaced by a plain tapered tip.
+**The broom is the full mark's own geometry** in both of them, not a redrawn
+wedge — the same `#broom-bristles` and `#broom-handle` paths, moved and scaled.
+That became possible only once the full mark's broom stopped being negative
+space cut out of the light field (see [`LOGO.md`](LOGO.md)); before that there
+was no handle to lift. Two concessions to the pixel grid, neither a redesign:
+the paths are fattened by a stroke so the hairline gaps around the ferrule fuse
+instead of turning to mud, and the ferrule notch is replaced by a plain tapered
+tip. The grip slot in the handle's far end goes with it, for the same reason.
 
-And one thing that is *not* carried over: the full mark cuts the helm where the
-broom crosses it. The small masters keep the helm **whole** and place the broom
-at the closest distance that leaves every spoke, peg and rim arc intact. At
-these sizes a chopped spoke does not read as depth, it reads as a rendering
-fault.
+**One consequence of drawing the 24px mark by hand:** `logo-small.af` holds its
+own moved and fattened copy of the broom, so a change to `logo.af`'s broom does
+*not* reach it. `logo-micro.svg` picks such a change up on the next re-run of
+`make-small-masters.py`; `logo-small.svg` does not until someone lifts the new
+broom into the `.af`. A broom edit is already a two-repository event (see
+[`LOGO.md`](LOGO.md), family rule 2) — add this to that list.
+
+**The crossing is kept at 24px and given up at 16px**, and the boundary is
+where it stops reading. The full mark cuts the helm where the broom passes in
+front of it, and `logo-small.af` does the same — the rim, one spoke run and two
+pegs stop at a clearance gap — because that crossing *is* the composition, and
+at 24px the surviving rim arc still reads as a wheel going behind something.
+At 16px it does not: the arc becomes a broken ring, which reads as a rendering
+fault rather than as depth. So `logo-micro.svg` keeps the helm **whole** and
+places the broom at the closest distance that leaves every spoke and rim arc
+intact.
 
 **The broom stays at every size, and that is the rule.** An earlier revision
 dropped it below 32px on legibility grounds and the result was a generic
@@ -111,6 +140,7 @@ the SVGs included.
 | File | What it is |
 |---|---|
 | `logo.af` | **the master** — Affinity, layer tree mirroring the generated SVG one-for-one |
+| `logo-small.af` | **the 24px master** — Affinity, `mascot-helm` + `brand-broom`, no `base` |
 | `logo.svg` | generated: the full mark, `viewBox="0 0 1024 1024"`, flattened plain paths — see [`LOGO.md`](LOGO.md) |
 | `logo-dark.svg` | generated: same bytes, `.ink`/`.paper` exchanged |
 | `logo-small.svg` / `-dark` | simplified mark for 24px, no disc, transparent |
@@ -144,22 +174,30 @@ traced from a raster once and hand-finished, with the tracer retired, and the
 flattened result now lives in the `.af` (see [`LOGO.md`](LOGO.md)). Draw in the
 `.af`; do not edit the SVGs.
 
-The **six small/micro files are generated**, by
-[`scripts/design/make-small-masters.py`](../scripts/design/make-small-masters.py),
-from `logo.svg`. Do not hand-edit them; re-run the script:
+The **three 24px files are generated from a second hand-drawn master**,
+`design/logo-small.af`, by the same two-step bridge the full mark uses:
+[`dump-af.js`](../scripts/design/dump-af.js) →
+[`af-to-small-svgs.py`](../scripts/design/af-to-small-svgs.py). Draw in the
+`.af`; do not edit the SVGs.
 
 ```bash
-python scripts/design/make-small-masters.py
+# with design/logo-small.af open in Affinity, run dump-af.js through the MCP
+python scripts/design/af-to-small-svgs.py
 ```
 
-They used to be hand-drawn approximations of the broom — a straight stroke and
-a four-point wedge — because the full mark had no broom to copy: its handle was
-negative space cut out of the light field, not an object. Once `#brand-broom`
-became self-contained the small marks could lift the real `#broom-bristles` and
-`#broom-handle` paths, and "the small icon looks like the logo" stopped being
-something you eyeball and became something you re-run. The helm stays
-parametric, because eight thin spokes cannot survive 16px whatever you do to
-them.
+**The three 16px files are still script-derived** from `logo.svg` by
+[`make-small-masters.py`](../scripts/design/make-small-masters.py), and that
+split is deliberate — see Part 0.
+
+The whole small-mark family used to be script-derived, and the 24px one was the
+case where that stopped paying. The script invents a helm from a parameter
+table, lifts the broom's real paths out of `logo.svg`, and then *searches for a
+placement at which the broom clears the helm entirely* — so the mark it
+produced shared its broom with the full mark and nothing else: the helm was the
+script's drawing, and the composition (wheel in one corner, broom in the other)
+was not the full mark's. At 24px there is enough room to say what the logo
+actually says, so that size is drawn. At 16px there is not, and the script's
+answer — four rays, no pegs, everything fattened — is still the right one.
 
 ---
 
@@ -290,19 +328,36 @@ geometry), and it **carries a stroke width through that transform**, because a
 scaled clearance halo is a different weight and the family's 39.451 is exact.
 It refuses a non-uniform scale rather than guess which width to report.
 
-### `scripts/design/make-small-masters.py` (Python 3.8+, stdlib only)
-Derives the 24px and 16px marks from `logo.svg`. Run after any change to the
-full mark's broom, **before** `make-masters.ps1`.
+### `scripts/design/af-to-small-svgs.py` (Python 3.8+, stdlib only)
+Carries `design/logo-small.af` across to the three 24px files. Run after
+`dump-af.js`, **before** `make-masters.ps1`.
 
 ```
-logo.svg #broom-bristles + #broom-handle ─┬─► logo-small.svg  + -dark  + -plated
-   + a parametric helm, fitted to the tile └─► logo-micro.svg  + -dark  + -plated
+logo-small.af ─ dump-af.js ─► kubenimbus-logo-small-dump.json
+                             ─► logo-small.svg + -dark + -plated
+```
+
+It reads the dump the same way `af-to-svg.py` does — ancestor transforms
+accumulated, stroke widths carried through them — and adds one thing that file
+does not need: the **plated** fit. The mark runs corner to corner, so the disc
+version is fitted to the content's *smallest enclosing circle* rather than to
+its bounding box (a box fit leaves about a fifth of the light field empty), at
+97% so antialiasing cannot bleed into the ring.
+
+### `scripts/design/make-small-masters.py` (Python 3.8+, stdlib only)
+Derives the **16px** mark from `logo.svg`. Run after any change to the full
+mark's broom, **before** `make-masters.ps1`.
+
+```
+logo.svg #broom-bristles + #broom-handle ──► logo-micro.svg + -dark + -plated
+   + a parametric helm, fitted to the tile
 ```
 
 The knobs at the bottom of the script (ray count, helm scale, fattening stroke,
-clearance) were chosen by rendering candidates at actual 16 and 24 px and
-comparing them, not by taste. If you change them, do that again — a value that
-looks right at 1024 tells you nothing about what it does to a 16px tile.
+clearance) were chosen by rendering candidates at actual 16 px and comparing
+them, not by taste. If you change them, do that again — a value that looks
+right at 1024 tells you nothing about what it does to a 16px tile. It used to
+emit the 24px pair too; that pair is `logo-small.af`'s now.
 
 ### `scripts/design/make-masters.ps1` (Inkscape + System.Drawing)
 Rebuilds everything in `design/masters/`. Run after editing any
@@ -361,10 +416,12 @@ one-off. Not wired into any build; the Partner Center upload is manual.
 ### The full refresh
 
 ```powershell
-# 1. with design/logo.af open in Affinity, run scripts/design/dump-af.js
-#    through the Affinity MCP (it writes the dump to your Desktop)
+# 1. with design/logo.af AND design/logo-small.af open in Affinity, run
+#    scripts/design/dump-af.js through the Affinity MCP (it dumps whichever
+#    of them are open, to your Desktop)
 python scripts/design/af-to-svg.py          # design/logo.svg + logo-dark.svg
-python scripts/design/make-small-masters.py # design/logo-{small,micro}*.svg
+python scripts/design/af-to-small-svgs.py   # design/logo-small*.svg
+python scripts/design/make-small-masters.py # design/logo-micro*.svg
 pwsh scripts/design/make-masters.ps1        # design/masters/**
 pwsh scripts/windows/make-app-icons.ps1     # src/KubeNimbus.App/Assets/**
 pwsh scripts/windows/make-store-logos.ps1   # design/store/**

@@ -1,21 +1,30 @@
-// Dumps design/logo.af geometry to JSON for scripts/design/af-to-svg.py.
+// Dumps the geometry of every kubeNimbus .af master to JSON, for
+// scripts/design/af-to-svg.py (the full mark) and
+// scripts/design/af-to-small-svgs.py (the 24 px mark).
 //
-// The .af is the editable master; design/logo.svg is the committed, tool-neutral
-// one. This is the bridge. Run it through the Affinity MCP (execute_script) with
-// design/logo.af open, then run af-to-svg.py on the file it writes.
+// The .af files are where the marks are drawn; the SVGs beside them are the
+// committed, tool-neutral copies. This is the bridge. Run it through the
+// Affinity MCP (execute_script) with the masters open, then run the two Python
+// scripts on the files it writes.
 //
-// This is pgNimbus's script with one difference: it selects the document by the
-// repository directory as well as the filename, because both marks are called
-// logo.af and the two are routinely open side by side. Picking by filename alone
-// dumps whichever the editor happens to list first, which is silent and wrong.
+// Every master that is open is dumped and every one that is not is skipped, so
+// a session that only touched one mark can run this unchanged. Documents are
+// selected by the repository directory as well as the filename: pgNimbus's
+// master is also called logo.af and the two are routinely open side by side, so
+// picking by filename alone dumps whichever the editor happens to list first,
+// which is silent and wrong.
 //
 // Affinity scripts can only write to the Desktop, hence the destination.
 const { app } = require('/application.js');
 const { SolidFill } = require('/fills.js');
 const { File } = require('/fs.js');
 
-const doc = app.documents.all.find(d => String(d.path).endsWith('kubeNimbus\\design\\logo.af'));
-if (!doc) throw new Error('kubeNimbus/design/logo.af is not open');
+// There is deliberately no logo-micro.af: the 16 px mark stays script-derived
+// from logo.svg (scripts/design/make-small-masters.py). See design/LOGO-ASSETS.md.
+const MASTERS = [
+    { tail: 'kubeNimbus\\design\\logo.af',       out: 'kubenimbus-logo-dump.json' },
+    { tail: 'kubeNimbus\\design\\logo-small.af', out: 'kubenimbus-logo-small-dump.json' },
+];
 
 const kids = (n) => { try { return Array.from(n.children); } catch (e) { return []; } };
 const nm   = (n) => { try { return n.description ?? ''; } catch (e) { return '?'; } };
@@ -61,9 +70,16 @@ function dumpNode(n) {
     return o;
 }
 
-const out = JSON.stringify(dumpNode(doc.rootNode));
-const dest = app.userDesktopPath + '\\kubenimbus-logo-dump.json';
-const f = new File(dest, 'wb');
-f.writeStringAsUtf8(out);
-f.close();
-console.log('wrote ' + dest + ' (' + out.length + ' bytes)');
+let dumped = 0;
+for (const m of MASTERS) {
+    const doc = app.documents.all.find(d => String(d.path).endsWith(m.tail));
+    if (!doc) { console.log('skipped ' + m.tail + ' (not open)'); continue; }
+    const out = JSON.stringify(dumpNode(doc.rootNode));
+    const dest = app.userDesktopPath + '\\' + m.out;
+    const f = new File(dest, 'wb');
+    f.writeStringAsUtf8(out);
+    f.close();
+    console.log('wrote ' + dest + ' (' + out.length + ' bytes)');
+    dumped++;
+}
+if (!dumped) throw new Error('none of the kubeNimbus .af masters are open');
