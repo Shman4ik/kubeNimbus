@@ -23,3 +23,7 @@ publish/
 # OS cruft
 Thumbs.db
 .DS_Store
+
+# Affinity holds a lock file beside an open document; it is transient editor
+# state, not art, and it disappears when the document is closed.
+*.af~lock~
