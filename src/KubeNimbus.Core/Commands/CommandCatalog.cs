@@ -150,6 +150,14 @@ public static class CommandCatalog
         // ------------------------------------------------------------ Resources
         new()
         {
+            Id = CommandId.NamespacePicker,
+            Title = "Choose namespace",
+            Category = CommandCategory.Resources,
+            Chord = new(CommandKey.N, Cmd | ChordModifiers.Shift),
+            Surfaces = SheetOnly,
+        },
+        new()
+        {
             Id = CommandId.FilterList,
             Title = "Search the resource list by name",
             Category = CommandCategory.Resources,
@@ -213,16 +221,55 @@ public static class CommandCatalog
             Id = CommandId.EditYaml,
             Title = "Edit YAML",
             Category = CommandCategory.Resources,
+            Scope = CommandScope.List,
             IconKey = "CodeBracesIconGeometry",
-            Surfaces = PaletteOnly,
+            // The row keys below are single letters, the way k9s has always done it —
+            // which is where most people choosing a Kubernetes GUI are coming from.
+            // Every one of them used to be a right-click and a menu read away, and the
+            // things they reach are what the app is opened for dozens of times a day.
+            // Unmodified letters are safe here because the list's own key handler owns
+            // them (CommandScope.List): the grid is read-only, so a letter typed into it
+            // had nowhere else to go.
+            Chord = new(CommandKey.E),
+            Surfaces = PaletteAndSheet,
         },
         new()
         {
             Id = CommandId.DeleteResource,
             Title = "Delete resource",
+            CheatTitle = "Delete the selected resource (asks to confirm)",
             Category = CommandCategory.Resources,
+            Scope = CommandScope.List,
             IconKey = "DeleteIconGeometry",
-            Surfaces = PaletteOnly,
+            // Safe on a bare key only because it arms the confirm strip (UI rule 17) —
+            // nothing is deleted by this keystroke.
+            Chord = new(CommandKey.Delete),
+            Surfaces = PaletteAndSheet,
+        },
+        new()
+        {
+            Id = CommandId.RolloutRestart,
+            Title = "Rollout restart",
+            CheatTitle = "Rollout restart the selected workload (asks to confirm)",
+            Category = CommandCategory.Resources,
+            Scope = CommandScope.List,
+            IconKey = "RestartIconGeometry",
+            Chord = new(CommandKey.R),
+            Surfaces = PaletteAndSheet,
+        },
+        new()
+        {
+            Id = CommandId.FilterListFromRows,
+            Title = "Search the list from the rows",
+            Category = CommandCategory.Resources,
+            Scope = CommandScope.List,
+            IconKey = "MagnifyIconGeometry",
+            // k9s's and vim's search key, as a second way into the same box Ctrl/Cmd+F
+            // reaches. List-scoped rather than an AltChord on FilterList because that one
+            // is a window binding, and a window binding on "/" would fire while typing a
+            // path into any text box in the app.
+            Chord = new(CommandKey.Slash),
+            Surfaces = SheetOnly,
         },
 
         // ----------------------------------------------------------------- Pods
@@ -230,34 +277,46 @@ public static class CommandCatalog
         {
             Id = CommandId.PodLogs,
             Title = "Logs",
-            CheatTitle = "Open the selected pod's logs",
+            CheatTitle = "Logs — the pod's, or every pod a workload owns",
             Category = CommandCategory.Pods,
+            Scope = CommandScope.List,
             IconKey = "ClockOutlineIconGeometry",
-            Surfaces = PaletteOnly,
+            Chord = new(CommandKey.L),
+            Surfaces = PaletteAndSheet,
         },
         new()
         {
             Id = CommandId.PreviousLogs,
             Title = "Previous logs (crashed container)",
             Category = CommandCategory.Pods,
+            Scope = CommandScope.List,
             IconKey = "ClockOutlineIconGeometry",
-            Surfaces = PaletteOnly,
+            Chord = new(CommandKey.P),
+            Surfaces = PaletteAndSheet,
         },
         new()
         {
             Id = CommandId.Exec,
             Title = "Exec into a container",
+            CheatTitle = "Shell into the pod — or scale a Deployment/StatefulSet",
             Category = CommandCategory.Pods,
+            Scope = CommandScope.List,
             IconKey = "ConsoleIconGeometry",
-            Surfaces = PaletteOnly,
+            // One key, two meanings by kind, exactly as in k9s: a pod has no replica
+            // count and a Deployment has no shell, so the key is never ambiguous about
+            // the row it is pressed on.
+            Chord = new(CommandKey.S),
+            Surfaces = PaletteAndSheet,
         },
         new()
         {
             Id = CommandId.PortForward,
             Title = "Port-forward",
             Category = CommandCategory.Pods,
+            Scope = CommandScope.List,
             IconKey = "SwapHorizontalIconGeometry",
-            Surfaces = PaletteOnly,
+            Chord = new(CommandKey.F),
+            Surfaces = PaletteAndSheet,
         },
         new()
         {

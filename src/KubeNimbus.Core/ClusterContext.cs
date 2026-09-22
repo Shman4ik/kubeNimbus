@@ -35,6 +35,13 @@ public sealed record ClusterContext(
     public bool IsDemo => KubeconfigPath == DemoKubeconfigPath;
 
     /// <summary>
+    /// True for the context the kubeconfig chain names as <c>current-context</c> — the
+    /// cluster <c>kubectl</c> would talk to right now. It is what a first launch opens,
+    /// because it is the one cluster the user has already said they are working on.
+    /// </summary>
+    public bool IsCurrentContext { get; init; }
+
+    /// <summary>
     /// The one demo context. Named so that nothing about it reads like a real
     /// cluster — and so <c>ClusterEnvironments.Classify</c> lands it on
     /// <see cref="ClusterEnvironment.Development"/> rather than anywhere near

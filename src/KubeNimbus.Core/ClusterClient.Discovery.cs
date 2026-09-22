@@ -18,42 +18,154 @@ public sealed partial class ClusterClient
     /// </summary>
     public async Task<IReadOnlyList<ResourceDescriptor>> DiscoverResourcesAsync(CancellationToken cancellationToken = default)
     {
-        var result = new List<ResourceDescriptor>();
+        _discoveryComplete = true;
+        var endpoints = await Task.WhenAll(FetchDiscoveryAsync("api", cancellationToken),
+            FetchDiscoveryAsync("apis", cancellationToken)).ConfigureAwait(false);
+        using var core = endpoints[0];
+        using var grouped = endpoints[1];
+        var coreAggregated = ParseAggregatedDiscovery(core?.RootElement);
+        var groupedAggregated = ParseAggregatedDiscovery(grouped?.RootElement);
+        if (coreAggregated is not null && groupedAggregated is not null)
+            return [.. coreAggregated, .. groupedAggregated];
 
-        using (var coreDoc = await GetJsonDocumentAsync("api/v1", cancellationToken).ConfigureAwait(false))
-        {
-            result.AddRange(ParseResourceList(coreDoc.RootElement, group: ""));
-        }
-
-        using var groupsDoc = await GetJsonDocumentAsync("apis", cancellationToken).ConfigureAwait(false);
-        if (!groupsDoc.RootElement.TryGetProperty("groups", out var groups) || groups.ValueKind != JsonValueKind.Array)
-        {
-            return result;
-        }
-
-        foreach (var group in groups.EnumerateArray())
-        {
-            var groupName = group.TryGetProperty("name", out var n) ? n.GetString() : null;
-            var version = PreferredVersion(group);
-            if (groupName is null || version is null)
+        var coreTask = coreAggregated is not null
+            ? Task.FromResult(coreAggregated)
+            : FetchResourceListAsync("api/v1", "", false, cancellationToken);
+        List<(string Group, string Version)> groupVersions = [];
+        // Reuse the legacy response when negotiation fell back to APIGroupList.
+        using var legacyGroups = groupedAggregated is null
+            && (grouped is null || IsAggregated(grouped.RootElement))
+            ? await GetJsonDocumentAsync("apis", cancellationToken).ConfigureAwait(false) : null;
+        var groupRoot = legacyGroups?.RootElement ?? grouped?.RootElement;
+        if (groupedAggregated is null && groupRoot is { } root
+            && root.TryGetProperty("groups", out var groups) && groups.ValueKind == JsonValueKind.Array)
+            foreach (var group in groups.EnumerateArray())
             {
-                continue;
+                var groupName = group.TryGetProperty("name", out var n) ? n.GetString() : null;
+                var version = PreferredVersion(group);
+                if (groupName is not null && version is not null) groupVersions.Add((groupName, version));
             }
 
+        // One request per API group, issued concurrently. These used to go out one after
+        // another, which made connect time scale with round-trip time × group count: a
+        // cluster running cert-manager, Istio and Argo serves 50+ groups, so at 100 ms
+        // to a distant API server the sidebar — and the first pod list, which waits on
+        // it — took five seconds that were nothing but queueing. The bound keeps a
+        // 100-group cluster from opening 100 connections at once; kubectl's own
+        // discovery client fans out the same way.
+        using var gate = new SemaphoreSlim(MaxConcurrentDiscoveryRequests);
+        var groupTasks = groupVersions.Select(async gv =>
+        {
+            await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                using var resDoc = await GetJsonDocumentAsync($"apis/{groupName}/{version}", cancellationToken).ConfigureAwait(false);
-                result.AddRange(ParseResourceList(resDoc.RootElement, groupName));
+                return await FetchResourceListAsync(
+                    $"apis/{gv.Group}/{gv.Version}", gv.Group, tolerateFailure: true, cancellationToken).ConfigureAwait(false);
             }
-            catch (HttpRequestException)
+            finally
             {
-                // A group can vanish between listing and querying (webhook-backed
-                // aggregated APIs); skip it rather than fail the whole catalog.
+                gate.Release();
             }
+        }).ToArray();
+
+        var result = new List<ResourceDescriptor>(await coreTask.ConfigureAwait(false));
+
+        // Awaited in the order the server listed the groups, so the catalog's order is
+        // as stable as it was when the requests were sequential.
+        foreach (var descriptors in await Task.WhenAll(groupTasks).ConfigureAwait(false))
+        {
+            result.AddRange(descriptors);
         }
 
+        if (groupedAggregated is not null) result.AddRange(groupedAggregated);
         return result;
     }
+
+    /// <summary>
+    /// How many group discovery requests may be in flight at once. High enough that a
+    /// typical cluster's groups all go out in two or three waves, low enough not to look
+    /// like a burst to an API server's priority-and-fairness limits.
+    /// </summary>
+    internal const int MaxConcurrentDiscoveryRequests = 16;
+
+    private async Task<IReadOnlyList<ResourceDescriptor>> FetchResourceListAsync(
+        string path, string group, bool tolerateFailure, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var doc = await GetJsonDocumentAsync(path, cancellationToken).ConfigureAwait(false);
+
+            // Materialized before the document is disposed: ParseResourceList is lazy
+            // and reads JsonElements that die with it.
+            return [.. ParseResourceList(doc.RootElement, group)];
+        }
+        catch (HttpRequestException) when (tolerateFailure)
+        {
+            _discoveryComplete = false;
+            // A group can vanish between listing and querying (webhook-backed
+            // aggregated APIs); skip it rather than fail the whole catalog.
+            return [];
+        }
+    }
+
+    private bool _discoveryComplete;
+    internal const string DiscoveryAccept =
+        "application/json;g=apidiscovery.k8s.io;v=v2;as=APIGroupDiscoveryList," +
+        "application/json;g=apidiscovery.k8s.io;v=v2beta1;as=APIGroupDiscoveryList,application/json";
+
+    private async Task<JsonDocument?> FetchDiscoveryAsync(string path, CancellationToken ct)
+    {
+        using var response = await SendRequestAsync(HttpMethod.Get, path, null,
+            HttpCompletionOption.ResponseContentRead, ct, DiscoveryAccept).ConfigureAwait(false);
+        if (response.StatusCode is System.Net.HttpStatusCode.NotFound or System.Net.HttpStatusCode.NotAcceptable)
+            return null;
+        await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+    }
+
+    private static bool IsAggregated(JsonElement root) =>
+        root.TryGetProperty("kind", out var kind) && kind.GetString() == "APIGroupDiscoveryList";
+
+    /// <summary>Null means legacy or stale discovery: query the individual group endpoints.</summary>
+    internal static IReadOnlyList<ResourceDescriptor>? ParseAggregatedDiscovery(JsonElement? document)
+    {
+        if (document is not { } root || !IsAggregated(root)
+            || !root.TryGetProperty("items", out var groups) || groups.ValueKind != JsonValueKind.Array) return null;
+        var result = new List<ResourceDescriptor>();
+        foreach (var group in groups.EnumerateArray())
+        {
+            var name = group.TryGetProperty("metadata", out var metadata) && metadata.TryGetProperty("name", out var n)
+                ? n.GetString() ?? "" : "";
+            if (!group.TryGetProperty("versions", out var versions) || versions.GetArrayLength() == 0) continue;
+            // The server sorts versions in preference order, matching preferredVersion in legacy discovery.
+            var version = versions[0];
+            if (!version.TryGetProperty("freshness", out var freshness) || freshness.GetString() != "Current") return null;
+            if (!version.TryGetProperty("resources", out var resources)) return null;
+            foreach (var resource in resources.EnumerateArray())
+            {
+                var plural = resource.GetProperty("resource").GetString() ?? "";
+                var verbs = Strings(resource, "verbs");
+                if (plural.Length == 0 || plural.Contains('/') || !verbs.Contains("list")) continue;
+                if (!resource.TryGetProperty("responseKind", out var responseKind)
+                    || !responseKind.TryGetProperty("kind", out var kind) || string.IsNullOrEmpty(kind.GetString())) continue;
+                result.Add(new ResourceDescriptor(name, version.GetProperty("version").GetString()!,
+                    kind.GetString()!, plural,
+                    resource.TryGetProperty("singularResource", out var singular) ? singular.GetString() ?? plural : plural,
+                    resource.TryGetProperty("scope", out var scope) && scope.GetString() == "Namespaced",
+                    Strings(resource, "shortNames"), Strings(resource, "categories"))
+                {
+                    Verbs = verbs,
+                    Subresources = resource.TryGetProperty("subresources", out var subs)
+                        ? subs.EnumerateArray().Select(sub => sub.GetProperty("subresource").GetString() ?? "").ToArray() : [],
+                });
+            }
+        }
+        return result;
+    }
+
+    private static string[] Strings(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var values) && values.ValueKind == JsonValueKind.Array
+            ? values.EnumerateArray().Select(v => v.GetString() ?? "").ToArray() : [];
 
     private static string? PreferredVersion(JsonElement group)
     {

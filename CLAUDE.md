@@ -686,6 +686,16 @@ There are **two** persisted files and the split is not arbitrary:
 - **`workspace.json`** (`KubeNimbus.App/WorkspaceStore.cs`) is *session* — what the
   window looked like: open tabs, pinned and recent contexts, environment overrides.
 
+Each tab snapshot also carries the **kind and namespace** it was showing, and the
+workspace the index of the tab in front, so a restart lands where you left off instead
+of on Pods in all namespaces on every tab. With nothing saved, a tab opens on the
+kubeconfig context's own `namespace` (what kubectl would use), and the first launch
+opens the chain's `current-context` rather than whichever context the merge listed
+first. `ClusterTabViewModel.ApplyInitialView` is the one place that decides, and
+`ClusterTabInitialViewTests` pins it — including that a saved namespace missing from a
+namespace list that *was* read is not opened (it was deleted), while one missing because
+listing was refused by RBAC is added and selected.
+
 The test: deleting the workspace should lose your tabs and nothing else; deleting the
 settings should reset your preferences and not close your clusters. Theme,
 `IsAdvancedView` and `KubeconfigPaths` used to be in the workspace, on the wrong side
@@ -727,6 +737,26 @@ should not learn it twice. Settings the shell already owns (`IsAdvancedView`,
 `IsSidebarVisible`) are *proxied* through `MainWindowViewModel`, never duplicated, so
 the page and the command bar's own toggles cannot disagree while both are on screen.
 
+## Workload detail and namespace navigation
+
+Double-click opens Deployments, StatefulSets and DaemonSets in
+`WorkloadDetailTabViewModel`. The pane shows replica counts, controller progress,
+conditions, events and a live pod list. The pod watch uses the workload selector,
+including match expressions. Closing the pane cancels its requests and watch.
+The workload status follows its list row; Refresh also reads the object directly.
+
+Double-click, Enter and L open a selected pod. S opens its shell.
+E opens the workload YAML. The Actions menu offers scale and rollout restart
+through the existing confirmation strip. Each action retains the original row,
+descriptor and cluster, even after the main list changes. Owner navigation uses
+the same detail routing. Events use the object UID when available.
+
+The namespace picker filters on input and commits only on Enter or a row click.
+Ctrl/Cmd+Shift+N opens it and focuses its search field. Escape closes it.
+Five recent namespaces appear first after All namespaces. `workspace.json`
+persists them per kubeconfig path and context. Deleted namespaces stay out of
+its results. The existing palette entries still work.
+
 ## The command catalog (shortcuts, palette, cheat sheet, docs)
 
 `KubeNimbus.Core/Commands/` is the single source for every command and documented
@@ -738,7 +768,7 @@ view-model commands, `ShortcutsViewModel` builds the F1 sheet, `CommandTip` buil
 tooltips. It replaced a hand-written `Hotkeys.CheatSheet` array plus gestures typed
 into four places.
 
-Six things worth keeping:
+Seven things worth keeping:
 
 1. **Core stays UI-free** (rule 1), so `CommandKey` is a local enum rather than
    Avalonia's `Key` and `CommandBindings.ToKey` owns the one mapping. That is also why
@@ -772,7 +802,19 @@ Six things worth keeping:
    pane's Copy/Paste pair is `Control | Shift` for the far side of the same argument —
    the terminal owns plain Ctrl+C, so the clipboard has to move up a modifier, exactly
    as it does in every terminal emulator.
-6. **The docs page is a golden file.** `ShortcutDocsTests` fails on any drift;
+6. **The list has single-letter row keys, k9s's own.** L logs (a pod's, or every pod a
+   workload owns), P previous logs, S shell on a pod / scale on anything with a `scale`
+   subresource, F port-forward, E edit YAML, R rollout restart, Delete, and `/` to search.
+   They are `CommandScope.List` rows in the catalog, matched by `ClusterTabView
+   .OnGridKeyDown` through `CommandBindings.Matches`, and each resolves to the *same*
+   command the context menu and the palette run — so a key can never do something the
+   menu could not, and the mutating ones arm the confirm strip (UI rule 17) rather than
+   acting. Bare letters are safe only because the grid is read-only and owns them;
+   never make one a window binding, where it would fire while typing into a text box.
+   The menu's `InputGesture` captions are display-only and have to be kept in step by
+   hand. They exist because every action here used to be right-click, read the menu,
+   click — three motions for the thing the app is opened to do.
+7. **The docs page is a golden file.** `ShortcutDocsTests` fails on any drift;
    `KUBENIMBUS_UPDATE_DOCS=1` regenerates it. A shortcut reference that can silently
    fall behind the app is worse than none.
 
@@ -923,21 +965,27 @@ the App layer.
 
 ## Discovery, server-side apply, events, exec, port-forward
 
-- **Discovery** (`ClusterClient.Discovery.cs`) walks `/api` and `/apis` with
-  raw `JsonDocument` parsing (same reasoning as watch frames — no source-gen
-  model needed for a shape this simple) into `ResourceDescriptor` records.
-  `SidebarGrouping` (App layer) buckets each descriptor into
-  Workloads/Network/Config/Storage/CRDs by Kind — an unrecognized API group
-  falls through to CRDs automatically, nothing is hardcoded.
-  A descriptor also carries the server's **`Subresources` and `Verbs`** for that
-  kind. Subresources arrive as sibling entries in the same array
-  (`deployments/scale`) in no guaranteed order, so they are collected in a first
-  pass and attached in a second; they are still never browsable kinds of their
-  own. This is the evidence every capability check uses — see "Mutating workload
-  actions" below. `Verbs` empty means **not known**, not "none"
-  (`ResourceDescriptor.AllowsVerb` answers true): descriptors built by hand — the
-  well-known statics, the demo catalog, fixtures — carry none, and reading that as
-  a prohibition would silently disable a feature everywhere except a live cluster.
+- **Discovery** (`ClusterClient.Discovery.cs`) negotiates aggregated discovery at
+  `/api` and `/apis`, preferring `apidiscovery.k8s.io/v2`, then `v2beta1`.
+  Current aggregated responses supply the catalog in two requests. Legacy or stale
+  responses use the bounded per-group fallback (16 requests at once).
+  Descriptors preserve verbs, subresources, short names and namespace scope.
+  The first advertised version is the preferred version. Raw `JsonDocument`
+  parsing keeps this path compatible with NativeAOT.
+  `DiscoveryCache` stores only descriptors in the local app-data directory.
+  Its key hashes the server URL, context, user name and kubeconfig path.
+  Entries expire after six hours or a server-version change. Corrupt files are
+  cache misses. Partial discovery results never replace the disk cache.
+  The sidebar context menu offers **Refresh resource catalog**, which bypasses
+  the cache. `DiscoveryHttpTests` covers negotiation, fallback concurrency,
+  warm connections and version invalidation.
+  `ConnectAsync` first reads the version to resolve exec credentials once.
+  It then starts discovery, namespaces and the metrics probe together.
+  After namespace resolution, the initial Pods watch starts with the known
+  core/v1 descriptor. Discovery replaces the temporary sidebar entry without
+  restarting the watch or clearing rows. Saved non-Pod kinds wait for discovery.
+  Discovery errors leave an early Pods watch connected and show a warning.
+  Restored cluster tabs also connect in parallel.
   Discovery says nothing about how a kind should be *printed*, which is why a CRD's
   own columns come from a separate GET of the CustomResourceDefinition — see "CRD
   printer columns" below.

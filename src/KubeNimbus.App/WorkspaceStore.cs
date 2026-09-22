@@ -5,7 +5,21 @@ namespace KubeNimbus.App;
 
 /// <summary>One remembered cluster tab. Only a context name + kubeconfig path — re-resolved
 /// through the kubeconfig chain on restore, never a credential (CLAUDE.md rule #4).</summary>
-public sealed record TabSnapshot(string ContextName, string KubeconfigPath);
+/// <param name="KindKey">
+/// The kind the tab was showing, as <c>&lt;group&gt;/&lt;Kind&gt;</c>
+/// (<see cref="GridLayoutStore.KeyFor"/>). Null in a file from an older build, and then
+/// the tab opens on Pods as it always did.
+/// </param>
+/// <param name="Namespace">
+/// The namespace the tab was showing (<see cref="ViewModels.ClusterTabViewModel.AllNamespaces"/>
+/// included). Null in an older file, which falls back to the context's own namespace.
+/// </param>
+/// <remarks>
+/// The kind and namespace are what turn a restart into "back where I was" rather than
+/// "Pods, all namespaces, pick again" — two or three clicks on every launch, on every
+/// tab, which is exactly the tax the fast start was supposed to remove.
+/// </remarks>
+public sealed record TabSnapshot(string ContextName, string KubeconfigPath, string? KindKey = null, string? Namespace = null);
 
 /// <summary>
 /// Persisted shell state. Everything added after the initial (Theme, Tabs) pair is
@@ -55,7 +69,15 @@ public sealed record WorkspaceSettings(
     /// Nullable with a null default like everything else added after
     /// <c>(Theme, Tabs)</c>.
     /// </summary>
-    Dictionary<string, GridLayout>? GridLayouts = null);
+    Dictionary<string, GridLayout>? GridLayouts = null,
+    /// <summary>
+    /// Which tab was in front, by index into <see cref="Tabs"/>. Restoring every tab and
+    /// then showing the last one in the strip rather than the one being worked in is a
+    /// click on every launch. Out-of-range (a tab whose context has since gone) falls
+    /// back to the first.
+    /// </summary>
+    int? SelectedTabIndex = null,
+    Dictionary<string, List<string>>? RecentNamespaces = null);
 
 [JsonSerializable(typeof(WorkspaceSettings))]
 internal sealed partial class WorkspaceJsonContext : JsonSerializerContext;
@@ -120,6 +142,7 @@ public static class WorkspaceStore
         IsAdvancedView = settings.IsAdvancedView ?? false,
         KubeconfigPaths = settings.KubeconfigPaths ?? [],
         GridLayouts = settings.GridLayouts ?? [],
+        RecentNamespaces = settings.RecentNamespaces ?? [],
     };
 
     public static void Save(WorkspaceSettings settings)

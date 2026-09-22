@@ -172,6 +172,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         // persist: false — this is reading a choice back, not making one, and writing it
         // straight back would turn every kind ever opened into a stored layout.
         SetSort(layout.SortColumn, layout.SortDescending, persist: false);
+        RaiseViewStateChanged();
     }
 
     /// <summary>
@@ -996,9 +997,46 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [RelayCommand]
     private void ToggleInspectorMaximized() => IsInspectorMaximized = !IsInspectorMaximized;
 
+    /// <summary>
+    /// The kind to open on after connecting, as <c>&lt;group&gt;/&lt;Kind&gt;</c> — the one
+    /// the tab was showing when the workspace was saved. Null (or a kind this cluster no
+    /// longer serves) opens on Pods.
+    /// </summary>
+    public string? RestoreKindKey { get; init; }
+
+    /// <summary>
+    /// The namespace to open on after connecting. Null falls back to the kubeconfig
+    /// context's own <c>namespace</c>, which is what kubectl would use, and then to all
+    /// namespaces.
+    /// </summary>
+    public string? RestoreNamespace { get; init; }
+
+    /// <summary>The selected kind as a workspace key; see <see cref="RestoreKindKey"/>.</summary>
+    public string? ViewKindKey => SelectedKind?.Descriptor is { } descriptor ? GridLayoutStore.KeyFor(descriptor) : null;
+
+    /// <summary>
+    /// Raised when the kind or namespace changes after the tab has settled, so the shell
+    /// can save the workspace. Not raised during connect, where both are set by the
+    /// restore itself and writing them straight back would be noise.
+    /// </summary>
+    public event EventHandler? ViewStateChanged;
+
+    private bool _viewStateReady;
+
+    private void RaiseViewStateChanged()
+    {
+        if (_viewStateReady)
+        {
+            ViewStateChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
     public ClusterTabViewModel(ClusterContext context)
     {
         Context = context;
+        _recentNamespaces = WorkspaceStore.Load().RecentNamespaces?.GetValueOrDefault(NamespaceHistoryKey) ?? [];
+        NamespaceOptions.CollectionChanged += (_, _) => RebuildNamespaceChoices();
+        RebuildNamespaceChoices();
 
         // The list renders VisibleRows; everything that produces rows writes to Rows.
         // Subscribing here rather than filtering at each producer is what keeps the
@@ -1024,23 +1062,31 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         try
         {
             var client = ClusterClient.Connect(Context);
+
+            // First and alone: it is the reachability check, and it is the request that
+            // runs an exec credential plugin. Everything after it reuses that token, so
+            // the fan-out below cannot start a dozen `aws eks get-token`s at once.
             var version = await client.GetServerVersionAsync();
             Client = client;
             IsConnected = true;
             Status = $"Connected — Kubernetes {version.GitVersion}.";
 
-            await BuildSidebarAsync();
-            await RefreshNamespacesAsync();
-            await DetectMetricsApiAsync();
-
-            var defaultKind = SidebarSections
-                .FirstOrDefault(s => s.Title == "Workloads")?.Kinds
-                .FirstOrDefault(k => k.Descriptor.Kind == "Pod")
-                ?? SidebarSections.SelectMany(s => s.Kinds).FirstOrDefault();
-            if (defaultKind is not null)
+            var sidebar = BuildSidebarAsync();
+            var namespaces = RefreshNamespacesAsync();
+            var metrics = DetectMetricsApiAsync();
+            await namespaces;
+            var startedPods = StartInitialPods();
+            try
             {
-                SelectKind(defaultKind);
+                await Task.WhenAll(sidebar, metrics);
+                if (startedPods) ReconcileInitialPods();
+                else ApplyInitialView(fallbackNamespace: Context.Namespace);
             }
+            catch (Exception ex) when (startedPods)
+            {
+                ConnectionWarning = $"Could not load the resource catalog: {ex.Message}";
+            }
+
         }
         catch (Exception ex)
         {
@@ -1094,24 +1140,108 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             NamespaceOptions.Add(ns);
         }
 
-        // Set before the kind, so the single RestartWatch that SelectKind triggers is
-        // the one that populates the rows — assigning it afterwards would clear them
-        // and latch IsListEmpty, the ordering gotcha CLAUDE.md documents for the
-        // screenshot fixtures.
-        SelectedNamespace = "payments";
-
         _metricsApiAvailable = true;
 
-        var defaultKind = SidebarSections
+        ApplyInitialView(fallbackNamespace: "payments");
+    }
+
+    /// <summary>
+    /// Where a freshly connected tab lands: the kind and namespace it was left on when
+    /// the workspace was saved, else the context's own namespace and Pods.
+    ///
+    /// <para>
+    /// The namespace is set before the kind, so the single RestartWatch that SelectKind
+    /// triggers is the one that populates the rows — assigning it afterwards would clear
+    /// them and latch IsListEmpty, the ordering gotcha CLAUDE.md documents for the
+    /// screenshot fixtures.
+    /// </para>
+    /// </summary>
+    internal void ApplyInitialView(string? fallbackNamespace)
+    {
+        var @namespace = RestoreNamespace ?? fallbackNamespace;
+        if (!string.IsNullOrEmpty(@namespace))
+        {
+            // A namespace the list does not contain is still a real answer when the list
+            // itself was refused: plenty of RBAC setups grant a namespace but not the
+            // right to enumerate namespaces, and the context's own namespace is exactly
+            // how kubectl copes with that. When the list *was* read, a name missing from
+            // it has been deleted, and opening on it would be an empty list that looks
+            // like a broken watch — so it is only added in the first case.
+            if (!NamespaceOptions.Contains(@namespace) && NamespaceOptions.Count <= 1 && !IsDemo)
+            {
+                NamespaceOptions.Add(@namespace);
+            }
+
+            if (NamespaceOptions.Contains(@namespace))
+            {
+                SelectedNamespace = @namespace;
+            }
+        }
+
+        var kinds = SidebarSections.SelectMany(s => s.Kinds).Where(k => !k.IsRecentEntry).ToList();
+        var kind = RestoreKindKey is { } key
+            ? kinds.FirstOrDefault(k => GridLayoutStore.KeyFor(k.Descriptor) == key)
+            : null;
+        kind ??= SidebarSections
             .FirstOrDefault(s => s.Title == "Workloads")?.Kinds
             .FirstOrDefault(k => k.Descriptor.Kind == "Pod")
-            ?? SidebarSections.SelectMany(s => s.Kinds).FirstOrDefault();
-        if (defaultKind is not null)
+            ?? kinds.FirstOrDefault();
+        if (kind is not null)
         {
-            SelectKind(defaultKind);
+            SelectKind(kind);
+        }
+
+        _viewStateReady = true;
+    }
+
+    // Pods has a stable core/v1 endpoint. A saved non-Pod kind still waits for discovery.
+    internal bool StartInitialPods()
+    {
+        if (RestoreKindKey is not (null or "/Pod")) return false;
+        if (!SidebarSections.SelectMany(s => s.Kinds).Any(k => k.Descriptor is { Group: "", Kind: "Pod" }))
+        {
+            var section = new SidebarSectionViewModel("Workloads");
+            section.Kinds.Add(new SidebarKindViewModel(ResourceDescriptor.Pods, "workload"));
+            SidebarSections.Insert(0, section);
+        }
+        ApplyInitialView(Context.Namespace);
+        return true;
+    }
+
+    internal void ReconcileInitialPods()
+    {
+        // Assigning the discovered descriptor refreshes capabilities but does not call
+        // SelectKind: that would clear rows and open the same watch a second time.
+        if (SelectedKind is not { } selected) return;
+        var replacement = SidebarSections.SelectMany(s => s.Kinds).FirstOrDefault(k => !k.IsRecentEntry
+            && k.Descriptor.Group == selected.Descriptor.Group && k.Descriptor.Kind == selected.Descriptor.Kind);
+        if (replacement is not null)
+        {
+            selected.IsSelected = false;
+            replacement.IsSelected = true;
+            SelectedKind = replacement;
+        }
+        if (!IsFleetView && !AreMetricsVisible && _metricsApiAvailable && Client is { } client
+            && _watchCts is { } cts && IsMeteredKind(SelectedKind.Descriptor))
+        {
+            AreMetricsVisible = true;
+            StartMetricsPolling(SelectedKind.Descriptor, [("", client)],
+                SelectedNamespace == AllNamespaces ? null : SelectedNamespace, cts.Token);
         }
     }
 
+    [RelayCommand]
+    private async Task RefreshCatalogAsync()
+    {
+        if (Client is null) return;
+        try
+        {
+            await Client.GetResourceCatalogAsync(forceRefresh: true);
+            await BuildSidebarAsync();
+            ReconcileInitialPods();
+        }
+        catch (Exception ex) { ConnectionWarning = $"Could not refresh the resource catalog: {ex.Message}"; }
+    }
     private async Task BuildSidebarAsync()
     {
         if (Client is null)
@@ -1703,17 +1833,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             return;
         }
 
-        var key = YamlEditorTabViewModel.KeyFor("", descriptor, resolved.Namespace, resolved.Name);
-        if (InspectorTabs.FirstOrDefault(t => t.Key == key) is { } open)
-        {
-            open.IsPreview = false;
-            SelectedInspectorTab = open;
-            return;
-        }
-
-        AddInspectorTab(
-            new YamlEditorTabViewModel(null, descriptor, resolved.Namespace, resolved.Name, resolved.ToYaml()),
-            replacePreview: false);
+        _ = OpenRowAsync(new ResourceRowViewModel(resolved), preview: false, descriptor);
     }
 
     /// <summary>
@@ -1735,6 +1855,9 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     partial void OnSelectedNamespaceChanged(string value)
     {
+        RememberNamespace(value);
+        RaiseViewStateChanged();
+
         if (IsHelmView)
         {
             _ = RefreshHelmReleasesAsync();
@@ -2689,16 +2812,18 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// descriptor (its cluster's, in fleet mode — an action that resolved either from the
     /// tab would fire at the wrong cluster).
     /// </summary>
-    private RowActionViewModel? ArmRowAction(RowActionKind kind)
+    private RowActionViewModel? ArmRowAction(RowActionKind kind, ResourceRowViewModel? targetRow = null, ResourceDescriptor? targetDescriptor = null, ClusterClient? targetClient = null)
     {
-        if (SelectedRow is not { } row || DescriptorFor(row) is not { } descriptor)
+        var row = targetRow ?? SelectedRow;
+        var descriptor = targetDescriptor ?? (row is null ? null : DescriptorFor(row));
+        if (row is null || descriptor is null)
         {
             return null;
         }
 
         // Null only on the demo cluster, which is what the strip reads as "not available
         // here" — same shape as the exec and port-forward panes.
-        var client = ClientFor(row);
+        var client = targetRow is not null ? targetClient : ClientFor(row);
         if (client is null && !IsDemo)
         {
             return null;
@@ -2786,16 +2911,16 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         return ports;
     }
 
-    private async Task OpenRowAsync(ResourceRowViewModel? row, bool preview)
+    private async Task OpenRowAsync(ResourceRowViewModel? row, bool preview, ResourceDescriptor? knownDescriptor = null, ClusterClient? knownClient = null)
     {
         // In fleet mode the row's own cluster owns it — using this tab's client here
         // would open (and later apply/delete) against the wrong cluster.
-        if (row is null || DescriptorFor(row) is not { } descriptor)
+        if (row is null || (knownDescriptor ?? DescriptorFor(row)) is not { } descriptor)
         {
             return;
         }
 
-        var client = ClientFor(row);
+        var client = knownClient ?? ClientFor(row);
         if (client is null && !IsDemo)
         {
             return;
@@ -2815,6 +2940,30 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         // detail pane, not its manifest: conditions, taints and how full it is are what
         // the double-click is for, and the YAML is one context-menu item away as it is
         // for a pod.
+        if (WorkloadDetailTabViewModel.Supports(descriptor))
+        {
+            var workloadKey = WorkloadDetailTabViewModel.KeyFor(row.ClusterName, descriptor, row.Namespace, row.Name);
+            if (InspectorTabs.FirstOrDefault(t => t.Key == workloadKey) is { } opened)
+            {
+                if (!preview) opened.IsPreview = false;
+                SelectedInspectorTab = opened;
+                return;
+            }
+            var detail = new WorkloadDetailTabViewModel(client, descriptor, row, AddInspectorTab, async kind =>
+            {
+                if (ArmRowAction(kind, row, descriptor, client) is { } action && kind == RowActionKind.Scale)
+                    await action.LoadCurrentScaleAsync();
+            }, (owner, ns) => OpenOwnerAsync(owner, ns, row.ClusterName, client), key =>
+            {
+                if (InspectorTabs.FirstOrDefault(t => t.Key == key) is not { } existingTab) return false;
+                existingTab.IsPreview = false;
+                SelectedInspectorTab = existingTab;
+                return true;
+            }) { IsPreview = preview };
+            AddInspectorTab(detail, replacePreview: preview);
+            return;
+        }
+
         var isPod = descriptor is { Kind: "Pod", Group: "" };
         var isNode = NodeActions.IsNodeKind(descriptor);
         var key = (isPod, isNode) switch
@@ -2840,11 +2989,11 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             (true, _) => new PodDetailTabViewModel(
                 client, row, AddInspectorTab,
                 // Bound to this row's cluster so owner navigation stays on it.
-                (owner, namespaceHint) => OpenOwnerAsync(owner, namespaceHint, row.ClusterName),
+                (owner, namespaceHint) => OpenOwnerAsync(owner, namespaceHint, row.ClusterName, client),
                 row.ClusterName),
             (_, true) => new NodeDetailTabViewModel(
                 client, row, PodDescriptorFor(row),
-                (owner, namespaceHint) => OpenOwnerAsync(owner, namespaceHint, row.ClusterName),
+                (owner, namespaceHint) => OpenOwnerAsync(owner, namespaceHint, row.ClusterName, client),
                 row.ClusterName),
             _ => new YamlEditorTabViewModel(
                 client, descriptor, row.Namespace, row.Name, row.Resource.ToYaml(), row.ClusterName),
@@ -2877,7 +3026,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// starting object came from when navigating out of an aggregated fleet row —
     /// an owner chain that hopped clusters mid-way would be nonsense.
     /// </summary>
-    private async Task OpenOwnerAsync(OwnerRef owner, string? namespaceHint, string clusterName = "")
+    private async Task OpenOwnerAsync(OwnerRef owner, string? namespaceHint, string clusterName = "", ClusterClient? knownClient = null)
     {
         if (IsDemo)
         {
@@ -2885,7 +3034,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             return;
         }
 
-        if (ClientForCluster(clusterName) is not { } client)
+        if ((knownClient ?? ClientForCluster(clusterName)) is not { } client)
         {
             return;
         }
@@ -2905,19 +3054,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             return;
         }
 
-        var key = descriptor.Kind == "Pod"
-            ? PodDetailTabViewModel.KeyFor(clusterName, resolved.Namespace, resolved.Name)
-            : YamlEditorTabViewModel.KeyFor(clusterName, descriptor, resolved.Namespace, resolved.Name);
-        var existing = InspectorTabs.FirstOrDefault(t => t.Key == key);
-        if (existing is not null)
-        {
-            SelectedInspectorTab = existing;
-            return;
-        }
-
-        var tab = new YamlEditorTabViewModel(
-            client, descriptor, resolved.Namespace, resolved.Name, resolved.ToYaml(), clusterName);
-        AddInspectorTab(tab, replacePreview: false);
+        await OpenRowAsync(new ResourceRowViewModel(resolved, clusterName), preview: false, descriptor, client);
     }
 
     /// <summary>

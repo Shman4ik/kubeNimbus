@@ -182,6 +182,30 @@ internal static class ClusterTabScenarios
     /// sample-data banner above it. The banner is the thing to look at — nobody may
     /// mistake this screen for their own cluster.
     /// </summary>
+    public static ClusterTabViewModel WorkloadDetail(int selectedTab = 0)
+    {
+        var tab = DemoTab();
+        var kind = tab.SidebarSections.SelectMany(s => s.Kinds)
+            .First(k => k.Descriptor is { Group: "apps", Kind: "Deployment" });
+        tab.SelectKindCommand.Execute(kind);
+        tab.SelectedRow = tab.Rows.First();
+        tab.OpenSelectedCommand.Execute(null);
+        if (tab.SelectedInspectorTab is WorkloadDetailTabViewModel detail)
+        {
+            detail.SelectedTabIndex = selectedTab;
+            detail.Conditions.Add(new("Available", "True", "MinimumReplicasAvailable", "Deployment has minimum availability."));
+            detail.Conditions.Add(new("Progressing", "True", "NewReplicaSetAvailable", "ReplicaSet has successfully progressed."));
+            using var document = JsonDocument.Parse("""
+                {"apiVersion":"v1","kind":"Event","metadata":{"name":"workload-event","namespace":"payments"},
+                "type":"Normal","reason":"ScalingReplicaSet","message":"Scaled up replica set to 3","count":1,
+                "involvedObject":{"kind":"Deployment","name":"payment-service-report-generator","namespace":"payments"}}
+                """);
+            detail.Events.Add(new EventRowViewModel(new DynamicResource(document.RootElement.Clone())));
+            detail.EventsStatus = "1 event";
+        }
+        return tab;
+    }
+
     public static ClusterTabViewModel DemoList() => DemoTab();
 
     /// <summary>Demo pod detail — logs, containers and events, all from the shipped dataset.</summary>
