@@ -1029,6 +1029,26 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 () => fleetable.IsFleetView = fleetTarget);
         }
 
+        // Unhealthy only. Offered to switch on where the kind has a health verdict to
+        // filter by, and to switch off wherever it is on — including a kind where the
+        // disabled chip cannot, so the palette is always a way out of the mode. Explicit
+        // target, captured now, for the same reason as the rows above.
+        if (SelectedTab is { IsResourceListVisible: true } healthTab
+            && (healthTab.CanFilterUnhealthy || healthTab.IsUnhealthyOnly))
+        {
+            var descriptor = CommandCatalog.Get(CommandId.ToggleUnhealthyOnly);
+            var unhealthyTarget = !healthTab.IsUnhealthyOnly;
+            var kind = healthTab.SelectedKind?.DisplayName ?? "rows";
+            var shortcut = descriptor.ShortcutLabel(Hotkeys.PrimaryLabel);
+            yield return new PaletteItem(
+                unhealthyTarget ? descriptor.Title : "Show every row, healthy ones too",
+                unhealthyTarget
+                    ? $"{kind} · warnings and errors only · {shortcut} in the list"
+                    : $"{kind} · leave unhealthy-only · {shortcut} in the list",
+                descriptor.IconKey,
+                () => healthTab.IsUnhealthyOnly = unhealthyTarget);
+        }
+
         // Access review is a deliberate errand, not something you stumble into — it
         // rides the advanced view along with the rest of the specialist surface.
         // The selected row's actions, mirroring the row context menu. The palette had

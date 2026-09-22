@@ -432,6 +432,16 @@ Three rules about it:
      filtered out of, and offers the way back. The filter is cleared when the selected
      kind changes — carrying "nginx" from Pods to ConfigMaps lands on an empty list
      that looks like a broken watch.
+   - **Unhealthy only is a second narrowing through the same predicate, and it does not
+     break "no status matching".** The chip beside the box (`IsUnhealthyOnly`, Ctrl+Z on
+     the list) keeps rows whose computed `StatusHealth` is warn or error. It matches no
+     text — it reads the verdict that colours the pill — so "Running" still matches
+     nothing. Unlike the name, health changes under an object on a Modified that updates
+     the row *in place*, which never reaches `Rows.CollectionChanged`; `RefreshRowVisibility`
+     re-evaluates the row on every Modified, and `ClusterTabHealthFilterTests` pins both
+     directions. It is a *mode* (kept across kinds, never persisted) where the text is a
+     question (cleared), and its empty state is a third one. Full rules in
+     [Unhealthy only](docs/engineering/unhealthy-only.md).
 14. **A `DataGridCell` needs a gutter on both sides.** Fluent's cell padding is
    left-only, which is invisible while every column is left-aligned and actively
    *misleading* as soon as one isn't. The resource list's Memory column is
@@ -575,6 +585,7 @@ Each feature's design rules, and the incidents behind them, live in a page of th
 - [The cluster switcher and environment colours](docs/engineering/cluster-switcher.md) — Ctrl/Cmd+P switcher (flat list, ranking) and environment colours (biased toward production).
 - [CRD printer columns](docs/engineering/crd-printer-columns.md) — additionalPrinterColumns: lazy CRD GET, JSONPath subset, ten fixed XAML slots, Tag-based column identity.
 - [The resource grid is the reader's to re-cut](docs/engineering/resource-grid-resize-sort.md) — Column drag + header sort: sorts VisibleRows never Rows, maintained sort, per-kind layout in workspace.json.
+- [Unhealthy only: the list's second narrowing](docs/engineering/unhealthy-only.md) — Warn/error predicate over StatusHealth, per-Modified re-evaluation, kind gate, third empty state, list-scoped Ctrl+Z.
 - [An Auto DataGrid column ratchets, and only one grid can afford it](docs/engineering/datagrid-auto-columns.md) — Why the resource list has no Width=Auto columns (measured ratchet) and why Helm/Argo keep them.
 - [Mutating workload actions (scale, rollout restart, delete)](docs/engineering/workload-actions.md) — Scale / rollout restart / delete: merge patches, scale subresource, capability from discovery.
 - [Node operations (detail, cordon / uncordon, drain)](docs/engineering/node-operations.md) — Node detail, cordon/uncordon, drain: allocatable math, eviction plan table, partial-drain lifetime.

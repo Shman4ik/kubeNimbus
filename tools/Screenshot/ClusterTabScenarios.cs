@@ -899,6 +899,86 @@ internal static class ClusterTabScenarios
         return tab;
     }
 
+    /// <summary>
+    /// Unhealthy only, on the payments pod list: the CrashLoopBackOff worker and the
+    /// Pending fraud detector, and nothing else. Through the real property, so the
+    /// chip's checked state, the "2 of 8 unhealthy" caption and the rows are all what
+    /// the toggle produces.
+    /// </summary>
+    public static ClusterTabViewModel UnhealthyList()
+    {
+        var tab = BaseTab();
+        tab.IsUnhealthyOnly = true;
+        tab.SelectedRow = tab.VisibleRows.FirstOrDefault();
+        return tab;
+    }
+
+    /// <summary>
+    /// Unhealthy only over a namespace where every pod is fine — the good-news state,
+    /// which has to look like neither "no pods here" nor "nothing matches".
+    /// </summary>
+    public static ClusterTabViewModel UnhealthyListAllHealthy()
+    {
+        var tab = BaseTab(populateRows: false);
+        tab.SelectedNamespace = "kube-system";
+        foreach (var pod in FixtureData.Pods.Where(p => p.Namespace == "kube-system"))
+        {
+            tab.Rows.Add(new ResourceRowViewModel(pod));
+        }
+
+        tab.IsListLoading = false;
+        tab.IsUnhealthyOnly = true;
+        return tab;
+    }
+
+    /// <summary>The same mode over a partial fleet: filtering rows from every cluster
+    /// still in it, with the unreachable member still stated in the header.</summary>
+    public static ClusterTabViewModel UnhealthyFleetPartial()
+    {
+        var tab = FleetListPartial();
+        tab.IsUnhealthyOnly = true;
+        tab.SelectedRow = tab.VisibleRows.FirstOrDefault();
+        return tab;
+    }
+
+    /// <summary>
+    /// The mode left on while a kind with no health verdict is showing: the chip stays
+    /// checked but disabled (its tooltip says why), and the list is the whole list rather
+    /// than an always-empty one.
+    /// </summary>
+    public static ClusterTabViewModel UnhealthyUnavailable()
+    {
+        var tab = BaseTab(populateRows: false);
+        tab.IsUnhealthyOnly = true;
+        var configMaps = tab.SidebarSections.SelectMany(s => s.Kinds)
+            .First(k => k.Descriptor is { Group: "", Kind: "ConfigMap" });
+        foreach (var kind in tab.SidebarSections.SelectMany(s => s.Kinds))
+        {
+            kind.IsSelected = kind == configMaps;
+        }
+
+        tab.SelectedKind = configMaps;
+        foreach (var configMap in DemoData.ConfigMaps.Where(c => c.Namespace == "payments"))
+        {
+            tab.Rows.Add(new ResourceRowViewModel(configMap));
+        }
+
+        tab.IsListLoading = false;
+        return tab;
+    }
+
+    /// <summary>
+    /// Unhealthy only on the demo cluster's own pod list, reached through the production
+    /// connect path rather than a fixture — the half of the item's sandbox check a local
+    /// API-server-only cluster cannot give, since no pod there ever starts.
+    /// </summary>
+    public static ClusterTabViewModel DemoUnhealthy()
+    {
+        var tab = DemoTab();
+        tab.IsUnhealthyOnly = true;
+        return tab;
+    }
+
     public static ClusterTabViewModel EmptyNamespace()
     {
         var tab = BaseTab(populateRows: false);

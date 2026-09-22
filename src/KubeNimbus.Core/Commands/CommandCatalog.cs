@@ -271,6 +271,23 @@ public static class CommandCatalog
             Chord = new(CommandKey.Slash),
             Surfaces = SheetOnly,
         },
+        new()
+        {
+            Id = CommandId.ToggleUnhealthyOnly,
+            Title = "Show only unhealthy rows",
+            CheatTitle = "Show only what is unhealthy (warnings and errors)",
+            Category = CommandCategory.Resources,
+            Scope = CommandScope.List,
+            IconKey = "AlertCircleIconGeometry",
+            // k9s's "toggle faults" key, which is where most people choosing a
+            // Kubernetes GUI are coming from. List-scoped rather than a window binding
+            // because Ctrl+Z anywhere with a text box in it is Undo, and the YAML editor
+            // is one keystroke away; the read-only grid has nothing to undo. Literal Ctrl
+            // rather than the primary modifier for the same reason on macOS, where
+            // Cmd+Z is Undo in every application and Ctrl+Z is exactly k9s's key.
+            Chord = new(CommandKey.Z, LiteralCtrl),
+            Surfaces = PaletteAndSheet,
+        },
 
         // ----------------------------------------------------------------- Pods
         new()

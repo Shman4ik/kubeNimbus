@@ -809,6 +809,19 @@ public partial class ClusterTabView : UserControl
             FocusRowFilter();
             e.Handled = true;
         }
+        else if (CommandBindings.Matches(CommandId.ToggleUnhealthyOnly, e))
+        {
+            // The chip's own two-way property, set directly — there is no command to
+            // race (UI rule 8b). Turning the mode *off* is always allowed, even on a kind
+            // where the disabled chip cannot do it: a key that could switch it on and
+            // then not off again would strand the mode.
+            if (vm.CanFilterUnhealthy || vm.IsUnhealthyOnly)
+            {
+                vm.IsUnhealthyOnly = !vm.IsUnhealthyOnly;
+            }
+
+            e.Handled = true;
+        }
         else if (RowKeyCommand(vm, e) is { } command && command.CanExecute(null))
         {
             command.Execute(null);

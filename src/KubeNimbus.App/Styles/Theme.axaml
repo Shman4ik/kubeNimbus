@@ -644,6 +644,32 @@
         <Setter Property="Foreground" Value="{StaticResource AppWarningBrush}" />
     </Style>
 
+    <!-- A checked icon-only chip whose glyph is the only thing saying "on". The shared
+         chip style (nimbusUi Theme.axaml) washes a checked chip in AppSelectionBrush and
+         leaves Fluent's checked foreground in place, which is TextOnAccent — white. On
+         the light theme that is a white glyph on a 16%-alpha blue wash, and the list's
+         unhealthy-only chip rendered as an empty pale circle: an "on" state nobody could
+         see (UI rule 9). Scoped to this class rather than fixed for every chip, because
+         the rest-state rule is shared with pgNimbus and a change there is a change to
+         both apps. Pinned for hover and pressed too: Fluent repaints the template part
+         in both. -->
+    <Style Selector="ToggleButton.chip.checkedAccent:checked /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Foreground" Value="{StaticResource AppAccentBrush}" />
+    </Style>
+    <Style Selector="ToggleButton.chip.checkedAccent:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Foreground" Value="{StaticResource AppAccentBrush}" />
+    </Style>
+    <Style Selector="ToggleButton.chip.checkedAccent:checked:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Foreground" Value="{StaticResource AppAccentBrush}" />
+    </Style>
+    <!-- Disabled while checked means "the mode is on, and does not apply here" (the
+         unhealthy-only chip over a kind with no health verdict). The shared checked rule
+         pins Opacity to 1, so without this a disabled chip rendered identically to one
+         that was filtering the list under it — a claim about the list that was false. -->
+    <Style Selector="ToggleButton.chip.checkedAccent:disabled">
+        <Setter Property="Opacity" Value="0.35" />
+    </Style>
+
     <!-- Key caps for the F1 cheat sheet: one bordered chip per key, the way every
          other tool prints a shortcut. This replaced a single monospace string per row
          ("Ctrl+1…9"), which read as a filename rather than as keys — and baked the

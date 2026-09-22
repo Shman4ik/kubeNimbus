@@ -33,6 +33,7 @@ public enum CommandId
     DeleteResource,
     RolloutRestart,
     FilterListFromRows,
+    ToggleUnhealthyOnly,
     RefreshList,
 
     // --- Pods ---

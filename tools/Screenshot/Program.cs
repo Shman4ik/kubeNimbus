@@ -44,6 +44,7 @@ BuildAvaloniaApp().SetupWithoutStarting();
 var scenarios = new (string Name, Func<Control> Build)[]
 {
     ("ux-namespace-picker", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
+    ("ux-unhealthy-toggle", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
     ("ux-workload-pods", () => HostInMainWindow(ClusterTabScenarios.WorkloadDetail(), height: 1000)),
     ("ux-workload-conditions", () => HostInMainWindow(ClusterTabScenarios.WorkloadDetail(1), height: 1000)),
     ("ux-workload-events", () => HostInMainWindow(ClusterTabScenarios.WorkloadDetail(2), height: 1000)),
@@ -104,6 +105,19 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // what makes this a render of the *restore* path and not of a hand-set grid.
     ("cluster-tab-list-sorted", () => HostInMainWindow(ClusterTabScenarios.SortedList())),
     ("cluster-tab-list-filtered-empty", () => HostInMainWindow(ClusterTabScenarios.FilteredListEmpty())),
+    // Unhealthy only (k9s's "toggle faults"): the narrowed list, its good-news empty
+    // state, the same mode over a partial fleet and on the demo cluster, and the
+    // disabled-but-still-on chip over a kind that has no health verdict to filter by.
+    ("cluster-tab-list-unhealthy", () => HostInMainWindow(ClusterTabScenarios.UnhealthyList())),
+    ("cluster-tab-list-unhealthy-all-healthy", () => HostInMainWindow(ClusterTabScenarios.UnhealthyListAllHealthy())),
+    ("cluster-tab-list-unhealthy-fleet-partial",
+        () => HostInMainWindow(ClusterTabScenarios.UnhealthyFleetPartial(), height: 1000)),
+    // The toggled list at a narrow window: the caption and the chip beside the search
+    // box are the two things this item added to the header row, and 1024px is where
+    // that row runs out first.
+    ("cluster-tab-list-unhealthy-narrow", () => HostInMainWindow(ClusterTabScenarios.UnhealthyList(), width: 1024)),
+    ("cluster-tab-list-unhealthy-unavailable", () => HostInMainWindow(ClusterTabScenarios.UnhealthyUnavailable())),
+    ("cluster-tab-list-unhealthy-demo", () => HostInMainWindow(ClusterTabScenarios.DemoUnhealthy())),
     // The mutating workload actions and their armed confirm strip.
     ("cluster-tab-row-action-scale", () => HostInMainWindow(ClusterTabScenarios.RowActionScale())),
     ("cluster-tab-row-action-restart", () => HostInMainWindow(ClusterTabScenarios.RowActionRestart())),
@@ -208,6 +222,7 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     Dispatcher.UIThread.RunJobs();
 
     if (name == "ux-namespace-picker") UxInteractionChecks.NamespacePicker(window);
+    if (name == "ux-unhealthy-toggle") UxInteractionChecks.UnhealthyToggle(window);
     using var frame = window.CaptureRenderedFrame();
     var themeLabel = theme == ThemeVariant.Dark ? "dark" : "light";
     var path = Path.Combine(outDir, $"{name}.{themeLabel}.png");
@@ -222,9 +237,9 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
 // (see MainWindow.axaml), so an inspector tab only renders its real View —
 // PodDetailView/YamlEditorView/etc — when hosted under the actual MainWindow.
 // A bare wrapper falls back to a "ToString() in a TextBlock" placeholder.
-static Control HostInMainWindow(ClusterTabViewModel tab, int height = 800)
+static Control HostInMainWindow(ClusterTabViewModel tab, int height = 800, int width = 1280)
 {
-    var window = new MainWindow { Width = 1280, Height = height };
+    var window = new MainWindow { Width = width, Height = height };
     var vm = new MainWindowViewModel();
     window.DataContext = vm;
     SeedContexts(vm);

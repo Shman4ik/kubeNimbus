@@ -4,6 +4,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KubeNimbus.Core;
+using KubeNimbus.Core.Commands;
 using KubeNimbus.Core.Settings;
 
 namespace KubeNimbus.App.ViewModels;
@@ -169,6 +170,10 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             ? GridLayoutStore.Load(GridLayoutStore.KeyFor(descriptor))
             : GridLayout.Empty;
 
+        // Unhealthy-only is a mode that outlives the kind, but whether it *applies* is
+        // a property of the kind. No rebuild of its own: SetSort below rebuilds anyway.
+        RefreshHealthFilter(rebuild: false);
+
         // persist: false — this is reading a choice back, not making one, and writing it
         // straight back would turn every kind ever opened into a stored layout.
         SetSort(layout.SortColumn, layout.SortDescending, persist: false);
@@ -227,7 +232,101 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [RelayCommand]
     private void ClearRowFilter() => RowFilter = "";
 
-    private bool MatchesRowFilter(ResourceRowViewModel row) => _rowQuery.Length == 0 || row.Matches(_rowQuery);
+    /// <summary>
+    /// The list's second narrowing, beside the search box: only rows whose health
+    /// verdict is warn or error (<see cref="ResourceHealth.IsUnhealthy"/>). k9s's
+    /// "toggle faults", and the answer to "what is broken here?" without sorting by
+    /// Status and scanning.
+    ///
+    /// <para>
+    /// It does not reopen UI rule 13's "the search box does not match status". That
+    /// rule is about free text: "Running" typed into a name box would match most of a
+    /// healthy list. This matches no text at all — it reads the same computed verdict
+    /// that colours the status pill, so what it keeps is exactly what is drawn amber or
+    /// red.
+    /// </para>
+    ///
+    /// <para>
+    /// A <em>mode</em>, unlike <see cref="RowFilter"/>: it is not a question about the
+    /// list it was set on, so it survives a kind change (someone hunting for trouble
+    /// wants it on Deployments after Pods). Per tab and never persisted — reopening the
+    /// app on a filtered list that does not say why is the empty-looking-list bug with
+    /// a restart in the middle. Bound two-way to the chip's <c>IsChecked</c> with no
+    /// command beside it (UI rule 8b); the work is in the changed hook.
+    /// </para>
+    /// </summary>
+    [ObservableProperty]
+    private bool _isUnhealthyOnly;
+
+    partial void OnIsUnhealthyOnlyChanged(bool value) => RefreshHealthFilter(rebuild: true);
+
+    /// <summary>
+    /// Whether the selected kind's rows carry a health verdict at all. A kind with no
+    /// status summary (ConfigMap, Secret, Service…) has every row at
+    /// <see cref="ResourceHealth.Idle"/>, so "unhealthy only" there would be a list
+    /// that is always empty — the toggle is disabled instead, and says why.
+    /// </summary>
+    public bool CanFilterUnhealthy =>
+        SelectedKind is { IsHelmReleases: false, IsArgoDashboard: false } kind
+        && ResourceStatusSummary.ShowsStatus(kind.Descriptor);
+
+    /// <summary>
+    /// The mode is on <em>and</em> means something for this kind. A field rather than a
+    /// computed property because <see cref="MatchesRowFilter"/> reads it once per row
+    /// per rebuild, and the kind lookup behind <see cref="CanFilterUnhealthy"/> builds a
+    /// string.
+    /// </summary>
+    private bool _healthFilterActive;
+
+    public bool IsHealthFiltering => _healthFilterActive;
+
+    /// <summary>The chip's tooltip: what it does and its key, or why it cannot.</summary>
+    public string UnhealthyToggleTip
+    {
+        get
+        {
+            var kind = SelectedKind?.DisplayName ?? "rows";
+            var key = CommandBindings.ShortcutLabel(CommandId.ToggleUnhealthyOnly);
+            if (CanFilterUnhealthy)
+            {
+                return $"Show only unhealthy {kind} — warnings and errors, the rows drawn amber or red ({key} in the list)";
+            }
+
+            return IsUnhealthyOnly
+                ? $"{kind} carry no health status, so there is nothing to narrow to. Unhealthy-only stays on and applies again on a kind that has one."
+                : $"{kind} carry no health status, so there is nothing to narrow to.";
+        }
+    }
+
+    /// <summary>
+    /// "Show every row" in the all-healthy empty state. An explicit target rather than
+    /// an inversion (UI rule 8b's pattern): it can never race the chip's own toggle.
+    /// </summary>
+    [RelayCommand]
+    private void ShowAllRows() => IsUnhealthyOnly = false;
+
+    private void RefreshHealthFilter(bool rebuild)
+    {
+        OnPropertyChanged(nameof(CanFilterUnhealthy));
+        OnPropertyChanged(nameof(UnhealthyToggleTip));
+
+        var active = IsUnhealthyOnly && CanFilterUnhealthy;
+        if (active == _healthFilterActive)
+        {
+            return;
+        }
+
+        _healthFilterActive = active;
+        OnPropertyChanged(nameof(IsHealthFiltering));
+        if (rebuild)
+        {
+            RebuildVisibleRows();
+        }
+    }
+
+    private bool MatchesRowFilter(ResourceRowViewModel row) =>
+        (_rowQuery.Length == 0 || row.Matches(_rowQuery))
+        && (!_healthFilterActive || row.IsUnhealthy);
 
     /// <summary>
     /// Which column the list is ordered by (a <see cref="ResourceColumn"/> id), or null
@@ -436,6 +535,72 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     }
 
     /// <summary>
+    /// What a Modified does to the rendered list. The watch updates the row object in
+    /// place (it never replaces it), so nothing reaches <see cref="OnRowsChanged"/> —
+    /// and with unhealthy-only on, a Modified is precisely what changes whether the row
+    /// belongs on screen: a pod going CrashLoopBackOff has to appear, and one that
+    /// recovers has to leave. The name search never needed this, because the fields it
+    /// matches do not change under an object; health is the first filter input that
+    /// does.
+    ///
+    /// <para>
+    /// The row is inserted where it would have been all along — the sort's position, or
+    /// its place in <see cref="Rows"/>' arrival order — never appended, so turning the
+    /// mode off and on again produces the same list the events produced.
+    /// </para>
+    /// </summary>
+    private void RefreshRowVisibility(ResourceRowViewModel row)
+    {
+        if (!_healthFilterActive)
+        {
+            RepositionRow(row);
+            return;
+        }
+
+        var index = VisibleRows.IndexOf(row);
+        var belongs = MatchesRowFilter(row);
+
+        if (index >= 0 && !belongs)
+        {
+            VisibleRows.RemoveAt(index);
+        }
+        else if (index < 0 && belongs)
+        {
+            VisibleRows.Insert(
+                RowComparer is { } comparer ? SortedIndexFor(row, comparer) : ArrivalIndexFor(row),
+                row);
+        }
+        else if (index >= 0)
+        {
+            RepositionRow(row);
+        }
+    }
+
+    /// <summary>
+    /// Where a row belongs in an unsorted <see cref="VisibleRows"/>, which is then a
+    /// subsequence of <see cref="Rows"/>: count the visible rows that come before it in
+    /// arrival order. One walk over both lists, and only on a visibility change.
+    /// </summary>
+    private int ArrivalIndexFor(ResourceRowViewModel row)
+    {
+        var visible = 0;
+        foreach (var candidate in Rows)
+        {
+            if (ReferenceEquals(candidate, row))
+            {
+                break;
+            }
+
+            if (visible < VisibleRows.Count && ReferenceEquals(VisibleRows[visible], candidate))
+            {
+                visible++;
+            }
+        }
+
+        return visible;
+    }
+
+    /// <summary>
     /// Mirrors <see cref="Rows"/> into <see cref="VisibleRows"/> through the filter and
     /// the sort.
     /// Rows only ever appends (watch, fleet merge, demo dataset) or removes by object,
@@ -506,13 +671,95 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [ObservableProperty]
     private bool _isFilterEmpty;
 
+    /// <summary>
+    /// True when unhealthy-only has emptied a list that has rows the search box would
+    /// otherwise show: "nothing is wrong here", which is a third state beside
+    /// <see cref="IsListEmpty"/> ("there is nothing here") and <see cref="IsFilterEmpty"/>
+    /// ("nothing is called that") — and the one of the three that is good news, so it
+    /// must not look like either of the others.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isHealthFilterEmpty;
+
+    /// <summary>"Nothing unhealthy among 12 Pods".</summary>
+    [ObservableProperty]
+    private string _healthFilterEmptyTitle = "";
+
+    /// <summary>What the count was taken over — the search, the namespace — or, when
+    /// no row reports a status at all, that there was nothing to judge.</summary>
+    [ObservableProperty]
+    private string _healthFilterEmptyDetail = "";
+
     partial void OnIsListLoadingChanged(bool value) => RecomputeListEmpty();
 
     private void RecomputeListEmpty()
     {
         IsListEmpty = Rows.Count == 0 && !IsListLoading;
-        IsFilterEmpty = Rows.Count > 0 && VisibleRows.Count == 0 && !IsListLoading;
-        RowFilterSummary = IsRowFiltering ? $"{VisibleRows.Count} of {Rows.Count}" : "";
+
+        // Loading wins over every verdict (UI rule 18), and an empty list is its own
+        // state; the other two only apply to a list that has rows but shows none.
+        var narrowedToNothing = Rows.Count > 0 && VisibleRows.Count == 0 && !IsListLoading;
+        var healthEmpty = narrowedToNothing && _healthFilterActive && DescribeHealthFilterEmpty();
+        IsHealthFilterEmpty = healthEmpty;
+        IsFilterEmpty = narrowedToNothing && !healthEmpty;
+
+        RowFilterSummary = !IsRowFiltering && !_healthFilterActive
+            ? ""
+            : _healthFilterActive
+                ? $"{VisibleRows.Count} of {Rows.Count} unhealthy"
+                : $"{VisibleRows.Count} of {Rows.Count}";
+    }
+
+    /// <summary>
+    /// Decides between the two empty states a narrowed list can land in, and words the
+    /// health one. If the search box matches nothing at all, that is the search's empty
+    /// state ("Nothing matches …") whatever the health filter says — the typo is the
+    /// thing to fix. If it matches rows and none is unhealthy, that is this one. Only
+    /// runs while the list is showing nothing, so the scan never costs a busy list.
+    /// </summary>
+    private bool DescribeHealthFilterEmpty()
+    {
+        var candidates = 0;
+        var judged = 0;
+        foreach (var row in Rows)
+        {
+            if (_rowQuery.Length > 0 && !row.Matches(_rowQuery))
+            {
+                continue;
+            }
+
+            candidates++;
+            if (row.StatusHealth != ResourceHealth.Idle)
+            {
+                judged++;
+            }
+        }
+
+        if (candidates == 0)
+        {
+            return false;
+        }
+
+        HealthFilterEmptyTitle = $"Nothing unhealthy among {candidates} {SelectedKind?.DisplayName ?? "rows"}";
+
+        var parts = new List<string>(2);
+        if (_rowQuery.Length > 0)
+        {
+            parts.Add($"matching “{_rowQuery}”");
+        }
+
+        if (SelectedKind?.Descriptor.Namespaced == true)
+        {
+            parts.Add($"in {SelectedNamespace}");
+        }
+
+        // A CRD whose objects carry no status the app can read passes the kind gate
+        // (it is not a known statusless kind) and then judges nothing. Saying "nothing
+        // unhealthy" there without qualification would be a claim the app cannot make.
+        HealthFilterEmptyDetail = judged == 0
+            ? "None of them reports a status this list can judge"
+            : string.Join(" · ", parts);
+        return true;
     }
 
     [ObservableProperty]
@@ -2309,7 +2556,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 if (_rowsByKey.TryGetValue(resource.Key, out var existing))
                 {
                     existing.Update(resource);
-                    RepositionRow(existing);
+                    RefreshRowVisibility(existing);
                 }
                 else
                 {
@@ -2378,7 +2625,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 if (_rowsByKey.TryGetValue(addedKey, out var existing))
                 {
                     existing.Update(added);
-                    RepositionRow(existing);
+                    RefreshRowVisibility(existing);
                 }
                 else
                 {

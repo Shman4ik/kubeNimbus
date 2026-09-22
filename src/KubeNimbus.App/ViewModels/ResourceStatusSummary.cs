@@ -17,6 +17,16 @@ public static class ResourceHealth
     public const string Warn = "warn";
     public const string Error = "error";
     public const string Idle = "idle";
+
+    /// <summary>
+    /// The list's "unhealthy only" predicate: warn and error, and nothing else.
+    /// <see cref="Idle"/> is out on purpose — it is the verdict for "claims nothing"
+    /// (a Deployment scaled to zero, a CRD phase this app does not recognise), and
+    /// listing those as problems would fill the filtered list with things nobody has
+    /// to fix. Warn is in because "in flight" and "degraded" are exactly what someone
+    /// looking for trouble wants to see: a pod stuck Pending for an hour is Warn.
+    /// </summary>
+    public static bool IsUnhealthy(string health) => health is Warn or Error;
 }
 
 /// <summary>
