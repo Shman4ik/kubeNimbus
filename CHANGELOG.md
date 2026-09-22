@@ -10,7 +10,7 @@ The release workflow reads the section matching a tag out of this file and uses
 it as the GitHub Release body, so headings must match tags exactly
 (`## [0.1.0] - …` ↔ `v0.1.0`).
 
-## [Unreleased]
+## [0.3.3] - 2026-09-22
 
 ### Added
 
@@ -21,14 +21,15 @@ it as the GitHub Release body, so headings must match tags exactly
   The workspace restores the selected kind, namespace and cluster tab.
 
 ### Changed
-
 - Pods start loading before discovery finishes. Aggregated discovery uses two requests on supported servers.
   A disk cache skips discovery on warm connections and expires after six hours or a server-version change.
   The sidebar context menu can refresh the catalog immediately.
-
-### Fixed
-
-- Keep YamlDotNet at 16.3.0 so kubeconfig loading remains compatible with the Kubernetes client.
+- **A new app icon, shared with pgNimbus.** The mark was redrawn so that its
+  plate, field and broom match pgNimbus's exactly, and every icon size — window,
+  taskbar, installer, Microsoft Store tiles — is now generated from one vector
+  master instead of a set of per-size drawings that had drifted apart.
+- **Dependency updates.** Avalonia 12.1.2 and SvcSystems.UI.Terminal 1.1.4 (the
+  exec pane's terminal). No behaviour change is intended.
 
 ## [0.3.2] - 2026-08-29
 
@@ -572,5 +573,7 @@ First public release. Everything below is new.
 - Usage history is session-scoped and bounded at 30 minutes by design. Long-range
   metrics history is a non-goal — that's Prometheus's job.
 
-[Unreleased]: https://github.com/Shman4ik/kubeNimbus/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/Shman4ik/kubeNimbus/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.3.3
+[0.3.2]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.3.2
 [0.3.1]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.3.1
