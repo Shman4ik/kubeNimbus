@@ -35,7 +35,7 @@ Sandbox: **API-server-only.** Docker Hub blobs 403, so `sandbox-up.sh` fails; na
 
 | # | Source | Deliverable (user outcome) | Kind | Size | Score | Status | Rounds | Commit |
 |---|---|---|---|---|---|---|---|---|
-| T1 | research #1, headlamp#6974, k9s `Ctrl-z` | Show only what is unhealthy, on any list | UX | S | 4.05 | building | 0 | |
+| T1 | research #1, headlamp#6974, k9s `Ctrl-z` | Show only what is unhealthy, on any list | UX | S | 4.05 | landed | 0 | fa4f30e |
 | L1 | owner pin | Open any pod's or workload's logs from the palette, from anywhere | UX | M | pin | planned | 0 | |
 | L2 | owner pin | One click to logs from the row, and logs opened full-size | UX | S | pin | planned | 0 | |
 | L3 | owner pin | Logs from everywhere a pod is named | UX | S | pin | planned | 0 | |
@@ -404,6 +404,10 @@ Risk:                 tests that leak state between runs; use a unique namespace
 - **R3 — FEAT-56**: `SelfSubjectReview` ("who am I") beside the access review; states pre-1.26 servers.
 
 ## Log
+
+- 2026-09-22 — T1 landed (`fa4f30e`), verifier PASS first round (re-ran build, both suites,
+  170 screenshots, AOT publish + smoke test; mutation-checked the Modified path). Inbox:
+  VER-38, ENG-31..34.
 
 - 2026-09-22 — Owner pin applied (quick access to logs → L1–L3, built next after T1);
   T4, T5, T8 to reserve.

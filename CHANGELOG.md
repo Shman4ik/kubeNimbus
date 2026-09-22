@@ -10,6 +10,12 @@ The release workflow reads the section matching a tag out of this file and uses
 it as the GitHub Release body, so headings must match tags exactly
 (`## [0.1.0] - …` ↔ `v0.1.0`).
 
+## [Unreleased]
+
+- Show only what is unhealthy on any list — one click or Ctrl+Z narrows pods, workloads or
+  events to the ones in trouble, and they appear the moment they break and leave when they
+  recover.
+
 ## [0.3.3] - 2026-09-22
 
 ### Added
