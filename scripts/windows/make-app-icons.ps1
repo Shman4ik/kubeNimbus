@@ -1,11 +1,11 @@
-# Assembles the shipped app icons from the design masters. The masters are
-# rendered per size from vector by scripts/design/make-masters.ps1 (16 and 24
-# from their own simplified marks, not downscales) - this script does NOT
-# resample the small, legibility-critical sizes: it copies them verbatim and
-# only downscales the larger, non-critical sizes from a bigger master.
+# Assembles the shipped app icons from the design masters. Every master is
+# rendered from design/logo.svg by scripts/design/make-masters.ps1, so run that
+# first if the mark changed. This script does NOT resample a size a master
+# already exists at: it copies that master verbatim and only downscales the
+# sizes with no master of their own, always from a LARGER master.
 #
 #   INPUT  design/masters/icon/icon-{16,24,32,48,256,1024}.png   square tiles
-#          design/masters/window/window-{light,dark}-256.png     transparent glyph
+#          design/masters/window/window-{light,dark}-256.png     the same plated mark, twice
 #
 #   OUTPUT src/KubeNimbus.App/Assets/app.ico             exe + installer icon (multi-size)
 #          src/KubeNimbus.App/Assets/window-icon-light.ico   light-theme window icon
@@ -14,8 +14,9 @@
 #              .scale-{100,125,150,200,400}.png           MSIX plated tiles, one file per DPI
 #          src/KubeNimbus.App/Assets/Msix/Square44x44Logo
 #              .targetsize-{16,24,32,48,256}_altform-{unplated,lightunplated}.png
-#              transparent taskbar/Alt+Tab/Start icon - without these, Windows adds
-#              its own backplate around the plated logo on those surfaces
+#              the plated mark again - Windows still backplates an "unplated"
+#              tile, so this is a plate inside a plate, accepted deliberately
+#              for one mark everywhere (the same choice as pgNimbus)
 #
 # Windows-only (uses System.Drawing/GDI+). Run after the masters change:
 #   pwsh scripts/design/make-masters.ps1
@@ -55,18 +56,16 @@ function Get-Tile([int]$size, [int]$fromSize) {
     return $bmp
 }
 
-# Picks the window-glyph master for a size: an exact-size one when it exists
-# (24 and 16 have their own, drawn from the simplified marks), else the 256 to
-# downscale from. Same rule as the plated tiles - never resample the small,
-# legibility-critical sizes out of a master drawn for a bigger one.
+# Picks the window master for a size: an exact-size one when it exists, else
+# the 256 to downscale from. Today only the 256 exists.
 function Resolve-WindowMaster([string]$theme, [int]$size) {
     $exact = Join-Path $winDir "window-$theme-$size.png"
     if (Test-Path $exact) { return $exact }
     return (Join-Path $winDir "window-$theme-256.png")
 }
 
-# Alpha-preserving downscale of a transparent master. Used for the unplated
-# MSIX taskbar/Alt+Tab icons, sourced from the window-glyph masters.
+# Alpha-preserving downscale of a window master (plated, but transparent outside
+# the disc). Used for the window-icon .ico files and the MSIX unplated tiles.
 function Get-TransparentTile([string]$masterPath, [int]$size) {
     $src = New-Object System.Drawing.Bitmap($masterPath)
     if ($src.Width -eq $size -and $src.Height -eq $size) { return $src }
@@ -160,7 +159,7 @@ New-Item -ItemType Directory -Force -Path $msixDir | Out-Null
 # --- per-theme window icons: a real multi-size .ico (16/24/32/48/256, all
 #     PNG-compressed entries - Windows Vista+ decodes PNG at any .ico size, so
 #     this needs no BMP fallback like app.ico's legacy sizes do) built from the
-#     transparent 256px glyph. A flat single-size PNG here leaves a Win32
+#     256px window master. A flat single-size PNG here leaves a Win32
 #     WM_SETICON call with only one oversized image to downscale, which Windows
 #     silently fails to apply to the title bar/taskbar on some Windows 11 builds.
 $windowIconSizes = 16, 24, 32, 48, 256
@@ -223,9 +222,8 @@ foreach ($logo in @(
     Write-Host "wrote src\KubeNimbus.App\Assets\Msix\$($logo.Name).scale-{100,125,150,200,400}.png"
 }
 
-# --- MSIX unplated Square44x44Logo: transparent taskbar/Alt+Tab/Start icon.
-#     Dark-theme (altform-unplated) uses the light-drawn window-dark glyph;
-#     light-theme (altform-lightunplated) uses the dark-drawn window-light one.
+# --- MSIX unplated Square44x44Logo: taskbar/Alt+Tab/Start icon. Both themes
+#     get the same plated mark (window-dark and window-light are one render).
 $unplatedSizes = 16, 24, 32, 48, 256
 foreach ($pair in @(
         @{ Theme = 'dark';  Suffix = 'altform-unplated' },

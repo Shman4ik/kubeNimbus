@@ -1,14 +1,12 @@
-// Dumps the geometry of every kubeNimbus .af master to JSON, for
-// scripts/design/af-to-svg.py (the full mark) and
-// scripts/design/af-to-small-svgs.py (the 24 px mark).
+// Dumps the geometry of the kubeNimbus .af master to JSON, for
+// scripts/design/af-to-svg.py.
 //
-// The .af files are where the marks are drawn; the SVGs beside them are the
-// committed, tool-neutral copies. This is the bridge. Run it through the
-// Affinity MCP (execute_script) with the masters open, then run the two Python
-// scripts on the files it writes.
+// The .af file is where the mark is drawn; logo.svg beside it is the committed,
+// tool-neutral copy. This is the bridge. Run it through the Affinity MCP
+// (execute_script) with the master open, then run af-to-svg.py on the file it
+// writes.
 //
-// Every master that is open is dumped and every one that is not is skipped, so
-// a session that only touched one mark can run this unchanged. Documents are
+// The master is skipped when it is not open. Documents are
 // selected by the repository directory as well as the filename: pgNimbus's
 // master is also called logo.af and the two are routinely open side by side, so
 // picking by filename alone dumps whichever the editor happens to list first,
@@ -19,11 +17,10 @@ const { app } = require('/application.js');
 const { SolidFill } = require('/fills.js');
 const { File } = require('/fs.js');
 
-// There is deliberately no logo-micro.af: the 16 px mark stays script-derived
-// from logo.svg (scripts/design/make-small-masters.py). See design/LOGO-ASSETS.md.
+// There is one master: every size, 16 px included, is rendered from logo.svg
+// (the same rule as pgNimbus). See design/LOGO-ASSETS.md.
 const MASTERS = [
     { tail: 'kubeNimbus\\design\\logo.af',       out: 'kubenimbus-logo-dump.json' },
-    { tail: 'kubeNimbus\\design\\logo-small.af', out: 'kubenimbus-logo-small-dump.json' },
 ];
 
 const kids = (n) => { try { return Array.from(n.children); } catch (e) { return []; } };

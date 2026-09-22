@@ -5,11 +5,13 @@
 > which icon size, what ships where, which scripts to re-run), see
 > [`LOGO-ASSETS.md`](LOGO-ASSETS.md).
 
-> **Status: `design/logo.af` is the master. `logo.svg` and `logo-dark.svg` are
-> generated from it** by `scripts/design/dump-af.js` → `scripts/design/af-to-svg.py`,
-> the same two-step bridge pgNimbus uses. Draw in the `.af`; the SVGs are
-> overwritten, so a hand edit to one survives exactly until the next person
-> regenerates.
+> **Status: `design/logo.af` is the master. `logo.svg` is generated from it**
+> by `scripts/design/dump-af.js` → `scripts/design/af-to-svg.py`, the same
+> two-step bridge pgNimbus uses. Draw in the `.af`; the SVG is overwritten, so a
+> hand edit to it survives exactly until the next person regenerates. It is the
+> only mark: every icon size, 16px included, is rendered from it (see
+> [`LOGO-ASSETS.md`](LOGO-ASSETS.md) Part 0 for why the simplified small marks
+> and the dark twin were removed).
 >
 > This replaced a period when `logo.svg` *was* the master and was hand-edited,
 > and that period is why the bridge exists. The file had been round-tripped
@@ -35,10 +37,6 @@ edit needs to know and cannot recover by looking at the paths.
 |---|---|
 | `logo.af` | **the master**, the only hand-drawn file |
 | `logo.svg` | generated: the mark, `viewBox="0 0 1024 1024"` |
-| `logo-dark.svg` | generated: the same bytes, `.ink`/`.paper` values exchanged |
-| `logo-small.af` | **a second master**, hand-drawn: the 24px mark, same 1024 grid, no plate |
-| `logo-small.svg` (+ `-dark`, `-plated`) | generated from `logo-small.af` |
-| `logo-micro.svg` (+ `-dark`, `-plated`) | generated from `logo.svg` by script — the 16px mark, see [`LOGO-ASSETS.md`](LOGO-ASSETS.md) Part 0 |
 
 ## The Nimbus family rules
 
@@ -237,8 +235,9 @@ the clearance mask left behind.
 put in a logo master: Inkscape logs `Ignoring CSS variable` and renders the whole
 mark black, and Illustrator does the same. Colour is now two classes, `.ink` /
 `.paper`, with the value repeated in a `fill` attribute — CSS wins where it is
-honoured, the attribute carries everywhere else. `logo-dark.svg` is still the
-same bytes with the two values exchanged.
+honoured, the attribute carries everywhere else. (The dark twin the mark then
+had stayed the same bytes with the two values exchanged; it has since been
+removed.)
 
 **Flattening.** `#broom-clearance` is baked in: the 13 stroked copies of the
 broom outline were `object-stroke-to-path` + `path-union`ed into one shape and
