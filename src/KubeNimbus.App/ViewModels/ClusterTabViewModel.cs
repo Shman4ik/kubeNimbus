@@ -2675,10 +2675,11 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     /// <summary>
     /// Opens pod detail on the Logs tab. Same tab-reuse path as a double-click, so
-    /// this never opens a second tab for a pod that already has one.
+    /// this never opens a second tab for a pod that already has one. Through
+    /// <see cref="OpenLogsForAsync"/>, the entry point the palette's log rows share.
     /// </summary>
     [RelayCommand(CanExecute = nameof(IsPodRowSelected))]
-    private async Task OpenLogsAsync() => await OpenPodDetailAsync(previous: false);
+    private Task OpenLogsAsync() => OpenSelectedRowLogsAsync(previous: false);
 
     /// <summary>
     /// Opens pod detail on the Logs tab, showing the crashed instance. This is the
@@ -2686,19 +2687,12 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// outside a toggle that didn't work.
     /// </summary>
     [RelayCommand(CanExecute = nameof(IsPodRowSelected))]
-    private async Task OpenPreviousLogsAsync() => await OpenPodDetailAsync(previous: true);
+    private Task OpenPreviousLogsAsync() => OpenSelectedRowLogsAsync(previous: true);
 
-    private async Task OpenPodDetailAsync(bool previous)
-    {
-        await OpenRowAsync(SelectedRow, preview: false);
-        if (SelectedInspectorTab is not PodDetailTabViewModel detail)
-        {
-            return;
-        }
-
-        detail.SelectedDetailTabIndex = 0;
-        detail.IsShowingPreviousLogs = previous;
-    }
+    private Task OpenSelectedRowLogsAsync(bool previous) =>
+        SelectedRow is { } row && LogTargetFor(row) is { } target
+            ? OpenLogsForAsync(target, previous)
+            : Task.CompletedTask;
 
     /// <summary>
     /// True when the selected object names the pods it owns — which is the honest test
@@ -2717,37 +2711,10 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// One pane over every pod the selected workload owns. This is the gesture people
     /// leave for <c>stern</c>: during a rolling deployment the pod going away and the
     /// pod coming up are the same question, and reading them in two panes is reading
-    /// them in the wrong order.
+    /// them in the wrong order. Through <see cref="OpenLogsForAsync"/>, like the pod's.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanAggregateLogsForSelectedRow))]
-    private void OpenWorkloadLogs()
-    {
-        if (SelectedRow is not { } row
-            || DescriptorFor(row) is not { } descriptor
-            || LabelSelector.ForPodsOf(row.Resource) is not { } selector)
-        {
-            return;
-        }
-
-        // Null in demo mode, where the pane still works: its pods come out of the
-        // shipped dataset through the same LabelSelector.Matches the live path renders
-        // into a query — see InspectorTabViewModelBase.IsDemo.
-        var client = ClientFor(row);
-        if (client is null && !IsDemo)
-        {
-            return;
-        }
-
-        var key = WorkloadLogsTabViewModel.KeyFor(row.ClusterName, descriptor, row.Namespace, row.Name);
-        if (InspectorTabs.FirstOrDefault(t => t.Key == key) is { } existing)
-        {
-            existing.IsPreview = false;
-            SelectedInspectorTab = existing;
-            return;
-        }
-
-        AddInspectorTab(new WorkloadLogsTabViewModel(client, descriptor, row.Resource, selector, row.ClusterName));
-    }
+    private Task OpenWorkloadLogsAsync() => OpenSelectedRowLogsAsync(previous: false);
 
     [RelayCommand(CanExecute = nameof(IsPodRowSelected))]
     private void ExecIntoSelected()
@@ -3389,6 +3356,10 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         // to be an explicit cancel rather than a task left running against a disposed
         // client.
         PendingRowAction?.CancelDrain();
+        if (_logTargetsCts is not null)
+        {
+            await _logTargetsCts.CancelAsync();
+        }
 
         if (_watchCts is not null)
         {

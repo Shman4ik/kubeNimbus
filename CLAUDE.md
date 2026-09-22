@@ -272,7 +272,10 @@ Three rules about it:
    row highlights on click but does nothing, which reads as "is this one click
    or two, or is it broken?". Handle taps on the **items control** and resolve
    the row from the event source (`OnSwitcherListTapped`), or give the target an
-   explicit `Background="Transparent"`. Anything clickable also gets
+   explicit `Background="Transparent"`. The Ctrl/Cmd+K palette shipped exactly this
+   (`Tapped` on the row template's `StackPanel`, so only a click on the text ran a
+   command) until L1 moved it to the `ListBox`; `ux-logs-palette` clicks a row at its
+   far edge, where no text is, and fails if it is put back. Anything clickable also gets
    `Cursor="Hand"` and a pressed state — and `:pressed` is a pseudo-class only
    button-like controls set, so on a `Border` it must be a real class toggled
    from the pointer handlers (`Border.clusterTab.pressed`), never
@@ -803,6 +806,28 @@ Seven things worth keeping:
    and then refuses to run is worse than no match. What they take from the catalog is
    title, icon and shortcut text. `CommandBindings`' startup check is therefore over
    `WindowBinding` only, which is narrower than pgNimbus's and says so in place.
+   **Since L1 some of those rows come from the network, and the palette stays
+   synchronous anyway.** The `Logs: …` rows (every pod and Deployment/StatefulSet/
+   DaemonSet in the selected tab's namespace, `ClusterTabViewModel.LogTargets.cs`) are
+   filled by a *one-shot* capped list started from `CommandPaletteViewModel.Opening` —
+   not a watch, because the palette is open for seconds and a second long-lived
+   connection per tab for its sake is the wrong trade; not an async item source, because
+   then every keystroke would await something. The source function still returns
+   whatever the tab has *now* (the previous answer for the same namespace and cluster
+   set, stale-while-loading, or nothing) plus **notes** — `PaletteItem`s with a null
+   `Execute` that say "loading", "not allowed to list pods here" (the server's own 403
+   sentence), "capped at 2,000" or "not connected". When the list lands, the tab calls
+   `LogTargetsChanged` and the shell calls `Palette.Refresh()`, which re-reads the source
+   *keeping the query and the highlighted row* (a keystroke still resets the highlight to
+   the top match). Notes are rendered as disabled `ListBoxItem`s, can never be the
+   selection, and are shown only under the `logs ` prefix or when nothing else matched —
+   a settled "no pods here" does not belong under every search for "Preferences". The
+   `logs ` prefix is what Ctrl/Cmd+Shift+L (`CommandId.LogsPalette`) opens the palette
+   with; a prefix in the query rather than a mode flag so it is visible and Backspace
+   leaves it. A log row matches on name, namespace and cluster (`PaletteItem.SearchText`)
+   and never on status, for UI rule 13's reason. Every open-logs gesture — L, P, the menu,
+   the palette rows — goes through `ClusterTabViewModel.OpenLogsForAsync(LogTarget)`, so
+   the pane chosen and the inspector tab reused cannot differ by route.
 4. **An action with no gesture is `PaletteOnly`, not `PaletteAndSheet`.** F1 is a
    *keyboard* reference: a row reading "Edit YAML — —" tells the reader nothing and
    pushes the rows that do carry a key further down. `CommandCatalogTests` pins this —

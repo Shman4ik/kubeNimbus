@@ -38,6 +38,7 @@ public enum CommandId
 
     // --- Pods ---
     PodLogs,
+    LogsPalette,
     PreviousLogs,
     FollowLogs,
     Exec,

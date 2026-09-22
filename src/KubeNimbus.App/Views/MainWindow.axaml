@@ -407,7 +407,7 @@
 
                       <StackPanel Grid.Column="1" VerticalAlignment="Center">
                         <TextBlock Text="{Binding Name}" FontSize="13" TextTrimming="CharacterEllipsis" />
-                        <TextBlock Text="{Binding Subtitle}" FontSize="11" Opacity="0.55" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Classes="paletteSubtitle" Text="{Binding Subtitle}" FontSize="11" Opacity="0.55" TextTrimming="CharacterEllipsis" />
                       </StackPanel>
 
                       <Border Grid.Column="2" Classes="envPill" Margin="8,0"
@@ -456,16 +456,40 @@
         <Grid RowDefinitions="Auto,*">
           <TextBox Grid.Row="0" Name="PaletteQueryBox" Text="{Binding Palette.Query}"
                     PlaceholderText="Type a command…" Margin="10" FontSize="14" KeyDown="OnPaletteKeyDown" />
-          <ListBox Grid.Row="1" ItemsSource="{Binding Palette.FilteredItems}" SelectedItem="{Binding Palette.SelectedItem}" Margin="4">
+          <!-- Tapped on the ListBox, resolved from the event source (UI rule 8): on the
+               item template's panel it fired on the text and nowhere else in the row.
+               Notes (rows with nothing to run: loading, refused, capped) are disabled
+               containers, so they neither highlight nor take a click. -->
+          <ListBox Grid.Row="1" Name="PaletteList" Classes="palette"
+                   ItemsSource="{Binding Palette.FilteredItems}" SelectedItem="{Binding Palette.SelectedItem}" Margin="4"
+                   Tapped="OnPaletteListTapped">
+            <ListBox.Styles>
+              <Style Selector="ListBox.palette ListBoxItem" x:DataType="vm:PaletteItem">
+                <Setter Property="IsEnabled" Value="{Binding IsActionable}" />
+              </Style>
+              <!-- A note is read, not run: muted rather than Fluent's disabled grey,
+                   which with the subtitle's own opacity left "Loading…" and a 403's
+                   reason all but invisible in the light theme. Its reason wraps — the
+                   server's sentence names the verb, the resource and the subject, and
+                   an ellipsis cuts off exactly the part that says what to ask for. -->
+              <Style Selector="ListBox.palette ListBoxItem:disabled /template/ ContentPresenter#PART_ContentPresenter">
+                <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseMediumHighBrush}" />
+              </Style>
+              <Style Selector="ListBox.palette ListBoxItem:disabled TextBlock.paletteSubtitle">
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="MaxLines" Value="3" />
+              </Style>
+            </ListBox.Styles>
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:PaletteItem">
-                <StackPanel Orientation="Horizontal" Spacing="10" Margin="4" Tapped="OnPaletteItemTapped">
-                  <PathIcon Data="{Binding IconKey, Converter={x:Static conv:IconKeyToGeometryConverter.Instance}}" Width="14" Height="14" Opacity="0.75" />
-                  <StackPanel>
-                    <TextBlock Text="{Binding Title}" FontSize="13" />
-                    <TextBlock Text="{Binding Subtitle}" FontSize="11" Opacity="0.55" />
+                <Grid ColumnDefinitions="Auto,*" Margin="4" Background="Transparent">
+                  <PathIcon Data="{Binding IconKey, Converter={x:Static conv:IconKeyToGeometryConverter.Instance}}"
+                            Width="14" Height="14" Opacity="0.75" Margin="0,0,10,0" VerticalAlignment="Center" />
+                  <StackPanel Grid.Column="1">
+                    <TextBlock Text="{Binding Title}" FontSize="13" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Classes="paletteSubtitle" Text="{Binding Subtitle}" FontSize="11" Opacity="0.55" TextTrimming="CharacterEllipsis" />
                   </StackPanel>
-                </StackPanel>
+                </Grid>
               </DataTemplate>
             </ListBox.ItemTemplate>
           </ListBox>

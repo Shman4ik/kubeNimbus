@@ -1822,4 +1822,51 @@ internal static class ClusterTabScenarios
         tab.SelectedInspectorTab = pf;
         return tab;
     }
+
+    // ------------------------------------------------------------ L1: palette log rows
+    //
+    // The answers a real listing produces, written in for the states a sandbox will not
+    // produce on demand. Built from the shipped demo objects so the rows read as the
+    // demo cluster's own.
+
+    private static IEnumerable<LogTarget> DemoLogTargets(string clusterName = "") =>
+        DemoData.Deployments.Select(d => new LogTarget(d, DeploymentDescriptor, clusterName, null))
+            .Concat(DemoData.Pods
+                .Where(p => p.Namespace == "payments")
+                .Select(p => new LogTarget(p, ResourceDescriptor.Pods, clusterName, null)));
+
+    /// <summary>The last look at this namespace, shown while the next is in flight.</summary>
+    public static LogTargetList StaleLogTargets() => new([.. DemoLogTargets().Take(4)], [], []);
+
+    /// <summary>
+    /// A user who may list Deployments here but not pods — the RBAC shape the note exists
+    /// for: the rows that could be listed, and the refusal in the server's own words.
+    /// </summary>
+    public static LogTargetList RefusedLogTargets() => new(
+        [.. DemoData.Deployments.Select(d => new LogTarget(d, DeploymentDescriptor, "", null))],
+        [new LogTargetProblem(
+            "not allowed to list pods in payments",
+            "pods is forbidden: User \"dev@acme.io\" cannot list resource \"pods\" in API group \"\" in the namespace \"payments\"",
+            IsForbidden: true)],
+        []);
+
+    public static LogTargetList CappedLogTargets() => new(
+        [.. DemoLogTargets()],
+        [],
+        ["only the first 2,000 pods in every namespace are listed"]);
+
+    /// <summary>Two clusters with the same objects — every row has to say which one it is.</summary>
+    public static LogTargetList FleetLogTargets() => new(
+        [.. DemoLogTargets("prod-payments").Take(5), .. DemoLogTargets("staging-eu").Take(5)],
+        [new LogTargetProblem("qa-integration: couldn't list pods in payments", "Connection refused (10.4.0.12:6443)", IsForbidden: false)],
+        []);
+
+    /// <summary>A tab whose connection is gone, so the palette has nothing to list from.</summary>
+    public static ClusterTabViewModel NotConnected()
+    {
+        var tab = BaseTab();
+        tab.IsConnected = false;
+        tab.Status = "Not connected.";
+        return tab;
+    }
 }

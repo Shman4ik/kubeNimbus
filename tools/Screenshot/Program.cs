@@ -164,6 +164,28 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-argo-application-detail",
         () => HostInMainWindow(ClusterTabScenarios.ArgoApplicationDetail(), height: 1000)),
     ("cluster-tab-argo-sync-unavailable", () => HostInMainWindow(ClusterTabScenarios.ArgoSyncUnavailable())),
+    // L1 — the palette's log rows. On the demo cluster, which is the one place the rows
+    // come from a real listing (the dataset) rather than a fixture; the states a sandbox
+    // cannot produce on demand (in flight, refused, capped, a fleet) are written in
+    // through the tab's fixture seam, after a real open so the seam is what wins.
+    ("ux-logs-palette", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
+    ("palette-logs", () => LogsPalette(ClusterTabScenarios.DemoList(), "")),
+    ("palette-logs-search", () => LogsPalette(ClusterTabScenarios.DemoList(), "report")),
+    ("palette-logs-narrow", () => LogsPalette(ClusterTabScenarios.DemoList(), "", width: 800)),
+    // Without the prefix: a plain Ctrl/Cmd+K search for a name finds the log rows too,
+    // after whatever commands match — which here is none.
+    ("palette-logs-unprefixed", () => LogsPalette(ClusterTabScenarios.DemoList(), "checkout", prefix: false)),
+    ("palette-logs-loading", () => LogsPalette(ClusterTabScenarios.DemoList(), "",
+        fixture: tab => tab.SetLogTargetsForFixture(ClusterTabScenarios.StaleLogTargets(), loading: true))),
+    ("palette-logs-denied", () => LogsPalette(ClusterTabScenarios.WorkloadsList(), "",
+        fixture: tab => tab.SetLogTargetsForFixture(ClusterTabScenarios.RefusedLogTargets(), loading: false))),
+    ("palette-logs-capped", () => LogsPalette(ClusterTabScenarios.WorkloadsList(), "",
+        fixture: tab => tab.SetLogTargetsForFixture(ClusterTabScenarios.CappedLogTargets(), loading: false))),
+    ("palette-logs-empty", () => LogsPalette(ClusterTabScenarios.WorkloadsList(), "",
+        fixture: tab => tab.SetLogTargetsForFixture(KubeNimbus.App.ViewModels.LogTargetList.Empty, loading: false))),
+    ("palette-logs-fleet", () => LogsPalette(ClusterTabScenarios.WorkloadsList(), "",
+        fixture: tab => tab.SetLogTargetsForFixture(ClusterTabScenarios.FleetLogTargets(), loading: false))),
+    ("palette-logs-disconnected", () => LogsPalette(ClusterTabScenarios.NotConnected(), "")),
     ("main-window", () => BuildMainWindowContent()),
     ("main-window-no-kubeconfig", () => BuildNoKubeconfigContent()),
     ("main-window-shortcuts", () => BuildMainWindowContent(openShortcuts: true)),
@@ -223,6 +245,7 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
 
     if (name == "ux-namespace-picker") UxInteractionChecks.NamespacePicker(window);
     if (name == "ux-unhealthy-toggle") UxInteractionChecks.UnhealthyToggle(window);
+    if (name == "ux-logs-palette") UxInteractionChecks.LogsPalette(window);
     using var frame = window.CaptureRenderedFrame();
     var themeLabel = theme == ThemeVariant.Dark ? "dark" : "light";
     var path = Path.Combine(outDir, $"{name}.{themeLabel}.png");
@@ -255,6 +278,19 @@ static Control HostInMainWindow(ClusterTabViewModel tab, int height = 800, int w
     vm.Tabs.Add(tab);
     vm.SelectedTab = tab;
     vm.IsAdvancedView = advanced;
+    return window;
+}
+
+// A cluster tab with the palette open on its log rows. The open is the real one —
+// Palette.Open runs the tab's RequestLogTargets, which on the demo cluster lists the
+// dataset — and a fixture, when there is one, lands after it through the tab's seam.
+static Control LogsPalette(
+    ClusterTabViewModel tab, string query, Action<ClusterTabViewModel>? fixture = null, int width = 1280, bool prefix = true)
+{
+    var window = (Window)HostInMainWindow(tab, width: width);
+    var vm = (MainWindowViewModel)window.DataContext!;
+    vm.Palette.Open((prefix ? CommandPaletteViewModel.LogsPrefix : "") + query);
+    fixture?.Invoke(tab);
     return window;
 }
 

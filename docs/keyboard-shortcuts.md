@@ -42,6 +42,7 @@ way in Preferences → Shortcut modifier.
 | Action | Windows / Linux | macOS |
 | --- | --- | --- |
 | Logs — the pod's, or every pod a workload owns | L | L |
+| Logs of any pod or workload, from anywhere | Ctrl+Shift+L | Cmd+Shift+L |
 | Previous logs (crashed container) | P | P |
 | Shell into the pod — or scale a Deployment/StatefulSet | S | S |
 | Port-forward | F | F |

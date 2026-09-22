@@ -58,16 +58,59 @@ public sealed partial class ClusterClient
         return result;
     }
 
+    /// <summary>
+    /// A one-shot list that stops at <paramref name="maxItems"/>. For the callers that
+    /// have to stay responsive on a cluster of any size — the palette's "open logs of any
+    /// pod" rows list every pod in scope on each open, and an unbounded walk of a
+    /// 20 000-pod namespace would page for seconds and hold every object in memory to
+    /// render fifty rows. Pages are asked for at no more than what is still wanted, so a
+    /// small cap is a small request; <see cref="CappedResourceList.IsTruncated"/> says
+    /// whether the server had more, which the caller has to state rather than imply the
+    /// list was complete.
+    /// </summary>
+    public async Task<CappedResourceList> ListResourceCappedAsync(
+        ResourceDescriptor descriptor,
+        string? @namespace,
+        int maxItems,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxItems, 1);
+
+        var result = new List<DynamicResource>();
+        string? continueToken = null;
+        do
+        {
+            var (items, next, _) = await ListResourcePageAsync(
+                descriptor, @namespace, continueToken, cancellationToken,
+                pageSize: Math.Min(DynamicListPageSize, maxItems - result.Count)).ConfigureAwait(false);
+
+            // A server is allowed to ignore `limit` (an aggregated API often does), so
+            // the cap is enforced here too rather than trusted to the request.
+            var wanted = maxItems - result.Count;
+            if (items.Count > wanted)
+            {
+                result.AddRange(items.Take(wanted));
+                return new CappedResourceList(result, IsTruncated: true);
+            }
+
+            result.AddRange(items);
+            continueToken = next;
+        } while (!string.IsNullOrEmpty(continueToken) && result.Count < maxItems);
+
+        return new CappedResourceList(result, IsTruncated: !string.IsNullOrEmpty(continueToken));
+    }
+
     private async Task<(IList<DynamicResource> Items, string? Continue, string? ResourceVersion)> ListResourcePageAsync(
         ResourceDescriptor descriptor,
         string? @namespace,
         string? continueToken,
         CancellationToken ct,
         string? fieldSelector = null,
-        LabelSelector? labelSelector = null)
+        LabelSelector? labelSelector = null,
+        int pageSize = DynamicListPageSize)
     {
         var path = descriptor.CollectionPath(descriptor.Namespaced ? @namespace : null);
-        var query = $"?limit={DynamicListPageSize}";
+        var query = $"?limit={pageSize}";
         if (!string.IsNullOrEmpty(continueToken))
         {
             query += $"&continue={Uri.EscapeDataString(continueToken)}";
@@ -377,3 +420,9 @@ public sealed class ServerSideApplyConflictException(string message, string stat
 {
     public string StatusJson { get; } = statusJson;
 }
+
+/// <summary>
+/// The result of <see cref="ClusterClient.ListResourceCappedAsync"/>: at most the cap's
+/// worth of objects, and whether the server had more than that.
+/// </summary>
+public sealed record CappedResourceList(IReadOnlyList<DynamicResource> Items, bool IsTruncated);

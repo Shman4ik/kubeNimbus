@@ -303,6 +303,21 @@ public static class CommandCatalog
         },
         new()
         {
+            Id = CommandId.LogsPalette,
+            Title = "Logs: find a pod or workload…",
+            CheatTitle = "Logs of any pod or workload, from anywhere",
+            Category = CommandCategory.Pods,
+            IconKey = "ClockOutlineIconGeometry",
+            // The palette, opened already narrowed to the tab's pods and workloads. A
+            // window binding, not a list key like L: it has to work with focus in the
+            // sidebar, the inspector or nowhere, which is the whole point of "from
+            // anywhere". Shift because Cmd+L is the address bar in every browser and
+            // Ctrl+L clears a terminal; nothing else in the app is on Ctrl/Cmd+Shift+L.
+            Chord = new(CommandKey.L, Cmd | ChordModifiers.Shift),
+            Surfaces = Everywhere,
+        },
+        new()
+        {
             Id = CommandId.PreviousLogs,
             Title = "Previous logs (crashed container)",
             Category = CommandCategory.Pods,

@@ -97,6 +97,63 @@ internal static class UxInteractionChecks
         Console.WriteLine($"Unhealthy-only interaction passed ({vm.Rows.Count} rows; key, chip click, palette).");
     }
 
+    /// <summary>
+    /// L1, driven through the real window: Ctrl/Cmd+Shift+L opens the palette on the logs
+    /// prefix with focus in its box, typing narrows it to the demo cluster's pods and
+    /// workloads, Enter opens the same pane the list's L key would, and a click lands on
+    /// the row it hit (the tap handler is on the list, not the row's text — UI rule 8).
+    /// </summary>
+    internal static void LogsPalette(Window window)
+    {
+        var view = window.GetVisualDescendants().OfType<ClusterTabView>().First();
+        var vm = (ClusterTabViewModel)view.DataContext!;
+        var shell = (MainWindowViewModel)window.DataContext!;
+        var box = window.FindControl<TextBox>("PaletteQueryBox")!;
+
+        view.FindControl<DataGrid>("ResourceGrid")!.Focus();
+        window.KeyPress(Key.L, (RawInputModifiers)(Hotkeys.Primary | KeyModifiers.Shift), PhysicalKey.L, "l");
+        Dispatcher.UIThread.RunJobs();
+        if (!shell.Palette.IsOpen || shell.Palette.Query != CommandPaletteViewModel.LogsPrefix || !box.IsFocused)
+            throw new InvalidOperationException("The logs gesture did not open a focused palette on the logs prefix.");
+        if (box.CaretIndex != CommandPaletteViewModel.LogsPrefix.Length)
+            throw new InvalidOperationException("The caret was not at the end of the logs prefix.");
+        if (shell.Palette.FilteredItems.Count == 0 || shell.Palette.FilteredItems.Any(i => i.Scope != PaletteScope.Logs))
+            throw new InvalidOperationException("The logs prefix did not narrow the palette to log rows.");
+
+        window.KeyTextInput("checkout");
+        Dispatcher.UIThread.RunJobs();
+        var titles = shell.Palette.FilteredItems.Select(i => i.Title).ToList();
+        if (titles.Count != 2 || titles[0] != "Logs: Deployment/checkout-worker" || !titles[1].StartsWith("Logs: checkout-worker-", StringComparison.Ordinal))
+            throw new InvalidOperationException($"Typing did not narrow to the workload and its pod: {string.Join(", ", titles)}");
+
+        // Down to the pod, Enter: pod detail on its Logs tab, as L on the row opens it.
+        window.KeyPress(Key.Down, RawInputModifiers.None, PhysicalKey.ArrowDown, null);
+        window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, "\r");
+        Dispatcher.UIThread.RunJobs();
+        if (shell.Palette.IsOpen || vm.SelectedInspectorTab is not PodDetailTabViewModel { SelectedDetailTabIndex: 0 } detail
+            || !detail.PodName.StartsWith("checkout-worker-", StringComparison.Ordinal))
+            throw new InvalidOperationException("Enter on a pod row did not open that pod's logs.");
+
+        // The workload row, by a click on its subtitle's far edge — a spot no text covers.
+        window.KeyPress(Key.L, (RawInputModifiers)(Hotkeys.Primary | KeyModifiers.Shift), PhysicalKey.L, "l");
+        window.KeyTextInput("checkout");
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        Dispatcher.UIThread.RunJobs();
+        var list = window.FindControl<ListBox>("PaletteList")!;
+        var first = list.ContainerFromIndex(0) as Control
+            ?? throw new InvalidOperationException("The palette's first row was not realized.");
+        var edge = first.TranslatePoint(new Point(first.Bounds.Width - 6, first.Bounds.Height / 2), window)!.Value;
+        window.MouseDown(edge, MouseButton.Left);
+        window.MouseUp(edge, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        if (shell.Palette.IsOpen || vm.SelectedInspectorTab is not WorkloadLogsTabViewModel)
+            throw new InvalidOperationException("A click at the row's edge did not open the workload's logs.");
+
+        var tabs = vm.InspectorTabs.Count;
+        Console.WriteLine($"Logs palette interaction passed (gesture, typing, Enter on a pod, click on a workload; {tabs} tabs).");
+    }
+
     private static void Click(Window window, Control target)
     {
         var centre = target.TranslatePoint(new Point(target.Bounds.Width / 2, target.Bounds.Height / 2), window)
