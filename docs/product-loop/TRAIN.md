@@ -18,7 +18,7 @@ by editing **Config** or **Owner notes**; the next step applies it first.
 
 ## State
 
-Phase: BUILD · Branch: claude/relaxed-franklin-gssbew (session-designated; stands in for `train/v0.4.0`) · Selected: 2026-09-22 · PR: — · Started: 2026-09-22 · Last release: v0.3.3 (2026-09-22)
+Phase: BUILD · Branch: claude/relaxed-franklin-gssbew (session-designated; stands in for `train/v0.4.0`) · Selected: 2026-09-22 · PR: [#87](https://github.com/Shman4ik/kubeNimbus/pull/87) · Started: 2026-09-22 · Last release: v0.3.3 (2026-09-22)
 Baseline: first frame 99 ms (median of 3 warm runs: 99/99/95; cold first run 3529 ms, font cache), executable 51.3 MiB (53 769 168 B; payload with libSkiaSharp + libHarfBuzzSharp 64.6 MiB) · RID: linux-x64 · AOT warnings: the known DataGrid IL2104/IL3053 pair only
 Sandbox: **API-server-only.** Docker Hub blobs 403, so `sandbox-up.sh` fails; native `k3s server` (GitHub binary + airgap images) comes up and the demo manifests apply (50-crds/51-custom-resources included, so VER-24 is paid), but `runc` cannot start containers here — no pod ever runs. Real: discovery, list/watch, CRDs, RBAC, SSA/dry-run, patches, evictions. Not real: logs, exec, port-forward, metrics. Must be re-started each session (see CURRENT_STATE.md → Environment notes).
 
@@ -36,7 +36,7 @@ Sandbox: **API-server-only.** Docker Hub blobs 403, so `sandbox-up.sh` fails; na
 | # | Source | Deliverable (user outcome) | Kind | Size | Score | Status | Rounds | Commit |
 |---|---|---|---|---|---|---|---|---|
 | T1 | research #1, headlamp#6974, k9s `Ctrl-z` | Show only what is unhealthy, on any list | UX | S | 4.05 | landed | 0 | fa4f30e |
-| L1 | owner pin | Open any pod's or workload's logs from the palette, from anywhere | UX | M | pin | planned | 0 | |
+| L1 | owner pin | Open any pod's or workload's logs from the palette, from anywhere | UX | M | pin | building | 0 | |
 | L2 | owner pin | One click to logs from the row, and logs opened full-size | UX | S | pin | planned | 0 | |
 | L3 | owner pin | Logs from everywhere a pod is named | UX | S | pin | planned | 0 | |
 | T2 | friction walk (`cluster-tab-events-list`) | The Events list reads like `kubectl get events`: last seen, type, reason, object, message | UX | M | 3.65 | planned | 0 | |
