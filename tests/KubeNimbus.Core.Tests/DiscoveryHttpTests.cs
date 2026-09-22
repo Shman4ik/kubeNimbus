@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Collections.Concurrent;
 
 namespace KubeNimbus.Core.Tests;
 
@@ -54,6 +55,60 @@ public class DiscoveryHttpTests
         await Assert.That(groups.Count).IsEqualTo(GroupCount); // core + 39 groups
     }
 
+    [Test]
+    public async Task Aggregated_discovery_uses_two_negotiated_requests_and_preserves_capabilities()
+    {
+        using var server = new SlowDiscoveryServer(0, null, aggregated: true);
+        using var client = server.Connect();
+        var catalog = await client.DiscoverResourcesAsync();
+        await Assert.That(server.Requests.Count).IsEqualTo(2);
+        await Assert.That(server.Requests.All(r => r.Accept.Contains("apidiscovery.k8s.io;v=v2"))).IsTrue();
+        await Assert.That(catalog.Count).IsEqualTo(2);
+        var deployment = catalog.Single(d => d.Group == "apps");
+        await Assert.That(deployment.Version).IsEqualTo("v1");
+        await Assert.That(deployment.HasSubresource("scale")).IsTrue();
+        await Assert.That(deployment.Namespaced).IsTrue();
+        await Assert.That(deployment.ShortNames.Contains("deploy")).IsTrue();
+    }
+
+    [Test]
+    public async Task Warm_connections_skip_discovery_and_version_changes_invalidate_the_disk_cache()
+    {
+        using var server = new SlowDiscoveryServer(0, null, aggregated: true);
+        using (var cold = server.Connect())
+        {
+            await cold.GetServerVersionAsync();
+            await cold.GetResourceCatalogAsync();
+        }
+        await Assert.That(server.Requests.Count).IsEqualTo(3);
+        using (var warm = server.Connect())
+        {
+            await warm.GetServerVersionAsync();
+            await Assert.That((await warm.GetResourceCatalogAsync()).Count).IsEqualTo(2);
+            await Assert.That(server.Requests.Count).IsEqualTo(4);
+            await warm.GetResourceCatalogAsync(forceRefresh: true);
+            await Assert.That(server.Requests.Count).IsEqualTo(6);
+        }
+        server.Version = "v1.32.0";
+        using var upgraded = server.Connect();
+        await upgraded.GetServerVersionAsync();
+        await upgraded.GetResourceCatalogAsync();
+        await Assert.That(server.Requests.Count).IsEqualTo(9);
+    }
+
+    [Test]
+    public async Task Discovery_honors_cancellation()
+    {
+        using var server = new SlowDiscoveryServer(GroupCount, null);
+        using var client = server.Connect();
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        var canceled = false;
+        try { await client.DiscoverResourcesAsync(cts.Token); }
+        catch (OperationCanceledException) { canceled = true; }
+        await Assert.That(canceled).IsTrue();
+    }
+
     /// <summary>
     /// A stand-in API server serving <c>/api/v1</c>, <c>/apis</c> and one resource list
     /// per group, each after a short delay, handling requests concurrently so that the
@@ -66,14 +121,18 @@ public class DiscoveryHttpTests
         private readonly HttpListener _listener = new();
         private readonly int _groupCount;
         private readonly int? _failingGroup;
+        private readonly bool _aggregated;
+        public ConcurrentBag<(string Path, string Accept)> Requests { get; } = [];
+        public string Version { get; set; } = "v1.31.0";
         private readonly string _directory;
         private readonly Task _pump;
         private int _inFlight;
         private int _maxInFlight;
 
-        public SlowDiscoveryServer(int groupCount, int? failingGroup)
+        public SlowDiscoveryServer(int groupCount, int? failingGroup, bool aggregated = false)
         {
             _groupCount = groupCount;
+            _aggregated = aggregated;
             _failingGroup = failingGroup;
 
             var port = FreePort();
@@ -107,12 +166,12 @@ public class DiscoveryHttpTests
 
         public static string GroupName(int index) => $"g{index:D2}.example.io";
 
-        public ClusterClient Connect() => ClusterClient.Connect(new ClusterContext(
-            Name: "stub",
-            ClusterName: "stub",
-            Namespace: null,
-            UserName: "stub",
-            KubeconfigPath: Path.Combine(_directory, "kubeconfig.yaml")));
+        public ClusterClient Connect()
+        {
+            var client = ClusterClient.Connect(new ClusterContext("stub", "stub", null, "stub", Path.Combine(_directory, "kubeconfig.yaml")));
+            client.DiscoveryCacheDirectory = Path.Combine(_directory, "cache");
+            return client;
+        }
 
         private async Task PumpAsync()
         {
@@ -136,6 +195,7 @@ public class DiscoveryHttpTests
 
         private async Task AnswerAsync(HttpListenerContext context)
         {
+            Requests.Add((context.Request.Url!.AbsolutePath, context.Request.Headers["Accept"] ?? ""));
             var now = Interlocked.Increment(ref _inFlight);
             int seen;
             while (now > (seen = Volatile.Read(ref _maxInFlight))
@@ -166,6 +226,22 @@ public class DiscoveryHttpTests
 
         private (HttpStatusCode Status, string Body) Route(string path)
         {
+            if (path.TrimEnd('/') == "/version")
+                return (HttpStatusCode.OK, $$"""{"major":"1","minor":"31","gitVersion":"{{Version}}"}""");
+            if (_aggregated && path is "/api" or "/apis")
+            {
+                var core = path == "/api";
+                return (HttpStatusCode.OK, $$"""
+                    {"apiVersion":"apidiscovery.k8s.io/v2","kind":"APIGroupDiscoveryList","items":[
+                      {"metadata":{"name":"{{(core ? "" : "apps")}}"},"versions":[
+                        {"version":"v1","freshness":"Current","resources":[
+                          {"resource":"{{(core ? "pods" : "deployments")}}","responseKind":{"kind":"{{(core ? "Pod" : "Deployment")}}"},
+                           "scope":"Namespaced","singularResource":"{{(core ? "pod" : "deployment")}}",
+                           "verbs":["get","list","watch","patch"],"shortNames":["deploy"],"categories":["all"],
+                           "subresources":[{"subresource":"scale"}]}]},
+                        {"version":"v1beta1","freshness":"Current","resources":[]}]}]}
+                    """);
+            }
             if (path == "/api/v1")
             {
                 return (HttpStatusCode.OK, ResourceList("v1", "Pod", "pods"));

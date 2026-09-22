@@ -22,6 +22,7 @@ way in Preferences → Shortcut modifier.
 
 | Action | Windows / Linux | macOS |
 | --- | --- | --- |
+| Choose namespace | Ctrl+Shift+N | Cmd+Shift+N |
 | Search the resource list by name | Ctrl+F | Cmd+F |
 | Filter the sidebar's resource kinds | Type in the filter box | Type in the filter box |
 | Open the selected resource | Enter | Enter |

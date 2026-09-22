@@ -76,7 +76,8 @@ public sealed record WorkspaceSettings(
     /// click on every launch. Out-of-range (a tab whose context has since gone) falls
     /// back to the first.
     /// </summary>
-    int? SelectedTabIndex = null);
+    int? SelectedTabIndex = null,
+    Dictionary<string, List<string>>? RecentNamespaces = null);
 
 [JsonSerializable(typeof(WorkspaceSettings))]
 internal sealed partial class WorkspaceJsonContext : JsonSerializerContext;
@@ -141,6 +142,7 @@ public static class WorkspaceStore
         IsAdvancedView = settings.IsAdvancedView ?? false,
         KubeconfigPaths = settings.KubeconfigPaths ?? [],
         GridLayouts = settings.GridLayouts ?? [],
+        RecentNamespaces = settings.RecentNamespaces ?? [],
     };
 
     public static void Save(WorkspaceSettings settings)

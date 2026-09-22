@@ -2072,3 +2072,23 @@ NativeAOT publish was run; nothing here adds reflection, and `TabSnapshot`/
 `WorkspaceSettings` stay on the source-generated JSON context.
 
 [fluent-basics]: https://learn.microsoft.com/en-us/windows/apps/design/basics/
+
+### Workload navigation and discovery follow-up (2026-09-22)
+
+UX-1 through UX-4 are complete. Workloads open on live pods, conditions and events.
+Their Actions menu uses the existing confirmation strip for scale and rollout restart.
+Pod navigation and actions retain the source cluster. The namespace picker supports
+search, persistent recents and Ctrl/Cmd+Shift+N.
+
+Pods start before discovery finishes. Aggregated discovery negotiates v2 and v2beta1,
+with the existing per-group walk as fallback. The disk cache stores descriptors only.
+It expires after six hours or a server-version change. Explicit catalog refresh
+bypasses it. Partial discovery results do not replace the disk cache.
+
+Checks: solution build; 394 Core tests and 168 App tests; 156 screenshots across
+both themes; keyboard interaction against 300 namespaces. The local k3s sandbox
+was available for all Core integration tests. Windows NativeAOT publish and the
+launch check passed. Only the known DataGrid IL2104/IL3053 warnings remained.
+
+Limits: fixture screenshots cover the new workload pane. Remote exec authentication,
+restricted RBAC and macOS keyboard behavior were not exercised against live systems.

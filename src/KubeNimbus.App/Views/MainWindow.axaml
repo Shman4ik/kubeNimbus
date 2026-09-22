@@ -31,6 +31,9 @@
     <DataTemplate DataType="vm:PodDetailTabViewModel">
       <views:PodDetailView />
     </DataTemplate>
+    <DataTemplate DataType="vm:WorkloadDetailTabViewModel">
+      <views:WorkloadDetailView />
+    </DataTemplate>
     <DataTemplate DataType="vm:NodeDetailTabViewModel">
       <views:NodeDetailView />
     </DataTemplate>

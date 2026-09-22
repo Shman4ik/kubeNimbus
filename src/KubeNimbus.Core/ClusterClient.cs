@@ -53,8 +53,15 @@ public sealed partial class ClusterClient : IDisposable
     /// <summary>Raw generated client, for tests only. App code goes through typed methods.</summary>
     internal Kubernetes Api => _client;
 
-    public async Task<VersionInfo> GetServerVersionAsync(CancellationToken cancellationToken = default) =>
-        await _client.Version.GetCodeAsync(cancellationToken).ConfigureAwait(false);
+    private string? _serverVersion;
+
+    public async Task<VersionInfo> GetServerVersionAsync(CancellationToken cancellationToken = default)
+    {
+        var version = await _client.Version.GetCodeAsync(cancellationToken).ConfigureAwait(false);
+        if (_serverVersion != version.GitVersion) _resourceCatalog = null;
+        _serverVersion = version.GitVersion;
+        return version;
+    }
 
     /// <summary>
     /// Live pod stream for a namespace (or all namespaces when null).
@@ -411,9 +418,11 @@ public sealed partial class ClusterClient : IDisposable
     /// copy of the credential-injection dance.
     /// </summary>
     internal async Task<HttpResponseMessage> SendRequestAsync(
-        HttpMethod method, string relativePath, HttpContent? content, HttpCompletionOption completion, CancellationToken ct)
+        HttpMethod method, string relativePath, HttpContent? content, HttpCompletionOption completion, CancellationToken ct,
+        string? accept = null)
     {
         var request = new HttpRequestMessage(method, new Uri(_client.BaseUri, relativePath)) { Content = content };
+        if (accept is not null) request.Headers.TryAddWithoutValidation("Accept", accept);
         if (_client.Credentials is not null)
         {
             await _client.Credentials.ProcessHttpRequestAsync(request, ct).ConfigureAwait(false);

@@ -15,6 +15,49 @@ namespace KubeNimbus.App.Views;
 
 public partial class ClusterTabView : UserControl
 {
+    private void OnNamespaceShortcut(object? sender, KeyEventArgs e)
+    {
+        if (Hotkeys.NamespacePicker.Matches(e) && NamespaceButton.IsEnabled)
+        {
+            NamespaceButton.Flyout?.ShowAt(NamespaceButton);
+            e.Handled = true;
+        }
+    }
+
+    private void OnNamespaceOpened(object? sender, EventArgs e)
+    {
+        if (DataContext is ClusterTabViewModel vm) { vm.NamespaceFilter = ""; vm.RebuildNamespaceChoices(); }
+        Dispatcher.UIThread.Post(() => NamespaceSearch.Focus(), DispatcherPriority.Input);
+    }
+
+    private void OnNamespaceClosed(object? sender, EventArgs e) => NamespaceButton.Focus();
+
+    private void ChooseNamespace()
+    {
+        if (DataContext is ClusterTabViewModel vm && vm.NamespaceCandidate is { } candidate)
+        {
+            vm.SelectedNamespace = candidate.Name;
+            NamespaceButton.Flyout?.Hide();
+        }
+    }
+
+    private void OnNamespaceTapped(object? sender, TappedEventArgs e)
+    {
+        if (e.Source is Avalonia.Visual visual && visual.FindAncestorOfType<ListBoxItem>() is not null)
+            ChooseNamespace();
+    }
+
+    private void OnNamespaceKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter) { ChooseNamespace(); e.Handled = true; }
+        else if (e.Key == Key.Down && NamespaceSearch.IsFocused)
+        {
+            NamespaceList.Focus();
+            if (NamespaceList.ContainerFromIndex(0) is ListBoxItem item) item.Focus();
+            e.Handled = true;
+        }
+    }
+
     // Remembered pixel height of the bottom dock, so toggling maximize off (or
     // reopening the dock) restores the height the user last dragged it to.
     private double _dockHeight = 300;
@@ -69,6 +112,7 @@ public partial class ClusterTabView : UserControl
     public ClusterTabView()
     {
         InitializeComponent();
+        AddHandler(KeyDownEvent, OnNamespaceShortcut, RoutingStrategies.Tunnel);
 
         _printerSlots.AddRange(ResourceGrid.Columns.Where(c => c.Tag as string == PrinterSlotTag));
         _slotIds = new string?[_printerSlots.Count];

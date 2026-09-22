@@ -9,12 +9,13 @@ namespace KubeNimbus.Core;
 public sealed partial class ClusterClient
 {
     private IReadOnlyList<ResourceDescriptor>? _resourceCatalog;
+    internal string? DiscoveryCacheDirectory { get; set; }
     private readonly SemaphoreSlim _catalogLock = new(1, 1);
 
     /// <summary>Discovery catalog, fetched once and cached for the life of this connection.</summary>
-    public async Task<IReadOnlyList<ResourceDescriptor>> GetResourceCatalogAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<ResourceDescriptor>> GetResourceCatalogAsync(CancellationToken cancellationToken = default, bool forceRefresh = false)
     {
-        if (_resourceCatalog is { } cached)
+        if (!forceRefresh && _resourceCatalog is { } cached)
         {
             return cached;
         }
@@ -22,7 +23,19 @@ public sealed partial class ClusterClient
         await _catalogLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            _resourceCatalog ??= await DiscoverResourcesAsync(cancellationToken).ConfigureAwait(false);
+            if (!forceRefresh && _resourceCatalog is not null) return _resourceCatalog;
+            var cache = new DiscoveryCache(DiscoveryCacheDirectory);
+            // The endpoint is essential; context/user also separates discovery filtered by a proxy or RBAC.
+            var identity = $"{_client.BaseUri.AbsoluteUri}\n{Context.Name}\n{Context.UserName}\n{Context.KubeconfigPath}";
+            if (forceRefresh) cache.Invalidate(identity);
+            if (!forceRefresh && _serverVersion is { } version)
+                _resourceCatalog = await cache.ReadAsync(identity, version, cancellationToken).ConfigureAwait(false);
+            if (forceRefresh || _resourceCatalog is null)
+            {
+                _resourceCatalog = await DiscoverResourcesAsync(cancellationToken).ConfigureAwait(false);
+                if (_discoveryComplete && _serverVersion is { } freshVersion)
+                    await cache.WriteAsync(identity, freshVersion, _resourceCatalog, cancellationToken).ConfigureAwait(false);
+            }
             return _resourceCatalog;
         }
         finally
@@ -42,6 +55,8 @@ public sealed partial class ClusterClient
             ? $"involvedObject.name={target.Name},involvedObject.namespace={ns}"
             : $"involvedObject.name={target.Name}";
 
+        selector += target.Uid is { Length: > 0 } uid
+            ? $",involvedObject.uid={uid}" : $",involvedObject.kind={target.Kind}";
         var events = await ListResourceOnceAsync(
             ResourceDescriptor.Events, target.Namespace, selector, cancellationToken).ConfigureAwait(false);
 

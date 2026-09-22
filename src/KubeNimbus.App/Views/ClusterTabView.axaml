@@ -22,6 +22,9 @@
 
     <!-- Sidebar: sits directly on the shell tone, Files-style — no card chrome. -->
     <Grid Name="Sidebar" Grid.Column="0" RowDefinitions="Auto,*" Margin="0,0,8,0">
+      <Grid.ContextFlyout><MenuFlyout>
+        <MenuItem Header="Refresh resource catalog" Command="{Binding RefreshCatalogCommand}"/>
+      </MenuFlyout></Grid.ContextFlyout>
 
       <!-- Filter row, with the advanced-view switch docked right of it — same placement
            and same shape as pgNimbus's SchemaTreePanel, because it answers the same
@@ -329,9 +332,31 @@
 
         <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto" Margin="0,0,0,10">
           <TextBlock Grid.Column="0" Text="{Binding SelectedKind.DisplayName}" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" />
-          <ComboBox Grid.Column="1" ItemsSource="{Binding NamespaceOptions}" SelectedItem="{Binding SelectedNamespace}"
-                     Margin="12,0,0,0" MinWidth="170"
-                     IsEnabled="{Binding SelectedKind.Descriptor.Namespaced}" />
+          <Button Grid.Column="1" Name="NamespaceButton" Classes="soft"
+                  Margin="12,0,0,0" MinWidth="170" MaxWidth="280" IsEnabled="{Binding SelectedKind.Descriptor.Namespaced}"
+                  ToolTip.Tip="Choose namespace — type to filter">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Text="{Binding SelectedNamespace}" TextTrimming="CharacterEllipsis"/>
+              <PathIcon Grid.Column="1" Data="{StaticResource ChevronDownIconGeometry}" Width="10" Height="10" Margin="12,0,0,0"/>
+            </Grid>
+            <Button.Flyout>
+              <Flyout Opened="OnNamespaceOpened" Closed="OnNamespaceClosed">
+                <Grid RowDefinitions="Auto,Auto,*" Width="320" MaxHeight="420" KeyDown="OnNamespaceKeyDown">
+                  <TextBox Name="NamespaceSearch" Text="{Binding NamespaceFilter}" PlaceholderText="Filter namespaces…"/>
+                  <TextBlock Grid.Row="1" Text="No matching namespaces." IsVisible="{Binding NoNamespaceMatches}" Margin="4,12" Opacity="0.65"/>
+                  <ListBox Grid.Row="2" Name="NamespaceList" ItemsSource="{Binding FilteredNamespaces}"
+                           SelectedItem="{Binding NamespaceCandidate}" Tapped="OnNamespaceTapped" Margin="0,6,0,0">
+                    <ListBox.ItemTemplate><DataTemplate x:DataType="vm:NamespaceChoice">
+                      <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}"/>
+                        <TextBlock Grid.Column="1" Text="Recent" IsVisible="{Binding IsRecent}" Opacity="0.45" Margin="12,0,0,0"/>
+                      </Grid>
+                    </DataTemplate></ListBox.ItemTemplate>
+                  </ListBox>
+                </Grid>
+              </Flyout>
+            </Button.Flyout>
+          </Button>
           <!-- Fleet toggle: only offered with more than one cluster connected, since
                aggregating one cluster is just this list (UI rule 1). -->
           <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" Margin="12,0,0,0" VerticalAlignment="Center"

@@ -55,6 +55,8 @@ public static class Hotkeys
     /// entry because it is the find-in-list every application has bound to this chord,
     /// and typing a pod name is the fastest way through a 200-row namespace.
     /// </summary>
+    public static KeyGesture NamespacePicker => Gesture(CommandId.NamespacePicker);
+
     public static KeyGesture FilterList => Gesture(CommandId.FilterList);
 
     public static KeyGesture ShortcutsHelp => Gesture(CommandId.ShortcutsWindow);

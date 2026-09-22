@@ -21,6 +21,7 @@ public enum CommandId
     ReorderTabs,
 
     // --- Resources ---
+    NamespacePicker,
     FilterList,
     FilterSidebar,
     OpenResource,

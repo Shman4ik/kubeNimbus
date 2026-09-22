@@ -43,6 +43,10 @@ BuildAvaloniaApp().SetupWithoutStarting();
 
 var scenarios = new (string Name, Func<Control> Build)[]
 {
+    ("ux-namespace-picker", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
+    ("ux-workload-pods", () => HostInMainWindow(ClusterTabScenarios.WorkloadDetail(), height: 1000)),
+    ("ux-workload-conditions", () => HostInMainWindow(ClusterTabScenarios.WorkloadDetail(1), height: 1000)),
+    ("ux-workload-events", () => HostInMainWindow(ClusterTabScenarios.WorkloadDetail(2), height: 1000)),
     ("cluster-tab-workloads-list", () => HostInMainWindow(ClusterTabScenarios.WorkloadsList())),
     // The before/after pair for the advanced view. Same tab, same seeded usage data —
     // the only difference is the switch, and what it may change is now exactly the
@@ -203,6 +207,7 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     AvaloniaHeadlessPlatform.ForceRenderTimerTick();
     Dispatcher.UIThread.RunJobs();
 
+    if (name == "ux-namespace-picker") UxInteractionChecks.NamespacePicker(window);
     using var frame = window.CaptureRenderedFrame();
     var themeLabel = theme == ThemeVariant.Dark ? "dark" : "light";
     var path = Path.Combine(outDir, $"{name}.{themeLabel}.png");

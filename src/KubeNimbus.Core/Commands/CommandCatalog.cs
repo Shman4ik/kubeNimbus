@@ -150,6 +150,14 @@ public static class CommandCatalog
         // ------------------------------------------------------------ Resources
         new()
         {
+            Id = CommandId.NamespacePicker,
+            Title = "Choose namespace",
+            Category = CommandCategory.Resources,
+            Chord = new(CommandKey.N, Cmd | ChordModifiers.Shift),
+            Surfaces = SheetOnly,
+        },
+        new()
+        {
             Id = CommandId.FilterList,
             Title = "Search the resource list by name",
             Category = CommandCategory.Resources,
