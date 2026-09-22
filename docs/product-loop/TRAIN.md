@@ -43,6 +43,11 @@ _(empty)_
   tab clipping, absolute timestamps in pod events, and a redundant Namespace column
   when one namespace is selected. `CURRENT_STATE.md` created. Waiting on the researcher
   before SELECT.
+- 2026-09-22 — Core suite against the API-server-only sandbox: 394 total, 391 passed,
+  **0 skipped**, 3 failed — exactly the three that need a running pod
+  (`Exec_runs_a_shell_command_in_a_running_pod`, `PortForward_connects_to_a_pod_tcp_port`,
+  `StreamPodLogs_returns_lines_and_honors_cancellation`, each timing out waiting for a pod
+  that can never start here). Every API-server-backed integration test ran for real.
 
 - 2026-09-22 — train machinery created; the first train starts at SURVEY. Being the
   first, its researcher seeds `COMPETITOR_MATRIX.md` from `docs/research/` (August
