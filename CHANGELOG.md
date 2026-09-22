@@ -20,8 +20,8 @@ it as the GitHub Release body, so headings must match tags exactly
   plate, field and broom match pgNimbus's exactly, and every icon size — window,
   taskbar, installer, Microsoft Store tiles — is now generated from one vector
   master instead of a set of per-size drawings that had drifted apart.
-- **Dependency updates.** Avalonia 12.1.2, SvcSystems.UI.Terminal 1.1.4 (the
-  exec pane's terminal) and YamlDotNet 18.1.0. No behaviour change is intended.
+- **Dependency updates.** Avalonia 12.1.2 and SvcSystems.UI.Terminal 1.1.4 (the
+  exec pane's terminal). No behaviour change is intended.
 
 ## [0.3.2] - 2026-08-29
 
