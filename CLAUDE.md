@@ -903,34 +903,52 @@ Public-facing docs, each with one job — don't duplicate content between them:
 | `CHANGELOG.md` | Release history — and machine-read: the release workflow lifts the section matching a tag out of it verbatim. |
 | `CODE_OF_CONDUCT.md` | Contributor Covenant 2.1, unmodified apart from the contact address. |
 | `CLAUDE.md` (this file) | Whoever is changing the code. The engineering contract and the *why* behind every rule. |
-| `docs/BACKLOG.md` | What is queued, and the state the backlog loop runs from — see below. |
+| `docs/product-loop/` | The release train's live state (`TRAIN.md`), product assessment, competitor matrix and per-release history. |
+| `docs/BACKLOG.md` | The long-lived evidence pool: owner-pinned Ready rows and the Inbox the release train mines — see below. |
 | `docs/PRE-LAUNCH-CHECKLIST.md` | One-time: making the repo public, cutting the first release, and the Microsoft Store submission. Delete it once the launch is behind us. |
 
-## The backlog loop
+## The release train
 
-`docs/BACKLOG.md` is the queue, and `.claude/` holds the machinery that works
-through it: `/backlog-cycle` (the orchestrator, one item per run, driven by the
-`/loop` skill) plus three agents — `kn-implementer` (Opus, builds it),
-`kn-verifier` (Sonnet, re-runs the checks and reviews against the rules above,
-with no Edit tool so it cannot quietly fix what it should be reporting), and
-`kn-researcher` (competitor demand and marketing emphasis, writing dated reports
-under `docs/research/`).
+Work is shipped as **trains**: one train is one release carrying 5–10 deliverables,
+every few days. `/release-train` ([`.claude/skills/release-train/SKILL.md`](.claude/skills/release-train/SKILL.md))
+runs it one step per invocation — SURVEY (repo scan + a background competitor
+delta) → SELECT (fresh scored candidates, 5–10 picked, a spec each) → BUILD (one
+item per step) → HARDEN (regression sweep, performance gate, polish pass, product
+review) → RELEASE → RECORD — and is driven by `/loop /release-train`, normally in a
+Claude Code cloud session. Three agents do the heavy lifting: `kn-implementer`
+(Opus, builds one item), `kn-verifier` (Sonnet, re-runs the checks and reviews
+against the rules above, with no Edit tool so it cannot quietly fix what it should
+be reporting), and `kn-researcher` (the competitor delta and matrix). Its files live
+in [`docs/product-loop/`](docs/product-loop/): `TRAIN.md` (the live state),
+`CURRENT_STATE.md`, `COMPETITOR_MATRIX.md`, and `history/<date>-v<version>/` for
+every shipped train.
 
-Three things about it are load-bearing:
+It replaced `/backlog-cycle`, which shipped one owner-approved item per cycle and
+never released. Five things about the train are load-bearing:
 
-1. **The loop may only take work from the Ready table, and only a human puts
-   anything there.** Research proposals and newly-found work land in the Inbox
-   with the priority column blank. An agent promoting its own suggestion into
-   Ready would close the only loop in this arrangement that has a person in it.
-2. **Verification debt is an item, not a footnote.** Whatever the verifier
-   reports as unverifiable in its environment — no live cluster, no Windows or
-   macOS box, no display — becomes its own Inbox row in the same cycle. This
-   repo has repeatedly lost track of exactly that, and the cost is on record:
-   three of four release RIDs shipped a binary that could not start, because
-   `ci.yml` publishes the AOT output and has never launched it.
-3. **`MAX_FIX_ROUNDS` exists so a stuck item becomes a `blocked` row with a
-   precise note** rather than a fifth round of the same failure.
-
+1. **The train selects its own work; the owner steers rather than gates.** The old
+   loop could only take items a human had put in Ready, which kept a person in the
+   loop and also meant the queue ran dry whenever that person was busy. Now the
+   Ready table is a set of *forced candidates* (P0/P1 rows enter the plan unless they
+   are infeasible where the train runs), the Inbox is an evidence pool, and the
+   owner's levers are `TRAIN.md`'s Config and Owner notes, applied at the start of
+   every step: pin, veto, pause, or change the release mode.
+2. **State lives in `TRAIN.md` on the train branch, and every step pushes it.** A
+   cloud container is discarded with its session, so a step that only committed
+   locally did not happen, and a fresh session finds the live train by its
+   `train/*` branch.
+3. **Verification debt is still an item, not a footnote.** Whatever the verifier
+   reports as unverifiable in its environment — no live cluster, no Windows or macOS
+   box, no display — becomes its own Inbox row in the same step. This repo has
+   repeatedly lost track of exactly that, and the cost is on record: three of four release
+   RIDs shipped a binary that could not start, because `ci.yml` published the AOT
+   output and never launched it.
+4. **`MAX_FIX_ROUNDS` ends in a revert, not a stall.** An item still failing
+   verification is reverted off the train branch and marked `blocked` with the
+   precise finding; the train moves on without it.
+5. **The next train starts from a new survey.** Items 11–20 of the last ranking are
+   not a queue — the repository and the market have both moved since they were
+   scored.
 ## App icon / logo assets
 
 Moved to [`design/CLAUDE.md`](design/CLAUDE.md), which loads when working under `design/`. The short version: nothing in `design/*.svg` is hand-edited (the `.af` files are the art), and the base and broom are shared byte-for-byte with pgNimbus, so a change to either is a pair of PRs.

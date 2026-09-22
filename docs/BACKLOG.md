@@ -1,36 +1,34 @@
 # kubeNimbus backlog
 
-The queue `/backlog-cycle` works from. Everything below is either **validated by
-a human and ready to build** (the Ready table) or **waiting for a human to
-validate it** (the Inbox). The loop may only take work from Ready — that gate is
-deliberate and is the one rule of this file.
+The long-lived evidence pool the **release train** (`/release-train`, see
+`CLAUDE.md` → "The release train") mines when it selects a train's 5–10 items.
+The train picks its own work; this file is how the owner tilts that choice:
 
-## Config
+- **Ready** — owner-validated. Every row is a candidate in every SELECT phase, and a
+  `P0`/`P1` row is *forced* into the next train unless it cannot be built and
+  verified where the train runs (the feasibility mark says so). Set a row's status
+  to `rejected` to keep it out for good.
+- **Inbox** — everything else with evidence behind it: research proposals, findings
+  the implementer ruled out of scope, and verification debt the verifier could not
+  pay. The train adds rows here; it never deletes them. Shipped rows are marked
+  `done <commit>` and kept for the evidence they carry.
 
-The cycle re-reads these each run, so changing one here changes the loop's
-behaviour on the next tick.
-
-| Key | Value | Meaning |
-|---|---|---|
-| `AUTO_PR` | `yes` | On PASS, push the branch **and** open a pull request against `main`, following `.github/PULL_REQUEST_TEMPLATE.md`. Set to `no` to push the branch only. |
-| `MAX_FIX_ROUNDS` | `2` | Verifier FAIL → implementer fix rounds before the item is marked `blocked`. |
-| `RESEARCH_EVERY` | `5` | Cycles between competitor-research runs. |
-| `READY_POOL_MIN` | `5` | Research also runs whenever Ready drops below this. |
+The train's own knobs (items per release, time box, release mode, fix rounds) live
+in `docs/product-loop/TRAIN.md`'s Config block, not here.
 
 **Status:** `inbox` → `ready` → `in-progress` → `needs-fix` → `done`, or
 `blocked` / `rejected`.
-**Priority** is `P0`–`P3` and is set **by a human only**. An item with no
-priority is not ready, whatever its status column says.
+**Priority** is `P0`–`P3`. Only the owner sets it; the train scores unprioritised
+rows itself and records the score in `TRAIN.md`, not here.
 **Size** is `S` (a session), `M` (a day), `L` (multi-session, wants its own
-design pass first).
+design pass first — a train only ever takes an S/M slice of one).
 **Rec** is the recommendation this file was drafted with — a starting point for
 your prioritization, not a decision.
 
 ---
-
 ## Ready
 
-Worked top-down, one per cycle. Every row here is something an agent can finish
+Owner-validated candidates for the next train. Every row here is something an agent can finish
 **without a human at a keyboard** — no live cluster it cannot start, no Windows
 or macOS box, no account or purchase. That is the entry test for this table, and
 it is why several P0/P1 rows are still in the Inbox with a `needs a human` note
