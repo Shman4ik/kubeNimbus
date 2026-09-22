@@ -18,41 +18,84 @@ public sealed partial class ClusterClient
     /// </summary>
     public async Task<IReadOnlyList<ResourceDescriptor>> DiscoverResourcesAsync(CancellationToken cancellationToken = default)
     {
-        var result = new List<ResourceDescriptor>();
+        // The core list and the group list are independent, so they go out together.
+        var coreTask = FetchResourceListAsync("api/v1", group: "", tolerateFailure: false, cancellationToken);
 
-        using (var coreDoc = await GetJsonDocumentAsync("api/v1", cancellationToken).ConfigureAwait(false))
+        List<(string Group, string Version)> groupVersions = [];
+        using (var groupsDoc = await GetJsonDocumentAsync("apis", cancellationToken).ConfigureAwait(false))
         {
-            result.AddRange(ParseResourceList(coreDoc.RootElement, group: ""));
-        }
-
-        using var groupsDoc = await GetJsonDocumentAsync("apis", cancellationToken).ConfigureAwait(false);
-        if (!groupsDoc.RootElement.TryGetProperty("groups", out var groups) || groups.ValueKind != JsonValueKind.Array)
-        {
-            return result;
-        }
-
-        foreach (var group in groups.EnumerateArray())
-        {
-            var groupName = group.TryGetProperty("name", out var n) ? n.GetString() : null;
-            var version = PreferredVersion(group);
-            if (groupName is null || version is null)
+            if (groupsDoc.RootElement.TryGetProperty("groups", out var groups) && groups.ValueKind == JsonValueKind.Array)
             {
-                continue;
+                foreach (var group in groups.EnumerateArray())
+                {
+                    var groupName = group.TryGetProperty("name", out var n) ? n.GetString() : null;
+                    var version = PreferredVersion(group);
+                    if (groupName is not null && version is not null)
+                    {
+                        groupVersions.Add((groupName, version));
+                    }
+                }
             }
+        }
 
+        // One request per API group, issued concurrently. These used to go out one after
+        // another, which made connect time scale with round-trip time × group count: a
+        // cluster running cert-manager, Istio and Argo serves 50+ groups, so at 100 ms
+        // to a distant API server the sidebar — and the first pod list, which waits on
+        // it — took five seconds that were nothing but queueing. The bound keeps a
+        // 100-group cluster from opening 100 connections at once; kubectl's own
+        // discovery client fans out the same way.
+        using var gate = new SemaphoreSlim(MaxConcurrentDiscoveryRequests);
+        var groupTasks = groupVersions.Select(async gv =>
+        {
+            await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                using var resDoc = await GetJsonDocumentAsync($"apis/{groupName}/{version}", cancellationToken).ConfigureAwait(false);
-                result.AddRange(ParseResourceList(resDoc.RootElement, groupName));
+                return await FetchResourceListAsync(
+                    $"apis/{gv.Group}/{gv.Version}", gv.Group, tolerateFailure: true, cancellationToken).ConfigureAwait(false);
             }
-            catch (HttpRequestException)
+            finally
             {
-                // A group can vanish between listing and querying (webhook-backed
-                // aggregated APIs); skip it rather than fail the whole catalog.
+                gate.Release();
             }
+        }).ToArray();
+
+        var result = new List<ResourceDescriptor>(await coreTask.ConfigureAwait(false));
+
+        // Awaited in the order the server listed the groups, so the catalog's order is
+        // as stable as it was when the requests were sequential.
+        foreach (var descriptors in await Task.WhenAll(groupTasks).ConfigureAwait(false))
+        {
+            result.AddRange(descriptors);
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// How many group discovery requests may be in flight at once. High enough that a
+    /// typical cluster's groups all go out in two or three waves, low enough not to look
+    /// like a burst to an API server's priority-and-fairness limits.
+    /// </summary>
+    internal const int MaxConcurrentDiscoveryRequests = 16;
+
+    private async Task<IReadOnlyList<ResourceDescriptor>> FetchResourceListAsync(
+        string path, string group, bool tolerateFailure, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var doc = await GetJsonDocumentAsync(path, cancellationToken).ConfigureAwait(false);
+
+            // Materialized before the document is disposed: ParseResourceList is lazy
+            // and reads JsonElements that die with it.
+            return [.. ParseResourceList(doc.RootElement, group)];
+        }
+        catch (HttpRequestException) when (tolerateFailure)
+        {
+            // A group can vanish between listing and querying (webhook-backed
+            // aggregated APIs); skip it rather than fail the whole catalog.
+            return [];
+        }
     }
 
     private static string? PreferredVersion(JsonElement group)

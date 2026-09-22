@@ -30,6 +30,8 @@ public enum CommandId
     EditYaml,
     ApplyYaml,
     DeleteResource,
+    RolloutRestart,
+    FilterListFromRows,
     RefreshList,
 
     // --- Pods ---

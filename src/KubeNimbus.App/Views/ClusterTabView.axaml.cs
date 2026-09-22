@@ -8,6 +8,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using KubeNimbus.App.ViewModels;
 using KubeNimbus.Core;
+using KubeNimbus.Core.Commands;
 using KubeNimbus.Core.Settings;
 
 namespace KubeNimbus.App.Views;
@@ -757,6 +758,63 @@ public partial class ClusterTabView : UserControl
             vm.OpenSelectedCommand.Execute(null);
             e.Handled = true;
         }
+        else if (CommandBindings.Matches(CommandId.FilterListFromRows, e) || e.KeySymbol == "/")
+        {
+            // KeySymbol as well as the chord: "/" sits on a different physical key on
+            // most non-US layouts, and the catalog's Slash maps to the US one.
+            FocusRowFilter();
+            e.Handled = true;
+        }
+        else if (RowKeyCommand(vm, e) is { } command && command.CanExecute(null))
+        {
+            command.Execute(null);
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// The single-letter row actions (k9s's keys: L logs, P previous, S shell/scale, F
+    /// forward, E edit, R restart, Delete). Each resolves to the same command the row's
+    /// context menu and the palette run, so a key can do nothing the menu could not —
+    /// and the mutating ones arm the confirm strip rather than acting (UI rule 17).
+    /// Null when the key is not one of them, or when it means nothing for this row,
+    /// in which case the grid keeps the keystroke.
+    /// </summary>
+    private static System.Windows.Input.ICommand? RowKeyCommand(ClusterTabViewModel vm, KeyEventArgs e)
+    {
+        if (CommandBindings.Matches(CommandId.PodLogs, e))
+        {
+            // A pod's own logs; on anything that owns pods, the one-stream-per-workload
+            // pane — the same thing the menu's "Logs (all pods)" opens.
+            return vm.IsPodRowSelected ? vm.OpenLogsCommand : vm.OpenWorkloadLogsCommand;
+        }
+
+        if (CommandBindings.Matches(CommandId.PreviousLogs, e))
+        {
+            return vm.OpenPreviousLogsCommand;
+        }
+
+        if (CommandBindings.Matches(CommandId.Exec, e))
+        {
+            return vm.IsPodRowSelected ? vm.ExecIntoSelectedCommand : vm.ScaleSelectedCommand;
+        }
+
+        if (CommandBindings.Matches(CommandId.PortForward, e))
+        {
+            return vm.PortForwardSelectedCommand;
+        }
+
+        if (CommandBindings.Matches(CommandId.EditYaml, e))
+        {
+            return vm.EditSelectedYamlCommand;
+        }
+
+        if (CommandBindings.Matches(CommandId.RolloutRestart, e))
+        {
+            return vm.RestartSelectedCommand;
+        }
+
+        return CommandBindings.Matches(CommandId.DeleteResource, e) ? vm.DeleteSelectedCommand : null;
     }
 
     private void OnInspectorTabTapped(object? sender, TappedEventArgs e)

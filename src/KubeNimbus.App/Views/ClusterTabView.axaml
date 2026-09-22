@@ -403,32 +403,36 @@
                  right-click-selects handler (OnGridRightClick) making sure the row under
                  the cursor is the row the menu acts on. Pod-only items are disabled
                  rather than hidden, so the menu doesn't change shape per row —
-                 a menu whose items move is a menu you have to read every time. -->
+                 a menu whose items move is a menu you have to read every time.
+                 InputGesture is a caption only (a MenuItem's HotKey is the binding, and
+                 there is none): the keys themselves are handled by OnGridKeyDown from
+                 the command catalog, and these captions are how a mouse user learns
+                 them. Keep the two in step with CommandCatalog's List-scoped rows. -->
             <DataGrid.ContextFlyout>
               <MenuFlyout>
-                <MenuItem Header="Logs" Command="{Binding OpenLogsCommand}">
+                <MenuItem Header="Logs" Command="{Binding OpenLogsCommand}" InputGesture="L">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource PlayIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
-                <MenuItem Header="Previous logs" Command="{Binding OpenPreviousLogsCommand}"
+                <MenuItem Header="Previous logs" Command="{Binding OpenPreviousLogsCommand}" InputGesture="P"
                           ToolTip.Tip="The crashed instance's logs — where a CrashLoopBackOff explains itself" />
                 <!-- Enabled for whatever names the pods it owns — a Deployment, a
                      StatefulSet, a Service, a CRD with a pod selector — and disabled on
                      a pod, whose own detail pane is the answer. -->
-                <MenuItem Header="Logs (all pods)" Command="{Binding OpenWorkloadLogsCommand}"
+                <MenuItem Header="Logs (all pods)" Command="{Binding OpenWorkloadLogsCommand}" InputGesture="L"
                           ToolTip.Tip="Tail every pod this workload owns in one pane, colour-keyed by pod">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource LayersIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
                 <Separator />
-                <MenuItem Header="Exec" Command="{Binding ExecIntoSelectedCommand}">
+                <MenuItem Header="Exec" Command="{Binding ExecIntoSelectedCommand}" InputGesture="S">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource ConsoleIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
-                <MenuItem Header="Port-forward" Command="{Binding PortForwardSelectedCommand}">
+                <MenuItem Header="Port-forward" Command="{Binding PortForwardSelectedCommand}" InputGesture="F">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource SwapHorizontalIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
@@ -441,13 +445,13 @@
                      server declares a `scale` subresource for the kind, restart when
                      the object has a pod template to stamp — both from discovery/the
                      object, never from a list of kinds. -->
-                <MenuItem Header="Scale…" Command="{Binding ScaleSelectedCommand}"
+                <MenuItem Header="Scale…" Command="{Binding ScaleSelectedCommand}" InputGesture="S"
                           ToolTip.Tip="Set the replica count through the scale subresource">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource ScaleIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
-                <MenuItem Header="Rollout restart…" Command="{Binding RestartSelectedCommand}"
+                <MenuItem Header="Rollout restart…" Command="{Binding RestartSelectedCommand}" InputGesture="R"
                           ToolTip.Tip="Stamps the pod template so the controller rolls its pods — the same thing kubectl rollout restart does">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource RestartIconGeometry}" Width="13" Height="13" />
@@ -500,12 +504,12 @@
                   </MenuItem.Icon>
                 </MenuItem>
                 <Separator />
-                <MenuItem Header="Edit YAML" Command="{Binding EditSelectedYamlCommand}">
+                <MenuItem Header="Edit YAML" Command="{Binding EditSelectedYamlCommand}" InputGesture="E">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource CodeBracesIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
-                <MenuItem Header="Delete…" Command="{Binding DeleteSelectedCommand}"
+                <MenuItem Header="Delete…" Command="{Binding DeleteSelectedCommand}" InputGesture="Delete"
                           ToolTip.Tip="Asks to confirm, naming the object — for a controller-owned pod, deleting it is how it gets recreated">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource DeleteIconGeometry}" Width="13" Height="13" />

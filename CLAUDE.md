@@ -686,6 +686,16 @@ There are **two** persisted files and the split is not arbitrary:
 - **`workspace.json`** (`KubeNimbus.App/WorkspaceStore.cs`) is *session* — what the
   window looked like: open tabs, pinned and recent contexts, environment overrides.
 
+Each tab snapshot also carries the **kind and namespace** it was showing, and the
+workspace the index of the tab in front, so a restart lands where you left off instead
+of on Pods in all namespaces on every tab. With nothing saved, a tab opens on the
+kubeconfig context's own `namespace` (what kubectl would use), and the first launch
+opens the chain's `current-context` rather than whichever context the merge listed
+first. `ClusterTabViewModel.ApplyInitialView` is the one place that decides, and
+`ClusterTabInitialViewTests` pins it — including that a saved namespace missing from a
+namespace list that *was* read is not opened (it was deleted), while one missing because
+listing was refused by RBAC is added and selected.
+
 The test: deleting the workspace should lose your tabs and nothing else; deleting the
 settings should reset your preferences and not close your clusters. Theme,
 `IsAdvancedView` and `KubeconfigPaths` used to be in the workspace, on the wrong side
@@ -738,7 +748,7 @@ view-model commands, `ShortcutsViewModel` builds the F1 sheet, `CommandTip` buil
 tooltips. It replaced a hand-written `Hotkeys.CheatSheet` array plus gestures typed
 into four places.
 
-Six things worth keeping:
+Seven things worth keeping:
 
 1. **Core stays UI-free** (rule 1), so `CommandKey` is a local enum rather than
    Avalonia's `Key` and `CommandBindings.ToKey` owns the one mapping. That is also why
@@ -772,7 +782,19 @@ Six things worth keeping:
    pane's Copy/Paste pair is `Control | Shift` for the far side of the same argument —
    the terminal owns plain Ctrl+C, so the clipboard has to move up a modifier, exactly
    as it does in every terminal emulator.
-6. **The docs page is a golden file.** `ShortcutDocsTests` fails on any drift;
+6. **The list has single-letter row keys, k9s's own.** L logs (a pod's, or every pod a
+   workload owns), P previous logs, S shell on a pod / scale on anything with a `scale`
+   subresource, F port-forward, E edit YAML, R rollout restart, Delete, and `/` to search.
+   They are `CommandScope.List` rows in the catalog, matched by `ClusterTabView
+   .OnGridKeyDown` through `CommandBindings.Matches`, and each resolves to the *same*
+   command the context menu and the palette run — so a key can never do something the
+   menu could not, and the mutating ones arm the confirm strip (UI rule 17) rather than
+   acting. Bare letters are safe only because the grid is read-only and owns them;
+   never make one a window binding, where it would fire while typing into a text box.
+   The menu's `InputGesture` captions are display-only and have to be kept in step by
+   hand. They exist because every action here used to be right-click, read the menu,
+   click — three motions for the thing the app is opened to do.
+7. **The docs page is a golden file.** `ShortcutDocsTests` fails on any drift;
    `KUBENIMBUS_UPDATE_DOCS=1` regenerates it. A shortcut reference that can silently
    fall behind the app is worse than none.
 
@@ -938,6 +960,17 @@ the App layer.
   (`ResourceDescriptor.AllowsVerb` answers true): descriptors built by hand — the
   well-known statics, the demo catalog, fixtures — carry none, and reading that as
   a prohibition would silently disable a feature everywhere except a live cluster.
+  **The per-group requests go out concurrently** (bounded at
+  `MaxConcurrentDiscoveryRequests`, 16) and are collected in the server's own order.
+  They used to be sequential, which made connect time RTT × group count — 50+ groups
+  on a cluster with cert-manager, Istio and Argo, so seconds before the first pod on a
+  distant cluster. `DiscoveryHttpTests` asserts the overlap itself, because a
+  regression here changes nothing but the wait. `ConnectAsync` likewise runs discovery,
+  the namespace list and the metrics probe together, after the version call — which
+  stays first and alone because it is the one that runs an exec credential plugin, and
+  everything after it reuses that token rather than starting a dozen plugins at once.
+  Restored tabs connect in parallel too: a slow cluster no longer holds every tab
+  after it on "Connecting…".
   Discovery says nothing about how a kind should be *printed*, which is why a CRD's
   own columns come from a separate GET of the CustomResourceDefinition — see "CRD
   printer columns" below.

@@ -172,6 +172,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         // persist: false — this is reading a choice back, not making one, and writing it
         // straight back would turn every kind ever opened into a stored layout.
         SetSort(layout.SortColumn, layout.SortDescending, persist: false);
+        RaiseViewStateChanged();
     }
 
     /// <summary>
@@ -996,6 +997,40 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [RelayCommand]
     private void ToggleInspectorMaximized() => IsInspectorMaximized = !IsInspectorMaximized;
 
+    /// <summary>
+    /// The kind to open on after connecting, as <c>&lt;group&gt;/&lt;Kind&gt;</c> — the one
+    /// the tab was showing when the workspace was saved. Null (or a kind this cluster no
+    /// longer serves) opens on Pods.
+    /// </summary>
+    public string? RestoreKindKey { get; init; }
+
+    /// <summary>
+    /// The namespace to open on after connecting. Null falls back to the kubeconfig
+    /// context's own <c>namespace</c>, which is what kubectl would use, and then to all
+    /// namespaces.
+    /// </summary>
+    public string? RestoreNamespace { get; init; }
+
+    /// <summary>The selected kind as a workspace key; see <see cref="RestoreKindKey"/>.</summary>
+    public string? ViewKindKey => SelectedKind?.Descriptor is { } descriptor ? GridLayoutStore.KeyFor(descriptor) : null;
+
+    /// <summary>
+    /// Raised when the kind or namespace changes after the tab has settled, so the shell
+    /// can save the workspace. Not raised during connect, where both are set by the
+    /// restore itself and writing them straight back would be noise.
+    /// </summary>
+    public event EventHandler? ViewStateChanged;
+
+    private bool _viewStateReady;
+
+    private void RaiseViewStateChanged()
+    {
+        if (_viewStateReady)
+        {
+            ViewStateChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
     public ClusterTabViewModel(ClusterContext context)
     {
         Context = context;
@@ -1024,23 +1059,23 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         try
         {
             var client = ClusterClient.Connect(Context);
+
+            // First and alone: it is the reachability check, and it is the request that
+            // runs an exec credential plugin. Everything after it reuses that token, so
+            // the fan-out below cannot start a dozen `aws eks get-token`s at once.
             var version = await client.GetServerVersionAsync();
             Client = client;
             IsConnected = true;
             Status = $"Connected — Kubernetes {version.GitVersion}.";
 
-            await BuildSidebarAsync();
-            await RefreshNamespacesAsync();
-            await DetectMetricsApiAsync();
+            // Discovery, the namespace list and the metrics probe do not depend on each
+            // other, and each is at least one round trip. They used to run one after
+            // another, which put three RTTs of pure waiting between "connected" and the
+            // first pod on a distant cluster. They all resume on the UI thread, so
+            // running them together changes nothing about who touches what.
+            await Task.WhenAll(BuildSidebarAsync(), RefreshNamespacesAsync(), DetectMetricsApiAsync());
 
-            var defaultKind = SidebarSections
-                .FirstOrDefault(s => s.Title == "Workloads")?.Kinds
-                .FirstOrDefault(k => k.Descriptor.Kind == "Pod")
-                ?? SidebarSections.SelectMany(s => s.Kinds).FirstOrDefault();
-            if (defaultKind is not null)
-            {
-                SelectKind(defaultKind);
-            }
+            ApplyInitialView(fallbackNamespace: Context.Namespace);
         }
         catch (Exception ex)
         {
@@ -1094,22 +1129,58 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             NamespaceOptions.Add(ns);
         }
 
-        // Set before the kind, so the single RestartWatch that SelectKind triggers is
-        // the one that populates the rows — assigning it afterwards would clear them
-        // and latch IsListEmpty, the ordering gotcha CLAUDE.md documents for the
-        // screenshot fixtures.
-        SelectedNamespace = "payments";
-
         _metricsApiAvailable = true;
 
-        var defaultKind = SidebarSections
+        ApplyInitialView(fallbackNamespace: "payments");
+    }
+
+    /// <summary>
+    /// Where a freshly connected tab lands: the kind and namespace it was left on when
+    /// the workspace was saved, else the context's own namespace and Pods.
+    ///
+    /// <para>
+    /// The namespace is set before the kind, so the single RestartWatch that SelectKind
+    /// triggers is the one that populates the rows — assigning it afterwards would clear
+    /// them and latch IsListEmpty, the ordering gotcha CLAUDE.md documents for the
+    /// screenshot fixtures.
+    /// </para>
+    /// </summary>
+    internal void ApplyInitialView(string? fallbackNamespace)
+    {
+        var @namespace = RestoreNamespace ?? fallbackNamespace;
+        if (!string.IsNullOrEmpty(@namespace))
+        {
+            // A namespace the list does not contain is still a real answer when the list
+            // itself was refused: plenty of RBAC setups grant a namespace but not the
+            // right to enumerate namespaces, and the context's own namespace is exactly
+            // how kubectl copes with that. When the list *was* read, a name missing from
+            // it has been deleted, and opening on it would be an empty list that looks
+            // like a broken watch — so it is only added in the first case.
+            if (!NamespaceOptions.Contains(@namespace) && NamespaceOptions.Count <= 1 && !IsDemo)
+            {
+                NamespaceOptions.Add(@namespace);
+            }
+
+            if (NamespaceOptions.Contains(@namespace))
+            {
+                SelectedNamespace = @namespace;
+            }
+        }
+
+        var kinds = SidebarSections.SelectMany(s => s.Kinds).Where(k => !k.IsRecentEntry).ToList();
+        var kind = RestoreKindKey is { } key
+            ? kinds.FirstOrDefault(k => GridLayoutStore.KeyFor(k.Descriptor) == key)
+            : null;
+        kind ??= SidebarSections
             .FirstOrDefault(s => s.Title == "Workloads")?.Kinds
             .FirstOrDefault(k => k.Descriptor.Kind == "Pod")
-            ?? SidebarSections.SelectMany(s => s.Kinds).FirstOrDefault();
-        if (defaultKind is not null)
+            ?? kinds.FirstOrDefault();
+        if (kind is not null)
         {
-            SelectKind(defaultKind);
+            SelectKind(kind);
         }
+
+        _viewStateReady = true;
     }
 
     private async Task BuildSidebarAsync()
@@ -1735,6 +1806,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     partial void OnSelectedNamespaceChanged(string value)
     {
+        RaiseViewStateChanged();
+
         if (IsHelmView)
         {
             _ = RefreshHelmReleasesAsync();

@@ -94,11 +94,19 @@ public static class Kubeconfig
     {
         var result = new List<ClusterContext>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
+        string? currentContext = null;
 
         foreach (var path in kubeconfigPaths ?? DiscoverPaths(extraPaths))
         {
             cancellationToken.ThrowIfCancellationRequested();
             var config = await KubernetesClientConfiguration.LoadKubeConfigAsync(path).ConfigureAwait(false);
+
+            // kubectl's merge rule: the first file in the chain that sets current-context wins.
+            if (currentContext is null && !string.IsNullOrEmpty(config.CurrentContext))
+            {
+                currentContext = config.CurrentContext;
+            }
+
             foreach (var ctx in config.Contexts ?? [])
             {
                 if (ctx.Name is null || !seen.Add(ctx.Name))
@@ -115,7 +123,9 @@ public static class Kubeconfig
             }
         }
 
-        return result;
+        return currentContext is null
+            ? result
+            : [.. result.Select(c => c.Name == currentContext ? c with { IsCurrentContext = true } : c)];
     }
 
     /// <summary>

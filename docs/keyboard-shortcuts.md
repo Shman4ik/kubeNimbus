@@ -28,6 +28,10 @@ way in Preferences → Shortcut modifier.
 | Quick-peek the selected resource | Space | Space |
 | Default action (pod → logs, resource → YAML, …) | Double-click | Double-click |
 | Logs, exec, port-forward, YAML, delete | Right-click a row | Right-click a row |
+| Edit YAML | E | E |
+| Delete the selected resource (asks to confirm) | Delete | Delete |
+| Rollout restart the selected workload (asks to confirm) | R | R |
+| Search the list from the rows | / | / |
 | Refresh the list | Ctrl+R | Cmd+R |
 | Apply the edited YAML | Ctrl+S | Cmd+S |
 
@@ -35,6 +39,10 @@ way in Preferences → Shortcut modifier.
 
 | Action | Windows / Linux | macOS |
 | --- | --- | --- |
+| Logs — the pod's, or every pod a workload owns | L | L |
+| Previous logs (crashed container) | P | P |
+| Shell into the pod — or scale a Deployment/StatefulSet | S | S |
+| Port-forward | F | F |
 | Interrupt a command in the exec pane | Ctrl+C | Ctrl+C |
 | End input / exit the shell | Ctrl+D | Ctrl+D |
 | Complete a command in the exec pane | Tab | Tab |
