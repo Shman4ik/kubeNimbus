@@ -12,6 +12,24 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+### Added
+
+- Deployments, StatefulSets and DaemonSets open on their pods, conditions and events.
+  Pod rows support logs and shell shortcuts. The Actions menu offers scale and rollout restart.
+- The namespace picker supports search, five recent namespaces and Ctrl/Cmd+Shift+N.
+- Resource rows support L, P, S, F, E, R, Delete and `/` shortcuts.
+  The workspace restores the selected kind, namespace and cluster tab.
+
+### Changed
+
+- Pods start loading before discovery finishes. Aggregated discovery uses two requests on supported servers.
+  A disk cache skips discovery on warm connections and expires after six hours or a server-version change.
+  The sidebar context menu can refresh the catalog immediately.
+
+### Fixed
+
+- Keep YamlDotNet at 16.3.0 so kubeconfig loading remains compatible with the Kubernetes client.
+
 ## [0.3.3] - 2026-09-22
 
 ### Changed

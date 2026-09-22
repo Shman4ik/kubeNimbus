@@ -21,6 +21,7 @@ public enum CommandId
     ReorderTabs,
 
     // --- Resources ---
+    NamespacePicker,
     FilterList,
     FilterSidebar,
     OpenResource,
@@ -30,6 +31,8 @@ public enum CommandId
     EditYaml,
     ApplyYaml,
     DeleteResource,
+    RolloutRestart,
+    FilterListFromRows,
     RefreshList,
 
     // --- Pods ---

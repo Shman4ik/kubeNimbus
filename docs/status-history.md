@@ -2038,4 +2038,57 @@ against a real remote cluster is the reported gesture itself — click Pods on a
 with a few hundred objects and confirm the panel names the kind, stays until rows arrive,
 and that nothing shifts sideways afterwards while the Age column ticks.
 
+### Fewer clicks for the daily scenarios (2026-09-22)
+
+A pass over the gestures the app is opened for — tail a pod's logs, shell into it,
+restart or scale a workload, change namespace, come back tomorrow — counted in clicks
+against k9s and Lens. Shipped:
+
+- **Row keys** (k9s's): L, P, S, F, E, R, Delete and `/` on the resource list. Logs on a
+  Deployment went from right-click → read menu → "Logs (all pods)" to select → L.
+- **Namespace switching from the palette** ("Namespace: payments"), where it used to be
+  only a dropdown that runs to hundreds of entries on a shared cluster.
+- **Workspace restore keeps kind, namespace and the front tab**, first launch opens the
+  kubeconfig's `current-context`, and a context's own `namespace` is honoured (the first
+  half of FEAT-52).
+- **Connect is faster on a distant cluster**: discovery's per-group requests are
+  concurrent, discovery/namespaces/metrics run together, and restored tabs connect in
+  parallel instead of one after another.
+- **YamlDotNet pinned back to 16.3.0** — #77 had bumped it to 18.1.0 by accident, which
+  makes every kubeconfig load throw `TypeLoadException` (the #15 failure again). 33 Core
+  tests caught it; the launch check did not (VER-14).
+
+Verified: both TUnit suites (Core 372 passed, 17 skipped for want of a sandbox; App 164
+passed), `DiscoveryHttpTests` shown red with the concurrency bound set to 1, the
+screenshot harness over every `cluster-tab` scenario, and the Debug app driven by hand on
+the demo cluster on Windows — restore onto Deployments/payments, L on a Deployment
+opening its multi-pod logs, S arming the scale strip, `/` + typing + Enter + E opening a
+pod's YAML, and the workspace written back as `/Pod` + `payments` on close.
+
+Not verified: any of it against a real API server (Docker was not running, so no
+sandbox) — in particular that concurrent discovery and the parallel connect behave with
+a real exec credential plugin, and the RBAC case where namespaces cannot be listed. No
+NativeAOT publish was run; nothing here adds reflection, and `TabSnapshot`/
+`WorkspaceSettings` stay on the source-generated JSON context.
+
 [fluent-basics]: https://learn.microsoft.com/en-us/windows/apps/design/basics/
+
+### Workload navigation and discovery follow-up (2026-09-22)
+
+UX-1 through UX-4 are complete. Workloads open on live pods, conditions and events.
+Their Actions menu uses the existing confirmation strip for scale and rollout restart.
+Pod navigation and actions retain the source cluster. The namespace picker supports
+search, persistent recents and Ctrl/Cmd+Shift+N.
+
+Pods start before discovery finishes. Aggregated discovery negotiates v2 and v2beta1,
+with the existing per-group walk as fallback. The disk cache stores descriptors only.
+It expires after six hours or a server-version change. Explicit catalog refresh
+bypasses it. Partial discovery results do not replace the disk cache.
+
+Checks: solution build; 394 Core tests and 168 App tests; 156 screenshots across
+both themes; keyboard interaction against 300 namespaces. The local k3s sandbox
+was available for all Core integration tests. Windows NativeAOT publish and the
+launch check passed. Only the known DataGrid IL2104/IL3053 warnings remained.
+
+Limits: fixture screenshots cover the new workload pane. Remote exec authentication,
+restricted RBAC and macOS keyboard behavior were not exercised against live systems.

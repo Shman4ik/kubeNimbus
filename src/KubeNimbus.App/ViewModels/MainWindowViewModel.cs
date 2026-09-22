@@ -39,6 +39,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(SwitcherLabel));
         OnPropertyChanged(nameof(SwitcherTooltip));
 
+        // Remember which tab is in front (see WorkspaceSettings.SelectedTabIndex).
+        // Guarded against the restore, and against a tab being closed, where the
+        // selection passes through null on its way to the neighbour.
+        if (newValue is not null)
+        {
+            SaveWorkspace();
+        }
+
         // The switcher marks the current tab so it isn't offered as the top hit.
         if (Switcher.IsOpen)
         {
@@ -671,31 +679,59 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private async Task RestoreWorkspaceAsync()
     {
         var settings = WorkspaceStore.Load();
-        foreach (var snapshot in settings.Tabs)
+        var connects = new List<Task>();
+        _isRestoring = true;
+        try
         {
-            // The demo cluster is not a kubeconfig context, so it is never in
-            // AvailableContexts and the name+path match below can't find it. The
-            // sentinel path is what identifies it — that is the whole reason it is a
-            // path rather than a new field on TabSnapshot.
-            if (snapshot.KubeconfigPath == ClusterContext.DemoKubeconfigPath)
+            foreach (var snapshot in settings.Tabs)
             {
-                await AddTabAsync(ClusterContext.Demo);
-                continue;
+                // The demo cluster is not a kubeconfig context, so it is never in
+                // AvailableContexts and the name+path match below can't find it. The
+                // sentinel path is what identifies it — that is the whole reason it is a
+                // path rather than a new field on TabSnapshot.
+                var context = snapshot.KubeconfigPath == ClusterContext.DemoKubeconfigPath
+                    ? ClusterContext.Demo
+                    : AvailableContexts.FirstOrDefault(c =>
+                        c.Name == snapshot.ContextName && c.KubeconfigPath == snapshot.KubeconfigPath);
+                if (context is not null)
+                {
+                    // Every tab connects at once. They used to connect one after another,
+                    // so one cluster behind a slow VPN or a hung credential plugin held
+                    // every tab after it on "Connecting…" — the whole window paced by
+                    // its slowest cluster, on the one launch path that is supposed to
+                    // be this app's reason to exist.
+                    connects.Add(AddTabAsync(context, snapshot));
+                }
             }
 
-            var match = AvailableContexts.FirstOrDefault(c =>
-                c.Name == snapshot.ContextName && c.KubeconfigPath == snapshot.KubeconfigPath);
-            if (match is not null)
+            if (Tabs.Count == 0 && AvailableContexts.Count > 0)
             {
-                await AddTabAsync(match);
+                // No workspace yet: open the kubeconfig's current-context — the cluster
+                // kubectl would talk to — rather than whichever context the merge
+                // happened to list first.
+                var current = AvailableContexts.FirstOrDefault(c => c.IsCurrentContext);
+                connects.Add(AddTabAsync(current ?? AvailableContexts[0]));
+            }
+            else if (settings.SelectedTabIndex is { } index && index >= 0 && index < Tabs.Count)
+            {
+                SelectedTab = Tabs[index];
             }
         }
-
-        if (Tabs.Count == 0 && AvailableContexts.Count > 0)
+        finally
         {
-            await AddTabAsync(AvailableContexts[0]);
+            _isRestoring = false;
         }
+
+        SaveWorkspace();
+        await Task.WhenAll(connects);
     }
+
+    /// <summary>
+    /// True while <see cref="RestoreWorkspaceAsync"/> is adding tabs, so each one
+    /// becoming selected in turn does not rewrite the saved selection before the real
+    /// one has been read back.
+    /// </summary>
+    private bool _isRestoring;
 
     /// <summary>
     /// "Add a cluster" now means "open the switcher" rather than "open whatever the
@@ -740,13 +776,23 @@ public sealed partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(SwitcherTooltip));
     }
 
-    private async Task AddTabAsync(ClusterContext context)
+    private async Task AddTabAsync(ClusterContext context, TabSnapshot? snapshot = null)
     {
-        var tab = new ClusterTabViewModel(context) { FleetMembersProvider = FleetMembers };
+        var tab = new ClusterTabViewModel(context)
+        {
+            FleetMembersProvider = FleetMembers,
+            RestoreKindKey = snapshot?.KindKey,
+            RestoreNamespace = snapshot?.Namespace,
+        };
+        tab.ViewStateChanged += (_, _) => SaveWorkspace();
         Tabs.Add(tab);
         SelectedTab = tab;
         RecordRecent(context.Name);
-        SaveWorkspace();
+        if (!_isRestoring)
+        {
+            SaveWorkspace();
+        }
+
         await tab.ConnectCommand.ExecuteAsync(null);
         RefreshFleetMembership();
     }
@@ -833,11 +879,23 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     private void SaveWorkspace()
     {
+        if (_isRestoring)
+        {
+            return;
+        }
+
         var settings = WorkspaceStore.Load();
-        var tabs = Tabs.Select(t => new TabSnapshot(t.Context.Name, t.Context.KubeconfigPath)).ToList();
+
+        // A tab that has not finished connecting has no kind or namespace of its own
+        // yet; saving its nulls would forget the ones it is about to restore.
+        var tabs = Tabs.Select(t => new TabSnapshot(
+            t.Context.Name, t.Context.KubeconfigPath,
+            t.ViewKindKey ?? t.RestoreKindKey,
+            t.SelectedKind is null ? t.RestoreNamespace : t.SelectedNamespace)).ToList();
         WorkspaceStore.Save(settings with
         {
             Tabs = tabs,
+            SelectedTabIndex = SelectedTab is { } selected ? Tabs.IndexOf(selected) : null,
             PinnedContexts = [.. _pinned],
             RecentContexts = [.. _recent],
             EnvironmentOverrides = _environmentOverrides.ToDictionary(kv => kv.Key, kv => kv.Value.ToString()),
@@ -985,16 +1043,18 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
             if (rowTab.IsPodRowSelected)
             {
-                yield return new PaletteItem("Logs", where, "PlayIconGeometry",
+                // Through Catalog() so each row carries its list key ("· L"): the palette
+                // is where somebody who reached for the mouse learns there was a key.
+                yield return Catalog(CommandId.PodLogs, where,
                     () => rowTab.OpenLogsCommand.Execute(null));
 
-                yield return new PaletteItem("Previous logs", $"{where} · the crashed instance", "PlayIconGeometry",
+                yield return Catalog(CommandId.PreviousLogs, $"{where} · the crashed instance",
                     () => rowTab.OpenPreviousLogsCommand.Execute(null));
 
-                yield return new PaletteItem("Exec into container", where, "ConsoleIconGeometry",
+                yield return Catalog(CommandId.Exec, where,
                     () => rowTab.ExecIntoSelectedCommand.Execute(null));
 
-                yield return new PaletteItem("Port-forward", where, "SwapHorizontalIconGeometry",
+                yield return Catalog(CommandId.PortForward, where,
                     () => rowTab.PortForwardSelectedCommand.Execute(null));
             }
 
@@ -1021,8 +1081,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
             if (rowTab.CanRestartSelectedRow)
             {
-                yield return new PaletteItem(
-                    "Rollout restart…", $"{where} · roll its pods", "RestartIconGeometry",
+                yield return Catalog(CommandId.RolloutRestart, $"{where} · roll its pods",
                     () => rowTab.RestartSelectedCommand.Execute(null));
             }
 
@@ -1050,12 +1109,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
                     () => rowTab.DrainSelectedCommand.Execute(null));
             }
 
-            yield return new PaletteItem("Edit YAML", where, "CodeBracesIconGeometry",
+            yield return Catalog(CommandId.EditYaml, where,
                 () => rowTab.EditSelectedYamlCommand.Execute(null));
 
             if (rowTab.CanDeleteSelectedRow)
             {
-                yield return new PaletteItem("Delete…", $"{where} · asks to confirm", "DeleteIconGeometry",
+                yield return Catalog(CommandId.DeleteResource, $"{where} · asks to confirm",
                     () => rowTab.DeleteSelectedCommand.Execute(null));
             }
         }
@@ -1104,6 +1163,29 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         if (SelectedTab is { } current)
         {
+            // Namespaces, so switching one is Ctrl/Cmd+K and a few letters instead of
+            // opening a dropdown and scrolling a list that runs to hundreds on a shared
+            // cluster (kubens, k9s `:ns`). Offered only where the picker itself is live —
+            // a cluster-scoped kind ignores the namespace, and an entry that then changed
+            // nothing visible would be the "matches and does nothing" failure again.
+            if (current.SelectedKind?.Descriptor is { Namespaced: true })
+            {
+                foreach (var ns in current.NamespaceOptions)
+                {
+                    if (ns == current.SelectedNamespace)
+                    {
+                        continue;
+                    }
+
+                    var kindName = current.SelectedKind.DisplayName;
+                    yield return new PaletteItem(
+                        ns == ClusterTabViewModel.AllNamespaces ? "Namespace: all" : $"Namespace: {ns}",
+                        $"Show {kindName} in {(ns == ClusterTabViewModel.AllNamespaces ? "every namespace" : ns)} · {current.Header}",
+                        "LayersIconGeometry",
+                        () => current.SelectedNamespace = ns);
+                }
+            }
+
             // Every section, including the ones the advanced view hides from the
             // sidebar. The palette is a search: somebody typing "CustomResourceDefinition"
             // has said which kind they want, and a match that then refuses to appear is
