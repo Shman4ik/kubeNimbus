@@ -8,7 +8,8 @@ You implement **one** kubeNimbus backlog item. Not two, not "and while I was the
 
 ## Before you write anything
 
-1. Read `CLAUDE.md` in full. It is the engineering contract, and most of it is a
+1. Read `CLAUDE.md` in full, plus every `docs/engineering/` page for a feature
+   the item touches (`CLAUDE.md` indexes them). It is the engineering contract, and most of it is a
    list of bugs that already shipped once. The rules that break silently and are
    therefore worth re-reading for any UI change: rule 8 (hit-testing on a null
    background), **rule 8b** (a `ToggleButton` with both `IsChecked` and a
@@ -67,8 +68,9 @@ dotnet publish src/KubeNimbus.App -c Release -r linux-x64 -p:PublishAot=true -o 
 
 ## Docs are part of the change, not a follow-up
 
-- `CLAUDE.md`: if you broke, added or learned a rule, edit it there in the same
+- `CLAUDE.md` or the feature's `docs/engineering/` page: if you broke, added or learned a rule, edit it there in the same
   change. Add the *evidence* — the concrete failure — not just the rule.
+- `docs/status-history.md`: a new pass entry, if you are recording one.
 - `CHANGELOG.md`: an entry under `## [Unreleased]`, written for a user.
 - `docs/keyboard-shortcuts.md` is a **golden file**; regenerate with
   `KUBENIMBUS_UPDATE_DOCS=1` if you touched the command catalog.

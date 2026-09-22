@@ -31,7 +31,8 @@ routine for a report to say "verified" about something that was never run.
    all of them, literally? A criterion quietly dropped is a FAIL, not a nit.
 
 3. **Does it violate `CLAUDE.md`?** Read the rules that apply to the files
-   touched. The high-yield ones, because each names a bug that already shipped:
+   touched — in `CLAUDE.md` and in the `docs/engineering/` page of each
+   feature the change touches. The high-yield ones, because each names a bug that already shipped:
    - **Rule 8b** — a `ToggleButton` with *both* a two-way `IsChecked` binding and
      a toggling `Command` compiles, animates and does nothing. Grep every
      `ToggleButton` in the diff.
@@ -53,7 +54,7 @@ routine for a report to say "verified" about something that was never run.
    the scenarios the item touches, in **both** themes. Look for clipped columns,
    collided cells, wrapped tab headers, invisible text, and chrome rows that grew.
 
-5. **Are the docs current?** `CLAUDE.md` updated if a rule changed,
+5. **Are the docs current?** `CLAUDE.md` or the feature's `docs/engineering/` page updated if a rule changed,
    `CHANGELOG.md` under `## [Unreleased]`, `docs/keyboard-shortcuts.md`
    regenerated if the command catalog moved.
 
