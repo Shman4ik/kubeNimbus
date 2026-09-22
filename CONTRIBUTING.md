@@ -6,7 +6,8 @@ opening a PR will save you a round trip.
 
 - **[CLAUDE.md](CLAUDE.md)** — the engineering contract: the tech stack, the
   hard architectural rules, the UI design rules, and *why* each one exists.
-  It is the single most useful thing to read before changing anything.
+  It is the single most useful thing to read before changing anything, and it
+  indexes the per-feature pages under [docs/engineering/](docs/engineering/).
 - **[scripts/README.md](scripts/README.md)** — how to get a throwaway cluster
   to develop against.
 
@@ -115,8 +116,8 @@ cluster. Pass a scenario-name substring as a second argument to render just one.
   tests, screenshots, AOT publish, live cluster or not. Being honest that
   something is unverified is fine and useful; claiming it was verified when it
   wasn't is not.
-- **Update CLAUDE.md** in the same PR when your change touches anything it
-  describes.
+- **Update CLAUDE.md** (or the feature's page under `docs/engineering/`) in the
+  same PR when your change touches anything it describes.
 - Match the surrounding code: file-scoped namespaces, nullable enabled, async
   all the way (no `.Result`/`.Wait()`), records for DTOs, and
   `[ObservableProperty]`/`[RelayCommand]` source generators rather than
