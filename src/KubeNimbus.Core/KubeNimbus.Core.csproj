@@ -21,7 +21,7 @@
          isn't AOT/trim-safe. Only bump this in lockstep with a KubernetesClient.Aot
          upgrade that itself moves to a newer YamlDotNet, and verify with
          tools/Screenshot (it loads a kubeconfig and would have caught #15). -->
-    <PackageReference Include="YamlDotNet" Version="16.3.0" />
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
 
   <ItemGroup>
