@@ -24,28 +24,38 @@ Sandbox: **API-server-only.** Docker Hub blobs 403, so `sandbox-up.sh` fails; na
 
 ## Owner notes
 
-_(empty)_
+- 2026-09-22 (owner, in chat): **pin "quick access to logs" as the next thing built.** Asked
+  which part, the owner chose all four: logs from the palette, a logs button on the row,
+  logs from everywhere a pod is named, and logs opened full-size. Applied as L1–L3 below,
+  built right after T1. To stay inside `CAPACITY` 14, T4, T5 and T8 move to reserve (the
+  three lowest-scoring non-forced UX items; T9/T10 stay because this is the first session
+  with a real API server).
 
 ## Items
 
 | # | Source | Deliverable (user outcome) | Kind | Size | Score | Status | Rounds | Commit |
 |---|---|---|---|---|---|---|---|---|
 | T1 | research #1, headlamp#6974, k9s `Ctrl-z` | Show only what is unhealthy, on any list | UX | S | 4.05 | building | 0 | |
+| L1 | owner pin | Open any pod's or workload's logs from the palette, from anywhere | UX | M | pin | planned | 0 | |
+| L2 | owner pin | One click to logs from the row, and logs opened full-size | UX | S | pin | planned | 0 | |
+| L3 | owner pin | Logs from everywhere a pod is named | UX | S | pin | planned | 0 | |
 | T2 | friction walk (`cluster-tab-events-list`) | The Events list reads like `kubectl get events`: last seen, type, reason, object, message | UX | M | 3.65 | planned | 0 | |
 | T3 | Ready FEAT-31 (P1, forced) | Reach a container's whole retained log: tail and since controls | UX | S | 3.45 | planned | 0 | |
-| T4 | research #6 + friction walk (`ux-workload-events`) | Events read the same everywhere, with relative times and a warning count on the tab | UX | S | 3.10 | planned | 0 | |
-| T5 | friction walk + Ready ENG-23 | The Namespace column appears only when it says something | UX | S | 2.85 | planned | 0 | |
+| T4 | research #6 + friction walk (`ux-workload-events`) | Events read the same everywhere, with relative times and a warning count on the tab | UX | S | 3.10 | reserve (owner pin displaced it) | 0 | |
+| T5 | friction walk + Ready ENG-23 | The Namespace column appears only when it says something | UX | S | 2.85 | reserve (owner pin displaced it) | 0 | |
 | T6 | Ready FEAT-34 (P1, forced) | Log follow survives a dropped stream and says so in place | Reliability | S | 2.60 | planned | 0 | |
 | T7 | Ready FEAT-32 (P1, forced) | JSON log lines are readable: keys coloured, level lifted into severity | UX | M | 2.55 | planned | 0 | |
-| T8 | research #3, headlamp#3222 | See a workload's revision history on its detail pane | UX | M | 2.50 | planned | 0 | |
+| T8 | research #3, headlamp#3222 | See a workload's revision history on its detail pane | UX | M | 2.50 | reserve (owner pin displaced it) | 0 | |
 | T9 | Inbox VER-31 (P1, now payable) | Exec-plugin auth proven against a real API server | Verification debt | S | 2.25 | planned | 0 | |
 | T10 | Inbox VER-13 + VER-36 (P1, now payable, API-server half) | Mutating actions and strict apply proven against a real API server | Verification debt | M | 2.00 | planned | 0 | |
 | R1 | research #4 | Diff a revision against the current template (needs T8) | UX | S | 2.40 | reserve | 0 | |
 | R2 | Ready ENG-22 | A running drain cannot be confirmed, by construction | Reliability | S | 2.30 | reserve | 0 | |
 | R3 | Ready FEAT-56 | "Who am I on this cluster" beside the access review | UX | S | 2.20 | reserve | 0 | |
 
-Capacity: 14 of 14 points (T1, T3, T4, T5, T6, T9 = 6 × S; T2, T7, T8, T10 = 4 × M).
-User-visible workflow/UX: 8 of 10. Reliability/verification debt: T6, T9, T10.
+Capacity: 14 of 14 points after the owner pin (T1, T3, T6, T9, L2, L3 = 6 × S; T2, T7, T10,
+L1 = 4 × M). Build order: T1, L1, L2, L3, then T2, T3, T6, T7, T9, T10. User-visible
+workflow/UX: 7 of 10. Reliability/verification debt: T6, T9, T10. Reserve order: T8, T4, T5,
+R1, R2, R3. (Originally selected: T1–T10 at 14 points; see Owner notes.)
 `shared/nimbusUi`: none planned — an implementer that finds it needs a shared style must
 say so rather than add one.
 
@@ -101,6 +111,76 @@ Verify:               App tests for the predicate + mirror invariants; screensho
                       start here — so assert the healthy-row half with the demo tab instead).
 Risk:                 breaking the Rows/VisibleRows mirror; the fix is to reuse the exact path the text
                       filter uses.
+
+### L1 — Open any pod's or workload's logs from the palette, from anywhere        (UX, M, owner pin)
+Problem + evidence:   Owner request (2026-09-22, "quick access to logs"). Today logs need the right kind
+                      selected, the row found, then L / double-click / menu: sidebar Pods → search → select →
+                      L = 4 interactions, more if the tab is on another kind or namespace.
+Now → after:          "logs of checkout-worker": 4+ → Ctrl/Cmd+K, type "checkout", Enter (2 + typing).
+Acceptance:           - The palette, on a connected cluster tab, offers "Logs: <pod>" rows for the tab's pods
+                        and "Logs: <Kind>/<workload>" rows for its Deployments/StatefulSets/DaemonSets (the
+                        latter open the existing multi-pod pane). Matching is the palette's own fuzzy match on
+                        the name; the row subtitle names namespace and status.
+                      - Source: the tab's current namespace selection. Filled by a one-shot list when the
+                        palette opens (not a new watch; reuse the current list's rows when the tab is already
+                        on Pods), bounded (state the cap, e.g. 2 000 pods), with a "loading pods…" row while
+                        it is in flight and the stale-but-available rows shown meanwhile; RBAC-denied or
+                        failed list → no rows plus one disabled row saying why. Never blocks typing.
+                      - Enter opens the logs exactly the way L does today (same command, same inspector tab
+                        rules — UI rule 5: never overwrites an active editor tab).
+                      - A dedicated gesture opens the palette pre-filtered to logs (e.g. Ctrl/Cmd+Shift+L via
+                        `Hotkeys`, prefix "logs " or similar); catalog + cheat sheet + golden docs updated.
+                      - Demo cluster: works over the demo dataset.
+                      - Fleet mode: rows name their cluster.
+States:               loading, loaded, empty namespace, RBAC-denied, disconnected, demo, fleet.
+Keyboard + entry:     Ctrl/Cmd+K and the dedicated logs gesture.
+Verify:               App tests for row building (pods + workloads, cap, denied); screenshot of the palette
+                      filtered to logs (both themes); sandbox: palette lists the sandbox's pods (logs themselves
+                      cannot stream here — say so).
+Risk:                 palette latency on a large cluster; build rows off the UI thread and cap them.
+
+### L2 — One click to logs from the row, and logs opened full-size        (UX, S, owner pin)
+Problem + evidence:   Owner request. Logs from the list need select + L or a context menu; and logs open in a
+                      ~300px dock where long lines and history are cramped — maximizing is another click.
+Now → after:          "open logs for this row": select + L (2) → hover + click the row's logs button (1);
+                      "read logs big": open + maximize (2) → Shift+L or Shift+click (1).
+Acceptance:           - Rows of kinds that have logs (pods, and the workload kinds L already supports) show a
+                        small logs icon button in the row on hover/selection (not always-visible chrome — UI
+                        rule 1), with tooltip naming L; it hit-tests its whole area and has the hand cursor
+                        (UI rule 8). It never appears on kinds without logs.
+                      - Shift+L (and Shift+click on that button) opens the logs with the inspector maximized
+                        (`IsInspectorMaximized`); Esc or the existing restore control returns to split.
+                      - A preference "Open logs maximized" in `settings.json` (preferences page card, immediate
+                        apply) makes maximized the default for L; the setting is actually read by the open
+                        path (CLAUDE.md settings rule 3).
+                      - Catalog/cheat sheet/golden docs updated for Shift+L.
+States:               hover, selected, kinds without logs, demo, maximized/restored.
+Keyboard + entry:     the row button, Shift+L, the preference.
+Verify:               App tests (button visibility rule per kind, the maximized open path, the setting read);
+                      screenshots of a hovered/selected row with the button and of logs opened maximized.
+Risk:                 a DataGrid template column for the button fights the per-kind column layout (FEAT-66)
+                      — prefer an overlay in the Name cell or a fixed narrow slot, and re-render
+                      `cluster-tab-workloads-list` and `cluster-tab-crd-printer-columns`.
+
+### L3 — Logs from everywhere a pod is named        (UX, S, owner pin)
+Problem + evidence:   Owner request. Pods named inside other panes (workload detail's pod list, node detail's
+                      pods-on-node, an event whose involved object is a pod, Argo application resources) do
+                      not open logs directly; the user navigates to Pods and finds the row again.
+Now → after:          "logs of a pod I see in workload detail": back to list → Pods → find → L (4) → select it
+                      in the pane + L or its logs button (1–2).
+Acceptance:           - In workload detail's Pods list, node detail's pods list and (after T2 or on the current
+                        Events list) an Event row whose involved object is a Pod: L opens that pod's logs, and a
+                        context menu item / row logs button does the same, reusing L2's affordance.
+                      - Argo application resource rows that are Pods (or workloads) get the same, if the pane
+                        lists them; if it does not, say so and skip.
+                      - Every entry resolves to the same open-logs command, so tab rules and the maximized
+                        preference from L2 apply everywhere.
+                      - Catalog/cheat sheet reflect the scope (L works in these lists too).
+States:               pod present, pod gone (stated, not a dead click), demo.
+Keyboard + entry:     L and the row button in each list.
+Verify:               App tests that each list routes to the shared command; screenshots of workload detail and
+                      node detail pod lists with the affordance.
+Risk:                 duplicated key handling per view; route through one handler.
 
 ### T2 — The Events list reads like `kubectl get events`        (UX, M, score 3.65, source: friction walk)
 Problem + evidence:   `cluster-tab-events-list`: Name shows the Event object's own name
@@ -324,6 +404,9 @@ Risk:                 tests that leak state between runs; use a unique namespace
 - **R3 — FEAT-56**: `SelfSubjectReview` ("who am I") beside the access review; states pre-1.26 servers.
 
 ## Log
+
+- 2026-09-22 — Owner pin applied (quick access to logs → L1–L3, built next after T1);
+  T4, T5, T8 to reserve.
 
 - 2026-09-22 — SELECT: research delta in (`history/v0.4.0/research.md`, matrix seeded).
   10 items + 3 reserve at 14/14 points; the three P1 Ready rows forced (FEAT-31/32/34);
