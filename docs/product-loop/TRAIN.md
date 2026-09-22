@@ -36,8 +36,8 @@ Sandbox: **API-server-only.** Docker Hub blobs 403, so `sandbox-up.sh` fails; na
 | # | Source | Deliverable (user outcome) | Kind | Size | Score | Status | Rounds | Commit |
 |---|---|---|---|---|---|---|---|---|
 | T1 | research #1, headlamp#6974, k9s `Ctrl-z` | Show only what is unhealthy, on any list | UX | S | 4.05 | landed | 0 | fa4f30e |
-| L1 | owner pin | Open any pod's or workload's logs from the palette, from anywhere | UX | M | pin | building | 0 | |
-| L2 | owner pin | One click to logs from the row, and logs opened full-size | UX | S | pin | planned | 0 | |
+| L1 | owner pin | Open any pod's or workload's logs from the palette, from anywhere | UX | M | pin | landed | 0 | e49b645 |
+| L2 | owner pin | One click to logs from the row, and logs opened full-size | UX | S | pin | building | 0 | |
 | L3 | owner pin | Logs from everywhere a pod is named | UX | S | pin | planned | 0 | |
 | T2 | friction walk (`cluster-tab-events-list`) | The Events list reads like `kubectl get events`: last seen, type, reason, object, message | UX | M | 3.65 | planned | 0 | |
 | T3 | Ready FEAT-31 (P1, forced) | Reach a container's whole retained log: tail and since controls | UX | S | 3.45 | planned | 0 | |
@@ -404,6 +404,11 @@ Risk:                 tests that leak state between runs; use a unique namespace
 - **R3 — FEAT-56**: `SelfSubjectReview` ("who am I") beside the access review; states pre-1.26 servers.
 
 ## Log
+
+- 2026-09-22 — L1 landed (`e49b645`), verifier PASS first round (independent mutation check of
+  the palette hit-test fix). One nit carried into L2: `_logTargetsCts` cancelled without
+  `Dispose()` in `SetLogTargetsForFixture` and `DisposeAsync`. Inbox: VER-39, ENG-35; ENG-34
+  widened. L2 building.
 
 - 2026-09-22 — T1 landed (`fa4f30e`), verifier PASS first round (re-ran build, both suites,
   170 screenshots, AOT publish + smoke test; mutation-checked the Modified path). Inbox:

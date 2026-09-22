@@ -15,6 +15,8 @@ it as the GitHub Release body, so headings must match tags exactly
 - Show only what is unhealthy on any list — one click or Ctrl+Z narrows pods, workloads or
   events to the ones in trouble, and they appear the moment they break and leave when they
   recover.
+- Open any pod's or workload's logs from anywhere: press Ctrl/Cmd+Shift+L (or Ctrl/Cmd+K),
+  type part of the name, press Enter.
 
 ## [0.3.3] - 2026-09-22
 
