@@ -99,6 +99,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     private string? _trimNotice;
 
     private bool _loadingLogRange;
+    private bool _logHeadersReady;
 
     public ObservableCollection<EventRowViewModel> Events { get; } = [];
 
@@ -1106,7 +1107,14 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
 
             if (_loadingLogRange)
             {
-                return $"Waiting for log response or output ({SelectedLogRange.Label.ToLowerInvariant()})…";
+                return _logHeadersReady
+                    ? $"Reading {SelectedLogRange.Label.ToLowerInvariant()} — waiting for opening log lines…"
+                    : $"Waiting for log response ({SelectedLogRange.Label.ToLowerInvariant()})…";
+            }
+
+            if (_logHeadersReady && IsFollowingLogs)
+            {
+                return SelectedLogRange.WaitingForOutputMessage;
             }
 
             return IsShowingPreviousLogs
@@ -1212,7 +1220,9 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
                 await foreach (var line in _client.StreamPodLogsAsync(
                     PodNamespace, PodName, container.Name, follow: false,
                     tailLines: SelectedLogRange.TailLines, sinceSeconds: SelectedLogRange.SinceSeconds,
-                    previous: true, timestamps: true, cancellationToken: token))
+                    previous: true, timestamps: true,
+                    responseReady: () => OnLogResponseReady(generation, token, follow: false),
+                    cancellationToken: token))
                 {
                     Enqueue(line);
                 }
@@ -1263,7 +1273,9 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
                 await foreach (var line in _client.StreamPodLogsAsync(
                     PodNamespace, PodName, container.Name, follow: follow,
                     tailLines: SelectedLogRange.TailLines, sinceSeconds: SelectedLogRange.SinceSeconds,
-                    timestamps: true, cancellationToken: token))
+                    timestamps: true,
+                    responseReady: () => OnLogResponseReady(generation, token, follow),
+                    cancellationToken: token))
                 {
                     Enqueue(line);
                 }
@@ -1342,11 +1354,39 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         _logGeneration++;
         _streaming = (container, previous, follow);
         _loadingLogRange = true;
+        _logHeadersReady = false;
         LogStatus = null;
         IsLogStatusProblem = false;
         ClearLogBuffer();
         StartLogFlushTimer();
         return _logCts.Token;
+    }
+
+    private void OnLogResponseReady(int generation, CancellationToken token, bool follow) =>
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (token.IsCancellationRequested || generation != _logGeneration || _streaming is null) return;
+            _logHeadersReady = true;
+            // A finite snapshot has answered, but only its EOF can prove it is empty.
+            if (follow) _ = ShowQuietRangeAfterResponseAsync(generation, token);
+            RaiseLogPlaceholder();
+        });
+
+    private async Task ShowQuietRangeAfterResponseAsync(int generation, CancellationToken token)
+    {
+        try
+        {
+            // Wait for the opening body burst, but never start this timer before HTTP
+            // headers. A slow API cannot become a false "empty range" by elapsed time.
+            await Task.Delay(200, token);
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (token.IsCancellationRequested || generation != _logGeneration || _allLogLines.Count > 0) return;
+                _loadingLogRange = false;
+                RaiseLogPlaceholder();
+            });
+        }
+        catch (OperationCanceledException) { }
     }
 
     private async Task EndLogStreamAsync(int generation, string status, bool problem) =>
@@ -1376,6 +1416,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         _logGeneration++;
         _streaming = null;
         _loadingLogRange = false;
+        _logHeadersReady = false;
         StopLogFlushTimer();
         FlushLogLines();
         LogStatus = status;

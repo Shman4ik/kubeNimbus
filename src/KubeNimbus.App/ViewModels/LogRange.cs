@@ -21,4 +21,9 @@ public sealed record LogRange(string Label, int? TailLines = null, int? SinceSec
     public string EmptyMessage => SinceSeconds is not null
         ? $"No lines in the {Label.ToLowerInvariant()}."
         : TailLines is not null ? "No lines in the selected range." : "No retained log lines.";
+
+    /// <summary>HTTP answered, but an open follow cannot prove the range is empty.</summary>
+    public string WaitingForOutputMessage => SinceSeconds is not null
+        ? $"No lines received yet in the {Label.ToLowerInvariant()} — following new output."
+        : "No lines received yet — following new output.";
 }

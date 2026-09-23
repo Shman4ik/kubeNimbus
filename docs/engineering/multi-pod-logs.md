@@ -54,11 +54,16 @@ Eight things are load-bearing.
    state stays as it was. The demo control is disabled because its fixed July 2026
    timestamps cannot answer a relative-time query honestly. A finite snapshot that
    completes with no lines can state that the range is empty. An open follow with no
-   first line cannot prove emptiness: a slow API response and a connected but quiet
-   container look identical to the line iterator, so the pane says it is waiting for
-   a response or output until a line arrives or the stream ends. A 750 ms timeout
-   once claimed "No lines in the last 5 minutes" before the HTTP request answered;
-   that was a false empty state, not a loading optimization. When Follow is off,
+   first line cannot prove emptiness. Core's `responseReady` callback fires only after
+   successful HTTP headers, so a slow API response stays in the loading state. After
+   headers and a short grace for the opening body burst, a quiet follow says "No lines
+   received yet … following new output", which states what was observed without claiming
+   kubelet history is empty. The aggregated pane waits for each active pod's response and
+   names the count still pending; a failed source is a partial result. The first attempt
+   used a 750 ms timer from request start and claimed "No lines in the last 5 minutes"
+   before HTTP answered; removing the timer without adding a response signal then left
+   a healthy quiet follow in "Waiting for log response or output" forever. Both were
+   false state transitions, caught during independent verification. When Follow is off,
    the finite fetch ends in the chip state **loaded**, rather than **ended** with an
    "exited" message that would claim a healthy container stopped.
 4. **Concurrency is capped at 50 streams, and the cap is stated.** N pods is N long-lived

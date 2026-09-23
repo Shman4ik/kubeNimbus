@@ -11,6 +11,8 @@ public class LogRangeTests
             [(200, null), (1000, null), (null, 300), (null, 3600), (null, 86400), (null, null)]))
             .IsTrue();
         await Assert.That(LogRange.FiveMinutes.EmptyMessage).IsEqualTo("No lines in the last 5 minutes.");
+        await Assert.That(LogRange.FiveMinutes.WaitingForOutputMessage)
+            .IsEqualTo("No lines received yet in the last 5 minutes — following new output.");
     }
 
     [Test]

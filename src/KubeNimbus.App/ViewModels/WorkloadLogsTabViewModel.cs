@@ -94,6 +94,7 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
     private readonly List<LogLineViewModel> _allLogLines = [];
     private readonly Dictionary<string, LogSourceViewModel> _sourcesByPod = new(StringComparer.Ordinal);
     private readonly Dictionary<string, CancellationTokenSource> _streamsByPod = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _respondedPods = new(StringComparer.Ordinal);
     private readonly List<(string Raw, LogSourceViewModel Source)> _pending = [];
     private readonly Lock _pendingLock = new();
 
@@ -146,6 +147,7 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
     private string? _trimNotice;
 
     private bool _loadingLogRange;
+    private int _streamGeneration;
 
     /// <summary>
     /// True while the pod watch and its streams are running. Bound from a
@@ -426,12 +428,16 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
     private void StartStream(LogSourceViewModel source, bool follow = true)
     {
         StopStream(source.PodName);
+        _respondedPods.Remove(source.PodName);
+        _streamGeneration++;
 
         var streamCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
         _streamsByPod[source.PodName] = streamCts;
         var token = streamCts.Token;
         source.State = LogSourceState.Starting;
         source.StatusMessage = null;
+
+        if (_client is not null) _loadingLogRange = true;
 
         var tail = SelectedLogRange.TailForPod(_maxLogLines, Math.Max(1, _sourcesByPod.Count));
 
@@ -449,7 +455,9 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
                 await foreach (var line in _client.StreamPodLogsAsync(
                     podNamespace, source.PodName, source.ContainerName.Length == 0 ? null : source.ContainerName,
                     follow: follow, tailLines: tail, sinceSeconds: SelectedLogRange.SinceSeconds,
-                    timestamps: true, cancellationToken: token))
+                    timestamps: true,
+                    responseReady: () => OnLogResponseReady(source, token, follow),
+                    cancellationToken: token))
                 {
                     Enqueue(line, source);
                 }
@@ -470,6 +478,55 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
                 await EndSourceAsync(source, LogSourceState.Failed, FirstLine(ex.Message), token);
             }
         }, token);
+    }
+
+    private void OnLogResponseReady(LogSourceViewModel source, CancellationToken token, bool follow) =>
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (token.IsCancellationRequested
+                || !_streamsByPod.TryGetValue(source.PodName, out var current)
+                || current.Token != token)
+            {
+                return;
+            }
+
+            _respondedPods.Add(source.PodName);
+            if (source.State is LogSourceState.Starting) source.State = LogSourceState.Streaming;
+            if (_streamsByPod.Keys.Any(pod => !_respondedPods.Contains(pod)))
+            {
+                _loadingLogRange = true;
+            }
+            else if (!follow)
+            {
+                // Headers alone cannot prove a finite snapshot is empty. Wait for EOF.
+                _loadingLogRange = true;
+            }
+            else if (_allLogLines.Count == 0)
+            {
+                _ = ShowQuietRangeAfterResponsesAsync(_streamGeneration);
+            }
+            else
+            {
+                _loadingLogRange = false;
+            }
+            RaisePlaceholder();
+        });
+
+    private async Task ShowQuietRangeAfterResponsesAsync(int generation)
+    {
+        try
+        {
+            await Task.Delay(200, _cts.Token);
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (generation != _streamGeneration || _allLogLines.Count > 0
+                    || _streamsByPod.Count == 0
+                    || _streamsByPod.Keys.Any(pod => !_respondedPods.Contains(pod))) return;
+                _loadingLogRange = false;
+                RaisePlaceholder();
+            });
+        }
+        catch (OperationCanceledException) { }
     }
 
     /// <summary>The demo cluster's stand-in for a follow, through the same <see cref="Enqueue"/>.</summary>
@@ -510,9 +567,14 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
 
             _streamsByPod.Remove(source.PodName);
             FlushNow();
-            if (_streamsByPod.Count == 0)
+            var pending = _streamsByPod.Keys.Any(pod => !_respondedPods.Contains(pod));
+            if (_streamsByPod.Count == 0 || (!pending && Sources.Any(s => s.State is LogSourceState.Failed)))
             {
                 _loadingLogRange = false;
+            }
+            else if (pending)
+            {
+                _loadingLogRange = true;
             }
             RaisePlaceholder();
         });
@@ -523,6 +585,13 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
         {
             cts.Cancel();
             cts.Dispose();
+            _respondedPods.Remove(podName);
+            var pending = _streamsByPod.Keys.Any(pod => !_respondedPods.Contains(pod));
+            if (_streamsByPod.Count == 0) _loadingLogRange = false;
+            else if (pending) _loadingLogRange = true;
+            else if (_allLogLines.Count == 0 && IsFollowing)
+                _ = ShowQuietRangeAfterResponsesAsync(_streamGeneration);
+            RaisePlaceholder();
         }
     }
 
@@ -605,7 +674,7 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
         }
 
         TrimBuffer();
-        _loadingLogRange = false;
+        _loadingLogRange = _streamsByPod.Keys.Any(pod => !_respondedPods.Contains(pod));
         UpdateSummary();
         RaisePlaceholder();
     }
@@ -870,7 +939,11 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
 
             if (_loadingLogRange)
             {
-                return $"Waiting for log responses or output ({SelectedLogRange.Label.ToLowerInvariant()})…";
+                var pending = _streamsByPod.Keys.Count(pod => !_respondedPods.Contains(pod));
+                return pending > 0
+                    ? $"Waiting for log responses from {pending} pod{(pending == 1 ? "" : "s")} "
+                      + $"({SelectedLogRange.Label.ToLowerInvariant()})…"
+                    : $"Reading {SelectedLogRange.Label.ToLowerInvariant()} — waiting for opening log lines…";
             }
 
             if (Sources.All(s => s.State is LogSourceState.Ended or LogSourceState.Loaded)
@@ -882,6 +955,11 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
             if (Sources.Any(s => s.State is LogSourceState.Failed))
             {
                 return "Some pod logs could not be loaded. Check the pod chips for details.";
+            }
+
+            if (IsFollowing && _streamsByPod.Count > 0 && _streamsByPod.Keys.All(_respondedPods.Contains))
+            {
+                return SelectedLogRange.WaitingForOutputMessage;
             }
 
             return IsFollowing
