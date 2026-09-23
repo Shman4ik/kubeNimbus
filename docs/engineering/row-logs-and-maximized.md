@@ -108,7 +108,7 @@ and a "Logs" menu item — on each list that names a pod or a workload:
 | Workload detail → Pods | yes | yes | Logs, Logs maximized | Enter / double-click still open the pod |
 | Node detail → Pods | yes | yes | Logs, Logs maximized, Open pod | the chevron still opens the pod |
 | Events list, an Event about a pod | yes | yes, in the Object cell | the list's own "Logs" | only when `involvedObject`/`regarding` is a core pod |
-| Argo Application → Resources | no | yes, on hover | none | pods and built-in workloads only |
+| Argo Application → Resources | no | yes, on hover | none | pods, built-in workloads and Argo Rollouts |
 
 Where it deliberately is **not**: pod detail's Events tab (every event there is about the
 pod whose Logs tab is one click away), workload detail's Events tab (its events are about
@@ -116,7 +116,7 @@ the workload), and node detail's Events tab (about the node). The Argo resource 
 no L because they have no selection — they are an `ItemsControl`, with nothing for a key to
 act on.
 
-Six things are load-bearing.
+Eight things are load-bearing.
 
 1. **One resolver, and the panes are handed it.** `ClusterTabViewModel.OpenNamedLogsAsync`
    is the only new entry point, and it ends in `OpenLogsForAsync` — so the pane chosen (pod
@@ -170,15 +170,40 @@ Six things are load-bearing.
    style, since the shared `Button.rowAction` reveal keys on `DataGridRow`/`ListBoxItem` and
    an `ItemsControl` item is neither. The row Grid has a Transparent background so that
    hover hit-tests across its whole width (UI rule 8). Which Argo rows get it is a kind list
-   (`LogTarget.MayHaveLogs`: Pod, Deployment, StatefulSet, DaemonSet, ReplicaSet, Job) — the
-   one place a kind list is acceptable, because the row carries no object body and the
-   resolver's `HasOwnLogs` on the object it reads has the last word.
+   (`LogTarget.MayHaveLogs`: Pod, Deployment, StatefulSet, DaemonSet, ReplicaSet, Job, and
+   `argoproj.io` Rollout) — the one place a kind list is acceptable, because the row carries
+   no object body and the resolver's `HasOwnLogs` on the object it reads has the last word.
+   Rollout is on it because on a cluster that uses Argo Rollouts it *is* the workload, and
+   the first cut hid the icon on exactly the row an Argo reader most wants logs from. A
+   duplicate build of L3 (#90, closed) went the other way and offered the icon on every
+   row; that was not taken, because on ConfigMaps, Services and Argo's own Applications it
+   is an always-visible control whose only answer is "names no pods" (UI rule 1). Other
+   selector-bearing CRDs keep their L on their own list rows.
+7. **A name is not an identity, so the UID is checked.** A pane that listed a pod passes
+   its UID along (workload detail from the watch, node detail from its one list, an Event
+   from `involvedObject.uid`). A StatefulSet recreates `web-0` as `web-0`, so a GET by name
+   can return a *different* pod; when the UIDs differ the resolver says "was replaced since
+   this was listed" and opens nothing, rather than showing the new instance's logs as if
+   they were the ones picked. Argo rows carry no UID and are resolved by name alone.
+8. **The read belongs to the pane that asked for it.** `OpenNamedLogs` carries the naming
+   pane's own `CancellationToken`, and the resolver checks it once more after the read
+   returns. Closing workload detail, node detail or an Argo pane while the GET is in flight
+   therefore opens no logs tab and states nothing — without the second check, a reader
+   that ignores the token still answered late and opened a pane over a closed one.
+   And in each pane's grid a right click selects the row under it before the menu's Logs
+   reads the selection. DataGrid 12 already does that over a *cell*, but not past the last
+   column, where nothing hit-tests: node detail's menu opened there acted on the
+   previously selected pod. `RowLogsGesture.Track` does it for every grid it tracks —
+   the resource list's own copy of the same handler moved there — first from the event
+   source, then by which realized row spans the pointer's height.
 
 **Verification.** `PaneLogsTests` (App tests) drives each pane the real double-click opens
 on the demo cluster, plus the resolver's real-cluster sentences through a stand-in source.
 The screenshot harness's `ux-pane-logs-workload`, `-node`, `-events` and `-argo` checks drive
 each list for real — icon hidden at rest, shown on the selected and hovered row, clicked
-1.5px from its edge, L and Shift+L on the pane's own grid — and throw on a regression.
+1.5px from its edge, L and Shift+L on the pane's own grid, and (workload and node) a right
+click past the last column that must select the row under it — and throw on a regression.
+The UID and cancellation guards are mutation-checked: disabling either turns its test red.
 `cluster-tab-node-detail-pod-gone` is the stated-gone state. Not verified: a live cluster
 (the sandbox cannot run pods here), so the 404/403 sentences are pinned against the
 stand-in, not an API server.

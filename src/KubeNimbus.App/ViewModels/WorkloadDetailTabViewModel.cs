@@ -222,7 +222,8 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
     {
         if (pod is null || _openLogs is null) return;
         SelectedPod = pod;
-        LogsNotice = await _openLogs(new OwnerRef("v1", "Pod", pod.Name, pod.Resource.Uid, false), pod.Namespace, maximized);
+        LogsNotice = await _openLogs(
+            new OwnerRef("v1", "Pod", pod.Name, pod.Resource.Uid, false), pod.Namespace, maximized, _cts.Token);
     }
 
     [RelayCommand(CanExecute = nameof(CanOpenPod))]

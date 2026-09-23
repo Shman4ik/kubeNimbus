@@ -845,7 +845,9 @@ Seven things worth keeping:
    includes Shift+L and the row's logs icon, and since L3 every other list that names a
    pod — workload and node detail's pod lists, an Event about a pod, an Argo
    Application's managed workloads — through `OpenNamedLogsAsync`, which reads the object
-   first so a pod that has gone is stated rather than opened. The same call is where
+   first so a pod that has gone, or been recreated under the same name (a UID that no
+   longer matches), is stated rather than opened, and which takes the naming pane's
+   cancellation so closing the pane mid-read opens nothing. The same call is where
    "open maximized" is decided (`maximized: true`, or the `OpenLogsMaximized` preference when null) — see
    [row-logs-and-maximized](docs/engineering/row-logs-and-maximized.md).
 4. **An action with no gesture is `PaletteOnly`, not `PaletteAndSheet`.** F1 is a

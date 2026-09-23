@@ -425,7 +425,12 @@ Three rules about it:
      tests were called done.
    - **It matches what identifies an object** — name, namespace, and cluster in fleet
      mode (`ResourceRowViewModel.Matches`) — and deliberately not the status, which
-     would make "Running" match most of a healthy list.
+     would make "Running" match most of a healthy list. **Events add Reason, Object and
+     Message**, and that is the same rule rather than an exception to it: an Event's own
+     name is a generated `<object>.<hex>` nobody types, and what identifies an event to
+     the person hunting for it is what happened, to what, and the sentence it logged —
+     they identify an event the way a name identifies a pod. Type stays out ("Normal"
+     would match most of the list). See [events-list](docs/engineering/events-list.md).
    - **A search that matches nothing is its own state** (`IsFilterEmpty`), separate
      from `IsListEmpty`: "this namespace has no pods" and "no pod here is called that"
      send you looking for opposite problems. It names the query, says how many rows it
@@ -565,6 +570,7 @@ Three rules about it:
 Each feature's design rules, and the incidents behind them, live in a page of their own under [`docs/engineering/`](docs/engineering/), so a session loads only the ones it touches. **Read the page for any feature you change before changing it**, and keep it current in the same PR — the same discipline as this file.
 
 - [Multi-pod logs (one workload, one stream)](docs/engineering/multi-pod-logs.md) — WorkloadLogsTabViewModel: selector-resolved pods, per-pod tail budget, 50-stream cap, two-stage timestamp merge.
+- [One click to logs from the row, and logs opened full-size](docs/engineering/row-logs-and-maximized.md) — The row's logs icon (hover/selected, IsVisible style, Shift+click), Shift+L, the "Open logs maximized" preference read by OpenLogsForAsync, Esc restore; L3's logs from every list that names a pod (OpenNamedLogs, RowLogsGesture, stated "gone" or "replaced", the pane's cancellation, right click selects its row).
 - [Log severity is three classes, not a brush binding](docs/engineering/log-severity-classes.md) — Why severity is style classes and never a Foreground binding (the invisible-plain-line bug, twice).
 - [Pod detail's Overview tab (conditions, tolerations, QoS, priority, probes)](docs/engineering/pod-overview-tab.md) — Conditions/tolerations/QoS/probes tab: index 4, condition polarity, API-server probe defaults, signature-guarded rebuild.
 - [Requests and limits are text on the Usage tab](docs/engineering/requests-and-limits.md) — Usage tab's declared requests/limits: words not blanks, not gated on metrics.
@@ -575,6 +581,7 @@ Each feature's design rules, and the incidents behind them, live in a page of th
 - [The cluster switcher and environment colours](docs/engineering/cluster-switcher.md) — Ctrl/Cmd+P switcher (flat list, ranking) and environment colours (biased toward production).
 - [CRD printer columns](docs/engineering/crd-printer-columns.md) — additionalPrinterColumns: lazy CRD GET, JSONPath subset, ten fixed XAML slots, Tag-based column identity.
 - [The resource grid is the reader's to re-cut](docs/engineering/resource-grid-resize-sort.md) — Column drag + header sort: sorts VisibleRows never Rows, maintained sort, per-kind layout in workspace.json.
+- [The Events list reads like `kubectl get events`](docs/engineering/events-list.md) — Last seen (fallback chain, series before eventTime) / Type / Reason / Object / Count / Message, newest-first default with a remembered clear, both Event groups, why not printer slots.
 - [An Auto DataGrid column ratchets, and only one grid can afford it](docs/engineering/datagrid-auto-columns.md) — Why the resource list has no Width=Auto columns (measured ratchet) and why Helm/Argo keep them.
 - [Mutating workload actions (scale, rollout restart, delete)](docs/engineering/workload-actions.md) — Scale / rollout restart / delete: merge patches, scale subresource, capability from discovery.
 - [Node operations (detail, cordon / uncordon, drain)](docs/engineering/node-operations.md) — Node detail, cordon/uncordon, drain: allocatable math, eviction plan table, partial-drain lifetime.
@@ -762,6 +769,13 @@ Six things worth keeping:
    and then refuses to run is worse than no match. What they take from the catalog is
    title, icon and shortcut text. `CommandBindings`' startup check is therefore over
    `WindowBinding` only, which is narrower than pgNimbus's and says so in place.
+   Every open-logs gesture — the list's L, Shift+L and P, the row's logs icon, the menu,
+   the palette's rows, and every other list that names a pod (workload and node detail's
+   pod lists, an Event about a pod, an Argo Application's managed workloads) — ends in
+   `ClusterTabViewModel.OpenLogsForAsync(LogTarget)`, so the pane chosen, the inspector
+   tab reused and the "Open logs maximized" preference cannot differ by route. The
+   naming lists go through `OpenNamedLogsAsync` first, which reads the object so a pod
+   that has gone, or been recreated under the same name, is stated rather than opened.
 4. **An action with no gesture is `PaletteOnly`, not `PaletteAndSheet`.** F1 is a
    *keyboard* reference: a row reading "Edit YAML — —" tells the reader nothing and
    pushes the rows that do carry a key further down. `CommandCatalogTests` pins this —

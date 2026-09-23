@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
@@ -26,6 +27,15 @@ namespace KubeNimbus.App.Views;
 /// modifiers in the Tunnel phase — before the button's own class handler runs — and
 /// <see cref="TakeShift"/> reads and clears them in the click handler.
 /// </para>
+///
+/// <para>
+/// <b>A right click selects the row under it.</b> A DataGrid selects on left-click only,
+/// so without this a row's context menu acts on whatever was selected <em>before</em> the
+/// right click — Logs opening a different pod than the one the menu opened over, and on
+/// the resource list, Delete. Every list that tracks this gesture has such a menu, which
+/// is why it lives here rather than once per view (the resource list had its own copy,
+/// and the panes' pod lists had none).
+/// </para>
 /// </summary>
 internal sealed class RowLogsGesture
 {
@@ -42,7 +52,62 @@ internal sealed class RowLogsGesture
 
         var gesture = new RowLogsGesture();
         host.AddHandler(InputElement.PointerReleasedEvent, gesture.OnPointerReleased, RoutingStrategies.Tunnel);
+        if (host is DataGrid grid)
+        {
+            grid.AddHandler(InputElement.PointerPressedEvent, SelectRowUnderRightClick, RoutingStrategies.Tunnel);
+        }
+
         return gesture;
+    }
+
+    /// <summary>
+    /// Selects the row a right click landed on. Not handled, so the context menu still
+    /// opens normally; this only fixes which row it is about. DataGrid 12 already selects
+    /// on a right click over a <em>cell</em>; what it misses is the rest of the row — the
+    /// gaps a row's padding leaves, and the strip past the last column, where nothing
+    /// hit-tests and the event's source is the grid itself (UI rule 8). So the row is
+    /// resolved from the source when the source is inside one, and otherwise by which
+    /// realized row spans the pointer's height.
+    /// </summary>
+    private static void SelectRowUnderRightClick(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is not DataGrid grid || !e.GetCurrentPoint(grid).Properties.IsRightButtonPressed)
+        {
+            return;
+        }
+
+        for (var element = e.Source as Visual; element is not null; element = element.GetVisualParent())
+        {
+            if (element is DataGridRow row)
+            {
+                grid.SelectedItem = row.DataContext;
+                return;
+            }
+
+            if (ReferenceEquals(element, grid))
+            {
+                break;
+            }
+        }
+
+        // Only inside the rows area: a row scrolled half under the column headers still
+        // spans a header's height, and a right click on a header is not about that row.
+        if (grid.GetVisualDescendants().OfType<DataGridRowsPresenter>().FirstOrDefault() is not { } rows
+            || !new Rect(rows.Bounds.Size).Contains(e.GetPosition(rows)))
+        {
+            return;
+        }
+
+        var y = e.GetPosition(grid).Y;
+        foreach (var row in grid.GetVisualDescendants().OfType<DataGridRow>())
+        {
+            if (row.IsEffectivelyVisible && row.TranslatePoint(default, grid) is { } top
+                && y >= top.Y && y < top.Y + row.Bounds.Height)
+            {
+                grid.SelectedItem = row.DataContext;
+                return;
+            }
+        }
     }
 
     private void OnPointerReleased(object? sender, PointerReleasedEventArgs e) => _modifiers = e.KeyModifiers;

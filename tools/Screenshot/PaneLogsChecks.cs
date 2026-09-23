@@ -30,6 +30,7 @@ internal static class PaneLogsChecks
 
         var grid = window.GetVisualDescendants().OfType<WorkloadDetailView>().First().FindControl<DataGrid>("PodsGrid")!;
         CheckRest(grid, detail.Pods[0], detail.Pods[1], "workload detail");
+        RightClickSelects(window, grid, detail.Pods[0], detail.Pods[1], () => detail.SelectedPod, "workload detail");
 
         var target = detail.Pods[^1];
         ClickIconAtEdge(window, grid, target, RawInputModifiers.None);
@@ -77,6 +78,7 @@ internal static class PaneLogsChecks
 
         var grid = window.GetVisualDescendants().OfType<NodeDetailView>().First().FindControl<DataGrid>("PodsGrid")!;
         CheckRest(grid, detail.Pods[0], detail.Pods[1], "node detail");
+        RightClickSelects(window, grid, detail.Pods[0], detail.Pods[1], () => detail.SelectedPod, "node detail");
 
         // The second row rather than the last: the node's list is longer than the dock, and
         // a row the DataGrid has not realized has no icon to click.
@@ -238,6 +240,34 @@ internal static class PaneLogsChecks
     private static Grid RowOf(ArgoApplicationView view, ArgoResourceRowViewModel item) =>
         view.GetVisualDescendants().OfType<Grid>()
             .First(g => g.Classes.Contains("argoResourceRow") && ReferenceEquals(g.DataContext, item));
+
+    /// <summary>
+    /// A right click on a pod row that is not selected must select it before the context
+    /// menu opens — otherwise the menu's Logs acts on the previously selected pod. DataGrid
+    /// 12 already selects on a right click over a <em>cell</em>, so this clicks the row's far
+    /// edge, past the last cell, which is where node detail's list failed without the shared
+    /// handler in RowLogsGesture (UI rule 8). The menu is dismissed afterwards.
+    /// </summary>
+    private static void RightClickSelects(
+        Window window, DataGrid grid, object selected, object clicked, Func<object?> selectedPod, string where)
+    {
+        grid.SelectedItem = selected;
+        Settle();
+        var row = grid.GetVisualDescendants().OfType<DataGridRow>().First(r => ReferenceEquals(r.DataContext, clicked));
+        var point = row.TranslatePoint(new Point(row.Bounds.Width - 1, row.Bounds.Height / 2), window)!.Value;
+        window.MouseMove(point);
+        window.MouseDown(point, MouseButton.Right);
+        window.MouseUp(point, MouseButton.Right);
+        Dispatcher.UIThread.RunJobs();
+
+        if (!ReferenceEquals(grid.SelectedItem, clicked) || !ReferenceEquals(selectedPod(), clicked))
+            throw new InvalidOperationException($"{char.ToUpperInvariant(where[0])}{where[1..]}: a right click did not select the pod under it, so the menu's Logs would open the previously selected pod.");
+
+        window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        Dispatcher.UIThread.RunJobs();
+        grid.SelectedItem = selected;
+        Settle();
+    }
 
     private static void Settle()
     {

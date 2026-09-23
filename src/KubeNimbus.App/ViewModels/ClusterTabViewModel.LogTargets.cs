@@ -267,8 +267,8 @@ public sealed partial class ClusterTabViewModel
     /// that row's cluster — the same binding <see cref="OpenOwnerAsync"/> is given.
     /// </summary>
     private OpenNamedLogs NamedLogsOpener(string clusterName, ClusterClient? client) =>
-        (target, namespaceHint, maximized) =>
-            OpenNamedLogsAsync(target, namespaceHint, clusterName, client, maximized ? true : null);
+        (target, namespaceHint, maximized, cancellationToken) =>
+            OpenNamedLogsAsync(target, namespaceHint, clusterName, client, maximized ? true : null, cancellationToken);
 
     /// <summary>
     /// Opens the logs of an object some pane names — workload detail's and node detail's
@@ -281,16 +281,25 @@ public sealed partial class ClusterTabViewModel
     /// resolves goes through <see cref="OpenLogsForAsync"/>, so the pane chosen, the
     /// inspector tab reused and the maximized preference are the list's own.
     /// </summary>
-    /// <returns>Null when logs opened; otherwise the sentence to show.</returns>
+    /// <remarks>
+    /// Two more things are checked before anything opens. A target that carries a UID (a
+    /// pod listed by a pane, the pod an Event names) must still have it: a StatefulSet pod
+    /// recreated under the same name is a different pod, and opening its logs silently
+    /// would show the reader the wrong instance. And <paramref name="cancellationToken"/>
+    /// is the naming pane's own, so closing that pane while the read is in flight opens
+    /// nothing and states nothing.
+    /// </remarks>
+    /// <returns>Null when logs opened (or the read was cancelled); otherwise the sentence to show.</returns>
     internal Task<string?> OpenNamedLogsAsync(
-        OwnerRef target, string? namespaceHint, string clusterName, ClusterClient? client, bool? maximized)
+        OwnerRef target, string? namespaceHint, string clusterName, ClusterClient? client, bool? maximized,
+        CancellationToken cancellationToken = default)
     {
         var source = client is not null ? NamedObjectSource.For(client)
             : IsDemo ? NamedObjectSource.Demo
             : null;
         return source is null
             ? Task.FromResult<string?>("Not connected to this cluster.")
-            : OpenNamedLogsAsync(target, namespaceHint, clusterName, client, source, maximized);
+            : OpenNamedLogsAsync(target, namespaceHint, clusterName, client, source, maximized, cancellationToken);
     }
 
     /// <summary>
@@ -301,7 +310,7 @@ public sealed partial class ClusterTabViewModel
     /// </summary>
     internal async Task<string?> OpenNamedLogsAsync(
         OwnerRef target, string? namespaceHint, string clusterName, ClusterClient? client,
-        NamedObjectSource source, bool? maximized)
+        NamedObjectSource source, bool? maximized, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(source);
@@ -310,7 +319,7 @@ public sealed partial class ClusterTabViewModel
         DynamicResource? resolved;
         try
         {
-            var catalog = await source.Catalog(CancellationToken.None);
+            var catalog = await source.Catalog(cancellationToken);
             descriptor = catalog.FirstOrDefault(d => d.ApiVersion == target.ApiVersion && d.Kind == target.Kind);
             if (descriptor is null)
             {
@@ -320,7 +329,7 @@ public sealed partial class ClusterTabViewModel
             }
 
             resolved = await source.Read(
-                descriptor, descriptor.Namespaced ? namespaceHint : null, target.Name, CancellationToken.None);
+                descriptor, descriptor.Namespaced ? namespaceHint : null, target.Name, cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -331,6 +340,11 @@ public sealed partial class ClusterTabViewModel
             // A 403 is the common one, and the server's sentence names the verb and the
             // subject — more useful than anything worded here.
             return ex.Message;
+        }
+
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return null;
         }
 
         if (resolved is null)
@@ -344,6 +358,13 @@ public sealed partial class ClusterTabViewModel
                 ? $"{namespaceHint}/{target.Name}"
                 : target.Name;
             return $"{target.Kind} {qualified} no longer exists — it was deleted or replaced since this was listed.";
+        }
+
+        if (target.Uid is { Length: > 0 } uid && !string.Equals(resolved.Uid, uid, StringComparison.Ordinal))
+        {
+            var qualified = resolved.Namespace is { Length: > 0 } ns ? $"{ns}/{target.Name}" : target.Name;
+            return $"{target.Kind} {qualified} was replaced since this was listed; the one there now is "
+                + "a different instance. Refresh the list to open its logs.";
         }
 
         if (!LogTarget.HasOwnLogs(resolved))

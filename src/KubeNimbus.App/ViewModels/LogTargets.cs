@@ -65,12 +65,23 @@ public sealed record LogTarget(
     /// only safe because it is a <em>hint</em>: the object is resolved before anything
     /// opens, and <see cref="HasOwnLogs"/> on the resolved object has the last word (a
     /// mismatch is stated, never a dead click).
+    /// <para>
+    /// Argo Rollouts' <c>Rollout</c> is on it because a Rollout <em>is</em> the workload
+    /// on any cluster that uses it, and leaving it off hid the one row an Argo reader most
+    /// wants logs for. It is matched on the group rather than one version, since the
+    /// Rollout CRD has only ever been served as <c>v1alpha1</c> so far but the row should
+    /// not go dark the day that changes. Other selector-bearing CRDs are deliberately not
+    /// guessed at: offering the icon on every custom row would put a control that mostly
+    /// answers "names no pods" on cert-manager Certificates and Argo's own Applications,
+    /// and those CRDs' own list rows already have L.
+    /// </para>
     /// </summary>
     public static bool MayHaveLogs(string apiVersion, string kind) => (apiVersion, kind) switch
     {
         ("v1", "Pod") => true,
         ("apps/v1", "Deployment" or "StatefulSet" or "DaemonSet" or "ReplicaSet") => true,
         ("batch/v1", "Job") => true,
+        (_, "Rollout") when apiVersion.StartsWith("argoproj.io/", StringComparison.Ordinal) => true,
         _ => false,
     };
 }
@@ -86,9 +97,12 @@ public sealed record LogTarget(
 /// <param name="namespaceHint">Its namespace; ignored for a cluster-scoped kind.</param>
 /// <param name="maximized">Shift+L or a Shift+click: open full-size. False leaves it to
 /// the "Open logs maximized" preference, exactly as the list's L does.</param>
+/// <param name="cancellationToken">The naming pane's own: closing the pane while the object
+/// is being read opens nothing.</param>
 /// <returns>Null when logs opened; otherwise the sentence the pane shows in place of a
 /// dead click — "gone since this list was read", a 403, "not in the demo dataset".</returns>
-public delegate Task<string?> OpenNamedLogs(OwnerRef target, string? namespaceHint, bool maximized);
+public delegate Task<string?> OpenNamedLogs(
+    OwnerRef target, string? namespaceHint, bool maximized, CancellationToken cancellationToken);
 
 /// <summary>
 /// One cluster the palette's log rows are listed from — the tab's own, or one member of

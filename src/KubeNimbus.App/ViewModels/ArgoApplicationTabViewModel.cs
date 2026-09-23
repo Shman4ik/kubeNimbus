@@ -270,7 +270,7 @@ public sealed partial class ArgoApplicationTabViewModel : InspectorTabViewModelB
         }
 
         var target = new OwnerRef(resource.ApiVersion, resource.Kind, resource.Name, Uid: null, Controller: false);
-        LogsNotice = await _openLogs(target, resource.Namespace.Length > 0 ? resource.Namespace : null, maximized);
+        LogsNotice = await _openLogs(target, resource.Namespace.Length > 0 ? resource.Namespace : null, maximized, _cts.Token);
     }
 
     public override async Task OnClosingAsync()

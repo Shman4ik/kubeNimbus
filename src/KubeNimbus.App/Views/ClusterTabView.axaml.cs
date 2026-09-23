@@ -136,16 +136,12 @@ public partial class ClusterTabView : UserControl
         // see it, so this has to run in the Tunnel phase to win.
         ResourceGrid.AddHandler(KeyDownEvent, OnGridKeyDown, RoutingStrategies.Tunnel);
 
-        // A DataGrid selects on left-click only, so without this the row context menu
-        // would act on whatever was selected *before* the right-click — i.e. usually
-        // not the row the menu opened over, which is the worst possible behaviour for
-        // a menu whose last item is Delete.
-        ResourceGrid.AddHandler(PointerPressedEvent, OnGridPointerPressed, RoutingStrategies.Tunnel);
-
         // A Button's Click carries no modifiers, and the row's logs icon needs Shift. The
         // release is what raises Click, so the modifiers are read off it on the way down
         // (Tunnel runs before the button's own class handler) — see OnRowLogsClick. Shared
-        // with the inspector panes' pod lists (RowLogsGesture).
+        // with the inspector panes' pod lists (RowLogsGesture), which also makes a right
+        // click select the row under it: a DataGrid selects on left-click only, and a menu
+        // whose last item is Delete must be about the row it opened over.
         _rowLogs = RowLogsGesture.Track(ResourceGrid);
 
         // Esc returns a maximized inspector to the split. Bubble, and only for keys nothing
@@ -718,31 +714,6 @@ public partial class ClusterTabView : UserControl
         }
 
         ApplySortIndicator();
-    }
-
-    /// <summary>
-    /// Makes a right-click select the row under the cursor before the context flyout
-    /// opens. Not handled (<c>e.Handled</c> stays false) so the flyout still opens
-    /// normally — this only fixes which row it is about.
-    /// </summary>
-    private void OnGridPointerPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (!e.GetCurrentPoint(ResourceGrid).Properties.IsRightButtonPressed)
-        {
-            return;
-        }
-
-        // Resolved from the event source rather than from a handler on the row
-        // template: a DataGridRow's own padding lies outside its cell content, so a
-        // handler in the template misses the gaps between cells entirely.
-        for (var element = e.Source as Visual; element is not null; element = element.GetVisualParent())
-        {
-            if (element is DataGridRow { DataContext: ResourceRowViewModel row })
-            {
-                ResourceGrid.SelectedItem = row;
-                return;
-            }
-        }
     }
 
     private void OnInspectorTabsChanged(object? sender, NotifyCollectionChangedEventArgs e) => ApplyDockState();

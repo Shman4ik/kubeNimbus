@@ -495,6 +495,90 @@ public class PaneLogsTests
             .IsEqualTo("Not connected to this cluster.");
     }
 
+    [Test]
+    public async Task A_pod_recreated_under_the_same_name_is_stated_not_opened()
+    {
+        // A StatefulSet recreates web-0 as web-0: same name, new UID. The pane listed the
+        // old one, so opening the new one's logs would show the wrong instance.
+        var tab = TestObjects.Tab();
+        var listed = new OwnerRef("v1", "Pod", "web-0", "shop-web-0-before", false);
+        var now = TestObjects.Pod("shop", "web-0");
+
+        var problem = await tab.OpenNamedLogsAsync(listed, "shop", "", null, Cluster(_ => now), maximized: null);
+
+        await Assert.That(problem).IsEqualTo(
+            "Pod shop/web-0 was replaced since this was listed; the one there now is a different instance. "
+            + "Refresh the list to open its logs.");
+        await Assert.That(tab.InspectorTabs.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task A_pod_with_the_uid_the_pane_listed_opens()
+    {
+        var tab = TestObjects.Tab();
+        var pod = TestObjects.Pod("shop", "web-0");
+
+        var problem = await tab.OpenNamedLogsAsync(
+            new OwnerRef("v1", "Pod", "web-0", pod.Uid, false), "shop", "", null, Cluster(_ => pod), maximized: null);
+
+        // Null is "handed to OpenLogsForAsync": this tab has no client to stream with, so
+        // no pane follows, but the UID check let it through. The demo-cluster tests above
+        // (which pass UIDs from the real panes) cover the pane actually opening.
+        await Assert.That(problem).IsNull();
+    }
+
+    [Test]
+    public async Task Closing_the_pane_during_the_read_opens_nothing_and_says_nothing()
+    {
+        // On the demo cluster, so that a read which is let through really does open a
+        // logs pane: the control run below proves the gate is what stops the first one.
+        var tab = DemoTab();
+        var pod = KubeNimbus.App.Demo.DemoData.ResourcesFor(ResourceDescriptor.Pods, null).First();
+        var target = new OwnerRef("v1", "Pod", pod.Name, pod.Uid, false);
+        var gate = new TaskCompletionSource();
+        CancellationToken seen = default;
+        var demo = NamedObjectSource.Demo;
+        var source = new NamedObjectSource(
+            demo.Catalog,
+            async (descriptor, @namespace, name, token) =>
+            {
+                seen = token;
+                await gate.Task; // a reader that ignores the token and answers late
+                return await demo.Read(descriptor, @namespace, name, CancellationToken.None);
+            },
+            IsDemo: true);
+        var before = tab.InspectorTabs.Count;
+        using var pane = new CancellationTokenSource();
+
+        var opening = tab.OpenNamedLogsAsync(target, pod.Namespace, "", null, source, maximized: null, pane.Token);
+        await pane.CancelAsync();
+        gate.SetResult();
+
+        await Assert.That(await opening).IsNull();
+        await Assert.That(seen).IsEqualTo(pane.Token);
+        await Assert.That(tab.InspectorTabs.Count).IsEqualTo(before);
+
+        // Control: the same read, not cancelled, opens the pod's logs.
+        await Assert.That(await tab.OpenNamedLogsAsync(target, pod.Namespace, "", null, source, maximized: null)).IsNull();
+        await Assert.That(tab.InspectorTabs.Count).IsEqualTo(before + 1);
+    }
+
+    [Test]
+    public async Task Node_detail_lists_its_pods_with_their_uids()
+    {
+        var pod = new NodePodViewModel(TestObjects.Pod("payments", "api-1"));
+
+        await Assert.That(pod.Uid).IsEqualTo("payments-api-1");
+    }
+
+    [Test]
+    public async Task An_Argo_Rollout_is_offered_logs_and_its_own_Application_is_not()
+    {
+        await Assert.That(LogTarget.MayHaveLogs("argoproj.io/v1alpha1", "Rollout")).IsTrue();
+        await Assert.That(LogTarget.MayHaveLogs("argoproj.io/v1alpha1", "Application")).IsFalse();
+        await Assert.That(LogTarget.MayHaveLogs("example.com/v1", "Rollout")).IsFalse();
+    }
+
     // ------------------------------------------------------------------ the keys
 
     [Test]

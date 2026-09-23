@@ -702,7 +702,8 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
         }
 
         SelectedPod = pod;
-        LogsNotice = await _openLogs(new OwnerRef("v1", "Pod", pod.Name, null, false), pod.Namespace, maximized);
+        LogsNotice = await _openLogs(
+            new OwnerRef("v1", "Pod", pod.Name, pod.Uid, false), pod.Namespace, maximized, _cts.Token);
     }
 
     public override async Task OnClosingAsync()
@@ -822,6 +823,7 @@ public sealed class NodePodViewModel
 
         Namespace = pod.Namespace ?? "";
         Name = pod.Name;
+        Uid = pod.Uid;
 
         var summary = ResourceStatusSummary.Summarize(pod);
         Status = summary.Status;
@@ -839,6 +841,13 @@ public sealed class NodePodViewModel
     public string Namespace { get; }
 
     public string Name { get; }
+
+    /// <summary>
+    /// The pod's UID as listed. The Pods tab is one read, not a watch, so by the time L is
+    /// pressed the name may belong to a pod recreated in its place (a StatefulSet does
+    /// exactly that); the logs opener compares this against the pod it reads back.
+    /// </summary>
+    public string? Uid { get; }
 
     public string Status { get; }
 
