@@ -169,6 +169,16 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // cannot produce on demand (in flight, refused, capped, a fleet) are written in
     // through the tab's fixture seam, after a real open so the seam is what wins.
     ("ux-logs-palette", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
+    // L2 — the row's logs icon and logs opened full-size. The hover is a real pointer
+    // move (HoverRow) over a second row, so the shot shows the icon on the hovered and the
+    // selected row and on no other; the ux- check clicks it at its edge, Shift+clicks it,
+    // presses Shift+L and Esc.
+    ("ux-row-logs", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
+    ("cluster-tab-row-logs", () => HostInMainWindow(ClusterTabScenarios.DemoRowLogs())),
+    ("cluster-tab-row-logs-narrow", () => HostInMainWindow(ClusterTabScenarios.DemoRowLogs(), width: 860)),
+    ("cluster-tab-row-logs-deployments", () => HostInMainWindow(ClusterTabScenarios.DemoRowLogsDeployments())),
+    ("cluster-tab-row-logs-none", () => HostInMainWindow(ClusterTabScenarios.DemoRowLogsNone())),
+    ("cluster-tab-logs-maximized", () => HostInMainWindow(ClusterTabScenarios.DemoLogsMaximized())),
     ("palette-logs", () => LogsPalette(ClusterTabScenarios.DemoList(), "")),
     ("palette-logs-search", () => LogsPalette(ClusterTabScenarios.DemoList(), "report")),
     ("palette-logs-narrow", () => LogsPalette(ClusterTabScenarios.DemoList(), "", width: 800)),
@@ -200,6 +210,9 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // URI or a DataTemplate that stopped resolving compiles perfectly), and these
     // two views are loaded from nowhere else.
     ("main-window-preferences", () => BuildMainWindowContent(openPreferences: true)),
+    // The same page scrolled to its Logs and metrics cards, where L2's "Open logs
+    // maximized" switch sits below the fold of the shot above.
+    ("main-window-preferences-logs", () => BuildMainWindowContent(openPreferences: true)),
     ("main-window-about", () => BuildMainWindowContent(openAbout: true)),
 };
 
@@ -246,6 +259,9 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     if (name == "ux-namespace-picker") UxInteractionChecks.NamespacePicker(window);
     if (name == "ux-unhealthy-toggle") UxInteractionChecks.UnhealthyToggle(window);
     if (name == "ux-logs-palette") UxInteractionChecks.LogsPalette(window);
+    if (name == "ux-row-logs") UxInteractionChecks.RowLogs(window);
+    if (name == "main-window-preferences-logs") UxInteractionChecks.ScrollPreferencesTo(window, "Open logs maximized");
+    if (name.StartsWith("cluster-tab-row-logs", StringComparison.Ordinal)) UxInteractionChecks.HoverRow(window, 3);
     using var frame = window.CaptureRenderedFrame();
     var themeLabel = theme == ThemeVariant.Dark ? "dark" : "light";
     var path = Path.Combine(outDir, $"{name}.{themeLabel}.png");

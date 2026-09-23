@@ -171,6 +171,21 @@ public sealed record AppSettings
     /// </summary>
     public bool PreviewApplies { get; set; } = true;
 
+    /// <summary>
+    /// Whether opening logs — L on a row, its logs icon, the context menu, a palette
+    /// <c>Logs: …</c> row — maximizes the inspector over the list rather than docking it
+    /// in the ~300px split. Off by default, because the split keeps the list in view and
+    /// the list is where you chose the pod; on for someone who reads logs far back and on
+    /// long lines, for whom the maximize was a second click every single time. Shift+L and
+    /// a Shift+click on the logs icon maximize whatever this says.
+    ///
+    /// <para>
+    /// Read by <c>ClusterTabViewModel.OpenLogsForAsync</c> at the moment logs open, not
+    /// cached, so turning it on applies to the next open with nothing to restart.
+    /// </para>
+    /// </summary>
+    public bool OpenLogsMaximized { get; set; }
+
     /// <summary>Default for <see cref="LogBufferLines"/>, and the value the app shipped with.</summary>
     public const int DefaultLogBufferLines = 4000;
 

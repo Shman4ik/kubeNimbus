@@ -142,7 +142,90 @@ public partial class ClusterTabView : UserControl
         // a menu whose last item is Delete.
         ResourceGrid.AddHandler(PointerPressedEvent, OnGridPointerPressed, RoutingStrategies.Tunnel);
 
+        // A Button's Click carries no modifiers, and the row's logs icon needs Shift. The
+        // release is what raises Click, so the modifiers are read off it on the way down
+        // (Tunnel runs before the button's own class handler) — see OnRowLogsClick.
+        ResourceGrid.AddHandler(PointerReleasedEvent, OnGridPointerReleasedForRowAction, RoutingStrategies.Tunnel);
+
+        // Esc returns a maximized inspector to the split. Bubble, and only for keys nothing
+        // below handled: a search box clearing itself, a menu closing and the terminal's
+        // own Esc (vim) all get the key first — see OnViewKeyDown.
+        AddHandler(KeyDownEvent, OnViewKeyDown, RoutingStrategies.Bubble);
+
         DataContextChanged += OnDataContextChanged;
+    }
+
+    /// <summary>The modifiers held when the pointer was last released over the grid.</summary>
+    private KeyModifiers _rowActionModifiers;
+
+    private void OnGridPointerReleasedForRowAction(object? sender, PointerReleasedEventArgs e) =>
+        _rowActionModifiers = e.KeyModifiers;
+
+    /// <summary>
+    /// The logs icon in a row's Name cell: that row's logs, and with Shift held, full-size.
+    /// The row comes from the button's own DataContext — the template's, so it is the row
+    /// the icon is drawn in rather than whatever was selected before the click (the button
+    /// takes the press the grid would have selected the row with; the view model selects it).
+    /// Focus goes back to the grid so the row keys, and Esc out of a maximized pane, keep
+    /// working without a second click.
+    /// </summary>
+    private void OnRowLogsClick(object? sender, RoutedEventArgs e)
+    {
+        var shift = _rowActionModifiers.HasFlag(KeyModifiers.Shift);
+        _rowActionModifiers = KeyModifiers.None;
+        e.Handled = true;
+
+        if (sender is not Button { DataContext: ResourceRowViewModel row } || Vm is not { } vm)
+        {
+            return;
+        }
+
+        _ = vm.OpenRowLogsAsync(row, maximized: shift);
+        ResourceGrid.Focus();
+    }
+
+    /// <summary>
+    /// Esc with the inspector maximized: back to the split, focus on the rows. Never from
+    /// a text-editing control — Esc there belongs to the text (a search box, the YAML
+    /// editor, a shell running vim), and taking it would make the key mean two things.
+    /// </summary>
+    private void OnViewKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Escape || e.KeyModifiers != KeyModifiers.None || e.Handled
+            || Vm is not { IsInspectorMaximized: true } || IsTextInput(e.Source))
+        {
+            return;
+        }
+
+        RestoreInspectorFromMaximized();
+        e.Handled = true;
+    }
+
+    private void RestoreInspectorFromMaximized()
+    {
+        if (Vm is not { } vm)
+        {
+            return;
+        }
+
+        vm.IsInspectorMaximized = false;
+        if (vm.IsResourceListVisible)
+        {
+            ResourceGrid.Focus();
+        }
+    }
+
+    private static bool IsTextInput(object? source)
+    {
+        for (var element = source as Visual; element is not null; element = element.GetVisualParent())
+        {
+            if (element is TextBox or AvaloniaEdit.TextEditor or SvcSystems.UI.Terminal.TerminalControl)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private ClusterTabViewModel? Vm => DataContext as ClusterTabViewModel;
@@ -792,6 +875,23 @@ public partial class ClusterTabView : UserControl
             return;
         }
 
+        if (vm.IsInspectorMaximized)
+        {
+            // The list is collapsed to nothing under a maximized inspector, but it can
+            // still hold focus — which is how Shift+L leaves it. Its row keys must not act
+            // on rows nobody can see (Delete would arm a strip over a list that is not
+            // there); Esc is the one key that means something here. Everything else is
+            // left unhandled so the window's own bindings (Ctrl/Cmd+K, Ctrl/Cmd+Shift+L…)
+            // still reach the window.
+            if (e.Key == Key.Escape && e.KeyModifiers == KeyModifiers.None)
+            {
+                RestoreInspectorFromMaximized();
+                e.Handled = true;
+            }
+
+            return;
+        }
+
         if (e.Key == Key.Space)
         {
             vm.PeekSelectedCommand.Execute(null);
@@ -839,6 +939,12 @@ public partial class ClusterTabView : UserControl
     /// </summary>
     private static System.Windows.Input.ICommand? RowKeyCommand(ClusterTabViewModel vm, KeyEventArgs e)
     {
+        if (CommandBindings.Matches(CommandId.PodLogsMaximized, e))
+        {
+            // The same logs as L, full-size — for a pod and a workload alike.
+            return vm.OpenLogsMaximizedCommand;
+        }
+
         if (CommandBindings.Matches(CommandId.PodLogs, e))
         {
             // A pod's own logs; on anything that owns pods, the one-stream-per-workload

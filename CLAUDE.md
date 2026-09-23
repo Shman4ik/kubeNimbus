@@ -263,7 +263,11 @@ Three rules about it:
    states (hidden / split / maximized) are driven from `ClusterTabView`'s
    code-behind `ApplyDockState` by mutating the content grid's row heights —
    a `GridSplitter` mutates `RowDefinition.Height` directly and would fight a
-   one-way height binding, which is why this is code-behind, not XAML.
+   one-way height binding, which is why this is code-behind, not XAML. Esc returns a
+   maximized inspector to the split (never from a text box, the YAML editor or the
+   terminal, whose Esc is their own), and while it is maximized the collapsed list keeps
+   focus but ignores its row keys — see
+   [row-logs-and-maximized](docs/engineering/row-logs-and-maximized.md).
 8. **A click target must hit-test across its whole area, and say it is one.**
    In Avalonia a `Panel` or `Border` with a **null** `Background` does not
    hit-test where no child covers it, and a container's own `Padding` lies
@@ -578,6 +582,7 @@ Three rules about it:
 Each feature's design rules, and the incidents behind them, live in a page of their own under [`docs/engineering/`](docs/engineering/), so a session loads only the ones it touches. **Read the page for any feature you change before changing it**, and keep it current in the same PR — the same discipline as this file.
 
 - [Multi-pod logs (one workload, one stream)](docs/engineering/multi-pod-logs.md) — WorkloadLogsTabViewModel: selector-resolved pods, per-pod tail budget, 50-stream cap, two-stage timestamp merge.
+- [One click to logs from the row, and logs opened full-size](docs/engineering/row-logs-and-maximized.md) — The row's logs icon (hover/selected, IsVisible style, Shift+click), Shift+L, the "Open logs maximized" preference read by OpenLogsForAsync, Esc restore.
 - [Log severity is three classes, not a brush binding](docs/engineering/log-severity-classes.md) — Why severity is style classes and never a Foreground binding (the invisible-plain-line bug, twice).
 - [Pod detail's Overview tab (conditions, tolerations, QoS, priority, probes)](docs/engineering/pod-overview-tab.md) — Conditions/tolerations/QoS/probes tab: index 4, condition polarity, API-server probe defaults, signature-guarded rebuild.
 - [Requests and limits are text on the Usage tab](docs/engineering/requests-and-limits.md) — Usage tab's declared requests/limits: words not blanks, not gated on metrics.
@@ -696,7 +701,7 @@ There are **two** persisted files and the split is not arbitrary:
   is *preferences* — what you chose once and expect to still be true next launch:
   theme, hotkey scheme, advanced view, sidebar visibility and expanded sections,
   picked kubeconfig paths, log scrollback, metrics poll interval, delete confirmation,
-  apply preview.
+  apply preview, open logs maximized.
 - **`workspace.json`** (`KubeNimbus.App/WorkspaceStore.cs`) is *session* — what the
   window looked like: open tabs, pinned and recent contexts, environment overrides.
 
@@ -827,7 +832,10 @@ Seven things worth keeping:
    leaves it. A log row matches on name, namespace and cluster (`PaletteItem.SearchText`)
    and never on status, for UI rule 13's reason. Every open-logs gesture — L, P, the menu,
    the palette rows — goes through `ClusterTabViewModel.OpenLogsForAsync(LogTarget)`, so
-   the pane chosen and the inspector tab reused cannot differ by route.
+   the pane chosen and the inspector tab reused cannot differ by route. Since L2 that
+   includes Shift+L and the row's logs icon, and the same call is where "open maximized"
+   is decided (`maximized: true`, or the `OpenLogsMaximized` preference when null) — see
+   [row-logs-and-maximized](docs/engineering/row-logs-and-maximized.md).
 4. **An action with no gesture is `PaletteOnly`, not `PaletteAndSheet`.** F1 is a
    *keyboard* reference: a row reading "Edit YAML — —" tells the reader nothing and
    pushes the rows that do carry a key further down. `CommandCatalogTests` pins this —
@@ -839,7 +847,7 @@ Seven things worth keeping:
    the terminal owns plain Ctrl+C, so the clipboard has to move up a modifier, exactly
    as it does in every terminal emulator.
 6. **The list has single-letter row keys, k9s's own.** L logs (a pod's, or every pod a
-   workload owns), P previous logs, S shell on a pod / scale on anything with a `scale`
+   workload owns), Shift+L the same logs with the inspector maximized, P previous logs, S shell on a pod / scale on anything with a `scale`
    subresource, F port-forward, E edit YAML, R rollout restart, Delete, and `/` to search.
    They are `CommandScope.List` rows in the catalog, matched by `ClusterTabView
    .OnGridKeyDown` through `CommandBindings.Matches`, and each resolves to the *same*

@@ -103,4 +103,26 @@ public class AppSettingsTests
         await Assert.That(new AppSettings().IsAdvancedView).IsTrue();
         await Assert.That(new AppSettings().Normalized().IsAdvancedView).IsTrue();
     }
+
+    // ------------------------------------------------------------ open logs maximized
+
+    /// <summary>
+    /// Off by default — the split keeps the list in view, and the list is where the pod
+    /// was chosen — and it survives the file, including a file written before the
+    /// setting existed (which must read as off, not fail).
+    /// </summary>
+    [Test]
+    public async Task Open_logs_maximized_is_off_by_default_and_round_trips()
+    {
+        await Assert.That(new AppSettings().OpenLogsMaximized).IsFalse();
+
+        var path = Path.Combine(Path.GetTempPath(), "kubenimbus-settings-tests", Guid.NewGuid().ToString("n"), "settings.json");
+        var store = new AppSettingsStore(path);
+        store.Save(new AppSettings { OpenLogsMaximized = true });
+        await Assert.That(store.Load().OpenLogsMaximized).IsTrue();
+
+        await File.WriteAllTextAsync(path, """{ "Theme": "dark" }""");
+        await Assert.That(store.Load().OpenLogsMaximized).IsFalse();
+        await Assert.That(store.Load().Theme).IsEqualTo("dark");
+    }
 }

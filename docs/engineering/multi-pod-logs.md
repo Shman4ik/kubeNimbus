@@ -7,8 +7,9 @@
 single inspector pane, colour-keyed by pod. It is the job `stern` exists for, and the
 thing that makes a *rolling deployment* readable: during a roll, the pod going away and
 the pod coming up are one question, and reading them in two panes reads them in the
-wrong order. Reached from the row context menu ("Logs (all pods)"), the list's L key, and
-Ctrl/Cmd+K — no always-visible control (UI rule 1). Since L1 the palette also offers a
+wrong order. Reached from the row context menu ("Logs (all pods)"), the list's L key (and
+Shift+L, full-size), the logs icon on a hovered or selected workload row, and Ctrl/Cmd+K —
+no always-visible control (UI rule 1); see [row-logs-and-maximized](row-logs-and-maximized.md). Since L1 the palette also offers a
 `Logs: Deployment/<name>` row for every Deployment, StatefulSet and DaemonSet in the tab's
 namespace whether or not the list is showing it, and Ctrl/Cmd+Shift+L opens the palette
 already narrowed to those rows and the namespace's pods; see the command catalog section

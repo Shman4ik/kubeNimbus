@@ -26,6 +26,17 @@ public sealed record LogTarget(
 {
     /// <summary>A pod opens its own detail pane; anything else aggregates the pods it owns.</summary>
     public bool IsPod => Descriptor is { Kind: "Pod", Group: "" };
+
+    /// <summary>
+    /// Whether an object has logs to open: a core pod, or anything that names the pods it
+    /// owns through a selector — the same evidence the list's L key and "Logs (all pods)"
+    /// are gated on, read off the object rather than off a list of kinds, so a row's logs
+    /// icon can never be offered where L would do nothing (or hidden where it would work).
+    /// Any list that shows objects can ask this; the resource list's rows cache it as
+    /// <see cref="ResourceRowViewModel.HasLogs"/>.
+    /// </summary>
+    public static bool CanOpen(DynamicResource resource) =>
+        resource is { Kind: "Pod", ApiVersion: "v1" } || LabelSelector.ForPodsOf(resource) is not null;
 }
 
 /// <summary>

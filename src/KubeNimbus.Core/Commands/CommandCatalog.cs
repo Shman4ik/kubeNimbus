@@ -303,6 +303,23 @@ public static class CommandCatalog
         },
         new()
         {
+            Id = CommandId.PodLogsMaximized,
+            Title = "Logs, maximized",
+            CheatTitle = "Logs, opened full-size over the list (Esc returns to split)",
+            Category = CommandCategory.Pods,
+            Scope = CommandScope.List,
+            IconKey = "FullscreenIconGeometry",
+            // The same logs L opens, with the inspector already maximized: a log is read
+            // on long lines and far back, and the ~300px dock was one more click away from
+            // that every time. Shift rather than a new letter so the pair reads as one
+            // gesture, and the row's logs icon takes the same modifier on a click. The
+            // "Open logs maximized" preference makes plain L do this too.
+            Chord = new(CommandKey.L, ChordModifiers.Shift),
+            GestureNote = "Shift+click a row's logs icon",
+            Surfaces = PaletteAndSheet,
+        },
+        new()
+        {
             Id = CommandId.LogsPalette,
             Title = "Logs: find a pod or workload…",
             CheatTitle = "Logs of any pod or workload, from anywhere",
@@ -470,7 +487,7 @@ public static class CommandCatalog
             Title = "Maximize the inspector over the list",
             Category = CommandCategory.View,
             IconKey = "FullscreenIconGeometry",
-            GestureNote = "The inspector's expand icon",
+            GestureNote = "The inspector's expand icon; Esc restores",
             Surfaces = SheetOnly,
         },
         new()

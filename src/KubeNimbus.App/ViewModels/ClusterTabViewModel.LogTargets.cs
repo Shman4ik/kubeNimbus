@@ -162,6 +162,8 @@ public sealed partial class ClusterTabViewModel
     internal void SetLogTargetsForFixture(LogTargetList? result, bool loading)
     {
         _logTargetsCts?.Cancel();
+        _logTargetsCts?.Dispose();
+        _logTargetsCts = null;
         var scope = LogTargetsScopeKey();
         _logTargetsLoadingScope = loading ? scope : null;
         _logTargetsScope = result is null ? null : scope;
@@ -216,14 +218,53 @@ public sealed partial class ClusterTabViewModel
             : null;
 
     /// <summary>
-    /// Opens the logs of a pod or of a workload's pods. The one entry point: the list's L
-    /// and P keys, its context menu and the palette's rows all come here, so each makes the
-    /// same choice of pane and reuses the same inspector tab. A pod opens its detail pane on
-    /// the Logs tab (<paramref name="previous"/> shows the crashed instance); anything that
-    /// names its pods opens the one-stream pane over them. Neither ever replaces an open
-    /// editor tab (UI rule 5) — both open permanent tabs, not previews.
+    /// The row's logs icon: selects the row (the icon swallows the press the grid would
+    /// otherwise have selected it with, and the list should say which row the inspector is
+    /// showing), then opens its logs through <see cref="OpenLogsForAsync"/> like every
+    /// other route. <paramref name="maximized"/> is the Shift+click; a plain click leaves
+    /// the choice to the "Open logs maximized" preference, exactly as L does.
     /// </summary>
-    public async Task OpenLogsForAsync(LogTarget target, bool previous = false)
+    public Task OpenRowLogsAsync(ResourceRowViewModel row, bool maximized = false)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        if (!row.HasLogs)
+        {
+            return Task.CompletedTask;
+        }
+
+        SelectedRow = row;
+        return LogTargetFor(row) is { } target
+            ? OpenLogsForAsync(target, previous: false, maximized: maximized ? true : null)
+            : Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Opens the logs of a pod or of a workload's pods. The one entry point: the list's L,
+    /// Shift+L and P keys, the row's logs icon, its context menu and the palette's rows all
+    /// come here, so each makes the same choice of pane and reuses the same inspector tab. A
+    /// pod opens its detail pane on the Logs tab (<paramref name="previous"/> shows the
+    /// crashed instance); anything that names its pods opens the one-stream pane over them.
+    /// Neither ever replaces an open editor tab (UI rule 5) — both open permanent tabs, not
+    /// previews.
+    ///
+    /// <para>
+    /// <paramref name="maximized"/>: true maximizes the inspector over the list (Shift+L, a
+    /// Shift+click on the logs icon); null leaves it to the "Open logs maximized" preference,
+    /// read here at the moment of opening so a change applies to the next open. Neither ever
+    /// <em>un</em>-maximizes: logs opened while the inspector already fills the area stay
+    /// full-size, and the way back is Esc or the dock's restore icon.
+    /// </para>
+    /// </summary>
+    public async Task OpenLogsForAsync(LogTarget target, bool previous = false, bool? maximized = null)
+    {
+        if (await OpenLogsPaneAsync(target, previous) && (maximized ?? App.LoadSettings().OpenLogsMaximized))
+        {
+            IsInspectorMaximized = true;
+        }
+    }
+
+    /// <summary>Opens (or re-selects) the pane; false when there was nothing to open.</summary>
+    private async Task<bool> OpenLogsPaneAsync(LogTarget target, bool previous)
     {
         // The live row when the list holds this object, so the pane follows its watch;
         // otherwise a row over the object as it was listed, which is what owner navigation
@@ -237,18 +278,19 @@ public sealed partial class ClusterTabViewModel
         if (target.IsPod)
         {
             await OpenRowAsync(row, preview: false, target.Descriptor, target.Client);
-            if (SelectedInspectorTab is PodDetailTabViewModel detail)
+            if (SelectedInspectorTab is not PodDetailTabViewModel detail)
             {
-                detail.SelectedDetailTabIndex = 0;
-                detail.IsShowingPreviousLogs = previous;
+                return false;
             }
 
-            return;
+            detail.SelectedDetailTabIndex = 0;
+            detail.IsShowingPreviousLogs = previous;
+            return true;
         }
 
         if (LabelSelector.ForPodsOf(row.Resource) is not { } selector)
         {
-            return;
+            return false;
         }
 
         // Null in demo mode, where the pane still works: its pods come out of the shipped
@@ -257,7 +299,7 @@ public sealed partial class ClusterTabViewModel
         var client = target.Client;
         if (client is null && !IsDemo)
         {
-            return;
+            return false;
         }
 
         var tabKey = WorkloadLogsTabViewModel.KeyFor(row.ClusterName, target.Descriptor, row.Namespace, row.Name);
@@ -265,9 +307,10 @@ public sealed partial class ClusterTabViewModel
         {
             existing.IsPreview = false;
             SelectedInspectorTab = existing;
-            return;
+            return true;
         }
 
         AddInspectorTab(new WorkloadLogsTabViewModel(client, target.Descriptor, row.Resource, selector, row.ClusterName));
+        return true;
     }
 }

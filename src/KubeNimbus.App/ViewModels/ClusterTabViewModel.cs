@@ -769,7 +769,9 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [NotifyPropertyChangedFor(nameof(CanRestartSelectedRow))]
     [NotifyPropertyChangedFor(nameof(CanDeleteSelectedRow))]
     [NotifyPropertyChangedFor(nameof(CanAggregateLogsForSelectedRow))]
+    [NotifyPropertyChangedFor(nameof(CanOpenLogsForSelectedRow))]
     [NotifyCanExecuteChangedFor(nameof(OpenWorkloadLogsCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenLogsMaximizedCommand))]
     [NotifyCanExecuteChangedFor(nameof(OpenLogsCommand))]
     [NotifyCanExecuteChangedFor(nameof(OpenPreviousLogsCommand))]
     [NotifyCanExecuteChangedFor(nameof(ExecIntoSelectedCommand))]
@@ -2716,6 +2718,24 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [RelayCommand(CanExecute = nameof(CanAggregateLogsForSelectedRow))]
     private Task OpenWorkloadLogsAsync() => OpenSelectedRowLogsAsync(previous: false);
 
+    /// <summary>
+    /// True when the selected row has logs of either shape — a pod's own, or the pods a
+    /// workload names. The union of <see cref="IsPodRowSelected"/> and
+    /// <see cref="CanAggregateLogsForSelectedRow"/>, which is exactly where L does something.
+    /// </summary>
+    public bool CanOpenLogsForSelectedRow => IsPodRowSelected || CanAggregateLogsForSelectedRow;
+
+    /// <summary>
+    /// Shift+L: the same logs L opens, with the inspector maximized over the list whatever
+    /// the preference says. Through <see cref="OpenLogsForAsync"/>, so it reuses the tab L
+    /// would have opened.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanOpenLogsForSelectedRow))]
+    private Task OpenLogsMaximizedAsync() =>
+        SelectedRow is { } row && LogTargetFor(row) is { } target
+            ? OpenLogsForAsync(target, previous: false, maximized: true)
+            : Task.CompletedTask;
+
     [RelayCommand(CanExecute = nameof(IsPodRowSelected))]
     private void ExecIntoSelected()
     {
@@ -3359,6 +3379,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         if (_logTargetsCts is not null)
         {
             await _logTargetsCts.CancelAsync();
+            _logTargetsCts.Dispose();
+            _logTargetsCts = null;
         }
 
         if (_watchCts is not null)

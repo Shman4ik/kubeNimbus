@@ -85,6 +85,17 @@ public static class CommandTip
             : text;
     }
 
+    /// <summary>
+    /// The tooltip on a row's logs icon, built from the catalog so it cannot name a key
+    /// the list does not handle: "Logs (L) — Shift+click opens them full-size (Shift+L)".
+    /// A static string rather than the attached properties above because it sits in every
+    /// realized row of a virtualized list, and neither chord involves Ctrl/Cmd — so there
+    /// is no scheme change for a per-row subscription to follow.
+    /// </summary>
+    public static string RowLogs { get; } =
+        $"Logs ({CommandCatalog.Get(CommandId.PodLogs).Chord!.Value.Label("Ctrl")}) — Shift+click opens them full-size "
+        + $"({CommandCatalog.Get(CommandId.PodLogsMaximized).Chord!.Value.Label("Ctrl")})";
+
     // Subscribed only while the control is on screen, so a closed window's buttons
     // don't stay rooted by the static event.
     private static void Hook(Control control)

@@ -4,6 +4,7 @@
              xmlns:conv="using:KubeNimbus.App.Converters"
              xmlns:controls="using:KubeNimbus.App.Controls"
              xmlns:aconv="using:Avalonia.Data.Converters"
+             xmlns:app="using:KubeNimbus.App"
              x:Class="KubeNimbus.App.Views.ClusterTabView"
              x:DataType="vm:ClusterTabViewModel">
 
@@ -603,10 +604,32 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
+              <!-- The logs icon lives INSIDE the Name cell, at its right end, rather than in
+                   a column: a column would be one more width the per-kind layout remembers
+                   and one more thing a CRD's printer columns compete with at 1280px (see
+                   "The resource grid is the reader's to re-cut"). The Panel carries whether
+                   the row has logs at all (HasLogs); Button.rowAction (Styles/Theme.axaml)
+                   carries when it is drawn — only on the hovered and the selected row (UI
+                   rule 1). While it is hidden its Auto column is zero wide, so a name at
+                   rest keeps the whole cell; the icon's 24px come out of the name only on
+                   the row under the pointer and the row you are on, which is the trade
+                   against a slot reserved on every row (measured: at 860px that was a fifth
+                   of every pod name, on rows nobody was pointing at).
+                   Click, not Command: Shift+click is the full-size open, and a command
+                   cannot see the modifier. -->
               <DataGridTemplateColumn Header="Name" Tag="name" CanUserSort="True" Width="2*" MinWidth="136">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
-                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" VerticalAlignment="Center" />
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" VerticalAlignment="Center" />
+                      <Panel Grid.Column="1" IsVisible="{Binding HasLogs}">
+                        <Button Classes="rowAction logs"
+                                Click="OnRowLogsClick"
+                                ToolTip.Tip="{x:Static app:CommandTip.RowLogs}">
+                          <PathIcon Data="{StaticResource LogsIconGeometry}" Width="12" Height="12" />
+                        </Button>
+                      </Panel>
+                    </Grid>
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>

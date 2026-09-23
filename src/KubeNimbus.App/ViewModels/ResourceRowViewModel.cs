@@ -56,6 +56,14 @@ public sealed partial class ResourceRowViewModel : ObservableObject
     /// </summary>
     public bool IsUnhealthy => ResourceHealth.IsUnhealthy(StatusHealth);
 
+    /// <summary>
+    /// Whether this row gets the logs icon in its Name cell (shown on hover and on the
+    /// selected row). Recomputed on every update, because the evidence is the object's own
+    /// selector — see <see cref="LogTarget.CanOpen"/>.
+    /// </summary>
+    [ObservableProperty]
+    private bool _hasLogs;
+
     /// <summary>kubectl's READY column ("2/3") — empty for kinds with no readiness notion.</summary>
     [ObservableProperty]
     private string _readyText = "";
@@ -224,6 +232,7 @@ public sealed partial class ResourceRowViewModel : ObservableObject
         Details = summary.Details;
         _restarts = summary.Restarts;
         _lastRestartAt = summary.LastRestartAt;
+        HasLogs = LogTarget.CanOpen(resource);
         RefreshPrinterCells();
         RefreshTimes();
     }

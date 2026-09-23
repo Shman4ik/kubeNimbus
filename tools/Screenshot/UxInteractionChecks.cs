@@ -154,6 +154,144 @@ internal static class UxInteractionChecks
         Console.WriteLine($"Logs palette interaction passed (gesture, typing, Enter on a pod, click on a workload; {tabs} tabs).");
     }
 
+    /// <summary>
+    /// L2, driven through the real window: the row's logs icon is invisible and
+    /// click-through on a row that is neither hovered nor selected; a click at the icon's
+    /// far edge (a spot the glyph does not cover — UI rule 8) on a hovered, unselected row
+    /// selects that row and opens its logs in the split; a Shift+click opens them maximized;
+    /// Esc returns to the split with focus on the rows; Shift+L on the grid maximizes again
+    /// and Esc undoes it; and the row keys do nothing to the hidden list while it is covered.
+    /// </summary>
+    internal static void RowLogs(Window window)
+    {
+        var view = window.GetVisualDescendants().OfType<ClusterTabView>().First();
+        var vm = (ClusterTabViewModel)view.DataContext!;
+        var grid = view.FindControl<DataGrid>("ResourceGrid")!;
+        if (vm.Rows.Count < 3) throw new InvalidOperationException("The demo list needs three rows for this check.");
+
+        vm.SelectedRow = vm.Rows[0];
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        Dispatcher.UIThread.RunJobs();
+
+        // Rest: a row neither hovered nor selected draws no icon and lets clicks through.
+        if (RowLogsButton(grid, vm.Rows[2]).IsEffectivelyVisible)
+            throw new InvalidOperationException("An idle row's logs icon is showing.");
+        if (!RowLogsButton(grid, vm.Rows[0]).IsEffectivelyVisible)
+            throw new InvalidOperationException("The selected row's logs icon is not showing.");
+
+        // A plain click on a hovered row's icon, at its right edge: that row, its logs, the split.
+        // The icon is not laid out until the row is hovered, so the pointer goes onto the
+        // row first (its Namespace cell) and then onto the icon it made appear.
+        var target = vm.Rows[1];
+        var targetRow = grid.GetVisualDescendants().OfType<DataGridRow>().First(r => ReferenceEquals(r.DataContext, target));
+        window.MouseMove(targetRow.TranslatePoint(new Point(20, targetRow.Bounds.Height / 2), window)!.Value);
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        Dispatcher.UIThread.RunJobs();
+        var button = RowLogsButton(grid, target);
+        if (!button.IsEffectivelyVisible || button.Bounds.Width <= 0)
+            throw new InvalidOperationException("Hovering a row did not show its logs icon.");
+        var edge = button.TranslatePoint(new Point(button.Bounds.Width - 1.5, button.Bounds.Height / 2), window)!.Value;
+        window.MouseMove(edge);
+        Dispatcher.UIThread.RunJobs();
+        window.MouseDown(edge, MouseButton.Left);
+        window.MouseUp(edge, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        if (!ReferenceEquals(vm.SelectedRow, target)
+            || vm.SelectedInspectorTab is not PodDetailTabViewModel { SelectedDetailTabIndex: 0 } detail
+            || detail.PodName != target.Name)
+            throw new InvalidOperationException("A click at the logs icon's edge did not open that row's logs.");
+        if (vm.IsInspectorMaximized)
+            throw new InvalidOperationException("A plain click opened the logs maximized with the preference off.");
+        if (!grid.IsFocused)
+            throw new InvalidOperationException("The click did not leave keyboard focus on the rows.");
+
+        // Shift+click: the same tab, maximized.
+        window.MouseDown(edge, MouseButton.Left, RawInputModifiers.Shift);
+        window.MouseUp(edge, MouseButton.Left, RawInputModifiers.Shift);
+        Dispatcher.UIThread.RunJobs();
+        if (!vm.IsInspectorMaximized || vm.InspectorTabs.Count != 1)
+            throw new InvalidOperationException("Shift+click on the logs icon did not maximize the same tab.");
+
+        // Row keys are dead while the list is covered (E would open a YAML tab for a row
+        // nobody can see); Esc is not.
+        var tabsBefore = vm.InspectorTabs.Count;
+        window.KeyPress(Key.E, RawInputModifiers.None, PhysicalKey.E, "e");
+        Dispatcher.UIThread.RunJobs();
+        if (vm.InspectorTabs.Count != tabsBefore || vm.PendingRowAction is not null)
+            throw new InvalidOperationException("A row key acted on the list hidden under the maximized inspector.");
+        window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        Dispatcher.UIThread.RunJobs();
+        if (vm.IsInspectorMaximized || !grid.IsFocused)
+            throw new InvalidOperationException("Esc did not return the maximized inspector to the split with focus on the rows.");
+
+        // Shift+L on the grid, and back.
+        vm.SelectedRow = vm.Rows[2];
+        grid.Focus();
+        window.KeyPress(Key.L, RawInputModifiers.Shift, PhysicalKey.L, "L");
+        Dispatcher.UIThread.RunJobs();
+        if (!vm.IsInspectorMaximized || vm.SelectedInspectorTab is not PodDetailTabViewModel { } shifted || shifted.PodName != vm.Rows[2].Name)
+            throw new InvalidOperationException("Shift+L did not open the selected pod's logs maximized.");
+        window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        Dispatcher.UIThread.RunJobs();
+        if (vm.IsInspectorMaximized)
+            throw new InvalidOperationException("Esc after Shift+L did not restore the split.");
+
+        // Plain L still opens in the split.
+        window.KeyPress(Key.L, RawInputModifiers.None, PhysicalKey.L, "l");
+        Dispatcher.UIThread.RunJobs();
+        if (vm.IsInspectorMaximized)
+            throw new InvalidOperationException("Plain L opened the logs maximized with the preference off.");
+
+        window.MouseMove(new Point(2, 2));
+        Dispatcher.UIThread.RunJobs();
+        Console.WriteLine($"Row logs interaction passed (icon rest/hover, edge click, Shift+click, Esc, Shift+L, L; {vm.InspectorTabs.Count} tabs).");
+    }
+
+    /// <summary>
+    /// Puts the pointer over a row other than the selected one, for the screenshot of the
+    /// icon's two visible states. The headless platform has no real pointer; a move is
+    /// what sets <c>:pointerover</c>.
+    /// </summary>
+    internal static void HoverRow(Window window, int index)
+    {
+        var view = window.GetVisualDescendants().OfType<ClusterTabView>().First();
+        var vm = (ClusterTabViewModel)view.DataContext!;
+        var grid = view.FindControl<DataGrid>("ResourceGrid")!;
+        var others = vm.VisibleRows.Where(r => !ReferenceEquals(r, vm.SelectedRow)).ToList();
+        if (others.Count == 0)
+        {
+            return;
+        }
+
+        var hovered = others[Math.Min(index, others.Count - 1)];
+        var row = grid.GetVisualDescendants().OfType<DataGridRow>().First(r => ReferenceEquals(r.DataContext, hovered));
+        var point = row.TranslatePoint(new Point(row.Bounds.Width * 0.4, row.Bounds.Height / 2), window)!.Value;
+        window.MouseMove(point);
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    /// <summary>Scrolls the preferences overlay so the card whose label reads <paramref name="label"/> is in view.</summary>
+    internal static void ScrollPreferencesTo(Window window, string label)
+    {
+        var view = window.GetVisualDescendants().OfType<PreferencesView>().First();
+        var text = view.GetVisualDescendants().OfType<TextBlock>().First(t => t.Text == label);
+        var card = text.FindAncestorOfType<Border>() ?? (Control)text;
+        card.BringIntoView(new Rect(0, 0, card.Bounds.Width, card.Bounds.Height + 80));
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    private static Button RowLogsButton(DataGrid grid, ResourceRowViewModel row) =>
+        grid.GetVisualDescendants().OfType<DataGridRow>()
+            .First(r => ReferenceEquals(r.DataContext, row))
+            .GetVisualDescendants().OfType<Button>()
+            .First(b => b.Classes.Contains("rowAction"));
+
     private static void Click(Window window, Control target)
     {
         var centre = target.TranslatePoint(new Point(target.Bounds.Width / 2, target.Bounds.Height / 2), window)

@@ -255,6 +255,55 @@ internal static class ClusterTabScenarios
     /// so every declared column is simply drawn and the pair collapses into this one.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// L2 — the row's logs icon. A demo pod list with one row selected; the scenario's
+    /// interaction step (<c>UxInteractionChecks.HoverRow</c>) then puts the pointer over a
+    /// second row, so the shot shows the icon on both states it appears in and on none of
+    /// the other rows.
+    /// </summary>
+    public static ClusterTabViewModel DemoRowLogs()
+    {
+        var tab = DemoTab();
+        tab.SelectedRow = tab.Rows.Skip(1).FirstOrDefault() ?? tab.Rows.FirstOrDefault();
+        return tab;
+    }
+
+    /// <summary>The same icon on a workload list — L opens the one-stream pane there.</summary>
+    public static ClusterTabViewModel DemoRowLogsDeployments()
+    {
+        var tab = DemoTab();
+        var kind = tab.SidebarSections.SelectMany(s => s.Kinds)
+            .First(k => k.Descriptor is { Group: "apps", Kind: "Deployment" });
+        tab.SelectKindCommand.Execute(kind);
+        tab.SelectedRow = tab.Rows.FirstOrDefault();
+        return tab;
+    }
+
+    /// <summary>A kind with no logs: no icon on the selected row, and no slot for one.</summary>
+    public static ClusterTabViewModel DemoRowLogsNone()
+    {
+        var tab = DemoTab();
+        var kind = tab.SidebarSections.SelectMany(s => s.Kinds)
+            .First(k => k.Descriptor is { Group: "", Kind: "ConfigMap" });
+        tab.SelectKindCommand.Execute(kind);
+        tab.SelectedRow = tab.Rows.FirstOrDefault();
+        return tab;
+    }
+
+    /// <summary>
+    /// Shift+L: the selected pod's logs opened with the inspector already maximized over
+    /// the list — through the real command, so the dock state is the one the key produces.
+    /// </summary>
+    public static ClusterTabViewModel DemoLogsMaximized()
+    {
+        var tab = DemoTab();
+        tab.SelectedRow = tab.Rows.FirstOrDefault(r => r.Name.StartsWith("payment-service-report-generator", StringComparison.Ordinal))
+            ?? tab.Rows.FirstOrDefault();
+        tab.OpenLogsMaximizedCommand.Execute(null);
+        DrainDemoLogs(tab);
+        return tab;
+    }
+
     public static ClusterTabViewModel DemoCrdPrinterColumns() => SelectDemoCertificates(DemoTab());
 
     private static ClusterTabViewModel SelectDemoCertificates(ClusterTabViewModel tab)

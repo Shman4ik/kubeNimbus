@@ -41,6 +41,10 @@ public sealed partial class PreferencesViewModel : ObservableObject
     [ObservableProperty]
     private bool _previewApplies;
 
+    /// <summary>Whether opening logs maximizes the inspector over the list.</summary>
+    [ObservableProperty]
+    private bool _openLogsMaximized;
+
     /// <summary>
     /// The kubeconfig files the user has pointed the app at, newest last. Paths only
     /// (CLAUDE.md rule 4) — this list is what gets re-resolved through the kubeconfig
@@ -71,6 +75,7 @@ public sealed partial class PreferencesViewModel : ObservableObject
         _metricsPollSeconds = settings.MetricsPollSeconds;
         _confirmDeletes = settings.ConfirmDeletes;
         _previewApplies = settings.PreviewApplies;
+        _openLogsMaximized = settings.OpenLogsMaximized;
 
         RefreshKubeconfigPaths();
         _main.PropertyChanged += OnMainPropertyChanged;
@@ -181,4 +186,7 @@ public sealed partial class PreferencesViewModel : ObservableObject
 
     partial void OnPreviewAppliesChanged(bool value) =>
         App.Update(s => s with { PreviewApplies = value });
+
+    partial void OnOpenLogsMaximizedChanged(bool value) =>
+        App.Update(s => s with { OpenLogsMaximized = value });
 }

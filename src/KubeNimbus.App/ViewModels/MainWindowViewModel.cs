@@ -1103,6 +1103,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
                     () => rowTab.OpenWorkloadLogsCommand.Execute(null));
             }
 
+            // The same logs, opened full-size — for a pod and a workload alike, which is
+            // where the list's Shift+L works.
+            if (rowTab.CanOpenLogsForSelectedRow)
+            {
+                yield return Catalog(CommandId.PodLogsMaximized, where,
+                    () => rowTab.OpenLogsMaximizedCommand.Execute(null));
+            }
+
             // The mutating actions, gated on what this row's own kind and object
             // actually support (a scale subresource; a pod template to stamp) rather
             // than on a list of kinds — and offered only when they apply, for the same
