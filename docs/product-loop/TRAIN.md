@@ -44,7 +44,7 @@ Sandbox: **API-server-only.** Docker Hub blobs 403, so `sandbox-up.sh` fails; na
 | T1 | research #1, headlamp#6974, k9s `Ctrl-z` | Show only what is unhealthy, on any list | UX | S | 4.05 | landed | 0 | fa4f30e |
 | L1 | owner pin | Open any pod's or workload's logs from the palette, from anywhere | UX | M | pin | landed | 0 | e49b645 |
 | L2 | owner pin | One click to logs from the row, and logs opened full-size | UX | S | pin | landed | 0 | 7dbc58d |
-| L3 | owner pin | Logs from everywhere a pod is named | UX | S | pin | building | 0 | |
+| L3 | owner pin | Logs from everywhere a pod is named | UX | S | pin | landed | 0 | ffe1694 |
 | T2 | friction walk (`cluster-tab-events-list`) | The Events list reads like `kubectl get events`: last seen, type, reason, object, message | UX | M | 3.65 | landed | 0 | 4326e05 |
 | T3 | Ready FEAT-31 (P1, forced) | Reach a container's whole retained log: tail and since controls | UX | S | 3.45 | planned | 0 | |
 | T4 | research #6 + friction walk (`ux-workload-events`) | Events read the same everywhere, with relative times and a warning count on the tab | UX | S | 3.10 | reserve (owner pin displaced it) | 0 | |
@@ -410,6 +410,13 @@ Risk:                 tests that leak state between runs; use a unique namespace
 - **R3 — FEAT-56**: `SelfSubjectReview` ("who am I") beside the access review; states pre-1.26 servers.
 
 ## Log
+
+- 2026-09-23 — L3 landed (`ffe1694`), verifier PASS first round (re-ran build, both suites —
+  Core 395/413 with 18 sandbox skips, App 274/274 — the full harness with the four pane-logs
+  interaction checks, AOT publish with the DataGrid pair only, smoke 107 ms; and drove a real
+  Enter on workload detail's pod grid to close the implementer's one open question — still
+  opens the pod). Argo rows have the icon but no L (no selection there). Inbox: VER-42,
+  ENG-43..46. Next: T3.
 
 - 2026-09-23 — T2 landed (`4326e05`), verifier PASS first round (re-ran build, both suites —
   Core 395/413 with 18 sandbox skips, App 245/245 — the events screenshots and their CRD /
