@@ -85,8 +85,8 @@ The history becomes permanently public the moment the switch flips.
       ```
 
 - [ ] **Check the release page** — four archives, `SHA256SUMS.txt`, the CHANGELOG
-      section as the body, the unsigned-binary footer, and the pre-release flag
-      (automatic for `0.x`).
+      section as the body, the unsigned-binary footer, and the **Latest** label
+      (a suffixed tag such as `-rc.1` is a pre-release instead and never gets it).
 - [ ] **Download and run one archive per platform you own.** The launch check
       proves the binary starts on a runner; it does not prove the zip you
       published extracts into something that starts on a real desktop.

@@ -94,8 +94,16 @@ design decisions behind it are here.
   `--smoke-test`, between Publish and Stage. See "The launch check" above. This
   step is not optional polish: without it, v0.1.0 attached three binaries that
   could not start to a public release page.
-- **Everything `0.x` or with a pre-release suffix ships flagged as a
-  pre-release.** kubeNimbus is pre-1.0 and the release page should say so.
+- **Only a tag with a pre-release suffix (`v0.4.0-rc.1`) ships flagged as a
+  pre-release; a plain `0.x` tag is a full release and takes the Latest
+  label.** Every `0.x` used to be flagged, on the argument that a pre-1.0
+  project should say so — but GitHub never gives a pre-release the Latest
+  label, so v0.3.1–v0.3.3 left the repository with no latest release at all:
+  `/releases/latest` (which the README links to) resolved to nothing and the
+  sidebar showed no release. The version number already says pre-1.0. The
+  workflow passes no `--latest` flag: GitHub's automatic choice picks the
+  highest semver, and forcing it would hand the label to an older tag
+  re-published through `workflow_dispatch`.
 - **Binaries are unsigned** (no certificates), so every release body repeats
   the SmartScreen/Gatekeeper workaround. Don't drop that footer.
 - **Every platform ships an installer beside the portable archive**, and each
