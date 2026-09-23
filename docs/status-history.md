@@ -2092,3 +2092,22 @@ launch check passed. Only the known DataGrid IL2104/IL3053 warnings remained.
 
 Limits: fixture screenshots cover the new workload pane. Remote exec authentication,
 restricted RBAC and macOS keyboard behavior were not exercised against live systems.
+
+### Node detail: system info, events and usage (2026-09-23)
+
+Node detail gained three things. The System card (was Kubelet) lists platform, every
+address, pod ranges, zone/region, instance type, provider ID and creation time, omitting
+anything the node did not report. A new Events tab reads node events by kind and name,
+because the kubelet stamps its node events with the node's name as UID. A new Usage tab
+polls the node's own metrics, seeded from the list row's history, and shows each figure
+as a share of allocatable.
+
+Checks: solution build; Core tests 385 passed and 17 skipped (no sandbox cluster); App
+tests 235 passed, 10 of them new in `NodeDetailTests`; every screenshot scenario renders,
+including the new `cluster-tab-node-detail-events` and `cluster-tab-node-detail-usage`;
+linux-x64 NativeAOT publish with only the known DataGrid warnings, and its
+`--smoke-test` under Xvfb exited 0.
+
+Not verified: any of it against a real API server — in particular the node-events field
+selector and the single-node metrics GET on a live metrics-server. Windows NativeAOT
+publish was not run.

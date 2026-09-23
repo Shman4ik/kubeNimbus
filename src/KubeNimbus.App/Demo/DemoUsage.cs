@@ -83,6 +83,40 @@ public static class DemoUsage
     }
 
     /// <summary>
+    /// The same replay for a node detail tab, from the dataset's node usage, through its
+    /// real <see cref="NodeDetailTabViewModel.ApplyMetrics"/>. A node the dataset has no
+    /// usage for gets nothing — which renders as "collecting", as a real just-joined node
+    /// would.
+    /// </summary>
+    public static void SeedNode(NodeDetailTabViewModel detail, DateTimeOffset? now = null)
+    {
+        var index = -1;
+        for (var i = 0; i < DemoData.NodeUsage.Count; i++)
+        {
+            if (string.Equals(DemoData.NodeUsage[i].Name, detail.NodeName, StringComparison.Ordinal))
+            {
+                index = i;
+                break;
+            }
+        }
+
+        if (index < 0)
+        {
+            return;
+        }
+
+        var usage = DemoData.NodeUsage[index];
+        for (var tick = 0; tick < SampleCount; tick++)
+        {
+            var final = tick == SampleCount - 1;
+            detail.ApplyMetrics(
+                Ripple(usage.CpuNanocores, index, tick, final),
+                Ripple(usage.MemoryBytes, index + 5, tick, final),
+                TickAt(tick, now));
+        }
+    }
+
+    /// <summary>
     /// Pushes the dataset's PodMetrics onto whichever rows they match, seeding a
     /// history behind each. Rows with no entry record a window of gaps rather than
     /// zeroes — a pod that isn't reporting must not draw as a pod that went idle.

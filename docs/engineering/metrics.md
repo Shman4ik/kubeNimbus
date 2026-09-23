@@ -12,7 +12,8 @@ container) and node usage. Three things are deliberate:
   registered-but-dead metrics API (503/404) both raise
   `MetricsUnavailableException`; the UI hides the CPU/Memory columns instead of
   showing an error or a column full of dashes.
-- **This is the one thing the app polls** (15s). The metrics API is a
+- **This is the one kind of thing the app polls** (15s) — from the list, and from pod
+  detail's and node detail's Usage tabs, each on its own pane's token. The metrics API is a
   point-in-time aggregate over a ~30s window with no watch endpoint, so there is
   nothing to stream; polling is scoped to the current list's `CancellationToken`
   so it dies with the watch when the kind/namespace changes.
@@ -50,7 +51,8 @@ sample also lands in a rolling window and gets drawn:
   place raises no change notification, and 120 doubles is cheaper than any
   observable-collection plumbing.
 - Where it shows: a sparkline beside the number in the list's CPU/Memory cells,
-  and pod detail's **Usage** tab (whole-pod CPU and memory charts plus a
+  node detail's **Usage** tab (whole-node CPU and memory, each also as a share of
+  allocatable — see [node operations](node-operations.md)), and pod detail's **Usage** tab (whole-pod CPU and memory charts plus a
   per-container pair). The tab is appended *after* Events so the existing
   `SelectedDetailTabIndex` values (Logs=0, Env=1, Events=2) stay stable.
 - The Usage tab distinguishes its three states explicitly (UI rule 9):

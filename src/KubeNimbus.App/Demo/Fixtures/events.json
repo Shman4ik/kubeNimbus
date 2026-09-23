@@ -64,5 +64,89 @@
     "message": "Error creating: pods \"checkout-worker-5d8f7b9c4-\" is forbidden: exceeded quota",
     "count": 3,
     "lastTimestamp": "2026-07-20T02:39:40Z"
+  },
+  {
+    "kind": "Event",
+    "apiVersion": "v1",
+    "metadata": { "name": "demo-worker-2.18a0c1", "namespace": "default" },
+    "involvedObject": { "kind": "Node", "name": "demo-worker-2", "uid": "demo-worker-2" },
+    "source": { "component": "kubelet", "host": "demo-worker-2" },
+    "type": "Warning",
+    "reason": "EvictionThresholdMet",
+    "message": "Attempting to reclaim ephemeral-storage",
+    "count": 6,
+    "lastTimestamp": "2026-07-30T08:02:41Z"
+  },
+  {
+    "kind": "Event",
+    "apiVersion": "v1",
+    "metadata": { "name": "demo-worker-2.18a0c0", "namespace": "default" },
+    "involvedObject": { "kind": "Node", "name": "demo-worker-2", "uid": "demo-worker-2" },
+    "source": { "component": "kubelet", "host": "demo-worker-2" },
+    "type": "Normal",
+    "reason": "NodeHasDiskPressure",
+    "message": "Node demo-worker-2 status is now: NodeHasDiskPressure",
+    "count": 1,
+    "lastTimestamp": "2026-07-30T07:58:02Z"
+  },
+  {
+    "kind": "Event",
+    "apiVersion": "v1",
+    "metadata": { "name": "demo-worker-2.18a0bf", "namespace": "default" },
+    "involvedObject": { "kind": "Node", "name": "demo-worker-2", "uid": "demo-worker-2" },
+    "source": { "component": "kubelet", "host": "demo-worker-2" },
+    "type": "Warning",
+    "reason": "FreeDiskSpaceFailed",
+    "message": "Failed to garbage collect required amount of images. Attempted to free 4294967296 bytes, but only found 1073741824 bytes eligible to free.",
+    "count": 3,
+    "lastTimestamp": "2026-07-30T07:55:12Z"
+  },
+  {
+    "kind": "Event",
+    "apiVersion": "v1",
+    "metadata": { "name": "demo-worker-2.18a0be", "namespace": "default" },
+    "involvedObject": { "kind": "Node", "name": "demo-worker-2", "uid": "demo-worker-2" },
+    "source": { "component": "kubelet", "host": "demo-worker-2" },
+    "type": "Normal",
+    "reason": "NodeNotSchedulable",
+    "message": "Node demo-worker-2 status is now: NodeNotSchedulable",
+    "count": 1,
+    "lastTimestamp": "2026-07-30T07:40:00Z"
+  },
+  {
+    "kind": "Event",
+    "apiVersion": "v1",
+    "metadata": { "name": "demo-worker-1.17f9a2", "namespace": "default" },
+    "involvedObject": { "kind": "Node", "name": "demo-worker-1", "uid": "demo-worker-1" },
+    "source": { "component": "kubelet", "host": "demo-worker-1" },
+    "type": "Normal",
+    "reason": "NodeReady",
+    "message": "Node demo-worker-1 status is now: NodeReady",
+    "count": 1,
+    "lastTimestamp": "2026-07-11T06:05:12Z"
+  },
+  {
+    "kind": "Event",
+    "apiVersion": "v1",
+    "metadata": { "name": "demo-worker-1.17f9a1", "namespace": "default" },
+    "involvedObject": { "kind": "Node", "name": "demo-worker-1", "uid": "e0000000-0000-0000-0000-000000000002" },
+    "source": { "component": "node-controller", "host": "demo-worker-1" },
+    "type": "Normal",
+    "reason": "RegisteredNode",
+    "message": "Node demo-worker-1 event: Registered Node demo-worker-1 in Controller",
+    "count": 1,
+    "lastTimestamp": "2026-07-11T06:04:58Z"
+  },
+  {
+    "kind": "Event",
+    "apiVersion": "v1",
+    "metadata": { "name": "demo-worker-1.17f9a0", "namespace": "default" },
+    "involvedObject": { "kind": "Node", "name": "demo-worker-1", "uid": "demo-worker-1" },
+    "source": { "component": "kubelet", "host": "demo-worker-1" },
+    "type": "Normal",
+    "reason": "Starting",
+    "message": "Starting kubelet.",
+    "count": 1,
+    "lastTimestamp": "2026-07-11T06:04:51Z"
   }
 ]

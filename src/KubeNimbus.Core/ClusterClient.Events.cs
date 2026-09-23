@@ -51,16 +51,34 @@ public sealed partial class ClusterClient
     public async Task<IReadOnlyList<DynamicResource>> GetEventsForAsync(
         DynamicResource target, CancellationToken cancellationToken = default)
     {
+        var events = await ListResourceOnceAsync(
+            ResourceDescriptor.Events, target.Namespace, EventSelectorFor(target), cancellationToken).ConfigureAwait(false);
+
+        return [.. events.OrderByDescending(e => e.LastTimestamp() ?? DateTimeOffset.MinValue)];
+    }
+
+    /// <summary>
+    /// The <c>fieldSelector</c> that finds the events about <paramref name="target"/>.
+    /// </summary>
+    /// <remarks>
+    /// The object's UID is the precise key and is used wherever it can be trusted — it
+    /// keeps a recreated pod from inheriting its predecessor's events. A <b>Node</b> is
+    /// the exception: the kubelet writes its own node events (<c>Starting</c>,
+    /// <c>NodeReady</c>, <c>Rebooted</c>, the pressure transitions) with
+    /// <c>involvedObject.uid</c> set to the node's <em>name</em>, not its UID, while the
+    /// node controller uses the real UID. Selecting on either UID drops half of them, so
+    /// a node is matched on kind and name — which is also what <c>kubectl describe node</c>
+    /// does. Nodes are cluster-scoped, so the list runs across every namespace (the
+    /// kubelet records into <c>default</c>).
+    /// </remarks>
+    internal static string EventSelectorFor(DynamicResource target)
+    {
         var selector = target.Namespace is { } ns
             ? $"involvedObject.name={target.Name},involvedObject.namespace={ns}"
             : $"involvedObject.name={target.Name}";
 
-        selector += target.Uid is { Length: > 0 } uid
-            ? $",involvedObject.uid={uid}" : $",involvedObject.kind={target.Kind}";
-        var events = await ListResourceOnceAsync(
-            ResourceDescriptor.Events, target.Namespace, selector, cancellationToken).ConfigureAwait(false);
-
-        return [.. events.OrderByDescending(e => e.LastTimestamp() ?? DateTimeOffset.MinValue)];
+        return selector + (target.Kind != "Node" && target.Uid is { Length: > 0 } uid
+            ? $",involvedObject.uid={uid}" : $",involvedObject.kind={target.Kind}");
     }
 
     /// <summary>Resolves an ownerReference to the actual object, or null if it's gone or unresolvable.</summary>

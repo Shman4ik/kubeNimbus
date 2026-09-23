@@ -126,6 +126,75 @@ public class NodeResourcesTests
         await Assert.That(info.InternalIp).IsEqualTo("10.0.1.21");
     }
 
+    [Test]
+    public async Task Node_info_reads_addresses_ranges_and_placement()
+    {
+        var info = NodeResources.Info(Parse("""
+            {
+              "apiVersion": "v1", "kind": "Node",
+              "metadata": {
+                "name": "ip-10-0-0-5", "creationTimestamp": "2026-05-02T09:14:22Z",
+                "labels": {
+                  "topology.kubernetes.io/zone": "us-east-1a",
+                  "failure-domain.beta.kubernetes.io/region": "us-east-1",
+                  "beta.kubernetes.io/instance-type": "m6i.large"
+                }
+              },
+              "spec": {
+                "podCIDR": "10.244.1.0/24",
+                "podCIDRs": [ "10.244.1.0/24", "fd00:10:244:1::/64" ],
+                "providerID": "aws:///us-east-1a/i-0123456789abcdef0"
+              },
+              "status": {
+                "addresses": [
+                  { "type": "InternalIP", "address": "10.0.0.5" },
+                  { "type": "ExternalIP", "address": "203.0.113.7" },
+                  { "type": "InternalDNS", "address": "" }
+                ],
+                "nodeInfo": { "operatingSystem": "linux", "architecture": "arm64" }
+              }
+            }
+            """));
+
+        await Assert.That(info.OperatingSystem).IsEqualTo("linux");
+        // An address with no value is dropped rather than rendered as a blank line.
+        await Assert.That(info.Addresses.Select(a => a.Type).ToArray()).IsEquivalentTo(new[] { "InternalIP", "ExternalIP" });
+        // podCIDRs wins over podCIDR: it is the dual-stack superset.
+        await Assert.That(info.PodCidrs.Count).IsEqualTo(2);
+        await Assert.That(info.ProviderId).IsEqualTo("aws:///us-east-1a/i-0123456789abcdef0");
+        await Assert.That(info.Zone).IsEqualTo("us-east-1a");
+        // The pre-1.17 label names are still read when the GA ones are missing.
+        await Assert.That(info.Region).IsEqualTo("us-east-1");
+        await Assert.That(info.InstanceType).IsEqualTo("m6i.large");
+        await Assert.That(info.Created).IsEqualTo(DateTimeOffset.Parse("2026-05-02T09:14:22Z", System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    [Test]
+    public async Task Node_info_falls_back_to_the_singular_pod_cidr()
+    {
+        var info = NodeResources.Info(Parse(NodeJson));
+
+        await Assert.That(info.PodCidrs.Single()).IsEqualTo("10.42.1.0/24");
+        await Assert.That(info.Zone).IsEqualTo("");
+    }
+
+    /// <summary>
+    /// The kubelet records node events with <c>involvedObject.uid</c> set to the node's
+    /// name and the node controller with its real UID, so a UID selector loses half of
+    /// them. A node is matched on kind and name; everything else keeps the UID.
+    /// </summary>
+    [Test]
+    public async Task Node_events_are_selected_by_kind_and_name_not_uid()
+    {
+        var node = Parse("""{ "kind": "Node", "metadata": { "name": "w1", "uid": "e0-1" } }""");
+        var pod = Parse("""{ "kind": "Pod", "metadata": { "name": "p", "namespace": "ns", "uid": "a1" } }""");
+
+        await Assert.That(ClusterClient.EventSelectorFor(node))
+            .IsEqualTo("involvedObject.name=w1,involvedObject.kind=Node");
+        await Assert.That(ClusterClient.EventSelectorFor(pod))
+            .IsEqualTo("involvedObject.name=p,involvedObject.namespace=ns,involvedObject.uid=a1");
+    }
+
     // ------------------------------------------------------------ the arithmetic
 
     /// <summary>
