@@ -5,7 +5,8 @@
 
 `ClusterClient.Nodes.cs` + `NodeActions.cs` + `NodeResources.cs` (Core) and
 `NodeDetailTabViewModel` + `NodeDetailView` (App) are the node surface: what a node says
-about itself, how much of it is already promised away, which pods are on it, and the
+about itself and the machine behind it, how much of it is already promised away, how much
+is actually in use, which pods are on it, what the kubelet has recorded about it, and the
 three actions that take it out of service and put it back. The read-only half was
 half-present before this — `ResourceStatusSummary.SummarizeNode` already rendered
 `Ready,SchedulingDisabled` and `IsMeteredKind` already covered `Node` — with no pane
@@ -85,6 +86,71 @@ menu and the command palette. Nothing new is always visible.
   object itself stays live: the pane tracks the same `ResourceRowViewModel` the list holds
   and re-reads conditions, taints and the cordon flag on every watch tick, the same way
   pod detail tracks its row.
+
+- **The System card lists what the node reported, and nothing it did not.** Kubelet,
+  OS image, platform (`operatingSystem/architecture`), kernel, runtime, every
+  `status.addresses` entry under the node's own type name (`InternalIP`, `ExternalIP`,
+  `Hostname`, …), the pod ranges, zone and region, instance type, provider ID and creation
+  time. `NodeDetailTabViewModel.BuildSystemRows` drops every empty value, so a bare-metal
+  node has no Provider ID row rather than a label beside a blank that reads as a field that
+  failed to load. Two readings are deliberate: `spec.podCIDRs` wins over `spec.podCIDR`
+  (it is the dual-stack superset, and the singular is only read on a server that never
+  wrote the plural), and zone/region/instance type fall back from the GA label names to the
+  `failure-domain.beta` / `beta` ones, because clusters that predate 1.17 carry only those.
+  Several addresses of one type (a dual-stack node's two InternalIPs) share one line. The
+  list is rebuilt only when it changed: its values are `SelectableTextBlock`s, and replacing
+  it on every watch tick would drop a selection someone is copying an IP out of.
+
+### The Events tab: kind and name, never UID
+
+Node events are selected on `involvedObject.kind=Node,involvedObject.name=<node>` across
+all namespaces, not on the UID every other object uses, and that is not a shortcut. The
+kubelet records its node events — `Starting`, `NodeReady`, `Rebooted`, the pressure
+transitions, `EvictionThresholdMet`, image GC failures — with `involvedObject.uid` set to
+the node's **name**, while the node controller (`RegisteredNode`, `NodeNotReady`) uses the
+real UID. A UID selector therefore loses one of the two halves whichever UID it picks;
+`kubectl describe node` matches by name for the same reason. The cost is that a node
+deleted and re-registered under the same name shows its predecessor's events until they
+expire (an hour by default), which is the lesser wrong answer. `ClusterClient
+.EventSelectorFor` owns the rule and `NodeResourcesTests` pins it; the demo dataset carries
+both UID shapes so the demo tab exercises both. The tab is a one-shot with a Refresh on the
+chrome row, like the Pods tab and pod detail's Events — node events arrive minutes apart,
+and a second watch per pane is the wrong trade. "No recent events" is its own sentence:
+events expire, so a quiet node is the healthy case and must not look like a fetch that
+never returned. A 403 (listing events across namespaces is a permission many roles lack)
+renders the server's sentence in an error InfoBar.
+
+The demo dataset's node events are filtered *out* of pod detail's demo feed, which used to
+show every event in the dataset: a pod reporting its node's disk pressure is a match no API
+server makes.
+
+### The Usage tab: measured, next to promised
+
+The Overview's bars are what the scheduler has *promised*; a node can be full of requests
+and idle. The Usage tab charts what metrics-server *measured* — CPU and memory, now and
+peak — and gives each figure as a share of **allocatable**, the Overview's own denominator,
+so "requested 80%, used 12%" are two figures of one node and compare directly. The share is
+omitted, not shown as "()", when the node reported no allocatable.
+
+- **The pane polls its own node, and starts from the row's history.** The list row stops
+  being polled the moment the list moves to another kind, and the pane must keep going, so
+  `PollMetricsAsync` reads `apis/metrics.k8s.io/<version>/nodes/<name>` on the pane's own
+  token (`ClusterClient.GetNodeMetricsAsync(name)`; a 404 is "not scraped yet", a gap in
+  the line). But the pane's `UsageHistory` is seeded with a copy of the row's, so a node that
+  has been on screen for ten minutes opens with ten minutes of chart rather than
+  "collecting". This is the same shape pod detail's Usage tab has, and the third place the
+  app polls (see [Metrics](metrics.md)).
+- **The three states are the pod pane's three**: no metrics API (install metrics-server; the
+  Overview needs none), collecting, and charts. A missed reading after the first is a gap,
+  never a zero.
+- **The demo replays through the real entry point.** `DemoUsage.SeedNode` drives
+  `ApplyMetrics` with stamped timestamps from `DemoData.NodeUsage`, used only when the row
+  carried no history (a fixture that skipped the list).
+
+Tab indices are Overview = 0, Pods = 1, Events = 2, Usage = 3
+(`NodeDetailTabViewModel.*TabIndex`); new tabs are appended so the existing indices the
+screenshot scenarios select stay put. `NodeDetailTests` (App) pins the System rows, the
+events filter and ordering, the empty-events state, the history seed and the gap.
 
 ### Cordon, and the one honest exception to "capability from discovery"
 

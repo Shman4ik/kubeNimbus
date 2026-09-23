@@ -795,6 +795,23 @@ internal static class ClusterTabScenarios
     public static ClusterTabViewModel NodeDetailPods() => OpenNode("demo-worker-1", tabIndex: 1);
 
     /// <summary>
+    /// The Events tab on the node under disk pressure: the kubelet's own account of it
+    /// (EvictionThresholdMet, the image GC that could not free enough) as Warning cards
+    /// above the Normal transitions. These carry the node's <em>name</em> as their UID,
+    /// which is why the selector matches kind and name.
+    /// </summary>
+    public static ClusterTabViewModel NodeDetailEvents() =>
+        OpenNode("demo-worker-2", tabIndex: NodeDetailTabViewModel.EventsTabIndex);
+
+    /// <summary>
+    /// The Usage tab: measured CPU and memory over the replayed window, now and peak, and
+    /// each as a share of allocatable — the same denominator as the Overview's requested
+    /// bars, so "requested vs used" compares figures of one node.
+    /// </summary>
+    public static ClusterTabViewModel NodeDetailUsage() =>
+        OpenNode("demo-worker-1", tabIndex: NodeDetailTabViewModel.UsageTabIndex);
+
+    /// <summary>
     /// The state the whole surface exists for: a node that is cordoned <em>and</em>
     /// reporting disk pressure. Both halves of "nothing lands here" are on the pane —
     /// the status pill and the scheduler's own <c>node.kubernetes.io/unschedulable</c>
@@ -1085,7 +1102,7 @@ internal static class ClusterTabScenarios
         }
 
         detail.Events.Clear();
-        foreach (var e in FixtureData.Events)
+        foreach (var e in FixtureData.Events.Where(e => e.InvolvedObject() is not { Kind: "Node" }))
         {
             detail.Events.Add(new EventRowViewModel(e));
         }

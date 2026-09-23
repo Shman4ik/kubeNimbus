@@ -20,6 +20,11 @@ it as the GitHub Release body, so headings must match tags exactly
 - Hover any pod or workload in the list and click its logs icon to open its logs; Shift+click,
   or Shift+L, opens them full-size (Esc goes back to the split). A new "Open logs maximized"
   preference makes full-size the default.
+- Node detail says more about the machine and what it is doing. The System card adds
+  platform, every address, pod ranges, zone and region, instance type, provider ID and when
+  the node joined. A new Events tab shows what the kubelet and the node controller recorded
+  (disk pressure, evictions, restarts), and a new Usage tab charts measured CPU and memory
+  with each figure as a share of allocatable.
 
 ## [0.3.3] - 2026-09-22
 

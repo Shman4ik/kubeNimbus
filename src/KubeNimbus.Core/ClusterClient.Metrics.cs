@@ -104,6 +104,31 @@ public sealed partial class ClusterClient
         return result;
     }
 
+    /// <summary>
+    /// Usage for one node, or null when metrics-server has not scraped it yet (a node
+    /// that just joined, or one whose kubelet stopped answering).
+    /// </summary>
+    public async Task<NodeMetrics?> GetNodeMetricsAsync(string nodeName, CancellationToken cancellationToken = default)
+    {
+        var version = await RequireMetricsVersionAsync(cancellationToken).ConfigureAwait(false);
+        var path = $"apis/{MetricsGroup}/{version}/nodes/{Uri.EscapeDataString(nodeName)}";
+
+        using var response = await SendRequestAsync(
+            HttpMethod.Get, path, content: null, HttpCompletionOption.ResponseContentRead, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (response.StatusCode is System.Net.HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        EnsureMetricsSuccess(response);
+        var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var usage = ReadUsage(doc.RootElement);
+        return new NodeMetrics(ReadName(doc.RootElement), usage.Cpu, usage.Memory);
+    }
+
     private async Task<string> RequireMetricsVersionAsync(CancellationToken ct) =>
         await GetMetricsApiVersionAsync(ct).ConfigureAwait(false)
         ?? throw new MetricsUnavailableException(

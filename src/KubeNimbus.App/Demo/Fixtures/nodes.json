@@ -11,12 +11,13 @@
         "kubernetes.io/os": "linux",
         "kubernetes.io/arch": "amd64",
         "node.kubernetes.io/instance-type": "n2-standard-8",
+        "topology.kubernetes.io/region": "eu-west-1",
         "topology.kubernetes.io/zone": "eu-west-1b",
         "node-role.kubernetes.io/control-plane": ""
       }
     },
     "spec": {
-      "podCIDR": "10.42.1.0/24",
+      "podCIDR": "10.42.0.0/24",
       "taints": [
         {
           "key": "node-role.kubernetes.io/control-plane",
@@ -104,6 +105,7 @@
         "kubernetes.io/os": "linux",
         "kubernetes.io/arch": "amd64",
         "node.kubernetes.io/instance-type": "n2-standard-8",
+        "topology.kubernetes.io/region": "eu-west-1",
         "topology.kubernetes.io/zone": "eu-west-1b"
       }
     },
@@ -189,11 +191,12 @@
         "kubernetes.io/os": "linux",
         "kubernetes.io/arch": "amd64",
         "node.kubernetes.io/instance-type": "n2-standard-8",
+        "topology.kubernetes.io/region": "eu-west-1",
         "topology.kubernetes.io/zone": "eu-west-1b"
       }
     },
     "spec": {
-      "podCIDR": "10.42.1.0/24",
+      "podCIDR": "10.42.2.0/24",
       "unschedulable": true,
       "taints": [
         {

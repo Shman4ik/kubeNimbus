@@ -18,6 +18,8 @@
       <ListBox Grid.Column="0" Classes="segmented" SelectedIndex="{Binding SelectedTabIndex}">
         <ListBoxItem Content="Overview" />
         <ListBoxItem Content="Pods" />
+        <ListBoxItem Content="Events" />
+        <ListBoxItem Content="Usage" />
       </ListBox>
 
       <Border Grid.Column="1" Classes="statusPill" Margin="10,0,0,0" VerticalAlignment="Center"
@@ -31,15 +33,27 @@
                  VerticalAlignment="Center" Margin="10,0,0,0"
                  TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Roles}" />
 
-      <!-- Only on the Pods tab: the Overview follows the node's own watch and has
-           nothing to refresh (UI rule 10 — a tool that belongs to one tab rides that
-           tab's slot on the shared row rather than taking a row of its own). -->
+      <!-- Each tab's own tools ride its slot on the shared row (UI rule 10): a caption
+           and a Refresh for the two one-shot reads (Pods, Events), the window caption
+           for Usage. The Overview follows the node's own watch and has nothing to
+           refresh. Exactly one of each column's children is ever visible. -->
       <TextBlock Grid.Column="4" Text="{Binding PodsCaption}" Opacity="0.6" FontSize="12"
                  VerticalAlignment="Center" Margin="0,0,8,0"
                  IsVisible="{Binding SelectedTabIndex, Converter={x:Static conv:IndexEqualsConverter.Instance}, ConverterParameter=1}" />
+      <TextBlock Grid.Column="4" Text="{Binding EventsCaption}" Opacity="0.6" FontSize="12"
+                 VerticalAlignment="Center" Margin="0,0,8,0"
+                 IsVisible="{Binding SelectedTabIndex, Converter={x:Static conv:IndexEqualsConverter.Instance}, ConverterParameter=2}" />
+      <TextBlock Grid.Column="4" Text="{Binding UsageWindowCaption}" Classes="sectionHeader"
+                 VerticalAlignment="Center" Margin="0,0,4,0"
+                 IsVisible="{Binding SelectedTabIndex, Converter={x:Static conv:IndexEqualsConverter.Instance}, ConverterParameter=3}" />
       <Button Grid.Column="5" Classes="toolbar" Padding="6" Command="{Binding RefreshPodsCommand}"
               ToolTip.Tip="Re-read the pods scheduled on this node"
               IsVisible="{Binding SelectedTabIndex, Converter={x:Static conv:IndexEqualsConverter.Instance}, ConverterParameter=1}">
+        <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="14" Height="14" />
+      </Button>
+      <Button Grid.Column="5" Classes="toolbar" Padding="6" Command="{Binding RefreshEventsCommand}"
+              ToolTip.Tip="Re-read the events about this node"
+              IsVisible="{Binding SelectedTabIndex, Converter={x:Static conv:IndexEqualsConverter.Instance}, ConverterParameter=2}">
         <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="14" Height="14" />
       </Button>
     </Grid>
@@ -177,21 +191,26 @@
               </StackPanel>
             </Border>
 
+            <!-- The machine behind the node: what it runs, where it is, how it is
+                 addressed, when it joined. One label/value line per thing the node
+                 actually reported — NodeDetailTabViewModel.BuildSystemRows leaves out
+                 what is absent, so a bare-metal node has no Provider ID row rather than a
+                 label beside nothing. Selectable, because IPs and provider IDs are what
+                 people copy out of this card. -->
             <Border Classes="card" Padding="12,10">
               <StackPanel Spacing="4">
-                <TextBlock Classes="sectionHeader" Text="KUBELET" />
-                <Grid ColumnDefinitions="130,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
-                  <TextBlock Grid.Row="0" Grid.Column="0" Text="Version" FontSize="12" Opacity="0.6" />
-                  <SelectableTextBlock Grid.Row="0" Grid.Column="1" FontSize="12" Text="{Binding Info.KubeletVersion}" />
-                  <TextBlock Grid.Row="1" Grid.Column="0" Text="OS image" FontSize="12" Opacity="0.6" />
-                  <SelectableTextBlock Grid.Row="1" Grid.Column="1" FontSize="12" Text="{Binding Info.OsImage}" />
-                  <TextBlock Grid.Row="2" Grid.Column="0" Text="Kernel" FontSize="12" Opacity="0.6" />
-                  <SelectableTextBlock Grid.Row="2" Grid.Column="1" FontSize="12" Text="{Binding Info.KernelVersion}" />
-                  <TextBlock Grid.Row="3" Grid.Column="0" Text="Runtime" FontSize="12" Opacity="0.6" />
-                  <SelectableTextBlock Grid.Row="3" Grid.Column="1" FontSize="12" Text="{Binding Info.ContainerRuntime}" />
-                  <TextBlock Grid.Row="4" Grid.Column="0" Text="Internal IP" FontSize="12" Opacity="0.6" />
-                  <SelectableTextBlock Grid.Row="4" Grid.Column="1" FontSize="12" Text="{Binding Info.InternalIp}" />
-                </Grid>
+                <TextBlock Classes="sectionHeader" Text="SYSTEM" />
+                <ItemsControl ItemsSource="{Binding SystemRows}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:NodeSystemRow">
+                      <Grid ColumnDefinitions="130,*" Margin="0,1">
+                        <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="12" Opacity="0.6" />
+                        <SelectableTextBlock Grid.Column="1" FontSize="12" Text="{Binding Value}"
+                                             TextWrapping="Wrap" />
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
               </StackPanel>
             </Border>
           </StackPanel>
@@ -280,6 +299,126 @@
             </DataGrid.Columns>
           </DataGrid>
         </Grid>
+      </TabItem>
+
+      <!-- ============================================================== Events -->
+      <!-- The same two-line card feed pod detail uses — Reason/Message/Count/Type never
+           fit a DataGrid at inspector width. No "open the object" chevron: every event
+           here is about the node this pane is already showing. -->
+      <TabItem Header="Events">
+        <Grid RowDefinitions="Auto,Auto,*">
+          <Border Grid.Row="0" Classes="infoBar error" Margin="0,0,0,8"
+                  IsVisible="{Binding HasEventsError}">
+            <TextBlock Text="{Binding EventsError}" TextWrapping="Wrap" FontSize="12" />
+          </Border>
+          <TextBlock Grid.Row="1" Classes="statusText dim" Margin="2,0,0,8" TextWrapping="Wrap"
+                     IsVisible="{Binding HasNoEvents}"
+                     Text="No recent events for this node. Events expire after an hour by default, so a quiet node has none — that is the healthy case." />
+          <ScrollViewer Grid.Row="2">
+            <ItemsControl ItemsSource="{Binding Events}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:EventRowViewModel">
+                  <Border Classes="card" Padding="8,6" Margin="0,0,0,4">
+                    <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto">
+                      <Border Grid.Row="0" Grid.Column="0" Classes="statusPill" Margin="0,0,8,0"
+                              Classes.ok="{Binding Health, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=ok}"
+                              Classes.warn="{Binding Health, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=warn}">
+                        <TextBlock Text="{Binding Type}" FontSize="11" />
+                      </Border>
+                      <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Reason}" FontWeight="SemiBold" FontSize="12.5"
+                                 VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Grid.Row="0" Grid.Column="2" FontSize="10.5" Opacity="0.5" VerticalAlignment="Center" Margin="8,0,0,0">
+                        <Run Text="{Binding Count, StringFormat='×{0}'}" />
+                        <Run Text=" · " />
+                        <Run Text="{Binding LastSeen}" />
+                      </TextBlock>
+                      <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Text="{Binding Message}" FontSize="11.5" Opacity="0.75"
+                                 TextWrapping="Wrap" Margin="0,3,0,0" />
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </Grid>
+      </TabItem>
+
+      <!-- =============================================================== Usage -->
+      <!-- Measured, not requested: the Overview's bars are what the scheduler has
+           promised, and a node can be full of requests and idle. Each figure is also
+           given as a share of allocatable, the Overview's own denominator, so the two
+           tabs compare directly. -->
+      <TabItem Header="Usage">
+        <ScrollViewer>
+          <StackPanel Spacing="8">
+            <Border Classes="infoBar" IsVisible="{Binding IsMetricsUnavailable}">
+              <DockPanel>
+                <PathIcon DockPanel.Dock="Left" Data="{StaticResource AlertCircleIconGeometry}" Width="12" Height="12"
+                          VerticalAlignment="Top" Margin="0,2,8,0" />
+                <StackPanel Spacing="2">
+                  <TextBlock Text="No usage data on this cluster" FontWeight="SemiBold" FontSize="12" />
+                  <TextBlock Text="metrics.k8s.io isn't served here — install metrics-server to see CPU and memory. What the scheduler has promised is on the Overview tab, which needs no metrics."
+                             FontSize="11.5" Opacity="0.7" TextWrapping="Wrap" />
+                </StackPanel>
+              </DockPanel>
+            </Border>
+
+            <Border Classes="infoBar" IsVisible="{Binding IsCollectingUsage}">
+              <DockPanel>
+                <PathIcon DockPanel.Dock="Left" Data="{StaticResource AlertCircleIconGeometry}" Width="12" Height="12"
+                          VerticalAlignment="Top" Margin="0,2,8,0" />
+                <StackPanel Spacing="2">
+                  <TextBlock Text="Collecting samples…" FontWeight="SemiBold" FontSize="12" />
+                  <TextBlock Text="{Binding UsagePollHint}" FontSize="11.5" Opacity="0.7" TextWrapping="Wrap" />
+                </StackPanel>
+              </DockPanel>
+            </Border>
+
+            <Border Classes="card" Padding="12" ToolTip.Tip="{Binding CpuTooltip}"
+                    IsVisible="{Binding HasUsageSamples}">
+              <Grid RowDefinitions="Auto,Auto">
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+                  <TextBlock Grid.Column="0" Text="CPU — node total" FontSize="12" FontWeight="SemiBold" Opacity="0.8" />
+                  <TextBlock Grid.Column="1" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" Opacity="0.8">
+                    <Run Text="{Binding CpuText}" />
+                    <Run Text="{Binding CpuShareText}" />
+                    <Run Text="  · peak " />
+                    <Run Text="{Binding PeakCpuText}" />
+                  </TextBlock>
+                </Grid>
+                <controls:Sparkline Grid.Row="1" Height="72" Values="{Binding CpuSeries}"
+                                    Stroke="{StaticResource UsageCpuStrokeBrush}"
+                                    AreaFill="{StaticResource UsageCpuAreaBrush}"
+                                    BaselineBrush="{StaticResource ChartBaselineBrush}"
+                                    StrokeThickness="1.6" />
+              </Grid>
+            </Border>
+
+            <Border Classes="card" Padding="12" ToolTip.Tip="{Binding MemoryTooltip}"
+                    IsVisible="{Binding HasUsageSamples}">
+              <Grid RowDefinitions="Auto,Auto">
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+                  <TextBlock Grid.Column="0" Text="Memory — node total" FontSize="12" FontWeight="SemiBold" Opacity="0.8" />
+                  <TextBlock Grid.Column="1" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" Opacity="0.8">
+                    <Run Text="{Binding MemoryText}" />
+                    <Run Text="{Binding MemoryShareText}" />
+                    <Run Text="  · peak " />
+                    <Run Text="{Binding PeakMemoryText}" />
+                  </TextBlock>
+                </Grid>
+                <controls:Sparkline Grid.Row="1" Height="72" Values="{Binding MemorySeries}"
+                                    Stroke="{StaticResource UsageMemoryStrokeBrush}"
+                                    AreaFill="{StaticResource UsageMemoryAreaBrush}"
+                                    BaselineBrush="{StaticResource ChartBaselineBrush}"
+                                    StrokeThickness="1.6" />
+              </Grid>
+            </Border>
+
+            <TextBlock Classes="statusText dim" FontSize="11.5" TextWrapping="Wrap"
+                       IsVisible="{Binding HasUsageSamples}"
+                       Text="Measured by metrics-server over its last scrape window: everything on the machine the kubelet can see, system daemons included — which is why it can differ from the sum of the pods on it." />
+          </StackPanel>
+        </ScrollViewer>
       </TabItem>
     </TabControl>
   </Grid>

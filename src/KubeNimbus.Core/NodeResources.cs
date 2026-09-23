@@ -95,26 +95,58 @@ public static class NodeResources
         return result;
     }
 
-    /// <summary>What the kubelet reports about the machine it runs on.</summary>
+    /// <summary>
+    /// What the node says about the machine it runs on: the kubelet's own
+    /// <c>status.nodeInfo</c>, every address it reports, the pod ranges it hands out,
+    /// where the cloud put it and when it joined.
+    /// </summary>
+    /// <remarks>
+    /// Zone, region and instance type are read from the well-known labels, the GA name
+    /// first and the <c>beta</c> / <c>failure-domain</c> name second: clusters that
+    /// predate 1.17 still carry only the old ones, and a node that says nothing about
+    /// where it is must read as unknown rather than as a node with no zone.
+    /// </remarks>
     public static NodeInfo Info(DynamicResource node)
     {
         ArgumentNullException.ThrowIfNull(node);
 
+        var spec = NodeActions.Object(node.Raw, "spec");
         var status = NodeActions.Object(node.Raw, "status");
         var info = NodeActions.Object(status, "nodeInfo");
 
-        string? internalIp = null;
-        if (status.TryGetProperty("addresses", out var addresses) && addresses.ValueKind == JsonValueKind.Array)
+        var addresses = new List<NodeAddress>();
+        if (status.ValueKind == JsonValueKind.Object
+            && status.TryGetProperty("addresses", out var list) && list.ValueKind == JsonValueKind.Array)
         {
-            foreach (var address in addresses.EnumerateArray())
+            foreach (var address in list.EnumerateArray())
             {
-                if (NodeActions.Str(address, "type") == "InternalIP")
+                var type = NodeActions.Str(address, "type");
+                var value = NodeActions.Str(address, "address");
+                if (type.Length > 0 && value.Length > 0)
                 {
-                    internalIp = NodeActions.Str(address, "address");
-                    break;
+                    addresses.Add(new NodeAddress(type, value));
                 }
             }
         }
+
+        // podCIDRs is the dual-stack field and, when set, a superset of podCIDR (its
+        // first entry is podCIDR). Older API servers only ever wrote the singular.
+        var podCidrs = new List<string>();
+        if (spec.ValueKind == JsonValueKind.Object
+            && spec.TryGetProperty("podCIDRs", out var cidrs) && cidrs.ValueKind == JsonValueKind.Array)
+        {
+            podCidrs.AddRange(cidrs.EnumerateArray()
+                .Where(c => c.ValueKind == JsonValueKind.String)
+                .Select(c => c.GetString() ?? "")
+                .Where(c => c.Length > 0));
+        }
+
+        if (podCidrs.Count == 0 && NodeActions.Str(spec, "podCIDR") is { Length: > 0 } single)
+        {
+            podCidrs.Add(single);
+        }
+
+        var labels = node.Labels;
 
         return new NodeInfo(
             NodeActions.Str(info, "kubeletVersion"),
@@ -122,8 +154,23 @@ public static class NodeResources
             NodeActions.Str(info, "kernelVersion"),
             NodeActions.Str(info, "containerRuntimeVersion"),
             NodeActions.Str(info, "architecture"),
-            internalIp ?? "");
+            addresses.FirstOrDefault(a => a.Type == "InternalIP")?.Address ?? "")
+        {
+            OperatingSystem = NodeActions.Str(info, "operatingSystem"),
+            Addresses = addresses,
+            PodCidrs = podCidrs,
+            ProviderId = NodeActions.Str(spec, "providerID"),
+            Zone = Label(labels, "topology.kubernetes.io/zone", "failure-domain.beta.kubernetes.io/zone"),
+            Region = Label(labels, "topology.kubernetes.io/region", "failure-domain.beta.kubernetes.io/region"),
+            InstanceType = Label(labels, "node.kubernetes.io/instance-type", "beta.kubernetes.io/instance-type"),
+            Created = node.CreationTimestamp,
+        };
     }
+
+    private static string Label(IReadOnlyDictionary<string, string> labels, string name, string legacyName) =>
+        labels.TryGetValue(name, out var value) && value.Length > 0 ? value
+        : labels.TryGetValue(legacyName, out var legacy) ? legacy
+        : "";
 
     /// <summary>
     /// Allocatable vs requested vs limits for CPU, memory and pod count, summed over the
@@ -317,14 +364,39 @@ public sealed record NodeTaint(string Key, string Value, string Effect)
     public string Display => Value.Length == 0 ? $"{Key}:{Effect}" : $"{Key}={Value}:{Effect}";
 }
 
-/// <summary>What the kubelet reports about its machine.</summary>
+/// <summary>What a node reports about its machine. Every string is empty when the node did not report it.</summary>
 public sealed record NodeInfo(
     string KubeletVersion,
     string OsImage,
     string KernelVersion,
     string ContainerRuntime,
     string Architecture,
-    string InternalIp);
+    string InternalIp)
+{
+    /// <summary><c>status.nodeInfo.operatingSystem</c> — <c>linux</c> or <c>windows</c>.</summary>
+    public string OperatingSystem { get; init; } = "";
+
+    /// <summary>Every entry of <c>status.addresses</c>, in the order the node reports them.</summary>
+    public IReadOnlyList<NodeAddress> Addresses { get; init; } = [];
+
+    /// <summary>The pod ranges this node hands out: <c>spec.podCIDRs</c>, or <c>spec.podCIDR</c> on an older server.</summary>
+    public IReadOnlyList<string> PodCidrs { get; init; } = [];
+
+    /// <summary><c>spec.providerID</c> — the cloud's own name for the machine, e.g. <c>aws:///eu-west-1b/i-0abc…</c>.</summary>
+    public string ProviderId { get; init; } = "";
+
+    public string Zone { get; init; } = "";
+
+    public string Region { get; init; } = "";
+
+    public string InstanceType { get; init; } = "";
+
+    /// <summary>When the Node object was created — when this machine joined the cluster under this name.</summary>
+    public DateTimeOffset? Created { get; init; }
+}
+
+/// <summary>One entry of a node's <c>status.addresses</c> (<c>InternalIP</c>, <c>ExternalIP</c>, <c>Hostname</c>, …).</summary>
+public sealed record NodeAddress(string Type, string Address);
 
 /// <summary>
 /// One resource's numbers on a node: what the scheduler may hand out, what the machine

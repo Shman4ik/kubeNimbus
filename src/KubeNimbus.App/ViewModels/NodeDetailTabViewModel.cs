@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KubeNimbus.App.Demo;
@@ -9,9 +10,10 @@ using KubeNimbus.Core;
 namespace KubeNimbus.App.ViewModels;
 
 /// <summary>
-/// Node detail: the conditions and taints the node reports about itself, how much of it
-/// the scheduler has already promised away (allocatable vs requested), and the pods that
-/// are actually on it.
+/// Node detail: the conditions and taints the node reports about itself, the machine
+/// behind it, how much of it the scheduler has already promised away (allocatable vs
+/// requested), how much of it is actually in use, the pods that are on it, and what the
+/// kubelet and the node controller have said about it.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -39,6 +41,17 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
     private readonly Func<OwnerRef, string?, Task>? _openPod;
     private readonly CancellationTokenSource _cts = new();
 
+    public const int OverviewTabIndex = 0;
+
+    public const int PodsTabIndex = 1;
+
+    public const int EventsTabIndex = 2;
+
+    public const int UsageTabIndex = 3;
+
+    private static TimeSpan MetricsPollInterval =>
+        TimeSpan.FromSeconds(App.LoadSettings().MetricsPollSeconds);
+
     public NodeDetailTabViewModel(
         ClusterClient? client,
         ResourceRowViewModel row,
@@ -61,7 +74,25 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
 
         _row.PropertyChanged += OnRowChanged;
         RefreshFromRow();
+        SeedUsageFromRow();
         _ = RefreshPodsAsync();
+        _ = RefreshEventsAsync();
+
+        if (client is null)
+        {
+            // The demo list has already replayed a window of polls onto this row, which
+            // SeedUsageFromRow copied. A node detail opened with no such history (a
+            // screenshot fixture that skipped the list) gets the same replay here, through
+            // the same ApplyMetrics a real poll lands on (demo rule 4).
+            if (!HasUsageSamples)
+            {
+                DemoUsage.SeedNode(this);
+            }
+        }
+        else
+        {
+            _ = Task.Run(() => PollMetricsAsync(client, _cts.Token), _cts.Token);
+        }
     }
 
     public static string KeyFor(string clusterName, string name) => $"node:{clusterName}/{name}";
@@ -73,7 +104,11 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
     /// <summary>Cluster this node came from in an aggregated fleet list; empty otherwise.</summary>
     public string ClusterName { get; }
 
-    /// <summary>Overview = 0, Pods = 1. Bound by both the segmented strip and the headerless TabControl.</summary>
+    /// <summary>
+    /// Overview = 0, Pods = 1, Events = 2, Usage = 3 (the constants above). Bound by both
+    /// the segmented strip and the headerless TabControl; new tabs are appended so the
+    /// existing indices stay what the screenshot scenarios already select.
+    /// </summary>
     [ObservableProperty]
     private int _selectedTabIndex;
 
@@ -96,6 +131,14 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
 
     [ObservableProperty]
     private NodeInfo _info = new("", "", "", "", "", "");
+
+    /// <summary>
+    /// The System card, one label/value pair per line the node actually reported — a node
+    /// that has no ExternalIP or no provider ID has no such row, rather than a label beside
+    /// an empty value that reads as "this field is broken".
+    /// </summary>
+    [ObservableProperty]
+    private IReadOnlyList<NodeSystemRow> _systemRows = [];
 
     public ObservableCollection<NodeConditionViewModel> Conditions { get; } = [];
 
@@ -165,6 +208,15 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
         Roles = _row.Details;
         Info = NodeResources.Info(node);
 
+        // Rebuilt only when something in it changed: the rows are SelectableTextBlocks,
+        // and replacing the list on every watch tick would drop a selection someone is
+        // in the middle of copying an IP out of.
+        var systemRows = BuildSystemRows(Info, DateTimeOffset.UtcNow);
+        if (!systemRows.SequenceEqual(SystemRows))
+        {
+            SystemRows = systemRows;
+        }
+
         Conditions.Clear();
         foreach (var condition in NodeResources.Conditions(node))
         {
@@ -179,6 +231,329 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
 
         OnPropertyChanged(nameof(HasNoTaints));
         RecomputeResources();
+    }
+
+    /// <summary>
+    /// The System card's lines, in the order someone reads a machine: what it runs, where
+    /// it is, how it is addressed, when it joined. Anything the node did not report is
+    /// left out rather than shown blank.
+    /// </summary>
+    internal static IReadOnlyList<NodeSystemRow> BuildSystemRows(NodeInfo info, DateTimeOffset now)
+    {
+        var rows = new List<NodeSystemRow>();
+
+        void Add(string label, string value)
+        {
+            if (value.Length > 0)
+            {
+                rows.Add(new NodeSystemRow(label, value));
+            }
+        }
+
+        Add("Kubelet", info.KubeletVersion);
+        Add("OS image", info.OsImage);
+        Add("Platform", (info.OperatingSystem, info.Architecture) switch
+        {
+            ({ Length: > 0 } os, { Length: > 0 } arch) => $"{os}/{arch}",
+            ({ Length: > 0 } os, _) => os,
+            (_, var arch) => arch,
+        });
+        Add("Kernel", info.KernelVersion);
+        Add("Runtime", info.ContainerRuntime);
+
+        // Every address, labelled with the node's own type name: InternalIP, ExternalIP,
+        // Hostname, InternalDNS… A node can report several of one type (dual-stack gives
+        // two InternalIPs), and those read as one line rather than two with the same label.
+        foreach (var group in info.Addresses.GroupBy(a => a.Type, StringComparer.Ordinal))
+        {
+            Add(group.Key, string.Join(", ", group.Select(a => a.Address)));
+        }
+
+        Add(info.PodCidrs.Count > 1 ? "Pod CIDRs" : "Pod CIDR", string.Join(", ", info.PodCidrs));
+        Add("Zone", info.Region.Length > 0 && info.Zone.Length > 0 ? $"{info.Zone} ({info.Region})" : info.Zone);
+        if (info.Zone.Length == 0)
+        {
+            Add("Region", info.Region);
+        }
+
+        Add("Instance type", info.InstanceType);
+        Add("Provider ID", info.ProviderId);
+        Add("Created", info.Created is { } created
+            ? $"{created.UtcDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)} UTC · {RelativeTime.Compact(now - created)} ago"
+            : "");
+
+        return rows;
+    }
+
+    // ----------------------------------------------------------------------- events
+
+    public ObservableCollection<EventRowViewModel> Events { get; } = [];
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(EventsCaption))]
+    private bool _isLoadingEvents;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasEventsError))]
+    [NotifyPropertyChangedFor(nameof(EventsCaption))]
+    private string? _eventsError;
+
+    public bool HasEventsError => !string.IsNullOrEmpty(EventsError);
+
+    /// <summary>
+    /// True when the node has no recorded events — its own sentence, not an empty list
+    /// (UI rule 9). Events expire (an hour by default), so a quiet node is the normal case
+    /// and needs saying so rather than looking like a fetch that never returned.
+    /// </summary>
+    public bool HasNoEvents => !IsLoadingEvents && !HasEventsError && Events.Count == 0;
+
+    public string EventsCaption => IsLoadingEvents
+        ? "Reading events…"
+        : HasEventsError
+            ? "Could not read events"
+            : Events.Count switch
+            {
+                0 => "No recent events",
+                1 => "1 event",
+                var n => $"{n} events",
+            };
+
+    /// <summary>
+    /// Reads the events about this node. A one-shot with an explicit Refresh, like the
+    /// Pods tab and pod detail's Events: a node's events arrive minutes apart, and a
+    /// second watch per open pane is the wrong trade for them.
+    /// </summary>
+    [RelayCommand]
+    private async Task RefreshEventsAsync()
+    {
+        IsLoadingEvents = true;
+        EventsError = null;
+        try
+        {
+            var events = _client is { } client
+                ? await client.GetEventsForAsync(_row.Resource, _cts.Token)
+                : DemoEvents();
+
+            Events.Clear();
+            foreach (var evt in events)
+            {
+                Events.Add(new EventRowViewModel(evt));
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Tab closed while the list was in flight.
+        }
+        catch (Exception ex)
+        {
+            // Listing events across namespaces is a permission plenty of roles lack; the
+            // server's own sentence names the verb and the subject.
+            EventsError = ex.Message;
+        }
+        finally
+        {
+            IsLoadingEvents = false;
+            OnPropertyChanged(nameof(EventsCaption));
+            OnPropertyChanged(nameof(HasNoEvents));
+        }
+    }
+
+    /// <summary>The same kind-and-name match the API server makes, over the shipped dataset.</summary>
+    private IReadOnlyList<DynamicResource> DemoEvents() =>
+        [.. DemoData.Events
+            .Where(e => e.InvolvedObject() is { Kind: "Node" } involved
+                && string.Equals(involved.Name, NodeName, StringComparison.Ordinal))
+            .OrderByDescending(e => e.LastTimestamp() ?? DateTimeOffset.MinValue)];
+
+    // ------------------------------------------------------------------------ usage
+
+    /// <summary>
+    /// This node's measured usage over time. Its own ring rather than the list row's,
+    /// because the row stops being polled the moment the list moves to another kind and
+    /// this pane has to keep going; it starts as a copy of the row's so a node that has
+    /// been on screen for ten minutes opens with ten minutes of chart.
+    /// </summary>
+    public UsageHistory History { get; } = new();
+
+    [ObservableProperty]
+    private IReadOnlyList<double?> _cpuSeries = [];
+
+    [ObservableProperty]
+    private IReadOnlyList<double?> _memorySeries = [];
+
+    [ObservableProperty]
+    private string _cpuText = "—";
+
+    [ObservableProperty]
+    private string _memoryText = "—";
+
+    [ObservableProperty]
+    private string _peakCpuText = "—";
+
+    [ObservableProperty]
+    private string _peakMemoryText = "—";
+
+    /// <summary>
+    /// " (31% of allocatable)" — measured usage against what the scheduler may hand out,
+    /// with its own leading space and parentheses so a node that reported no allocatable
+    /// renders nothing rather than an empty "()".
+    /// </summary>
+    [ObservableProperty]
+    private string _cpuShareText = "";
+
+    [ObservableProperty]
+    private string _memoryShareText = "";
+
+    [ObservableProperty]
+    private string _cpuTooltip = "";
+
+    [ObservableProperty]
+    private string _memoryTooltip = "";
+
+    [ObservableProperty]
+    private string _usageWindowCaption = "collecting…";
+
+    /// <summary>True once at least one sample has landed; until then the tab says it is collecting.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsCollectingUsage))]
+    private bool _hasUsageSamples;
+
+    /// <summary>
+    /// No usable metrics.k8s.io here. Kept apart from "nothing has arrived yet", which
+    /// looks the same and has the opposite next step (install metrics-server vs wait).
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsCollectingUsage))]
+    private bool _isMetricsUnavailable;
+
+    public bool IsCollectingUsage => !HasUsageSamples && !IsMetricsUnavailable;
+
+    public string UsagePollHint =>
+        $"metrics.k8s.io has no watch endpoint, so usage is polled every {MetricsPollInterval.TotalSeconds:0}s. "
+        + "History is kept for this session only — kubeNimbus is a viewer, not a time-series store.";
+
+    partial void OnIsMetricsUnavailableChanged(bool value)
+    {
+        if (value)
+        {
+            UsageWindowCaption = "";
+        }
+    }
+
+    private void SeedUsageFromRow()
+    {
+        for (var i = 0; i < _row.History.Count; i++)
+        {
+            History.Add(_row.History[i]);
+        }
+
+        if (History.Latest is { } latest && (latest.CpuNanocores is not null || latest.MemoryBytes is not null))
+        {
+            HasUsageSamples = true;
+        }
+
+        PublishUsage();
+    }
+
+    /// <summary>
+    /// Records one poll of this node's usage — or a gap, when both are null. The entry
+    /// point a real poll and the demo replay share, which is why it takes a timestamp.
+    /// </summary>
+    public void ApplyMetrics(long? cpuNanocores, long? memoryBytes, DateTimeOffset? at = null)
+    {
+        History.Add(cpuNanocores, memoryBytes, at);
+        if (cpuNanocores is not null || memoryBytes is not null)
+        {
+            HasUsageSamples = true;
+        }
+
+        PublishUsage();
+    }
+
+    private void PublishUsage()
+    {
+        var latest = History.Latest;
+        CpuSeries = History.CpuSeries();
+        MemorySeries = History.MemorySeries();
+        CpuText = Quantity.FormatCpu(latest?.CpuNanocores);
+        MemoryText = Quantity.FormatMemory(latest?.MemoryBytes);
+        PeakCpuText = Quantity.FormatCpu(History.PeakCpuNanocores);
+        PeakMemoryText = Quantity.FormatMemory(History.PeakMemoryBytes);
+        UpdateUsageShares();
+        CpuTooltip = UsageFormat.Tooltip("Node CPU", CpuText, PeakCpuText, History);
+        MemoryTooltip = UsageFormat.Tooltip("Node Mem", MemoryText, PeakMemoryText, History);
+        if (!IsMetricsUnavailable)
+        {
+            UsageWindowCaption = UsageFormat.WindowCaption(History);
+        }
+    }
+
+    /// <summary>
+    /// Usage as a share of allocatable, the same denominator the requested bars use — so
+    /// "requested 80%, used 12%" on the two tabs are figures of one node, comparable
+    /// directly. Re-run when the node object changes as well as when a poll lands.
+    /// </summary>
+    private void UpdateUsageShares()
+    {
+        var latest = History.Latest;
+        CpuShareText = Share(latest?.CpuNanocores / 1_000_000_000d, _summary?.Cpu.Allocatable);
+        MemoryShareText = Share(latest?.MemoryBytes, _summary?.Memory.Allocatable);
+    }
+
+    internal static string Share(double? used, double? allocatable) =>
+        used is { } u && allocatable is { } a && a > 0
+            ? string.Create(CultureInfo.InvariantCulture, $" ({u * 100d / a:0}% of allocatable)")
+            : "";
+
+    /// <summary>
+    /// Polls this one node's usage. Scoped to the pane's own token, so closing the tab
+    /// ends it — the second documented poll pattern after the list's, and for the same
+    /// reason: metrics.k8s.io has no watch.
+    /// </summary>
+    private async Task PollMetricsAsync(ClusterClient client, CancellationToken token)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(MetricsPollInterval);
+            do
+            {
+                try
+                {
+                    var metrics = await client.GetNodeMetricsAsync(NodeName, token);
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        if (metrics is not null)
+                        {
+                            ApplyMetrics(metrics.CpuNanocores, metrics.MemoryBytes);
+                        }
+                        else if (HasUsageSamples)
+                        {
+                            // Not scraped this round: a gap in the line, never a zero.
+                            ApplyMetrics(null, null);
+                        }
+                    });
+                }
+                catch (MetricsUnavailableException)
+                {
+                    await Dispatcher.UIThread.InvokeAsync(() => IsMetricsUnavailable = true);
+                    return;
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (Exception)
+                {
+                    // A transient failure (a dropped connection, a slow aggregated API)
+                    // skips this tick; the next one tries again.
+                }
+            }
+            while (await timer.WaitForNextTickAsync(token));
+        }
+        catch (OperationCanceledException)
+        {
+            // Pane closed.
+        }
     }
 
     /// <summary>
@@ -236,9 +611,12 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
         [.. DemoData.Pods.Where(p =>
             string.Equals(NodeActions.NodeNameOf(p), NodeName, StringComparison.Ordinal))];
 
+    private NodeResourceSummary? _summary;
+
     private void RecomputeResources()
     {
         var summary = NodeResources.Summarize(_row.Resource, _podsOnNode);
+        _summary = summary;
         var lines = new[]
         {
             new NodeResourceLineViewModel("CPU", summary.Cpu, FormatCores),
@@ -251,6 +629,8 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
         {
             ResourceLines.Add(line);
         }
+
+        UpdateUsageShares();
     }
 
     /// <summary>
@@ -380,6 +760,9 @@ public sealed class NodeResourceLineViewModel
     private static string Format(double? value, Func<double, string> format) =>
         value is { } number ? format(number) : "";
 }
+
+/// <summary>One line of node detail's System card.</summary>
+public sealed record NodeSystemRow(string Label, string Value);
 
 /// <summary>One pod on the node, as the Pods tab lists it.</summary>
 public sealed class NodePodViewModel

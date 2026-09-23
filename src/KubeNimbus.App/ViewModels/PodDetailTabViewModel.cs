@@ -282,7 +282,10 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     private void LoadDemoEvents()
     {
         Events.Clear();
-        foreach (var e in DemoData.Events)
+
+        // The dataset also carries node events, which belong to node detail's own tab;
+        // a pod's feed showing its node's disk pressure would be a match no API server makes.
+        foreach (var e in DemoData.Events.Where(e => e.InvolvedObject() is not { Kind: "Node" }))
         {
             Events.Add(new EventRowViewModel(e));
         }
