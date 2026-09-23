@@ -43,7 +43,7 @@ Sandbox: **API-server-only.** Docker Hub blobs 403, so `sandbox-up.sh` fails; na
 | L1 | owner pin | Open any pod's or workload's logs from the palette, from anywhere | UX | M | pin | landed | 0 | e49b645 |
 | L2 | owner pin | One click to logs from the row, and logs opened full-size | UX | S | pin | landed | 0 | 7dbc58d |
 | L3 | owner pin | Logs from everywhere a pod is named | UX | S | pin | planned | 0 | |
-| T2 | friction walk (`cluster-tab-events-list`) | The Events list reads like `kubectl get events`: last seen, type, reason, object, message | UX | M | 3.65 | building | 0 | |
+| T2 | friction walk (`cluster-tab-events-list`) | The Events list reads like `kubectl get events`: last seen, type, reason, object, message | UX | M | 3.65 | landed | 0 | 4326e05 |
 | T3 | Ready FEAT-31 (P1, forced) | Reach a container's whole retained log: tail and since controls | UX | S | 3.45 | planned | 0 | |
 | T4 | research #6 + friction walk (`ux-workload-events`) | Events read the same everywhere, with relative times and a warning count on the tab | UX | S | 3.10 | reserve (owner pin displaced it) | 0 | |
 | T5 | friction walk + Ready ENG-23 | The Namespace column appears only when it says something | UX | S | 2.85 | reserve (owner pin displaced it) | 0 | |
@@ -408,6 +408,14 @@ Risk:                 tests that leak state between runs; use a unique namespace
 - **R3 — FEAT-56**: `SelfSubjectReview` ("who am I") beside the access review; states pre-1.26 servers.
 
 ## Log
+
+- 2026-09-23 — T2 landed (`4326e05`), verifier PASS first round (re-ran build, both suites —
+  Core 395/413 with 18 sandbox skips, App 245/245 — the events screenshots and their CRD /
+  workloads regression shots, AOT publish with the DataGrid pair only, smoke 127 ms). One
+  documented deviation: Last seen reads `series.lastObservedTime` before `eventTime`, as
+  kubectl does. Checked live on an API-server-only k3s (real `FailedScheduling`, both
+  groups). Inbox: VER-41, ENG-39..42 (the Namespace-column finding is T5/ENG-23, the fleet
+  width is ENG-6). **Pause stands**; next when resumed: L3, T3, T6, T7, T9, T10.
 
 - 2026-09-23 — L2 landed (`7dbc58d`), verifier PASS first round (smoke re-run 3×: 153/134/187 ms,
   the reported 1654 ms was a cold-cache outlier; Esc checked not to steal from the namespace
