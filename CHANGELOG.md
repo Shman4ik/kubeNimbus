@@ -17,6 +17,9 @@ it as the GitHub Release body, so headings must match tags exactly
   recover.
 - Open any pod's or workload's logs from anywhere: press Ctrl/Cmd+Shift+L (or Ctrl/Cmd+K),
   type part of the name, press Enter.
+- Hover any pod or workload in the list and click its logs icon to open its logs; Shift+click,
+  or Shift+L, opens them full-size (Esc goes back to the split). A new "Open logs maximized"
+  preference makes full-size the default.
 
 ## [0.3.3] - 2026-09-22
 
