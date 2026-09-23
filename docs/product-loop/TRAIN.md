@@ -42,7 +42,7 @@ Sandbox: **API-server-only.** Docker Hub blobs 403, so `sandbox-up.sh` fails; na
 | T1 | research #1, headlamp#6974, k9s `Ctrl-z` | Show only what is unhealthy, on any list | UX | S | 4.05 | landed | 0 | fa4f30e |
 | L1 | owner pin | Open any pod's or workload's logs from the palette, from anywhere | UX | M | pin | landed | 0 | e49b645 |
 | L2 | owner pin | One click to logs from the row, and logs opened full-size | UX | S | pin | landed | 0 | 7dbc58d |
-| L3 | owner pin | Logs from everywhere a pod is named | UX | S | pin | building | 0 | |
+| L3 | owner pin | Logs from everywhere a pod is named | UX | S | pin | needs-fix | 1 | |
 | T2 | friction walk (`cluster-tab-events-list`) | The Events list reads like `kubectl get events`: last seen, type, reason, object, message | UX | M | 3.65 | planned | 0 | |
 | T3 | Ready FEAT-31 (P1, forced) | Reach a container's whole retained log: tail and since controls | UX | S | 3.45 | planned | 0 | |
 | T4 | research #6 + friction walk (`ux-workload-events`) | Events read the same everywhere, with relative times and a warning count on the tab | UX | S | 3.10 | reserve (owner pin displaced it) | 0 | |
