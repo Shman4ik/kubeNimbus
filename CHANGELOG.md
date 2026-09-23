@@ -12,6 +12,9 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+- Choose a log range in pod and workload panes: last 200 or 1000 lines, the last 5 minutes,
+  hour or day, or everything still retained. The pane shows when its scrollback limit trims
+  older lines.
 - Show only what is unhealthy on any list — one click or Ctrl+Z narrows pods, workloads or
   events to the ones in trouble, and they appear the moment they break and leave when they
   recover.
