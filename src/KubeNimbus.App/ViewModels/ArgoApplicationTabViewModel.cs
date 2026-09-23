@@ -24,6 +24,7 @@ public sealed partial class ArgoApplicationTabViewModel : InspectorTabViewModelB
     private readonly ClusterClient? _client;
     private readonly ResourceDescriptor _descriptor;
     private readonly Func<OwnerRef, string?, Task>? _openResource;
+    private readonly OpenNamedLogs? _openLogs;
     private readonly CancellationTokenSource _cts = new();
 
     public ArgoApplicationTabViewModel(
@@ -31,7 +32,8 @@ public sealed partial class ArgoApplicationTabViewModel : InspectorTabViewModelB
         ResourceDescriptor descriptor,
         ArgoApplication application,
         Func<OwnerRef, string?, Task>? openResource = null,
-        string clusterName = "")
+        string clusterName = "",
+        OpenNamedLogs? openLogs = null)
         : base($"Argo/{application?.Name}", isDemo: client is null)
     {
         ArgumentNullException.ThrowIfNull(application);
@@ -39,6 +41,7 @@ public sealed partial class ArgoApplicationTabViewModel : InspectorTabViewModelB
         _client = client;
         _descriptor = descriptor;
         _openResource = openResource;
+        _openLogs = openLogs;
         Key = KeyFor(clusterName, application.Namespace, application.Name);
         Apply(application);
     }
@@ -141,7 +144,7 @@ public sealed partial class ArgoApplicationTabViewModel : InspectorTabViewModelB
             .ThenBy(r => r.Kind, StringComparer.Ordinal)
             .ThenBy(r => r.Name, StringComparer.Ordinal))
         {
-            Resources.Add(new ArgoResourceRowViewModel(resource, OpenResourceAsync));
+            Resources.Add(new ArgoResourceRowViewModel(resource, OpenResourceAsync, _openLogs is null ? null : OpenResourceLogsAsync));
         }
 
         Conditions.Clear();
@@ -241,6 +244,35 @@ public sealed partial class ArgoApplicationTabViewModel : InspectorTabViewModelB
         return _openResource(owner, resource.Namespace.Length > 0 ? resource.Namespace : null);
     }
 
+    /// <summary>
+    /// Why the last logs-icon click did not open anything — a workload Argo reports as
+    /// Missing, a pod since replaced, a read the server refused. Stated above the resource
+    /// list instead of a dead click; cleared by the next open that works.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasLogsNotice))]
+    private string? _logsNotice;
+
+    public bool HasLogsNotice => !string.IsNullOrEmpty(LogsNotice);
+
+    /// <summary>
+    /// A managed pod's or workload's logs, through the cluster tab's one open-logs path
+    /// (<see cref="OpenNamedLogs"/>). The row carries only a kind and a name, so this is
+    /// where the object is first read — and where "names no pods" or "no longer exists"
+    /// comes back as a sentence.
+    /// </summary>
+    public async Task OpenResourceLogsAsync(ArgoResource resource, bool maximized)
+    {
+        ArgumentNullException.ThrowIfNull(resource);
+        if (_openLogs is null)
+        {
+            return;
+        }
+
+        var target = new OwnerRef(resource.ApiVersion, resource.Kind, resource.Name, Uid: null, Controller: false);
+        LogsNotice = await _openLogs(target, resource.Namespace.Length > 0 ? resource.Namespace : null, maximized);
+    }
+
     public override async Task OnClosingAsync()
     {
         await _cts.CancelAsync();
@@ -249,10 +281,22 @@ public sealed partial class ArgoApplicationTabViewModel : InspectorTabViewModelB
 }
 
 /// <summary>One object Argo manages for an Application, as a row in the detail pane.</summary>
-public sealed partial class ArgoResourceRowViewModel(ArgoResource resource, Func<ArgoResource, Task> open)
+public sealed partial class ArgoResourceRowViewModel(
+    ArgoResource resource, Func<ArgoResource, Task> open, Func<ArgoResource, bool, Task>? openLogs = null)
     : ObservableObject
 {
     public ArgoResource Resource { get; } = resource;
+
+    /// <summary>
+    /// Whether the row carries the logs icon: a pod or a built-in workload kind (see
+    /// <see cref="LogTarget.MayHaveLogs"/> for why a kind list is acceptable here and
+    /// nowhere else), and only when the pane was given a way to open them.
+    /// </summary>
+    public bool HasLogs => openLogs is not null && LogTarget.MayHaveLogs(Resource.ApiVersion, Resource.Kind);
+
+    /// <summary>The logs icon; <paramref name="maximized"/> is a Shift+click.</summary>
+    public Task OpenLogsAsync(bool maximized) =>
+        HasLogs ? openLogs!(Resource, maximized) : Task.CompletedTask;
 
     public string Kind => Resource.Kind;
 

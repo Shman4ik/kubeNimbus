@@ -144,8 +144,9 @@ public partial class ClusterTabView : UserControl
 
         // A Button's Click carries no modifiers, and the row's logs icon needs Shift. The
         // release is what raises Click, so the modifiers are read off it on the way down
-        // (Tunnel runs before the button's own class handler) — see OnRowLogsClick.
-        ResourceGrid.AddHandler(PointerReleasedEvent, OnGridPointerReleasedForRowAction, RoutingStrategies.Tunnel);
+        // (Tunnel runs before the button's own class handler) — see OnRowLogsClick. Shared
+        // with the inspector panes' pod lists (RowLogsGesture).
+        _rowLogs = RowLogsGesture.Track(ResourceGrid);
 
         // Esc returns a maximized inspector to the split. Bubble, and only for keys nothing
         // below handled: a search box clearing itself, a menu closing and the terminal's
@@ -156,10 +157,7 @@ public partial class ClusterTabView : UserControl
     }
 
     /// <summary>The modifiers held when the pointer was last released over the grid.</summary>
-    private KeyModifiers _rowActionModifiers;
-
-    private void OnGridPointerReleasedForRowAction(object? sender, PointerReleasedEventArgs e) =>
-        _rowActionModifiers = e.KeyModifiers;
+    private readonly RowLogsGesture _rowLogs;
 
     /// <summary>
     /// The logs icon in a row's Name cell: that row's logs, and with Shift held, full-size.
@@ -171,8 +169,7 @@ public partial class ClusterTabView : UserControl
     /// </summary>
     private void OnRowLogsClick(object? sender, RoutedEventArgs e)
     {
-        var shift = _rowActionModifiers.HasFlag(KeyModifiers.Shift);
-        _rowActionModifiers = KeyModifiers.None;
+        var shift = _rowLogs.TakeShift();
         e.Handled = true;
 
         if (sender is not Button { DataContext: ResourceRowViewModel row } || Vm is not { } vm)
@@ -949,17 +946,16 @@ public partial class ClusterTabView : UserControl
     /// </summary>
     private static System.Windows.Input.ICommand? RowKeyCommand(ClusterTabViewModel vm, KeyEventArgs e)
     {
-        if (CommandBindings.Matches(CommandId.PodLogsMaximized, e))
+        switch (RowLogsGesture.MatchLogsKey(e))
         {
-            // The same logs as L, full-size — for a pod and a workload alike.
-            return vm.OpenLogsMaximizedCommand;
-        }
-
-        if (CommandBindings.Matches(CommandId.PodLogs, e))
-        {
-            // A pod's own logs; on anything that owns pods, the one-stream-per-workload
-            // pane — the same thing the menu's "Logs (all pods)" opens.
-            return vm.IsPodRowSelected ? vm.OpenLogsCommand : vm.OpenWorkloadLogsCommand;
+            case true:
+                // The same logs as L, full-size — for a pod, a workload and an event alike.
+                return vm.OpenLogsMaximizedCommand;
+            case false:
+                // A pod's own logs (or, on an Event, the pod it is about); on anything that
+                // owns pods, the one-stream-per-workload pane — the same thing the menu's
+                // "Logs (all pods)" opens.
+                return vm.CanOpenPodLogsForSelectedRow ? vm.OpenLogsCommand : vm.OpenWorkloadLogsCommand;
         }
 
         if (CommandBindings.Matches(CommandId.PreviousLogs, e))

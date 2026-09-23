@@ -41,7 +41,7 @@ way in Preferences → Shortcut modifier.
 
 | Action | Windows / Linux | macOS |
 | --- | --- | --- |
-| Logs — the pod's, or every pod a workload owns | L | L |
+| Logs — a pod's, a workload's, or an event's pod; also in detail panes | L | L |
 | Logs, opened full-size over the list (Esc returns to split) | Shift+L / Shift+click a row's logs icon | Shift+L / Shift+click a row's logs icon |
 | Logs of any pod or workload, from anywhere | Ctrl+Shift+L | Cmd+Shift+L |
 | Previous logs (crashed container) | P | P |

@@ -18,6 +18,7 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
     private readonly Func<RowActionKind, Task> _armAction;
     private readonly Func<OwnerRef, string?, Task> _openOwner;
     private readonly Func<string, bool>? _activateTab;
+    private readonly OpenNamedLogs? _openLogs;
     private readonly CancellationTokenSource _cts = new();
     private readonly Task _watch;
     private readonly Task _initialRefresh;
@@ -36,8 +37,18 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(OpenPodCommand))]
     [NotifyCanExecuteChangedFor(nameof(ShellCommand))]
+    [NotifyCanExecuteChangedFor(nameof(PodLogsCommand))]
+    [NotifyCanExecuteChangedFor(nameof(PodLogsMaximizedCommand))]
     private ResourceRowViewModel? _selectedPod;
     private bool CanOpenPod => SelectedPod is not null;
+    private bool CanOpenPodLogs => SelectedPod is not null && _openLogs is not null;
+
+    /// <summary>
+    /// Why the last L / logs-icon open did not open anything — the pod went away between
+    /// the watch's last frame and the click, the server refused the read — stated above the
+    /// pod list instead of a dead click. Cleared by the next open that works and by Refresh.
+    /// </summary>
+    [ObservableProperty] private string? _logsNotice;
     [ObservableProperty] private int _selectedTabIndex;
     [ObservableProperty] private string _rollout = "";
     [ObservableProperty] private string _podsStatus = "Loading pods…";
@@ -47,7 +58,7 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
 
     public WorkloadDetailTabViewModel(ClusterClient? client, ResourceDescriptor descriptor,
         ResourceRowViewModel row, Action<InspectorTabViewModelBase> openTab, Func<RowActionKind, Task> armAction,
-        Func<OwnerRef, string?, Task> openOwner, Func<string, bool>? activateTab = null)
+        Func<OwnerRef, string?, Task> openOwner, Func<string, bool>? activateTab = null, OpenNamedLogs? openLogs = null)
         : base($"{descriptor.Kind}/{row.Name}" + (row.ClusterName.Length > 0 ? $" · {row.ClusterName}" : ""), client is null)
     {
         _client = client;
@@ -57,6 +68,7 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
         _armAction = armAction;
         _openOwner = openOwner;
         _activateTab = activateTab;
+        _openLogs = openLogs;
         Key = KeyFor(row.ClusterName, descriptor, row.Namespace, row.Name);
         row.PropertyChanged += RowChanged;
         ReadStatus();
@@ -145,6 +157,7 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
     {
         var token = _cts.Token;
         Error = null;
+        LogsNotice = null;
         EventsStatus = "Loading events…";
         try
         {
@@ -187,6 +200,29 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
         if (SelectedPod is not { } pod) return;
         if (_activateTab?.Invoke(PodDetailTabViewModel.KeyFor(_row.ClusterName, pod.Namespace, pod.Name)) == true) return;
         _openTab(new PodDetailTabViewModel(_client, pod, _openTab, _openOwner, clusterName: _row.ClusterName));
+    }
+
+    /// <summary>
+    /// L, the context menu's Logs and the row's logs icon: the pod's logs, through the
+    /// cluster tab's one open-logs path (<see cref="OpenNamedLogs"/>), so the inspector tab
+    /// reused and the "Open logs maximized" preference are the resource list's own.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanOpenPodLogs))]
+    private Task PodLogsAsync() => OpenPodLogsAsync(SelectedPod, maximized: false);
+
+    /// <summary>Shift+L: the same logs, full-size.</summary>
+    [RelayCommand(CanExecute = nameof(CanOpenPodLogs))]
+    private Task PodLogsMaximizedAsync() => OpenPodLogsAsync(SelectedPod, maximized: true);
+
+    /// <summary>
+    /// One pod's logs. Selects the row first — the icon takes the press the grid would
+    /// have selected it with, and the list should say which pod the logs are of.
+    /// </summary>
+    public async Task OpenPodLogsAsync(ResourceRowViewModel? pod, bool maximized)
+    {
+        if (pod is null || _openLogs is null) return;
+        SelectedPod = pod;
+        LogsNotice = await _openLogs(new OwnerRef("v1", "Pod", pod.Name, pod.Resource.Uid, false), pod.Namespace, maximized);
     }
 
     [RelayCommand(CanExecute = nameof(CanOpenPod))]

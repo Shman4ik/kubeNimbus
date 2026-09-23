@@ -456,6 +456,7 @@
                  them. Keep the two in step with CommandCatalog's List-scoped rows. -->
             <DataGrid.ContextFlyout>
               <MenuFlyout>
+                <!-- On an Event about a pod, "Logs" is that pod's (L3). -->
                 <MenuItem Header="Logs" Command="{Binding OpenLogsCommand}" InputGesture="L">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource PlayIconGeometry}" Width="13" Height="13" />
@@ -644,11 +645,25 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
+              <!-- On an Event about a pod the row's logs icon sits here, at the end of the
+                   object it opens the logs of — the Events list hides Name, which is where
+                   every other kind carries it. Same Panel/Button.rowAction pair and the same
+                   click handler as the Name cell below (L3); HasLogs is true on an event
+                   only when its involved object is a core pod (LogTarget.InvolvedPod). -->
               <DataGridTemplateColumn Header="Object" Tag="event-object" CanUserSort="True" Width="1.3*" MinWidth="110" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
-                    <TextBlock Text="{Binding EventObject}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding EventObjectTooltip}"
-                               FontSize="12" VerticalAlignment="Center" />
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock Text="{Binding EventObject}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding EventObjectTooltip}"
+                                 FontSize="12" VerticalAlignment="Center" />
+                      <Panel Grid.Column="1" IsVisible="{Binding HasLogs}">
+                        <Button Classes="rowAction logs"
+                                Click="OnRowLogsClick"
+                                ToolTip.Tip="{x:Static app:CommandTip.RowLogs}">
+                          <PathIcon Data="{StaticResource LogsIconGeometry}" Width="12" Height="12" />
+                        </Button>
+                      </Panel>
+                    </Grid>
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>

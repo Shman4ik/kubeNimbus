@@ -233,9 +233,126 @@ public sealed partial class ClusterTabViewModel
         }
 
         SelectedRow = row;
-        return LogTargetFor(row) is { } target
-            ? OpenLogsForAsync(target, previous: false, maximized: maximized ? true : null)
-            : Task.CompletedTask;
+        return OpenLogsForRowAsync(row, previous: false, maximized: maximized ? true : null);
+    }
+
+    /// <summary>
+    /// A list row's logs, whatever the row is: its own (a pod, or whatever names its pods),
+    /// or — on an Event about a pod — that pod's, resolved first so a pod that has gone
+    /// since the event was logged is stated in the list's warning rather than opening a
+    /// pane over nothing. <paramref name="previous"/> applies to a pod row only.
+    /// </summary>
+    private async Task OpenLogsForRowAsync(ResourceRowViewModel row, bool previous, bool? maximized)
+    {
+        if (!LogTarget.HasOwnLogs(row.Resource) && LogTarget.InvolvedPod(row.Resource) is { } pod)
+        {
+            var @namespace = row.Resource.InvolvedObjectNamespace() ?? row.Namespace;
+            if (await OpenNamedLogsAsync(pod, @namespace, row.ClusterName, ClientFor(row), maximized) is { } problem)
+            {
+                ConnectionWarning = problem;
+            }
+
+            return;
+        }
+
+        if (LogTargetFor(row) is { } target)
+        {
+            await OpenLogsForAsync(target, previous, maximized);
+        }
+    }
+
+    /// <summary>
+    /// The <see cref="OpenNamedLogs"/> an inspector pane is handed: bound to the cluster
+    /// and client the pane's own object came from, so a fleet row's pane opens logs on
+    /// that row's cluster — the same binding <see cref="OpenOwnerAsync"/> is given.
+    /// </summary>
+    private OpenNamedLogs NamedLogsOpener(string clusterName, ClusterClient? client) =>
+        (target, namespaceHint, maximized) =>
+            OpenNamedLogsAsync(target, namespaceHint, clusterName, client, maximized ? true : null);
+
+    /// <summary>
+    /// Opens the logs of an object some pane names — workload detail's and node detail's
+    /// pod lists, an Argo Application's managed workloads, the pod an Event is about. The
+    /// object is read first (the shipped dataset on the demo cluster), for two reasons: a
+    /// pane that names an object does not always hold it (an Argo row is a kind and a
+    /// name), and a pane's list can be older than the cluster (node detail's pods are one
+    /// list, and an Event outlives its pod by an hour) — so "gone" is found out here and
+    /// said, rather than opening a pane that then fails to stream. Everything that
+    /// resolves goes through <see cref="OpenLogsForAsync"/>, so the pane chosen, the
+    /// inspector tab reused and the maximized preference are the list's own.
+    /// </summary>
+    /// <returns>Null when logs opened; otherwise the sentence to show.</returns>
+    internal Task<string?> OpenNamedLogsAsync(
+        OwnerRef target, string? namespaceHint, string clusterName, ClusterClient? client, bool? maximized)
+    {
+        var source = client is not null ? NamedObjectSource.For(client)
+            : IsDemo ? NamedObjectSource.Demo
+            : null;
+        return source is null
+            ? Task.FromResult<string?>("Not connected to this cluster.")
+            : OpenNamedLogsAsync(target, namespaceHint, clusterName, client, source, maximized);
+    }
+
+    /// <summary>
+    /// The same, reading through <paramref name="source"/> — which is the whole of what
+    /// differs between a real cluster, the demo dataset and a test's stand-in (the
+    /// <see cref="LogTargetSource"/> precedent), so "gone", "refused" and "names no pods"
+    /// are pinned against exactly the code a real cluster runs.
+    /// </summary>
+    internal async Task<string?> OpenNamedLogsAsync(
+        OwnerRef target, string? namespaceHint, string clusterName, ClusterClient? client,
+        NamedObjectSource source, bool? maximized)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(source);
+
+        ResourceDescriptor? descriptor;
+        DynamicResource? resolved;
+        try
+        {
+            var catalog = await source.Catalog(CancellationToken.None);
+            descriptor = catalog.FirstOrDefault(d => d.ApiVersion == target.ApiVersion && d.Kind == target.Kind);
+            if (descriptor is null)
+            {
+                return source.IsDemo
+                    ? $"{target.Kind}/{target.Name} isn't part of the demo dataset, so there are no logs to show."
+                    : $"This cluster does not serve {target.Kind} ({target.ApiVersion}).";
+            }
+
+            resolved = await source.Read(
+                descriptor, descriptor.Namespaced ? namespaceHint : null, target.Name, CancellationToken.None);
+        }
+        catch (OperationCanceledException)
+        {
+            return null;
+        }
+        catch (Exception ex)
+        {
+            // A 403 is the common one, and the server's sentence names the verb and the
+            // subject — more useful than anything worded here.
+            return ex.Message;
+        }
+
+        if (resolved is null)
+        {
+            if (source.IsDemo)
+            {
+                return $"{target.Kind}/{target.Name} isn't part of the demo dataset, so there are no logs to show.";
+            }
+
+            var qualified = namespaceHint is { Length: > 0 } && descriptor.Namespaced
+                ? $"{namespaceHint}/{target.Name}"
+                : target.Name;
+            return $"{target.Kind} {qualified} no longer exists — it was deleted or replaced since this was listed.";
+        }
+
+        if (!LogTarget.HasOwnLogs(resolved))
+        {
+            return $"{target.Kind}/{target.Name} names no pods, so there are no logs to open.";
+        }
+
+        await OpenLogsForAsync(new LogTarget(resolved, descriptor, clusterName, client), previous: false, maximized);
+        return null;
     }
 
     /// <summary>

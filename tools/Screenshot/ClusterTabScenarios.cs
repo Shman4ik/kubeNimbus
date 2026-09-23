@@ -193,6 +193,10 @@ internal static class ClusterTabScenarios
         if (tab.SelectedInspectorTab is WorkloadDetailTabViewModel detail)
         {
             detail.SelectedTabIndex = selectedTab;
+
+            // A selected pod, so the Pods shot shows the row's logs icon (L3) — drawn on
+            // the selected and the hovered row only, like the resource list's own.
+            detail.SelectedPod = detail.Pods.FirstOrDefault();
             detail.Conditions.Add(new("Available", "True", "MinimumReplicasAvailable", "Deployment has minimum availability."));
             detail.Conditions.Add(new("Progressing", "True", "NewReplicaSetAvailable", "ReplicaSet has successfully progressed."));
             using var document = JsonDocument.Parse("""
@@ -869,8 +873,50 @@ internal static class ClusterTabScenarios
         if (tab.SelectedInspectorTab is NodeDetailTabViewModel detail)
         {
             detail.SelectedTabIndex = tabIndex;
+
+            // A selected pod, so the Pods shot shows the row's logs icon (L3).
+            detail.SelectedPod = detail.Pods.FirstOrDefault();
         }
 
+        return tab;
+    }
+
+    /// <summary>
+    /// L3's "pod gone" state: a logs open on a pod the node's list still names but the
+    /// cluster no longer has, stated above the list in place of a dead click. The ghost row
+    /// is opened through the real <c>OpenPodLogsAsync</c>, so the sentence is the one the
+    /// shared resolver writes (the demo's own variant of it — the dataset is its cluster).
+    /// </summary>
+    public static ClusterTabViewModel NodeDetailPodGone()
+    {
+        var tab = OpenNode("demo-worker-1", tabIndex: NodeDetailTabViewModel.PodsTabIndex);
+        if (tab.SelectedInspectorTab is NodeDetailTabViewModel detail)
+        {
+            using var document = JsonDocument.Parse("""
+                {"apiVersion":"v1","kind":"Pod",
+                 "metadata":{"name":"checkout-worker-5d8f7b9c4-x7k2m","namespace":"payments"},
+                 "spec":{"nodeName":"demo-worker-1","containers":[{"name":"worker"}]},
+                 "status":{"phase":"Running"}}
+                """);
+            var ghost = new NodePodViewModel(new DynamicResource(document.RootElement.Clone()));
+            detail.OpenPodLogsAsync(ghost, maximized: false).GetAwaiter().GetResult();
+        }
+
+        return tab;
+    }
+
+    /// <summary>
+    /// The demo Events list with an event about a pod selected, so the row's logs icon shows
+    /// at the end of its Object cell (L3). All namespaces, Config expanded.
+    /// </summary>
+    public static ClusterTabViewModel DemoEventsPodLogs()
+    {
+        var tab = DemoTab();
+        tab.SelectedNamespace = ClusterTabViewModel.AllNamespaces;
+        var config = tab.SidebarSections.First(s => s.Kinds.Any(k => k.Descriptor is { Group: "", Kind: "Event" }));
+        config.IsExpanded = true;
+        tab.SelectKindCommand.Execute(config.Kinds.First(k => k.Descriptor is { Group: "", Kind: "Event" }));
+        tab.SelectedRow = tab.VisibleRows.First(r => r.Resource.InvolvedObject() is { Kind: "Pod" });
         return tab;
     }
 

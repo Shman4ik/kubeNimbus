@@ -587,7 +587,7 @@ Three rules about it:
 Each feature's design rules, and the incidents behind them, live in a page of their own under [`docs/engineering/`](docs/engineering/), so a session loads only the ones it touches. **Read the page for any feature you change before changing it**, and keep it current in the same PR — the same discipline as this file.
 
 - [Multi-pod logs (one workload, one stream)](docs/engineering/multi-pod-logs.md) — WorkloadLogsTabViewModel: selector-resolved pods, per-pod tail budget, 50-stream cap, two-stage timestamp merge.
-- [One click to logs from the row, and logs opened full-size](docs/engineering/row-logs-and-maximized.md) — The row's logs icon (hover/selected, IsVisible style, Shift+click), Shift+L, the "Open logs maximized" preference read by OpenLogsForAsync, Esc restore.
+- [One click to logs from the row, and logs opened full-size](docs/engineering/row-logs-and-maximized.md) — The row's logs icon (hover/selected, IsVisible style, Shift+click), Shift+L, the "Open logs maximized" preference read by OpenLogsForAsync, Esc restore; L3's logs from every list that names a pod (OpenNamedLogs, RowLogsGesture, stated "gone").
 - [Log severity is three classes, not a brush binding](docs/engineering/log-severity-classes.md) — Why severity is style classes and never a Foreground binding (the invisible-plain-line bug, twice).
 - [Pod detail's Overview tab (conditions, tolerations, QoS, priority, probes)](docs/engineering/pod-overview-tab.md) — Conditions/tolerations/QoS/probes tab: index 4, condition polarity, API-server probe defaults, signature-guarded rebuild.
 - [Requests and limits are text on the Usage tab](docs/engineering/requests-and-limits.md) — Usage tab's declared requests/limits: words not blanks, not gated on metrics.
@@ -770,7 +770,10 @@ conditions, events and a live pod list. The pod watch uses the workload selector
 including match expressions. Closing the pane cancels its requests and watch.
 The workload status follows its list row; Refresh also reads the object directly.
 
-Double-click, Enter and L open a selected pod. S opens its shell.
+Double-click and Enter open a selected pod. L opens its logs and Shift+L opens
+them maximized, through the resource list's own open-logs path (see
+[row-logs-and-maximized](docs/engineering/row-logs-and-maximized.md), "L3").
+S opens its shell.
 E opens the workload YAML. The Actions menu offers scale and rollout restart
 through the existing confirmation strip. Each action retains the original row,
 descriptor and cluster, even after the main list changes. Owner navigation uses
@@ -839,8 +842,11 @@ Seven things worth keeping:
    and never on status, for UI rule 13's reason. Every open-logs gesture — L, P, the menu,
    the palette rows — goes through `ClusterTabViewModel.OpenLogsForAsync(LogTarget)`, so
    the pane chosen and the inspector tab reused cannot differ by route. Since L2 that
-   includes Shift+L and the row's logs icon, and the same call is where "open maximized"
-   is decided (`maximized: true`, or the `OpenLogsMaximized` preference when null) — see
+   includes Shift+L and the row's logs icon, and since L3 every other list that names a
+   pod — workload and node detail's pod lists, an Event about a pod, an Argo
+   Application's managed workloads — through `OpenNamedLogsAsync`, which reads the object
+   first so a pod that has gone is stated rather than opened. The same call is where
+   "open maximized" is decided (`maximized: true`, or the `OpenLogsMaximized` preference when null) — see
    [row-logs-and-maximized](docs/engineering/row-logs-and-maximized.md).
 4. **An action with no gesture is `PaletteOnly`, not `PaletteAndSheet`.** F1 is a
    *keyboard* reference: a row reading "Edit YAML — —" tells the reader nothing and

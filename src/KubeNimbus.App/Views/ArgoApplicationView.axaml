@@ -4,8 +4,19 @@
              xmlns:core="using:KubeNimbus.Core"
              xmlns:conv="using:KubeNimbus.App.Converters"
              xmlns:aconv="using:Avalonia.Data.Converters"
+             xmlns:app="using:KubeNimbus.App"
              x:Class="KubeNimbus.App.Views.ArgoApplicationView"
              x:DataType="vm:ArgoApplicationTabViewModel">
+
+  <UserControl.Styles>
+    <!-- The resource rows are an ItemsControl, not a list with selection, so the shared
+         Button.rowAction reveal (DataGridRow / ListBoxItem :pointerover and :selected) has
+         nothing to key on. The row Grid carries a Transparent background so it hit-tests
+         across its whole width (UI rule 8) and its :pointerover is the reveal instead. -->
+    <Style Selector="Grid.argoResourceRow:pointerover Button.rowAction">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+  </UserControl.Styles>
 
   <!-- One row of chrome (UI rule 10): the tab strip, the selected tab's own caption, and
        reload. No title row — the dock tab above already reads `Argo/<name>`. -->
@@ -114,8 +125,14 @@
       </TabItem>
 
       <TabItem Header="Resources">
-        <Grid>
-          <ScrollViewer IsVisible="{Binding HasResources}">
+        <Grid RowDefinitions="Auto,*">
+          <!-- A logs open that found nothing to open says why (a workload Argo reports
+               Missing, a read the server refused) — present only while there is something
+               to say (UI rule 9). -->
+          <Border Grid.Row="0" Classes="infoBar warn" Margin="0,0,0,8" IsVisible="{Binding HasLogsNotice}">
+            <TextBlock Text="{Binding LogsNotice}" TextWrapping="Wrap" FontSize="12" />
+          </Border>
+          <ScrollViewer Grid.Row="1" IsVisible="{Binding HasResources}">
             <ItemsControl ItemsSource="{Binding Resources}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:ArgoResourceRowViewModel">
@@ -125,7 +142,7 @@
                        qualifier read as belonging to the row *below* it. Rows have to be
                        separated by more than their own lines are, or a list of them reads as
                        one block of text running together. -->
-                  <Grid ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,0,0,12">
+                  <Grid Classes="argoResourceRow" Background="Transparent" ColumnDefinitions="*,Auto,Auto,Auto,Auto" Margin="0,0,0,12">
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
                       <TextBlock FontSize="12.5" TextTrimming="CharacterEllipsis">
                         <Run Text="{Binding Kind}" FontWeight="SemiBold" />
@@ -150,7 +167,22 @@
                     <!-- The chevron the owner chips and the events feed already use: a
                          Deployment Argo reports as Degraded is one click from its own
                          manifest rather than a search of the list. -->
-                    <Button Grid.Column="3" Classes="chip" Padding="4" Margin="6,0,0,0" VerticalAlignment="Center"
+                    <!-- A pod's or a built-in workload's logs (L3), revealed on hover like the
+                         resource list's own icon; Shift+click opens them full-size. There is
+                         no L key here: the rows have no selection to press it on. The slot is
+                         a fixed 26px on every row, unlike the resource list's Name cell: there
+                         a collapsing slot gives a name its width back, here it would only make
+                         the pills beside it jump sideways under the pointer, and keep rows
+                         with and without logs from lining their pills up. -->
+                    <Panel Grid.Column="3" Width="26" VerticalAlignment="Center">
+                      <Panel IsVisible="{Binding HasLogs}">
+                        <Button Classes="rowAction logs" Margin="6,0,0,0" Click="OnResourceLogsClick"
+                                ToolTip.Tip="{x:Static app:CommandTip.RowLogs}">
+                          <PathIcon Data="{StaticResource LogsIconGeometry}" Width="12" Height="12" />
+                        </Button>
+                      </Panel>
+                    </Panel>
+                    <Button Grid.Column="4" Classes="chip" Padding="4" Margin="6,0,0,0" VerticalAlignment="Center"
                             Command="{Binding OpenCommand}" ToolTip.Tip="Open this resource">
                       <PathIcon Data="{StaticResource ChevronRightIconGeometry}" Width="11" Height="11" />
                     </Button>
@@ -160,7 +192,7 @@
             </ItemsControl>
           </ScrollViewer>
 
-          <TextBlock Classes="statusText dim" TextWrapping="Wrap" MaxWidth="420" TextAlignment="Center"
+          <TextBlock Grid.Row="1" Classes="statusText dim" TextWrapping="Wrap" MaxWidth="420" TextAlignment="Center"
                      HorizontalAlignment="Center" VerticalAlignment="Center"
                      Text="{Binding EmptyResourcesNotice}" IsVisible="{Binding !HasResources}" />
         </Grid>
