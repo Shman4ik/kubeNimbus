@@ -91,6 +91,32 @@ modifiers exactly, so Shift+L can never also run L's command; `RowLogsTests` pin
 "Logs, maximized" beside "Logs", so a mouse user who reaches for the palette learns the key
 from its subtitle.
 
-**What the icon is not.** It is not in the Helm or Argo grids (their rows are releases and
+**What the icon is not.** It is not in the Helm browser or Argo dashboard grids (their rows are releases and
 Applications, which have no pods of their own to tail), and it does not replace the context
 menu's Logs / Logs (all pods) items, whose captions stay the place a mouse user learns L.
+
+## Logs where another pane names a pod
+
+L3 extends the same `OpenLogsForAsync` route to the workload detail's pod grid, the
+node detail's pod grid, core Event rows whose involved object is a Pod, and Argo
+Application managed-resource rows that name a Pod or a workload. Each list has L and
+the hover logs button; the two DataGrids and Events list also have a Logs context-menu
+item. The button uses the existing `rowAction` style, so it reveals on a hovered or
+selected row without reserving width on idle rows. Argo's Resources pane is a
+selectable ListBox for the same keyboard and hover behavior.
+
+The nested views pass only an object identity to `ClusterTabViewModel.OpenNamedLogsAsync`.
+That method reads the current object before calling `OpenLogsForAsync`, so a pod deleted
+after the node's one-shot list was loaded produces an explicit warning rather than a
+stale log tab or a dead click. It also checks the UID when the naming row has one:
+a recreated StatefulSet pod may reuse the same name but its logs are not the old pod's.
+The demo uses the same resolver over its shipped object
+set. A workload without a usable selector also gets an explicit notice. The Event
+API sometimes omits `involvedObject.apiVersion`; a core Pod with an empty version is
+normalized to `v1` before resolution. The palette's selected-row Logs entry follows
+the same Event capability as L and the context menu.
+
+The screenshot harness initially rendered both pod grids with the button absent:
+setting `SelectedPod` on a fixture before the DataGrid materialized did not reliably
+produce a selected-row visual. It now moves the headless pointer onto the first pod
+row and asserts that the real `rowAction` button becomes visible, in both themes.

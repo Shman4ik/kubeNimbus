@@ -949,7 +949,7 @@ public partial class ClusterTabView : UserControl
         {
             // A pod's own logs; on anything that owns pods, the one-stream-per-workload
             // pane — the same thing the menu's "Logs (all pods)" opens.
-            return vm.IsPodRowSelected ? vm.OpenLogsCommand : vm.OpenWorkloadLogsCommand;
+            return vm.CanOpenDirectLogsForSelectedRow ? vm.OpenLogsCommand : vm.OpenWorkloadLogsCommand;
         }
 
         if (CommandBindings.Matches(CommandId.PreviousLogs, e))

@@ -116,8 +116,8 @@
       <TabItem Header="Resources">
         <Grid>
           <ScrollViewer IsVisible="{Binding HasResources}">
-            <ItemsControl ItemsSource="{Binding Resources}">
-              <ItemsControl.ItemTemplate>
+            <ListBox ItemsSource="{Binding Resources}" SelectedItem="{Binding SelectedResource}" KeyDown="OnResourceKeyDown">
+              <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:ArgoResourceRowViewModel">
                   <!-- The bottom margin is doing real work. A row is two lines — the object
                        and its group/namespace — and they sat 16px apart while consecutive
@@ -125,7 +125,7 @@
                        qualifier read as belonging to the row *below* it. Rows have to be
                        separated by more than their own lines are, or a list of them reads as
                        one block of text running together. -->
-                  <Grid ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,0,0,12">
+                  <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" Margin="0,0,0,12">
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
                       <TextBlock FontSize="12.5" TextTrimming="CharacterEllipsis">
                         <Run Text="{Binding Kind}" FontWeight="SemiBold" />
@@ -150,14 +150,19 @@
                     <!-- The chevron the owner chips and the events feed already use: a
                          Deployment Argo reports as Degraded is one click from its own
                          manifest rather than a search of the list. -->
-                    <Button Grid.Column="3" Classes="chip" Padding="4" Margin="6,0,0,0" VerticalAlignment="Center"
+                    <Panel Grid.Column="3" IsVisible="{Binding HasLogs}" VerticalAlignment="Center">
+                      <Button Classes="rowAction logs" Click="OnResourceLogsClick" ToolTip.Tip="Open logs (L)">
+                        <PathIcon Data="{StaticResource LogsIconGeometry}" Width="12" Height="12" />
+                      </Button>
+                    </Panel>
+                    <Button Grid.Column="4" Classes="chip" Padding="4" Margin="6,0,0,0" VerticalAlignment="Center"
                             Command="{Binding OpenCommand}" ToolTip.Tip="Open this resource">
                       <PathIcon Data="{StaticResource ChevronRightIconGeometry}" Width="11" Height="11" />
                     </Button>
                   </Grid>
                 </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
+              </ListBox.ItemTemplate>
+            </ListBox>
           </ScrollViewer>
 
           <TextBlock Classes="statusText dim" TextWrapping="Wrap" MaxWidth="420" TextAlignment="Center"

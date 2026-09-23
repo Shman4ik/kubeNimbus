@@ -15,8 +15,17 @@ public partial class WorkloadDetailView : UserControl
     private void OnPodKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.KeyModifiers != KeyModifiers.None || DataContext is not WorkloadDetailTabViewModel vm) return;
-        if (e.Key is Key.L or Key.Enter) { vm.OpenPodCommand.Execute(null); e.Handled = true; }
+        if (e.Key == Key.L) { vm.OpenPodLogsCommand.Execute(null); e.Handled = true; }
+        if (e.Key == Key.Enter) { vm.OpenPodCommand.Execute(null); e.Handled = true; }
         if (e.Key == Key.S) { vm.ShellCommand.Execute(null); e.Handled = true; }
+    }
+    private void OnPodLogsClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is WorkloadDetailTabViewModel vm && sender is Button { DataContext: ResourceRowViewModel pod })
+        {
+            vm.SelectedPod = pod;
+            _ = vm.OpenPodLogsAsync(pod);
+        }
     }
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {

@@ -18,6 +18,7 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
     private readonly Func<RowActionKind, Task> _armAction;
     private readonly Func<OwnerRef, string?, Task> _openOwner;
     private readonly Func<string, bool>? _activateTab;
+    private readonly Func<OwnerRef, string?, Task>? _openLogs;
     private readonly CancellationTokenSource _cts = new();
     private readonly Task _watch;
     private readonly Task _initialRefresh;
@@ -35,6 +36,7 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
     public ObservableCollection<EventRowViewModel> Events { get; } = [];
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(OpenPodCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenPodLogsCommand))]
     [NotifyCanExecuteChangedFor(nameof(ShellCommand))]
     private ResourceRowViewModel? _selectedPod;
     private bool CanOpenPod => SelectedPod is not null;
@@ -47,7 +49,8 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
 
     public WorkloadDetailTabViewModel(ClusterClient? client, ResourceDescriptor descriptor,
         ResourceRowViewModel row, Action<InspectorTabViewModelBase> openTab, Func<RowActionKind, Task> armAction,
-        Func<OwnerRef, string?, Task> openOwner, Func<string, bool>? activateTab = null)
+        Func<OwnerRef, string?, Task> openOwner, Func<string, bool>? activateTab = null,
+        Func<OwnerRef, string?, Task>? openLogs = null)
         : base($"{descriptor.Kind}/{row.Name}" + (row.ClusterName.Length > 0 ? $" · {row.ClusterName}" : ""), client is null)
     {
         _client = client;
@@ -57,6 +60,7 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
         _armAction = armAction;
         _openOwner = openOwner;
         _activateTab = activateTab;
+        _openLogs = openLogs;
         Key = KeyFor(row.ClusterName, descriptor, row.Namespace, row.Name);
         row.PropertyChanged += RowChanged;
         ReadStatus();
@@ -188,6 +192,13 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
         if (_activateTab?.Invoke(PodDetailTabViewModel.KeyFor(_row.ClusterName, pod.Namespace, pod.Name)) == true) return;
         _openTab(new PodDetailTabViewModel(_client, pod, _openTab, _openOwner, clusterName: _row.ClusterName));
     }
+
+    [RelayCommand(CanExecute = nameof(CanOpenPod))]
+    private Task OpenPodLogsAsync() => OpenPodLogsAsync(SelectedPod);
+
+    public Task OpenPodLogsAsync(ResourceRowViewModel? pod) =>
+        pod is null || _openLogs is null ? Task.CompletedTask
+        : _openLogs(new OwnerRef("v1", "Pod", pod.Name, pod.Resource.Uid, Controller: false), pod.Namespace);
 
     [RelayCommand(CanExecute = nameof(CanOpenPod))]
     private void Shell()

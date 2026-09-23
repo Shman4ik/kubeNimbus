@@ -1077,13 +1077,16 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             var where = $"{row.Namespace}/{row.Name}";
 
-            if (rowTab.IsPodRowSelected)
+            if (rowTab.CanOpenDirectLogsForSelectedRow)
             {
                 // Through Catalog() so each row carries its list key ("· L"): the palette
                 // is where somebody who reached for the mouse learns there was a key.
                 yield return Catalog(CommandId.PodLogs, where,
                     () => rowTab.OpenLogsCommand.Execute(null));
+            }
 
+            if (rowTab.IsPodRowSelected)
+            {
                 yield return Catalog(CommandId.PreviousLogs, $"{where} · the crashed instance",
                     () => rowTab.OpenPreviousLogsCommand.Execute(null));
 

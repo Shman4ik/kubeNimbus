@@ -24,6 +24,7 @@ public sealed partial class ArgoApplicationTabViewModel : InspectorTabViewModelB
     private readonly ClusterClient? _client;
     private readonly ResourceDescriptor _descriptor;
     private readonly Func<OwnerRef, string?, Task>? _openResource;
+    private readonly Func<OwnerRef, string?, Task>? _openLogs;
     private readonly CancellationTokenSource _cts = new();
 
     public ArgoApplicationTabViewModel(
@@ -31,7 +32,8 @@ public sealed partial class ArgoApplicationTabViewModel : InspectorTabViewModelB
         ResourceDescriptor descriptor,
         ArgoApplication application,
         Func<OwnerRef, string?, Task>? openResource = null,
-        string clusterName = "")
+        string clusterName = "",
+        Func<OwnerRef, string?, Task>? openLogs = null)
         : base($"Argo/{application?.Name}", isDemo: client is null)
     {
         ArgumentNullException.ThrowIfNull(application);
@@ -39,6 +41,7 @@ public sealed partial class ArgoApplicationTabViewModel : InspectorTabViewModelB
         _client = client;
         _descriptor = descriptor;
         _openResource = openResource;
+        _openLogs = openLogs;
         Key = KeyFor(clusterName, application.Namespace, application.Name);
         Apply(application);
     }
@@ -58,6 +61,15 @@ public sealed partial class ArgoApplicationTabViewModel : InspectorTabViewModelB
 
     /// <summary>The objects Argo manages for this Application, each with its own sync and health.</summary>
     public ObservableCollection<ArgoResourceRowViewModel> Resources { get; } = [];
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(OpenSelectedResourceLogsCommand))]
+    private ArgoResourceRowViewModel? _selectedResource;
+
+    private bool CanOpenSelectedResourceLogs => SelectedResource?.HasLogs == true;
+
+    [RelayCommand(CanExecute = nameof(CanOpenSelectedResourceLogs))]
+    private Task OpenSelectedResourceLogsAsync() => SelectedResource?.OpenLogsCommand.ExecuteAsync(null) ?? Task.CompletedTask;
 
     public ObservableCollection<ArgoCondition> Conditions { get; } = [];
 
@@ -141,7 +153,7 @@ public sealed partial class ArgoApplicationTabViewModel : InspectorTabViewModelB
             .ThenBy(r => r.Kind, StringComparer.Ordinal)
             .ThenBy(r => r.Name, StringComparer.Ordinal))
         {
-            Resources.Add(new ArgoResourceRowViewModel(resource, OpenResourceAsync));
+            Resources.Add(new ArgoResourceRowViewModel(resource, OpenResourceAsync, OpenResourceLogsAsync));
         }
 
         Conditions.Clear();
@@ -241,6 +253,11 @@ public sealed partial class ArgoApplicationTabViewModel : InspectorTabViewModelB
         return _openResource(owner, resource.Namespace.Length > 0 ? resource.Namespace : null);
     }
 
+    private Task OpenResourceLogsAsync(ArgoResource resource) => _openLogs is null
+        ? Task.CompletedTask
+        : _openLogs(new OwnerRef(resource.ApiVersion, resource.Kind, resource.Name, Uid: null, Controller: false),
+            resource.Namespace.Length > 0 ? resource.Namespace : null);
+
     public override async Task OnClosingAsync()
     {
         await _cts.CancelAsync();
@@ -249,7 +266,8 @@ public sealed partial class ArgoApplicationTabViewModel : InspectorTabViewModelB
 }
 
 /// <summary>One object Argo manages for an Application, as a row in the detail pane.</summary>
-public sealed partial class ArgoResourceRowViewModel(ArgoResource resource, Func<ArgoResource, Task> open)
+public sealed partial class ArgoResourceRowViewModel(ArgoResource resource, Func<ArgoResource, Task> open,
+    Func<ArgoResource, Task>? openLogs = null)
     : ObservableObject
 {
     public ArgoResource Resource { get; } = resource;
@@ -259,6 +277,13 @@ public sealed partial class ArgoResourceRowViewModel(ArgoResource resource, Func
     public string Name => Resource.Name;
 
     public string Namespace => Resource.Namespace;
+
+    public bool HasLogs => Resource is { Kind: "Pod", ApiVersion: "v1" }
+        || Resource is { ApiVersion: "apps/v1", Kind: "Deployment" or "StatefulSet" or "DaemonSet" or "ReplicaSet" }
+        || Resource is { ApiVersion: "batch/v1", Kind: "Job" };
+
+    [RelayCommand(CanExecute = nameof(HasLogs))]
+    private Task OpenLogsAsync() => openLogs?.Invoke(Resource) ?? Task.CompletedTask;
 
     /// <summary>"apps/v1 · payments" — group and namespace, which is what tells two same-named rows apart.</summary>
     public string Qualifier => Resource.Namespace.Length > 0

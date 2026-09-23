@@ -85,6 +85,10 @@ menu and the command palette. Nothing new is always visible.
   object itself stays live: the pane tracks the same `ResourceRowViewModel` the list holds
   and re-reads conditions, taints and the cordon flag on every watch tick, the same way
   pod detail tracks its row.
+- **The pod rows open logs through the cluster tab's shared route.** L, the row's
+  hover icon and the Logs context item resolve the pod again before opening its logs.
+  This matters because the list is a one-shot snapshot: a pod may have disappeared
+  before the click, and the pane must say so rather than opening a stale object.
 
 ### Cordon, and the one honest exception to "capability from discovery"
 

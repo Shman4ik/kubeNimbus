@@ -83,6 +83,12 @@ Nine things are load-bearing.
    it means writing `status.operationState.phase`, which is a status-subresource patch and
    its own item.
 
+The Resources pane lists managed objects. L on a selected Pod or selector-bearing
+workload row, and its hover logs icon, now resolve that object through the cluster
+tab's shared log command. Argo's status may outlive the managed object, so a missing
+Pod is stated in the connection warning. The Application summary grid still has no
+logs action: its rows are Applications, not managed pods.
+
 **Two rendering defects, both found by looking at the rendered pane rather than by any
 test.** The second is the more general one: the detail pane's resource rows are two lines
 each (the object, then its group and namespace), and they shipped with 16px between the

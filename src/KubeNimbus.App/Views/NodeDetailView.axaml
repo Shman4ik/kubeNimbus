@@ -206,8 +206,11 @@
             <TextBlock Text="{Binding PodsError}" TextWrapping="Wrap" FontSize="12" />
           </Border>
 
-          <DataGrid Grid.Row="1" ItemsSource="{Binding Pods}" IsReadOnly="True"
+          <DataGrid Grid.Row="1" ItemsSource="{Binding Pods}" SelectedItem="{Binding SelectedPod}" IsReadOnly="True" KeyDown="OnPodKeyDown"
                     GridLinesVisibility="Horizontal" CanUserResizeColumns="True">
+            <DataGrid.ContextMenu><ContextMenu>
+              <MenuItem Header="Logs (L)" Command="{Binding OpenPodLogsCommand}" />
+            </ContextMenu></DataGrid.ContextMenu>
             <DataGrid.Columns>
               <DataGridTemplateColumn Header="" Width="28">
                 <DataGridTemplateColumn.CellTemplate>
@@ -228,8 +231,13 @@
               <DataGridTemplateColumn Header="Name" Width="*" MinWidth="160">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:NodePodViewModel">
-                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
-                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                                 TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                      <Button Grid.Column="1" Classes="rowAction logs" Click="OnPodLogsClick" ToolTip.Tip="Open pod logs (L)">
+                        <PathIcon Data="{StaticResource LogsIconGeometry}" Width="12" Height="12" />
+                      </Button>
+                    </Grid>
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>

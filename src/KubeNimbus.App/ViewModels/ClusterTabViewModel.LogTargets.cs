@@ -233,9 +233,64 @@ public sealed partial class ClusterTabViewModel
         }
 
         SelectedRow = row;
+        if (row.Resource is { Kind: "Event", ApiVersion: "v1" } && row.Resource.InvolvedObject() is { Kind: "Pod" } involved)
+            return OpenNamedLogsAsync(new OwnerRef("v1", "Pod", involved.Name, involved.Uid, false), row.Resource.InvolvedObjectNamespace() ?? row.Namespace,
+                row.ClusterName, maximized ? true : null);
+
         return LogTargetFor(row) is { } target
             ? OpenLogsForAsync(target, previous: false, maximized: maximized ? true : null)
             : Task.CompletedTask;
+    }
+
+    /// <summary>Resolve an object named by another pane before opening logs. A stale node
+    /// snapshot or Argo status must never turn a deleted pod into a dead click.</summary>
+    public async Task OpenNamedLogsAsync(OwnerRef owner, string? namespaceHint, string clusterName = "", bool? maximized = null)
+    {
+        var client = ClientForCluster(clusterName);
+        try
+        {
+            DynamicResource? resource;
+            ResourceDescriptor? descriptor;
+            if (IsDemo)
+            {
+                descriptor = owner is { Kind: "Pod", ApiVersion: "v1" }
+                    ? ResourceDescriptor.Pods
+                    : Demo.DemoData.BuildCatalog().FirstOrDefault(d => d.Kind == owner.Kind && d.ApiVersion == owner.ApiVersion);
+                resource = descriptor is null ? null : Demo.DemoData.ResourcesFor(descriptor, namespaceHint)
+                    .FirstOrDefault(r => r.Name == owner.Name);
+            }
+            else
+            {
+                if (client is null) { ConnectionWarning = $"Could not reach {owner.Kind}/{owner.Name} to open logs."; return; }
+                resource = await client.ResolveOwnerAsync(owner, namespaceHint);
+                descriptor = resource is null ? null : (await client.GetResourceCatalogAsync())
+                    .FirstOrDefault(d => d.Kind == owner.Kind && d.ApiVersion == owner.ApiVersion);
+            }
+
+            if (resource is null || descriptor is null)
+            {
+                ConnectionWarning = $"{owner.Kind}/{owner.Name} is no longer available; logs could not be opened.";
+                return;
+            }
+
+            if (owner.Uid is { Length: > 0 } uid && !string.Equals(resource.Uid, uid, StringComparison.Ordinal))
+            {
+                ConnectionWarning = $"{owner.Kind}/{owner.Name} was replaced; its original logs are no longer available.";
+                return;
+            }
+
+            if (!LogTarget.CanOpen(resource))
+            {
+                ConnectionWarning = $"{owner.Kind}/{owner.Name} has no pod logs to open.";
+                return;
+            }
+
+            await OpenLogsForAsync(new LogTarget(resource, descriptor, clusterName, client), maximized: maximized);
+        }
+        catch (Exception ex)
+        {
+            ConnectionWarning = $"Could not open logs for {owner.Kind}/{owner.Name}: {ex.Message}";
+        }
     }
 
     /// <summary>

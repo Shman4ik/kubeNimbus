@@ -37,6 +37,7 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
     private readonly ResourceRowViewModel _row;
     private readonly ResourceDescriptor? _podDescriptor;
     private readonly Func<OwnerRef, string?, Task>? _openPod;
+    private readonly Func<OwnerRef, string?, Task>? _openLogs;
     private readonly CancellationTokenSource _cts = new();
 
     public NodeDetailTabViewModel(
@@ -44,7 +45,8 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
         ResourceRowViewModel row,
         ResourceDescriptor? podDescriptor = null,
         Func<OwnerRef, string?, Task>? openPod = null,
-        string clusterName = "")
+        string clusterName = "",
+        Func<OwnerRef, string?, Task>? openLogs = null)
         : base(
             clusterName.Length == 0 ? $"Node/{row.Name}" : $"Node/{row.Name} · {clusterName}",
             isDemo: client is null)
@@ -55,6 +57,7 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
         _row = row;
         _podDescriptor = podDescriptor;
         _openPod = openPod;
+        _openLogs = openLogs;
         NodeName = row.Name;
         ClusterName = clusterName;
         Key = KeyFor(clusterName, row.Name);
@@ -122,6 +125,19 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
     // ---------------------------------------------------------------- pods on this node
 
     public ObservableCollection<NodePodViewModel> Pods { get; } = [];
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(OpenPodLogsCommand))]
+    private NodePodViewModel? _selectedPod;
+
+    private bool CanOpenPodLogs => SelectedPod is not null;
+
+    [RelayCommand(CanExecute = nameof(CanOpenPodLogs))]
+    private Task OpenPodLogsAsync() => OpenPodLogsAsync(SelectedPod);
+
+    public Task OpenPodLogsAsync(NodePodViewModel? pod) =>
+        pod is null || _openLogs is null ? Task.CompletedTask
+        : _openLogs(new OwnerRef("v1", "Pod", pod.Name, pod.Uid, Controller: false), pod.Namespace);
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PodsCaption))]
@@ -197,6 +213,7 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
                 : DemoPods();
 
             Pods.Clear();
+            SelectedPod = null;
             foreach (var pod in pods.OrderBy(p => p.Namespace, StringComparer.Ordinal)
                          .ThenBy(p => p.Name, StringComparer.Ordinal))
             {
@@ -390,6 +407,7 @@ public sealed class NodePodViewModel
 
         Namespace = pod.Namespace ?? "";
         Name = pod.Name;
+        Uid = pod.Uid;
 
         var summary = ResourceStatusSummary.Summarize(pod);
         Status = summary.Status;
@@ -407,6 +425,8 @@ public sealed class NodePodViewModel
     public string Namespace { get; }
 
     public string Name { get; }
+
+    public string? Uid { get; }
 
     public string Status { get; }
 

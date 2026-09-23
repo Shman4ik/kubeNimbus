@@ -770,6 +770,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [NotifyPropertyChangedFor(nameof(CanDeleteSelectedRow))]
     [NotifyPropertyChangedFor(nameof(CanAggregateLogsForSelectedRow))]
     [NotifyPropertyChangedFor(nameof(CanOpenLogsForSelectedRow))]
+    [NotifyPropertyChangedFor(nameof(CanOpenDirectLogsForSelectedRow))]
     [NotifyCanExecuteChangedFor(nameof(OpenWorkloadLogsCommand))]
     [NotifyCanExecuteChangedFor(nameof(OpenLogsMaximizedCommand))]
     [NotifyCanExecuteChangedFor(nameof(OpenLogsCommand))]
@@ -1917,7 +1918,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 row.Descriptor,
                 row.Application,
                 (owner, namespaceHint) => OpenOwnerAsync(owner, namespaceHint, row.ClusterName),
-                row.ClusterName),
+                row.ClusterName,
+                (owner, ns) => OpenNamedLogsAsync(owner, ns, row.ClusterName)),
             replacePreview: false);
     }
 
@@ -2680,7 +2682,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// this never opens a second tab for a pod that already has one. Through
     /// <see cref="OpenLogsForAsync"/>, the entry point the palette's log rows share.
     /// </summary>
-    [RelayCommand(CanExecute = nameof(IsPodRowSelected))]
+    [RelayCommand(CanExecute = nameof(CanOpenDirectLogsForSelectedRow))]
     private Task OpenLogsAsync() => OpenSelectedRowLogsAsync(previous: false);
 
     /// <summary>
@@ -2692,9 +2694,15 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     private Task OpenPreviousLogsAsync() => OpenSelectedRowLogsAsync(previous: true);
 
     private Task OpenSelectedRowLogsAsync(bool previous) =>
-        SelectedRow is { } row && LogTargetFor(row) is { } target
-            ? OpenLogsForAsync(target, previous)
+        SelectedRow is { } row
+            ? row.Resource is { Kind: "Event", ApiVersion: "v1" } && row.Resource.InvolvedObject() is { Kind: "Pod" }
+                ? OpenRowLogsAsync(row)
+                : LogTargetFor(row) is { } target ? OpenLogsForAsync(target, previous) : Task.CompletedTask
             : Task.CompletedTask;
+
+    public bool CanOpenDirectLogsForSelectedRow => IsPodRowSelected || SelectedRow?.Resource is
+        { Kind: "Event", ApiVersion: "v1" } eventResource && eventResource.InvolvedObject() is
+        { Kind: "Pod", ApiVersion: "v1" or "" };
 
     /// <summary>
     /// True when the selected object names the pods it owns — which is the honest test
@@ -2723,7 +2731,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// workload names. The union of <see cref="IsPodRowSelected"/> and
     /// <see cref="CanAggregateLogsForSelectedRow"/>, which is exactly where L does something.
     /// </summary>
-    public bool CanOpenLogsForSelectedRow => IsPodRowSelected || CanAggregateLogsForSelectedRow;
+    public bool CanOpenLogsForSelectedRow => CanOpenDirectLogsForSelectedRow || CanAggregateLogsForSelectedRow;
 
     /// <summary>
     /// Shift+L: the same logs L opens, with the inspector maximized over the list whatever
@@ -2732,9 +2740,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanOpenLogsForSelectedRow))]
     private Task OpenLogsMaximizedAsync() =>
-        SelectedRow is { } row && LogTargetFor(row) is { } target
-            ? OpenLogsForAsync(target, previous: false, maximized: true)
-            : Task.CompletedTask;
+        SelectedRow is { } row ? OpenRowLogsAsync(row, maximized: true) : Task.CompletedTask;
 
     [RelayCommand(CanExecute = nameof(IsPodRowSelected))]
     private void ExecIntoSelected()
@@ -3193,7 +3199,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 existingTab.IsPreview = false;
                 SelectedInspectorTab = existingTab;
                 return true;
-            }) { IsPreview = preview };
+            }, (owner, ns) => OpenNamedLogsAsync(owner, ns, row.ClusterName)) { IsPreview = preview };
             AddInspectorTab(detail, replacePreview: preview);
             return;
         }
@@ -3228,7 +3234,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             (_, true) => new NodeDetailTabViewModel(
                 client, row, PodDescriptorFor(row),
                 (owner, namespaceHint) => OpenOwnerAsync(owner, namespaceHint, row.ClusterName, client),
-                row.ClusterName),
+                row.ClusterName, (owner, ns) => OpenNamedLogsAsync(owner, ns, row.ClusterName)),
             _ => new YamlEditorTabViewModel(
                 client, descriptor, row.Namespace, row.Name, row.Resource.ToYaml(), row.ClusterName),
         };

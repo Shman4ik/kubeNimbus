@@ -274,6 +274,35 @@ internal static class UxInteractionChecks
         Dispatcher.UIThread.RunJobs();
     }
 
+    /// <summary>Render the nested pod list's real hover affordance in both themes.</summary>
+    internal static void HoverNamedPodRow(Window window)
+    {
+        var view = window.GetVisualDescendants().OfType<WorkloadDetailView>().Cast<Control>()
+            .FirstOrDefault() ?? window.GetVisualDescendants().OfType<NodeDetailView>().First();
+        var row = view.GetVisualDescendants().OfType<DataGridRow>().First();
+        var point = row.TranslatePoint(new Point(row.Bounds.Width * 0.4, row.Bounds.Height / 2), window)!.Value;
+        window.MouseMove(point);
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        Dispatcher.UIThread.RunJobs();
+        if (!row.GetVisualDescendants().OfType<Button>().Any(b => b.Classes.Contains("rowAction") && b.IsEffectivelyVisible))
+            throw new InvalidOperationException("Nested pod row did not reveal its logs button on hover.");
+    }
+
+    internal static void HoverArgoResourceRow(Window window)
+    {
+        var view = window.GetVisualDescendants().OfType<ArgoApplicationView>().First();
+        var row = view.GetVisualDescendants().OfType<ListBoxItem>()
+            .First(r => r.DataContext is ArgoResourceRowViewModel { HasLogs: true });
+        var point = row.TranslatePoint(new Point(row.Bounds.Width * 0.4, row.Bounds.Height / 2), window)!.Value;
+        window.MouseMove(point);
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        Dispatcher.UIThread.RunJobs();
+        if (!row.GetVisualDescendants().OfType<Button>().Any(b => b.Classes.Contains("rowAction") && b.IsEffectivelyVisible))
+            throw new InvalidOperationException("Argo workload row did not reveal its logs button on hover.");
+    }
+
     /// <summary>Scrolls the preferences overlay so the card whose label reads <paramref name="label"/> is in view.</summary>
     internal static void ScrollPreferencesTo(Window window, string label)
     {

@@ -262,6 +262,9 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     if (name == "ux-row-logs") UxInteractionChecks.RowLogs(window);
     if (name == "main-window-preferences-logs") UxInteractionChecks.ScrollPreferencesTo(window, "Open logs maximized");
     if (name.StartsWith("cluster-tab-row-logs", StringComparison.Ordinal)) UxInteractionChecks.HoverRow(window, 3);
+    if (name is "ux-workload-pods" or "cluster-tab-node-detail-pods") UxInteractionChecks.HoverNamedPodRow(window);
+    if (name == "cluster-tab-argo-application-detail") UxInteractionChecks.HoverArgoResourceRow(window);
+    if (name == "cluster-tab-events-list") UxInteractionChecks.HoverRow(window, 0);
     using var frame = window.CaptureRenderedFrame();
     var themeLabel = theme == ThemeVariant.Dark ? "dark" : "light";
     var path = Path.Combine(outDir, $"{name}.{themeLabel}.png");

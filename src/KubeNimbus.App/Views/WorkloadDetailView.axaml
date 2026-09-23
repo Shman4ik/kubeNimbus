@@ -23,11 +23,20 @@
         <DataGrid Grid.Row="1" ItemsSource="{Binding Pods}" SelectedItem="{Binding SelectedPod}"
                   IsReadOnly="True" AutoGenerateColumns="False" DoubleTapped="OnPodDoubleTapped" KeyDown="OnPodKeyDown">
           <DataGrid.ContextMenu><ContextMenu>
-            <MenuItem Header="Logs (L)" Command="{Binding OpenPodCommand}"/>
+            <MenuItem Header="Logs (L)" Command="{Binding OpenPodLogsCommand}"/>
             <MenuItem Header="Shell (S)" Command="{Binding ShellCommand}"/>
           </ContextMenu></DataGrid.ContextMenu>
           <DataGrid.Columns>
-            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
+            <DataGridTemplateColumn Header="Name" Width="*">
+              <DataGridTemplateColumn.CellTemplate><DataTemplate x:DataType="vm:ResourceRowViewModel">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}"/>
+                  <Button Grid.Column="1" Classes="rowAction logs" Click="OnPodLogsClick" ToolTip.Tip="Open pod logs (L)">
+                    <PathIcon Data="{StaticResource LogsIconGeometry}" Width="12" Height="12" />
+                  </Button>
+                </Grid>
+              </DataTemplate></DataGridTemplateColumn.CellTemplate>
+            </DataGridTemplateColumn>
             <DataGridTextColumn Header="Ready" Binding="{Binding ReadyText}" Width="80"/>
             <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="180"/>
             <DataGridTextColumn Header="Restarts" Binding="{Binding RestartsText}" Width="100"/>

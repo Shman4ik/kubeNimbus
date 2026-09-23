@@ -193,6 +193,7 @@ internal static class ClusterTabScenarios
         if (tab.SelectedInspectorTab is WorkloadDetailTabViewModel detail)
         {
             detail.SelectedTabIndex = selectedTab;
+            if (selectedTab == 0) detail.SelectedPod = detail.Pods.FirstOrDefault();
             detail.Conditions.Add(new("Available", "True", "MinimumReplicasAvailable", "Deployment has minimum availability."));
             detail.Conditions.Add(new("Progressing", "True", "NewReplicaSetAvailable", "ReplicaSet has successfully progressed."));
             using var document = JsonDocument.Parse("""
@@ -792,7 +793,13 @@ internal static class ClusterTabScenarios
     public static ClusterTabViewModel NodeDetail() => OpenNode("demo-worker-1", tabIndex: 0);
 
     /// <summary>The Pods tab: what is actually on the node, with each pod's own requests.</summary>
-    public static ClusterTabViewModel NodeDetailPods() => OpenNode("demo-worker-1", tabIndex: 1);
+    public static ClusterTabViewModel NodeDetailPods()
+    {
+        var tab = OpenNode("demo-worker-1", tabIndex: 1);
+        if (tab.SelectedInspectorTab is NodeDetailTabViewModel detail)
+            detail.SelectedPod = detail.Pods.FirstOrDefault();
+        return tab;
+    }
 
     /// <summary>
     /// The state the whole surface exists for: a node that is cordoned <em>and</em>

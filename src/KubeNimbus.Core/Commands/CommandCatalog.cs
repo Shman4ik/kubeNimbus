@@ -294,7 +294,7 @@ public static class CommandCatalog
         {
             Id = CommandId.PodLogs,
             Title = "Logs",
-            CheatTitle = "Logs — the pod's, or every pod a workload owns",
+            CheatTitle = "Logs — selected pod, workload, or pod named by an event or detail pane",
             Category = CommandCategory.Pods,
             Scope = CommandScope.List,
             IconKey = "ClockOutlineIconGeometry",

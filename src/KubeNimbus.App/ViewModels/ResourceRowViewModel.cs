@@ -232,7 +232,9 @@ public sealed partial class ResourceRowViewModel : ObservableObject
         Details = summary.Details;
         _restarts = summary.Restarts;
         _lastRestartAt = summary.LastRestartAt;
-        HasLogs = LogTarget.CanOpen(resource);
+        HasLogs = LogTarget.CanOpen(resource)
+            || resource is { Kind: "Event", ApiVersion: "v1" }
+               && resource.InvolvedObject() is { Kind: "Pod", ApiVersion: "v1" or "" };
         RefreshPrinterCells();
         RefreshTimes();
     }
