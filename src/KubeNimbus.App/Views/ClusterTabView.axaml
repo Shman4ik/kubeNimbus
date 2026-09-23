@@ -398,7 +398,7 @@
             <TextBlock Text="{Binding RowFilterSummary}" FontSize="11" Opacity="0.55" VerticalAlignment="Center"
                        IsVisible="{Binding RowFilterSummary, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}" />
             <TextBox Name="RowFilterBox" Classes="filterbox" Width="230"
-                     Text="{Binding RowFilter}" PlaceholderText="Search by name…"
+                     Text="{Binding RowFilter}" PlaceholderText="{Binding RowFilterPlaceholder}"
                      KeyDown="OnRowFilterKeyDown">
               <TextBox.InnerLeftContent>
                 <PathIcon Data="{StaticResource MagnifyIconGeometry}" Width="11" Height="11" Opacity="0.5" Margin="8,0,0,0" />
@@ -604,6 +604,70 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
+              <!-- The Events list's own columns: kubectl's LAST SEEN / TYPE / REASON / OBJECT /
+                   MESSAGE, plus COUNT. Shown only while the selected kind is an Event, in
+                   place of Name (a generated "<object>.<hex>"), Status and Age — see
+                   ClusterTabView.ApplySummaryColumns and docs/engineering/events-list.md.
+                   Ordinary tagged columns rather than CRD printer slots: Last seen is a
+                   fallback chain, Object a concatenation and Type a tinted pill, none of which
+                   a JSONPath text cell can carry. No Width="Auto" (the ratchet): bounded
+                   cells are fixed, the three that carry prose are stars. The MinWidths are
+                   what a narrow window squeezes the fixed columns down to, so each one still
+                   fits its header and, for Type, the whole word "Warning" — the pill's tint
+                   is not allowed to be the only thing left of it (checked at 1024px). -->
+              <DataGridTemplateColumn Header="Last seen" Tag="event-lastseen" CanUserSort="True" Width="108" MinWidth="100" IsVisible="False">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                    <TextBlock Text="{Binding LastSeenText}" VerticalAlignment="Center" ToolTip.Tip="{Binding LastSeenTooltip}"
+                               FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <!-- Type: the word, always — "Warning" is the signal and the amber tint only
+                   repeats it, so the column reads the same to someone who cannot tell the
+                   tints apart. Normal stays an untinted pill. -->
+              <DataGridTemplateColumn Header="Type" Tag="event-type" CanUserSort="True" Width="90" MinWidth="90" IsVisible="False">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                    <Border Classes="statusPill" Classes.warn="{Binding IsWarningEvent}"
+                            IsVisible="{Binding EventType, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}">
+                      <TextBlock Text="{Binding EventType}" FontSize="11.5" TextTrimming="CharacterEllipsis" />
+                    </Border>
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Reason" Tag="event-reason" CanUserSort="True" Width="1.3*" MinWidth="100" IsVisible="False">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                    <TextBlock Text="{Binding EventReason}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding EventReason}"
+                               FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Object" Tag="event-object" CanUserSort="True" Width="1.3*" MinWidth="110" IsVisible="False">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                    <TextBlock Text="{Binding EventObject}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding EventObjectTooltip}"
+                               FontSize="12" VerticalAlignment="Center" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Count" Tag="event-count" CanUserSort="True" Width="84" MinWidth="80" IsVisible="False">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                    <TextBlock Text="{Binding EventCount}" VerticalAlignment="Center"
+                               FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Message" Tag="event-message" CanUserSort="True" Width="2.4*" MinWidth="160" IsVisible="False">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                    <TextBlock Text="{Binding EventMessage}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                               ToolTip.Tip="{Binding EventMessageTooltip}" VerticalAlignment="Center" FontSize="12" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
               <!-- The logs icon lives INSIDE the Name cell, at its right end, rather than in
                    a column: a column would be one more width the per-kind layout remembers
                    and one more thing a CRD's printer columns compete with at 1280px (see
@@ -692,8 +756,8 @@
                    PrinterSlotHeader sentinel below is how it finds them, and is read
                    once at construction, before any of them is renamed.
                    A built-in kind never has any (it is not a CRD), which is what keeps
-                   ResourceStatusSummary the sole owner of every column a Pod, Deployment,
-                   Node or Event list shows. -->
+                   ResourceStatusSummary the sole owner of every column a Pod, Deployment
+                   or Node list shows (an Event list has its own columns, further up). -->
               <DataGridTemplateColumn Tag="crd-slot" CanUserSort="True" Width="*" MinWidth="88" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
@@ -850,6 +914,12 @@
             <TextBlock Text="{Binding SelectedNamespace, StringFormat='in {0}'}" FontSize="12" Opacity="0.5"
                        HorizontalAlignment="Center"
                        IsVisible="{Binding SelectedKind.Descriptor.Namespaced}" />
+            <!-- Events only: an empty events list usually means "nothing recent", because
+                 events expire (an hour by default), and saying so stops it reading as a
+                 broken watch. -->
+            <TextBlock Text="{Binding EmptyListHint}" FontSize="12" Opacity="0.5" TextWrapping="Wrap"
+                       TextAlignment="Center" HorizontalAlignment="Center" Margin="0,4,0,0"
+                       IsVisible="{Binding EmptyListHint, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}" />
           </StackPanel>
 
           <!-- "The search matched nothing" is a different state from "this kind has

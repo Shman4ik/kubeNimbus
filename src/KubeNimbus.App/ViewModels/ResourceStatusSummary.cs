@@ -79,10 +79,12 @@ public static class ResourceStatusSummary
         var status = Obj(resource.Raw, "status");
         var details = Describe(group, kind, resource.Raw, spec, status);
 
-        // core/v1 Event: Type/Reason/Count live at the top level, not under status —
-        // "Warning" events read as warn (so they visually stand out in the sidebar's
-        // Events view the same way pod-detail's Events tab already colors them).
-        if (group.Length == 0 && kind == "Event")
+        // Events (core/v1 and events.k8s.io): Type/Reason/Count live at the top level,
+        // not under status. The Events list draws its own Type column rather than this
+        // Status text (see ResourceRowViewModel's event cells), but the verdict still
+        // matters: "Warning" reads as warn, which is what the list's unhealthy-only
+        // chip keeps.
+        if (EventFields.IsEventKind(group, kind))
         {
             var eventReason = resource.Reason();
             if (eventReason.Length == 0)
@@ -90,7 +92,7 @@ public static class ResourceStatusSummary
                 return ResourceSummary.None;
             }
 
-            var count = resource.Count();
+            var count = resource.Occurrences();
             var text = count > 1 ? $"{eventReason} ×{count}" : eventReason;
             var health = string.Equals(resource.Type(), "Warning", StringComparison.OrdinalIgnoreCase)
                 ? ResourceHealth.Warn

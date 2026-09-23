@@ -55,7 +55,16 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // every other content-area control stay where they were.
     ("cluster-tab-basic-sidebar", () => HostInMainWindow(ClusterTabScenarios.BasicSidebar())),
     ("cluster-tab-workloads-list-metrics", () => HostInMainWindow(ClusterTabScenarios.WorkloadsListWithMetrics())),
+    // The Events list as `kubectl get events` prints it (Last seen, Type, Reason,
+    // Object, Count, Message; newest first), its empty state (events expire), a search
+    // that matches a message rather than a name, the states the demo dataset cannot hold
+    // (fleet, events.k8s.io series, no object, no timestamp, a multi-line message), and
+    // the whole thing at a narrow window, where the prose columns run out first.
     ("cluster-tab-events-list", () => HostInMainWindow(ClusterTabScenarios.EventsList())),
+    ("cluster-tab-events-empty", () => HostInMainWindow(ClusterTabScenarios.EventsListEmpty())),
+    ("cluster-tab-events-search", () => HostInMainWindow(ClusterTabScenarios.EventsList(filter: "probe"))),
+    ("cluster-tab-events-edge-cases", () => HostInMainWindow(ClusterTabScenarios.EventsListEdgeCases())),
+    ("cluster-tab-events-narrow", () => HostInMainWindow(ClusterTabScenarios.EventsList(), width: 1024)),
     ("cluster-tab-fleet-list", () => HostInMainWindow(ClusterTabScenarios.FleetList(), height: 1000)),
     ("cluster-tab-fleet-list-partial", () => HostInMainWindow(ClusterTabScenarios.FleetListPartial(), height: 1000)),
     ("cluster-tab-sidebar-filtered", () => HostInMainWindow(ClusterTabScenarios.SidebarFiltered())),

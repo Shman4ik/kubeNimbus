@@ -386,21 +386,15 @@ internal static class ClusterTabScenarios
         }
     }
 
-    /// <summary>Namespace/cluster-wide Events browsing — selecting the Events kind in the sidebar
-    /// (Config section, distinct bell icon) shows the same generic list, with Type-driven color coding.</summary>
-    public static ClusterTabViewModel EventsList()
+    /// <summary>
+    /// The Events list, read the way <c>kubectl get events</c> prints it: Last seen, Type,
+    /// Reason, Object, Count, Message — newest first by default. All namespaces, so the
+    /// Namespace column carries both of the dataset's namespaces. The rows are exactly
+    /// the demo dataset's events (demo rule 3: one dataset).
+    /// </summary>
+    public static ClusterTabViewModel EventsList(string? filter = null)
     {
-        var tab = BaseTab(populateRows: false);
-        var config = tab.SidebarSections.First(s => s.Title == "Config");
-
-        // Config now starts collapsed (it is no longer the catalog's junk drawer, but
-        // it is still not what a session opens on), and this shot is about the row
-        // that's selected in it.
-        config.IsExpanded = true;
-
-        var eventsKind = config.Kinds.First(k => k.Descriptor.Kind == "Event");
-        eventsKind.IsSelected = true;
-        tab.SelectedKind = eventsKind;
+        var tab = EventsTab(ClusterTabViewModel.AllNamespaces);
 
         foreach (var e in FixtureData.Events)
         {
@@ -409,7 +403,113 @@ internal static class ClusterTabScenarios
 
         tab.IsListEmpty = false;
         tab.IsListLoading = false;
+        if (filter is not null)
+        {
+            tab.RowFilter = filter;
+        }
+
         return tab;
+    }
+
+    /// <summary>
+    /// An Events tab with nothing in it: the empty state, which for this kind adds that
+    /// events expire — an hour after they last happen by default — so an empty list reads
+    /// as "nothing recent" rather than as a broken watch.
+    /// </summary>
+    public static ClusterTabViewModel EventsListEmpty()
+    {
+        var tab = EventsTab("payments");
+        tab.IsListLoading = false;
+        tab.IsListEmpty = true;
+        return tab;
+    }
+
+    /// <summary>
+    /// The states the demo dataset cannot hold, across a fleet: an events.k8s.io-shaped
+    /// series (<c>regarding</c>/<c>note</c>, a series count and <c>lastObservedTime</c>
+    /// newer than its <c>eventTime</c>), an event naming no object, one with no timestamp
+    /// at all, and a multi-line message. Synthetic on purpose — none of these belongs in a
+    /// dataset a Store reviewer browses, and a real API server always stamps
+    /// <c>creationTimestamp</c>, so "no timestamp" only exists here.
+    /// </summary>
+    public static ClusterTabViewModel EventsListEdgeCases()
+    {
+        var tab = EventsTab(ClusterTabViewModel.AllNamespaces);
+        tab.IsFleetViewAvailable = true;
+        tab.IsFleetView = true;
+        tab.FleetSummary = "2 of 2 clusters serve Event";
+
+        var now = DateTimeOffset.UtcNow;
+        string At(TimeSpan ago) => (now - ago).ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture);
+
+        foreach (var e in FixtureData.Events.Where(e => e.Namespace == "payments").Take(3))
+        {
+            tab.Rows.Add(new ResourceRowViewModel(e, "prod-payments"));
+        }
+
+        tab.Rows.Add(new ResourceRowViewModel(Parse($$"""
+            {
+              "apiVersion": "v1", "kind": "Event",
+              "metadata": { "name": "ledger-db-0.17f9c2", "namespace": "ledger" },
+              "regarding": { "apiVersion": "v1", "kind": "Pod", "name": "ledger-db-0", "namespace": "ledger" },
+              "type": "Warning", "reason": "FailedScheduling",
+              "note": "0/3 nodes are available: 1 node(s) had untolerated taint {node-role.kubernetes.io/control-plane: },\n2 Insufficient memory. preemption: 0/3 nodes are available: 3 No preemption victims found for incoming pod.",
+              "eventTime": "{{At(TimeSpan.FromMinutes(47))}}",
+              "series": { "count": 14, "lastObservedTime": "{{At(TimeSpan.FromMinutes(2))}}" }
+            }
+            """), "prod-ledger"));
+
+        tab.Rows.Add(new ResourceRowViewModel(Parse($$"""
+            {
+              "apiVersion": "v1", "kind": "Event",
+              "metadata": { "name": "cluster-autoscaler-status.17f9d0", "namespace": "kube-system" },
+              "type": "Normal", "reason": "ScaleDown",
+              "message": "Scale-down: removing empty node ip-10-0-3-17.eu-west-1.compute.internal",
+              "count": 1, "lastTimestamp": "{{At(TimeSpan.FromMinutes(9))}}"
+            }
+            """), "prod-ledger"));
+
+        tab.Rows.Add(new ResourceRowViewModel(Parse("""
+            {
+              "apiVersion": "v1", "kind": "Event",
+              "metadata": { "name": "ledger-api.17f9e4", "namespace": "ledger" },
+              "involvedObject": { "apiVersion": "apps/v1", "kind": "Deployment", "name": "ledger-api", "namespace": "ledger" },
+              "type": "Normal", "reason": "ScalingReplicaSet",
+              "message": "Scaled up replica set ledger-api-7c9d5f6b8 to 3"
+            }
+            """), "prod-ledger"));
+
+        tab.IsListEmpty = false;
+        tab.IsListLoading = false;
+        return tab;
+    }
+
+    /// <summary>
+    /// A tab showing the Events kind in <paramref name="namespace"/>, with no rows yet.
+    /// The namespace and kind are set before any row is added, because both run the real
+    /// <c>RestartWatch()</c>, which clears <c>Rows</c> (see <see cref="BaseTab"/>).
+    /// </summary>
+    private static ClusterTabViewModel EventsTab(string @namespace)
+    {
+        var tab = BaseTab(populateRows: false);
+        var config = tab.SidebarSections.First(s => s.Title == "Config");
+
+        // Config starts collapsed (it is no longer the catalog's junk drawer, but it is
+        // still not what a session opens on), and these shots are about the row that is
+        // selected in it.
+        config.IsExpanded = true;
+
+        tab.SelectedNamespace = @namespace;
+        var eventsKind = config.Kinds.First(k => k.Descriptor.Kind == "Event");
+        eventsKind.IsSelected = true;
+        tab.SelectedKind = eventsKind;
+        return tab;
+    }
+
+    private static DynamicResource Parse(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        return new DynamicResource(document.RootElement.Clone());
     }
 
     /// <summary>

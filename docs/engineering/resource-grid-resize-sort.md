@@ -41,6 +41,9 @@ Twelve things are load-bearing.
    the fraction "2/3" resolves to, and a CRD's `type: date` column is the instant behind
    the age it prints. **Ascending Age means the youngest first**, which is the opposite
    direction to the instants — the number people read is the age, not the timestamp.
+   The Events list's Last seen prints an age too and follows the same direction, which
+   is why its newest-first default is the ascending arrow (see
+   [events-list](events-list.md)); it is also the one kind with a default sort at all.
 5. **A row with no value sorts after the rows that have one** in ascending order, rather
    than as a zero or as an empty string above them. A pod that reports no CPU is not a
    pod using none, and a ConfigMap has no Ready to be worst at. The tie-break is the row

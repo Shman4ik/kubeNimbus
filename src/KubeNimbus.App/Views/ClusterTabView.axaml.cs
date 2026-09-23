@@ -456,14 +456,24 @@ public partial class ClusterTabView : UserControl
         // they are not CRDs, so VisiblePrinterColumns is always empty for them.
         var hasPrinterColumns = Vm?.VisiblePrinterColumns.Count > 0;
 
+        // Events are read the way `kubectl get events` prints them: Last seen, Type,
+        // Reason, Object, Count, Message. Those take the place of Name (the Event
+        // object's own generated "<object>.<hex>" name), Status (it was "Reason ×count",
+        // now two columns of its own) and Age (the Event's creation, which is not when it
+        // last happened). Namespace and, in fleet mode, Cluster stay.
+        var isEvents = Vm?.IsEventList == true;
+
         foreach (var column in FixedColumns)
         {
             column.IsVisible = column.Tag switch
             {
+                ResourceColumn.EventLastSeen or ResourceColumn.EventType or ResourceColumn.EventReason
+                    or ResourceColumn.EventObject or ResourceColumn.EventCount or ResourceColumn.EventMessage => isEvents,
+                ResourceColumn.Name or ResourceColumn.Age => !isEvents,
                 ResourceColumn.Ready => ResourceStatusSummary.ShowsReady(descriptor),
                 ResourceColumn.Restarts => ResourceStatusSummary.ShowsRestarts(descriptor),
                 ResourceColumn.Details => !hasPrinterColumns && ResourceStatusSummary.ShowsDetails(descriptor),
-                ResourceColumn.Status => !hasPrinterColumns && ResourceStatusSummary.ShowsStatus(descriptor),
+                ResourceColumn.Status => !isEvents && !hasPrinterColumns && ResourceStatusSummary.ShowsStatus(descriptor),
                 // The 28px health dot, and it now shows *only* where the Status column
                 // has stepped aside for a CRD's own printer columns. Beside a Status
                 // pill it was the same fact twice in the same row — the pill is already

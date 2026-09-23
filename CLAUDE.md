@@ -432,7 +432,12 @@ Three rules about it:
      tests were called done.
    - **It matches what identifies an object** — name, namespace, and cluster in fleet
      mode (`ResourceRowViewModel.Matches`) — and deliberately not the status, which
-     would make "Running" match most of a healthy list.
+     would make "Running" match most of a healthy list. **Events add Reason, Object and
+     Message**, and that is the same rule rather than an exception to it: an Event's own
+     name is a generated `<object>.<hex>` nobody types, and what identifies an event to
+     the person hunting for it is what happened, to what, and the sentence it logged —
+     they identify an event the way a name identifies a pod. Type stays out ("Normal"
+     would match most of the list). See [events-list](docs/engineering/events-list.md).
    - **A search that matches nothing is its own state** (`IsFilterEmpty`), separate
      from `IsListEmpty`: "this namespace has no pods" and "no pod here is called that"
      send you looking for opposite problems. It names the query, says how many rows it
@@ -593,6 +598,7 @@ Each feature's design rules, and the incidents behind them, live in a page of th
 - [The cluster switcher and environment colours](docs/engineering/cluster-switcher.md) — Ctrl/Cmd+P switcher (flat list, ranking) and environment colours (biased toward production).
 - [CRD printer columns](docs/engineering/crd-printer-columns.md) — additionalPrinterColumns: lazy CRD GET, JSONPath subset, ten fixed XAML slots, Tag-based column identity.
 - [The resource grid is the reader's to re-cut](docs/engineering/resource-grid-resize-sort.md) — Column drag + header sort: sorts VisibleRows never Rows, maintained sort, per-kind layout in workspace.json.
+- [The Events list reads like `kubectl get events`](docs/engineering/events-list.md) — Last seen (fallback chain, series before eventTime) / Type / Reason / Object / Count / Message, newest-first default with a remembered clear, both Event groups, why not printer slots.
 - [Unhealthy only: the list's second narrowing](docs/engineering/unhealthy-only.md) — Warn/error predicate over StatusHealth, per-Modified re-evaluation, kind gate, third empty state, list-scoped Ctrl+Z.
 - [An Auto DataGrid column ratchets, and only one grid can afford it](docs/engineering/datagrid-auto-columns.md) — Why the resource list has no Width=Auto columns (measured ratchet) and why Helm/Argo keep them.
 - [Mutating workload actions (scale, rollout restart, delete)](docs/engineering/workload-actions.md) — Scale / rollout restart / delete: merge patches, scale subresource, capability from discovery.
