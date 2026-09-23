@@ -18,7 +18,7 @@ by editing **Config** or **Owner notes**; the next step applies it first.
 
 ## State
 
-Phase: BUILD · Branch: codex/release-train-l3 (isolated worktree; PR #87 merged before this step) · Selected: 2026-09-22 · PR: — · Started: 2026-09-22 · Last release: v0.3.3 (2026-09-22)
+Phase: BUILD · Branch: codex/release-train-l3 (isolated worktree; PR #87 merged before this step) · Selected: 2026-09-22 · PR: [#90](https://github.com/Shman4ik/kubeNimbus/pull/90) (draft) · Started: 2026-09-22 · Last release: v0.3.3 (2026-09-22)
 Baseline: first frame 99 ms (median of 3 warm runs: 99/99/95; cold first run 3529 ms, font cache), executable 51.3 MiB (53 769 168 B; payload with libSkiaSharp + libHarfBuzzSharp 64.6 MiB) · RID: linux-x64 · AOT warnings: the known DataGrid IL2104/IL3053 pair only
 Sandbox: **API-server-only.** Docker Hub blobs 403, so `sandbox-up.sh` fails; native `k3s server` (GitHub binary + airgap images) comes up and the demo manifests apply (50-crds/51-custom-resources included, so VER-24 is paid), but `runc` cannot start containers here — no pod ever runs. Real: discovery, list/watch, CRDs, RBAC, SSA/dry-run, patches, evictions. Not real: logs, exec, port-forward, metrics. Must be re-started each session (see CURRENT_STATE.md → Environment notes).
 
@@ -42,7 +42,7 @@ Sandbox: **API-server-only.** Docker Hub blobs 403, so `sandbox-up.sh` fails; na
 | T1 | research #1, headlamp#6974, k9s `Ctrl-z` | Show only what is unhealthy, on any list | UX | S | 4.05 | landed | 0 | fa4f30e |
 | L1 | owner pin | Open any pod's or workload's logs from the palette, from anywhere | UX | M | pin | landed | 0 | e49b645 |
 | L2 | owner pin | One click to logs from the row, and logs opened full-size | UX | S | pin | landed | 0 | 7dbc58d |
-| L3 | owner pin | Logs from everywhere a pod is named | UX | S | pin | needs-fix | 1 | |
+| L3 | owner pin | Logs from everywhere a pod is named | UX | S | pin | landed | 1 | 69a16aa |
 | T2 | friction walk (`cluster-tab-events-list`) | The Events list reads like `kubectl get events`: last seen, type, reason, object, message | UX | M | 3.65 | planned | 0 | |
 | T3 | Ready FEAT-31 (P1, forced) | Reach a container's whole retained log: tail and since controls | UX | S | 3.45 | planned | 0 | |
 | T4 | research #6 + friction walk (`ux-workload-events`) | Events read the same everywhere, with relative times and a warning count on the tab | UX | S | 3.10 | reserve (owner pin displaced it) | 0 | |
@@ -408,6 +408,13 @@ Risk:                 tests that leak state between runs; use a unique namespace
 - **R3 — FEAT-56**: `SelfSubjectReview` ("who am I") beside the access review; states pre-1.26 servers.
 
 ## Log
+
+- 2026-09-23 — L3 landed (`69a16aa`), verifier PASS after one fix round. Right-click now
+  selects the pod under the pointer; Argo Rollouts can open logs; closing a pane cancels
+  pending named-resource reads. Independent App tests: 233 passed. Both-theme screenshots,
+  win-x64 NativeAOT publish and published smoke test passed. Core: 382 passed, 17 skipped
+  because the local sandbox API server was unavailable. Live nested log actions remain
+  verification debt (VER-41). Draft PR #90 carries this continuation of the train.
 
 - 2026-09-23 — L2 landed (`7dbc58d`), verifier PASS first round (smoke re-run 3×: 153/134/187 ms,
   the reported 1654 ms was a cold-cache outlier; Esc checked not to steal from the namespace
