@@ -297,9 +297,8 @@ public class WorkloadLogsTests
     /// <summary>
     /// The tail-lines decision, stated as arithmetic. The pane's buffer is shared by
     /// every pod in it, so the per-pod fetch is the budget divided by the pod count —
-    /// never more than the single-pod pane's own 200 (widening the window is a separate,
-    /// unbuilt control that belongs to both panes), and never so small that a replica
-    /// contributes nothing.
+    /// at most 200 for the default range, and never so small that a replica contributes
+    /// nothing. Wider ranges are covered by <see cref="LogRangeTests"/>.
     /// </summary>
     [Test]
     public async Task The_per_pod_tail_divides_the_panes_budget_and_is_clamped_at_both_ends()
@@ -321,6 +320,22 @@ public class WorkloadLogsTests
         await Assert.That(WorkloadLogsTabViewModel.PerPodTailLines(200, 50))
             .IsEqualTo(WorkloadLogsTabViewModel.MinPerPodTailLines);
         await Assert.That(WorkloadLogsTabViewModel.PerPodTailLines(4000, 0)).IsEqualTo(200);
+    }
+
+    [Test]
+    public async Task Scrollback_trimming_is_stated_when_history_exceeds_the_cap()
+    {
+        var pane = Pane();
+        var source = pane.RegisterSource("api-a", "app");
+        for (var i = 0; i < 4001; i++)
+        {
+            pane.Enqueue($"2026-08-17T10:00:01.000Z line {i}", source);
+        }
+
+        pane.Flush(force: true);
+
+        await Assert.That(pane.LogLines.Count).IsEqualTo(4000);
+        await Assert.That(pane.TrimNotice!).Contains("Older lines were trimmed");
     }
 
     /// <summary>

@@ -42,21 +42,17 @@ Eight things are load-bearing.
    operator is refused for the same reason in miniature: dropping a requirement *widens*
    a selector, so a selector whose only requirement is unreadable comes back null rather
    than matching everything.
-3. **The per-pod tail is the pane's own budget divided by the pod count.**
-   `PerPodTailLines(bufferLines, podCount)` = `clamp(bufferLines / podCount, 25, 200)`,
-   and this is the decision to read before changing anything here. The single-pod pane
-   fetches a literal `tailLines: 200`; N replicas at 200 each is N × 200 lines of
-   backfill competing for one shared `LogBufferLines` cap, so past a handful of replicas
-   the oldest pods' history is trimmed away before anybody can read it — a pane that
-   silently drops a whole replica's backfill is worse than one that asks for less of
-   each. Dividing keeps the opening burst inside the buffer. The **ceiling of 200 is
-   deliberate and is a scope boundary, not a limit anyone likes**: how much history a log
-   pane should ask for is its own open question (this app offers no tail/since control on
-   any surface, and its window is the smallest of the comparable tools), and answering it
-   here for the multi-pod case only would leave the two panes disagreeing about the same
-   thing. The floor of 25 stops a large workload reducing each replica to nothing.
-   `LogBufferLines` is a **per-pane** cap here, which it already was — there is one
-   buffer per tab — and not a per-pod one.
+3. **The per-pod line range shares the pane's buffer budget.** The default last-200
+   range still asks for `clamp(bufferLines / podCount, 25, 200)` per pod. Last-1000
+   uses the same per-pod share, up to 1000. This avoids an opening burst of N × 1000
+   lines evicting whole replicas' histories before a reader can see them. The 5-minute,
+   1-hour, 24-hour and Everything ranges send `sinceSeconds` or no range parameter;
+   combining a tail limit with them would silently cut off the interval the user chose.
+   Those wider requests can fill the pane's `LogBufferLines` cap, so the pane states
+   when it trims older lines. `LogBufferLines` remains a **per-pane** cap, not a per-pod
+   one. The request is cancelled and reopened when the range changes, while Follow's
+   state stays as it was. The demo control is disabled because its fixed July 2026
+   timestamps cannot answer a relative-time query honestly.
 4. **Concurrency is capped at 50 streams, and the cap is stated.** N pods is N long-lived
    HTTP connections against one API server; a Deployment scaled to 400 would otherwise
    open 400 of them because someone clicked a menu item. 50 is `stern`'s own
