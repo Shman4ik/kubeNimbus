@@ -44,7 +44,7 @@ Sandbox: **API-server-only.** Docker Hub blobs 403, so `sandbox-up.sh` fails; na
 | L2 | owner pin | One click to logs from the row, and logs opened full-size | UX | S | pin | landed | 0 | 7dbc58d |
 | L3 | owner pin | Logs from everywhere a pod is named | UX | S | pin | planned | 0 | |
 | T2 | friction walk (`cluster-tab-events-list`) | The Events list reads like `kubectl get events`: last seen, type, reason, object, message | UX | M | 3.65 | planned | 0 | |
-| T3 | Ready FEAT-31 (P1, forced) | Reach a container's whole retained log: tail and since controls | UX | S | 3.45 | building | 0 | |
+| T3 | Ready FEAT-31 (P1, forced) | Reach a container's whole retained log: tail and since controls | UX | S | 3.45 | landed | 2 | 38f1012 |
 | T4 | research #6 + friction walk (`ux-workload-events`) | Events read the same everywhere, with relative times and a warning count on the tab | UX | S | 3.10 | reserve (owner pin displaced it) | 0 | |
 | T5 | friction walk + Ready ENG-23 | The Namespace column appears only when it says something | UX | S | 2.85 | reserve (owner pin displaced it) | 0 | |
 | T6 | Ready FEAT-34 (P1, forced) | Log follow survives a dropped stream and says so in place | Reliability | S | 2.60 | planned | 0 | |
@@ -408,6 +408,17 @@ Risk:                 tests that leak state between runs; use a unique namespace
 - **R3 — FEAT-56**: `SelfSubjectReview` ("who am I") beside the access review; states pre-1.26 servers.
 
 ## Log
+
+- 2026-09-23 — T3 landed in its own worktree (`38f1012`), verifier PASS after two fix
+  rounds. Both log panes offer six ranges, keep Follow state, and report scrollback
+  trimming. The first review caught premature empty states and a snapshot labelled
+  as a container exit; the second caught a quiet follow that never left loading.
+  Successful-response callbacks now distinguish a pending request from an answered
+  quiet stream. Build, 389 Core tests and 239 App tests passed; 17 Core integration
+  tests skipped because this Windows host has no cluster that runs pods. Both themes
+  rendered at 1280 px; `win-x64` NativeAOT passed with only the known DataGrid
+  warnings. `linux-x64` NativeAOT is not supported from Windows. VER-41 records
+  live-stream verification debt.
 
 - 2026-09-23 — L2 landed (`7dbc58d`), verifier PASS first round (smoke re-run 3×: 153/134/187 ms,
   the reported 1654 ms was a cold-cache outlier; Esc checked not to steal from the namespace
