@@ -30,6 +30,8 @@ Sandbox: **API-server-only.** Docker Hub blobs 403, so `sandbox-up.sh` fails; na
   built right after T1. To stay inside `CAPACITY` 14, T4, T5 and T8 move to reserve (the
   three lowest-scoring non-forced UX items; T9/T10 stay because this is the first session
   with a real API server).
+- 2026-09-23 (owner, in chat): **finish the current item (L2) through to the PR, then stop.**
+  The train pauses after L2 lands; the next step does nothing until the owner resumes it.
 
 ## Items
 
