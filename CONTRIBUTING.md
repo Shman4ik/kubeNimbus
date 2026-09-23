@@ -162,7 +162,9 @@ The workflow NativeAOT-publishes for `win-x64`, `linux-x64`, `linux-arm64` and
 installer beside the portable archive — MSI, `.dmg`, `.deb` and `.AppImage` —
 smoke-launches each of those through its own installed path, generates
 `SHA256SUMS.txt`, and creates the GitHub Release with the CHANGELOG section as
-its body. Pre-1.0 tags (`0.x`) are published as pre-releases automatically.
+its body. A plain tag (`v0.4.0`) is a full release and takes GitHub's
+**Latest** label; only a tag with a suffix (`v0.4.0-rc.1`) is published as a
+pre-release.
 
 The packaging itself lives in scripts you can run on your own machine, against
 any `dotnet publish` output:

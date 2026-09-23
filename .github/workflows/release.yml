@@ -420,9 +420,12 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
-          # Anything with a pre-release suffix, and every 0.x, ships flagged as
-          # a pre-release: kubeNimbus is pre-1.0 and shouldn't claim otherwise.
-          if printf '%s' "$version" | grep -Eq '^0\.|-'; then
+          # Only a version with a pre-release suffix (`0.4.0-rc.1`) ships flagged
+          # as a pre-release. A plain 0.x is a real release: GitHub never gives
+          # a pre-release the "Latest" label, so flagging every 0.x left the
+          # repository with no latest release at all — /releases/latest 404'd
+          # and the sidebar showed nothing.
+          if printf '%s' "$version" | grep -q -- '-'; then
             echo "prerelease=true" >> "$GITHUB_OUTPUT"
           else
             echo "prerelease=false" >> "$GITHUB_OUTPUT"
@@ -484,6 +487,9 @@ jobs:
           } >> notes.md
           cat notes.md
 
+      # No explicit --latest: GitHub's automatic choice (highest semver among
+      # full releases) already gives a new tag the label, and forcing it would
+      # hand it to an older tag re-published through workflow_dispatch.
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}

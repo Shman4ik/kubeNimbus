@@ -12,6 +12,9 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+- Releases are no longer published as pre-releases just because the version starts with
+  `0.`, so the newest one carries GitHub's **Latest** label and the README's download link
+  lands on it. Only a suffixed tag (`-rc.1`) is still a pre-release.
 - Show only what is unhealthy on any list — one click or Ctrl+Z narrows pods, workloads or
   events to the ones in trouble, and they appear the moment they break and leave when they
   recover.
