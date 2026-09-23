@@ -338,6 +338,18 @@ public class WorkloadLogsTests
         await Assert.That(pane.TrimNotice!).Contains("Older lines were trimmed");
     }
 
+    [Test]
+    public async Task A_completed_snapshot_is_labelled_loaded_without_claiming_the_container_exited()
+    {
+        var pane = Pane();
+        var source = pane.RegisterSource("api-a", "app");
+        source.State = LogSourceState.Loaded;
+        source.StatusMessage = "Selected range loaded — snapshot, not a live stream.";
+
+        await Assert.That(source.StateLabel).IsEqualTo("loaded");
+        await Assert.That(source.Tooltip).Contains("snapshot, not a live stream");
+    }
+
     /// <summary>
     /// The pane's key is cluster-qualified for the same reason pod detail's is: two
     /// clusters in an aggregated fleet list routinely hold a Deployment with the same

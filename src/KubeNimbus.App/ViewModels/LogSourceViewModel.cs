@@ -15,6 +15,9 @@ public enum LogSourceState
     /// <summary>The stream closed on its own — the container exited, or the pod went away.</summary>
     Ended,
 
+    /// <summary>A finite log-range snapshot completed; the container may still be healthy.</summary>
+    Loaded,
+
     /// <summary>The stream could not be opened or died with an error the pane is showing.</summary>
     Failed,
 
@@ -100,6 +103,7 @@ public sealed partial class LogSourceViewModel : ObservableObject
     {
         LogSourceState.Starting => "connecting",
         LogSourceState.Ended => "ended",
+        LogSourceState.Loaded => "loaded",
         LogSourceState.Failed => "failed",
         LogSourceState.Gone => "deleted",
         _ => null,

@@ -35,8 +35,10 @@
                        is how log lines once rendered invisible. -->
                   <Ellipse Width="8" Height="8" VerticalAlignment="Center" Fill="{Binding Brush}" />
                   <TextBlock Text="{Binding ShortName}" FontSize="12" VerticalAlignment="Center"
-                             FontFamily="Cascadia Mono,Consolas,monospace" />
-                  <TextBlock Text="{Binding StateLabel}" FontSize="10" Opacity="0.55" VerticalAlignment="Center"
+                             FontFamily="Cascadia Mono,Consolas,monospace"
+                             Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                  <TextBlock Text="{Binding StateLabel}" FontSize="10" Opacity="0.85" VerticalAlignment="Center"
+                             Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"
                              IsVisible="{Binding HasStateLabel}" />
                 </StackPanel>
               </ToggleButton>

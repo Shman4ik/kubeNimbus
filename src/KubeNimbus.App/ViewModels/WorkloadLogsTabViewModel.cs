@@ -146,8 +146,6 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
     private string? _trimNotice;
 
     private bool _loadingLogRange;
-    private bool _rangeChanged;
-    private int _rangeGeneration;
 
     /// <summary>
     /// True while the pod watch and its streams are running. Bound from a
@@ -456,7 +454,9 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
                     Enqueue(line, source);
                 }
 
-                await EndSourceAsync(source, LogSourceState.Ended, $"{source.ContainerName} exited.", token);
+                await EndSourceAsync(source, follow ? LogSourceState.Ended : LogSourceState.Loaded,
+                    follow ? $"{source.ContainerName} exited." : "Selected range loaded — snapshot, not a live stream.",
+                    token);
             }
             catch (OperationCanceledException)
             {
@@ -716,10 +716,8 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
         }
 
         StopAllStreams();
-        _rangeChanged = true;
         ClearBuffer();
         _loadingLogRange = true;
-        _ = EndRangeLoadingAfterDelayAsync(++_rangeGeneration);
         SetStatus(null, problem: false);
         foreach (var source in Sources.Where(s => s.State is not LogSourceState.Gone))
         {
@@ -727,21 +725,6 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
         }
 
         RaisePlaceholder();
-    }
-
-    private async Task EndRangeLoadingAfterDelayAsync(int generation)
-    {
-        try
-        {
-            await Task.Delay(750, _cts.Token);
-            await Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                if (generation != _rangeGeneration || !_loadingLogRange) return;
-                _loadingLogRange = false;
-                RaisePlaceholder();
-            });
-        }
-        catch (OperationCanceledException) { }
     }
 
     partial void OnShowLogTimestampsChanged(bool value)
@@ -887,12 +870,18 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
 
             if (_loadingLogRange)
             {
-                return $"Loading {SelectedLogRange.Label.ToLowerInvariant()}…";
+                return $"Waiting for log responses or output ({SelectedLogRange.Label.ToLowerInvariant()})…";
             }
 
-            if (_rangeChanged && LogSearchText.Length == 0)
+            if (Sources.All(s => s.State is LogSourceState.Ended or LogSourceState.Loaded)
+                && LogSearchText.Length == 0)
             {
                 return SelectedLogRange.EmptyMessage;
+            }
+
+            if (Sources.Any(s => s.State is LogSourceState.Failed))
+            {
+                return "Some pod logs could not be loaded. Check the pod chips for details.";
             }
 
             return IsFollowing

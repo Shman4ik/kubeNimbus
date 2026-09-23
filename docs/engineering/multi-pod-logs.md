@@ -52,7 +52,15 @@ Eight things are load-bearing.
    when it trims older lines. `LogBufferLines` remains a **per-pane** cap, not a per-pod
    one. The request is cancelled and reopened when the range changes, while Follow's
    state stays as it was. The demo control is disabled because its fixed July 2026
-   timestamps cannot answer a relative-time query honestly.
+   timestamps cannot answer a relative-time query honestly. A finite snapshot that
+   completes with no lines can state that the range is empty. An open follow with no
+   first line cannot prove emptiness: a slow API response and a connected but quiet
+   container look identical to the line iterator, so the pane says it is waiting for
+   a response or output until a line arrives or the stream ends. A 750 ms timeout
+   once claimed "No lines in the last 5 minutes" before the HTTP request answered;
+   that was a false empty state, not a loading optimization. When Follow is off,
+   the finite fetch ends in the chip state **loaded**, rather than **ended** with an
+   "exited" message that would claim a healthy container stopped.
 4. **Concurrency is capped at 50 streams, and the cap is stated.** N pods is N long-lived
    HTTP connections against one API server; a Deployment scaled to 400 would otherwise
    open 400 of them because someone clicked a menu item. 50 is `stern`'s own
@@ -106,6 +114,9 @@ and a half-swapped palette is worse than a single one that works in both. The co
 hint beside a name that is always printed, not an identifier, so an honest repeat past
 eight beats inventing hues nobody can tell apart. Both themes are rendered by the
 screenshot harness, which is where that claim is checked rather than asserted.
+The pod chip labels explicitly use Fluent's theme foreground: inherited foreground
+was nearly white on the light theme's pale blue checked chip, leaving the pod names
+barely readable in the 1280 px screenshot despite their essential legend role.
 
 **The demo cluster runs this for real** (demo rule 4): its three
 `payment-service-report-generator` replicas exist precisely for this — two on the old

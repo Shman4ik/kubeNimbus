@@ -99,7 +99,6 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     private string? _trimNotice;
 
     private bool _loadingLogRange;
-    private bool _rangeChanged;
 
     public ObservableCollection<EventRowViewModel> Events { get; } = [];
 
@@ -1107,12 +1106,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
 
             if (_loadingLogRange)
             {
-                return $"Loading {SelectedLogRange.Label.ToLowerInvariant()}…";
-            }
-
-            if (_rangeChanged && LogSearchText.Length == 0)
-            {
-                return SelectedLogRange.EmptyMessage;
+                return $"Waiting for log response or output ({SelectedLogRange.Label.ToLowerInvariant()})…";
             }
 
             return IsShowingPreviousLogs
@@ -1133,7 +1127,6 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         }
 
         // Force a fresh request even when the same container remains selected.
-        _rangeChanged = true;
         _streaming = null;
         if (IsShowingPreviousLogs)
         {
@@ -1349,29 +1342,11 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         _logGeneration++;
         _streaming = (container, previous, follow);
         _loadingLogRange = true;
-        _ = EndRangeLoadingAfterDelayAsync(_logGeneration, _logCts.Token);
         LogStatus = null;
         IsLogStatusProblem = false;
         ClearLogBuffer();
         StartLogFlushTimer();
         return _logCts.Token;
-    }
-
-    private async Task EndRangeLoadingAfterDelayAsync(int generation, CancellationToken token)
-    {
-        try
-        {
-            // A follow can remain open forever without yielding a line. One delayed
-            // transition keeps that honest empty-range state from reading as a hang.
-            await Task.Delay(750, token);
-            await Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                if (generation != _logGeneration || !_loadingLogRange) return;
-                _loadingLogRange = false;
-                RaiseLogPlaceholder();
-            });
-        }
-        catch (OperationCanceledException) { }
     }
 
     private async Task EndLogStreamAsync(int generation, string status, bool problem) =>
