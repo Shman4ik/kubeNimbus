@@ -24,6 +24,7 @@ namespace KubeNimbus.App.ViewModels;
 public sealed partial class ClusterTabViewModel
 {
     private CancellationTokenSource? _logTargetsCts;
+    private readonly CancellationTokenSource _namedLogsCts = new();
 
     /// <summary>The scope of the load in flight, or null when none is.</summary>
     private string? _logTargetsLoadingScope;
@@ -235,7 +236,7 @@ public sealed partial class ClusterTabViewModel
         SelectedRow = row;
         if (row.Resource is { Kind: "Event", ApiVersion: "v1" } && row.Resource.InvolvedObject() is { Kind: "Pod" } involved)
             return OpenNamedLogsAsync(new OwnerRef("v1", "Pod", involved.Name, involved.Uid, false), row.Resource.InvolvedObjectNamespace() ?? row.Namespace,
-                row.ClusterName, maximized ? true : null);
+                row.ClusterName, maximized ? true : null, _namedLogsCts.Token);
 
         return LogTargetFor(row) is { } target
             ? OpenLogsForAsync(target, previous: false, maximized: maximized ? true : null)
@@ -244,11 +245,13 @@ public sealed partial class ClusterTabViewModel
 
     /// <summary>Resolve an object named by another pane before opening logs. A stale node
     /// snapshot or Argo status must never turn a deleted pod into a dead click.</summary>
-    public async Task OpenNamedLogsAsync(OwnerRef owner, string? namespaceHint, string clusterName = "", bool? maximized = null)
+    public async Task OpenNamedLogsAsync(OwnerRef owner, string? namespaceHint, string clusterName = "", bool? maximized = null,
+        CancellationToken cancellationToken = default)
     {
-        var client = ClientForCluster(clusterName);
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            var client = ClientForCluster(clusterName);
             DynamicResource? resource;
             ResourceDescriptor? descriptor;
             if (IsDemo)
@@ -262,10 +265,12 @@ public sealed partial class ClusterTabViewModel
             else
             {
                 if (client is null) { ConnectionWarning = $"Could not reach {owner.Kind}/{owner.Name} to open logs."; return; }
-                resource = await client.ResolveOwnerAsync(owner, namespaceHint);
-                descriptor = resource is null ? null : (await client.GetResourceCatalogAsync())
+                resource = await client.ResolveOwnerAsync(owner, namespaceHint, cancellationToken);
+                descriptor = resource is null ? null : (await client.GetResourceCatalogAsync(cancellationToken))
                     .FirstOrDefault(d => d.Kind == owner.Kind && d.ApiVersion == owner.ApiVersion);
             }
+
+            cancellationToken.ThrowIfCancellationRequested();
 
             if (resource is null || descriptor is null)
             {
@@ -286,6 +291,10 @@ public sealed partial class ClusterTabViewModel
             }
 
             await OpenLogsForAsync(new LogTarget(resource, descriptor, clusterName, client), maximized: maximized);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Closing the naming pane cancels the read; no stale warning or logs tab.
         }
         catch (Exception ex)
         {

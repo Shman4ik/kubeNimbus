@@ -37,7 +37,7 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
     private readonly ResourceRowViewModel _row;
     private readonly ResourceDescriptor? _podDescriptor;
     private readonly Func<OwnerRef, string?, Task>? _openPod;
-    private readonly Func<OwnerRef, string?, Task>? _openLogs;
+    private readonly Func<OwnerRef, string?, CancellationToken, Task>? _openLogs;
     private readonly CancellationTokenSource _cts = new();
 
     public NodeDetailTabViewModel(
@@ -46,7 +46,7 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
         ResourceDescriptor? podDescriptor = null,
         Func<OwnerRef, string?, Task>? openPod = null,
         string clusterName = "",
-        Func<OwnerRef, string?, Task>? openLogs = null)
+        Func<OwnerRef, string?, CancellationToken, Task>? openLogs = null)
         : base(
             clusterName.Length == 0 ? $"Node/{row.Name}" : $"Node/{row.Name} · {clusterName}",
             isDemo: client is null)
@@ -137,7 +137,7 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
 
     public Task OpenPodLogsAsync(NodePodViewModel? pod) =>
         pod is null || _openLogs is null ? Task.CompletedTask
-        : _openLogs(new OwnerRef("v1", "Pod", pod.Name, pod.Uid, Controller: false), pod.Namespace);
+        : _openLogs(new OwnerRef("v1", "Pod", pod.Name, pod.Uid, Controller: false), pod.Namespace, _cts.Token);
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PodsCaption))]

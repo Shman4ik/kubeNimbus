@@ -13,7 +13,11 @@ namespace KubeNimbus.App.Views;
 /// </summary>
 public partial class NodeDetailView : UserControl
 {
-    public NodeDetailView() => InitializeComponent();
+    public NodeDetailView()
+    {
+        InitializeComponent();
+        PodGrid.AddHandler(PointerPressedEvent, PodRowContextSelection.OnPointerPressed, RoutingStrategies.Tunnel);
+    }
 
     private void OnPodKeyDown(object? sender, KeyEventArgs e)
     {

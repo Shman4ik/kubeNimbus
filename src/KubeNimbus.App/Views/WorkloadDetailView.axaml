@@ -20,7 +20,7 @@
     <TabControl Grid.Row="2" Classes="headerless" SelectedIndex="{Binding SelectedTabIndex}">
       <TabItem Header="Pods"><Grid RowDefinitions="Auto,*">
         <TextBlock Text="{Binding PodsStatus}" Opacity="0.65" Margin="0,0,0,6"/>
-        <DataGrid Grid.Row="1" ItemsSource="{Binding Pods}" SelectedItem="{Binding SelectedPod}"
+        <DataGrid Name="PodGrid" Grid.Row="1" ItemsSource="{Binding Pods}" SelectedItem="{Binding SelectedPod}"
                   IsReadOnly="True" AutoGenerateColumns="False" DoubleTapped="OnPodDoubleTapped" KeyDown="OnPodKeyDown">
           <DataGrid.ContextMenu><ContextMenu>
             <MenuItem Header="Logs (L)" Command="{Binding OpenPodLogsCommand}"/>

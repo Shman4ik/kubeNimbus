@@ -18,7 +18,7 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
     private readonly Func<RowActionKind, Task> _armAction;
     private readonly Func<OwnerRef, string?, Task> _openOwner;
     private readonly Func<string, bool>? _activateTab;
-    private readonly Func<OwnerRef, string?, Task>? _openLogs;
+    private readonly Func<OwnerRef, string?, CancellationToken, Task>? _openLogs;
     private readonly CancellationTokenSource _cts = new();
     private readonly Task _watch;
     private readonly Task _initialRefresh;
@@ -50,7 +50,7 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
     public WorkloadDetailTabViewModel(ClusterClient? client, ResourceDescriptor descriptor,
         ResourceRowViewModel row, Action<InspectorTabViewModelBase> openTab, Func<RowActionKind, Task> armAction,
         Func<OwnerRef, string?, Task> openOwner, Func<string, bool>? activateTab = null,
-        Func<OwnerRef, string?, Task>? openLogs = null)
+        Func<OwnerRef, string?, CancellationToken, Task>? openLogs = null)
         : base($"{descriptor.Kind}/{row.Name}" + (row.ClusterName.Length > 0 ? $" · {row.ClusterName}" : ""), client is null)
     {
         _client = client;
@@ -198,7 +198,7 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
 
     public Task OpenPodLogsAsync(ResourceRowViewModel? pod) =>
         pod is null || _openLogs is null ? Task.CompletedTask
-        : _openLogs(new OwnerRef("v1", "Pod", pod.Name, pod.Resource.Uid, Controller: false), pod.Namespace);
+        : _openLogs(new OwnerRef("v1", "Pod", pod.Name, pod.Resource.Uid, Controller: false), pod.Namespace, _cts.Token);
 
     [RelayCommand(CanExecute = nameof(CanOpenPod))]
     private void Shell()

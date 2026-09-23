@@ -24,7 +24,7 @@ public sealed partial class ArgoApplicationTabViewModel : InspectorTabViewModelB
     private readonly ClusterClient? _client;
     private readonly ResourceDescriptor _descriptor;
     private readonly Func<OwnerRef, string?, Task>? _openResource;
-    private readonly Func<OwnerRef, string?, Task>? _openLogs;
+    private readonly Func<OwnerRef, string?, CancellationToken, Task>? _openLogs;
     private readonly CancellationTokenSource _cts = new();
 
     public ArgoApplicationTabViewModel(
@@ -33,7 +33,7 @@ public sealed partial class ArgoApplicationTabViewModel : InspectorTabViewModelB
         ArgoApplication application,
         Func<OwnerRef, string?, Task>? openResource = null,
         string clusterName = "",
-        Func<OwnerRef, string?, Task>? openLogs = null)
+        Func<OwnerRef, string?, CancellationToken, Task>? openLogs = null)
         : base($"Argo/{application?.Name}", isDemo: client is null)
     {
         ArgumentNullException.ThrowIfNull(application);
@@ -256,7 +256,7 @@ public sealed partial class ArgoApplicationTabViewModel : InspectorTabViewModelB
     private Task OpenResourceLogsAsync(ArgoResource resource) => _openLogs is null
         ? Task.CompletedTask
         : _openLogs(new OwnerRef(resource.ApiVersion, resource.Kind, resource.Name, Uid: null, Controller: false),
-            resource.Namespace.Length > 0 ? resource.Namespace : null);
+            resource.Namespace.Length > 0 ? resource.Namespace : null, _cts.Token);
 
     public override async Task OnClosingAsync()
     {
@@ -278,9 +278,14 @@ public sealed partial class ArgoResourceRowViewModel(ArgoResource resource, Func
 
     public string Namespace => Resource.Namespace;
 
-    public bool HasLogs => Resource is { Kind: "Pod", ApiVersion: "v1" }
-        || Resource is { ApiVersion: "apps/v1", Kind: "Deployment" or "StatefulSet" or "DaemonSet" or "ReplicaSet" }
-        || Resource is { ApiVersion: "batch/v1", Kind: "Job" };
+    /// <summary>
+    /// Argo's status.resources contains identity and health, not spec.selector. The
+    /// capability cannot be known until the object is fetched, so every managed row
+    /// offers the hover action and the shared resolver gives a stated unavailable
+    /// result for objects without logs. A kind list here hid Rollouts and selector
+    /// bearing CRDs even though the ordinary resource grid could tail them.
+    /// </summary>
+    public bool HasLogs => true;
 
     [RelayCommand(CanExecute = nameof(HasLogs))]
     private Task OpenLogsAsync() => openLogs?.Invoke(Resource) ?? Task.CompletedTask;

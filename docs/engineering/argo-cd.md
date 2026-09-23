@@ -83,10 +83,14 @@ Nine things are load-bearing.
    it means writing `status.operationState.phase`, which is a status-subresource patch and
    its own item.
 
-The Resources pane lists managed objects. L on a selected Pod or selector-bearing
-workload row, and its hover logs icon, now resolve that object through the cluster
-tab's shared log command. Argo's status may outlive the managed object, so a missing
-Pod is stated in the connection warning. The Application summary grid still has no
+The Resources pane lists managed objects. L on a selected resource row, and its hover
+logs icon, now resolve that object through the cluster tab's shared log command.
+Argo's status carries no selector, so the pane cannot know which kinds have logs
+without fetching every object; the shared resolver makes the capability decision
+on demand and states when an object has no pod logs. A built-in-kind allowlist hid
+selector-bearing Argo Rollouts and was removed. Argo's status may outlive the managed
+object, so a missing Pod is stated in the connection warning. Closing the pane
+cancels an in-flight lookup. The Application summary grid still has no
 logs action: its rows are Applications, not managed pods.
 
 **Two rendering defects, both found by looking at the rendered pane rather than by any

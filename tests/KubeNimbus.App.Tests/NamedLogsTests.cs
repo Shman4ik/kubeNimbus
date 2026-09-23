@@ -83,7 +83,7 @@ public class NamedLogsTests
         var application = DemoData.ArgoApplications.First(a => a.Name == "fraud-detector");
         var descriptor = DemoData.BuildCatalog().First(d => d is { Group: "argoproj.io", Kind: "Application" });
         var detail = new ArgoApplicationTabViewModel(null, descriptor, application,
-            openLogs: (owner, ns) => tab.OpenNamedLogsAsync(owner, ns));
+            openLogs: (owner, ns, token) => tab.OpenNamedLogsAsync(owner, ns, cancellationToken: token));
         detail.SelectedResource = detail.Resources.First(r => r.Name == "fraud-detector" && r.Kind == "Deployment");
 
         await Assert.That(detail.SelectedResource.HasLogs).IsTrue();
@@ -96,5 +96,64 @@ public class NamedLogsTests
         var existingPod = DemoData.Pods.First();
         await tab.OpenNamedLogsAsync(new OwnerRef("v1", "Pod", existingPod.Name, "old-uid", false), existingPod.Namespace);
         await Assert.That(tab.ConnectionWarning).Contains("was replaced");
+    }
+
+    [Test]
+    public async Task Argo_resource_logs_are_not_limited_to_builtin_workload_kinds()
+    {
+        var rollout = new ArgoResource("argoproj.io", "v1alpha1", "Rollout", "payments", "web",
+            ArgoSyncState.Synced, ArgoHealthState.Healthy);
+        ArgoResource? opened = null;
+        var row = new ArgoResourceRowViewModel(rollout, _ => Task.CompletedTask,
+            resource => { opened = resource; return Task.CompletedTask; });
+
+        await Assert.That(row.HasLogs).IsTrue();
+        await row.OpenLogsCommand.ExecuteAsync(null);
+        await Assert.That(opened).IsEqualTo(rollout);
+    }
+
+    [Test]
+    public async Task Closing_workload_detail_cancels_named_log_resolution()
+    {
+        var deployment = DemoData.Deployments.First(d => d.Name == "payment-service-report-generator");
+        var descriptor = DemoData.BuildCatalog().First(d => d is { Group: "apps", Kind: "Deployment" });
+        var detail = new WorkloadDetailTabViewModel(null, descriptor, new ResourceRowViewModel(deployment),
+            _ => { }, _ => Task.CompletedTask, (_, _) => Task.CompletedTask,
+            openLogs: (_, _, token) => Task.Delay(Timeout.Infinite, token));
+        detail.SelectedPod = detail.Pods.First();
+
+        var resolution = detail.OpenPodLogsAsync(detail.SelectedPod);
+        await detail.OnClosingAsync();
+
+        await Assert.That(resolution.IsCanceled).IsTrue();
+    }
+
+    [Test]
+    public async Task Closing_node_detail_cancels_named_log_resolution()
+    {
+        var node = new ResourceRowViewModel(DemoData.Nodes.First());
+        var detail = new NodeDetailTabViewModel(null, node,
+            openLogs: (_, _, token) => Task.Delay(Timeout.Infinite, token));
+        detail.SelectedPod = detail.Pods.First();
+
+        var resolution = detail.OpenPodLogsAsync(detail.SelectedPod);
+        await detail.OnClosingAsync();
+
+        await Assert.That(resolution.IsCanceled).IsTrue();
+    }
+
+    [Test]
+    public async Task Closing_argo_detail_cancels_named_log_resolution()
+    {
+        var application = DemoData.ArgoApplications.First(a => a.Name == "fraud-detector");
+        var descriptor = DemoData.BuildCatalog().First(d => d is { Group: "argoproj.io", Kind: "Application" });
+        var detail = new ArgoApplicationTabViewModel(null, descriptor, application,
+            openLogs: (_, _, token) => Task.Delay(Timeout.Infinite, token));
+        detail.SelectedResource = detail.Resources.First(r => r.Kind == "Deployment");
+
+        var resolution = detail.OpenSelectedResourceLogsCommand.ExecuteAsync(null);
+        await detail.OnClosingAsync();
+
+        await Assert.That(resolution.IsCanceled).IsTrue();
     }
 }

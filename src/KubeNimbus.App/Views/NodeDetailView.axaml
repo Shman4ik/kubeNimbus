@@ -206,7 +206,7 @@
             <TextBlock Text="{Binding PodsError}" TextWrapping="Wrap" FontSize="12" />
           </Border>
 
-          <DataGrid Grid.Row="1" ItemsSource="{Binding Pods}" SelectedItem="{Binding SelectedPod}" IsReadOnly="True" KeyDown="OnPodKeyDown"
+          <DataGrid Name="PodGrid" Grid.Row="1" ItemsSource="{Binding Pods}" SelectedItem="{Binding SelectedPod}" IsReadOnly="True" KeyDown="OnPodKeyDown"
                     GridLinesVisibility="Horizontal" CanUserResizeColumns="True">
             <DataGrid.ContextMenu><ContextMenu>
               <MenuItem Header="Logs (L)" Command="{Binding OpenPodLogsCommand}" />

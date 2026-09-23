@@ -105,7 +105,10 @@ item. The button uses the existing `rowAction` style, so it reveals on a hovered
 selected row without reserving width on idle rows. Argo's Resources pane is a
 selectable ListBox for the same keyboard and hover behavior.
 
-The nested views pass only an object identity to `ClusterTabViewModel.OpenNamedLogsAsync`.
+The nested views pass only an object identity and their lifetime cancellation token to
+`ClusterTabViewModel.OpenNamedLogsAsync`. The token goes through owner resolution and
+catalog lookup, so closing an inspector during a slow API read stops that read and
+does not leave a stale warning or open a pane afterward.
 That method reads the current object before calling `OpenLogsForAsync`, so a pod deleted
 after the node's one-shot list was loaded produces an explicit warning rather than a
 stale log tab or a dead click. It also checks the UID when the naming row has one:
@@ -115,6 +118,19 @@ set. A workload without a usable selector also gets an explicit notice. The Even
 API sometimes omits `involvedObject.apiVersion`; a core Pod with an empty version is
 normalized to `v1` before resolution. The palette's selected-row Logs entry follows
 the same Event capability as L and the context menu.
+
+The workload and node pod grids select the row under a right click in a tunnel pointer
+handler before the context menu opens. Without that, selecting pod A and right-clicking
+pod B left `SelectedPod` on A, so Logs opened A; the headless interaction check drives
+that exact sequence on both grids and checks the command target. The handler resolves
+`DataGridRow` from the event source, including clicks in cell padding.
+
+Argo's `status.resources` gives group, kind, name and status but no object spec or
+selector. The first implementation used a built-in-kind allowlist and hid Logs on an
+Argo Rollout whose `spec.selector` the shared L2 path supports. Every managed resource
+row now offers the hover action; the resolver reads the current object and either opens
+logs or states that it has no pod logs. This can expose an icon on a ConfigMap while it
+is hovered, but avoids a network read per row just to decide icon visibility.
 
 The screenshot harness initially rendered both pod grids with the button absent:
 setting `SelectedPod` on a fixture before the DataGrid materialized did not reliably

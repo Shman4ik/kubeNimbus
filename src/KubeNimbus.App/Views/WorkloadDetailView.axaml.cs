@@ -7,7 +7,11 @@ namespace KubeNimbus.App.Views;
 
 public partial class WorkloadDetailView : UserControl
 {
-    public WorkloadDetailView() => InitializeComponent();
+    public WorkloadDetailView()
+    {
+        InitializeComponent();
+        PodGrid.AddHandler(PointerPressedEvent, PodRowContextSelection.OnPointerPressed, RoutingStrategies.Tunnel);
+    }
     private void OnPodDoubleTapped(object? sender, TappedEventArgs e)
     {
         if (DataContext is WorkloadDetailTabViewModel vm) vm.OpenPodCommand.Execute(null);

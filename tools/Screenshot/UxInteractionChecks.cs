@@ -289,6 +289,31 @@ internal static class UxInteractionChecks
             throw new InvalidOperationException("Nested pod row did not reveal its logs button on hover.");
     }
 
+    internal static void RightClickNestedPodRow(Window window)
+    {
+        var view = window.GetVisualDescendants().OfType<WorkloadDetailView>().Cast<Control>()
+            .FirstOrDefault() ?? window.GetVisualDescendants().OfType<NodeDetailView>().First();
+        var grid = view.GetVisualDescendants().OfType<DataGrid>().First();
+        var rows = grid.GetVisualDescendants().OfType<DataGridRow>().ToArray();
+        if (rows.Length < 2) throw new InvalidOperationException("Nested pod fixture needs two rows.");
+
+        grid.SelectedItem = rows[0].DataContext;
+        var expected = rows[1].DataContext;
+        var point = rows[1].TranslatePoint(new Point(rows[1].Bounds.Width * 0.45, rows[1].Bounds.Height / 2), window)!.Value;
+        window.MouseMove(point);
+        window.MouseDown(point, MouseButton.Right);
+        window.MouseUp(point, MouseButton.Right);
+        Dispatcher.UIThread.RunJobs();
+
+        if (!ReferenceEquals(grid.SelectedItem, expected))
+            throw new InvalidOperationException("Right-clicking another pod kept the previous context-menu target.");
+        if (view.DataContext is WorkloadDetailTabViewModel workload && !ReferenceEquals(workload.SelectedPod, expected)
+            || view.DataContext is NodeDetailTabViewModel node && !ReferenceEquals(node.SelectedPod, expected))
+            throw new InvalidOperationException("Right-clicked pod did not reach the context-menu command target.");
+        window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        Dispatcher.UIThread.RunJobs();
+    }
+
     internal static void HoverArgoResourceRow(Window window)
     {
         var view = window.GetVisualDescendants().OfType<ArgoApplicationView>().First();

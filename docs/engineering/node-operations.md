@@ -88,7 +88,10 @@ menu and the command palette. Nothing new is always visible.
 - **The pod rows open logs through the cluster tab's shared route.** L, the row's
   hover icon and the Logs context item resolve the pod again before opening its logs.
   This matters because the list is a one-shot snapshot: a pod may have disappeared
-  before the click, and the pane must say so rather than opening a stale object.
+  before the click, and the pane must say so rather than opening a stale object. A
+  right click selects its own row before the Logs menu acts; without this, clicking
+  pod B after selecting pod A opened A's logs. Closing the pane cancels an in-flight
+  lookup through the pane's cancellation token.
 
 ### Cordon, and the one honest exception to "capability from discovery"
 

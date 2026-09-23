@@ -1919,7 +1919,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 row.Application,
                 (owner, namespaceHint) => OpenOwnerAsync(owner, namespaceHint, row.ClusterName),
                 row.ClusterName,
-                (owner, ns) => OpenNamedLogsAsync(owner, ns, row.ClusterName)),
+                (owner, ns, token) => OpenNamedLogsAsync(owner, ns, row.ClusterName, cancellationToken: token)),
             replacePreview: false);
     }
 
@@ -3199,7 +3199,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 existingTab.IsPreview = false;
                 SelectedInspectorTab = existingTab;
                 return true;
-            }, (owner, ns) => OpenNamedLogsAsync(owner, ns, row.ClusterName)) { IsPreview = preview };
+            }, (owner, ns, token) => OpenNamedLogsAsync(owner, ns, row.ClusterName, cancellationToken: token)) { IsPreview = preview };
             AddInspectorTab(detail, replacePreview: preview);
             return;
         }
@@ -3234,7 +3234,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             (_, true) => new NodeDetailTabViewModel(
                 client, row, PodDescriptorFor(row),
                 (owner, namespaceHint) => OpenOwnerAsync(owner, namespaceHint, row.ClusterName, client),
-                row.ClusterName, (owner, ns) => OpenNamedLogsAsync(owner, ns, row.ClusterName)),
+                row.ClusterName, (owner, ns, token) => OpenNamedLogsAsync(owner, ns, row.ClusterName, cancellationToken: token)),
             _ => new YamlEditorTabViewModel(
                 client, descriptor, row.Namespace, row.Name, row.Resource.ToYaml(), row.ClusterName),
         };
@@ -3377,6 +3377,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     public async ValueTask DisposeAsync()
     {
+        await _namedLogsCts.CancelAsync();
+        _namedLogsCts.Dispose();
         // A drain runs in this process and in this strip. Closing the tab stops it —
         // which is the honest behaviour and the one the confirm warned about, but it has
         // to be an explicit cancel rather than a task left running against a disposed
