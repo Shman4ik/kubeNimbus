@@ -18,7 +18,7 @@ by editing **Config** or **Owner notes**; the next step applies it first.
 
 ## State
 
-Phase: BUILD · Branch: codex/release-train-t3 (isolated worktree for the owner's T3 request; PR #87 merged) · Selected: 2026-09-22 · PR: — · Started: 2026-09-22 · Last release: v0.3.3 (2026-09-22)
+Phase: BUILD · Branch: codex/release-train-t3 (isolated worktree for the owner's T3 request; PR #87 merged) · Selected: 2026-09-22 · PR: [#92](https://github.com/Shman4ik/kubeNimbus/pull/92) · Started: 2026-09-22 · Last release: v0.3.3 (2026-09-22)
 Baseline: first frame 99 ms (median of 3 warm runs: 99/99/95; cold first run 3529 ms, font cache), executable 51.3 MiB (53 769 168 B; payload with libSkiaSharp + libHarfBuzzSharp 64.6 MiB) · RID: linux-x64 · AOT warnings: the known DataGrid IL2104/IL3053 pair only
 Sandbox: **API-server-only.** Docker Hub blobs 403, so `sandbox-up.sh` fails; native `k3s server` (GitHub binary + airgap images) comes up and the demo manifests apply (50-crds/51-custom-resources included, so VER-24 is paid), but `runc` cannot start containers here — no pod ever runs. Real: discovery, list/watch, CRDs, RBAC, SSA/dry-run, patches, evictions. Not real: logs, exec, port-forward, metrics. Must be re-started each session (see CURRENT_STATE.md → Environment notes).
 
