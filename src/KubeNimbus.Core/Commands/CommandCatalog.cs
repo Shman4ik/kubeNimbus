@@ -294,9 +294,14 @@ public static class CommandCatalog
         {
             Id = CommandId.PodLogs,
             Title = "Logs",
-            CheatTitle = "Logs — the pod's, or every pod a workload owns",
+            CheatTitle = "Logs — a pod's, a workload's, or an event's pod; also in detail panes",
             Category = CommandCategory.Pods,
             Scope = CommandScope.List,
+            // List-scoped in every list that names pods, not only the resource list:
+            // workload detail's and node detail's pod lists match this same row (and
+            // PodLogsMaximized's) through RowLogsGesture.MatchLogsKey, and the Events
+            // list's L opens the involved pod's logs. Still never a window binding — each
+            // of those lists is a read-only grid that owns the bare letter.
             IconKey = "ClockOutlineIconGeometry",
             Chord = new(CommandKey.L),
             Surfaces = PaletteAndSheet,

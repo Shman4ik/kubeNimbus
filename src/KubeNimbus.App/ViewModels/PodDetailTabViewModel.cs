@@ -90,6 +90,17 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     [ObservableProperty]
     private bool _wrapLogLines;
 
+    public IReadOnlyList<LogRange> LogRanges => LogRange.Choices;
+
+    [ObservableProperty]
+    private LogRange _selectedLogRange = LogRange.Last200;
+
+    [ObservableProperty]
+    private string? _trimNotice;
+
+    private bool _loadingLogRange;
+    private bool _logHeadersReady;
+
     public ObservableCollection<EventRowViewModel> Events { get; } = [];
 
     /// <summary>The selected container's env vars — literal values inline, Secret/ConfigMap refs shown
@@ -1045,7 +1056,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     private int _logGeneration;
 
     /// <summary>What the running stream is reading, so a redundant restart is skipped.</summary>
-    private (string Container, bool Previous)? _streaming;
+    private (string Container, bool Previous, bool Follow)? _streaming;
 
     /// <summary>
     /// Why the pane looks the way it does — the reason a stream ended, or null while
@@ -1094,6 +1105,18 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
                 return status;
             }
 
+            if (_loadingLogRange)
+            {
+                return _logHeadersReady
+                    ? $"Reading {SelectedLogRange.Label.ToLowerInvariant()} — waiting for opening log lines…"
+                    : $"Waiting for log response ({SelectedLogRange.Label.ToLowerInvariant()})…";
+            }
+
+            if (_logHeadersReady && IsFollowingLogs)
+            {
+                return SelectedLogRange.WaitingForOutputMessage;
+            }
+
             return IsShowingPreviousLogs
                 ? $"Fetching the previous instance of {SelectedContainer.Name}…"
                 : IsFollowingLogs
@@ -1103,6 +1126,25 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     }
 
     public bool HasLogPlaceholder => LogPlaceholder is not null;
+
+    partial void OnSelectedLogRangeChanged(LogRange value)
+    {
+        if (IsDemo || SelectedContainer is null)
+        {
+            return;
+        }
+
+        // Force a fresh request even when the same container remains selected.
+        _streaming = null;
+        if (IsShowingPreviousLogs)
+        {
+            LoadPreviousLogs();
+        }
+        else
+        {
+            StartLogs(IsFollowingLogs);
+        }
+    }
 
     partial void OnIsFollowingLogsChanged(bool value)
     {
@@ -1156,12 +1198,12 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
             return;
         }
 
-        if (_streaming == (container.Name, true))
+        if (_streaming == (container.Name, true, false))
         {
             return;
         }
 
-        var token = BeginLogStream(container.Name, previous: true);
+        var token = BeginLogStream(container.Name, previous: true, follow: false);
         SetLogFlags(following: false, previous: true);
         var generation = _logGeneration;
 
@@ -1176,8 +1218,11 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
             try
             {
                 await foreach (var line in _client.StreamPodLogsAsync(
-                    PodNamespace, PodName, container.Name, follow: false, tailLines: 1000,
-                    previous: true, timestamps: true, cancellationToken: token))
+                    PodNamespace, PodName, container.Name, follow: false,
+                    tailLines: SelectedLogRange.TailLines, sinceSeconds: SelectedLogRange.SinceSeconds,
+                    previous: true, timestamps: true,
+                    responseReady: () => OnLogResponseReady(generation, token, follow: false),
+                    cancellationToken: token))
                 {
                     Enqueue(line);
                 }
@@ -1198,7 +1243,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         }, token);
     }
 
-    private void StartLogs()
+    private void StartLogs(bool follow = true)
     {
         if (SelectedContainer is not { } container)
         {
@@ -1206,13 +1251,13 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
             return;
         }
 
-        if (_streaming == (container.Name, false))
+        if (_streaming == (container.Name, false, follow))
         {
             return;
         }
 
-        var token = BeginLogStream(container.Name, previous: false);
-        SetLogFlags(following: true, previous: false);
+        var token = BeginLogStream(container.Name, previous: false, follow);
+        SetLogFlags(following: follow, previous: false);
         var generation = _logGeneration;
 
         if (_client is null)
@@ -1226,15 +1271,20 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
             try
             {
                 await foreach (var line in _client.StreamPodLogsAsync(
-                    PodNamespace, PodName, container.Name, follow: true, tailLines: 200,
-                    timestamps: true, cancellationToken: token))
+                    PodNamespace, PodName, container.Name, follow: follow,
+                    tailLines: SelectedLogRange.TailLines, sinceSeconds: SelectedLogRange.SinceSeconds,
+                    timestamps: true,
+                    responseReady: () => OnLogResponseReady(generation, token, follow),
+                    cancellationToken: token))
                 {
                     Enqueue(line);
                 }
 
                 // follow=true returning means the container exited; the API server
                 // closes the stream rather than erroring.
-                await EndLogStreamAsync(generation, $"Stream ended — {container.Name} exited.", problem: false);
+                await EndLogStreamAsync(generation,
+                    follow ? $"Stream ended — {container.Name} exited." : "Selected range loaded — this is a snapshot.",
+                    problem: false);
             }
             catch (OperationCanceledException)
             {
@@ -1296,18 +1346,47 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     }
 
     /// <summary>Cancels whatever is running, clears the buffer and opens a new generation.</summary>
-    private CancellationToken BeginLogStream(string container, bool previous)
+    private CancellationToken BeginLogStream(string container, bool previous, bool follow)
     {
         _logCts?.Cancel();
         _logCts?.Dispose();
         _logCts = new CancellationTokenSource();
         _logGeneration++;
-        _streaming = (container, previous);
+        _streaming = (container, previous, follow);
+        _loadingLogRange = true;
+        _logHeadersReady = false;
         LogStatus = null;
         IsLogStatusProblem = false;
         ClearLogBuffer();
         StartLogFlushTimer();
         return _logCts.Token;
+    }
+
+    private void OnLogResponseReady(int generation, CancellationToken token, bool follow) =>
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (token.IsCancellationRequested || generation != _logGeneration || _streaming is null) return;
+            _logHeadersReady = true;
+            // A finite snapshot has answered, but only its EOF can prove it is empty.
+            if (follow) _ = ShowQuietRangeAfterResponseAsync(generation, token);
+            RaiseLogPlaceholder();
+        });
+
+    private async Task ShowQuietRangeAfterResponseAsync(int generation, CancellationToken token)
+    {
+        try
+        {
+            // Wait for the opening body burst, but never start this timer before HTTP
+            // headers. A slow API cannot become a false "empty range" by elapsed time.
+            await Task.Delay(200, token);
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (token.IsCancellationRequested || generation != _logGeneration || _allLogLines.Count > 0) return;
+                _loadingLogRange = false;
+                RaiseLogPlaceholder();
+            });
+        }
+        catch (OperationCanceledException) { }
     }
 
     private async Task EndLogStreamAsync(int generation, string status, bool problem) =>
@@ -1321,7 +1400,10 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
             FlushLogLines();
             StopLogFlushTimer();
             _streaming = null;
-            LogStatus = status;
+            _loadingLogRange = false;
+            LogStatus = !IsDemo && !problem && _allLogLines.Count == 0
+                ? SelectedLogRange.EmptyMessage
+                : status;
             IsLogStatusProblem = problem;
             SetLogFlags(following: false, previous: IsShowingPreviousLogs);
         });
@@ -1333,6 +1415,8 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         _logCts = null;
         _logGeneration++;
         _streaming = null;
+        _loadingLogRange = false;
+        _logHeadersReady = false;
         StopLogFlushTimer();
         FlushLogLines();
         LogStatus = status;
@@ -1349,6 +1433,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
 
         _allLogLines.Clear();
         LogLines.Clear();
+        TrimNotice = null;
         RaiseLogPlaceholder();
     }
 
@@ -1414,6 +1499,8 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
             }
         }
 
+        _loadingLogRange = false;
+
         TrimLogBuffer();
         RaiseLogPlaceholder();
     }
@@ -1431,6 +1518,8 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         {
             return;
         }
+
+        TrimNotice = $"Older lines were trimmed at the { _maxLogLines:N0}-line scrollback limit.";
 
         var dropped = _allLogLines.GetRange(0, excess);
         _allLogLines.RemoveRange(0, excess);

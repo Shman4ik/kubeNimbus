@@ -1093,6 +1093,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 yield return Catalog(CommandId.PortForward, where,
                     () => rowTab.PortForwardSelectedCommand.Execute(null));
             }
+            else if (rowTab.SelectedEventPod is { } eventPod)
+            {
+                // An Event about a pod: "Logs" is that pod's, as it is for the list's L and
+                // the row's logs icon. The subtitle names the pod, not the event.
+                yield return Catalog(CommandId.PodLogs,
+                    $"{row.Resource.InvolvedObjectNamespace() ?? row.Namespace}/{eventPod.Name} · the pod this event is about",
+                    () => rowTab.OpenLogsCommand.Execute(null));
+            }
 
             // Offered on whatever names the pods it owns, which is the same evidence the
             // menu item is gated on — never on a list of kinds.

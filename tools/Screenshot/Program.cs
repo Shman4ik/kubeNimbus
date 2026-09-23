@@ -55,7 +55,16 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // every other content-area control stay where they were.
     ("cluster-tab-basic-sidebar", () => HostInMainWindow(ClusterTabScenarios.BasicSidebar())),
     ("cluster-tab-workloads-list-metrics", () => HostInMainWindow(ClusterTabScenarios.WorkloadsListWithMetrics())),
+    // The Events list as `kubectl get events` prints it (Last seen, Type, Reason,
+    // Object, Count, Message; newest first), its empty state (events expire), a search
+    // that matches a message rather than a name, the states the demo dataset cannot hold
+    // (fleet, events.k8s.io series, no object, no timestamp, a multi-line message), and
+    // the whole thing at a narrow window, where the prose columns run out first.
     ("cluster-tab-events-list", () => HostInMainWindow(ClusterTabScenarios.EventsList())),
+    ("cluster-tab-events-empty", () => HostInMainWindow(ClusterTabScenarios.EventsListEmpty())),
+    ("cluster-tab-events-search", () => HostInMainWindow(ClusterTabScenarios.EventsList(filter: "probe"))),
+    ("cluster-tab-events-edge-cases", () => HostInMainWindow(ClusterTabScenarios.EventsListEdgeCases())),
+    ("cluster-tab-events-narrow", () => HostInMainWindow(ClusterTabScenarios.EventsList(), width: 1024)),
     ("cluster-tab-fleet-list", () => HostInMainWindow(ClusterTabScenarios.FleetList(), height: 1000)),
     ("cluster-tab-fleet-list-partial", () => HostInMainWindow(ClusterTabScenarios.FleetListPartial(), height: 1000)),
     ("cluster-tab-sidebar-filtered", () => HostInMainWindow(ClusterTabScenarios.SidebarFiltered())),
@@ -177,6 +186,23 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // presses Shift+L and Esc.
     ("ux-row-logs", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
     ("cluster-tab-row-logs", () => HostInMainWindow(ClusterTabScenarios.DemoRowLogs())),
+    // L3 — logs from everywhere a pod is named. The static shots are ux-workload-pods and
+    // cluster-tab-node-detail-pods (a pod selected, so its row's logs icon shows),
+    // the Events list with an event about a pod selected, and the stated "pod gone". The
+    // ux- checks drive each list for real: the icon clicked at its edge, L, Shift+L, and
+    // the hover reveal on an Argo Application's resource rows.
+    ("cluster-tab-events-pod-logs", () => HostInMainWindow(ClusterTabScenarios.DemoEventsPodLogs())),
+    ("cluster-tab-node-detail-pod-gone", () => HostInMainWindow(ClusterTabScenarios.NodeDetailPodGone(), height: 1000)),
+    ("cluster-tab-pane-logs-narrow-workload",
+        () => HostInMainWindow(ClusterTabScenarios.WorkloadDetail(), height: 1000, width: 860)),
+    ("cluster-tab-pane-logs-narrow-node",
+        () => HostInMainWindow(ClusterTabScenarios.NodeDetailPods(), height: 1000, width: 860)),
+    ("cluster-tab-argo-resource-logs-hover",
+        () => HostInMainWindow(ClusterTabScenarios.ArgoApplicationDetail(), height: 1000)),
+    ("ux-pane-logs-workload", () => HostInMainWindow(ClusterTabScenarios.WorkloadDetail(), height: 1000)),
+    ("ux-pane-logs-node", () => HostInMainWindow(ClusterTabScenarios.NodeDetailPods(), height: 1000)),
+    ("ux-pane-logs-events", () => HostInMainWindow(ClusterTabScenarios.DemoEventsPodLogs())),
+    ("ux-pane-logs-argo", () => HostInMainWindow(ClusterTabScenarios.ArgoApplicationDetail(), height: 1000)),
     ("cluster-tab-row-logs-narrow", () => HostInMainWindow(ClusterTabScenarios.DemoRowLogs(), width: 860)),
     ("cluster-tab-row-logs-deployments", () => HostInMainWindow(ClusterTabScenarios.DemoRowLogsDeployments())),
     ("cluster-tab-row-logs-none", () => HostInMainWindow(ClusterTabScenarios.DemoRowLogsNone())),
@@ -262,6 +288,11 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     if (name == "ux-unhealthy-toggle") UxInteractionChecks.UnhealthyToggle(window);
     if (name == "ux-logs-palette") UxInteractionChecks.LogsPalette(window);
     if (name == "ux-row-logs") UxInteractionChecks.RowLogs(window);
+    if (name == "ux-pane-logs-workload") PaneLogsChecks.WorkloadDetail(window);
+    if (name == "ux-pane-logs-node") PaneLogsChecks.NodeDetail(window);
+    if (name == "ux-pane-logs-events") PaneLogsChecks.Events(window);
+    if (name == "ux-pane-logs-argo") PaneLogsChecks.Argo(window);
+    if (name == "cluster-tab-argo-resource-logs-hover") PaneLogsChecks.HoverArgoRow(window, "Deployment");
     if (name == "main-window-preferences-logs") UxInteractionChecks.ScrollPreferencesTo(window, "Open logs maximized");
     if (name.StartsWith("cluster-tab-row-logs", StringComparison.Ordinal)) UxInteractionChecks.HoverRow(window, 3);
     using var frame = window.CaptureRenderedFrame();

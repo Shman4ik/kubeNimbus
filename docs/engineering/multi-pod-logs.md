@@ -42,21 +42,30 @@ Eight things are load-bearing.
    operator is refused for the same reason in miniature: dropping a requirement *widens*
    a selector, so a selector whose only requirement is unreadable comes back null rather
    than matching everything.
-3. **The per-pod tail is the pane's own budget divided by the pod count.**
-   `PerPodTailLines(bufferLines, podCount)` = `clamp(bufferLines / podCount, 25, 200)`,
-   and this is the decision to read before changing anything here. The single-pod pane
-   fetches a literal `tailLines: 200`; N replicas at 200 each is N × 200 lines of
-   backfill competing for one shared `LogBufferLines` cap, so past a handful of replicas
-   the oldest pods' history is trimmed away before anybody can read it — a pane that
-   silently drops a whole replica's backfill is worse than one that asks for less of
-   each. Dividing keeps the opening burst inside the buffer. The **ceiling of 200 is
-   deliberate and is a scope boundary, not a limit anyone likes**: how much history a log
-   pane should ask for is its own open question (this app offers no tail/since control on
-   any surface, and its window is the smallest of the comparable tools), and answering it
-   here for the multi-pod case only would leave the two panes disagreeing about the same
-   thing. The floor of 25 stops a large workload reducing each replica to nothing.
-   `LogBufferLines` is a **per-pane** cap here, which it already was — there is one
-   buffer per tab — and not a per-pod one.
+3. **The per-pod line range shares the pane's buffer budget.** The default last-200
+   range still asks for `clamp(bufferLines / podCount, 25, 200)` per pod. Last-1000
+   uses the same per-pod share, up to 1000. This avoids an opening burst of N × 1000
+   lines evicting whole replicas' histories before a reader can see them. The 5-minute,
+   1-hour, 24-hour and Everything ranges send `sinceSeconds` or no range parameter;
+   combining a tail limit with them would silently cut off the interval the user chose.
+   Those wider requests can fill the pane's `LogBufferLines` cap, so the pane states
+   when it trims older lines. `LogBufferLines` remains a **per-pane** cap, not a per-pod
+   one. The request is cancelled and reopened when the range changes, while Follow's
+   state stays as it was. The demo control is disabled because its fixed July 2026
+   timestamps cannot answer a relative-time query honestly. A finite snapshot that
+   completes with no lines can state that the range is empty. An open follow with no
+   first line cannot prove emptiness. Core's `responseReady` callback fires only after
+   successful HTTP headers, so a slow API response stays in the loading state. After
+   headers and a short grace for the opening body burst, a quiet follow says "No lines
+   received yet … following new output", which states what was observed without claiming
+   kubelet history is empty. The aggregated pane waits for each active pod's response and
+   names the count still pending; a failed source is a partial result. The first attempt
+   used a 750 ms timer from request start and claimed "No lines in the last 5 minutes"
+   before HTTP answered; removing the timer without adding a response signal then left
+   a healthy quiet follow in "Waiting for log response or output" forever. Both were
+   false state transitions, caught during independent verification. When Follow is off,
+   the finite fetch ends in the chip state **loaded**, rather than **ended** with an
+   "exited" message that would claim a healthy container stopped.
 4. **Concurrency is capped at 50 streams, and the cap is stated.** N pods is N long-lived
    HTTP connections against one API server; a Deployment scaled to 400 would otherwise
    open 400 of them because someone clicked a menu item. 50 is `stern`'s own
@@ -110,6 +119,9 @@ and a half-swapped palette is worse than a single one that works in both. The co
 hint beside a name that is always printed, not an identifier, so an honest repeat past
 eight beats inventing hues nobody can tell apart. Both themes are rendered by the
 screenshot harness, which is where that claim is checked rather than asserted.
+The pod chip labels explicitly use Fluent's theme foreground: inherited foreground
+was nearly white on the light theme's pale blue checked chip, leaving the pod names
+barely readable in the 1280 px screenshot despite their essential legend role.
 
 **The demo cluster runs this for real** (demo rule 4): its three
 `payment-service-report-generator` replicas exist precisely for this — two on the old

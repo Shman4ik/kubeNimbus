@@ -332,6 +332,11 @@ public class ApplyPreviewHttpTests
         private readonly string _directory;
         private readonly Task _pump;
 
+        /// <summary>Optional gate for tests that distinguish a request from its HTTP response.</summary>
+        public TaskCompletionSource<bool>? RequestReceived { get; set; }
+        public TaskCompletionSource<bool>? ReleaseResponse { get; set; }
+        public TaskCompletionSource<bool>? ReleaseBody { get; set; }
+
         public StubApiServer()
         {
             var port = FreePort();
@@ -422,6 +427,9 @@ public class ApplyPreviewHttpTests
                         context.Request.HttpMethod, path, context.Request.Url.Query, context.Request.ContentType, body));
                 }
 
+                RequestReceived?.TrySetResult(true);
+                if (ReleaseResponse is { } gate) await gate.Task;
+
                 var key = $"{context.Request.HttpMethod} {path}";
                 (HttpStatusCode Status, string Body) answer =
                     (HttpStatusCode.NotFound, """{"kind":"Status","code":404,"message":"no stub for this request"}""");
@@ -437,8 +445,14 @@ public class ApplyPreviewHttpTests
                 var bytes = Encoding.UTF8.GetBytes(responseBody);
                 context.Response.StatusCode = (int)status;
                 context.Response.ContentType = "application/json";
-                context.Response.ContentLength64 = bytes.Length;
+                if (ReleaseBody is null) context.Response.ContentLength64 = bytes.Length;
+                else context.Response.SendChunked = true;
                 await context.Response.OutputStream.WriteAsync(bytes);
+                if (ReleaseBody is { } bodyGate)
+                {
+                    await context.Response.OutputStream.FlushAsync();
+                    await bodyGate.Task;
+                }
                 context.Response.Close();
             }
         }

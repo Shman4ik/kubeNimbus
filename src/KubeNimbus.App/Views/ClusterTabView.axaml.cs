@@ -136,16 +136,13 @@ public partial class ClusterTabView : UserControl
         // see it, so this has to run in the Tunnel phase to win.
         ResourceGrid.AddHandler(KeyDownEvent, OnGridKeyDown, RoutingStrategies.Tunnel);
 
-        // A DataGrid selects on left-click only, so without this the row context menu
-        // would act on whatever was selected *before* the right-click — i.e. usually
-        // not the row the menu opened over, which is the worst possible behaviour for
-        // a menu whose last item is Delete.
-        ResourceGrid.AddHandler(PointerPressedEvent, OnGridPointerPressed, RoutingStrategies.Tunnel);
-
         // A Button's Click carries no modifiers, and the row's logs icon needs Shift. The
         // release is what raises Click, so the modifiers are read off it on the way down
-        // (Tunnel runs before the button's own class handler) — see OnRowLogsClick.
-        ResourceGrid.AddHandler(PointerReleasedEvent, OnGridPointerReleasedForRowAction, RoutingStrategies.Tunnel);
+        // (Tunnel runs before the button's own class handler) — see OnRowLogsClick. Shared
+        // with the inspector panes' pod lists (RowLogsGesture), which also makes a right
+        // click select the row under it: a DataGrid selects on left-click only, and a menu
+        // whose last item is Delete must be about the row it opened over.
+        _rowLogs = RowLogsGesture.Track(ResourceGrid);
 
         // Esc returns a maximized inspector to the split. Bubble, and only for keys nothing
         // below handled: a search box clearing itself, a menu closing and the terminal's
@@ -156,10 +153,7 @@ public partial class ClusterTabView : UserControl
     }
 
     /// <summary>The modifiers held when the pointer was last released over the grid.</summary>
-    private KeyModifiers _rowActionModifiers;
-
-    private void OnGridPointerReleasedForRowAction(object? sender, PointerReleasedEventArgs e) =>
-        _rowActionModifiers = e.KeyModifiers;
+    private readonly RowLogsGesture _rowLogs;
 
     /// <summary>
     /// The logs icon in a row's Name cell: that row's logs, and with Shift held, full-size.
@@ -171,8 +165,7 @@ public partial class ClusterTabView : UserControl
     /// </summary>
     private void OnRowLogsClick(object? sender, RoutedEventArgs e)
     {
-        var shift = _rowActionModifiers.HasFlag(KeyModifiers.Shift);
-        _rowActionModifiers = KeyModifiers.None;
+        var shift = _rowLogs.TakeShift();
         e.Handled = true;
 
         if (sender is not Button { DataContext: ResourceRowViewModel row } || Vm is not { } vm)
@@ -456,14 +449,24 @@ public partial class ClusterTabView : UserControl
         // they are not CRDs, so VisiblePrinterColumns is always empty for them.
         var hasPrinterColumns = Vm?.VisiblePrinterColumns.Count > 0;
 
+        // Events are read the way `kubectl get events` prints them: Last seen, Type,
+        // Reason, Object, Count, Message. Those take the place of Name (the Event
+        // object's own generated "<object>.<hex>" name), Status (it was "Reason ×count",
+        // now two columns of its own) and Age (the Event's creation, which is not when it
+        // last happened). Namespace and, in fleet mode, Cluster stay.
+        var isEvents = Vm?.IsEventList == true;
+
         foreach (var column in FixedColumns)
         {
             column.IsVisible = column.Tag switch
             {
+                ResourceColumn.EventLastSeen or ResourceColumn.EventType or ResourceColumn.EventReason
+                    or ResourceColumn.EventObject or ResourceColumn.EventCount or ResourceColumn.EventMessage => isEvents,
+                ResourceColumn.Name or ResourceColumn.Age => !isEvents,
                 ResourceColumn.Ready => ResourceStatusSummary.ShowsReady(descriptor),
                 ResourceColumn.Restarts => ResourceStatusSummary.ShowsRestarts(descriptor),
                 ResourceColumn.Details => !hasPrinterColumns && ResourceStatusSummary.ShowsDetails(descriptor),
-                ResourceColumn.Status => !hasPrinterColumns && ResourceStatusSummary.ShowsStatus(descriptor),
+                ResourceColumn.Status => !isEvents && !hasPrinterColumns && ResourceStatusSummary.ShowsStatus(descriptor),
                 // The 28px health dot, and it now shows *only* where the Status column
                 // has stepped aside for a CRD's own printer columns. Beside a Status
                 // pill it was the same fact twice in the same row — the pill is already
@@ -713,31 +716,6 @@ public partial class ClusterTabView : UserControl
         ApplySortIndicator();
     }
 
-    /// <summary>
-    /// Makes a right-click select the row under the cursor before the context flyout
-    /// opens. Not handled (<c>e.Handled</c> stays false) so the flyout still opens
-    /// normally — this only fixes which row it is about.
-    /// </summary>
-    private void OnGridPointerPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (!e.GetCurrentPoint(ResourceGrid).Properties.IsRightButtonPressed)
-        {
-            return;
-        }
-
-        // Resolved from the event source rather than from a handler on the row
-        // template: a DataGridRow's own padding lies outside its cell content, so a
-        // handler in the template misses the gaps between cells entirely.
-        for (var element = e.Source as Visual; element is not null; element = element.GetVisualParent())
-        {
-            if (element is DataGridRow { DataContext: ResourceRowViewModel row })
-            {
-                ResourceGrid.SelectedItem = row;
-                return;
-            }
-        }
-    }
-
     private void OnInspectorTabsChanged(object? sender, NotifyCollectionChangedEventArgs e) => ApplyDockState();
 
     /// <summary>
@@ -939,17 +917,16 @@ public partial class ClusterTabView : UserControl
     /// </summary>
     private static System.Windows.Input.ICommand? RowKeyCommand(ClusterTabViewModel vm, KeyEventArgs e)
     {
-        if (CommandBindings.Matches(CommandId.PodLogsMaximized, e))
+        switch (RowLogsGesture.MatchLogsKey(e))
         {
-            // The same logs as L, full-size — for a pod and a workload alike.
-            return vm.OpenLogsMaximizedCommand;
-        }
-
-        if (CommandBindings.Matches(CommandId.PodLogs, e))
-        {
-            // A pod's own logs; on anything that owns pods, the one-stream-per-workload
-            // pane — the same thing the menu's "Logs (all pods)" opens.
-            return vm.IsPodRowSelected ? vm.OpenLogsCommand : vm.OpenWorkloadLogsCommand;
+            case true:
+                // The same logs as L, full-size — for a pod, a workload and an event alike.
+                return vm.OpenLogsMaximizedCommand;
+            case false:
+                // A pod's own logs (or, on an Event, the pod it is about); on anything that
+                // owns pods, the one-stream-per-workload pane — the same thing the menu's
+                // "Logs (all pods)" opens.
+                return vm.CanOpenPodLogsForSelectedRow ? vm.OpenLogsCommand : vm.OpenWorkloadLogsCommand;
         }
 
         if (CommandBindings.Matches(CommandId.PreviousLogs, e))

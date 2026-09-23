@@ -39,6 +39,7 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
     private readonly ResourceRowViewModel _row;
     private readonly ResourceDescriptor? _podDescriptor;
     private readonly Func<OwnerRef, string?, Task>? _openPod;
+    private readonly OpenNamedLogs? _openLogs;
     private readonly CancellationTokenSource _cts = new();
 
     public const int OverviewTabIndex = 0;
@@ -57,7 +58,8 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
         ResourceRowViewModel row,
         ResourceDescriptor? podDescriptor = null,
         Func<OwnerRef, string?, Task>? openPod = null,
-        string clusterName = "")
+        string clusterName = "",
+        OpenNamedLogs? openLogs = null)
         : base(
             clusterName.Length == 0 ? $"Node/{row.Name}" : $"Node/{row.Name} · {clusterName}",
             isDemo: client is null)
@@ -68,6 +70,7 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
         _row = row;
         _podDescriptor = podDescriptor;
         _openPod = openPod;
+        _openLogs = openLogs;
         NodeName = row.Name;
         ClusterName = clusterName;
         Key = KeyFor(clusterName, row.Name);
@@ -565,6 +568,7 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
     {
         IsLoadingPods = true;
         PodsError = null;
+        LogsNotice = null;
         try
         {
             var pods = _client is { } client && _podDescriptor is { } descriptor
@@ -572,6 +576,7 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
                 : DemoPods();
 
             Pods.Clear();
+            SelectedPod = null;
             foreach (var pod in pods.OrderBy(p => p.Namespace, StringComparer.Ordinal)
                          .ThenBy(p => p.Name, StringComparer.Ordinal))
             {
@@ -654,6 +659,51 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
         }
 
         await _openPod(new OwnerRef("v1", "Pod", pod.Name, null, false), pod.Namespace);
+    }
+
+    /// <summary>The pod row the Pods tab has selected — what L and the context menu act on.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(PodLogsCommand))]
+    [NotifyCanExecuteChangedFor(nameof(PodLogsMaximizedCommand))]
+    private NodePodViewModel? _selectedPod;
+
+    /// <summary>
+    /// Why the last L / logs-icon open did not open anything. The pod list is one read,
+    /// not a watch, so a pod rescheduled elsewhere since it was listed is the expected
+    /// case, and it is said above the list ("no longer exists") rather than by a click
+    /// that does nothing. Cleared by the next open that works and by a refresh.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasLogsNotice))]
+    private string? _logsNotice;
+
+    public bool HasLogsNotice => !string.IsNullOrEmpty(LogsNotice);
+
+    private bool CanOpenPodLogs => SelectedPod is not null && _openLogs is not null;
+
+    /// <summary>
+    /// L and the context menu's Logs: the selected pod's logs, through the cluster tab's one
+    /// open-logs path (<see cref="OpenNamedLogs"/>), so the pane, the tab reuse and the
+    /// "Open logs maximized" preference are the resource list's own.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanOpenPodLogs))]
+    private Task PodLogsAsync() => OpenPodLogsAsync(SelectedPod, maximized: false);
+
+    /// <summary>Shift+L: the same logs, full-size.</summary>
+    [RelayCommand(CanExecute = nameof(CanOpenPodLogs))]
+    private Task PodLogsMaximizedAsync() => OpenPodLogsAsync(SelectedPod, maximized: true);
+
+    /// <summary>One pod's logs — the row's logs icon, or L. Selects the row first.</summary>
+    public async Task OpenPodLogsAsync(NodePodViewModel? pod, bool maximized)
+    {
+        if (pod is null || _openLogs is null)
+        {
+            return;
+        }
+
+        SelectedPod = pod;
+        LogsNotice = await _openLogs(
+            new OwnerRef("v1", "Pod", pod.Name, pod.Uid, false), pod.Namespace, maximized, _cts.Token);
     }
 
     public override async Task OnClosingAsync()
@@ -773,6 +823,7 @@ public sealed class NodePodViewModel
 
         Namespace = pod.Namespace ?? "";
         Name = pod.Name;
+        Uid = pod.Uid;
 
         var summary = ResourceStatusSummary.Summarize(pod);
         Status = summary.Status;
@@ -790,6 +841,13 @@ public sealed class NodePodViewModel
     public string Namespace { get; }
 
     public string Name { get; }
+
+    /// <summary>
+    /// The pod's UID as listed. The Pods tab is one read, not a watch, so by the time L is
+    /// pressed the name may belong to a pod recreated in its place (a StatefulSet does
+    /// exactly that); the logs opener compares this against the pod it reads back.
+    /// </summary>
+    public string? Uid { get; }
 
     public string Status { get; }
 
