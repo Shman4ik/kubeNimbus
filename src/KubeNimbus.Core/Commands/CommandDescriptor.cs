@@ -33,10 +33,13 @@ public enum CommandId
     DeleteResource,
     RolloutRestart,
     FilterListFromRows,
+    ToggleUnhealthyOnly,
     RefreshList,
 
     // --- Pods ---
     PodLogs,
+    PodLogsMaximized,
+    LogsPalette,
     PreviousLogs,
     FollowLogs,
     Exec,

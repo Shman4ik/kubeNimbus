@@ -271,6 +271,23 @@ public static class CommandCatalog
             Chord = new(CommandKey.Slash),
             Surfaces = SheetOnly,
         },
+        new()
+        {
+            Id = CommandId.ToggleUnhealthyOnly,
+            Title = "Show only unhealthy rows",
+            CheatTitle = "Show only what is unhealthy (warnings and errors)",
+            Category = CommandCategory.Resources,
+            Scope = CommandScope.List,
+            IconKey = "AlertCircleIconGeometry",
+            // k9s's "toggle faults" key, which is where most people choosing a
+            // Kubernetes GUI are coming from. List-scoped rather than a window binding
+            // because Ctrl+Z anywhere with a text box in it is Undo, and the YAML editor
+            // is one keystroke away; the read-only grid has nothing to undo. Literal Ctrl
+            // rather than the primary modifier for the same reason on macOS, where
+            // Cmd+Z is Undo in every application and Ctrl+Z is exactly k9s's key.
+            Chord = new(CommandKey.Z, LiteralCtrl),
+            Surfaces = PaletteAndSheet,
+        },
 
         // ----------------------------------------------------------------- Pods
         new()
@@ -283,6 +300,38 @@ public static class CommandCatalog
             IconKey = "ClockOutlineIconGeometry",
             Chord = new(CommandKey.L),
             Surfaces = PaletteAndSheet,
+        },
+        new()
+        {
+            Id = CommandId.PodLogsMaximized,
+            Title = "Logs, maximized",
+            CheatTitle = "Logs, opened full-size over the list (Esc returns to split)",
+            Category = CommandCategory.Pods,
+            Scope = CommandScope.List,
+            IconKey = "FullscreenIconGeometry",
+            // The same logs L opens, with the inspector already maximized: a log is read
+            // on long lines and far back, and the ~300px dock was one more click away from
+            // that every time. Shift rather than a new letter so the pair reads as one
+            // gesture, and the row's logs icon takes the same modifier on a click. The
+            // "Open logs maximized" preference makes plain L do this too.
+            Chord = new(CommandKey.L, ChordModifiers.Shift),
+            GestureNote = "Shift+click a row's logs icon",
+            Surfaces = PaletteAndSheet,
+        },
+        new()
+        {
+            Id = CommandId.LogsPalette,
+            Title = "Logs: find a pod or workload…",
+            CheatTitle = "Logs of any pod or workload, from anywhere",
+            Category = CommandCategory.Pods,
+            IconKey = "ClockOutlineIconGeometry",
+            // The palette, opened already narrowed to the tab's pods and workloads. A
+            // window binding, not a list key like L: it has to work with focus in the
+            // sidebar, the inspector or nowhere, which is the whole point of "from
+            // anywhere". Shift because Cmd+L is the address bar in every browser and
+            // Ctrl+L clears a terminal; nothing else in the app is on Ctrl/Cmd+Shift+L.
+            Chord = new(CommandKey.L, Cmd | ChordModifiers.Shift),
+            Surfaces = Everywhere,
         },
         new()
         {
@@ -438,7 +487,7 @@ public static class CommandCatalog
             Title = "Maximize the inspector over the list",
             Category = CommandCategory.View,
             IconKey = "FullscreenIconGeometry",
-            GestureNote = "The inspector's expand icon",
+            GestureNote = "The inspector's expand icon; Esc restores",
             Surfaces = SheetOnly,
         },
         new()

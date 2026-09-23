@@ -44,6 +44,7 @@ BuildAvaloniaApp().SetupWithoutStarting();
 var scenarios = new (string Name, Func<Control> Build)[]
 {
     ("ux-namespace-picker", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
+    ("ux-unhealthy-toggle", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
     ("ux-workload-pods", () => HostInMainWindow(ClusterTabScenarios.WorkloadDetail(), height: 1000)),
     ("ux-workload-conditions", () => HostInMainWindow(ClusterTabScenarios.WorkloadDetail(1), height: 1000)),
     ("ux-workload-events", () => HostInMainWindow(ClusterTabScenarios.WorkloadDetail(2), height: 1000)),
@@ -104,6 +105,19 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // what makes this a render of the *restore* path and not of a hand-set grid.
     ("cluster-tab-list-sorted", () => HostInMainWindow(ClusterTabScenarios.SortedList())),
     ("cluster-tab-list-filtered-empty", () => HostInMainWindow(ClusterTabScenarios.FilteredListEmpty())),
+    // Unhealthy only (k9s's "toggle faults"): the narrowed list, its good-news empty
+    // state, the same mode over a partial fleet and on the demo cluster, and the
+    // disabled-but-still-on chip over a kind that has no health verdict to filter by.
+    ("cluster-tab-list-unhealthy", () => HostInMainWindow(ClusterTabScenarios.UnhealthyList())),
+    ("cluster-tab-list-unhealthy-all-healthy", () => HostInMainWindow(ClusterTabScenarios.UnhealthyListAllHealthy())),
+    ("cluster-tab-list-unhealthy-fleet-partial",
+        () => HostInMainWindow(ClusterTabScenarios.UnhealthyFleetPartial(), height: 1000)),
+    // The toggled list at a narrow window: the caption and the chip beside the search
+    // box are the two things this item added to the header row, and 1024px is where
+    // that row runs out first.
+    ("cluster-tab-list-unhealthy-narrow", () => HostInMainWindow(ClusterTabScenarios.UnhealthyList(), width: 1024)),
+    ("cluster-tab-list-unhealthy-unavailable", () => HostInMainWindow(ClusterTabScenarios.UnhealthyUnavailable())),
+    ("cluster-tab-list-unhealthy-demo", () => HostInMainWindow(ClusterTabScenarios.DemoUnhealthy())),
     // The mutating workload actions and their armed confirm strip.
     ("cluster-tab-row-action-scale", () => HostInMainWindow(ClusterTabScenarios.RowActionScale())),
     ("cluster-tab-row-action-restart", () => HostInMainWindow(ClusterTabScenarios.RowActionRestart())),
@@ -150,6 +164,38 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-argo-application-detail",
         () => HostInMainWindow(ClusterTabScenarios.ArgoApplicationDetail(), height: 1000)),
     ("cluster-tab-argo-sync-unavailable", () => HostInMainWindow(ClusterTabScenarios.ArgoSyncUnavailable())),
+    // L1 — the palette's log rows. On the demo cluster, which is the one place the rows
+    // come from a real listing (the dataset) rather than a fixture; the states a sandbox
+    // cannot produce on demand (in flight, refused, capped, a fleet) are written in
+    // through the tab's fixture seam, after a real open so the seam is what wins.
+    ("ux-logs-palette", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
+    // L2 — the row's logs icon and logs opened full-size. The hover is a real pointer
+    // move (HoverRow) over a second row, so the shot shows the icon on the hovered and the
+    // selected row and on no other; the ux- check clicks it at its edge, Shift+clicks it,
+    // presses Shift+L and Esc.
+    ("ux-row-logs", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
+    ("cluster-tab-row-logs", () => HostInMainWindow(ClusterTabScenarios.DemoRowLogs())),
+    ("cluster-tab-row-logs-narrow", () => HostInMainWindow(ClusterTabScenarios.DemoRowLogs(), width: 860)),
+    ("cluster-tab-row-logs-deployments", () => HostInMainWindow(ClusterTabScenarios.DemoRowLogsDeployments())),
+    ("cluster-tab-row-logs-none", () => HostInMainWindow(ClusterTabScenarios.DemoRowLogsNone())),
+    ("cluster-tab-logs-maximized", () => HostInMainWindow(ClusterTabScenarios.DemoLogsMaximized())),
+    ("palette-logs", () => LogsPalette(ClusterTabScenarios.DemoList(), "")),
+    ("palette-logs-search", () => LogsPalette(ClusterTabScenarios.DemoList(), "report")),
+    ("palette-logs-narrow", () => LogsPalette(ClusterTabScenarios.DemoList(), "", width: 800)),
+    // Without the prefix: a plain Ctrl/Cmd+K search for a name finds the log rows too,
+    // after whatever commands match — which here is none.
+    ("palette-logs-unprefixed", () => LogsPalette(ClusterTabScenarios.DemoList(), "checkout", prefix: false)),
+    ("palette-logs-loading", () => LogsPalette(ClusterTabScenarios.DemoList(), "",
+        fixture: tab => tab.SetLogTargetsForFixture(ClusterTabScenarios.StaleLogTargets(), loading: true))),
+    ("palette-logs-denied", () => LogsPalette(ClusterTabScenarios.WorkloadsList(), "",
+        fixture: tab => tab.SetLogTargetsForFixture(ClusterTabScenarios.RefusedLogTargets(), loading: false))),
+    ("palette-logs-capped", () => LogsPalette(ClusterTabScenarios.WorkloadsList(), "",
+        fixture: tab => tab.SetLogTargetsForFixture(ClusterTabScenarios.CappedLogTargets(), loading: false))),
+    ("palette-logs-empty", () => LogsPalette(ClusterTabScenarios.WorkloadsList(), "",
+        fixture: tab => tab.SetLogTargetsForFixture(KubeNimbus.App.ViewModels.LogTargetList.Empty, loading: false))),
+    ("palette-logs-fleet", () => LogsPalette(ClusterTabScenarios.WorkloadsList(), "",
+        fixture: tab => tab.SetLogTargetsForFixture(ClusterTabScenarios.FleetLogTargets(), loading: false))),
+    ("palette-logs-disconnected", () => LogsPalette(ClusterTabScenarios.NotConnected(), "")),
     ("main-window", () => BuildMainWindowContent()),
     ("main-window-no-kubeconfig", () => BuildNoKubeconfigContent()),
     ("main-window-shortcuts", () => BuildMainWindowContent(openShortcuts: true)),
@@ -164,6 +210,9 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // URI or a DataTemplate that stopped resolving compiles perfectly), and these
     // two views are loaded from nowhere else.
     ("main-window-preferences", () => BuildMainWindowContent(openPreferences: true)),
+    // The same page scrolled to its Logs and metrics cards, where L2's "Open logs
+    // maximized" switch sits below the fold of the shot above.
+    ("main-window-preferences-logs", () => BuildMainWindowContent(openPreferences: true)),
     ("main-window-about", () => BuildMainWindowContent(openAbout: true)),
 };
 
@@ -208,6 +257,11 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     Dispatcher.UIThread.RunJobs();
 
     if (name == "ux-namespace-picker") UxInteractionChecks.NamespacePicker(window);
+    if (name == "ux-unhealthy-toggle") UxInteractionChecks.UnhealthyToggle(window);
+    if (name == "ux-logs-palette") UxInteractionChecks.LogsPalette(window);
+    if (name == "ux-row-logs") UxInteractionChecks.RowLogs(window);
+    if (name == "main-window-preferences-logs") UxInteractionChecks.ScrollPreferencesTo(window, "Open logs maximized");
+    if (name.StartsWith("cluster-tab-row-logs", StringComparison.Ordinal)) UxInteractionChecks.HoverRow(window, 3);
     using var frame = window.CaptureRenderedFrame();
     var themeLabel = theme == ThemeVariant.Dark ? "dark" : "light";
     var path = Path.Combine(outDir, $"{name}.{themeLabel}.png");
@@ -222,9 +276,9 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
 // (see MainWindow.axaml), so an inspector tab only renders its real View —
 // PodDetailView/YamlEditorView/etc — when hosted under the actual MainWindow.
 // A bare wrapper falls back to a "ToString() in a TextBlock" placeholder.
-static Control HostInMainWindow(ClusterTabViewModel tab, int height = 800)
+static Control HostInMainWindow(ClusterTabViewModel tab, int height = 800, int width = 1280)
 {
-    var window = new MainWindow { Width = 1280, Height = height };
+    var window = new MainWindow { Width = width, Height = height };
     var vm = new MainWindowViewModel();
     window.DataContext = vm;
     SeedContexts(vm);
@@ -240,6 +294,19 @@ static Control HostInMainWindow(ClusterTabViewModel tab, int height = 800)
     vm.Tabs.Add(tab);
     vm.SelectedTab = tab;
     vm.IsAdvancedView = advanced;
+    return window;
+}
+
+// A cluster tab with the palette open on its log rows. The open is the real one —
+// Palette.Open runs the tab's RequestLogTargets, which on the demo cluster lists the
+// dataset — and a fixture, when there is one, lands after it through the tab's seam.
+static Control LogsPalette(
+    ClusterTabViewModel tab, string query, Action<ClusterTabViewModel>? fixture = null, int width = 1280, bool prefix = true)
+{
+    var window = (Window)HostInMainWindow(tab, width: width);
+    var vm = (MainWindowViewModel)window.DataContext!;
+    vm.Palette.Open((prefix ? CommandPaletteViewModel.LogsPrefix : "") + query);
+    fixture?.Invoke(tab);
     return window;
 }
 

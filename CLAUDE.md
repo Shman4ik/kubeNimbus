@@ -263,7 +263,11 @@ Three rules about it:
    states (hidden / split / maximized) are driven from `ClusterTabView`'s
    code-behind `ApplyDockState` by mutating the content grid's row heights —
    a `GridSplitter` mutates `RowDefinition.Height` directly and would fight a
-   one-way height binding, which is why this is code-behind, not XAML.
+   one-way height binding, which is why this is code-behind, not XAML. Esc returns a
+   maximized inspector to the split (never from a text box, the YAML editor or the
+   terminal, whose Esc is their own), and while it is maximized the collapsed list keeps
+   focus but ignores its row keys — see
+   [row-logs-and-maximized](docs/engineering/row-logs-and-maximized.md).
 8. **A click target must hit-test across its whole area, and say it is one.**
    In Avalonia a `Panel` or `Border` with a **null** `Background` does not
    hit-test where no child covers it, and a container's own `Padding` lies
@@ -272,7 +276,10 @@ Three rules about it:
    row highlights on click but does nothing, which reads as "is this one click
    or two, or is it broken?". Handle taps on the **items control** and resolve
    the row from the event source (`OnSwitcherListTapped`), or give the target an
-   explicit `Background="Transparent"`. Anything clickable also gets
+   explicit `Background="Transparent"`. The Ctrl/Cmd+K palette shipped exactly this
+   (`Tapped` on the row template's `StackPanel`, so only a click on the text ran a
+   command) until L1 moved it to the `ListBox`; `ux-logs-palette` clicks a row at its
+   far edge, where no text is, and fails if it is put back. Anything clickable also gets
    `Cursor="Hand"` and a pressed state — and `:pressed` is a pseudo-class only
    button-like controls set, so on a `Border` it must be a real class toggled
    from the pointer handlers (`Border.clusterTab.pressed`), never
@@ -432,6 +439,16 @@ Three rules about it:
      filtered out of, and offers the way back. The filter is cleared when the selected
      kind changes — carrying "nginx" from Pods to ConfigMaps lands on an empty list
      that looks like a broken watch.
+   - **Unhealthy only is a second narrowing through the same predicate, and it does not
+     break "no status matching".** The chip beside the box (`IsUnhealthyOnly`, Ctrl+Z on
+     the list) keeps rows whose computed `StatusHealth` is warn or error. It matches no
+     text — it reads the verdict that colours the pill — so "Running" still matches
+     nothing. Unlike the name, health changes under an object on a Modified that updates
+     the row *in place*, which never reaches `Rows.CollectionChanged`; `RefreshRowVisibility`
+     re-evaluates the row on every Modified, and `ClusterTabHealthFilterTests` pins both
+     directions. It is a *mode* (kept across kinds, never persisted) where the text is a
+     question (cleared), and its empty state is a third one. Full rules in
+     [Unhealthy only](docs/engineering/unhealthy-only.md).
 14. **A `DataGridCell` needs a gutter on both sides.** Fluent's cell padding is
    left-only, which is invisible while every column is left-aligned and actively
    *misleading* as soon as one isn't. The resource list's Memory column is
@@ -565,6 +582,7 @@ Three rules about it:
 Each feature's design rules, and the incidents behind them, live in a page of their own under [`docs/engineering/`](docs/engineering/), so a session loads only the ones it touches. **Read the page for any feature you change before changing it**, and keep it current in the same PR — the same discipline as this file.
 
 - [Multi-pod logs (one workload, one stream)](docs/engineering/multi-pod-logs.md) — WorkloadLogsTabViewModel: selector-resolved pods, per-pod tail budget, 50-stream cap, two-stage timestamp merge.
+- [One click to logs from the row, and logs opened full-size](docs/engineering/row-logs-and-maximized.md) — The row's logs icon (hover/selected, IsVisible style, Shift+click), Shift+L, the "Open logs maximized" preference read by OpenLogsForAsync, Esc restore.
 - [Log severity is three classes, not a brush binding](docs/engineering/log-severity-classes.md) — Why severity is style classes and never a Foreground binding (the invisible-plain-line bug, twice).
 - [Pod detail's Overview tab (conditions, tolerations, QoS, priority, probes)](docs/engineering/pod-overview-tab.md) — Conditions/tolerations/QoS/probes tab: index 4, condition polarity, API-server probe defaults, signature-guarded rebuild.
 - [Requests and limits are text on the Usage tab](docs/engineering/requests-and-limits.md) — Usage tab's declared requests/limits: words not blanks, not gated on metrics.
@@ -575,6 +593,7 @@ Each feature's design rules, and the incidents behind them, live in a page of th
 - [The cluster switcher and environment colours](docs/engineering/cluster-switcher.md) — Ctrl/Cmd+P switcher (flat list, ranking) and environment colours (biased toward production).
 - [CRD printer columns](docs/engineering/crd-printer-columns.md) — additionalPrinterColumns: lazy CRD GET, JSONPath subset, ten fixed XAML slots, Tag-based column identity.
 - [The resource grid is the reader's to re-cut](docs/engineering/resource-grid-resize-sort.md) — Column drag + header sort: sorts VisibleRows never Rows, maintained sort, per-kind layout in workspace.json.
+- [Unhealthy only: the list's second narrowing](docs/engineering/unhealthy-only.md) — Warn/error predicate over StatusHealth, per-Modified re-evaluation, kind gate, third empty state, list-scoped Ctrl+Z.
 - [An Auto DataGrid column ratchets, and only one grid can afford it](docs/engineering/datagrid-auto-columns.md) — Why the resource list has no Width=Auto columns (measured ratchet) and why Helm/Argo keep them.
 - [Mutating workload actions (scale, rollout restart, delete)](docs/engineering/workload-actions.md) — Scale / rollout restart / delete: merge patches, scale subresource, capability from discovery.
 - [Node operations (detail, cordon / uncordon, drain)](docs/engineering/node-operations.md) — Node detail, cordon/uncordon, drain: allocatable math, eviction plan table, partial-drain lifetime.
@@ -682,7 +701,7 @@ There are **two** persisted files and the split is not arbitrary:
   is *preferences* — what you chose once and expect to still be true next launch:
   theme, hotkey scheme, advanced view, sidebar visibility and expanded sections,
   picked kubeconfig paths, log scrollback, metrics poll interval, delete confirmation,
-  apply preview.
+  apply preview, open logs maximized.
 - **`workspace.json`** (`KubeNimbus.App/WorkspaceStore.cs`) is *session* — what the
   window looked like: open tabs, pinned and recent contexts, environment overrides.
 
@@ -792,6 +811,31 @@ Seven things worth keeping:
    and then refuses to run is worse than no match. What they take from the catalog is
    title, icon and shortcut text. `CommandBindings`' startup check is therefore over
    `WindowBinding` only, which is narrower than pgNimbus's and says so in place.
+   **Since L1 some of those rows come from the network, and the palette stays
+   synchronous anyway.** The `Logs: …` rows (every pod and Deployment/StatefulSet/
+   DaemonSet in the selected tab's namespace, `ClusterTabViewModel.LogTargets.cs`) are
+   filled by a *one-shot* capped list started from `CommandPaletteViewModel.Opening` —
+   not a watch, because the palette is open for seconds and a second long-lived
+   connection per tab for its sake is the wrong trade; not an async item source, because
+   then every keystroke would await something. The source function still returns
+   whatever the tab has *now* (the previous answer for the same namespace and cluster
+   set, stale-while-loading, or nothing) plus **notes** — `PaletteItem`s with a null
+   `Execute` that say "loading", "not allowed to list pods here" (the server's own 403
+   sentence), "capped at 2,000" or "not connected". When the list lands, the tab calls
+   `LogTargetsChanged` and the shell calls `Palette.Refresh()`, which re-reads the source
+   *keeping the query and the highlighted row* (a keystroke still resets the highlight to
+   the top match). Notes are rendered as disabled `ListBoxItem`s, can never be the
+   selection, and are shown only under the `logs ` prefix or when nothing else matched —
+   a settled "no pods here" does not belong under every search for "Preferences". The
+   `logs ` prefix is what Ctrl/Cmd+Shift+L (`CommandId.LogsPalette`) opens the palette
+   with; a prefix in the query rather than a mode flag so it is visible and Backspace
+   leaves it. A log row matches on name, namespace and cluster (`PaletteItem.SearchText`)
+   and never on status, for UI rule 13's reason. Every open-logs gesture — L, P, the menu,
+   the palette rows — goes through `ClusterTabViewModel.OpenLogsForAsync(LogTarget)`, so
+   the pane chosen and the inspector tab reused cannot differ by route. Since L2 that
+   includes Shift+L and the row's logs icon, and the same call is where "open maximized"
+   is decided (`maximized: true`, or the `OpenLogsMaximized` preference when null) — see
+   [row-logs-and-maximized](docs/engineering/row-logs-and-maximized.md).
 4. **An action with no gesture is `PaletteOnly`, not `PaletteAndSheet`.** F1 is a
    *keyboard* reference: a row reading "Edit YAML — —" tells the reader nothing and
    pushes the rows that do carry a key further down. `CommandCatalogTests` pins this —
@@ -803,7 +847,7 @@ Seven things worth keeping:
    the terminal owns plain Ctrl+C, so the clipboard has to move up a modifier, exactly
    as it does in every terminal emulator.
 6. **The list has single-letter row keys, k9s's own.** L logs (a pod's, or every pod a
-   workload owns), P previous logs, S shell on a pod / scale on anything with a `scale`
+   workload owns), Shift+L the same logs with the inspector maximized, P previous logs, S shell on a pod / scale on anything with a `scale`
    subresource, F port-forward, E edit YAML, R rollout restart, Delete, and `/` to search.
    They are `CommandScope.List` rows in the catalog, matched by `ClusterTabView
    .OnGridKeyDown` through `CommandBindings.Matches`, and each resolves to the *same*

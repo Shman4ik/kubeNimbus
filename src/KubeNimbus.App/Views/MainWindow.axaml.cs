@@ -124,6 +124,7 @@ public partial class MainWindow : Window
     private System.Windows.Input.ICommand WindowCommandFor(CommandId id) => id switch
     {
         CommandId.CommandPalette => new RelayOpenPaletteCommand(this),
+        CommandId.LogsPalette => new RelayOpenPaletteCommand(this, CommandPaletteViewModel.LogsPrefix),
         CommandId.ClusterSwitcher => new RelayOpenSwitcherCommand(this),
         CommandId.FilterList => new RelayFocusRowFilterCommand(this),
         CommandId.ShortcutsWindow => new RelayToggleShortcutsCommand(this),
@@ -184,10 +185,26 @@ public partial class MainWindow : Window
 
     private void OnPaletteButtonClick(object? sender, RoutedEventArgs e) => OpenPalette();
 
-    internal void OpenPalette()
+    internal void OpenPalette() => OpenPalette("");
+
+    /// <summary>
+    /// Opens the palette with <paramref name="query"/> already typed — the logs gesture
+    /// opens it on <see cref="CommandPaletteViewModel.LogsPrefix"/>. The caret goes to the
+    /// end, so the next keystroke narrows the query rather than landing in front of it.
+    /// </summary>
+    internal void OpenPalette(string query)
     {
-        Vm?.Palette.Open();
+        Vm?.Palette.Open(query);
         PaletteQueryBox.Focus();
+        MovePaletteCaretToEnd();
+    }
+
+    private void MovePaletteCaretToEnd()
+    {
+        var length = PaletteQueryBox.Text?.Length ?? 0;
+        PaletteQueryBox.SelectionStart = length;
+        PaletteQueryBox.SelectionEnd = length;
+        PaletteQueryBox.CaretIndex = length;
     }
 
     /// <summary>
@@ -223,7 +240,32 @@ public partial class MainWindow : Window
     // focus in a search box and drive a selection from the arrow keys, which is a
     // different thing from a panel you read and dismiss.
 
-    private void OnPaletteItemTapped(object? sender, TappedEventArgs e) => Vm?.Palette.ExecuteSelected();
+    private void OnPaletteListTapped(object? sender, TappedEventArgs e)
+    {
+        if (e.Source is not Visual source
+            || source.FindAncestorOfType<ListBoxItem>(includeSelf: true) is not { DataContext: PaletteItem item }
+            || Vm?.Palette is not { } palette)
+        {
+            return;
+        }
+
+        palette.Execute(item);
+        AfterPaletteRun(palette);
+    }
+
+    /// <summary>
+    /// A row that narrows the palette instead of leaving it (the "find logs…" entry) has
+    /// just rewritten the query under the caret; put the caret back at the end and keep
+    /// focus in the box, so the next keystroke is part of the search.
+    /// </summary>
+    private void AfterPaletteRun(CommandPaletteViewModel palette)
+    {
+        if (palette.IsOpen)
+        {
+            PaletteQueryBox.Focus();
+            MovePaletteCaretToEnd();
+        }
+    }
 
     /// <summary>
     /// Cluster tab context menu → environment assignment. An empty Tag clears the
@@ -355,6 +397,7 @@ public partial class MainWindow : Window
                 break;
             case Key.Enter:
                 palette.ExecuteSelected();
+                AfterPaletteRun(palette);
                 e.Handled = true;
                 break;
             case Key.Down:
@@ -442,13 +485,13 @@ public partial class MainWindow : Window
 }
 
 /// <summary>Trivial ICommand so the palette gesture can live in a KeyBinding without a ViewModel round-trip.</summary>
-internal sealed class RelayOpenPaletteCommand(MainWindow window) : System.Windows.Input.ICommand
+internal sealed class RelayOpenPaletteCommand(MainWindow window, string query = "") : System.Windows.Input.ICommand
 {
     public event EventHandler? CanExecuteChanged { add { } remove { } }
 
     public bool CanExecute(object? parameter) => true;
 
-    public void Execute(object? parameter) => window.OpenPalette();
+    public void Execute(object? parameter) => window.OpenPalette(query);
 }
 
 /// <summary>Trivial ICommand so the cluster-switcher gesture can live in a KeyBinding.</summary>

@@ -207,6 +207,7 @@ public static class CommandBindings
         // move focus into a control, which is not something a command can express. The
         // entries exist so the gesture is still stated once, in the catalog.
         [CommandId.CommandPalette] = _ => null,
+        [CommandId.LogsPalette] = _ => null,
         [CommandId.FilterList] = _ => null,
     };
 }

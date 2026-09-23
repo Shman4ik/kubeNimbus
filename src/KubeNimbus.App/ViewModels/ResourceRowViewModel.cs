@@ -46,6 +46,24 @@ public sealed partial class ResourceRowViewModel : ObservableObject
     [ObservableProperty]
     private string _statusHealth = ResourceHealth.Idle; // -> Ellipse.statusDot / Border.statusPill class
 
+    /// <summary>
+    /// Whether the list's "unhealthy only" mode keeps this row. Computed from
+    /// <see cref="StatusHealth"/> — the same verdict that colours the pill — so the
+    /// filter and the colour can never disagree about a row. It changes on a Modified
+    /// event, which updates this row in place; that is why the list re-evaluates it per
+    /// event rather than only when rows are added (see
+    /// <c>ClusterTabViewModel.RefreshRowVisibility</c>).
+    /// </summary>
+    public bool IsUnhealthy => ResourceHealth.IsUnhealthy(StatusHealth);
+
+    /// <summary>
+    /// Whether this row gets the logs icon in its Name cell (shown on hover and on the
+    /// selected row). Recomputed on every update, because the evidence is the object's own
+    /// selector — see <see cref="LogTarget.CanOpen"/>.
+    /// </summary>
+    [ObservableProperty]
+    private bool _hasLogs;
+
     /// <summary>kubectl's READY column ("2/3") — empty for kinds with no readiness notion.</summary>
     [ObservableProperty]
     private string _readyText = "";
@@ -214,6 +232,7 @@ public sealed partial class ResourceRowViewModel : ObservableObject
         Details = summary.Details;
         _restarts = summary.Restarts;
         _lastRestartAt = summary.LastRestartAt;
+        HasLogs = LogTarget.CanOpen(resource);
         RefreshPrinterCells();
         RefreshTimes();
     }

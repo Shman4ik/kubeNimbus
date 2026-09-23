@@ -145,6 +145,10 @@
             <StreamGeometry x:Key="ContentCopyIconGeometry">M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z</StreamGeometry>
             <StreamGeometry x:Key="DownloadIconGeometry">M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z</StreamGeometry>
             <StreamGeometry x:Key="ClockOutlineIconGeometry">M12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12.5,7H11V13L16.2,16.2L17,14.9L12.5,12.2V7Z</StreamGeometry>
+            <!-- mdi-text-long: lines of text of uneven length, i.e. a log. The row's logs
+                 icon has no label beside it, so its glyph has to say "logs" on its own —
+                 the clock the palette uses reads as "age" in a row that has an Age column. -->
+            <StreamGeometry x:Key="LogsIconGeometry">M4,5H20V7H4V5M4,9H20V11H4V9M4,13H20V15H4V13M4,17H14V19H4V17Z</StreamGeometry>
             <!-- Eye / eye-off: the show-hide toggle on a masked Secret value. A filled
                  and a struck-through glyph, not one glyph at two opacities — the pair
                  reads as a toggle where the single glyph reads as "disabled". -->
@@ -644,6 +648,32 @@
         <Setter Property="Foreground" Value="{StaticResource AppWarningBrush}" />
     </Style>
 
+    <!-- A checked icon-only chip whose glyph is the only thing saying "on". The shared
+         chip style (nimbusUi Theme.axaml) washes a checked chip in AppSelectionBrush and
+         leaves Fluent's checked foreground in place, which is TextOnAccent — white. On
+         the light theme that is a white glyph on a 16%-alpha blue wash, and the list's
+         unhealthy-only chip rendered as an empty pale circle: an "on" state nobody could
+         see (UI rule 9). Scoped to this class rather than fixed for every chip, because
+         the rest-state rule is shared with pgNimbus and a change there is a change to
+         both apps. Pinned for hover and pressed too: Fluent repaints the template part
+         in both. -->
+    <Style Selector="ToggleButton.chip.checkedAccent:checked /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Foreground" Value="{StaticResource AppAccentBrush}" />
+    </Style>
+    <Style Selector="ToggleButton.chip.checkedAccent:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Foreground" Value="{StaticResource AppAccentBrush}" />
+    </Style>
+    <Style Selector="ToggleButton.chip.checkedAccent:checked:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Foreground" Value="{StaticResource AppAccentBrush}" />
+    </Style>
+    <!-- Disabled while checked means "the mode is on, and does not apply here" (the
+         unhealthy-only chip over a kind with no health verdict). The shared checked rule
+         pins Opacity to 1, so without this a disabled chip rendered identically to one
+         that was filtering the list under it — a claim about the list that was false. -->
+    <Style Selector="ToggleButton.chip.checkedAccent:disabled">
+        <Setter Property="Opacity" Value="0.35" />
+    </Style>
+
     <!-- Key caps for the F1 cheat sheet: one bordered chip per key, the way every
          other tool prints a shortcut. This replaced a single monospace string per row
          ("Ctrl+1…9"), which read as a filename rather than as keys — and baked the
@@ -665,5 +695,48 @@
         <Setter Property="FontSize" Value="11" />
         <Setter Property="Opacity" Value="0.5" />
         <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- Row actions: a small icon button inside a list row — today the logs icon in the
+         resource list's Name cell. Drawn only on the hovered row and the selected one: an
+         icon on every row of a 200-pod list is the always-visible chrome UI rule 1
+         defaults to no, while one under the pointer and one on the row you are on costs
+         nothing. Hidden with IsVisible, so a hidden one takes no width and no clicks; the
+         template decides whether a row may have one at all (a Panel around it, bound to
+         the row), because a local IsVisible would outrank these setters. Written for
+         ListBoxItem rows as well as DataGridRow ones, so any list that names a pod can
+         carry the same icon (L3).
+         Hit-testing: the button's template paints a Background (Transparent), so the whole
+         20×20 is the target, not just the glyph (UI rule 8); Cursor is the hand, and
+         :pressed is a real Button pseudo-class here, not a Border one. Not focusable: a
+         click must leave keyboard focus on the rows, where L / Shift+L / Esc live. -->
+    <Style Selector="Button.rowAction">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Width" Value="20" />
+        <Setter Property="Height" Value="20" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Margin" Value="4,0,0,0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Opacity" Value="0.75" />
+        <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="DataGridRow:pointerover Button.rowAction, DataGridRow:selected Button.rowAction, ListBoxItem:pointerover Button.rowAction, ListBoxItem:selected Button.rowAction">
+        <Setter Property="IsVisible" Value="True" />
+    </Style>
+    <Style Selector="Button.rowAction:pointerover">
+        <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="Button.rowAction:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource HoverBackgroundBrush}" />
+    </Style>
+    <Style Selector="Button.rowAction:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource AppSelectionBrush}" />
     </Style>
 </Styles>

@@ -284,7 +284,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     public MainWindowViewModel()
     {
-        Palette = new CommandPaletteViewModel(BuildPaletteItems);
+        Palette = new CommandPaletteViewModel(BuildPaletteItems)
+        {
+            // Every open takes a fresh one-shot look at the selected tab's pods and
+            // workloads (the log rows). It returns at once; the rows join an open palette
+            // through LogTargetsChanged below, and the stale answer shows meanwhile.
+            Opening = () => SelectedTab?.RequestLogTargets(),
+        };
         Switcher = new ClusterSwitcherViewModel(BuildSwitcherItems) { Activate = ActivateSwitcherItem };
 
         LoadPreferences();
@@ -316,6 +322,16 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 // through the shell — exactly as the advanced view above does it.
                 tab.SidebarWidth = SidebarWidth;
                 tab.SidebarWidthChanged = value => SidebarWidth = value;
+
+                // Log rows landing while the palette is open join it in place. Only the
+                // selected tab's: a background tab finishing a load has nothing to show.
+                tab.LogTargetsChanged = () =>
+                {
+                    if (Palette.IsOpen && ReferenceEquals(SelectedTab, tab))
+                    {
+                        Palette.Refresh();
+                    }
+                };
             }
         };
 
@@ -1029,6 +1045,26 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 () => fleetable.IsFleetView = fleetTarget);
         }
 
+        // Unhealthy only. Offered to switch on where the kind has a health verdict to
+        // filter by, and to switch off wherever it is on — including a kind where the
+        // disabled chip cannot, so the palette is always a way out of the mode. Explicit
+        // target, captured now, for the same reason as the rows above.
+        if (SelectedTab is { IsResourceListVisible: true } healthTab
+            && (healthTab.CanFilterUnhealthy || healthTab.IsUnhealthyOnly))
+        {
+            var descriptor = CommandCatalog.Get(CommandId.ToggleUnhealthyOnly);
+            var unhealthyTarget = !healthTab.IsUnhealthyOnly;
+            var kind = healthTab.SelectedKind?.DisplayName ?? "rows";
+            var shortcut = descriptor.ShortcutLabel(Hotkeys.PrimaryLabel);
+            yield return new PaletteItem(
+                unhealthyTarget ? descriptor.Title : "Show every row, healthy ones too",
+                unhealthyTarget
+                    ? $"{kind} · warnings and errors only · {shortcut} in the list"
+                    : $"{kind} · leave unhealthy-only · {shortcut} in the list",
+                descriptor.IconKey,
+                () => healthTab.IsUnhealthyOnly = unhealthyTarget);
+        }
+
         // Access review is a deliberate errand, not something you stumble into — it
         // rides the advanced view along with the rest of the specialist surface.
         // The selected row's actions, mirroring the row context menu. The palette had
@@ -1065,6 +1101,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 yield return new PaletteItem(
                     "Logs (all pods)", $"{where} · one stream across every pod", "LayersIconGeometry",
                     () => rowTab.OpenWorkloadLogsCommand.Execute(null));
+            }
+
+            // The same logs, opened full-size — for a pod and a workload alike, which is
+            // where the list's Shift+L works.
+            if (rowTab.CanOpenLogsForSelectedRow)
+            {
+                yield return Catalog(CommandId.PodLogsMaximized, where,
+                    () => rowTab.OpenLogsMaximizedCommand.Execute(null));
             }
 
             // The mutating actions, gated on what this row's own kind and object
@@ -1161,6 +1205,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
         }
 
+        foreach (var item in LogPaletteItems())
+        {
+            yield return item;
+        }
+
         if (SelectedTab is { } current)
         {
             // Namespaces, so switching one is Ctrl/Cmd+K and a few letters instead of
@@ -1204,6 +1253,44 @@ public sealed partial class MainWindowViewModel : ObservableObject
                         () => current.SelectKindCommand.Execute(kind));
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// The palette's log rows: an entry that narrows the palette to logs, then a
+    /// <c>Logs: …</c> row per pod and per Deployment/StatefulSet/DaemonSet in the selected
+    /// tab's namespace, then the notes that say what the rows cannot (still loading, not
+    /// allowed to list, capped). Last in the source, so in the unfiltered palette the
+    /// commands come first and a namespace of pods does not bury them — the same reason the
+    /// switcher, not the palette, lists every kubeconfig context.
+    /// </summary>
+    private IEnumerable<PaletteItem> LogPaletteItems()
+    {
+        if (SelectedTab is not { } tab)
+        {
+            yield break;
+        }
+
+        var descriptor = CommandCatalog.Get(CommandId.LogsPalette);
+        var shortcut = descriptor.ShortcutLabel(Hotkeys.PrimaryLabel);
+        var state = tab.LogTargetsState;
+        yield return new PaletteItem(
+            descriptor.Title,
+            $"Every pod and workload in {state.Scope} · {shortcut}",
+            descriptor.IconKey,
+            () => Palette.Query = CommandPaletteViewModel.LogsPrefix)
+        {
+            KeepsPaletteOpen = true,
+        };
+
+        foreach (var row in tab.LogTargetRows)
+        {
+            yield return row;
+        }
+
+        foreach (var note in LogPaletteRows.Notes(state))
+        {
+            yield return note;
         }
     }
 }

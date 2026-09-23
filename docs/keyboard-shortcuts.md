@@ -33,6 +33,7 @@ way in Preferences → Shortcut modifier.
 | Delete the selected resource (asks to confirm) | Delete | Delete |
 | Rollout restart the selected workload (asks to confirm) | R | R |
 | Search the list from the rows | / | / |
+| Show only what is unhealthy (warnings and errors) | Ctrl+Z | Ctrl+Z |
 | Refresh the list | Ctrl+R | Cmd+R |
 | Apply the edited YAML | Ctrl+S | Cmd+S |
 
@@ -41,6 +42,8 @@ way in Preferences → Shortcut modifier.
 | Action | Windows / Linux | macOS |
 | --- | --- | --- |
 | Logs — the pod's, or every pod a workload owns | L | L |
+| Logs, opened full-size over the list (Esc returns to split) | Shift+L / Shift+click a row's logs icon | Shift+L / Shift+click a row's logs icon |
+| Logs of any pod or workload, from anywhere | Ctrl+Shift+L | Cmd+Shift+L |
 | Previous logs (crashed container) | P | P |
 | Shell into the pod — or scale a Deployment/StatefulSet | S | S |
 | Port-forward | F | F |
@@ -58,7 +61,7 @@ way in Preferences → Shortcut modifier.
 | Open the command palette | Ctrl+K | Cmd+K |
 | Show or hide the advanced sidebar sections | The sliders icon, top of the sidebar | The sliders icon, top of the sidebar |
 | Show or hide the resource sidebar | Ctrl+B | Cmd+B |
-| Maximize the inspector over the list | The inspector's expand icon | The inspector's expand icon |
+| Maximize the inspector over the list | The inspector's expand icon; Esc restores | The inspector's expand icon; Esc restores |
 | Preferences… | Ctrl+, | Cmd+, |
 | Show this cheat sheet | F1 | F1 |
 

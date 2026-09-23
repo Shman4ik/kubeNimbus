@@ -150,6 +150,18 @@
             <Border Classes="card" Padding="14,12" Margin="0,6,0,0">
                 <Grid ColumnDefinitions="*,Auto">
                     <StackPanel Spacing="2" Margin="0,0,16,0">
+                        <TextBlock Classes="label" Text="Open logs maximized" />
+                        <TextBlock Classes="hint" Text="Logs open full-size over the list instead of in the bottom dock — from L, a row's logs icon, the menu and the palette alike. Shift+L does this for one open whatever this says; Esc or the dock's restore icon goes back to the split." />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="1" VerticalAlignment="Center"
+                                  OnContent="" OffContent=""
+                                  IsChecked="{Binding OpenLogsMaximized}" />
+                </Grid>
+            </Border>
+
+            <Border Classes="card" Padding="14,12" Margin="0,6,0,0">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Spacing="2" Margin="0,0,16,0">
                         <TextBlock Classes="label" Text="Metrics refresh (seconds)" />
                         <TextBlock Classes="hint" Text="How often CPU and memory are re-read. This is the only thing kubeNimbus polls — the metrics API has no watch endpoint — so raising it is the way to go quieter on a large cluster. Below metrics-server's own scrape interval there is no new data to fetch." />
                     </StackPanel>

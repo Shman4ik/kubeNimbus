@@ -7,9 +7,17 @@
 single inspector pane, colour-keyed by pod. It is the job `stern` exists for, and the
 thing that makes a *rolling deployment* readable: during a roll, the pod going away and
 the pod coming up are one question, and reading them in two panes reads them in the
-wrong order. Reached from the row context menu ("Logs (all pods)") and from Ctrl/Cmd+K —
-no new always-visible control (UI rule 1), and no new key binding, so
-`docs/keyboard-shortcuts.md` is unchanged.
+wrong order. Reached from the row context menu ("Logs (all pods)"), the list's L key (and
+Shift+L, full-size), the logs icon on a hovered or selected workload row, and Ctrl/Cmd+K —
+no always-visible control (UI rule 1); see [row-logs-and-maximized](row-logs-and-maximized.md). Since L1 the palette also offers a
+`Logs: Deployment/<name>` row for every Deployment, StatefulSet and DaemonSet in the tab's
+namespace whether or not the list is showing it, and Ctrl/Cmd+Shift+L opens the palette
+already narrowed to those rows and the namespace's pods; see the command catalog section
+of `CLAUDE.md`. Every route lands in `ClusterTabViewModel.OpenLogsForAsync`, which is what
+keeps "which pane, and does it reuse the one already open" one decision. Only those three
+controller kinds get palette rows — a ReplicaSet or Job qualifies on the same selector
+evidence and the L key still reaches it, but as a palette row it would be a second row for
+pods a Deployment already covers.
 
 Eight things are load-bearing.
 

@@ -315,7 +315,7 @@ public class ApplyPreviewHttpTests
         await Assert.That(preview.Diff.IsEmpty).IsFalse();
     }
 
-    private sealed record StubRequest(string Method, string Path, string Query, string? ContentType, string Body);
+    internal sealed record StubRequest(string Method, string Path, string Query, string? ContentType, string Body);
 
     /// <summary>
     /// A loopback HTTP stand-in for an API server, plus the kubeconfig that points a real
@@ -323,7 +323,7 @@ public class ApplyPreviewHttpTests
     /// under test is the request this feature builds, and a self-signed certificate would
     /// add a trust dance that tests nothing about it.
     /// </summary>
-    private sealed class StubApiServer : IDisposable
+    internal sealed class StubApiServer : IDisposable
     {
         private readonly HttpListener _listener = new();
         private readonly Dictionary<string, List<(HttpStatusCode Status, string Body)>> _responses = new(StringComparer.Ordinal);

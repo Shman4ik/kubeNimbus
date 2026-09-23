@@ -4,6 +4,7 @@
              xmlns:conv="using:KubeNimbus.App.Converters"
              xmlns:controls="using:KubeNimbus.App.Controls"
              xmlns:aconv="using:Avalonia.Data.Converters"
+             xmlns:app="using:KubeNimbus.App"
              x:Class="KubeNimbus.App.Views.ClusterTabView"
              x:DataType="vm:ClusterTabViewModel">
 
@@ -373,11 +374,18 @@
                        IsVisible="{Binding IsFleetView}" />
           </StackPanel>
           <Border Grid.Column="3" Classes="inlineWarning" Margin="12,0,0,0" HorizontalAlignment="Left"
-                  IsVisible="{Binding ConnectionWarning, Converter={x:Static aconv:ObjectConverters.IsNotNull}}">
-            <StackPanel Orientation="Horizontal" Spacing="6">
-              <PathIcon Data="{StaticResource AlertCircleIconGeometry}" Width="12" Height="12" />
+                  IsVisible="{Binding ConnectionWarning, Converter={x:Static aconv:ObjectConverters.IsNotNull}}"
+                  ToolTip.Tip="{Binding ConnectionWarning}">
+            <!-- A DockPanel, not a horizontal StackPanel: a StackPanel measures its
+                 children at infinite width, so the TextTrimming below never fired and a
+                 long warning ("staging-eu: connection refused (127.0.0.1:6550)") drew
+                 straight over the search box beside it in the fleet-partial state. Docked,
+                 the text gets the column's width and ellipsises; the tooltip has the rest. -->
+            <DockPanel>
+              <PathIcon DockPanel.Dock="Left" Data="{StaticResource AlertCircleIconGeometry}" Width="12" Height="12"
+                        Margin="0,0,6,0" />
               <TextBlock Text="{Binding ConnectionWarning}" FontSize="12" TextTrimming="CharacterEllipsis" />
-            </StackPanel>
+            </DockPanel>
           </Border>
           <!-- Search the list by name. The sidebar's filter box narrows *kinds*; this
                one narrows the objects, which is the thing `kubectl get | grep` has
@@ -388,7 +396,7 @@
           <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="8" Margin="12,0,0,0"
                       VerticalAlignment="Center" IsVisible="{Binding IsResourceListVisible}">
             <TextBlock Text="{Binding RowFilterSummary}" FontSize="11" Opacity="0.55" VerticalAlignment="Center"
-                       IsVisible="{Binding IsRowFiltering}" />
+                       IsVisible="{Binding RowFilterSummary, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}" />
             <TextBox Name="RowFilterBox" Classes="filterbox" Width="230"
                      Text="{Binding RowFilter}" PlaceholderText="Search by name…"
                      KeyDown="OnRowFilterKeyDown">
@@ -404,6 +412,19 @@
                 </Button>
               </TextBox.InnerRightContent>
             </TextBox>
+            <!-- Unhealthy only: k9s's "toggle faults". Beside the search box because it
+                 narrows the same list, docked right of it the way the sidebar's advanced
+                 switch sits right of the sidebar's box. Two-way IsChecked and NO Command
+                 (UI rule 8b). Disabled on a kind with no health verdict, where it could
+                 only produce an always-empty list; ShowOnDisabled so the tooltip that
+                 says why is still reachable. -->
+            <ToggleButton Name="UnhealthyToggle" Classes="chip checkedAccent" Padding="5" VerticalAlignment="Center"
+                          IsChecked="{Binding IsUnhealthyOnly}"
+                          IsEnabled="{Binding CanFilterUnhealthy}"
+                          ToolTip.Tip="{Binding UnhealthyToggleTip}"
+                          ToolTip.ShowOnDisabled="True">
+              <PathIcon Data="{StaticResource AlertCircleIconGeometry}" Width="14" Height="14" />
+            </ToggleButton>
           </StackPanel>
           <Button Grid.Column="5" Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="Refresh" Padding="6"
                   Margin="8,0,0,0">
@@ -583,10 +604,32 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
+              <!-- The logs icon lives INSIDE the Name cell, at its right end, rather than in
+                   a column: a column would be one more width the per-kind layout remembers
+                   and one more thing a CRD's printer columns compete with at 1280px (see
+                   "The resource grid is the reader's to re-cut"). The Panel carries whether
+                   the row has logs at all (HasLogs); Button.rowAction (Styles/Theme.axaml)
+                   carries when it is drawn — only on the hovered and the selected row (UI
+                   rule 1). While it is hidden its Auto column is zero wide, so a name at
+                   rest keeps the whole cell; the icon's 24px come out of the name only on
+                   the row under the pointer and the row you are on, which is the trade
+                   against a slot reserved on every row (measured: at 860px that was a fifth
+                   of every pod name, on rows nobody was pointing at).
+                   Click, not Command: Shift+click is the full-size open, and a command
+                   cannot see the modifier. -->
               <DataGridTemplateColumn Header="Name" Tag="name" CanUserSort="True" Width="2*" MinWidth="136">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
-                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" VerticalAlignment="Center" />
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" VerticalAlignment="Center" />
+                      <Panel Grid.Column="1" IsVisible="{Binding HasLogs}">
+                        <Button Classes="rowAction logs"
+                                Click="OnRowLogsClick"
+                                ToolTip.Tip="{x:Static app:CommandTip.RowLogs}">
+                          <PathIcon Data="{StaticResource LogsIconGeometry}" Width="12" Height="12" />
+                        </Button>
+                      </Panel>
+                    </Grid>
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
@@ -824,6 +867,24 @@
                        HorizontalAlignment="Center" />
             <Button Classes="chip" HorizontalAlignment="Center" Command="{Binding ClearRowFilterCommand}"
                     Content="Clear search" />
+          </StackPanel>
+
+          <!-- Unhealthy-only emptied the list: the good-news state, and a third one
+               beside "no <kind> found" and "nothing matches" (UI rule 9) — a check mark
+               rather than the kind's glyph or a magnifier, so it cannot be read as
+               either. States what it counted over and offers the way back. -->
+          <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" MaxWidth="360"
+                      IsVisible="{Binding IsHealthFilterEmpty}">
+            <PathIcon Data="{StaticResource CheckIconGeometry}" Width="26" Height="26" Opacity="0.3"
+                      HorizontalAlignment="Center" />
+            <TextBlock Text="{Binding HealthFilterEmptyTitle}"
+                       FontWeight="SemiBold" FontSize="13" HorizontalAlignment="Center" Opacity="0.7"
+                       TextTrimming="CharacterEllipsis" />
+            <TextBlock Text="{Binding HealthFilterEmptyDetail}" FontSize="12" Opacity="0.5"
+                       HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"
+                       IsVisible="{Binding HealthFilterEmptyDetail, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}" />
+            <Button Classes="chip" HorizontalAlignment="Center" Command="{Binding ShowAllRowsCommand}"
+                    Content="Show every row" />
           </StackPanel>
         </Grid>
 

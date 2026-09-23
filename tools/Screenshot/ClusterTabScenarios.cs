@@ -255,6 +255,55 @@ internal static class ClusterTabScenarios
     /// so every declared column is simply drawn and the pair collapses into this one.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// L2 — the row's logs icon. A demo pod list with one row selected; the scenario's
+    /// interaction step (<c>UxInteractionChecks.HoverRow</c>) then puts the pointer over a
+    /// second row, so the shot shows the icon on both states it appears in and on none of
+    /// the other rows.
+    /// </summary>
+    public static ClusterTabViewModel DemoRowLogs()
+    {
+        var tab = DemoTab();
+        tab.SelectedRow = tab.Rows.Skip(1).FirstOrDefault() ?? tab.Rows.FirstOrDefault();
+        return tab;
+    }
+
+    /// <summary>The same icon on a workload list — L opens the one-stream pane there.</summary>
+    public static ClusterTabViewModel DemoRowLogsDeployments()
+    {
+        var tab = DemoTab();
+        var kind = tab.SidebarSections.SelectMany(s => s.Kinds)
+            .First(k => k.Descriptor is { Group: "apps", Kind: "Deployment" });
+        tab.SelectKindCommand.Execute(kind);
+        tab.SelectedRow = tab.Rows.FirstOrDefault();
+        return tab;
+    }
+
+    /// <summary>A kind with no logs: no icon on the selected row, and no slot for one.</summary>
+    public static ClusterTabViewModel DemoRowLogsNone()
+    {
+        var tab = DemoTab();
+        var kind = tab.SidebarSections.SelectMany(s => s.Kinds)
+            .First(k => k.Descriptor is { Group: "", Kind: "ConfigMap" });
+        tab.SelectKindCommand.Execute(kind);
+        tab.SelectedRow = tab.Rows.FirstOrDefault();
+        return tab;
+    }
+
+    /// <summary>
+    /// Shift+L: the selected pod's logs opened with the inspector already maximized over
+    /// the list — through the real command, so the dock state is the one the key produces.
+    /// </summary>
+    public static ClusterTabViewModel DemoLogsMaximized()
+    {
+        var tab = DemoTab();
+        tab.SelectedRow = tab.Rows.FirstOrDefault(r => r.Name.StartsWith("payment-service-report-generator", StringComparison.Ordinal))
+            ?? tab.Rows.FirstOrDefault();
+        tab.OpenLogsMaximizedCommand.Execute(null);
+        DrainDemoLogs(tab);
+        return tab;
+    }
+
     public static ClusterTabViewModel DemoCrdPrinterColumns() => SelectDemoCertificates(DemoTab());
 
     private static ClusterTabViewModel SelectDemoCertificates(ClusterTabViewModel tab)
@@ -896,6 +945,86 @@ internal static class ClusterTabScenarios
     {
         var tab = BaseTab();
         tab.RowFilter = "nginx-ingress";
+        return tab;
+    }
+
+    /// <summary>
+    /// Unhealthy only, on the payments pod list: the CrashLoopBackOff worker and the
+    /// Pending fraud detector, and nothing else. Through the real property, so the
+    /// chip's checked state, the "2 of 8 unhealthy" caption and the rows are all what
+    /// the toggle produces.
+    /// </summary>
+    public static ClusterTabViewModel UnhealthyList()
+    {
+        var tab = BaseTab();
+        tab.IsUnhealthyOnly = true;
+        tab.SelectedRow = tab.VisibleRows.FirstOrDefault();
+        return tab;
+    }
+
+    /// <summary>
+    /// Unhealthy only over a namespace where every pod is fine — the good-news state,
+    /// which has to look like neither "no pods here" nor "nothing matches".
+    /// </summary>
+    public static ClusterTabViewModel UnhealthyListAllHealthy()
+    {
+        var tab = BaseTab(populateRows: false);
+        tab.SelectedNamespace = "kube-system";
+        foreach (var pod in FixtureData.Pods.Where(p => p.Namespace == "kube-system"))
+        {
+            tab.Rows.Add(new ResourceRowViewModel(pod));
+        }
+
+        tab.IsListLoading = false;
+        tab.IsUnhealthyOnly = true;
+        return tab;
+    }
+
+    /// <summary>The same mode over a partial fleet: filtering rows from every cluster
+    /// still in it, with the unreachable member still stated in the header.</summary>
+    public static ClusterTabViewModel UnhealthyFleetPartial()
+    {
+        var tab = FleetListPartial();
+        tab.IsUnhealthyOnly = true;
+        tab.SelectedRow = tab.VisibleRows.FirstOrDefault();
+        return tab;
+    }
+
+    /// <summary>
+    /// The mode left on while a kind with no health verdict is showing: the chip stays
+    /// checked but disabled (its tooltip says why), and the list is the whole list rather
+    /// than an always-empty one.
+    /// </summary>
+    public static ClusterTabViewModel UnhealthyUnavailable()
+    {
+        var tab = BaseTab(populateRows: false);
+        tab.IsUnhealthyOnly = true;
+        var configMaps = tab.SidebarSections.SelectMany(s => s.Kinds)
+            .First(k => k.Descriptor is { Group: "", Kind: "ConfigMap" });
+        foreach (var kind in tab.SidebarSections.SelectMany(s => s.Kinds))
+        {
+            kind.IsSelected = kind == configMaps;
+        }
+
+        tab.SelectedKind = configMaps;
+        foreach (var configMap in DemoData.ConfigMaps.Where(c => c.Namespace == "payments"))
+        {
+            tab.Rows.Add(new ResourceRowViewModel(configMap));
+        }
+
+        tab.IsListLoading = false;
+        return tab;
+    }
+
+    /// <summary>
+    /// Unhealthy only on the demo cluster's own pod list, reached through the production
+    /// connect path rather than a fixture — the half of the item's sandbox check a local
+    /// API-server-only cluster cannot give, since no pod there ever starts.
+    /// </summary>
+    public static ClusterTabViewModel DemoUnhealthy()
+    {
+        var tab = DemoTab();
+        tab.IsUnhealthyOnly = true;
         return tab;
     }
 
@@ -1740,6 +1869,53 @@ internal static class ClusterTabScenarios
 
         tab.InspectorTabs.Add(pf);
         tab.SelectedInspectorTab = pf;
+        return tab;
+    }
+
+    // ------------------------------------------------------------ L1: palette log rows
+    //
+    // The answers a real listing produces, written in for the states a sandbox will not
+    // produce on demand. Built from the shipped demo objects so the rows read as the
+    // demo cluster's own.
+
+    private static IEnumerable<LogTarget> DemoLogTargets(string clusterName = "") =>
+        DemoData.Deployments.Select(d => new LogTarget(d, DeploymentDescriptor, clusterName, null))
+            .Concat(DemoData.Pods
+                .Where(p => p.Namespace == "payments")
+                .Select(p => new LogTarget(p, ResourceDescriptor.Pods, clusterName, null)));
+
+    /// <summary>The last look at this namespace, shown while the next is in flight.</summary>
+    public static LogTargetList StaleLogTargets() => new([.. DemoLogTargets().Take(4)], [], []);
+
+    /// <summary>
+    /// A user who may list Deployments here but not pods — the RBAC shape the note exists
+    /// for: the rows that could be listed, and the refusal in the server's own words.
+    /// </summary>
+    public static LogTargetList RefusedLogTargets() => new(
+        [.. DemoData.Deployments.Select(d => new LogTarget(d, DeploymentDescriptor, "", null))],
+        [new LogTargetProblem(
+            "not allowed to list pods in payments",
+            "pods is forbidden: User \"dev@acme.io\" cannot list resource \"pods\" in API group \"\" in the namespace \"payments\"",
+            IsForbidden: true)],
+        []);
+
+    public static LogTargetList CappedLogTargets() => new(
+        [.. DemoLogTargets()],
+        [],
+        ["only the first 2,000 pods in every namespace are listed"]);
+
+    /// <summary>Two clusters with the same objects — every row has to say which one it is.</summary>
+    public static LogTargetList FleetLogTargets() => new(
+        [.. DemoLogTargets("prod-payments").Take(5), .. DemoLogTargets("staging-eu").Take(5)],
+        [new LogTargetProblem("qa-integration: couldn't list pods in payments", "Connection refused (10.4.0.12:6443)", IsForbidden: false)],
+        []);
+
+    /// <summary>A tab whose connection is gone, so the palette has nothing to list from.</summary>
+    public static ClusterTabViewModel NotConnected()
+    {
+        var tab = BaseTab();
+        tab.IsConnected = false;
+        tab.Status = "Not connected.";
         return tab;
     }
 }
