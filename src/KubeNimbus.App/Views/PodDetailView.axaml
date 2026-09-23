@@ -125,6 +125,16 @@
              The work happens in the view model's On<Property>Changed hooks. -->
         <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center"
                     IsVisible="{Binding SelectedDetailTabIndex, Converter={x:Static conv:IndexEqualsConverter.Instance}, ConverterParameter=0}">
+          <ComboBox Width="132" MinHeight="27" FontSize="11" Margin="0,0,4,0"
+                    ItemsSource="{Binding LogRanges}" SelectedItem="{Binding SelectedLogRange}"
+                    IsEnabled="{Binding !IsDemo}"
+                    ToolTip.Tip="Log range (unavailable for canned demo streams)">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:LogRange">
+                <TextBlock Text="{Binding Label}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
           <ToggleButton Classes="chip" Padding="6" IsChecked="{Binding IsFollowingLogs}"
                         ToolTip.Tip="Follow logs (cancels the stream when toggled off)">
             <PathIcon Data="{StaticResource PlayIconGeometry}" Width="12" Height="12" />
@@ -166,8 +176,12 @@
 
     <TabControl Grid.Row="2" Classes="headerless" SelectedIndex="{Binding SelectedDetailTabIndex}">
       <TabItem Header="Logs">
-        <Grid>
-          <Border Classes="card" Padding="8">
+        <Grid RowDefinitions="Auto,*">
+          <Border Grid.Row="0" Classes="infoBar warn" Margin="0,0,0,4"
+                  IsVisible="{Binding TrimNotice, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}">
+            <TextBlock Text="{Binding TrimNotice}" FontSize="11.5" />
+          </Border>
+          <Border Grid.Row="1" Classes="card" Padding="8">
             <Grid>
               <!-- HorizontalScrollBarVisibility defaults to Disabled, which with wrapping
                    off hard-clipped every long line — a stack trace or a JSON log entry

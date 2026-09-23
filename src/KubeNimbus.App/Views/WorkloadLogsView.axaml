@@ -35,8 +35,10 @@
                        is how log lines once rendered invisible. -->
                   <Ellipse Width="8" Height="8" VerticalAlignment="Center" Fill="{Binding Brush}" />
                   <TextBlock Text="{Binding ShortName}" FontSize="12" VerticalAlignment="Center"
-                             FontFamily="Cascadia Mono,Consolas,monospace" />
-                  <TextBlock Text="{Binding StateLabel}" FontSize="10" Opacity="0.55" VerticalAlignment="Center"
+                             FontFamily="Cascadia Mono,Consolas,monospace"
+                             Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                  <TextBlock Text="{Binding StateLabel}" FontSize="10" Opacity="0.85" VerticalAlignment="Center"
+                             Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"
                              IsVisible="{Binding HasStateLabel}" />
                 </StackPanel>
               </ToggleButton>
@@ -59,6 +61,16 @@
       </TextBox>
 
       <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+        <ComboBox Width="132" MinHeight="27" FontSize="11" Margin="0,0,4,0"
+                  ItemsSource="{Binding LogRanges}" SelectedItem="{Binding SelectedLogRange}"
+                  IsEnabled="{Binding !IsDemo}"
+                  ToolTip.Tip="Log range (unavailable for canned demo streams)">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:LogRange">
+              <TextBlock Text="{Binding Label}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
         <ToggleButton Classes="chip" Padding="6" IsChecked="{Binding IsFollowing}"
                       ToolTip.Tip="Follow every pod (cancels all streams when toggled off)">
           <PathIcon Data="{StaticResource PlayIconGeometry}" Width="12" Height="12" />
@@ -82,10 +94,16 @@
 
     <!-- Present only when the pod cap actually bit, so it costs nothing the rest of the
          time (UI rule 1) and is impossible to miss when it matters (UI rule 11). -->
-    <Border Grid.Row="2" Classes="infoBar warn" Margin="0,0,0,6"
-            IsVisible="{Binding CapNotice, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}">
-      <TextBlock Text="{Binding CapNotice}" TextWrapping="Wrap" FontSize="11.5" />
-    </Border>
+    <StackPanel Grid.Row="2" Spacing="4">
+      <Border Classes="infoBar warn" Margin="0,0,0,6"
+              IsVisible="{Binding CapNotice, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}">
+        <TextBlock Text="{Binding CapNotice}" TextWrapping="Wrap" FontSize="11.5" />
+      </Border>
+      <Border Classes="infoBar warn" Margin="0,0,0,6"
+              IsVisible="{Binding TrimNotice, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}">
+        <TextBlock Text="{Binding TrimNotice}" TextWrapping="Wrap" FontSize="11.5" />
+      </Border>
+    </StackPanel>
 
     <Border Grid.Row="3" Classes="card" Padding="8">
       <Grid>

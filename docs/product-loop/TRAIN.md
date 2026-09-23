@@ -18,7 +18,7 @@ by editing **Config** or **Owner notes**; the next step applies it first.
 
 ## State
 
-Phase: BUILD — resumed by the owner after T2 (2026-09-23) · Branch: claude/epic-mccarthy-a0inzm (session-designated; stands in for `train/v0.4.0`; #87 merged the first three items to `main`) · Selected: 2026-09-22 · PR: [#87](https://github.com/Shman4ik/kubeNimbus/pull/87) (merged) · Started: 2026-09-22 · Last release: v0.3.3 (2026-09-22)
+Phase: BUILD · Branch: claude/merge-t2-l3-t3 (combines #91 — T2 and L3 — with #92 — T3; the duplicate L3 in #90 is closed, its fixes ported) · Selected: 2026-09-22 · PR: [#87](https://github.com/Shman4ik/kubeNimbus/pull/87) (merged) · Started: 2026-09-22 · Last release: v0.3.3 (2026-09-22)
 Baseline: first frame 99 ms (median of 3 warm runs: 99/99/95; cold first run 3529 ms, font cache), executable 51.3 MiB (53 769 168 B; payload with libSkiaSharp + libHarfBuzzSharp 64.6 MiB) · RID: linux-x64 · AOT warnings: the known DataGrid IL2104/IL3053 pair only
 Sandbox: **API-server-only.** Docker Hub blobs 403, so `sandbox-up.sh` fails; native `k3s server` (GitHub binary + airgap images) comes up and the demo manifests apply (50-crds/51-custom-resources included, so VER-24 is paid), but `runc` cannot start containers here — no pod ever runs. Real: discovery, list/watch, CRDs, RBAC, SSA/dry-run, patches, evictions. Not real: logs, exec, port-forward, metrics. Must be re-started each session (see CURRENT_STATE.md → Environment notes).
 
@@ -36,6 +36,8 @@ Sandbox: **API-server-only.** Docker Hub blobs 403, so `sandbox-up.sh` fails; na
   one-item resume: T2 is built and verified; the pause stands for everything else.
 - 2026-09-23 (owner, in chat, after T2 landed): **"continue"** — read as lifting the pause;
   the train resumes in plan order with L3.
+- 2026-09-23 (owner, in chat): **build T3 in a separate worktree.** This authorizes T3
+  as an isolated BUILD step while L3 remains in progress in its own worktree.
 
 ## Items
 
@@ -46,7 +48,7 @@ Sandbox: **API-server-only.** Docker Hub blobs 403, so `sandbox-up.sh` fails; na
 | L2 | owner pin | One click to logs from the row, and logs opened full-size | UX | S | pin | landed | 0 | 7dbc58d |
 | L3 | owner pin | Logs from everywhere a pod is named | UX | S | pin | landed | 0 | ffe1694 |
 | T2 | friction walk (`cluster-tab-events-list`) | The Events list reads like `kubectl get events`: last seen, type, reason, object, message | UX | M | 3.65 | landed | 0 | 4326e05 |
-| T3 | Ready FEAT-31 (P1, forced) | Reach a container's whole retained log: tail and since controls | UX | S | 3.45 | planned | 0 | |
+| T3 | Ready FEAT-31 (P1, forced) | Reach a container's whole retained log: tail and since controls | UX | S | 3.45 | landed | 2 | 38f1012 |
 | T4 | research #6 + friction walk (`ux-workload-events`) | Events read the same everywhere, with relative times and a warning count on the tab | UX | S | 3.10 | reserve (owner pin displaced it) | 0 | |
 | T5 | friction walk + Ready ENG-23 | The Namespace column appears only when it says something | UX | S | 2.85 | reserve (owner pin displaced it) | 0 | |
 | T6 | Ready FEAT-34 (P1, forced) | Log follow survives a dropped stream and says so in place | Reliability | S | 2.60 | planned | 0 | |
@@ -410,6 +412,23 @@ Risk:                 tests that leak state between runs; use a unique namespace
 - **R3 — FEAT-56**: `SelfSubjectReview` ("who am I") beside the access review; states pre-1.26 servers.
 
 ## Log
+
+- 2026-09-23 — Consolidation: T2 and L3 (#91) and T3 (#92) merged onto one branch. L3 had
+  been built twice (#90 as well); #91 was kept and #90 closed, with its fixes ported: a pod
+  re-read by name must still have the UID the pane listed, the pane's cancellation reaches
+  the read, a right click in a pane's pod list selects the row under it, and Argo Rollouts
+  get the logs icon. T3's live-verification row renumbered from VER-41 to VER-43 (VER-41 is T2's).
+
+- 2026-09-23 — T3 landed in its own worktree (`38f1012`), verifier PASS after two fix
+  rounds. Both log panes offer six ranges, keep Follow state, and report scrollback
+  trimming. The first review caught premature empty states and a snapshot labelled
+  as a container exit; the second caught a quiet follow that never left loading.
+  Successful-response callbacks now distinguish a pending request from an answered
+  quiet stream. Build, 389 Core tests and 239 App tests passed; 17 Core integration
+  tests skipped because this Windows host has no cluster that runs pods. Both themes
+  rendered at 1280 px; `win-x64` NativeAOT passed with only the known DataGrid
+  warnings. `linux-x64` NativeAOT is not supported from Windows. VER-43 records
+  live-stream verification debt.
 
 - 2026-09-23 — L3 landed (`ffe1694`), verifier PASS first round (re-ran build, both suites —
   Core 395/413 with 18 sandbox skips, App 274/274 — the full harness with the four pane-logs
