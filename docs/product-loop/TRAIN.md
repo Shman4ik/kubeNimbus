@@ -18,7 +18,7 @@ by editing **Config** or **Owner notes**; the next step applies it first.
 
 ## State
 
-Phase: BUILD — **paused by the owner after L2** (2026-09-23; resume by clearing that Owner note) · Branch: claude/relaxed-franklin-gssbew (session-designated; stands in for `train/v0.4.0`) · Selected: 2026-09-22 · PR: [#87](https://github.com/Shman4ik/kubeNimbus/pull/87) · Started: 2026-09-22 · Last release: v0.3.3 (2026-09-22)
+Phase: BUILD · Branch: codex/release-train-l3 (isolated worktree; PR #87 merged before this step) · Selected: 2026-09-22 · PR: — · Started: 2026-09-22 · Last release: v0.3.3 (2026-09-22)
 Baseline: first frame 99 ms (median of 3 warm runs: 99/99/95; cold first run 3529 ms, font cache), executable 51.3 MiB (53 769 168 B; payload with libSkiaSharp + libHarfBuzzSharp 64.6 MiB) · RID: linux-x64 · AOT warnings: the known DataGrid IL2104/IL3053 pair only
 Sandbox: **API-server-only.** Docker Hub blobs 403, so `sandbox-up.sh` fails; native `k3s server` (GitHub binary + airgap images) comes up and the demo manifests apply (50-crds/51-custom-resources included, so VER-24 is paid), but `runc` cannot start containers here — no pod ever runs. Real: discovery, list/watch, CRDs, RBAC, SSA/dry-run, patches, evictions. Not real: logs, exec, port-forward, metrics. Must be re-started each session (see CURRENT_STATE.md → Environment notes).
 
@@ -32,6 +32,8 @@ Sandbox: **API-server-only.** Docker Hub blobs 403, so `sandbox-up.sh` fails; na
   with a real API server).
 - 2026-09-23 (owner, in chat): **finish the current item (L2) through to the PR, then stop.**
   The train pauses after L2 lands; the next step does nothing until the owner resumes it.
+- 2026-09-23 (owner, in chat): **perform the next `/release-train` item in a separate
+  worktree and verify the app locally.** This resumes BUILD for L3.
 
 ## Items
 
@@ -40,7 +42,7 @@ Sandbox: **API-server-only.** Docker Hub blobs 403, so `sandbox-up.sh` fails; na
 | T1 | research #1, headlamp#6974, k9s `Ctrl-z` | Show only what is unhealthy, on any list | UX | S | 4.05 | landed | 0 | fa4f30e |
 | L1 | owner pin | Open any pod's or workload's logs from the palette, from anywhere | UX | M | pin | landed | 0 | e49b645 |
 | L2 | owner pin | One click to logs from the row, and logs opened full-size | UX | S | pin | landed | 0 | 7dbc58d |
-| L3 | owner pin | Logs from everywhere a pod is named | UX | S | pin | planned | 0 | |
+| L3 | owner pin | Logs from everywhere a pod is named | UX | S | pin | building | 0 | |
 | T2 | friction walk (`cluster-tab-events-list`) | The Events list reads like `kubectl get events`: last seen, type, reason, object, message | UX | M | 3.65 | planned | 0 | |
 | T3 | Ready FEAT-31 (P1, forced) | Reach a container's whole retained log: tail and since controls | UX | S | 3.45 | planned | 0 | |
 | T4 | research #6 + friction walk (`ux-workload-events`) | Events read the same everywhere, with relative times and a warning count on the tab | UX | S | 3.10 | reserve (owner pin displaced it) | 0 | |
