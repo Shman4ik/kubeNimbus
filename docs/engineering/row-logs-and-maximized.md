@@ -91,6 +91,94 @@ modifiers exactly, so Shift+L can never also run L's command; `RowLogsTests` pin
 "Logs, maximized" beside "Logs", so a mouse user who reaches for the palette learns the key
 from its subtitle.
 
-**What the icon is not.** It is not in the Helm or Argo grids (their rows are releases and
-Applications, which have no pods of their own to tail), and it does not replace the context
-menu's Logs / Logs (all pods) items, whose captions stay the place a mouse user learns L.
+**What the icon is not.** It is not in the Helm or Argo *list* grids (their rows are
+releases and Applications, which have no pods of their own to tail — an Application's
+managed workloads are another matter, below), and it does not replace the context menu's
+Logs / Logs (all pods) items, whose captions stay the place a mouse user learns L.
+
+## L3: logs from everywhere a pod is named
+
+L2 made logs one interaction from a row of the resource list. Every other place the app
+names a pod still took four: back to the list, Pods, find the row again, L. L3 (owner
+request) puts the same affordance — L, Shift+L, the hover/selected icon with Shift+click,
+and a "Logs" menu item — on each list that names a pod or a workload:
+
+| Where | L / Shift+L | Row icon | Menu | Notes |
+| --- | --- | --- | --- | --- |
+| Workload detail → Pods | yes | yes | Logs, Logs maximized | Enter / double-click still open the pod |
+| Node detail → Pods | yes | yes | Logs, Logs maximized, Open pod | the chevron still opens the pod |
+| Events list, an Event about a pod | yes | yes, in the Object cell | the list's own "Logs" | only when `involvedObject`/`regarding` is a core pod |
+| Argo Application → Resources | no | yes, on hover | none | pods and built-in workloads only |
+
+Where it deliberately is **not**: pod detail's Events tab (every event there is about the
+pod whose Logs tab is one click away), workload detail's Events tab (its events are about
+the workload), and node detail's Events tab (about the node). The Argo resource rows have
+no L because they have no selection — they are an `ItemsControl`, with nothing for a key to
+act on.
+
+Six things are load-bearing.
+
+1. **One resolver, and the panes are handed it.** `ClusterTabViewModel.OpenNamedLogsAsync`
+   is the only new entry point, and it ends in `OpenLogsForAsync` — so the pane chosen (pod
+   detail on Logs, or the one-stream workload pane), the inspector tab reused and the "Open
+   logs maximized" preference are the list's own, whichever list the gesture started in.
+   Each pane receives it as an `OpenNamedLogs` delegate bound to the pane's own cluster and
+   client (`NamedLogsOpener`), the same pattern as the `_openOwner` delegate owner chips
+   use, so a fleet row's pane opens logs on that row's cluster. No pane builds a log tab of
+   its own. `PaneLogsTests` pins the routing, and making the pane opener ignore the
+   preference (passing `false` where `null` means "ask it") was run and turned the two
+   preference tests red.
+2. **The object is read before its logs open, and that is how "gone" gets said.** A pane
+   that names an object does not always hold it (an Argo row is a kind and a name), and a
+   pane's list can be older than the cluster: node detail's pods are one list, not a watch,
+   and an Event outlives its pod by up to an hour. So the resolver GETs it first. Missing,
+   it returns "Pod shop/web-1 no longer exists — it was deleted or replaced since this was
+   listed."; refused, the server's own 403 sentence; resolved but naming no pods (a
+   Deployment with an empty selector, a Job the kind hint let through), it says so. The
+   sentence is shown where the gesture was made — a `LogsNotice` `infoBar.warn` above the
+   pane's list (present only while there is something to say, UI rule 9), or the list's
+   own inline warning for an Event — never as a click that does nothing. On the demo
+   cluster the same code reads through `NamedObjectSource.Demo`, and a missing object is
+   "isn't part of the demo dataset", which is not a claim about a real cluster.
+3. **`NamedObjectSource` is delegates, for `LogTargetSource`'s reason.** Catalog and read
+   are functions rather than a `ClusterClient`, so the demo dataset and the tests' stand-in
+   (a pod that 404s, a read that 403s) go through exactly the code a real cluster does.
+   A real API server's "gone" is therefore pinned by a unit test, not only argued.
+4. **An Event's logs are its pod's, and only a pod's.** `LogTarget.InvolvedPod` admits an
+   Event (core/v1 or events.k8s.io, `involvedObject` or `regarding`) whose object is a core
+   `v1` Pod; `LogTarget.CanOpen` — the row icon's rule — now includes it, and
+   `HasOwnLogs` is the old rule, which the resolver applies to what it read. An Event about a
+   Deployment gets no icon: its double-click opens that Deployment, whose own row has L, and
+   an icon that opened a workload's logs from an event would be a second meaning for one
+   glyph. The list's "Logs" item and L's pod half are gated on
+   `CanOpenPodLogsForSelectedRow` (a pod row, or an Event about one); exec, port-forward and
+   previous logs stay on `IsPodRowSelected`, because they act on a pod row itself.
+5. **The keys and the Shift+click are decided once (`Views/RowLogsGesture`).**
+   `MatchLogsKey` matches L and Shift+L against the catalog's `CommandScope.List` rows — the
+   resource list's own — so a pane can never answer to a key the cheat sheet does not name;
+   `Track` records pointer-release modifiers in the Tunnel phase for the icon's Shift+click,
+   which is L2's mechanism lifted out of `ClusterTabView` rather than copied. The panes'
+   grids register their key handler in the **Tunnel** phase for the reason the resource
+   list does: DataGrid's class handler consumes Enter before a bubble handler sees it
+   (workload detail's Enter, "open the pod", shares that handler).
+6. **The Argo row's slot is fixed, unlike the Name cell's.** Rule 5 above collapses the
+   icon's slot so a pod name gets its width back. An Argo row's text is not beside the icon
+   — its sync and health pills are — so a collapsing slot only made the pills jump 26px
+   sideways under the pointer and kept rows with and without logs from lining their pills
+   up (seen in the first cut's `cluster-tab-argo-resource-logs-hover`). Every row reserves
+   the slot; the icon inside it is revealed by `Grid.argoResourceRow:pointerover`, a local
+   style, since the shared `Button.rowAction` reveal keys on `DataGridRow`/`ListBoxItem` and
+   an `ItemsControl` item is neither. The row Grid has a Transparent background so that
+   hover hit-tests across its whole width (UI rule 8). Which Argo rows get it is a kind list
+   (`LogTarget.MayHaveLogs`: Pod, Deployment, StatefulSet, DaemonSet, ReplicaSet, Job) — the
+   one place a kind list is acceptable, because the row carries no object body and the
+   resolver's `HasOwnLogs` on the object it reads has the last word.
+
+**Verification.** `PaneLogsTests` (App tests) drives each pane the real double-click opens
+on the demo cluster, plus the resolver's real-cluster sentences through a stand-in source.
+The screenshot harness's `ux-pane-logs-workload`, `-node`, `-events` and `-argo` checks drive
+each list for real — icon hidden at rest, shown on the selected and hovered row, clicked
+1.5px from its edge, L and Shift+L on the pane's own grid — and throw on a regression.
+`cluster-tab-node-detail-pod-gone` is the stated-gone state. Not verified: a live cluster
+(the sandbox cannot run pods here), so the 404/403 sentences are pinned against the
+stand-in, not an API server.

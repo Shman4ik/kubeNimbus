@@ -175,10 +175,55 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         RefreshHealthFilter(rebuild: false);
 
         // persist: false — this is reading a choice back, not making one, and writing it
-        // straight back would turn every kind ever opened into a stored layout.
-        SetSort(layout.SortColumn, layout.SortDescending, persist: false);
+        // straight back would turn every kind ever opened into a stored layout. No stored
+        // choice means the kind's own default (the Events list opens newest first);
+        // Unsorted is a stored choice of arrival order on a kind that has a default.
+        var (sortColumn, sortDescending) = layout.SortColumn switch
+        {
+            null => DefaultSortFor(value?.Descriptor),
+            ResourceColumn.Unsorted => (null, false),
+            var column => (column, layout.SortDescending),
+        };
+        SetSort(sortColumn, sortDescending, persist: false);
+        OnPropertyChanged(nameof(IsEventList));
+        OnPropertyChanged(nameof(RowFilterPlaceholder));
+        OnPropertyChanged(nameof(EmptyListHint));
         RaiseViewStateChanged();
     }
+
+    /// <summary>
+    /// The sort a kind opens on when nobody has chosen one for it. Arrival order for
+    /// everything except Events, which open on Last seen with the most recent first:
+    /// the question an events list answers is "what just happened", and arrival order
+    /// there is the informer's relist order, which is the API server's storage order —
+    /// meaningless to a reader. (Last seen follows Age's direction, so the newest-first
+    /// order is its ascending one.)
+    /// </summary>
+    internal static (string? Column, bool Descending) DefaultSortFor(ResourceDescriptor? descriptor) =>
+        descriptor is not null && descriptor.IsEventKind()
+            ? (ResourceColumn.EventLastSeen, false)
+            : (null, false);
+
+    /// <summary>Whether the selected kind is Events, which the grid draws with kubectl's
+    /// event columns instead of Name/Status/Age.</summary>
+    public bool IsEventList => SelectedKind is { IsHelmReleases: false, IsArgoDashboard: false } kind
+        && kind.Descriptor.IsEventKind();
+
+    /// <summary>
+    /// The search box's placeholder names what it matches, because for Events that is
+    /// more than a name — see <see cref="ResourceRowViewModel.Matches"/>.
+    /// </summary>
+    public string RowFilterPlaceholder => IsEventList ? "Search reason, object, message…" : "Search by name…";
+
+    /// <summary>
+    /// A third line under "No &lt;kind&gt; found", for the kind whose empty list most
+    /// often means something other than "there is nothing here": events expire, an hour
+    /// after they last happened by default, so a quiet namespace with a perfectly real
+    /// incident yesterday shows none. Empty for every other kind.
+    /// </summary>
+    public string EmptyListHint => IsEventList
+        ? "Events expire an hour after they last happen (the API server's default --event-ttl), so an empty list means nothing happened recently — not that nothing ever did."
+        : "";
 
     /// <summary>
     /// Every row the watch knows about — the informer's own view of the cluster.
@@ -376,10 +421,20 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         if (persist && GridLayoutKey is { } key)
         {
+            // Stored relative to the kind's default: choosing the default back is "no
+            // choice" (null, so the layout can drop out of the file), and clearing the
+            // sort on a kind that *has* a default is a choice of its own (Unsorted) —
+            // otherwise the default would come back the next time the kind was opened.
+            var (defaultColumn, defaultDescending) = DefaultSortFor(SelectedKind?.Descriptor);
+            var (storedColumn, storedDescending) =
+                columnId == defaultColumn && (columnId is null || descending == defaultDescending)
+                    ? ((string?)null, false)
+                    : (columnId ?? ResourceColumn.Unsorted, descending);
+
             GridLayoutStore.Update(key, layout => layout with
             {
-                SortColumn = columnId,
-                SortDescending = descending,
+                SortColumn = storedColumn,
+                SortDescending = storedDescending,
             });
         }
     }
@@ -770,6 +825,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [NotifyPropertyChangedFor(nameof(CanDeleteSelectedRow))]
     [NotifyPropertyChangedFor(nameof(CanAggregateLogsForSelectedRow))]
     [NotifyPropertyChangedFor(nameof(CanOpenLogsForSelectedRow))]
+    [NotifyPropertyChangedFor(nameof(CanOpenPodLogsForSelectedRow))]
+    [NotifyPropertyChangedFor(nameof(SelectedEventPod))]
     [NotifyCanExecuteChangedFor(nameof(OpenWorkloadLogsCommand))]
     [NotifyCanExecuteChangedFor(nameof(OpenLogsMaximizedCommand))]
     [NotifyCanExecuteChangedFor(nameof(OpenLogsCommand))]
@@ -1917,7 +1974,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 row.Descriptor,
                 row.Application,
                 (owner, namespaceHint) => OpenOwnerAsync(owner, namespaceHint, row.ClusterName),
-                row.ClusterName),
+                row.ClusterName,
+                NamedLogsOpener(row.ClusterName, ClientForCluster(row.ClusterName))),
             replacePreview: false);
     }
 
@@ -2676,11 +2734,26 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     public bool HasSelectedRow => SelectedRow is not null;
 
     /// <summary>
+    /// The pod the selected row is an Event about, when it is one — see
+    /// <see cref="LogTarget.InvolvedPod"/>. Where the Events list's L, logs icon and
+    /// "Logs" menu item go.
+    /// </summary>
+    public OwnerRef? SelectedEventPod => SelectedRow is { } row ? LogTarget.InvolvedPod(row.Resource) : null;
+
+    /// <summary>
+    /// A pod's own logs are one step away: the selected row is a pod, or an Event about
+    /// one. Gates the "Logs" menu item and L's pod half; exec, port-forward and previous
+    /// logs stay on <see cref="IsPodRowSelected"/>, since they act on a pod row itself.
+    /// </summary>
+    public bool CanOpenPodLogsForSelectedRow => IsPodRowSelected || SelectedEventPod is not null;
+
+    /// <summary>
     /// Opens pod detail on the Logs tab. Same tab-reuse path as a double-click, so
     /// this never opens a second tab for a pod that already has one. Through
-    /// <see cref="OpenLogsForAsync"/>, the entry point the palette's log rows share.
+    /// <see cref="OpenLogsForAsync"/>, the entry point the palette's log rows share. On
+    /// an Event about a pod, that pod's logs (<see cref="OpenNamedLogsAsync"/>).
     /// </summary>
-    [RelayCommand(CanExecute = nameof(IsPodRowSelected))]
+    [RelayCommand(CanExecute = nameof(CanOpenPodLogsForSelectedRow))]
     private Task OpenLogsAsync() => OpenSelectedRowLogsAsync(previous: false);
 
     /// <summary>
@@ -2691,10 +2764,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [RelayCommand(CanExecute = nameof(IsPodRowSelected))]
     private Task OpenPreviousLogsAsync() => OpenSelectedRowLogsAsync(previous: true);
 
-    private Task OpenSelectedRowLogsAsync(bool previous) =>
-        SelectedRow is { } row && LogTargetFor(row) is { } target
-            ? OpenLogsForAsync(target, previous)
-            : Task.CompletedTask;
+    private Task OpenSelectedRowLogsAsync(bool previous, bool? maximized = null) =>
+        SelectedRow is { } row ? OpenLogsForRowAsync(row, previous, maximized) : Task.CompletedTask;
 
     /// <summary>
     /// True when the selected object names the pods it owns — which is the honest test
@@ -2723,7 +2794,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// workload names. The union of <see cref="IsPodRowSelected"/> and
     /// <see cref="CanAggregateLogsForSelectedRow"/>, which is exactly where L does something.
     /// </summary>
-    public bool CanOpenLogsForSelectedRow => IsPodRowSelected || CanAggregateLogsForSelectedRow;
+    public bool CanOpenLogsForSelectedRow => CanOpenPodLogsForSelectedRow || CanAggregateLogsForSelectedRow;
 
     /// <summary>
     /// Shift+L: the same logs L opens, with the inspector maximized over the list whatever
@@ -2731,10 +2802,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// would have opened.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanOpenLogsForSelectedRow))]
-    private Task OpenLogsMaximizedAsync() =>
-        SelectedRow is { } row && LogTargetFor(row) is { } target
-            ? OpenLogsForAsync(target, previous: false, maximized: true)
-            : Task.CompletedTask;
+    private Task OpenLogsMaximizedAsync() => OpenSelectedRowLogsAsync(previous: false, maximized: true);
 
     [RelayCommand(CanExecute = nameof(IsPodRowSelected))]
     private void ExecIntoSelected()
@@ -3164,9 +3232,14 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         // straight to what the event is about (the same navigation owner-chips use)
         // is the more useful default action here, matching CLAUDE.md's "double-click
         // = default action" rule.
-        if (descriptor is { Kind: "Event", Group: "" } && row.Resource.InvolvedObject() is { } involved)
+        //
+        // In fleet mode the involved object lives on the event's own cluster, so the
+        // row's cluster and client go with it — the tab's own client would open (or fail
+        // to find) the object on the wrong cluster. An event that names no object falls
+        // through and opens the event itself.
+        if (descriptor.IsEventKind() && row.Resource.InvolvedObject() is { } involved)
         {
-            await OpenOwnerAsync(involved, row.Resource.InvolvedObjectNamespace() ?? row.Namespace);
+            await OpenOwnerAsync(involved, row.Resource.InvolvedObjectNamespace() ?? row.Namespace, row.ClusterName, client);
             return;
         }
 
@@ -3193,7 +3266,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 existingTab.IsPreview = false;
                 SelectedInspectorTab = existingTab;
                 return true;
-            }) { IsPreview = preview };
+            }, NamedLogsOpener(row.ClusterName, client)) { IsPreview = preview };
             AddInspectorTab(detail, replacePreview: preview);
             return;
         }
@@ -3228,7 +3301,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             (_, true) => new NodeDetailTabViewModel(
                 client, row, PodDescriptorFor(row),
                 (owner, namespaceHint) => OpenOwnerAsync(owner, namespaceHint, row.ClusterName, client),
-                row.ClusterName),
+                row.ClusterName,
+                NamedLogsOpener(row.ClusterName, client)),
             _ => new YamlEditorTabViewModel(
                 client, descriptor, row.Namespace, row.Name, row.Resource.ToYaml(), row.ClusterName),
         };

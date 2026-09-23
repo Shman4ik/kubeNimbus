@@ -4,6 +4,7 @@
              xmlns:core="using:KubeNimbus.Core"
              xmlns:conv="using:KubeNimbus.App.Converters"
              xmlns:controls="using:KubeNimbus.App.Controls"
+             xmlns:app="using:KubeNimbus.App"
              x:Class="KubeNimbus.App.Views.NodeDetailView"
              x:DataType="vm:NodeDetailTabViewModel">
 
@@ -220,13 +221,30 @@
       <!-- ================================================================ Pods -->
       <TabItem Header="Pods">
         <Grid RowDefinitions="Auto,*">
-          <Border Grid.Row="0" Classes="infoBar error" Margin="0,0,0,8"
-                  IsVisible="{Binding HasPodsError}">
-            <TextBlock Text="{Binding PodsError}" TextWrapping="Wrap" FontSize="12" />
-          </Border>
+          <StackPanel Grid.Row="0">
+            <Border Classes="infoBar error" Margin="0,0,0,8"
+                    IsVisible="{Binding HasPodsError}">
+              <TextBlock Text="{Binding PodsError}" TextWrapping="Wrap" FontSize="12" />
+            </Border>
+            <!-- A logs open that found nothing to open says why here. The list is one read,
+                 not a watch, so "rescheduled since it was listed" is the expected case. -->
+            <Border Classes="infoBar warn" Margin="0,0,0,8"
+                    IsVisible="{Binding HasLogsNotice}">
+              <TextBlock Text="{Binding LogsNotice}" TextWrapping="Wrap" FontSize="12" />
+            </Border>
+          </StackPanel>
 
-          <DataGrid Grid.Row="1" ItemsSource="{Binding Pods}" IsReadOnly="True"
-                    GridLinesVisibility="Horizontal" CanUserResizeColumns="True">
+          <!-- L / Shift+L from the resource list's own catalog rows (RowLogsGesture, Tunnel,
+               in code-behind); the menu captions are display-only and kept in step by hand. -->
+          <DataGrid Grid.Row="1" Name="PodsGrid" ItemsSource="{Binding Pods}" SelectedItem="{Binding SelectedPod}"
+                    IsReadOnly="True" GridLinesVisibility="Horizontal" CanUserResizeColumns="True">
+            <DataGrid.ContextMenu>
+              <ContextMenu>
+                <MenuItem Header="Logs" Command="{Binding PodLogsCommand}" InputGesture="L" />
+                <MenuItem Header="Logs, maximized" Command="{Binding PodLogsMaximizedCommand}" InputGesture="Shift+L" />
+                <MenuItem Header="Open pod" Command="{Binding OpenPodCommand}" CommandParameter="{Binding SelectedPod}" />
+              </ContextMenu>
+            </DataGrid.ContextMenu>
             <DataGrid.Columns>
               <DataGridTemplateColumn Header="" Width="28">
                 <DataGridTemplateColumn.CellTemplate>
@@ -244,11 +262,19 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
+              <!-- The row's logs icon, the resource list's own (L2): drawn on the hovered and
+                   the selected row by Button.rowAction, Shift+click for full-size. -->
               <DataGridTemplateColumn Header="Name" Width="*" MinWidth="160">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:NodePodViewModel">
-                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
-                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                                 TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                      <Button Grid.Column="1" Classes="rowAction logs" Click="OnPodLogsClick"
+                              ToolTip.Tip="{x:Static app:CommandTip.RowLogs}">
+                        <PathIcon Data="{StaticResource LogsIconGeometry}" Width="12" Height="12" />
+                      </Button>
+                    </Grid>
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>

@@ -28,6 +28,12 @@ it as the GitHub Release body, so headings must match tags exactly
   the node joined. A new Events tab shows what the kubelet and the node controller recorded
   (disk pressure, evictions, restarts), and a new Usage tab charts measured CPU and memory
   with each figure as a share of allocatable.
+- The Events list reads like `kubectl get events`: when each event last happened, its type,
+  reason, the object it was about, how many times it happened and its message, newest first —
+  and the search box finds events by reason, object or message.
+- Open a pod's logs straight from where it is named — workload details, node details, an event
+  about the pod, or an Argo CD application's resources — with L or the row's logs icon, instead
+  of going back to the Pods list to find it. If the pod has gone since, it says so.
 
 ## [0.3.3] - 2026-09-22
 

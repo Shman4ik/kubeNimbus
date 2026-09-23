@@ -32,6 +32,25 @@ public static class ResourceColumn
     public const string Memory = "memory";
     public const string Age = "age";
 
+    // The Events list's own columns — kubectl's LAST SEEN / TYPE / REASON / OBJECT /
+    // MESSAGE plus COUNT. Ordinary tagged columns rather than printer slots: see
+    // docs/engineering/events-list.md for why the CRD machinery was not reused.
+    public const string EventLastSeen = "event-lastseen";
+    public const string EventType = "event-type";
+    public const string EventReason = "event-reason";
+    public const string EventObject = "event-object";
+    public const string EventCount = "event-count";
+    public const string EventMessage = "event-message";
+
+    /// <summary>
+    /// What a stored layout says when the reader cleared the sort on a kind that has a
+    /// default one (the Events list opens on Last seen). A stored <c>null</c> means "no
+    /// choice made", which brings the default back, so "I chose arrival order" needs a
+    /// value of its own. Never handed to the comparer: <c>ClusterTabViewModel</c> reads
+    /// it back as no sort.
+    /// </summary>
+    public const string Unsorted = "unsorted";
+
     /// <summary>
     /// A CRD printer column, by the CRD author's own name for it.
     ///
@@ -86,8 +105,9 @@ public sealed class ResourceRowComparer(
     /// would look like the list had shuffled itself.
     /// </summary>
     public static bool CanSort(string columnId, IReadOnlyList<PrinterColumn> printerColumns) =>
-        ResourceColumn.PrinterName(columnId) is not { } name
-        || printerColumns.Any(c => string.Equals(c.Name, name, StringComparison.Ordinal));
+        columnId != ResourceColumn.Unsorted
+        && (ResourceColumn.PrinterName(columnId) is not { } name
+            || printerColumns.Any(c => string.Equals(c.Name, name, StringComparison.Ordinal)));
 
     public int Compare(ResourceRowViewModel? x, ResourceRowViewModel? y)
     {
@@ -141,6 +161,15 @@ public sealed class ResourceRowComparer(
             // Ascending Age means the *smallest age* first, which is the newest object —
             // so the instants compare the other way round from the number people read.
             ResourceColumn.Age => -Instant(x.CreatedAt, y.CreatedAt),
+
+            // Last seen prints an age too ("5m"), so it follows Age's direction: ascending
+            // is the most recent first. An event with no timestamp at all sorts last.
+            ResourceColumn.EventLastSeen => -Instant(x.EventLastSeen, y.EventLastSeen),
+            ResourceColumn.EventType => Text(x.EventType, y.EventType),
+            ResourceColumn.EventReason => Text(x.EventReason, y.EventReason),
+            ResourceColumn.EventObject => Text(x.EventObject, y.EventObject),
+            ResourceColumn.EventCount => x.EventCount.CompareTo(y.EventCount),
+            ResourceColumn.EventMessage => Text(x.EventMessage, y.EventMessage),
             _ => 0,
         };
     }

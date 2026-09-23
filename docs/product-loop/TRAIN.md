@@ -18,7 +18,7 @@ by editing **Config** or **Owner notes**; the next step applies it first.
 
 ## State
 
-Phase: BUILD — **paused by the owner after L2** (2026-09-23; resume by clearing that Owner note) · Branch: claude/relaxed-franklin-gssbew (session-designated; stands in for `train/v0.4.0`) · Selected: 2026-09-22 · PR: [#87](https://github.com/Shman4ik/kubeNimbus/pull/87) · Started: 2026-09-22 · Last release: v0.3.3 (2026-09-22)
+Phase: BUILD — resumed by the owner after T2 (2026-09-23) · Branch: claude/epic-mccarthy-a0inzm (session-designated; stands in for `train/v0.4.0`; #87 merged the first three items to `main`) · Selected: 2026-09-22 · PR: [#87](https://github.com/Shman4ik/kubeNimbus/pull/87) (merged) · Started: 2026-09-22 · Last release: v0.3.3 (2026-09-22)
 Baseline: first frame 99 ms (median of 3 warm runs: 99/99/95; cold first run 3529 ms, font cache), executable 51.3 MiB (53 769 168 B; payload with libSkiaSharp + libHarfBuzzSharp 64.6 MiB) · RID: linux-x64 · AOT warnings: the known DataGrid IL2104/IL3053 pair only
 Sandbox: **API-server-only.** Docker Hub blobs 403, so `sandbox-up.sh` fails; native `k3s server` (GitHub binary + airgap images) comes up and the demo manifests apply (50-crds/51-custom-resources included, so VER-24 is paid), but `runc` cannot start containers here — no pod ever runs. Real: discovery, list/watch, CRDs, RBAC, SSA/dry-run, patches, evictions. Not real: logs, exec, port-forward, metrics. Must be re-started each session (see CURRENT_STATE.md → Environment notes).
 
@@ -32,6 +32,10 @@ Sandbox: **API-server-only.** Docker Hub blobs 403, so `sandbox-up.sh` fails; na
   with a real API server).
 - 2026-09-23 (owner, in chat): **finish the current item (L2) through to the PR, then stop.**
   The train pauses after L2 lands; the next step does nothing until the owner resumes it.
+- 2026-09-23 (owner, in chat): **"Сделай T2"** — build T2 now, ahead of L3. Applied as a
+  one-item resume: T2 is built and verified; the pause stands for everything else.
+- 2026-09-23 (owner, in chat, after T2 landed): **"continue"** — read as lifting the pause;
+  the train resumes in plan order with L3.
 
 ## Items
 
@@ -40,8 +44,8 @@ Sandbox: **API-server-only.** Docker Hub blobs 403, so `sandbox-up.sh` fails; na
 | T1 | research #1, headlamp#6974, k9s `Ctrl-z` | Show only what is unhealthy, on any list | UX | S | 4.05 | landed | 0 | fa4f30e |
 | L1 | owner pin | Open any pod's or workload's logs from the palette, from anywhere | UX | M | pin | landed | 0 | e49b645 |
 | L2 | owner pin | One click to logs from the row, and logs opened full-size | UX | S | pin | landed | 0 | 7dbc58d |
-| L3 | owner pin | Logs from everywhere a pod is named | UX | S | pin | planned | 0 | |
-| T2 | friction walk (`cluster-tab-events-list`) | The Events list reads like `kubectl get events`: last seen, type, reason, object, message | UX | M | 3.65 | planned | 0 | |
+| L3 | owner pin | Logs from everywhere a pod is named | UX | S | pin | landed | 0 | ffe1694 |
+| T2 | friction walk (`cluster-tab-events-list`) | The Events list reads like `kubectl get events`: last seen, type, reason, object, message | UX | M | 3.65 | landed | 0 | 4326e05 |
 | T3 | Ready FEAT-31 (P1, forced) | Reach a container's whole retained log: tail and since controls | UX | S | 3.45 | planned | 0 | |
 | T4 | research #6 + friction walk (`ux-workload-events`) | Events read the same everywhere, with relative times and a warning count on the tab | UX | S | 3.10 | reserve (owner pin displaced it) | 0 | |
 | T5 | friction walk + Ready ENG-23 | The Namespace column appears only when it says something | UX | S | 2.85 | reserve (owner pin displaced it) | 0 | |
@@ -406,6 +410,21 @@ Risk:                 tests that leak state between runs; use a unique namespace
 - **R3 — FEAT-56**: `SelfSubjectReview` ("who am I") beside the access review; states pre-1.26 servers.
 
 ## Log
+
+- 2026-09-23 — L3 landed (`ffe1694`), verifier PASS first round (re-ran build, both suites —
+  Core 395/413 with 18 sandbox skips, App 274/274 — the full harness with the four pane-logs
+  interaction checks, AOT publish with the DataGrid pair only, smoke 107 ms; and drove a real
+  Enter on workload detail's pod grid to close the implementer's one open question — still
+  opens the pod). Argo rows have the icon but no L (no selection there). Inbox: VER-42,
+  ENG-43..46. Next: T3.
+
+- 2026-09-23 — T2 landed (`4326e05`), verifier PASS first round (re-ran build, both suites —
+  Core 395/413 with 18 sandbox skips, App 245/245 — the events screenshots and their CRD /
+  workloads regression shots, AOT publish with the DataGrid pair only, smoke 127 ms). One
+  documented deviation: Last seen reads `series.lastObservedTime` before `eventTime`, as
+  kubectl does. Checked live on an API-server-only k3s (real `FailedScheduling`, both
+  groups). Inbox: VER-41, ENG-39..42 (the Namespace-column finding is T5/ENG-23, the fleet
+  width is ENG-6). **Pause stands**; next when resumed: L3, T3, T6, T7, T9, T10.
 
 - 2026-09-23 — L2 landed (`7dbc58d`), verifier PASS first round (smoke re-run 3×: 153/134/187 ms,
   the reported 1654 ms was a cold-cache outlier; Esc checked not to steal from the namespace

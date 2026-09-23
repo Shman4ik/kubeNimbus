@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:KubeNimbus.App.ViewModels" xmlns:conv="using:KubeNimbus.App.Converters" x:Class="KubeNimbus.App.Views.WorkloadDetailView"
+             xmlns:vm="using:KubeNimbus.App.ViewModels" xmlns:conv="using:KubeNimbus.App.Converters"
+             xmlns:app="using:KubeNimbus.App" x:Class="KubeNimbus.App.Views.WorkloadDetailView"
              x:DataType="vm:WorkloadDetailTabViewModel" KeyDown="OnKeyDown">
   <Grid RowDefinitions="Auto,Auto,*" Margin="10,8,10,10">
     <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,0,0,6">
@@ -18,16 +19,42 @@
     </Grid>
     <TextBlock Grid.Row="1" Text="{Binding Error}" IsVisible="{Binding Error, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}" Foreground="{StaticResource AppDangerBrush}" TextWrapping="Wrap"/>
     <TabControl Grid.Row="2" Classes="headerless" SelectedIndex="{Binding SelectedTabIndex}">
-      <TabItem Header="Pods"><Grid RowDefinitions="Auto,*">
+      <TabItem Header="Pods"><Grid RowDefinitions="Auto,Auto,*">
         <TextBlock Text="{Binding PodsStatus}" Opacity="0.65" Margin="0,0,0,6"/>
-        <DataGrid Grid.Row="1" ItemsSource="{Binding Pods}" SelectedItem="{Binding SelectedPod}"
-                  IsReadOnly="True" AutoGenerateColumns="False" DoubleTapped="OnPodDoubleTapped" KeyDown="OnPodKeyDown">
+        <!-- A logs open that found nothing to open says why here (the pod went away, the
+             read was refused) — present only while there is something to say (UI rule 9). -->
+        <Border Grid.Row="1" Classes="infoBar warn" Margin="0,0,0,6"
+                IsVisible="{Binding LogsNotice, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}">
+          <TextBlock Text="{Binding LogsNotice}" TextWrapping="Wrap" FontSize="12"/>
+        </Border>
+        <!-- L / Shift+L and Enter are handled in the Tunnel phase from code-behind
+             (RowLogsGesture + OnPodKeyDown): DataGrid's own class handler consumes Enter
+             before a bubble handler here would see it. The menu captions are display-only
+             and follow CommandCatalog's List-scoped rows by hand. -->
+        <DataGrid Grid.Row="2" Name="PodsGrid" ItemsSource="{Binding Pods}" SelectedItem="{Binding SelectedPod}"
+                  IsReadOnly="True" AutoGenerateColumns="False" DoubleTapped="OnPodDoubleTapped">
           <DataGrid.ContextMenu><ContextMenu>
-            <MenuItem Header="Logs (L)" Command="{Binding OpenPodCommand}"/>
-            <MenuItem Header="Shell (S)" Command="{Binding ShellCommand}"/>
+            <MenuItem Header="Logs" Command="{Binding PodLogsCommand}" InputGesture="L"/>
+            <MenuItem Header="Logs, maximized" Command="{Binding PodLogsMaximizedCommand}" InputGesture="Shift+L"/>
+            <MenuItem Header="Open pod" Command="{Binding OpenPodCommand}" InputGesture="Enter"/>
+            <MenuItem Header="Shell" Command="{Binding ShellCommand}" InputGesture="S"/>
           </ContextMenu></DataGrid.ContextMenu>
           <DataGrid.Columns>
-            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
+            <!-- The row's logs icon, the resource list's own (L2): drawn on the hovered and
+                 the selected row by Button.rowAction, Shift+click for full-size. -->
+            <DataGridTemplateColumn Header="Name" Width="*">
+              <DataGridTemplateColumn.CellTemplate>
+                <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                  <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" VerticalAlignment="Center"/>
+                    <Button Grid.Column="1" Classes="rowAction logs" Click="OnPodLogsClick"
+                            ToolTip.Tip="{x:Static app:CommandTip.RowLogs}">
+                      <PathIcon Data="{StaticResource LogsIconGeometry}" Width="12" Height="12"/>
+                    </Button>
+                  </Grid>
+                </DataTemplate>
+              </DataGridTemplateColumn.CellTemplate>
+            </DataGridTemplateColumn>
             <DataGridTextColumn Header="Ready" Binding="{Binding ReadyText}" Width="80"/>
             <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="180"/>
             <DataGridTextColumn Header="Restarts" Binding="{Binding RestartsText}" Width="100"/>

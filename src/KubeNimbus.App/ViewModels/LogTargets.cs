@@ -36,8 +36,59 @@ public sealed record LogTarget(
     /// <see cref="ResourceRowViewModel.HasLogs"/>.
     /// </summary>
     public static bool CanOpen(DynamicResource resource) =>
+        HasOwnLogs(resource) || InvolvedPod(resource) is not null;
+
+    /// <summary>
+    /// The object's own logs: a core pod, or anything whose selector names the pods it
+    /// owns. What an object resolved from another pane's row has to satisfy before its
+    /// logs are opened — <see cref="CanOpen"/> additionally admits an Event about a pod,
+    /// whose logs are that pod's rather than its own.
+    /// </summary>
+    public static bool HasOwnLogs(DynamicResource resource) =>
         resource is { Kind: "Pod", ApiVersion: "v1" } || LabelSelector.ForPodsOf(resource) is not null;
+
+    /// <summary>
+    /// The pod an Event is about, when it is about a pod — core/v1 or events.k8s.io, read
+    /// from <c>involvedObject</c> or <c>regarding</c>. Null for anything else, including an
+    /// Event about a workload: the Events list's L opens the pod an event names (UI job:
+    /// "the pod this warning is about — what did it log?"), and an Event about a Deployment
+    /// is one double-click from that Deployment, whose own row has L.
+    /// </summary>
+    public static OwnerRef? InvolvedPod(DynamicResource resource) =>
+        resource.IsEvent() && resource.InvolvedObject() is { Kind: "Pod", ApiVersion: "v1" } pod ? pod : null;
+
+    /// <summary>
+    /// Whether a row that knows only an object's apiVersion and kind — an Argo CD
+    /// Application's managed-resource list, which carries no object body — can be offered
+    /// logs: a core pod, or one of the built-in workload kinds that always names its pods.
+    /// This is a list of kinds, which <see cref="CanOpen"/> deliberately is not, and it is
+    /// only safe because it is a <em>hint</em>: the object is resolved before anything
+    /// opens, and <see cref="HasOwnLogs"/> on the resolved object has the last word (a
+    /// mismatch is stated, never a dead click).
+    /// </summary>
+    public static bool MayHaveLogs(string apiVersion, string kind) => (apiVersion, kind) switch
+    {
+        ("v1", "Pod") => true,
+        ("apps/v1", "Deployment" or "StatefulSet" or "DaemonSet" or "ReplicaSet") => true,
+        ("batch/v1", "Job") => true,
+        _ => false,
+    };
 }
+
+/// <summary>
+/// Opens the logs of an object a pane <em>names</em> rather than holds — a pod in workload
+/// detail's or node detail's pod list, a workload in an Argo Application's resources, the
+/// pod an Event is about. Built by <see cref="ClusterTabViewModel"/> with the pane's
+/// cluster and client already bound, and ending in
+/// <see cref="ClusterTabViewModel.OpenLogsForAsync"/> like every other open-logs route.
+/// </summary>
+/// <param name="target">The object, as the pane knows it (kind, apiVersion, name).</param>
+/// <param name="namespaceHint">Its namespace; ignored for a cluster-scoped kind.</param>
+/// <param name="maximized">Shift+L or a Shift+click: open full-size. False leaves it to
+/// the "Open logs maximized" preference, exactly as the list's L does.</param>
+/// <returns>Null when logs opened; otherwise the sentence the pane shows in place of a
+/// dead click — "gone since this list was read", a 403, "not in the demo dataset".</returns>
+public delegate Task<string?> OpenNamedLogs(OwnerRef target, string? namespaceHint, bool maximized);
 
 /// <summary>
 /// One cluster the palette's log rows are listed from — the tab's own, or one member of
@@ -83,6 +134,33 @@ public sealed record LogTargetSource(
                 return Task.FromResult(new CappedResourceList([.. all.Take(cap)], all.Count > cap));
             },
             knownPods);
+}
+
+/// <summary>
+/// How an object a pane names is read before its logs open: the cluster's catalog (for the
+/// kind's descriptor) and one GET. Delegates rather than a <see cref="ClusterClient"/>, for
+/// the reason <see cref="LogTargetSource"/> gives — the demo cluster has no client, and the
+/// tests' stand-in (a pod that is gone, a 403) must go through the code a real cluster does.
+/// </summary>
+/// <param name="Catalog">The cluster's discovery catalog.</param>
+/// <param name="Read">One object by kind, namespace (null when cluster-scoped) and name;
+/// null when it does not exist.</param>
+/// <param name="IsDemo">The shipped dataset: an object it lacks "isn't part of the demo
+/// dataset" rather than "no longer exists", which would be a claim about a real cluster.</param>
+public sealed record NamedObjectSource(
+    Func<CancellationToken, Task<IReadOnlyList<ResourceDescriptor>>> Catalog,
+    Func<ResourceDescriptor, string?, string, CancellationToken, Task<DynamicResource?>> Read,
+    bool IsDemo = false)
+{
+    public static NamedObjectSource For(ClusterClient client) =>
+        new(ct => client.GetResourceCatalogAsync(ct), client.ReadResourceAsync);
+
+    public static NamedObjectSource Demo { get; } = new(
+        _ => Task.FromResult(KubeNimbus.App.Demo.DemoData.BuildCatalog()),
+        (descriptor, @namespace, name, _) => Task.FromResult(
+            KubeNimbus.App.Demo.DemoData.ResourcesFor(descriptor, @namespace)
+                .FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.Ordinal))),
+        IsDemo: true);
 }
 
 /// <summary>

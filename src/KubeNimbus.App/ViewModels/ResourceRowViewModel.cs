@@ -17,7 +17,13 @@ namespace KubeNimbus.App.ViewModels;
 /// replace the generic Status/Details pair rather than joining it, because they are
 /// the CRD author's own answer to the same question and kubectl shows no other.
 /// Built-in kinds never have any — they are not CustomResourceDefinitions — so
-/// nothing about a Pod, Deployment, Node or Event list changes.
+/// nothing about a Pod, Deployment or Node list changes.
+/// </para>
+///
+/// <para>
+/// Events get a third set, their own: Last seen, Type, Reason, Object, Count and
+/// Message — what <c>kubectl get events</c> prints — in place of Name, Status and Age.
+/// See <c>docs/engineering/events-list.md</c>.
 /// </para>
 /// </summary>
 public sealed partial class ResourceRowViewModel : ObservableObject
@@ -102,6 +108,62 @@ public sealed partial class ResourceRowViewModel : ObservableObject
 
     private int _restarts;
     private DateTimeOffset? _lastRestartAt;
+
+    // ------------------------------------------------------------ the Events list
+    // An Event row is read the way `kubectl get events` prints it — when, what kind,
+    // why, about what, how often, and the sentence — rather than by the Event object's
+    // own name (a generated "<object>.<hex>" that says nothing). These are empty on
+    // every other kind's rows; the columns that show them are shown only for Events
+    // (ClusterTabView.ApplySummaryColumns).
+
+    /// <summary>Whether this row is an Event (core/v1 or events.k8s.io).</summary>
+    public bool IsEvent { get; private set; }
+
+    /// <summary>
+    /// When the event last happened, through <see cref="EventFields.LastSeen"/>'s
+    /// fallback chain. What the Last seen column sorts by; its text is an age off the
+    /// shared timer, exactly like Age.
+    /// </summary>
+    public DateTimeOffset? EventLastSeen { get; private set; }
+
+    private DateTimeOffset? _eventFirstSeen;
+
+    [ObservableProperty]
+    private string _lastSeenText = "";
+
+    [ObservableProperty]
+    private string _lastSeenTooltip = "";
+
+    /// <summary>"Warning" / "Normal", verbatim — the word is the signal, the tint only repeats it.</summary>
+    [ObservableProperty]
+    private string _eventType = "";
+
+    /// <summary>Drives the Type pill's warn tint. Normal stays neutral: a list that is
+    /// mostly green says nothing, and Warning is the thing to find.</summary>
+    [ObservableProperty]
+    private bool _isWarningEvent;
+
+    [ObservableProperty]
+    private string _eventReason = "";
+
+    /// <summary>kubectl's OBJECT: "Pod/checkout-worker-…", or "—" when the event names none.</summary>
+    [ObservableProperty]
+    private string _eventObject = "";
+
+    [ObservableProperty]
+    private string _eventObjectTooltip = "";
+
+    [ObservableProperty]
+    private int _eventCount;
+
+    /// <summary>The message on one line — newlines and runs of whitespace folded to a
+    /// space, trimmed — so a multi-line message cannot make one row taller than the rest.
+    /// The full text is <see cref="EventMessageTooltip"/>.</summary>
+    [ObservableProperty]
+    private string _eventMessage = "";
+
+    [ObservableProperty]
+    private string _eventMessageTooltip = "";
 
     /// <summary>
     /// kubectl's RESTARTS count as a number. <see cref="RestartsText"/> is the rendered
@@ -233,8 +295,68 @@ public sealed partial class ResourceRowViewModel : ObservableObject
         _restarts = summary.Restarts;
         _lastRestartAt = summary.LastRestartAt;
         HasLogs = LogTarget.CanOpen(resource);
+        UpdateEventCells(resource);
         RefreshPrinterCells();
         RefreshTimes();
+    }
+
+    private void UpdateEventCells(DynamicResource resource)
+    {
+        IsEvent = resource.IsEvent();
+        if (!IsEvent)
+        {
+            return;
+        }
+
+        EventLastSeen = resource.LastSeen();
+        _eventFirstSeen = resource.FirstSeen();
+        EventType = resource.Type();
+        IsWarningEvent = string.Equals(EventType, "Warning", StringComparison.OrdinalIgnoreCase);
+        EventReason = resource.Reason();
+        EventCount = resource.Occurrences();
+
+        var objectText = resource.ObjectText();
+        var involvedNamespace = resource.InvolvedObjectNamespace();
+        EventObject = objectText.Length > 0 ? objectText : "—";
+        EventObjectTooltip = objectText.Length == 0
+            ? "This event names no object"
+            : involvedNamespace is { Length: > 0 } ns && ns != Namespace
+                ? $"{objectText} in {ns} — double-click to open it"
+                : $"{objectText} — double-click to open it";
+
+        var message = resource.Message().Trim();
+        EventMessage = OneLine(message);
+        EventMessageTooltip = message;
+    }
+
+    /// <summary>Folds every run of whitespace (newlines included) into one space.</summary>
+    internal static string OneLine(string text)
+    {
+        if (text.Length == 0)
+        {
+            return "";
+        }
+
+        var builder = new System.Text.StringBuilder(text.Length);
+        var pendingSpace = false;
+        foreach (var c in text)
+        {
+            if (char.IsWhiteSpace(c))
+            {
+                pendingSpace = builder.Length > 0;
+                continue;
+            }
+
+            if (pendingSpace)
+            {
+                builder.Append(' ');
+                pendingSpace = false;
+            }
+
+            builder.Append(c);
+        }
+
+        return builder.ToString();
     }
 
     /// <summary>
@@ -285,11 +407,25 @@ public sealed partial class ResourceRowViewModel : ObservableObject
     /// answer on its own. The identity fields are the ones that mean the same thing
     /// everywhere.
     /// </para>
+    ///
+    /// <para>
+    /// <b>An Event is the exception, and for the same reason, not against it.</b> An
+    /// Event's own name is a generated "&lt;object&gt;.&lt;hex&gt;" that nobody types; what
+    /// identifies an event to the person looking for it is what happened (Reason), to
+    /// what (Object) and the sentence it logged (Message) — "BackOff", "checkout-worker",
+    /// "Insufficient cpu". So for Event rows those three are matched as well: they
+    /// identify an event the way a name identifies a pod. Type is still not matched —
+    /// "Normal" would match most of the list, which is the status argument again.
+    /// </para>
     /// </summary>
     public bool Matches(string query) =>
         Name.Contains(query, StringComparison.OrdinalIgnoreCase)
         || Namespace.Contains(query, StringComparison.OrdinalIgnoreCase)
-        || (ClusterName.Length > 0 && ClusterName.Contains(query, StringComparison.OrdinalIgnoreCase));
+        || (ClusterName.Length > 0 && ClusterName.Contains(query, StringComparison.OrdinalIgnoreCase))
+        || (IsEvent
+            && (EventReason.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || EventObject.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || EventMessageTooltip.Contains(query, StringComparison.OrdinalIgnoreCase)));
 
     /// <summary>
     /// Recomputes the two cells whose text is a function of wall-clock rather than of
@@ -303,6 +439,19 @@ public sealed partial class ResourceRowViewModel : ObservableObject
     {
         var now = DateTimeOffset.UtcNow;
         AgeText = CreatedAt is { } created ? RelativeTime.Compact(now - created) : "";
+
+        if (IsEvent)
+        {
+            // Last seen is an age as well, and goes stale exactly the way Age would. The
+            // exact instant is the tooltip, as it is for Age; "—" says the event carries
+            // no timestamp at all, which is different from an empty cell nobody filled.
+            LastSeenText = EventLastSeen is { } seen ? RelativeTime.Compact(now - seen) : "—";
+            LastSeenTooltip = EventLastSeen is { } at
+                ? EventCount > 1 && _eventFirstSeen is { } first && first < at
+                    ? $"Last seen {at.ToLocalTime():yyyy-MM-dd HH:mm:ss} · first seen {first.ToLocalTime():yyyy-MM-dd HH:mm:ss} ({EventCount} times)"
+                    : $"Last seen {at.ToLocalTime():yyyy-MM-dd HH:mm:ss}"
+                : "This event carries no timestamp";
+        }
         RestartsText = _restarts == 0
             ? "0"
             : _lastRestartAt is { } last
