@@ -25,10 +25,16 @@ unconditionally. So:
    ran the whole job twice for one commit — two sets of runner minutes and two
    artifacts. The concurrency key was believed to prevent it and cannot: a push
    yields `refs/heads/Codex/x` where the PR event yields `Codex/x`, so they
-   are different groups by construction. The push trigger is `main` only now,
-   which is also pgNimbus's shape; branch work is built through its PR, which
-   is the run the branch ruleset requires anyway, and the cost is that a branch
-   pushed with no PR open is not built until one is.
+   are different groups by construction. Branch work is built through its PR,
+   which is the run the branch ruleset requires anyway, and the cost is that a
+   branch pushed with no PR open is not built until one is.
+   **There is no push-to-`main` trigger either (2026-09).** The merge commit is
+   the code its PR just built, so a second run re-proved nothing, and a release
+   cycle showed three workflow runs — the release PR, the merge, the tag — where
+   two carry all the information. The cost, stated: a semantic conflict between
+   two PRs that each passed alone surfaces on the next PR or in `release.yml`,
+   not on `main`. What the main run uniquely supplied was a NuGet cache every PR
+   can read, and rule 5 covers that now.
    The group stays `github.event.pull_request.head.ref || github.ref` and the
    two sides stay in **different namespaces on purpose**. Normalising them (to
    `github.ref_name`) would be a regression now the repository is public: a
@@ -56,9 +62,35 @@ unconditionally. So:
    Default setup has to be switched off in repository settings for this workflow
    to run at all — the two cannot coexist.
 
+5. **A PR runs only the jobs its files can affect, and restores NuGet from a
+   cache it never writes.** `ci.yml`'s `changes` job classifies the PR's files:
+   a PR touching only `docs/`, `design/`, `.claude/`, `LICENSE` or `*.md` skips
+   every build (except `docs/keyboard-shortcuts.md`, which `ShortcutDocsTests`
+   reads), and the AOT job runs only for `src/`, `shared/`, the build-wide props,
+   `global.json` or `ci.yml` itself. It is a job and not `paths-ignore` because
+   `Build & test` is required: a workflow skipped by its trigger never reports
+   the check, and the PR would wait for it forever, while a job skipped by its
+   own `if:` reports success. The consumers test `!= 'false'`, so a failed
+   classifier makes everything run — it can cost time, never coverage.
+   The XAML smoke test (the screenshot render, ~90 s) is its own job in
+   parallel with `Build & test` rather than a step at the end of it, which is
+   what took the required check from 2.5–4 min to about one.
+   Caches are scoped to the ref that saved them, so a PR's saved cache is
+   invisible to the next PR. `warm-cache.yml` is therefore the **only writer**:
+   on `main`, when a `*.csproj`, `Directory.Build.props` or `global.json`
+   changes, weekly (GitHub evicts a cache unread for 7 days), and by hand. It
+   saves `nuget-<os>-<arch>-<hash>` (the solution restore) and
+   `nuget-aot-<os>-<arch>-<hash>` per release RID (the app restored with `-r
+   <rid> -p:PublishAot=true`, which adds the ILCompiler and runtime packs).
+   `ci.yml` and `release.yml` use `actions/cache/restore` and never save. Cache
+   storage is separate from the 0.5 GB artifact budget above (10 GB per repo).
+
 **Only `Build & test` is a required check.** The branch ruleset on `main`
-requires a PR and that one job; `NativeAOT publish (linux-x64)` still runs on
-every PR and is still worth reading, but it does not hold the merge, because it
+requires a PR and that one job; `XAML smoke test` and `NativeAOT publish
+(linux-x64)` still run on every PR that can affect them and are still worth
+reading, but they do not hold the merge. The smoke test is a candidate for the
+required list (it catches a view that no longer loads, which nothing else in CI
+does); the AOT job is not, because it
 is the slow half of the wait and an AOT regression cannot reach anybody without
 going through `release.yml`, which publishes *and launches* every RID.
 

@@ -1,0 +1,90 @@
+name: Warm NuGet cache
+
+# The one writer of the NuGet caches that ci.yml and release.yml read.
+#
+# It exists because GitHub scopes a cache to the ref that saved it: a cache
+# saved by a PR run can be read by later runs of that PR and by nothing else,
+# while one saved on the default branch can be read by every PR and every tag.
+# ci.yml has no push-to-main trigger (the merge commit is code its PR already
+# built), so without this nothing would ever save on main and every PR would
+# restore from nuget.org cold — observed at 7 s to 108 s for the same package
+# set.
+#
+# It is not a build and never blocks anything. It runs when the package set can
+# have changed (the same files the cache key hashes), weekly so an idle week
+# cannot let GitHub's 7-day eviction empty it, and by hand. A run whose key
+# already exists restores it, which counts as an access, and saves nothing.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**/*.csproj'
+      - 'Directory.Build.props'
+      - 'global.json'
+      - '.github/workflows/warm-cache.yml'
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: warm-cache
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  # ci.yml's `Build & test` and `XAML smoke test` key.
+  build:
+    name: Solution (linux-x64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'global.json') }}
+
+      - run: dotnet restore KubeNimbus.slnx
+
+  # ci.yml's `NativeAOT publish` key (linux-x64) and every release.yml leg. A
+  # restore with the RID and PublishAot set pulls exactly what the publish would:
+  # the app's packages, the ILCompiler and the RID's runtime packs.
+  aot:
+    name: AOT (${{ matrix.rid }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # Mirrors release.yml's matrix; the key includes runner OS and
+        # architecture, so each leg can only ever read its own runner's cache.
+        include:
+          - { os: windows-latest,   rid: win-x64 }
+          - { os: ubuntu-latest,    rid: linux-x64 }
+          - { os: ubuntu-24.04-arm, rid: linux-arm64 }
+          - { os: macos-latest,     rid: osx-arm64 }
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-aot-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'global.json') }}
+
+      - run: dotnet restore src/KubeNimbus.App -r ${{ matrix.rid }} -p:PublishAot=true

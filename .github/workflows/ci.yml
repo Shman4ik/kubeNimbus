@@ -7,15 +7,25 @@ name: CI
 # jobs. Branch work is built through its PR, which is also the run the branch
 # ruleset on main requires, so the push trigger has nothing left to add there.
 # The cost, stated: a branch pushed with no PR open is not built until one is.
+#
+# There is no push-to-main trigger either, for the same one-commit-one-run
+# reason one level up: the merge commit is the code the PR just built, so a
+# second run after the merge re-proved nothing and made a release cycle three
+# workflow runs (PR, merge, tag) where two carry all the information. What a
+# main run *did* uniquely provide was a NuGet cache every PR can read — GitHub
+# scopes a cache to the ref that saved it, so one saved by a PR is invisible to
+# the next PR — and `warm-cache.yml` provides that now, running only when the
+# package set changes. The cost, stated: a semantic conflict between two PRs
+# that each passed alone is found by the next PR or the release, not on main.
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
+  # `changes` lists the PR's files through the API.
+  pull-requests: read
 
 # A newer commit supersedes whatever was still running for the same PR, so a
 # force-push burst leaves one run instead of five. The two sides of the
@@ -28,12 +38,84 @@ concurrency:
   group: ci-${{ github.event.pull_request.head.ref || github.ref }}
   cancel-in-progress: true
 
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
 jobs:
+  # Decides which of the jobs below a change can affect, so a docs-only PR is
+  # green in seconds instead of after a full build, and a test-only PR does not
+  # wait on a NativeAOT publish it cannot break.
+  #
+  # This is a job rather than `paths-ignore` on the trigger, and that is forced:
+  # `Build & test` is a required check, and a workflow skipped by its trigger
+  # never reports the check at all, so the PR would wait for it forever. A job
+  # skipped by its own `if:` reports success, which is what a required check
+  # needs.
+  #
+  # Fail-open by construction: the consumers test `!= 'false'`, so if this job
+  # fails or is cancelled its outputs are empty and everything runs. A broken
+  # change detector can cost time, never coverage.
+  changes:
+    name: Changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.classify.outputs.code }}
+      aot: ${{ steps.classify.outputs.aot }}
+    steps:
+      - name: Classify changed files
+        id: classify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          # workflow_dispatch has no diff to classify: build everything.
+          if [ "$EVENT" = pull_request ]; then
+            files=$(gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[].filename')
+          else
+            files='*'
+          fi
+          # The PR files API stops listing at 3000 files; a change anywhere near
+          # that large is not one to be clever about.
+          if [ "$files" = '*' ] || [ "$(printf '%s\n' "$files" | wc -l)" -ge 3000 ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            echo "aot=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          printf '%s\n' "$files"
+
+          # Documentation, design masters and agent instructions cannot change
+          # what the build or the tests see — except docs/keyboard-shortcuts.md,
+          # which ShortcutDocsTests compares against the command catalog, so an
+          # edit to it alone can turn the suite red.
+          code=$(printf '%s\n' "$files" \
+            | grep -Ev '^(docs/|design/|\.claude/|LICENSE$)|\.md$' \
+            || true)
+          code="$code$(printf '%s\n' "$files" | grep -E '^docs/keyboard-shortcuts\.md$' || true)"
+
+          # What can change the trimmed/AOT-compiled app: its own source, the
+          # shared UI library, build-wide props, the SDK pin, and this workflow.
+          # Tests and the screenshot harness are not in the published binary.
+          # Read from $code, so a doc under src/ or shared/ skips it too.
+          aot=$(printf '%s\n' "$code" \
+            | grep -E '^(src/|shared/|Directory\.[^/]*$|global\.json$|nuget\.config$|\.github/workflows/ci\.yml$)' \
+            || true)
+
+          echo "code=$([ -n "$code" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "aot=$([ -n "$aot" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build & test
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
-    # Generous multiples of the observed runtimes (~1 min build, ~3 min publish):
-    # a hung job otherwise sits on a runner for the 6-hour default.
+    # Generous multiples of the observed runtimes (~1 min with a warm cache): a
+    # hung job otherwise sits on a runner for the 6-hour default.
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -42,6 +124,21 @@ jobs:
         uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
+
+      # Restore was the most variable step in the job — 7 s to 108 s on the same
+      # package set, i.e. nuget.org's latency on the day. The key is every
+      # project file plus the build-wide props, which is where every package
+      # version in this repo is written; the prefix fallback means a version
+      # bump still starts from yesterday's packages and downloads only the new one.
+      # Restore-only: warm-cache.yml is the one writer, on main, where every PR
+      # can read it; a PR saving its own copy would be invisible to the next PR
+      # and would only push the shared one towards eviction.
+      - name: Restore NuGet cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Restore
         run: dotnet restore KubeNimbus.slnx
@@ -67,11 +164,42 @@ jobs:
       - name: Test (App)
         run: dotnet test --project tests/KubeNimbus.App.Tests/KubeNimbus.App.Tests.csproj -c Release --no-build
 
-      # Renders every real View headlessly. A compiling build can still fail to
-      # load XAML at runtime — a bad `avares://` URI, a missing resource, a
-      # DataTemplate that no longer resolves — and this is the only check that
-      # catches that without a display.
-      - name: Render screenshots (XAML smoke test)
+  # Renders every real View headlessly. A compiling build can still fail to load
+  # XAML at runtime — a bad `avares://` URI, a missing resource, a DataTemplate
+  # that no longer resolves — and this is the only check that catches that
+  # without a display.
+  #
+  # Its own job, in parallel with `Build & test`, because it was the slow half
+  # of that job: ~90 s for ~236 renders, against ~40 s for everything else once
+  # restore is cached. Paying a second compile of the harness here is cheaper
+  # than making the build wait for the renders, since the two now overlap.
+  screenshots:
+    name: XAML smoke test
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      # Same key as `Build & test`: the harness's package set is a subset of the
+      # solution's.
+      - name: Restore NuGet cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Build
+        run: dotnet build tools/Screenshot -c Release
+
+      - name: Render screenshots
         run: dotnet run --project tools/Screenshot -c Release --no-build -- "${{ runner.temp }}/screenshots"
 
       # Only when the render step went red. The images are a smoke-test
@@ -92,6 +220,8 @@ jobs:
 
   aot:
     name: NativeAOT publish (linux-x64)
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.aot != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -101,6 +231,18 @@ jobs:
         uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
+
+      # A separate key from the build jobs: an AOT publish also restores the
+      # ILCompiler and the linux-x64 runtime packs, which warm-cache.yml saves
+      # under this key only. release.yml's linux-x64 leg reads the same one.
+      - name: Restore NuGet cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-aot-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'global.json') }}
+          restore-keys: |
+            nuget-aot-${{ runner.os }}-${{ runner.arch }}-
+            nuget-${{ runner.os }}-${{ runner.arch }}-
 
       # ILCompiler links with clang against zlib; the hosted image doesn't
       # guarantee the dev headers. Xvfb and the X client libraries are for the
