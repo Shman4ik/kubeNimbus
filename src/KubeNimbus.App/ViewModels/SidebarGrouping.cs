@@ -200,6 +200,18 @@ public static class SidebarGrouping
     public static bool IsAdvancedSection(string section) =>
         section is ClusterSection or "CRDs";
 
+    /// <summary>
+    /// The kinds in an advanced section that the basic view keeps anyway: Nodes and
+    /// Namespaces. They live in Cluster because they describe the cluster rather than
+    /// anything deployed on it, but they are not API machinery — "which node is this pod
+    /// on, and is it Ready?" is an everyday question, and hiding the whole section took
+    /// the only route to it (and to node detail, cordon and drain) along with 30-odd
+    /// kinds nobody browses. So with the switch off the Cluster section stays, holding
+    /// just these two.
+    /// </summary>
+    public static bool IsShownInBasicView(ResourceDescriptor descriptor) =>
+        descriptor is { Group: "", Kind: "Node" or "Namespace" };
+
     /// <summary>Sidebar section for Helm releases — appended after the discovery-driven ones.</summary>
     public const string HelmSection = "Helm";
 

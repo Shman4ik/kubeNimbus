@@ -884,7 +884,13 @@ never open — **Cluster** (the API machinery: APIServices, CSRs, ClusterRoles a
 whole of flowcontrol, admissionregistration, apiregistration and coordination, 33 kinds
 on a bare k3s) and **CRDs** (the catalog's long tail, comfortably the longest section
 on any cluster running cert-manager, Argo or Istio). `SidebarGrouping.IsAdvancedSection`
-is the whole classification. It keeps its place — an icon-only `ToggleButton
+is the classification, with one per-kind exception: **Nodes and Namespaces survive the
+switch** (`SidebarGrouping.IsShownInBasicView`), so with it off the Cluster section stays,
+holding just those two. They are filed under Cluster because they describe the cluster, but
+they are not machinery, and hiding the section had taken the only route to node detail,
+cordon and drain along with it. The gate is therefore derived per kind, in
+`ApplySidebarFilter` (which `ApplySidebarChrome` now ends by calling), and a section is
+hidden only when none of its kinds survives. It keeps its place — an icon-only `ToggleButton
 Classes="chip"` docked right of the sidebar's filter box, the same spot as pgNimbus's
 `ShowAdvancedObjects` — because people who use both should find it where they left it,
 and because that is now literally the panel it acts on.
@@ -1022,6 +1028,21 @@ with `HttpCompletionOption.ResponseHeadersRead`:
   bearer/exec tokens are applied by calling `Kubernetes.Credentials
   .ProcessHttpRequestAsync` on our manual request. This is what makes exec-plugin
   auth work for watches.
+- **A failing exec plugin must be reported by what it printed.** The library ignores
+  the plugin's exit code, parses its (empty) stdout as JSON and throws
+  `external exec failed due to failed deserialization process: System.Text.Json
+  .JsonException…`, stack trace included — which is what a user with the VPN off saw
+  instead of "could not reach the sign-in server". Both places a plugin runs (the config
+  build in `Kubeconfig.BuildClientConfigAsync`, and the token refresh inside
+  `SendRequestAsync`) go through `ExecCredentialCapture.RunAsync`, which collects the
+  plugin's stderr through the library's static `ExecStdError` event, routed per connect
+  by an `AsyncLocal` because restored tabs connect in parallel, and throws
+  `ExecCredentialException`. It waits up to a second for stderr to reach its end,
+  because the library's `WaitForExit(timeout)` returns before the stream drains, and
+  the first cut lost the very line it existed to show. `GetServerVersionAsync` goes
+  through `SendRequestAsync` rather than the generated client for the same reason:
+  a VPN or proxy page answering 200 with HTML came out as `'<' is an invalid start of
+  a value`. `ConnectFailureTests` pins all of it.
 - Watch frames are line-delimited JSON, parsed with `System.Text.Json.JsonDocument`
   (AOT-safe) and materialized with source-generated `KubernetesJson.Deserialize`.
 - The informer loop lives in `ClusterClient.PumpAsync`/`StreamWatchAsync`:

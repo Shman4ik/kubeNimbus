@@ -864,8 +864,9 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// <see cref="MainWindowViewModel"/> (which owns it and persists it). <b>On by
     /// default.</b> It governs one thing: whether the sidebar shows the sections most
     /// sessions never open — Cluster and CRDs, see
-    /// <see cref="SidebarGrouping.IsAdvancedSection"/>. Off gives a sidebar of the
-    /// kinds people actually browse; on shows the whole catalog.
+    /// <see cref="SidebarGrouping.IsAdvancedSection"/> — except Nodes and Namespaces,
+    /// which stay (<see cref="SidebarGrouping.IsShownInBasicView"/>). Off gives a
+    /// sidebar of the kinds people actually browse; on shows the whole catalog.
     ///
     /// <para>
     /// It is a *display* switch and nothing more: flipping it must never restart a
@@ -1440,7 +1441,6 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         SidebarGrouping.LabelAmbiguousKinds(SidebarSections);
         ApplySidebarChrome();
-        ApplySidebarFilter();
 
         NamespaceOptions.Clear();
         NamespaceOptions.Add(AllNamespaces);
@@ -1590,7 +1590,6 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         SidebarGrouping.AddArgoDashboard(SidebarSections, catalog);
         await AddHelmSectionIfPresentAsync();
         ApplySidebarChrome();
-        ApplySidebarFilter();
     }
 
     /// <summary>
@@ -1601,11 +1600,6 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// </summary>
     internal void ApplySidebarChrome()
     {
-        // A filter is a deliberate search for one thing, so it reaches into the
-        // sections the advanced view hides: a query that matches a kind and then shows
-        // nothing is the "worse than no match" failure the palette's own rules name.
-        var filtering = (SidebarFilter ?? "").Trim().Length > 0;
-
         foreach (var section in SidebarSections)
         {
             // The badge stays on the switch. "How much is hiding in here?" is a question
@@ -1614,14 +1608,15 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             // content area and had nothing to do with sidebar clutter.
             section.ShowKindCount = IsAdvancedView;
 
-            section.IsHiddenByBasicView =
-                !IsAdvancedView && !filtering && SidebarGrouping.IsAdvancedSection(section.Title);
-
             // Wired here rather than at construction because this runs after every
             // rebuild, and a section built during one must not record its state while
             // the list is still half-assembled.
             section.ExpansionChanged = PersistExpandedSections;
         }
+
+        // The advanced-view gate is per kind now (Nodes and Namespaces survive it), and
+        // per-kind visibility is the filter's job, so the gate is derived there.
+        ApplySidebarFilter();
     }
 
     /// <summary>
@@ -1748,7 +1743,6 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         // the first time round, inserts a section that has never seen the tab's
         // display state.
         ApplySidebarChrome();
-        ApplySidebarFilter();
     }
 
     partial void OnSidebarFilterChanged(string value) => ApplySidebarFilter();
@@ -1771,22 +1765,27 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         foreach (var section in SidebarSections)
         {
+            // The advanced-view gate. A filter is a deliberate search for one thing, so
+            // it reaches into what the gate hides: a query that matches a kind and then
+            // shows nothing is the "worse than no match" failure the palette's own rules
+            // name. That makes the filter an input to the gate, which is why the gate is
+            // derived here rather than only on a rebuild or a toggle.
+            var gated = !IsAdvancedView && !filtering && SidebarGrouping.IsAdvancedSection(section.Title);
+
             var anyMatch = false;
+            var anyInBasicView = false;
             foreach (var kind in section.Kinds)
             {
                 var match = !filtering || kind.Matches(query);
-                kind.IsVisible = match;
+                var inBasicView = !gated || SidebarGrouping.IsShownInBasicView(kind.Descriptor);
+                kind.IsVisible = match && inBasicView;
                 anyMatch |= match;
+                anyInBasicView |= inBasicView;
             }
 
             section.HasVisibleKinds = anyMatch;
             section.IsForceExpanded = filtering && anyMatch;
-
-            // The filter is an input to the advanced-view gate (see ApplySidebarChrome),
-            // so it is re-derived here rather than only on a rebuild — otherwise typing
-            // a query would leave the hidden sections hidden and the match unreachable.
-            section.IsHiddenByBasicView =
-                !IsAdvancedView && !filtering && SidebarGrouping.IsAdvancedSection(section.Title);
+            section.IsHiddenByBasicView = gated && !anyInBasicView;
         }
     }
 

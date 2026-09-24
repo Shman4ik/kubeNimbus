@@ -146,6 +146,61 @@ public class SidebarAdvancedSectionTests
         await Assert.That(Section(tab, "Workloads").IsSectionVisible).IsFalse();
     }
 
+    /// <summary>
+    /// Nodes and Namespaces live in Cluster but are not API machinery, and hiding the
+    /// whole section took the only route to node detail, cordon and drain with it. The
+    /// basic view keeps the section with those two in it and nothing else.
+    /// </summary>
+    [Test]
+    public async Task The_basic_view_keeps_Nodes_and_Namespaces_in_Cluster()
+    {
+        var tab = TestObjects.Tab();
+        var cluster = new SidebarSectionViewModel(SidebarGrouping.ClusterSection);
+        var nodes = new SidebarKindViewModel(Kind("", "Node", "nodes"), "CogIconGeometry");
+        var namespaces = new SidebarKindViewModel(Kind("", "Namespace", "namespaces"), "CogIconGeometry");
+        var roles = new SidebarKindViewModel(Kind("rbac.authorization.k8s.io", "ClusterRole", "clusterroles"), "CogIconGeometry");
+        // Kind "NodeMetrics", resource "nodes": the kind that used to render as a second "Nodes".
+        var nodeMetrics = new SidebarKindViewModel(Kind("metrics.k8s.io", "NodeMetrics", "nodes"), "CogIconGeometry");
+        foreach (var kind in new[] { nodes, namespaces, roles, nodeMetrics })
+        {
+            cluster.Kinds.Add(kind);
+        }
+
+        tab.SidebarSections.Add(cluster);
+
+        tab.IsAdvancedView = false;
+
+        await Assert.That(cluster.IsSectionVisible).IsTrue();
+        await Assert.That(nodes.IsVisible).IsTrue();
+        await Assert.That(namespaces.IsVisible).IsTrue();
+        await Assert.That(roles.IsVisible).IsFalse();
+        await Assert.That(nodeMetrics.IsVisible).IsFalse();
+
+        tab.IsAdvancedView = true;
+
+        await Assert.That(roles.IsVisible).IsTrue();
+        await Assert.That(nodeMetrics.IsVisible).IsTrue();
+    }
+
+    /// <summary>
+    /// <c>metrics.k8s.io</c> serves Kind <c>NodeMetrics</c> as resource <c>nodes</c>; re-casing
+    /// the plural against the Kind gave "Nodes", a second row indistinguishable from the real one.
+    /// </summary>
+    [Test]
+    public async Task A_plural_that_is_not_a_plural_of_the_Kind_shows_the_Kind()
+    {
+        await Assert.That(new SidebarKindViewModel(Kind("metrics.k8s.io", "NodeMetrics", "nodes"), "x").DisplayName)
+            .IsEqualTo("NodeMetrics");
+        await Assert.That(new SidebarKindViewModel(Kind("metrics.k8s.io", "PodMetrics", "pods"), "x").DisplayName)
+            .IsEqualTo("PodMetrics");
+
+        // …without losing what the re-casing is for.
+        await Assert.That(new SidebarKindViewModel(Kind("", "Node", "nodes"), "x").DisplayName).IsEqualTo("Nodes");
+        await Assert.That(new SidebarKindViewModel(Kind("networking.k8s.io", "NetworkPolicy", "networkpolicies"), "x").DisplayName)
+            .IsEqualTo("NetworkPolicies");
+        await Assert.That(new SidebarKindViewModel(Kind("", "Endpoints", "endpoints"), "x").DisplayName).IsEqualTo("Endpoints");
+    }
+
     // ------------------------------------------------- and nothing outside the sidebar
 
     /// <summary>

@@ -12,6 +12,14 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+- A cluster that cannot be reached now says why. When the kubeconfig's credential plugin
+  (`aws eks get-token`, `kubelogin`, `gke-gcloud-auth-plugin`, …) fails, the tab shows what
+  the plugin printed instead of a JSON deserialization error, and a VPN or proxy page
+  answering in the API server's place is named as such.
+- Nodes and Namespaces stay in the sidebar when the advanced view is off; the Cluster section
+  keeps just those two.
+- The Cluster section no longer lists Nodes twice. The second row was the metrics API's
+  NodeMetrics, which now carries its own name (and PodMetrics likewise).
 - Releases are no longer published as pre-releases just because the version starts with
   `0.`, so the newest one carries GitHub's **Latest** label and the README's download link
   lands on it. Only a suffixed tag (`-rc.1`) is still a pre-release.
