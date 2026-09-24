@@ -879,15 +879,36 @@ Seven things worth keeping:
 ## The Advanced view
 
 One global persisted boolean, default **on**, mirrored onto every cluster tab. It
-governs exactly one thing: whether the sidebar shows the two sections most sessions
-never open — **Cluster** (the API machinery: APIServices, CSRs, ClusterRoles and the
-whole of flowcontrol, admissionregistration, apiregistration and coordination, 33 kinds
-on a bare k3s) and **CRDs** (the catalog's long tail, comfortably the longest section
-on any cluster running cert-manager, Argo or Istio). `SidebarGrouping.IsAdvancedSection`
-is the whole classification. It keeps its place — an icon-only `ToggleButton
-Classes="chip"` docked right of the sidebar's filter box, the same spot as pgNimbus's
-`ShowAdvancedObjects` — because people who use both should find it where they left it,
-and because that is now literally the panel it acts on.
+governs exactly one thing: which kinds the sidebar lists. Off keeps a curated allow-list
+of about 20 everyday built-ins (`SidebarGrouping.BasicViewKinds`, keyed by group *and*
+Kind so a CRD called `Deployment` is not mistaken for the built-in): Pods, Deployments,
+StatefulSets, DaemonSets, ReplicaSets, Jobs, CronJobs, HPAs; Services, Ingresses,
+NetworkPolicies; ConfigMaps, Secrets, core Events, ServiceAccounts, ResourceQuotas, PDBs;
+PVCs, PVs, StorageClasses; Nodes and Namespaces. Everything else in the discovery-driven
+sections (`SidebarGrouping.IsCuratedSection`) waits for the switch, and a section is
+hidden only when none of its kinds survives, which is what happens to CRDs and to all of
+Cluster except Nodes and Namespaces. Argo, Helm and Recent are never curated.
+
+It used to hide whole sections, Cluster and CRDs, and that was too coarse in both
+directions. It took Nodes along with the API machinery, so node detail, cordon and drain
+had no route in the basic view. And it left the machinery filed in the *other* sections in
+place, so a real 1.31–1.33 cluster still opened on about 35 rows: ControllerRevisions,
+PodTemplates and ReplicationControllers in Workloads; Endpoints (deprecated in 1.33),
+EndpointSlices, IngressClasses, IPAddresses and ServiceCIDRs in Network; a second "Events"
+row (`events.k8s.io`, the same objects as core Events) and LimitRanges in Config; and the
+CSI plumbing in Storage. The allow-list is an allow-list rather than a deny-list so that a
+built-in a future Kubernetes adds lands in the advanced view until someone decides it is
+everyday. Two close calls were decided on purpose: ReplicaSets stay (owner navigation lands
+on them), and PersistentVolumes stay beside the claims that bind them. The gate is derived
+per kind in `ApplySidebarFilter`, which `ApplySidebarChrome` ends by calling.
+
+It keeps its place — an icon-only `ToggleButton Classes="chip"` docked right of the
+sidebar's filter box, the same spot as pgNimbus's tree-options button — because people who
+use both should find it where they left it. Its glyph is **eye-plus**
+(`EyePlusIconGeometry`), "show more". It used to be `TuneIconGeometry`, the sliders, which
+is also the Config section's header icon and is pgNimbus's glyph for an options *menu*: on a
+direct toggle it read as "settings" and sat one row above an identical icon that meant
+something else.
 
 **It used to hide a great deal more, and removing that is the point of the current
 shape.** Off took the CPU/Memory columns and their sparklines, pod detail's Usage tab,
@@ -1022,6 +1043,21 @@ with `HttpCompletionOption.ResponseHeadersRead`:
   bearer/exec tokens are applied by calling `Kubernetes.Credentials
   .ProcessHttpRequestAsync` on our manual request. This is what makes exec-plugin
   auth work for watches.
+- **A failing exec plugin must be reported by what it printed.** The library ignores
+  the plugin's exit code, parses its (empty) stdout as JSON and throws
+  `external exec failed due to failed deserialization process: System.Text.Json
+  .JsonException…`, stack trace included — which is what a user with the VPN off saw
+  instead of "could not reach the sign-in server". Both places a plugin runs (the config
+  build in `Kubeconfig.BuildClientConfigAsync`, and the token refresh inside
+  `SendRequestAsync`) go through `ExecCredentialCapture.RunAsync`, which collects the
+  plugin's stderr through the library's static `ExecStdError` event, routed per connect
+  by an `AsyncLocal` because restored tabs connect in parallel, and throws
+  `ExecCredentialException`. It waits up to a second for stderr to reach its end,
+  because the library's `WaitForExit(timeout)` returns before the stream drains, and
+  the first cut lost the very line it existed to show. `GetServerVersionAsync` goes
+  through `SendRequestAsync` rather than the generated client for the same reason:
+  a VPN or proxy page answering 200 with HTML came out as `'<' is an invalid start of
+  a value`. `ConnectFailureTests` pins all of it.
 - Watch frames are line-delimited JSON, parsed with `System.Text.Json.JsonDocument`
   (AOT-safe) and materialized with source-generated `KubernetesJson.Deserialize`.
 - The informer loop lives in `ClusterClient.PumpAsync`/`StreamWatchAsync`:

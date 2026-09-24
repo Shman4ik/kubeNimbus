@@ -51,8 +51,8 @@
         </TextBox>
         <ToggleButton Grid.Column="1" Classes="chip" Padding="5" Margin="6,0,0,0" VerticalAlignment="Center"
                       IsChecked="{Binding IsAdvancedView}"
-                      ToolTip.Tip="Advanced view — show the Cluster and CRDs sections. On by default; turn it off for a sidebar of the kinds you actually browse. The filter and the command palette still reach everything.">
-          <PathIcon Data="{StaticResource TuneIconGeometry}" Width="14" Height="14" />
+                      ToolTip.Tip="Advanced view — list every resource kind, including the API machinery and CRDs. On by default; turn it off for the kinds you actually browse (Pods, Deployments, Services, Nodes…). The filter and the command palette still reach everything.">
+          <PathIcon Data="{StaticResource EyePlusIconGeometry}" Width="14" Height="14" />
         </ToggleButton>
       </Grid>
 

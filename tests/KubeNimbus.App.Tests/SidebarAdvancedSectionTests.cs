@@ -48,27 +48,55 @@ public class SidebarAdvancedSectionTests
     // ------------------------------------------------------- what counts as advanced
 
     [Test]
-    public async Task Cluster_and_CRDs_are_the_advanced_sections()
+    public async Task The_discovery_driven_sections_are_curated()
     {
-        await Assert.That(SidebarGrouping.IsAdvancedSection(SidebarGrouping.ClusterSection)).IsTrue();
-        await Assert.That(SidebarGrouping.IsAdvancedSection("CRDs")).IsTrue();
+        foreach (var title in new[] { "Workloads", "Network", "Config", "Storage", SidebarGrouping.ClusterSection, "CRDs" })
+        {
+            await Assert.That(SidebarGrouping.IsCuratedSection(title)).IsTrue();
+        }
     }
 
     /// <summary>
-    /// The sections the app is actually for are never hidden. Argo and Helm are on this
-    /// list too: they only exist at all on a cluster that has them, which is already the
-    /// evidence test UI rule 1 asks for.
+    /// Argo and Helm only exist at all on a cluster that has them, which is already the
+    /// evidence UI rule 1 asks for; Recent holds what the reader just chose.
     /// </summary>
     [Test]
-    public async Task The_sections_people_browse_are_never_advanced()
+    public async Task Argo_Helm_and_Recent_are_never_curated()
     {
-        foreach (var title in new[]
+        foreach (var title in new[] { SidebarGrouping.ArgoSection, SidebarGrouping.HelmSection, SidebarGrouping.RecentSection })
+        {
+            await Assert.That(SidebarGrouping.IsCuratedSection(title)).IsFalse();
+        }
+    }
+
+    /// <summary>
+    /// The basic view's list, by group and Kind. The machinery that sits in the ordinary
+    /// sections is the half the old section-only rule missed.
+    /// </summary>
+    [Test]
+    public async Task The_basic_view_keeps_the_everyday_kinds_and_drops_the_machinery()
+    {
+        foreach (var (group, kind) in new[]
                  {
-                     "Workloads", "Network", "Config", "Storage",
-                     SidebarGrouping.ArgoSection, SidebarGrouping.HelmSection, SidebarGrouping.RecentSection,
+                     ("", "Pod"), ("apps", "Deployment"), ("apps", "ReplicaSet"), ("batch", "CronJob"),
+                     ("", "Service"), ("networking.k8s.io", "Ingress"), ("", "ConfigMap"), ("", "Event"),
+                     ("", "PersistentVolumeClaim"), ("", "PersistentVolume"), ("", "Node"), ("", "Namespace"),
                  })
         {
-            await Assert.That(SidebarGrouping.IsAdvancedSection(title)).IsFalse();
+            await Assert.That(SidebarGrouping.IsShownInBasicView(Kind(group, kind, ""))).IsTrue();
+        }
+
+        foreach (var (group, kind) in new[]
+                 {
+                     ("apps", "ControllerRevision"), ("", "ReplicationController"), ("", "PodTemplate"),
+                     ("", "Endpoints"), ("discovery.k8s.io", "EndpointSlice"), ("networking.k8s.io", "IngressClass"),
+                     ("events.k8s.io", "Event"), ("", "LimitRange"), ("storage.k8s.io", "CSIDriver"),
+                     ("storage.k8s.io", "VolumeAttachment"), ("rbac.authorization.k8s.io", "ClusterRole"),
+                     // A CRD that shares a built-in's Kind is not the built-in.
+                     ("example.io", "Deployment"),
+                 })
+        {
+            await Assert.That(SidebarGrouping.IsShownInBasicView(Kind(group, kind, ""))).IsFalse();
         }
     }
 
@@ -86,16 +114,29 @@ public class SidebarAdvancedSectionTests
     }
 
     [Test]
-    public async Task Turning_it_off_hides_the_advanced_sections_and_only_those()
+    public async Task Turning_it_off_hides_the_machinery_and_the_sections_left_empty()
     {
-        var tab = TabWithSections("Workloads", "Network", SidebarGrouping.ClusterSection, "CRDs");
+        var tab = TestObjects.Tab();
+        var workloads = new SidebarSectionViewModel("Workloads");
+        var pods = new SidebarKindViewModel(Kind("", "Pod", "pods"), "CubeOutlineIconGeometry");
+        var revisions = new SidebarKindViewModel(Kind("apps", "ControllerRevision", "controllerrevisions"), "CubeOutlineIconGeometry");
+        workloads.Kinds.Add(pods);
+        workloads.Kinds.Add(revisions);
+        tab.SidebarSections.Add(workloads);
+        var crds = new SidebarSectionViewModel("CRDs");
+        crds.Kinds.Add(new SidebarKindViewModel(Kind("cert-manager.io", "Certificate", "certificates"), "PuzzleIconGeometry"));
+        tab.SidebarSections.Add(crds);
+        var argo = new SidebarSectionViewModel(SidebarGrouping.ArgoSection);
+        argo.Kinds.Add(new SidebarKindViewModel(Kind("argoproj.io", "Application", "applications"), "SourceBranchIconGeometry"));
+        tab.SidebarSections.Add(argo);
 
         tab.IsAdvancedView = false;
 
-        await Assert.That(Section(tab, SidebarGrouping.ClusterSection).IsSectionVisible).IsFalse();
-        await Assert.That(Section(tab, "CRDs").IsSectionVisible).IsFalse();
-        await Assert.That(Section(tab, "Workloads").IsSectionVisible).IsTrue();
-        await Assert.That(Section(tab, "Network").IsSectionVisible).IsTrue();
+        await Assert.That(workloads.IsSectionVisible).IsTrue();
+        await Assert.That(pods.IsVisible).IsTrue();
+        await Assert.That(revisions.IsVisible).IsFalse();
+        await Assert.That(crds.IsSectionVisible).IsFalse();
+        await Assert.That(argo.IsSectionVisible).IsTrue();
     }
 
     [Test]
@@ -144,6 +185,61 @@ public class SidebarAdvancedSectionTests
         tab.SidebarFilter = "nothing-matches-this";
 
         await Assert.That(Section(tab, "Workloads").IsSectionVisible).IsFalse();
+    }
+
+    /// <summary>
+    /// Nodes and Namespaces live in Cluster but are not API machinery, and hiding the
+    /// whole section took the only route to node detail, cordon and drain with it. The
+    /// basic view keeps the section with those two in it and nothing else.
+    /// </summary>
+    [Test]
+    public async Task The_basic_view_keeps_Nodes_and_Namespaces_in_Cluster()
+    {
+        var tab = TestObjects.Tab();
+        var cluster = new SidebarSectionViewModel(SidebarGrouping.ClusterSection);
+        var nodes = new SidebarKindViewModel(Kind("", "Node", "nodes"), "CogIconGeometry");
+        var namespaces = new SidebarKindViewModel(Kind("", "Namespace", "namespaces"), "CogIconGeometry");
+        var roles = new SidebarKindViewModel(Kind("rbac.authorization.k8s.io", "ClusterRole", "clusterroles"), "CogIconGeometry");
+        // Kind "NodeMetrics", resource "nodes": the kind that used to render as a second "Nodes".
+        var nodeMetrics = new SidebarKindViewModel(Kind("metrics.k8s.io", "NodeMetrics", "nodes"), "CogIconGeometry");
+        foreach (var kind in new[] { nodes, namespaces, roles, nodeMetrics })
+        {
+            cluster.Kinds.Add(kind);
+        }
+
+        tab.SidebarSections.Add(cluster);
+
+        tab.IsAdvancedView = false;
+
+        await Assert.That(cluster.IsSectionVisible).IsTrue();
+        await Assert.That(nodes.IsVisible).IsTrue();
+        await Assert.That(namespaces.IsVisible).IsTrue();
+        await Assert.That(roles.IsVisible).IsFalse();
+        await Assert.That(nodeMetrics.IsVisible).IsFalse();
+
+        tab.IsAdvancedView = true;
+
+        await Assert.That(roles.IsVisible).IsTrue();
+        await Assert.That(nodeMetrics.IsVisible).IsTrue();
+    }
+
+    /// <summary>
+    /// <c>metrics.k8s.io</c> serves Kind <c>NodeMetrics</c> as resource <c>nodes</c>; re-casing
+    /// the plural against the Kind gave "Nodes", a second row indistinguishable from the real one.
+    /// </summary>
+    [Test]
+    public async Task A_plural_that_is_not_a_plural_of_the_Kind_shows_the_Kind()
+    {
+        await Assert.That(new SidebarKindViewModel(Kind("metrics.k8s.io", "NodeMetrics", "nodes"), "x").DisplayName)
+            .IsEqualTo("NodeMetrics");
+        await Assert.That(new SidebarKindViewModel(Kind("metrics.k8s.io", "PodMetrics", "pods"), "x").DisplayName)
+            .IsEqualTo("PodMetrics");
+
+        // …without losing what the re-casing is for.
+        await Assert.That(new SidebarKindViewModel(Kind("", "Node", "nodes"), "x").DisplayName).IsEqualTo("Nodes");
+        await Assert.That(new SidebarKindViewModel(Kind("networking.k8s.io", "NetworkPolicy", "networkpolicies"), "x").DisplayName)
+            .IsEqualTo("NetworkPolicies");
+        await Assert.That(new SidebarKindViewModel(Kind("", "Endpoints", "endpoints"), "x").DisplayName).IsEqualTo("Endpoints");
     }
 
     // ------------------------------------------------- and nothing outside the sidebar

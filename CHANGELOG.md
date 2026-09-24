@@ -12,6 +12,20 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+- A cluster that cannot be reached now says why. When the kubeconfig's credential plugin
+  (`aws eks get-token`, `kubelogin`, `gke-gcloud-auth-plugin`, …) fails, the tab shows what
+  the plugin printed instead of a JSON deserialization error, and a VPN or proxy page
+  answering in the API server's place is named as such.
+- With the advanced view off, the sidebar now lists about 20 everyday kinds instead of about
+  35: Pods, Deployments, Services, ConfigMaps, Secrets, PVCs, Nodes, Namespaces and the like.
+  API machinery hides wherever it is filed, including ControllerRevisions, Endpoints and
+  EndpointSlices, IngressClasses, the second `events.k8s.io` Events row, LimitRanges and the
+  CSI kinds. Nodes and Namespaces are now reachable in this view. The sidebar filter and
+  Ctrl/Cmd+K still find everything.
+- The advanced-view toggle has an eye-plus icon ("show more"). It used to show the sliders
+  icon, which also marks the Config section.
+- The Cluster section no longer lists Nodes twice. The second row was the metrics API's
+  NodeMetrics, which now carries its own name (and PodMetrics likewise).
 - Releases are no longer published as pre-releases just because the version starts with
   `0.`, so the newest one carries GitHub's **Latest** label and the README's download link
   lands on it. Only a suffixed tag (`-rc.1`) is still a pre-release.

@@ -59,8 +59,9 @@ public sealed partial class SidebarSectionViewModel : ObservableObject
     private bool _hasVisibleKinds = true;
 
     /// <summary>
-    /// True while the advanced view is off and this is one of the sections it governs
-    /// (<see cref="SidebarGrouping.IsAdvancedSection"/>). Pushed down from
+    /// True while the advanced view is off, this is a section it curates
+    /// (<see cref="SidebarGrouping.IsCuratedSection"/>), and none of its kinds is one
+    /// the basic view keeps (<see cref="SidebarGrouping.IsShownInBasicView"/>). Pushed down from
     /// <see cref="ClusterTabViewModel"/> rather than read from a global, same as
     /// <see cref="ShowKindCount"/>: a section built outside a tab — the screenshot
     /// harness — then renders as the app's own default rather than as a hidden one.
@@ -202,9 +203,14 @@ public sealed partial class SidebarKindViewModel(ResourceDescriptor descriptor, 
     /// Re-casing is done by walking the Kind and the plural together while they agree
     /// case-insensitively, which restores the Kind's own capitalisation over the part
     /// they share and leaves the server's suffix alone — "NetworkPolicy" +
-    /// "networkpolicies" gives "NetworkPolicies". A plural that shares no prefix with
-    /// the Kind (nothing in Kubernetes does this, but a CRD may) falls back to the
-    /// server's string as sent, which is still the truth about that resource.
+    /// "networkpolicies" gives "NetworkPolicies".
+    ///
+    /// A plural that parts from the Kind before its last letter is not a plural of
+    /// that Kind, and the row shows the Kind instead. Kubernetes itself does this:
+    /// <c>metrics.k8s.io</c> serves Kind <c>NodeMetrics</c> as resource <c>nodes</c>
+    /// and <c>PodMetrics</c> as <c>pods</c>, so re-casing produced a second "Nodes"
+    /// row in the Cluster section, beside the real one and indistinguishable from it.
+    /// One letter of slack is what y→ies ("Policy"/"policies") needs.
     /// </summary>
     private static string Pluralize(ResourceDescriptor descriptor)
     {
@@ -231,6 +237,6 @@ public sealed partial class SidebarKindViewModel(ResourceDescriptor descriptor, 
             shared++;
         }
 
-        return shared == 0 ? plural : string.Concat(kind.AsSpan(0, shared), plural.AsSpan(shared));
+        return shared < kind.Length - 1 ? kind : string.Concat(kind.AsSpan(0, shared), plural.AsSpan(shared));
     }
 }

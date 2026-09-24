@@ -167,14 +167,20 @@ public static class Kubeconfig
     /// (bounded only by <c>ExecTimeout</c>, two minutes) — would otherwise still run on
     /// the UI thread whenever the read happened to complete inline.
     /// </para>
+    /// <para>
+    /// An exec plugin runs inside this call, and a failing one surfaces as an
+    /// <see cref="ExecCredentialException"/> carrying what the plugin said, never the
+    /// library's JSON parser error — see there.
+    /// </para>
     /// </remarks>
     public static Task<KubernetesClientConfiguration> BuildClientConfigAsync(
         ClusterContext context,
         CancellationToken cancellationToken = default) =>
         Task.Run(
-            () => KubernetesClientConfiguration.BuildConfigFromConfigFileAsync(
-                new FileInfo(context.KubeconfigPath),
-                currentContext: context.Name),
+            () => ExecCredentialCapture.RunAsync(
+                () => KubernetesClientConfiguration.BuildConfigFromConfigFileAsync(
+                    new FileInfo(context.KubeconfigPath),
+                    currentContext: context.Name)),
             cancellationToken);
 }
 

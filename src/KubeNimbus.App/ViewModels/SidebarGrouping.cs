@@ -179,26 +179,67 @@ public static class SidebarGrouping
         section is not ("Config" or ClusterSection or "CRDs");
 
     /// <summary>
-    /// Whether a section is one the advanced view governs — i.e. one most sessions
-    /// never open.
+    /// Whether the advanced view curates a section: the discovery-driven ones, where the
+    /// basic view keeps only <see cref="BasicViewKinds"/>. Argo, Helm and Recent are
+    /// left alone — the first two exist only on a cluster that has them, which is
+    /// already the evidence UI rule 1 asks for, and Recent holds what you just chose.
+    /// </summary>
+    public static bool IsCuratedSection(string section) =>
+        section is not (ArgoSection or HelmSection or RecentSection);
+
+    /// <summary>
+    /// The kinds the basic view shows: the built-ins people open a Kubernetes client to
+    /// look at. Everything else in a curated section waits for the advanced view — and is
+    /// still one filter keystroke or Ctrl/Cmd+K away.
     ///
     /// <para>
-    /// <b>Cluster</b> is the API machinery: APIServices, CSRs, ClusterRoles and the
-    /// whole of flowcontrol, admissionregistration, apiregistration and coordination,
-    /// which on a bare k3s is 33 kinds. <b>CRDs</b> is the catalog's own long tail —
-    /// on a cluster running cert-manager, Argo and Istio it is comfortably the longest
-    /// section there is. Between them they are most of what makes a real cluster's
-    /// sidebar unreadable, and neither is where anybody starts.
+    /// This is an allow-list, and it replaced a section rule that was too coarse in both
+    /// directions. Hiding whole sections (Cluster and CRDs) took Nodes along with the API
+    /// machinery, so node detail, cordon and drain had no route in the basic view; and it
+    /// left the machinery that lives in the <em>other</em> sections in place, so a real
+    /// 1.31–1.33 cluster still opened on about 35 rows: ControllerRevisions, PodTemplates
+    /// and ReplicationControllers in Workloads; Endpoints (deprecated in 1.33),
+    /// EndpointSlices, IngressClasses, IPAddresses and ServiceCIDRs in Network; a second
+    /// "Events" row (<c>events.k8s.io</c>, the same objects as core Events) and
+    /// LimitRanges in Config; and the CSI plumbing in Storage. This list comes to about 20.
     /// </para>
     ///
     /// <para>
-    /// Everything else stays: Workloads, Network, Config and Storage are what the app
-    /// is for, and Argo and Helm are only present at all on a cluster that has them —
-    /// a section gated on evidence is already narrow enough (UI rule 1).
+    /// Keyed by group <em>and</em> Kind, so a CRD that happens to be called
+    /// <c>Deployment</c> is not mistaken for the built-in one, the same reason
+    /// <see cref="SectionFor"/> buckets by group. An allow-list rather than a deny-list
+    /// so that a built-in kind a future Kubernetes adds lands in the advanced view until
+    /// someone decides it is everyday. Two close calls, decided on purpose: ReplicaSets
+    /// stay (owner navigation lands on them), and PersistentVolumes stay beside the claims
+    /// that bind them.
     /// </para>
     /// </summary>
-    public static bool IsAdvancedSection(string section) =>
-        section is ClusterSection or "CRDs";
+    private static readonly HashSet<(string Group, string Kind)> BasicViewKinds =
+    [
+        // Workloads
+        ("", "Pod"), ("apps", "Deployment"), ("apps", "StatefulSet"), ("apps", "DaemonSet"),
+        ("apps", "ReplicaSet"), ("batch", "Job"), ("batch", "CronJob"),
+        ("autoscaling", "HorizontalPodAutoscaler"),
+
+        // Network
+        ("", "Service"), ("networking.k8s.io", "Ingress"), ("networking.k8s.io", "NetworkPolicy"),
+
+        // Config
+        ("", "ConfigMap"), ("", "Secret"), ("", "Event"), ("", "ServiceAccount"),
+        ("", "ResourceQuota"), ("policy", "PodDisruptionBudget"),
+
+        // Storage
+        ("", "PersistentVolumeClaim"), ("", "PersistentVolume"), ("storage.k8s.io", "StorageClass"),
+
+        // Cluster: filed there because they describe the cluster rather than anything
+        // deployed on it, but they are not machinery — "which node is this pod on, and is
+        // it Ready?" is an everyday question.
+        ("", "Node"), ("", "Namespace"),
+    ];
+
+    /// <summary>Whether the basic view shows this kind; see <see cref="BasicViewKinds"/>.</summary>
+    public static bool IsShownInBasicView(ResourceDescriptor descriptor) =>
+        BasicViewKinds.Contains((descriptor.Group, descriptor.Kind));
 
     /// <summary>Sidebar section for Helm releases — appended after the discovery-driven ones.</summary>
     public const string HelmSection = "Helm";

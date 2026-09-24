@@ -74,12 +74,58 @@ public sealed partial class ClusterClient : IDisposable
 
     private string? _serverVersion;
 
+    /// <summary>
+    /// <c>GET /version</c> — the connect path's reachability check.
+    /// </summary>
+    /// <remarks>
+    /// Through <see cref="SendRequestAsync"/> rather than the generated
+    /// <c>Version.GetCodeAsync</c>, because this is the first request a connect makes
+    /// and therefore the one that meets whatever sits between the app and a cluster it
+    /// cannot reach. The generated call reported a VPN or proxy sign-in page answering
+    /// 200 with HTML as <c>'&lt;' is an invalid start of a value</c>, and a 502 as
+    /// <c>Operation returned an invalid status code 'BadGateway'</c>; both now say what
+    /// answered instead.
+    /// </remarks>
     public async Task<VersionInfo> GetServerVersionAsync(CancellationToken cancellationToken = default)
     {
-        var version = await _client.Version.GetCodeAsync(cancellationToken).ConfigureAwait(false);
+        using var response = await SendRequestAsync(
+            HttpMethod.Get, "version", content: null, HttpCompletionOption.ResponseContentRead, cancellationToken)
+            .ConfigureAwait(false);
+        await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+        VersionInfo? version;
+        try
+        {
+            version = KubernetesJson.Deserialize<VersionInfo>(body);
+        }
+        catch (JsonException)
+        {
+            version = null;
+        }
+
+        if (version is not { GitVersion.Length: > 0 })
+        {
+            throw NotAnApiServer(response, body);
+        }
+
         if (_serverVersion != version.GitVersion) _resourceCatalog = null;
         _serverVersion = version.GitVersion;
         return version;
+    }
+
+    /// <summary>
+    /// Something answered <c>/version</c> successfully, but not with a Kubernetes
+    /// version — a VPN portal, a corporate proxy's sign-in page, or the wrong port.
+    /// </summary>
+    private HttpRequestException NotAnApiServer(HttpResponseMessage response, string body)
+    {
+        var contentType = response.Content.Headers.ContentType?.MediaType;
+        var head = body.Trim();
+        head = head.Length == 0 ? "an empty response" : head.Length > 120 ? $"\"{head[..120]}…\"" : $"\"{head}\"";
+        return new HttpRequestException(
+            $"{_client.BaseUri.GetLeftPart(UriPartial.Authority)} answered, but not as a Kubernetes API server "
+            + $"({(contentType is null ? "" : contentType + ": ")}{head}). A VPN, proxy or sign-in page may be in the way.");
     }
 
     /// <summary>
@@ -453,9 +499,12 @@ public sealed partial class ClusterClient : IDisposable
     {
         var request = new HttpRequestMessage(method, new Uri(_client.BaseUri, relativePath)) { Content = content };
         if (accept is not null) request.Headers.TryAddWithoutValidation("Accept", accept);
-        if (_client.Credentials is not null)
+        if (_client.Credentials is { } credentials)
         {
-            await _client.Credentials.ProcessHttpRequestAsync(request, ct).ConfigureAwait(false);
+            // An expired exec token is refreshed here, by running the plugin again —
+            // so a plugin failing mid-session (VPN dropped) is translated the same way
+            // as one failing at connect.
+            await ExecCredentialCapture.RunAsync(() => credentials.ProcessHttpRequestAsync(request, ct)).ConfigureAwait(false);
         }
 
         return await _client.HttpClient.SendAsync(request, completion, ct).ConfigureAwait(false);
