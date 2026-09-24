@@ -49,10 +49,9 @@ public sealed record AppSettings
     public string HotkeyScheme { get; set; } = "auto";
 
     /// <summary>
-    /// The single global "advanced view" switch: whether the sidebar shows the resource
-    /// sections most sessions never open — Cluster (the API machinery) and CRDs (the
-    /// catalog's long tail). <b>On by default</b>, so nothing is missing until somebody
-    /// asks for a shorter list.
+    /// The single global "advanced view" switch: whether the sidebar lists every resource
+    /// kind, or only the everyday built-ins (no API machinery, no CRDs). <b>On by
+    /// default</b>, so nothing is missing until somebody asks for a shorter list.
     ///
     /// <para>
     /// It used to hide content-area controls as well — the list's usage columns, pod

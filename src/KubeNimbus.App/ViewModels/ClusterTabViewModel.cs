@@ -862,11 +862,9 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// <summary>
     /// The one global "advanced view" switch, mirrored onto every tab by
     /// <see cref="MainWindowViewModel"/> (which owns it and persists it). <b>On by
-    /// default.</b> It governs one thing: whether the sidebar shows the sections most
-    /// sessions never open — Cluster and CRDs, see
-    /// <see cref="SidebarGrouping.IsAdvancedSection"/> — except Nodes and Namespaces,
-    /// which stay (<see cref="SidebarGrouping.IsShownInBasicView"/>). Off gives a
-    /// sidebar of the kinds people actually browse; on shows the whole catalog.
+    /// default.</b> It governs one thing: which kinds the sidebar lists. Off keeps the
+    /// built-ins people actually browse (<see cref="SidebarGrouping.IsShownInBasicView"/>)
+    /// and hides the API machinery and CRDs; on shows the whole catalog.
     ///
     /// <para>
     /// It is a *display* switch and nothing more: flipping it must never restart a
@@ -1770,7 +1768,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             // shows nothing is the "worse than no match" failure the palette's own rules
             // name. That makes the filter an input to the gate, which is why the gate is
             // derived here rather than only on a rebuild or a toggle.
-            var gated = !IsAdvancedView && !filtering && SidebarGrouping.IsAdvancedSection(section.Title);
+            var gated = !IsAdvancedView && !filtering && SidebarGrouping.IsCuratedSection(section.Title);
 
             var anyMatch = false;
             var anyInBasicView = false;

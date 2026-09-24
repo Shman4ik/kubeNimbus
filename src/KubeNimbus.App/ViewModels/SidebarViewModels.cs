@@ -59,8 +59,8 @@ public sealed partial class SidebarSectionViewModel : ObservableObject
     private bool _hasVisibleKinds = true;
 
     /// <summary>
-    /// True while the advanced view is off, this is one of the sections it governs
-    /// (<see cref="SidebarGrouping.IsAdvancedSection"/>), and none of its kinds is one
+    /// True while the advanced view is off, this is a section it curates
+    /// (<see cref="SidebarGrouping.IsCuratedSection"/>), and none of its kinds is one
     /// the basic view keeps (<see cref="SidebarGrouping.IsShownInBasicView"/>). Pushed down from
     /// <see cref="ClusterTabViewModel"/> rather than read from a global, same as
     /// <see cref="ShowKindCount"/>: a section built outside a tab — the screenshot

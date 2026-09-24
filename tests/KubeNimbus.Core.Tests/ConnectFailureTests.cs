@@ -16,10 +16,10 @@ public class ConnectFailureTests
     [Test]
     public async Task A_failing_exec_plugin_is_reported_by_what_it_printed()
     {
-        var kubeconfig = WriteKubeconfig("http://127.0.0.1:1", ExecUser(
-            OperatingSystem.IsWindows()
-                ? ("cmd", ["/c", "echo error: could not reach login.example.com 1>&2 & exit /b 1"])
-                : ("sh", ["-c", "echo 'error: could not reach login.example.com' >&2; exit 1"])));
+        // A script file rather than `sh -c "…"`: the library does not hand a plugin's args
+        // to the process one by one, so on Linux `sh -c` received `echo` alone as its
+        // script and the plugin printed nothing at all.
+        var kubeconfig = WriteKubeconfig("http://127.0.0.1:1", ExecUser((WritePlugin(), [])));
 
         var ex = await Assert.ThrowsAsync<ExecCredentialException>(
             () => ClusterClient.ConnectAsync(Context(kubeconfig)));
@@ -94,6 +94,23 @@ public class ConnectFailureTests
               command: {{plugin.Command}}
               args: [{{string.Join(", ", plugin.Args.Select(a => $"'{a.Replace("'", "''")}'"))}}]
         """;
+
+    /// <summary>A plugin that fails the way a real one does: its reason on stderr, exit 1.</summary>
+    private static string WritePlugin()
+    {
+        var directory = Directory.CreateTempSubdirectory("kubenimbus-exec-plugin").FullName;
+        if (OperatingSystem.IsWindows())
+        {
+            var path = Path.Combine(directory, "plugin.cmd");
+            File.WriteAllText(path, "@echo error: could not reach login.example.com 1>&2\r\n@exit /b 1\r\n");
+            return path;
+        }
+
+        var script = Path.Combine(directory, "plugin.sh");
+        File.WriteAllText(script, "#!/bin/sh\necho 'error: could not reach login.example.com' >&2\nexit 1\n");
+        File.SetUnixFileMode(script, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        return script;
+    }
 
     private static ClusterContext Context(string kubeconfig) => new("stub", "stub", null, "stub", kubeconfig);
 

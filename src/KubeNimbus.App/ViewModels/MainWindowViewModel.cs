@@ -1006,11 +1006,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
         // never race whatever else has touched the flag since the palette opened.
         var advancedTarget = !IsAdvancedView;
         yield return new PaletteItem(
-            advancedTarget ? "Advanced view: show every control" : "Advanced view: hide advanced controls",
+            advancedTarget ? "Advanced view: show every resource kind" : "Advanced view: show only everyday kinds",
             advancedTarget
-                ? "Usage columns, fleet view, log tools, force-apply, Helm & RBAC"
-                : "Back to the minimal layout",
-            "TuneIconGeometry",
+                ? "Adds the API machinery and CRDs to the sidebar"
+                : "Pods, Deployments, Services, Nodes… — about 20 kinds",
+            "EyePlusIconGeometry",
             () => IsAdvancedView = advancedTarget);
 
         // Same explicit-target shape, same reason, for the sidebar.

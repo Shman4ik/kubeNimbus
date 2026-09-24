@@ -471,10 +471,10 @@ public static class CommandCatalog
         {
             Id = CommandId.ToggleAdvancedView,
             Title = "Advanced view",
-            CheatTitle = "Show or hide the advanced sidebar sections",
+            CheatTitle = "Show every resource kind in the sidebar, or only the everyday ones",
             Category = CommandCategory.View,
-            IconKey = "TuneIconGeometry",
-            GestureNote = "The sliders icon, top of the sidebar",
+            IconKey = "EyePlusIconGeometry",
+            GestureNote = "The eye-plus icon, top of the sidebar",
             Surfaces = PaletteAndSheet,
         },
         new()
