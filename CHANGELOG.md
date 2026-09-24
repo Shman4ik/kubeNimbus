@@ -12,6 +12,8 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-24
+
 - A cluster that cannot be reached now says why. When the kubeconfig's credential plugin
   (`aws eks get-token`, `kubelogin`, `gke-gcloud-auth-plugin`, …) fails, the tab shows what
   the plugin printed instead of a JSON deserialization error, and a VPN or proxy page
@@ -615,7 +617,8 @@ First public release. Everything below is new.
 - Usage history is session-scoped and bounded at 30 minutes by design. Long-range
   metrics history is a non-goal — that's Prometheus's job.
 
-[Unreleased]: https://github.com/Shman4ik/kubeNimbus/compare/v0.3.3...HEAD
+[Unreleased]: https://github.com/Shman4ik/kubeNimbus/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.4.0
 [0.3.3]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.3.3
 [0.3.2]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.3.2
 [0.3.1]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.3.1
