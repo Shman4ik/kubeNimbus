@@ -51,6 +51,16 @@ jobs:
         with:
           global-json-file: global.json
 
+      # Restore-only, saved by warm-cache.yml on main (a cache saved by a tag
+      # run could be read by that tag and nothing else). A miss costs nothing but
+      # the download it would have saved.
+      - name: Restore NuGet cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-aot-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'global.json') }}
+          restore-keys: nuget-aot-${{ runner.os }}-${{ runner.arch }}-
+
       # ILCompiler links with clang against zlib; the hosted images don't
       # guarantee the dev headers. Xvfb and the X client libraries are for the
       # launch check below — Avalonia's X11 backend dlopens exactly these seven

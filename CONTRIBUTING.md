@@ -123,7 +123,7 @@ cluster. Pass a scenario-name substring as a second argument to render just one.
   `[ObservableProperty]`/`[RelayCommand]` source generators rather than
   hand-written INPC. `.editorconfig` covers formatting — please don't reformat
   files you aren't otherwise changing.
-- CI runs build + tests + a linux-x64 AOT publish on every PR. It must be green.
+- CI runs on every PR, and only the jobs its files can affect: build + tests (required), the headless XAML smoke test and a linux-x64 AOT publish run in parallel; a docs-only PR skips them all. There is no separate run after the merge. The required check must be green.
 
 Small fixes are welcome without discussion. For anything large — a new
 top-level feature, a new dependency, a structural change — **open an issue
