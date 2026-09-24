@@ -122,12 +122,23 @@ jobs:
       # Each leg carries timeout-minutes as a backstop below the app's own 90s
       # watchdog: a process wedged beneath the .NET runtime would otherwise sit
       # on the runner for the job's full 45 minutes.
+      #
+      # Each binary is launched twice. A runner has no kubeconfig and no
+      # workspace, so the plain `--smoke-test` never restores a tab or connects
+      # to anything — and a win-x64 NativeAOT hang on exactly that path (the UI
+      # thread blocked reading a restored tab's kubeconfig, 8 launches in 10)
+      # passed it for that reason. `--smoke-test=unreachable-cluster` seeds a
+      # workspace restoring a cluster nothing listens on and passes only once
+      # the tab has reported its failed connection and another frame rendered.
       # ---------------------------------------------------------------------
       - name: Launch check (Linux)
         if: runner.os == 'Linux'
         timeout-minutes: 5
         shell: bash
-        run: xvfb-run -a --server-args="-screen 0 1280x800x24" ./publish/${{ matrix.rid }}/kubeNimbus --smoke-test
+        run: |
+          for mode in --smoke-test --smoke-test=unreachable-cluster; do
+            xvfb-run -a --server-args="-screen 0 1280x800x24" ./publish/${{ matrix.rid }}/kubeNimbus "$mode"
+          done
 
       # Start-Process rather than the call operator: kubeNimbus.exe is built
       # WinExe (GUI subsystem), and PowerShell does not wait for a GUI-subsystem
@@ -141,20 +152,25 @@ jobs:
         shell: pwsh
         run: |
           $exe = ".\publish\${{ matrix.rid }}\kubeNimbus.exe"
-          $p = Start-Process -FilePath $exe -ArgumentList '--smoke-test' `
-                             -Wait -PassThru -NoNewWindow `
-                             -RedirectStandardOutput smoke-out.txt `
-                             -RedirectStandardError smoke-err.txt
-          Get-Content smoke-out.txt, smoke-err.txt -ErrorAction SilentlyContinue
-          if ($p.ExitCode -ne 0) {
-            throw "Launch check failed: $exe --smoke-test exited $($p.ExitCode). The published binary does not start."
+          foreach ($mode in '--smoke-test', '--smoke-test=unreachable-cluster') {
+            $p = Start-Process -FilePath $exe -ArgumentList $mode `
+                               -Wait -PassThru -NoNewWindow `
+                               -RedirectStandardOutput smoke-out.txt `
+                               -RedirectStandardError smoke-err.txt
+            Get-Content smoke-out.txt, smoke-err.txt -ErrorAction SilentlyContinue
+            if ($p.ExitCode -ne 0) {
+              throw "Launch check failed: $exe $mode exited $($p.ExitCode). The published binary does not start."
+            }
           }
 
       - name: Launch check (macOS)
         if: runner.os == 'macOS'
         timeout-minutes: 5
         shell: bash
-        run: ./publish/${{ matrix.rid }}/kubeNimbus --smoke-test
+        run: |
+          for mode in --smoke-test --smoke-test=unreachable-cluster; do
+            ./publish/${{ matrix.rid }}/kubeNimbus "$mode"
+          done
 
       # ---------------------------------------------------------------------
       # Installers. A zip and a tarball are what a developer wants; an MSI, a

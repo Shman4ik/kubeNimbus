@@ -177,7 +177,7 @@ public class EventFieldsTests
             return;
         }
 
-        using var client = ClusterClient.Connect(context);
+        using var client = await ClusterClient.ConnectAsync(context);
         var eventsApi = new ResourceDescriptor("events.k8s.io", "v1", "Event", "events", "event", true, [], []);
 
         var core = await client.ListResourceOnceAsync(ResourceDescriptor.Events, cancellationToken: ct);

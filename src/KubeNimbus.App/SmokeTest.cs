@@ -3,6 +3,10 @@ using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Threading;
+using KubeNimbus.App.ViewModels;
+using KubeNimbus.Core;
+using KubeNimbus.Core.Settings;
 
 namespace KubeNimbus.App;
 
@@ -41,11 +45,31 @@ namespace KubeNimbus.App;
 /// Ordinary launches never touch any of this — <see cref="Attach"/> returns
 /// immediately unless the flag was passed.
 /// </para>
+///
+/// <para>
+/// <b>Scenarios.</b> Plain <c>--smoke-test</c> launches with whatever workspace and
+/// kubeconfig the machine has, which on a CI runner is none — so it never restored a
+/// tab or connected to anything, and a NativeAOT hang on exactly that path shipped past
+/// it (see <see cref="Kubeconfig.BuildClientConfigAsync"/>).
+/// <c>--smoke-test=unreachable-cluster</c> seeds, in a temporary directory, a
+/// kubeconfig whose server nothing listens on and a workspace that restores it, then
+/// passes only once the restored tab has reported its failed connection and a frame
+/// has been composited after that — a UI thread that is still alive once the connect
+/// path has run to its end, not just at the first frame.
+/// </para>
 /// </summary>
 internal static class SmokeTest
 {
     /// <summary>The command-line flag that turns this on.</summary>
     private const string FlagName = "--smoke-test";
+
+    /// <summary><c>--smoke-test=&lt;scenario&gt;</c> selects a seeded launch; see the class remarks.</summary>
+    private const string ScenarioPrefix = FlagName + "=";
+
+    private const string UnreachableClusterScenario = "unreachable-cluster";
+
+    /// <summary>The context the unreachable-cluster scenario seeds and restores.</summary>
+    private const string UnreachableContextName = "kubenimbus-smoke-unreachable";
 
     /// <summary>Grep-able success line, so a CI log says why the step passed.</summary>
     private const string SuccessMarker = "SMOKE-OK";
@@ -69,6 +93,8 @@ internal static class SmokeTest
     private static readonly Stopwatch Clock = Stopwatch.StartNew();
 
     private static bool _requested;
+    private static string? _scenario;
+    private static string? _seedDirectory;
     private static Timer? _watchdog;
     private static string _stage = "process started";
 
@@ -86,14 +112,19 @@ internal static class SmokeTest
     {
         ArgumentNullException.ThrowIfNull(args);
 
-        if (Array.IndexOf(args, FlagName) < 0)
+        var flag = Array.Find(args, IsSmokeFlag);
+        if (flag is null)
         {
             return args;
         }
 
         _requested = true;
-        return [.. args.Where(a => !string.Equals(a, FlagName, StringComparison.Ordinal))];
+        _scenario = flag.StartsWith(ScenarioPrefix, StringComparison.Ordinal) ? flag[ScenarioPrefix.Length..] : null;
+        return [.. args.Where(a => !IsSmokeFlag(a))];
     }
+
+    private static bool IsSmokeFlag(string arg) =>
+        string.Equals(arg, FlagName, StringComparison.Ordinal) || arg.StartsWith(ScenarioPrefix, StringComparison.Ordinal);
 
     /// <summary>Whether <see cref="Consume"/> saw the flag.</summary>
     public static bool IsRequested => _requested;
@@ -108,7 +139,7 @@ internal static class SmokeTest
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        Report($"launch check starting (timeout {TimeoutSeconds}s)");
+        Report($"launch check starting (timeout {TimeoutSeconds}s{(_scenario is null ? "" : $", scenario {_scenario}")})");
 
         // Armed here rather than in Attach, which is the obvious place and is wrong:
         // Attach runs inside OnFrameworkInitializationCompleted, so a hang anywhere
@@ -119,6 +150,19 @@ internal static class SmokeTest
 
         try
         {
+            switch (_scenario)
+            {
+                case null:
+                    break;
+                case UnreachableClusterScenario:
+                    SeedUnreachableCluster();
+                    break;
+                default:
+                    StopWatchdog();
+                    Fail($"unknown scenario '{_scenario}' (known: {UnreachableClusterScenario})", ExitStartupFailed);
+                    return ExitStartupFailed;
+            }
+
             var code = builder.StartWithClassicDesktopLifetime(args);
             StopWatchdog();
 
@@ -150,6 +194,74 @@ internal static class SmokeTest
             Console.Error.WriteLine(e);
             Console.Error.Flush();
             return ExitStartupFailed;
+        }
+        finally
+        {
+            DeleteSeed();
+        }
+    }
+
+    /// <summary>
+    /// Writes the unreachable-cluster scenario's kubeconfig and workspace, and points
+    /// the app at them. Both stores are redirected, so the run neither reads nor
+    /// writes the files of whoever runs it — the plain check does read them, which is
+    /// how it came to hang on a developer's machine and pass on a runner.
+    /// </summary>
+    private static void SeedUnreachableCluster()
+    {
+        _stage = "seeding the unreachable-cluster scenario";
+        _seedDirectory = Path.Combine(Path.GetTempPath(), $"kubenimbus-smoke-{Environment.ProcessId}");
+        Directory.CreateDirectory(_seedDirectory);
+
+        // Port 1 on loopback: nothing listens there, so the connect is refused rather
+        // than timing out, and the scenario ends in seconds on every platform. A token
+        // user and skip-verify keep the kubeconfig to what the library needs to build
+        // a client — no certificate is involved, and none is a credential.
+        var kubeconfig = Path.Combine(_seedDirectory, "kubeconfig.yaml");
+        File.WriteAllText(kubeconfig, $"""
+            apiVersion: v1
+            kind: Config
+            clusters:
+            - name: unreachable
+              cluster:
+                server: https://127.0.0.1:1
+                insecure-skip-tls-verify: true
+            users:
+            - name: smoke
+              user:
+                token: smoke-test-not-a-credential
+            contexts:
+            - name: {UnreachableContextName}
+              context:
+                cluster: unreachable
+                user: smoke
+            current-context: {UnreachableContextName}
+            """);
+
+        Environment.SetEnvironmentVariable("KUBECONFIG", kubeconfig);
+        WorkspaceStore.DirectoryOverride = _seedDirectory;
+        AppSettingsStore.DirectoryOverride = _seedDirectory;
+        WorkspaceStore.Save(new WorkspaceSettings(Theme: null, Tabs: [new TabSnapshot(UnreachableContextName, kubeconfig)]));
+        Report($"seeded {kubeconfig} and a workspace restoring {UnreachableContextName}");
+    }
+
+    private static void DeleteSeed()
+    {
+        if (_seedDirectory is null)
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.Delete(_seedDirectory, recursive: true);
+        }
+        catch (IOException)
+        {
+            // Best effort: a temp directory left behind is not worth failing the check.
+        }
+        catch (UnauthorizedAccessException)
+        {
         }
     }
 
@@ -193,11 +305,10 @@ internal static class SmokeTest
 
     private static void Complete(IClassicDesktopStyleApplicationLifetime desktop, Window window)
     {
-        StopWatchdog();
-
         var size = window.ClientSize;
         if (!window.IsVisible || size.Width <= 0 || size.Height <= 0)
         {
+            StopWatchdog();
             Fail(
                 $"a frame was composited but the window is not shown (IsVisible={window.IsVisible}, ClientSize={size})",
                 ExitWindowNotShown);
@@ -205,10 +316,60 @@ internal static class SmokeTest
             return;
         }
 
+        if (_scenario == UnreachableClusterScenario)
+        {
+            // The watchdog stays armed: a UI thread that wedges on the connect path
+            // after the first frame is precisely what this scenario is here to catch.
+            Report("first frame rendered");
+            WaitForRestoredTabToFail(desktop, window);
+            return;
+        }
+
+        Pass(desktop, window, "");
+    }
+
+    /// <summary>
+    /// Polls from a <see cref="DispatcherTimer"/>, on the UI thread, until the restored
+    /// tab has reported its refused connection, then asks for one more composited
+    /// frame. Polling on the UI thread is deliberate: if that thread is blocked the
+    /// timer never ticks, and the watchdog reports the stage it was stuck at.
+    /// </summary>
+    private static void WaitForRestoredTabToFail(IClassicDesktopStyleApplicationLifetime desktop, Window window)
+    {
+        _stage = "first frame rendered, waiting for the restored tab to appear";
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+        timer.Tick += (_, _) =>
+        {
+            var tab = (window.DataContext as MainWindowViewModel)?.Tabs
+                .FirstOrDefault(t => t.Context.Name == UnreachableContextName);
+            if (tab is null)
+            {
+                return;
+            }
+
+            _stage = $"restored tab present, waiting for its connection to fail (tab status: {tab.Status})";
+            if (tab.IsConnecting || tab.IsConnected || !tab.Status.StartsWith("Connection failed", StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            timer.Stop();
+            Report($"restored tab reported: {tab.Status}");
+            _stage = "connection failed, waiting for a frame composited after it";
+            window.RequestAnimationFrame(_ => Pass(desktop, window, ", restored an unreachable cluster"));
+        };
+        timer.Start();
+    }
+
+    private static void Pass(IClassicDesktopStyleApplicationLifetime desktop, Window window, string detail)
+    {
+        StopWatchdog();
+
+        var size = window.ClientSize;
         Console.Out.WriteLine(
             string.Create(
                 CultureInfo.InvariantCulture,
-                $"{SuccessMarker} main window rendered at {size.Width:0}x{size.Height:0} after {Clock.ElapsedMilliseconds} ms"));
+                $"{SuccessMarker} main window rendered at {size.Width:0}x{size.Height:0} after {Clock.ElapsedMilliseconds} ms{detail}"));
         Console.Out.Flush();
 
         _passed = true;

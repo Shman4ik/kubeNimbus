@@ -2111,3 +2111,30 @@ linux-x64 NativeAOT publish with only the known DataGrid warnings, and its
 Not verified: any of it against a real API server — in particular the node-events field
 selector and the single-node metrics GET on a live metrics-server. Windows NativeAOT
 publish was not run.
+
+### NativeAOT startup hang with a restored cluster tab (2026-09-24)
+
+The win-x64 NativeAOT build hung before its first frame on 8 launches in 10 whenever
+the workspace restored a cluster tab. The window drew the command bar and nothing
+after it. The cause was `ClusterClient.Connect` on the UI thread. It builds the client
+with the library's synchronous `BuildConfigFromConfigFile`, which is sync-over-async,
+and NativeAOT parks that wait in `CoWaitForMultipleHandles` on the STA UI thread. A cdb
+stack of the hung thread showed where it was stuck. An instrumented build showed that
+the awaited kubeconfig read reached `RanToCompletion` on a pool thread within about a
+millisecond, and the UI thread never woke. The JIT build never hung. The unreachable
+server was incidental: the hang happens before any connection is attempted.
+
+The fix is `ClusterClient.ConnectAsync` over `Kubeconfig.BuildClientConfigAsync`. The
+whole config build, including any exec credential plugin, now runs on the thread pool.
+The new `--smoke-test=unreachable-cluster` scenario seeds a workspace restoring a
+cluster nothing listens on, and CI's `aot` job and every release leg now run it. CI had
+missed the bug because the plain check runs with no workspace and no kubeconfig.
+
+Checks: the unfixed AOT build failed the new scenario 3 times in 6 (exit 67). The fixed
+win-x64 AOT build passed 10 runs in 10 of the scenario, and 10 in 10 of the plain check
+against the developer's real workspace (a stopped sandbox). The publish showed only the
+known DataGrid warnings. Core tests: 417 passed with the sandbox started for the run.
+App tests: 283 passed.
+
+Not verified: the scenario on linux-x64, linux-arm64 and osx-arm64. CI and the next
+release run will cover those; the bug itself was only ever seen on Windows.

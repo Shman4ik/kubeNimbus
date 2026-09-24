@@ -144,6 +144,13 @@ roughly six seconds of frozen window immediately after a ~150 ms first frame; on
 expired `kubelogin` is up to two minutes of frozen window. That is headlamp#5148's
 failure with a different runtime.
 
+> **Update 2026-09-24.** The synchronous `Connect` on the UI thread turned out to
+> be worse than slow. Under NativeAOT on Windows it hung startup outright, with no
+> exec plugin involved: the kubeconfig read completed and the STA wait never woke.
+> `ClusterTabViewModel` now awaits `ClusterClient.ConnectAsync`, which builds the
+> config (exec plugins included) on the thread pool. See CLAUDE.md, "The launch
+> check".
+
 Two smaller details of the same code path, both already in kubeNimbus's favour and
 worth *not* proposing: the client sets `CreateNoWindow = true`
 (`set_CreateNoWindow` present in the shipped assembly), so kubeNimbus does not have

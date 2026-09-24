@@ -1322,6 +1322,29 @@ would pass unconditionally. Avalonia's X11 backend dlopens exactly seven native
 libraries (`libX11`, `libXext`, `libXrandr`, `libXi`, `libXcursor`, `libICE`,
 `libSM`); both Linux workflows install them alongside `xvfb`.
 
+**A runner has no workspace, so the plain check never connects to anything — hence
+`--smoke-test=unreachable-cluster`.** The plain run reads whatever workspace and
+kubeconfig the machine has. On a runner that means none, so no tab is restored and no
+connect runs. That is how a win-x64 NativeAOT hang shipped past CI and past every
+release leg: `ClusterTabViewModel.ConnectAsync` called the synchronous
+`ClusterClient.Connect`, which built the client with the library's
+`BuildConfigFromConfigFile`, and that method is sync-over-async
+(`.GetAwaiter().GetResult()`). On the UI thread, which is an STA, NativeAOT parks that
+wait in `CoWaitForMultipleHandles`. The kubeconfig read finished on a pool thread in
+about a millisecond, and the UI thread still never woke. That was 8 launches in 10 on
+a developer machine with one restored tab; the JIT build never hung. cdb showed where
+the thread was stuck, and an instrumented build showed that the awaited task had
+completed. The fix is `ClusterClient.ConnectAsync` /
+`Kubeconfig.BuildClientConfigAsync`: the whole config build runs on the pool and the
+UI thread only awaits it. The synchronous `Connect` stays for tests and tooling, and it
+must never be called on the UI thread. The scenario seeds a kubeconfig pointed at
+`https://127.0.0.1:1` and a workspace that restores it, in a temp directory, with both
+stores redirected. It passes only after the tab reports `Connection failed` and a frame
+has composited after that. The watchdog stays armed until then, and the stage it
+reports names the tab status it last saw. Against the unfixed build it failed 3 runs in
+6 with exit 67. Both CI's `aot` job and every `release.yml` leg run it after the plain
+check. The installer legs do not, because those check packaging, not connect.
+
 **The check is only worth having if a broken binary fails it, so prove that, don't
 assume it.** Restore `Icon="/Assets/app.ico"` on `MainWindow`, publish, and run the
 check: the publish succeeds with the same two DataGrid warnings and the check exits

@@ -132,10 +132,50 @@ public static class Kubeconfig
     /// Builds a client configuration for one context, re-resolving the file on
     /// every call (exec plugins, rotated certs and tokens are picked up fresh).
     /// </summary>
+    /// <remarks>
+    /// Blocks the calling thread: the library's synchronous overload is sync-over-async
+    /// (<c>BuildConfigFromConfigFileAsync(…).GetAwaiter().GetResult()</c>), and an exec
+    /// credential plugin runs inside it as a blocking <c>WaitForExit</c>. Tests and
+    /// tooling only — the app goes through <see cref="BuildClientConfigAsync"/>, and why
+    /// is written there.
+    /// </remarks>
     public static KubernetesClientConfiguration BuildClientConfig(ClusterContext context) =>
         KubernetesClientConfiguration.BuildConfigFromConfigFile(
             kubeconfigPath: context.KubeconfigPath,
             currentContext: context.Name);
+
+    /// <summary>
+    /// <see cref="BuildClientConfig"/> for a caller that must not block — the UI thread,
+    /// which is every caller in the app.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The synchronous overload hung the NativeAOT build at startup. Called on Avalonia's
+    /// UI thread (an STA), its <c>GetResult()</c> parks in the runtime's reentrant COM
+    /// wait; the kubeconfig read it waits for finished on a pool thread within a
+    /// millisecond, and the UI thread still never woke — measured on win-x64 with the
+    /// wait instrumented, 4 of 6 launches. The JIT runtime implements that wait
+    /// differently and was never seen to hang, so a Debug run could not show it.
+    /// Whatever the runtime's share of that, blocking the UI thread on I/O was the
+    /// part that was ours.
+    /// </para>
+    /// <para>
+    /// <see cref="Task.Run(Func{Task})"/> rather than awaiting the library's async
+    /// overload directly: that overload only leaves the calling thread at its first
+    /// await that does not complete synchronously, and everything after the file read —
+    /// certificate parsing, and an exec credential plugin's blocking <c>WaitForExit</c>
+    /// (bounded only by <c>ExecTimeout</c>, two minutes) — would otherwise still run on
+    /// the UI thread whenever the read happened to complete inline.
+    /// </para>
+    /// </remarks>
+    public static Task<KubernetesClientConfiguration> BuildClientConfigAsync(
+        ClusterContext context,
+        CancellationToken cancellationToken = default) =>
+        Task.Run(
+            () => KubernetesClientConfiguration.BuildConfigFromConfigFileAsync(
+                new FileInfo(context.KubeconfigPath),
+                currentContext: context.Name),
+            cancellationToken);
 }
 
 /// <summary>One place the kubeconfig search looked, and whether anything was there.</summary>
