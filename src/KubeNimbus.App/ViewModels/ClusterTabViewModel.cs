@@ -1367,7 +1367,10 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         Status = $"Connecting to {Context.Name}…";
         try
         {
-            var client = ClusterClient.Connect(Context);
+            // Awaited, never the synchronous Connect: blocking this (UI) thread on the
+            // kubeconfig read hung the NativeAOT build at startup whenever a restored tab
+            // connected — see Kubeconfig.BuildClientConfigAsync.
+            var client = await ClusterClient.ConnectAsync(Context);
 
             // First and alone: it is the reachability check, and it is the request that
             // runs an exec credential plugin. Everything after it reuses that token, so

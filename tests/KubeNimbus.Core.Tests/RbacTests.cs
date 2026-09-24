@@ -230,7 +230,7 @@ public class RbacIntegrationTests
             return;
         }
 
-        using var client = ClusterClient.Connect(context);
+        using var client = await ClusterClient.ConnectAsync(context);
         var rules = await client.GetSelfSubjectRulesAsync("default", ct);
 
         // The sandbox kubeconfig is cluster-admin, so it must come back with the
@@ -249,7 +249,7 @@ public class RbacIntegrationTests
             return;
         }
 
-        using var client = ClusterClient.Connect(context);
+        using var client = await ClusterClient.ConnectAsync(context);
 
         // Every cluster binds system:kube-controller-manager (a User subject) or
         // at minimum has bindings for its own system ServiceAccounts; an empty
@@ -274,7 +274,7 @@ public class RbacIntegrationTests
             return;
         }
 
-        using var client = ClusterClient.Connect(context);
+        using var client = await ClusterClient.ConnectAsync(context);
         var result = await client.WhoCanAsync(new AccessQuery("delete", "pods"), ct);
 
         // Every conformant cluster binds cluster-admin to the system:masters group, so
@@ -300,7 +300,7 @@ public class RbacIntegrationTests
             return;
         }
 
-        using var client = ClusterClient.Connect(context);
+        using var client = await ClusterClient.ConnectAsync(context);
         var query = new AccessQuery("delete", "pods", Namespace: "default");
         var result = await client.WhoCanAsync(query, ct);
 
@@ -328,7 +328,7 @@ public class RbacIntegrationTests
             return;
         }
 
-        using var client = ClusterClient.Connect(context);
+        using var client = await ClusterClient.ConnectAsync(context);
         var result = await client.WhoCanAsync(
             new AccessQuery("list", "nodes", ClusterScopedResource: true), ct);
 

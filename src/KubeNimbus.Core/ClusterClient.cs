@@ -44,9 +44,28 @@ public sealed partial class ClusterClient : IDisposable
     /// plugins) are resolved through the kubeconfig chain right now, never
     /// from app storage.
     /// </summary>
+    /// <remarks>
+    /// Blocks the calling thread while the kubeconfig is read and any exec plugin
+    /// runs, so it is for tests and tooling only. Never call it on the UI thread:
+    /// that is what hung the NativeAOT build at startup — see
+    /// <see cref="Kubeconfig.BuildClientConfigAsync"/>. The app uses
+    /// <see cref="ConnectAsync"/>.
+    /// </remarks>
     public static ClusterClient Connect(ClusterContext context)
     {
         var config = Kubeconfig.BuildClientConfig(context);
+        return new ClusterClient(context, new Kubernetes(config));
+    }
+
+    /// <summary>
+    /// <see cref="Connect"/> without blocking the caller: the kubeconfig read,
+    /// certificate loading and any exec credential plugin all run on the thread pool.
+    /// </summary>
+    public static async Task<ClusterClient> ConnectAsync(
+        ClusterContext context,
+        CancellationToken cancellationToken = default)
+    {
+        var config = await Kubeconfig.BuildClientConfigAsync(context, cancellationToken).ConfigureAwait(false);
         return new ClusterClient(context, new Kubernetes(config));
     }
 

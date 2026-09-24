@@ -13,7 +13,7 @@ public class ClusterClientTests
     private static async Task<ClusterClient?> ConnectAsync()
     {
         var context = await SandboxCluster.TryGetContextAsync();
-        return context is null ? null : ClusterClient.Connect(context);
+        return context is null ? null : await ClusterClient.ConnectAsync(context);
     }
 
     [Test]

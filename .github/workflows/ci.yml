@@ -132,6 +132,15 @@ jobs:
       # rather than headless, so what is exercised is the X11 backend a user
       # gets. The in-app watchdog bounds a hang at 90s; timeout-minutes is the
       # backstop for a process wedged below the runtime.
+      #
+      # Twice, because a runner has no kubeconfig and no workspace: the plain run
+      # restores no tab and connects to nothing, and a NativeAOT win-x64 hang on
+      # exactly that path (the UI thread blocked reading a restored tab's
+      # kubeconfig) passed it for that reason. `=unreachable-cluster` seeds a
+      # workspace restoring a cluster nothing listens on and passes only once the
+      # tab has reported its failed connection and another frame has rendered.
       - name: Launch check (linux-x64)
         timeout-minutes: 5
-        run: xvfb-run -a --server-args="-screen 0 1280x800x24" ./publish/app/kubeNimbus --smoke-test
+        run: |
+          xvfb-run -a --server-args="-screen 0 1280x800x24" ./publish/app/kubeNimbus --smoke-test
+          xvfb-run -a --server-args="-screen 0 1280x800x24" ./publish/app/kubeNimbus --smoke-test=unreachable-cluster

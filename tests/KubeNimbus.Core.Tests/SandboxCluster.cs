@@ -111,10 +111,10 @@ internal static class SandboxCluster
         using var timeout = new CancellationTokenSource(ProbeTimeout);
         try
         {
-            // Connect() is inside the try on purpose: it throws for a kubeconfig that
+            // ConnectAsync() is inside the try on purpose: it throws for a kubeconfig that
             // parses but names no usable credentials, which is a sandbox this machine
             // cannot talk to for the same practical reason as one that is switched off.
-            using var client = ClusterClient.Connect(context);
+            using var client = await ClusterClient.ConnectAsync(context, timeout.Token);
             await client.GetServerVersionAsync(timeout.Token);
         }
         // Only the ways a sandbox can be unusable from here: nothing listening, TLS that
