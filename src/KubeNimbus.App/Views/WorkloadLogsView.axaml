@@ -16,7 +16,10 @@
     <!-- Pod strip. ToggleButtons bound to IsIncluded and to NOTHING else — a Command
          beside a two-way IsChecked flips the property twice per click and lands where
          it started (UI rule 8b); the view model listens for the property instead. -->
-    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+    <!-- Hidden when the pane is embedded in an application page, whose own pod list is the
+         selector there; a second strip of the same pods would be two controls for one
+         choice. -->
+    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6" IsVisible="{Binding !IsEmbedded}">
       <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
         <ItemsControl ItemsSource="{Binding Sources}">
           <ItemsControl.ItemsPanel>
@@ -61,6 +64,13 @@
       </TextBox>
 
       <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+        <!-- Errors only: the application page's narrowing, over the same severity classes
+             the lines are coloured with. Two-way IsChecked and no Command (UI rule 8b).
+             Offered only where the pane is embedded, so the dock's pane is unchanged. -->
+        <ToggleButton Name="ErrorsOnlyToggle" Classes="chip checkedAccent" Padding="7,3" FontSize="11" Margin="0,0,4,0"
+                      IsChecked="{Binding ShowErrorsOnly}" IsVisible="{Binding IsEmbedded}"
+                      ToolTip.Tip="Show only the lines coloured as errors; every line stays buffered"
+                      Content="Errors only" />
         <ComboBox Width="132" MinHeight="27" FontSize="11" Margin="0,0,4,0"
                   ItemsSource="{Binding LogRanges}" SelectedItem="{Binding SelectedLogRange}"
                   IsEnabled="{Binding !IsDemo}"
@@ -108,6 +118,7 @@
     <Border Grid.Row="3" Classes="card" Padding="8">
       <Grid>
         <ScrollViewer Name="LogScroll" HorizontalScrollBarVisibility="Auto">
+          <StackPanel>
           <ItemsControl ItemsSource="{Binding LogLines}">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:LogLineViewModel">
@@ -133,6 +144,11 @@
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
+          <!-- How the run ended, set by the application page: the log's last line. -->
+          <Border Classes="infoBar error" Margin="0,8,0,0" HorizontalAlignment="Left" IsVisible="{Binding HasFooter}">
+            <TextBlock Text="{Binding Footer}" FontSize="11.5" FontWeight="SemiBold" TextWrapping="Wrap" />
+          </Border>
+          </StackPanel>
         </ScrollViewer>
 
         <!-- Every empty state says which one it is (UI rule 9) — "still finding pods",

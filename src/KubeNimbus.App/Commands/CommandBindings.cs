@@ -198,6 +198,8 @@ public static class CommandBindings
         [CommandId.ToggleSidebar] = vm => vm.ToggleSidebarCommand,
         [CommandId.Preferences] = vm => vm.ShowPreferencesCommand,
         [CommandId.ShortcutsWindow] = vm => vm.ToggleShortcutsCommand,
+        [CommandId.ShowApplications] = vm => vm.ShowApplicationsCommand,
+        [CommandId.ShowResources] = vm => vm.ShowResourcesCommand,
 
         // SelectedTab settles after construction and changes on every tab switch, so
         // these resolve through it each time rather than being captured.

@@ -145,7 +145,8 @@ public static class ApplicationRules
         return [.. pods.Where(p => p.Namespace == workload.Namespace && selector.Matches(p.Pod.Labels))];
     }
 
-    internal static bool IsOwnedBy(DynamicResource child, DynamicResource owner) =>
+    /// <summary>Whether <paramref name="child"/> names <paramref name="owner"/> in its ownerReferences (by kind and name, and UID when both carry one).</summary>
+    public static bool IsOwnedBy(DynamicResource child, DynamicResource owner) =>
         child.Namespace == owner.Namespace
         && child.OwnerReferences.Any(o => o.Kind == owner.Kind && o.Name == owner.Name
             && (o.Uid is null || owner.Uid is null || o.Uid == owner.Uid));
@@ -321,7 +322,8 @@ public static class ApplicationRules
                     : $"{unscheduled.Count} of {live.Count} pods cannot be scheduled",
                 "The scheduler found no node for "
                     + (unscheduled.Count == 1 ? example.Name : $"{unscheduled.Count} pods, e.g. {example.Name}")
-                    + (example.ScheduledMessage.Length > 0 ? $". It reports: {example.ScheduledMessage}" : "."),
+                    + (SchedulerTail(example.ScheduledMessage) is { Length: > 0 } why ? $": {why}." : ".")
+                    + " Its full message is quoted below.",
                 evidence,
                 $"{scheduled} of {live.Count} pods scheduled" + (SchedulerTail(example.ScheduledMessage) is { Length: > 0 } tail ? $": {tail}" : ""),
                 AppStatus.Degraded,
@@ -389,7 +391,15 @@ public static class ApplicationRules
             text = text[..preemption];
         }
 
-        return text.Trim().TrimEnd('.').Trim();
+        // "Insufficient cpu" is the shortage somebody can act on, and the scheduler lists it
+        // after whatever taints and affinities it tried first — so it goes first here, and
+        // the rest keep their order.
+        var parts = text.Trim().TrimEnd('.').Split(", ", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        return string.Join(", ", parts
+            .Select((p, i) => (p, i))
+            .OrderBy(x => x.p.Contains("Insufficient", StringComparison.Ordinal) ? 0 : 1)
+            .ThenBy(x => x.i)
+            .Select(x => x.p));
     }
 
     // ------------------------------------------------------------- workloads

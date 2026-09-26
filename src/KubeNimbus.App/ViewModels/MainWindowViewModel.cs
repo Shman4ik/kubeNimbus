@@ -38,6 +38,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         OnPropertyChanged(nameof(SwitcherLabel));
         OnPropertyChanged(nameof(SwitcherTooltip));
+        OnPropertyChanged(nameof(ShowsApplications));
+        OnPropertyChanged(nameof(ShowsResources));
+        ActivateModeOnSelectedTab();
 
         // Remember which tab is in front (see WorkspaceSettings.SelectedTabIndex).
         // Guarded against the restore, and against a tab being closed, where the
@@ -282,6 +285,67 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void ToggleSidebar() => IsSidebarVisible = !IsSidebarVisible;
 
+    // ------------------------------------------------------------------ mode
+
+    /// <summary>
+    /// Which way into the cluster the window shows: the Applications list (the default,
+    /// and the first screen of every cluster tab) or the Resources explorer. One value for
+    /// the window, persisted in <c>workspace.json</c> as session state. Switching never
+    /// restarts a watch or loses list or inspector state: both views stay alive, one hidden.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsApplicationsMode), nameof(IsResourcesMode), nameof(ModeIndex),
+        nameof(ShowsApplications), nameof(ShowsResources))]
+    private ShellMode _mode = ShellMode.Applications;
+
+    /// <summary>The content area shows the selected tab's Applications list.</summary>
+    public bool ShowsApplications => IsApplicationsMode && SelectedTab is not null;
+
+    /// <summary>The content area shows the selected tab's Resources explorer.</summary>
+    public bool ShowsResources => IsResourcesMode && SelectedTab is not null;
+
+    public bool IsApplicationsMode => Mode == ShellMode.Applications;
+
+    public bool IsResourcesMode => Mode == ShellMode.Resources;
+
+    /// <summary>The segmented control's selection, two-way. 0 = Applications, 1 = Resources.</summary>
+    public int ModeIndex
+    {
+        get => (int)Mode;
+        set
+        {
+            if (value is 0 or 1)
+            {
+                Mode = (ShellMode)value;
+            }
+        }
+    }
+
+    partial void OnModeChanged(ShellMode value)
+    {
+        ActivateModeOnSelectedTab();
+        SaveWorkspace();
+    }
+
+    /// <summary>Explicit targets rather than a toggle, so no control can race its own state (UI rule 8b).</summary>
+    [RelayCommand]
+    private void ShowApplications() => Mode = ShellMode.Applications;
+
+    [RelayCommand]
+    private void ShowResources() => Mode = ShellMode.Resources;
+
+    /// <summary>
+    /// The Applications list reads a tab's cluster only once it is shown for that tab, so
+    /// restoring five tabs in Resources mode opens no watches the reader never looks at.
+    /// </summary>
+    private void ActivateModeOnSelectedTab()
+    {
+        if (IsApplicationsMode && SelectedTab is { } tab)
+        {
+            tab.Applications.Activate();
+        }
+    }
+
     public MainWindowViewModel()
     {
         Palette = new CommandPaletteViewModel(BuildPaletteItems)
@@ -323,6 +387,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 tab.SidebarWidth = SidebarWidth;
                 tab.SidebarWidthChanged = value => SidebarWidth = value;
 
+                // The application page hands linked objects and the YAML editor to the
+                // Resources mode; this is how it gets there.
+                tab.Applications.SwitchToResources = () => Mode = ShellMode.Resources;
+
                 // Log rows landing while the palette is open join it in place. Only the
                 // selected tab's: a background tab finishing a load has nothing to show.
                 tab.LogTargetsChanged = () =>
@@ -353,6 +421,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         _pinned.Clear();
         _pinned.AddRange(settings.PinnedContexts ?? []);
+
+#pragma warning disable MVVMTK0034
+        _mode = Enum.TryParse<ShellMode>(settings.ShellMode, ignoreCase: true, out var mode) ? mode : ShellMode.Applications;
+#pragma warning restore MVVMTK0034
 
         _recent.Clear();
         _recent.AddRange(settings.RecentContexts ?? []);
@@ -915,6 +987,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             PinnedContexts = [.. _pinned],
             RecentContexts = [.. _recent],
             EnvironmentOverrides = _environmentOverrides.ToDictionary(kv => kv.Key, kv => kv.Value.ToString()),
+            ShellMode = Mode.ToString(),
         });
 
         // The picked kubeconfig paths are a preference, not session state — they are
@@ -1024,6 +1097,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
         // Title, icon and shortcut caption all come from the catalog rather than being
         // retyped here, so the palette row, the tooltip and the F1 sheet cannot spell
         // the same command three different ways.
+        // The mode not on screen — offering the one you are already in would be a row that
+        // matches and does nothing.
+        yield return IsApplicationsMode
+            ? Catalog(CommandId.ShowResources, "Kinds, lists and the inspector dock", () => Mode = ShellMode.Resources)
+            : Catalog(CommandId.ShowApplications, "Every application's health and the reason, first", () => Mode = ShellMode.Applications);
+
         yield return Catalog(CommandId.Preferences, "Theme, shortcuts, kubeconfig files, logs and metrics",
             () => ShowPreferencesCommand.Execute(null));
 

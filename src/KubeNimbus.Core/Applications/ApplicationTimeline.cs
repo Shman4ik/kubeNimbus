@@ -52,6 +52,9 @@ public sealed record TimelineWindow(
 /// </remarks>
 public static class ApplicationTimeline
 {
+    /// <summary>How close a ReplicaSet's creation must follow an Argo sync to be the same deploy.</summary>
+    public static readonly TimeSpan DeployMergeWindow = TimeSpan.FromMinutes(1);
+
     public static readonly TimeSpan[] Windows =
         [TimeSpan.FromMinutes(15), TimeSpan.FromMinutes(30), TimeSpan.FromMinutes(45), TimeSpan.FromMinutes(60)];
 
@@ -75,10 +78,28 @@ public static class ApplicationTimeline
 
         foreach (var rs in input.ReplicaSets)
         {
-            if (rs.CreationTimestamp is { } at)
+            if (rs.CreationTimestamp is not { } at)
             {
-                items.Add(new TimelineItem(at, TimelineKind.Deploy, $"rev {ApplicationRules.Revision(rs)}",
-                    $"ReplicaSet {rs.Name} created (revision {ApplicationRules.Revision(rs)})"));
+                continue;
+            }
+
+            var revision = ApplicationRules.Revision(rs);
+            var created = $"ReplicaSet {rs.Name} created (revision {revision})";
+
+            // An Argo sync and the ReplicaSet it created are one deploy seconds apart; drawn
+            // as two marks their labels land on top of each other. They merge when the
+            // ReplicaSet appears within a minute after the sync — a restart or a manual edit
+            // has no sync near it and keeps a mark of its own.
+            var sync = items.FindIndex(i => i.Kind == TimelineKind.Deploy && i.Detail.StartsWith("Argo CD", StringComparison.Ordinal)
+                && at - i.At >= TimeSpan.FromSeconds(-5) && at - i.At <= DeployMergeWindow);
+            if (sync >= 0)
+            {
+                var deploy = items[sync];
+                items[sync] = deploy with { Label = $"{deploy.Label} · rev {revision}", Detail = $"{deploy.Detail}; {created}" };
+            }
+            else
+            {
+                items.Add(new TimelineItem(at, TimelineKind.Deploy, $"rev {revision}", created));
             }
         }
 

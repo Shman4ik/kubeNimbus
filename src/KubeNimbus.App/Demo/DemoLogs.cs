@@ -105,6 +105,20 @@ internal static class DemoLogs
                 """2026-07-20T08:45:03.117Z [2026-07-20T08:45:03Z] "POST /v1/blob HTTP/1.1" 200 - 1948231 34 9 "-" "report-generator/2.14.3" """,
             ],
 
+            // The crash-looping replica of the checkout deploy: the one run the kubelet still
+            // holds for a container waiting in CrashLoopBackOff, ending in the error that
+            // made it exit (the Applications page closes it with the exit code). Deploy
+            // 8f3c1d9 removed PAYMENT_GATEWAY_URL from the pod template — "what changed"
+            // shows exactly that — and this is what the new version says about it.
+            ("checkout-worker-5d8f7b9c4-qz9pl", "worker") =>
+            [
+                "2026-07-30T08:54:31.402Z checkout-worker 9.0.1 starting, queue=checkout-events group=workers-a",
+                "2026-07-30T08:54:31.690Z loading config from /etc/checkout/config.yaml",
+                "2026-07-30T08:54:32.118Z subscribed to 12 partitions",
+                "2026-07-30T08:54:36.004Z ERROR payment gateway client: missing required setting PAYMENT_GATEWAY_URL",
+                "2026-07-30T08:54:36.011Z ERROR fatal: configuration invalid (1 error), exiting",
+            ],
+
             (_, "worker") =>
             [
                 "2026-07-20T08:39:11.001Z checkout-worker starting, queue=checkout-events group=workers-a",

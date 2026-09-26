@@ -502,9 +502,10 @@
       "name": "checkout-worker-5d8f7b9c4-qz9pl",
       "namespace": "payments",
       "uid": "a2222222-2222-2222-2222-222222222222",
-      "creationTimestamp": "2026-07-20T02:40:00Z",
+      "creationTimestamp": "2026-07-30T08:41:12Z",
       "labels": {
-        "app": "checkout-worker"
+        "app": "checkout-worker",
+        "pod-template-hash": "5d8f7b9c4"
       },
       "ownerReferences": [
         {
@@ -526,6 +527,9 @@
             "requests": {
               "cpu": "500m",
               "memory": "512Mi"
+            },
+            "limits": {
+              "memory": "512Mi"
             }
           },
           "livenessProbe": {
@@ -535,6 +539,142 @@
             },
             "periodSeconds": 15,
             "failureThreshold": 3
+          },
+          "envFrom": [
+            {
+              "configMapRef": {
+                "name": "checkout-worker-config"
+              }
+            }
+          ]
+        }
+      ],
+      "tolerations": [
+        {
+          "key": "node.kubernetes.io/not-ready",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
+        },
+        {
+          "key": "node.kubernetes.io/unreachable",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
+        }
+      ]
+    },
+    "status": {
+      "phase": "Running",
+      "qosClass": "Burstable",
+      "conditions": [
+        {
+          "type": "PodReadyToStartContainers",
+          "status": "True",
+          "lastTransitionTime": "2026-07-30T08:41:12Z"
+        },
+        {
+          "type": "Initialized",
+          "status": "True",
+          "lastTransitionTime": "2026-07-30T08:41:12Z"
+        },
+        {
+          "type": "Ready",
+          "status": "False",
+          "lastTransitionTime": "2026-07-30T08:41:12Z"
+        },
+        {
+          "type": "ContainersReady",
+          "status": "False",
+          "lastTransitionTime": "2026-07-30T08:41:12Z"
+        },
+        {
+          "type": "PodScheduled",
+          "status": "True",
+          "lastTransitionTime": "2026-07-30T08:41:12Z"
+        }
+      ],
+      "containerStatuses": [
+        {
+          "name": "worker",
+          "ready": false,
+          "restartCount": 14,
+          "image": "registry.internal/payments/checkout-worker:9.0.1",
+          "state": {
+            "waiting": {
+              "reason": "CrashLoopBackOff",
+              "message": "back-off 5m0s restarting failed container=worker pod=checkout-worker-5d8f7b9c4-qz9pl_payments(a2222222-2222-2222-2222-222222222222)"
+            }
+          },
+          "lastState": {
+            "terminated": {
+              "exitCode": 1,
+              "reason": "Error",
+              "startedAt": "2026-07-30T08:54:31Z",
+              "finishedAt": "2026-07-30T08:54:36Z",
+              "containerID": "containerd://7f1e4c2b9a0d83e5c6b1f2a4d9e07c3b8a5f6d2e1c0b9a8f7e6d5c4b3a2f1e0d"
+            }
+          },
+          "containerID": "containerd://7f1e4c2b9a0d83e5c6b1f2a4d9e07c3b8a5f6d2e1c0b9a8f7e6d5c4b3a2f1e0d"
+        }
+      ],
+      "startTime": "2026-07-30T08:41:12Z"
+    }
+  },
+  {
+    "kind": "Pod",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "checkout-worker-7b4c6d8f5-h2x7d",
+      "namespace": "payments",
+      "uid": "a2222223-2222-2222-2222-222222222222",
+      "creationTimestamp": "2026-07-26T09:31:40Z",
+      "labels": {
+        "app": "checkout-worker",
+        "pod-template-hash": "7b4c6d8f5"
+      },
+      "ownerReferences": [
+        {
+          "apiVersion": "apps/v1",
+          "kind": "ReplicaSet",
+          "name": "checkout-worker-7b4c6d8f5",
+          "uid": "b2222223-2222-2222-2222-222222222222",
+          "controller": true
+        }
+      ]
+    },
+    "spec": {
+      "nodeName": "demo-worker-2",
+      "containers": [
+        {
+          "name": "worker",
+          "image": "registry.internal/payments/checkout-worker:9.0.0",
+          "env": [
+            {
+              "name": "PAYMENT_GATEWAY_URL",
+              "valueFrom": {
+                "configMapKeyRef": {
+                  "name": "checkout-worker-config",
+                  "key": "gateway-url"
+                }
+              }
+            }
+          ],
+          "envFrom": [
+            {
+              "configMapRef": {
+                "name": "checkout-worker-config"
+              }
+            }
+          ],
+          "resources": {
+            "requests": {
+              "cpu": "500m",
+              "memory": "512Mi"
+            },
+            "limits": {
+              "memory": "512Mi"
+            }
           }
         }
       ],
@@ -560,38 +700,37 @@
         {
           "type": "PodReadyToStartContainers",
           "status": "True",
-          "lastTransitionTime": "2026-07-20T02:40:00Z"
+          "lastTransitionTime": "2026-07-26T09:31:40Z"
         },
         {
           "type": "Initialized",
           "status": "True",
-          "lastTransitionTime": "2026-07-20T02:40:00Z"
+          "lastTransitionTime": "2026-07-26T09:31:40Z"
         },
         {
           "type": "Ready",
           "status": "True",
-          "lastTransitionTime": "2026-07-20T02:40:00Z"
+          "lastTransitionTime": "2026-07-26T09:31:40Z"
         },
         {
           "type": "ContainersReady",
           "status": "True",
-          "lastTransitionTime": "2026-07-20T02:40:00Z"
+          "lastTransitionTime": "2026-07-26T09:31:40Z"
         },
         {
           "type": "PodScheduled",
           "status": "True",
-          "lastTransitionTime": "2026-07-20T02:40:00Z"
+          "lastTransitionTime": "2026-07-26T09:31:40Z"
         }
       ],
       "containerStatuses": [
         {
           "name": "worker",
-          "ready": false,
-          "restartCount": 14,
+          "ready": true,
+          "restartCount": 0,
           "state": {
-            "waiting": {
-              "reason": "CrashLoopBackOff",
-              "message": "back-off 5m0s restarting failed container"
+            "running": {
+              "startedAt": "2026-07-26T09:31:52Z"
             }
           }
         }
@@ -700,9 +839,10 @@
       "name": "fraud-detector-6c7d9f8b5-2n8wt",
       "namespace": "payments",
       "uid": "a4444444-4444-4444-4444-444444444444",
-      "creationTimestamp": "2026-07-20T03:20:00Z",
+      "creationTimestamp": "2026-07-30T06:12:33Z",
       "labels": {
-        "app": "fraud-detector"
+        "app": "fraud-detector",
+        "pod-template-hash": "6c7d9f8b5"
       },
       "ownerReferences": [
         {
@@ -718,7 +858,15 @@
       "containers": [
         {
           "name": "model-server",
-          "image": "registry.internal/ml/fraud-detector:4.1.0"
+          "image": "registry.internal/ml/fraud-detector:4.1.0",
+          "resources": {
+            "requests": {
+              "cpu": "2"
+            },
+            "limits": {
+              "cpu": "2"
+            }
+          }
         }
       ]
     },
@@ -730,8 +878,61 @@
           "type": "PodScheduled",
           "status": "False",
           "reason": "Unschedulable",
-          "message": "0/3 nodes are available: 1 node(s) had untolerated taint {node-role.kubernetes.io/control-plane: }, 2 Insufficient cpu. preemption: 0/3 nodes are available: 3 No preemption victims found for incoming pod.",
-          "lastTransitionTime": "2026-07-20T03:20:10Z"
+          "message": "0/3 nodes are available: 1 node(s) had untolerated taint {node.kubernetes.io/disk-pressure: }, 2 Insufficient cpu. preemption: 0/3 nodes are available: 1 Preemption is not helpful for scheduling, 2 No preemption victims found for incoming pod.",
+          "lastTransitionTime": "2026-07-30T06:12:34Z"
+        }
+      ],
+      "containerStatuses": []
+    }
+  },
+  {
+    "kind": "Pod",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "fraud-detector-6c7d9f8b5-7kq4v",
+      "namespace": "payments",
+      "uid": "a4444445-4444-4444-4444-444444444444",
+      "creationTimestamp": "2026-07-30T06:12:33Z",
+      "labels": {
+        "app": "fraud-detector",
+        "pod-template-hash": "6c7d9f8b5"
+      },
+      "ownerReferences": [
+        {
+          "apiVersion": "apps/v1",
+          "kind": "ReplicaSet",
+          "name": "fraud-detector-6c7d9f8b5",
+          "uid": "b4444444-4444-4444-4444-444444444444",
+          "controller": true
+        }
+      ]
+    },
+    "spec": {
+      "containers": [
+        {
+          "name": "model-server",
+          "image": "registry.internal/ml/fraud-detector:4.1.0",
+          "resources": {
+            "requests": {
+              "cpu": "2"
+            },
+            "limits": {
+              "cpu": "2"
+            }
+          }
+        }
+      ]
+    },
+    "status": {
+      "phase": "Pending",
+      "qosClass": "BestEffort",
+      "conditions": [
+        {
+          "type": "PodScheduled",
+          "status": "False",
+          "reason": "Unschedulable",
+          "message": "0/3 nodes are available: 1 node(s) had untolerated taint {node.kubernetes.io/disk-pressure: }, 2 Insufficient cpu. preemption: 0/3 nodes are available: 1 Preemption is not helpful for scheduling, 2 No preemption victims found for incoming pod.",
+          "lastTransitionTime": "2026-07-30T06:12:34Z"
         }
       ],
       "containerStatuses": []
@@ -856,9 +1057,10 @@
       "namespace": "payments",
       "uid": "a6666666-6666-6666-6666-666666666666",
       "creationTimestamp": "2026-07-20T04:01:00Z",
-      "deletionTimestamp": "2026-07-20T04:15:00Z",
+      "deletionTimestamp": "2026-07-30T08:55:30Z",
       "labels": {
-        "app": "notification-dispatcher"
+        "app": "notification-dispatcher",
+        "pod-template-hash": "8b6f5d7c9"
       },
       "ownerReferences": [
         {
@@ -935,9 +1137,9 @@
         {
           "type": "DisruptionTarget",
           "status": "True",
-          "lastTransitionTime": "2026-08-19T09:14:31Z",
-          "reason": "EvictionByEvictionAPI",
-          "message": "Pod was evicted by the eviction API: draining node demo-worker-1"
+          "lastTransitionTime": "2026-07-30T08:55:30Z",
+          "reason": "TerminationByKubelet",
+          "message": "Pod was terminated in response to a rollout of the new ReplicaSet"
         },
         {
           "type": "cloud.example.com/load-balancer-ready",
@@ -955,6 +1157,618 @@
           "state": {
             "running": {
               "startedAt": "2026-07-20T04:01:05Z"
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "Pod",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "notification-dispatcher-8b6f5d7c9-p4t6w",
+      "namespace": "payments",
+      "uid": "a6666668-6666-6666-6666-666666666666",
+      "creationTimestamp": "2026-07-26T09:35:20Z",
+      "labels": {
+        "app": "notification-dispatcher",
+        "pod-template-hash": "8b6f5d7c9"
+      },
+      "ownerReferences": [
+        {
+          "apiVersion": "apps/v1",
+          "kind": "ReplicaSet",
+          "name": "notification-dispatcher-8b6f5d7c9",
+          "uid": "b6666666-6666-6666-6666-666666666666",
+          "controller": true
+        }
+      ]
+    },
+    "spec": {
+      "nodeName": "demo-worker-2",
+      "containers": [
+        {
+          "name": "dispatcher",
+          "image": "registry.internal/payments/notification-dispatcher:3.3.3",
+          "resources": {
+            "requests": {
+              "cpu": "150m",
+              "memory": "192Mi"
+            },
+            "limits": {
+              "cpu": "2",
+              "memory": "6Gi"
+            }
+          }
+        }
+      ],
+      "tolerations": [
+        {
+          "key": "node.kubernetes.io/not-ready",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
+        },
+        {
+          "key": "node.kubernetes.io/unreachable",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
+        }
+      ]
+    },
+    "status": {
+      "phase": "Running",
+      "qosClass": "Burstable",
+      "conditions": [
+        {
+          "type": "PodReadyToStartContainers",
+          "status": "True",
+          "lastTransitionTime": "2026-07-26T09:35:20Z"
+        },
+        {
+          "type": "Initialized",
+          "status": "True",
+          "lastTransitionTime": "2026-07-26T09:35:20Z"
+        },
+        {
+          "type": "Ready",
+          "status": "True",
+          "lastTransitionTime": "2026-07-26T09:35:20Z"
+        },
+        {
+          "type": "ContainersReady",
+          "status": "True",
+          "lastTransitionTime": "2026-07-26T09:35:20Z"
+        },
+        {
+          "type": "PodScheduled",
+          "status": "True",
+          "lastTransitionTime": "2026-07-26T09:35:20Z"
+        }
+      ],
+      "containerStatuses": [
+        {
+          "name": "dispatcher",
+          "ready": true,
+          "restartCount": 0,
+          "state": {
+            "running": {
+              "startedAt": "2026-07-26T09:35:31Z"
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "Pod",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "notification-dispatcher-5c9d7f6b8-r2m8x",
+      "namespace": "payments",
+      "uid": "a6666667-6666-6666-6666-666666666666",
+      "creationTimestamp": "2026-07-30T08:44:40Z",
+      "labels": {
+        "app": "notification-dispatcher",
+        "pod-template-hash": "5c9d7f6b8"
+      },
+      "ownerReferences": [
+        {
+          "apiVersion": "apps/v1",
+          "kind": "ReplicaSet",
+          "name": "notification-dispatcher-5c9d7f6b8",
+          "uid": "b6666667-6666-6666-6666-666666666666",
+          "controller": true
+        }
+      ]
+    },
+    "spec": {
+      "nodeName": "demo-worker-2",
+      "containers": [
+        {
+          "name": "dispatcher",
+          "image": "registry.internal/payments/notification-dispatcher:3.4.0",
+          "resources": {
+            "requests": {
+              "cpu": "150m",
+              "memory": "192Mi"
+            },
+            "limits": {
+              "cpu": "2",
+              "memory": "6Gi"
+            }
+          }
+        }
+      ],
+      "tolerations": [
+        {
+          "key": "node.kubernetes.io/not-ready",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
+        },
+        {
+          "key": "node.kubernetes.io/unreachable",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
+        }
+      ]
+    },
+    "status": {
+      "phase": "Running",
+      "qosClass": "Burstable",
+      "conditions": [
+        {
+          "type": "PodReadyToStartContainers",
+          "status": "True",
+          "lastTransitionTime": "2026-07-30T08:44:40Z"
+        },
+        {
+          "type": "Initialized",
+          "status": "True",
+          "lastTransitionTime": "2026-07-30T08:44:40Z"
+        },
+        {
+          "type": "Ready",
+          "status": "True",
+          "lastTransitionTime": "2026-07-30T08:44:40Z"
+        },
+        {
+          "type": "ContainersReady",
+          "status": "True",
+          "lastTransitionTime": "2026-07-30T08:44:40Z"
+        },
+        {
+          "type": "PodScheduled",
+          "status": "True",
+          "lastTransitionTime": "2026-07-30T08:44:40Z"
+        }
+      ],
+      "containerStatuses": [
+        {
+          "name": "dispatcher",
+          "ready": true,
+          "restartCount": 0,
+          "state": {
+            "running": {
+              "startedAt": "2026-07-30T08:44:49Z"
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "Pod",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "ledger-api-6d5c8b7f9-x4k9p",
+      "namespace": "payments",
+      "uid": "a7777777-7777-7777-7777-777777777771",
+      "creationTimestamp": "2026-07-28T17:04:40Z",
+      "labels": {
+        "app": "ledger-api",
+        "pod-template-hash": "6d5c8b7f9"
+      },
+      "ownerReferences": [
+        {
+          "apiVersion": "apps/v1",
+          "kind": "ReplicaSet",
+          "name": "ledger-api-6d5c8b7f9",
+          "uid": "b7777777-7777-7777-7777-777777777777",
+          "controller": true
+        }
+      ]
+    },
+    "spec": {
+      "nodeName": "demo-worker-2",
+      "containers": [
+        {
+          "name": "api",
+          "image": "registry.internal/payments/ledger-api:2.14.3",
+          "ports": [
+            {
+              "containerPort": 8080,
+              "protocol": "TCP"
+            }
+          ],
+          "resources": {
+            "requests": {
+              "cpu": "250m",
+              "memory": "256Mi"
+            },
+            "limits": {
+              "memory": "512Mi"
+            }
+          },
+          "readinessProbe": {
+            "httpGet": {
+              "path": "/ready",
+              "port": 8080
+            },
+            "periodSeconds": 10
+          }
+        }
+      ],
+      "tolerations": [
+        {
+          "key": "node.kubernetes.io/not-ready",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
+        },
+        {
+          "key": "node.kubernetes.io/unreachable",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
+        }
+      ]
+    },
+    "status": {
+      "phase": "Running",
+      "qosClass": "Burstable",
+      "conditions": [
+        {
+          "type": "PodReadyToStartContainers",
+          "status": "True",
+          "lastTransitionTime": "2026-07-28T17:04:40Z"
+        },
+        {
+          "type": "Initialized",
+          "status": "True",
+          "lastTransitionTime": "2026-07-28T17:04:40Z"
+        },
+        {
+          "type": "Ready",
+          "status": "True",
+          "lastTransitionTime": "2026-07-28T17:04:40Z"
+        },
+        {
+          "type": "ContainersReady",
+          "status": "True",
+          "lastTransitionTime": "2026-07-28T17:04:40Z"
+        },
+        {
+          "type": "PodScheduled",
+          "status": "True",
+          "lastTransitionTime": "2026-07-28T17:04:40Z"
+        }
+      ],
+      "containerStatuses": [
+        {
+          "name": "api",
+          "ready": true,
+          "restartCount": 0,
+          "state": {
+            "running": {
+              "startedAt": "2026-07-28T17:04:52Z"
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "Pod",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "ledger-api-6d5c8b7f9-m2v7q",
+      "namespace": "payments",
+      "uid": "a7777777-7777-7777-7777-777777777772",
+      "creationTimestamp": "2026-07-28T17:04:40Z",
+      "labels": {
+        "app": "ledger-api",
+        "pod-template-hash": "6d5c8b7f9"
+      },
+      "ownerReferences": [
+        {
+          "apiVersion": "apps/v1",
+          "kind": "ReplicaSet",
+          "name": "ledger-api-6d5c8b7f9",
+          "uid": "b7777777-7777-7777-7777-777777777777",
+          "controller": true
+        }
+      ]
+    },
+    "spec": {
+      "nodeName": "demo-worker-2",
+      "containers": [
+        {
+          "name": "api",
+          "image": "registry.internal/payments/ledger-api:2.14.3",
+          "ports": [
+            {
+              "containerPort": 8080,
+              "protocol": "TCP"
+            }
+          ],
+          "resources": {
+            "requests": {
+              "cpu": "250m",
+              "memory": "256Mi"
+            },
+            "limits": {
+              "memory": "512Mi"
+            }
+          },
+          "readinessProbe": {
+            "httpGet": {
+              "path": "/ready",
+              "port": 8080
+            },
+            "periodSeconds": 10
+          }
+        }
+      ],
+      "tolerations": [
+        {
+          "key": "node.kubernetes.io/not-ready",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
+        },
+        {
+          "key": "node.kubernetes.io/unreachable",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
+        }
+      ]
+    },
+    "status": {
+      "phase": "Running",
+      "qosClass": "Burstable",
+      "conditions": [
+        {
+          "type": "PodReadyToStartContainers",
+          "status": "True",
+          "lastTransitionTime": "2026-07-28T17:04:40Z"
+        },
+        {
+          "type": "Initialized",
+          "status": "True",
+          "lastTransitionTime": "2026-07-28T17:04:40Z"
+        },
+        {
+          "type": "Ready",
+          "status": "True",
+          "lastTransitionTime": "2026-07-28T17:04:40Z"
+        },
+        {
+          "type": "ContainersReady",
+          "status": "True",
+          "lastTransitionTime": "2026-07-28T17:04:40Z"
+        },
+        {
+          "type": "PodScheduled",
+          "status": "True",
+          "lastTransitionTime": "2026-07-28T17:04:40Z"
+        }
+      ],
+      "containerStatuses": [
+        {
+          "name": "api",
+          "ready": true,
+          "restartCount": 0,
+          "state": {
+            "running": {
+              "startedAt": "2026-07-28T17:04:52Z"
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "Pod",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "kube-prometheus-stack-operator-5f7d9c8b6-w8n2c",
+      "namespace": "monitoring",
+      "uid": "a8888888-8888-8888-8888-888888888881",
+      "creationTimestamp": "2026-07-29T22:11:10Z",
+      "labels": {
+        "app.kubernetes.io/name": "kube-prometheus-stack-prometheus-operator",
+        "pod-template-hash": "5f7d9c8b6"
+      },
+      "ownerReferences": [
+        {
+          "apiVersion": "apps/v1",
+          "kind": "ReplicaSet",
+          "name": "kube-prometheus-stack-operator-5f7d9c8b6",
+          "uid": "b8888888-8888-8888-8888-888888888881",
+          "controller": true
+        }
+      ]
+    },
+    "spec": {
+      "nodeName": "demo-worker-2",
+      "containers": [
+        {
+          "name": "kube-prometheus-stack",
+          "image": "quay.io/prometheus-operator/prometheus-operator:v0.76.0"
+        }
+      ],
+      "tolerations": [
+        {
+          "key": "node.kubernetes.io/not-ready",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
+        },
+        {
+          "key": "node.kubernetes.io/unreachable",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
+        }
+      ]
+    },
+    "status": {
+      "phase": "Running",
+      "qosClass": "Burstable",
+      "conditions": [
+        {
+          "type": "PodReadyToStartContainers",
+          "status": "True",
+          "lastTransitionTime": "2026-07-29T22:11:10Z"
+        },
+        {
+          "type": "Initialized",
+          "status": "True",
+          "lastTransitionTime": "2026-07-29T22:11:10Z"
+        },
+        {
+          "type": "Ready",
+          "status": "True",
+          "lastTransitionTime": "2026-07-29T22:11:10Z"
+        },
+        {
+          "type": "ContainersReady",
+          "status": "True",
+          "lastTransitionTime": "2026-07-29T22:11:10Z"
+        },
+        {
+          "type": "PodScheduled",
+          "status": "True",
+          "lastTransitionTime": "2026-07-29T22:11:10Z"
+        }
+      ],
+      "containerStatuses": [
+        {
+          "name": "kube-prometheus-stack",
+          "ready": true,
+          "restartCount": 0,
+          "state": {
+            "running": {
+              "startedAt": "2026-07-29T22:11:21Z"
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "Pod",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "prometheus-kube-prometheus-stack-prometheus-0",
+      "namespace": "monitoring",
+      "uid": "a8888888-8888-8888-8888-888888888882",
+      "creationTimestamp": "2026-07-29T22:11:30Z",
+      "labels": {
+        "app.kubernetes.io/name": "prometheus",
+        "prometheus": "kube-prometheus-stack-prometheus"
+      },
+      "ownerReferences": [
+        {
+          "apiVersion": "apps/v1",
+          "kind": "StatefulSet",
+          "name": "prometheus-kube-prometheus-stack-prometheus",
+          "uid": "b8888888-8888-8888-8888-888888888882",
+          "controller": true
+        }
+      ]
+    },
+    "spec": {
+      "nodeName": "demo-worker-2",
+      "containers": [
+        {
+          "name": "prometheus",
+          "image": "quay.io/prometheus/prometheus:v2.54.1"
+        },
+        {
+          "name": "config-reloader",
+          "image": "quay.io/prometheus-operator/prometheus-config-reloader:v0.76.0"
+        }
+      ],
+      "tolerations": [
+        {
+          "key": "node.kubernetes.io/not-ready",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
+        },
+        {
+          "key": "node.kubernetes.io/unreachable",
+          "operator": "Exists",
+          "effect": "NoExecute",
+          "tolerationSeconds": 300
+        }
+      ]
+    },
+    "status": {
+      "phase": "Running",
+      "qosClass": "Burstable",
+      "conditions": [
+        {
+          "type": "PodReadyToStartContainers",
+          "status": "True",
+          "lastTransitionTime": "2026-07-29T22:11:30Z"
+        },
+        {
+          "type": "Initialized",
+          "status": "True",
+          "lastTransitionTime": "2026-07-29T22:11:30Z"
+        },
+        {
+          "type": "Ready",
+          "status": "True",
+          "lastTransitionTime": "2026-07-29T22:11:30Z"
+        },
+        {
+          "type": "ContainersReady",
+          "status": "True",
+          "lastTransitionTime": "2026-07-29T22:11:30Z"
+        },
+        {
+          "type": "PodScheduled",
+          "status": "True",
+          "lastTransitionTime": "2026-07-29T22:11:30Z"
+        }
+      ],
+      "containerStatuses": [
+        {
+          "name": "prometheus",
+          "ready": true,
+          "restartCount": 0,
+          "state": {
+            "running": {
+              "startedAt": "2026-07-29T22:11:45Z"
+            }
+          }
+        },
+        {
+          "name": "config-reloader",
+          "ready": true,
+          "restartCount": 0,
+          "state": {
+            "running": {
+              "startedAt": "2026-07-29T22:11:44Z"
             }
           }
         }

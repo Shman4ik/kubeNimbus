@@ -2,75 +2,148 @@
   {
     "kind": "Event",
     "apiVersion": "v1",
-    "metadata": { "name": "checkout-worker-5d8f7b9c4-qz9pl.17f2a1", "namespace": "payments" },
-    "involvedObject": { "apiVersion": "v1", "kind": "Pod", "name": "checkout-worker-5d8f7b9c4-qz9pl", "namespace": "payments", "uid": "a2222222-2222-2222-2222-222222222222" },
+    "metadata": {
+      "name": "checkout-worker-5d8f7b9c4-qz9pl.17f2a1",
+      "namespace": "payments"
+    },
+    "involvedObject": {
+      "apiVersion": "v1",
+      "kind": "Pod",
+      "name": "checkout-worker-5d8f7b9c4-qz9pl",
+      "namespace": "payments",
+      "uid": "a2222222-2222-2222-2222-222222222222"
+    },
     "type": "Warning",
     "reason": "BackOff",
     "message": "Back-off restarting failed container worker in pod checkout-worker-5d8f7b9c4-qz9pl_payments(a2222222)",
     "count": 42,
-    "lastTimestamp": "2026-07-20T04:58:00Z"
+    "lastTimestamp": "2026-07-30T08:55:40Z",
+    "firstTimestamp": "2026-07-30T08:43:05Z"
   },
   {
     "kind": "Event",
     "apiVersion": "v1",
-    "metadata": { "name": "checkout-worker-5d8f7b9c4-qz9pl.17f2a0", "namespace": "payments" },
-    "involvedObject": { "apiVersion": "v1", "kind": "Pod", "name": "checkout-worker-5d8f7b9c4-qz9pl", "namespace": "payments", "uid": "a2222222-2222-2222-2222-222222222222" },
+    "metadata": {
+      "name": "checkout-worker-5d8f7b9c4-qz9pl.17f2a0",
+      "namespace": "payments"
+    },
+    "involvedObject": {
+      "apiVersion": "v1",
+      "kind": "Pod",
+      "name": "checkout-worker-5d8f7b9c4-qz9pl",
+      "namespace": "payments",
+      "uid": "a2222222-2222-2222-2222-222222222222"
+    },
     "type": "Warning",
     "reason": "Unhealthy",
     "message": "Readiness probe failed: HTTP probe failed with statuscode: 503",
     "count": 18,
-    "lastTimestamp": "2026-07-20T04:57:10Z"
+    "lastTimestamp": "2026-07-30T08:50:12Z",
+    "firstTimestamp": "2026-07-30T08:42:30Z"
   },
   {
     "kind": "Event",
     "apiVersion": "v1",
-    "metadata": { "name": "checkout-worker-5d8f7b9c4-qz9pl.17f29f", "namespace": "payments" },
-    "involvedObject": { "apiVersion": "v1", "kind": "Pod", "name": "checkout-worker-5d8f7b9c4-qz9pl", "namespace": "payments", "uid": "a2222222-2222-2222-2222-222222222222" },
+    "metadata": {
+      "name": "checkout-worker-5d8f7b9c4-qz9pl.17f29f",
+      "namespace": "payments"
+    },
+    "involvedObject": {
+      "apiVersion": "v1",
+      "kind": "Pod",
+      "name": "checkout-worker-5d8f7b9c4-qz9pl",
+      "namespace": "payments",
+      "uid": "a2222222-2222-2222-2222-222222222222"
+    },
     "type": "Normal",
     "reason": "Pulled",
     "message": "Container image \"registry.internal/payments/checkout-worker:9.0.1\" already present on machine",
     "count": 15,
-    "lastTimestamp": "2026-07-20T04:40:02Z"
+    "lastTimestamp": "2026-07-30T08:54:30Z",
+    "firstTimestamp": "2026-07-30T08:41:14Z"
   },
   {
     "kind": "Event",
     "apiVersion": "v1",
-    "metadata": { "name": "checkout-worker-5d8f7b9c4-qz9pl.17f29e", "namespace": "payments" },
-    "involvedObject": { "apiVersion": "v1", "kind": "Pod", "name": "checkout-worker-5d8f7b9c4-qz9pl", "namespace": "payments", "uid": "a2222222-2222-2222-2222-222222222222" },
+    "metadata": {
+      "name": "checkout-worker-5d8f7b9c4-qz9pl.17f29e",
+      "namespace": "payments"
+    },
+    "involvedObject": {
+      "apiVersion": "v1",
+      "kind": "Pod",
+      "name": "checkout-worker-5d8f7b9c4-qz9pl",
+      "namespace": "payments",
+      "uid": "a2222222-2222-2222-2222-222222222222"
+    },
     "type": "Normal",
     "reason": "Scheduled",
     "message": "Successfully assigned payments/checkout-worker-5d8f7b9c4-qz9pl to node-pool-a-7fzk",
     "count": 1,
-    "lastTimestamp": "2026-07-20T02:40:01Z"
+    "lastTimestamp": "2026-07-30T08:41:12Z",
+    "firstTimestamp": "2026-07-30T08:41:12Z"
   },
   {
     "kind": "Event",
     "apiVersion": "v1",
-    "metadata": { "name": "fraud-detector-6c7d9f8b5-2n8wt.17f2b3", "namespace": "payments" },
-    "involvedObject": { "apiVersion": "v1", "kind": "Pod", "name": "fraud-detector-6c7d9f8b5-2n8wt", "namespace": "payments", "uid": "a4444444-4444-4444-4444-444444444444" },
-    "type": "Normal",
-    "reason": "Created",
-    "message": "Created container fraud-detector",
-    "count": 1,
-    "lastTimestamp": "2026-07-20T03:20:05Z"
+    "metadata": {
+      "name": "fraud-detector-6c7d9f8b5-2n8wt.17f2b3",
+      "namespace": "payments"
+    },
+    "involvedObject": {
+      "apiVersion": "v1",
+      "kind": "Pod",
+      "name": "fraud-detector-6c7d9f8b5-2n8wt",
+      "namespace": "payments",
+      "uid": "a4444444-4444-4444-4444-444444444444"
+    },
+    "type": "Warning",
+    "reason": "FailedScheduling",
+    "message": "0/3 nodes are available: 1 node(s) had untolerated taint {node.kubernetes.io/disk-pressure: }, 2 Insufficient cpu. preemption: 0/3 nodes are available: 1 Preemption is not helpful for scheduling, 2 No preemption victims found for incoming pod.",
+    "count": 5,
+    "lastTimestamp": "2026-07-30T08:55:10Z",
+    "firstTimestamp": "2026-07-30T06:12:34Z",
+    "source": {
+      "component": "default-scheduler"
+    }
   },
   {
     "kind": "Event",
     "apiVersion": "v1",
-    "metadata": { "name": "checkout-worker-5d8f7b9c4.17f298", "namespace": "payments" },
-    "involvedObject": { "apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "checkout-worker-5d8f7b9c4", "namespace": "payments", "uid": "b2222222-2222-2222-2222-222222222222" },
+    "metadata": {
+      "name": "checkout-worker-5d8f7b9c4.17f298",
+      "namespace": "payments"
+    },
+    "involvedObject": {
+      "apiVersion": "apps/v1",
+      "kind": "ReplicaSet",
+      "name": "checkout-worker-5d8f7b9c4",
+      "namespace": "payments",
+      "uid": "b2222222-2222-2222-2222-222222222222"
+    },
     "type": "Warning",
     "reason": "FailedCreate",
-    "message": "Error creating: pods \"checkout-worker-5d8f7b9c4-\" is forbidden: exceeded quota",
+    "message": "Error creating: pods \"checkout-worker-5d8f7b9c4-8wlzq\" is forbidden: exceeded quota: payments-quota, requested: limits.memory=512Mi, used: limits.memory=3584Mi, limited: limits.memory=4Gi",
     "count": 3,
-    "lastTimestamp": "2026-07-20T02:39:40Z"
+    "lastTimestamp": "2026-07-30T08:41:40Z",
+    "firstTimestamp": "2026-07-30T08:41:11Z"
   },
   {
     "kind": "Event",
     "apiVersion": "v1",
-    "metadata": { "name": "demo-worker-2.18a0c1", "namespace": "default" },
-    "involvedObject": { "kind": "Node", "name": "demo-worker-2", "uid": "demo-worker-2" },
-    "source": { "component": "kubelet", "host": "demo-worker-2" },
+    "metadata": {
+      "name": "demo-worker-2.18a0c1",
+      "namespace": "default"
+    },
+    "involvedObject": {
+      "kind": "Node",
+      "name": "demo-worker-2",
+      "uid": "demo-worker-2"
+    },
+    "source": {
+      "component": "kubelet",
+      "host": "demo-worker-2"
+    },
     "type": "Warning",
     "reason": "EvictionThresholdMet",
     "message": "Attempting to reclaim ephemeral-storage",
@@ -80,9 +153,19 @@
   {
     "kind": "Event",
     "apiVersion": "v1",
-    "metadata": { "name": "demo-worker-2.18a0c0", "namespace": "default" },
-    "involvedObject": { "kind": "Node", "name": "demo-worker-2", "uid": "demo-worker-2" },
-    "source": { "component": "kubelet", "host": "demo-worker-2" },
+    "metadata": {
+      "name": "demo-worker-2.18a0c0",
+      "namespace": "default"
+    },
+    "involvedObject": {
+      "kind": "Node",
+      "name": "demo-worker-2",
+      "uid": "demo-worker-2"
+    },
+    "source": {
+      "component": "kubelet",
+      "host": "demo-worker-2"
+    },
     "type": "Normal",
     "reason": "NodeHasDiskPressure",
     "message": "Node demo-worker-2 status is now: NodeHasDiskPressure",
@@ -92,9 +175,19 @@
   {
     "kind": "Event",
     "apiVersion": "v1",
-    "metadata": { "name": "demo-worker-2.18a0bf", "namespace": "default" },
-    "involvedObject": { "kind": "Node", "name": "demo-worker-2", "uid": "demo-worker-2" },
-    "source": { "component": "kubelet", "host": "demo-worker-2" },
+    "metadata": {
+      "name": "demo-worker-2.18a0bf",
+      "namespace": "default"
+    },
+    "involvedObject": {
+      "kind": "Node",
+      "name": "demo-worker-2",
+      "uid": "demo-worker-2"
+    },
+    "source": {
+      "component": "kubelet",
+      "host": "demo-worker-2"
+    },
     "type": "Warning",
     "reason": "FreeDiskSpaceFailed",
     "message": "Failed to garbage collect required amount of images. Attempted to free 4294967296 bytes, but only found 1073741824 bytes eligible to free.",
@@ -104,9 +197,19 @@
   {
     "kind": "Event",
     "apiVersion": "v1",
-    "metadata": { "name": "demo-worker-2.18a0be", "namespace": "default" },
-    "involvedObject": { "kind": "Node", "name": "demo-worker-2", "uid": "demo-worker-2" },
-    "source": { "component": "kubelet", "host": "demo-worker-2" },
+    "metadata": {
+      "name": "demo-worker-2.18a0be",
+      "namespace": "default"
+    },
+    "involvedObject": {
+      "kind": "Node",
+      "name": "demo-worker-2",
+      "uid": "demo-worker-2"
+    },
+    "source": {
+      "component": "kubelet",
+      "host": "demo-worker-2"
+    },
     "type": "Normal",
     "reason": "NodeNotSchedulable",
     "message": "Node demo-worker-2 status is now: NodeNotSchedulable",
@@ -116,9 +219,19 @@
   {
     "kind": "Event",
     "apiVersion": "v1",
-    "metadata": { "name": "demo-worker-1.17f9a2", "namespace": "default" },
-    "involvedObject": { "kind": "Node", "name": "demo-worker-1", "uid": "demo-worker-1" },
-    "source": { "component": "kubelet", "host": "demo-worker-1" },
+    "metadata": {
+      "name": "demo-worker-1.17f9a2",
+      "namespace": "default"
+    },
+    "involvedObject": {
+      "kind": "Node",
+      "name": "demo-worker-1",
+      "uid": "demo-worker-1"
+    },
+    "source": {
+      "component": "kubelet",
+      "host": "demo-worker-1"
+    },
     "type": "Normal",
     "reason": "NodeReady",
     "message": "Node demo-worker-1 status is now: NodeReady",
@@ -128,9 +241,19 @@
   {
     "kind": "Event",
     "apiVersion": "v1",
-    "metadata": { "name": "demo-worker-1.17f9a1", "namespace": "default" },
-    "involvedObject": { "kind": "Node", "name": "demo-worker-1", "uid": "e0000000-0000-0000-0000-000000000002" },
-    "source": { "component": "node-controller", "host": "demo-worker-1" },
+    "metadata": {
+      "name": "demo-worker-1.17f9a1",
+      "namespace": "default"
+    },
+    "involvedObject": {
+      "kind": "Node",
+      "name": "demo-worker-1",
+      "uid": "e0000000-0000-0000-0000-000000000002"
+    },
+    "source": {
+      "component": "node-controller",
+      "host": "demo-worker-1"
+    },
     "type": "Normal",
     "reason": "RegisteredNode",
     "message": "Node demo-worker-1 event: Registered Node demo-worker-1 in Controller",
@@ -140,9 +263,19 @@
   {
     "kind": "Event",
     "apiVersion": "v1",
-    "metadata": { "name": "demo-worker-1.17f9a0", "namespace": "default" },
-    "involvedObject": { "kind": "Node", "name": "demo-worker-1", "uid": "demo-worker-1" },
-    "source": { "component": "kubelet", "host": "demo-worker-1" },
+    "metadata": {
+      "name": "demo-worker-1.17f9a0",
+      "namespace": "default"
+    },
+    "involvedObject": {
+      "kind": "Node",
+      "name": "demo-worker-1",
+      "uid": "demo-worker-1"
+    },
+    "source": {
+      "component": "kubelet",
+      "host": "demo-worker-1"
+    },
     "type": "Normal",
     "reason": "Starting",
     "message": "Starting kubelet.",

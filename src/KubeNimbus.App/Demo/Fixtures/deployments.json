@@ -7,18 +7,62 @@
       "namespace": "payments",
       "uid": "c1111111-1111-1111-1111-111111111111",
       "creationTimestamp": "2026-06-01T09:00:00Z",
-      "labels": { "app": "payment-service-report-generator" },
-      "annotations": { "deployment.kubernetes.io/revision": "12" }
+      "labels": {
+        "app": "payment-service-report-generator"
+      },
+      "annotations": {
+        "deployment.kubernetes.io/revision": "7"
+      },
+      "generation": 7
     },
     "spec": {
       "replicas": 3,
-      "selector": { "matchLabels": { "app": "payment-service-report-generator" } },
+      "selector": {
+        "matchLabels": {
+          "app": "payment-service-report-generator"
+        }
+      },
       "template": {
-        "metadata": { "labels": { "app": "payment-service-report-generator" } },
-        "spec": { "containers": [ { "name": "app", "image": "registry.internal/payments/report-generator:2.14.3" } ] }
+        "metadata": {
+          "labels": {
+            "app": "payment-service-report-generator"
+          }
+        },
+        "spec": {
+          "containers": [
+            {
+              "name": "app",
+              "image": "registry.internal/payments/report-generator:2.14.3"
+            }
+          ]
+        }
       }
     },
-    "status": { "replicas": 3, "readyReplicas": 3, "availableReplicas": 3, "updatedReplicas": 3 }
+    "status": {
+      "observedGeneration": 7,
+      "replicas": 3,
+      "updatedReplicas": 1,
+      "readyReplicas": 3,
+      "availableReplicas": 3,
+      "conditions": [
+        {
+          "type": "Available",
+          "status": "True",
+          "reason": "MinimumReplicasAvailable",
+          "message": "Deployment has minimum availability.",
+          "lastUpdateTime": "2026-07-30T06:52:00Z",
+          "lastTransitionTime": "2026-07-30T06:52:00Z"
+        },
+        {
+          "type": "Progressing",
+          "status": "False",
+          "reason": "ProgressDeadlineExceeded",
+          "message": "ReplicaSet \"payment-service-report-generator-8c1a4f2e91\" has timed out progressing.",
+          "lastUpdateTime": "2026-07-30T06:52:00Z",
+          "lastTransitionTime": "2026-07-30T06:52:00Z"
+        }
+      ]
+    }
   },
   {
     "kind": "Deployment",
@@ -28,14 +72,88 @@
       "namespace": "payments",
       "uid": "c2222222-2222-2222-2222-222222222222",
       "creationTimestamp": "2026-05-20T09:00:00Z",
-      "labels": { "app": "checkout-worker" }
+      "labels": {
+        "app": "checkout-worker",
+        "app.kubernetes.io/instance": "checkout"
+      },
+      "generation": 12,
+      "annotations": {
+        "deployment.kubernetes.io/revision": "12"
+      }
     },
     "spec": {
       "replicas": 4,
-      "selector": { "matchLabels": { "app": "checkout-worker" } },
-      "template": { "metadata": { "labels": { "app": "checkout-worker" } }, "spec": { "containers": [ { "name": "worker", "image": "registry.internal/payments/checkout-worker:9.0.1" } ] } }
+      "selector": {
+        "matchLabels": {
+          "app": "checkout-worker"
+        }
+      },
+      "template": {
+        "metadata": {
+          "labels": {
+            "app": "checkout-worker"
+          }
+        },
+        "spec": {
+          "containers": [
+            {
+              "name": "worker",
+              "image": "registry.internal/payments/checkout-worker:9.0.1",
+              "envFrom": [
+                {
+                  "configMapRef": {
+                    "name": "checkout-worker-config"
+                  }
+                }
+              ],
+              "resources": {
+                "requests": {
+                  "cpu": "500m",
+                  "memory": "512Mi"
+                },
+                "limits": {
+                  "memory": "512Mi"
+                }
+              }
+            }
+          ]
+        }
+      }
     },
-    "status": { "replicas": 4, "readyReplicas": 1, "availableReplicas": 1, "updatedReplicas": 4 }
+    "status": {
+      "observedGeneration": 12,
+      "replicas": 2,
+      "updatedReplicas": 1,
+      "readyReplicas": 1,
+      "availableReplicas": 1,
+      "unavailableReplicas": 3,
+      "conditions": [
+        {
+          "type": "Available",
+          "status": "False",
+          "reason": "MinimumReplicasUnavailable",
+          "message": "Deployment does not have minimum availability.",
+          "lastUpdateTime": "2026-07-30T08:41:10Z",
+          "lastTransitionTime": "2026-07-30T08:41:10Z"
+        },
+        {
+          "type": "Progressing",
+          "status": "True",
+          "reason": "ReplicaSetUpdated",
+          "message": "ReplicaSet \"checkout-worker-5d8f7b9c4\" is progressing.",
+          "lastUpdateTime": "2026-07-30T08:41:10Z",
+          "lastTransitionTime": "2026-07-30T08:41:10Z"
+        },
+        {
+          "type": "ReplicaFailure",
+          "status": "True",
+          "reason": "FailedCreate",
+          "message": "pods \"checkout-worker-5d8f7b9c4-8wlzq\" is forbidden: exceeded quota: payments-quota, requested: limits.memory=512Mi, used: limits.memory=3584Mi, limited: limits.memory=4Gi",
+          "lastUpdateTime": "2026-07-30T08:41:40Z",
+          "lastTransitionTime": "2026-07-30T08:41:40Z"
+        }
+      ]
+    }
   },
   {
     "kind": "Deployment",
@@ -45,13 +163,303 @@
       "namespace": "payments",
       "uid": "c3333333-3333-3333-3333-333333333333",
       "creationTimestamp": "2026-07-20T03:00:00Z",
-      "labels": { "app": "fraud-detector" }
+      "labels": {
+        "app": "fraud-detector"
+      },
+      "generation": 4,
+      "annotations": {
+        "deployment.kubernetes.io/revision": "4"
+      }
     },
     "spec": {
       "replicas": 2,
-      "selector": { "matchLabels": { "app": "fraud-detector" } },
-      "template": { "metadata": { "labels": { "app": "fraud-detector" } }, "spec": { "containers": [ { "name": "model-server", "image": "registry.internal/ml/fraud-detector:4.1.0" } ] } }
+      "selector": {
+        "matchLabels": {
+          "app": "fraud-detector"
+        }
+      },
+      "template": {
+        "metadata": {
+          "labels": {
+            "app": "fraud-detector"
+          }
+        },
+        "spec": {
+          "containers": [
+            {
+              "name": "model-server",
+              "image": "registry.internal/ml/fraud-detector:4.1.0",
+              "resources": {
+                "requests": {
+                  "cpu": "2"
+                },
+                "limits": {
+                  "cpu": "2"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "strategy": {
+        "type": "Recreate"
+      },
+      "progressDeadlineSeconds": 600
     },
-    "status": { "replicas": 2, "readyReplicas": 0, "availableReplicas": 0, "updatedReplicas": 2 }
+    "status": {
+      "observedGeneration": 4,
+      "replicas": 2,
+      "updatedReplicas": 2,
+      "readyReplicas": 0,
+      "availableReplicas": 0,
+      "unavailableReplicas": 2,
+      "conditions": [
+        {
+          "type": "Available",
+          "status": "False",
+          "reason": "MinimumReplicasUnavailable",
+          "message": "Deployment does not have minimum availability.",
+          "lastUpdateTime": "2026-07-30T06:22:33Z",
+          "lastTransitionTime": "2026-07-30T06:22:33Z"
+        },
+        {
+          "type": "Progressing",
+          "status": "False",
+          "reason": "ProgressDeadlineExceeded",
+          "message": "ReplicaSet \"fraud-detector-6c7d9f8b5\" has timed out progressing.",
+          "lastUpdateTime": "2026-07-30T06:22:33Z",
+          "lastTransitionTime": "2026-07-30T06:22:33Z"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "Deployment",
+    "apiVersion": "apps/v1",
+    "metadata": {
+      "name": "ledger-api",
+      "namespace": "payments",
+      "uid": "c7777777-7777-7777-7777-777777777777",
+      "generation": 9,
+      "creationTimestamp": "2026-03-04T10:15:00Z",
+      "labels": {
+        "app": "ledger-api",
+        "app.kubernetes.io/instance": "ledger-api"
+      },
+      "annotations": {
+        "deployment.kubernetes.io/revision": "9"
+      }
+    },
+    "spec": {
+      "replicas": 2,
+      "selector": {
+        "matchLabels": {
+          "app": "ledger-api"
+        }
+      },
+      "template": {
+        "metadata": {
+          "labels": {
+            "app": "ledger-api"
+          }
+        },
+        "spec": {
+          "containers": [
+            {
+              "name": "api",
+              "image": "registry.internal/payments/ledger-api:2.14.3",
+              "ports": [
+                {
+                  "containerPort": 8080,
+                  "protocol": "TCP"
+                }
+              ],
+              "resources": {
+                "requests": {
+                  "cpu": "250m",
+                  "memory": "256Mi"
+                },
+                "limits": {
+                  "memory": "512Mi"
+                }
+              },
+              "readinessProbe": {
+                "httpGet": {
+                  "path": "/ready",
+                  "port": 8080
+                },
+                "periodSeconds": 10
+              }
+            }
+          ]
+        }
+      }
+    },
+    "status": {
+      "observedGeneration": 9,
+      "replicas": 2,
+      "updatedReplicas": 2,
+      "readyReplicas": 2,
+      "availableReplicas": 2,
+      "conditions": [
+        {
+          "type": "Available",
+          "status": "True",
+          "reason": "MinimumReplicasAvailable",
+          "message": "Deployment has minimum availability.",
+          "lastUpdateTime": "2026-07-28T17:05:02Z",
+          "lastTransitionTime": "2026-07-28T17:05:02Z"
+        },
+        {
+          "type": "Progressing",
+          "status": "True",
+          "reason": "NewReplicaSetAvailable",
+          "message": "ReplicaSet \"ledger-api-6d5c8b7f9\" has successfully progressed.",
+          "lastUpdateTime": "2026-07-28T17:05:02Z",
+          "lastTransitionTime": "2026-07-28T17:05:02Z"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "Deployment",
+    "apiVersion": "apps/v1",
+    "metadata": {
+      "name": "notification-dispatcher",
+      "namespace": "payments",
+      "uid": "c6666666-6666-6666-6666-666666666666",
+      "generation": 6,
+      "creationTimestamp": "2026-03-04T10:15:00Z",
+      "labels": {
+        "app": "notification-dispatcher",
+        "app.kubernetes.io/instance": "notification-dispatcher"
+      },
+      "annotations": {
+        "deployment.kubernetes.io/revision": "6"
+      }
+    },
+    "spec": {
+      "replicas": 2,
+      "selector": {
+        "matchLabels": {
+          "app": "notification-dispatcher"
+        }
+      },
+      "template": {
+        "metadata": {
+          "labels": {
+            "app": "notification-dispatcher"
+          }
+        },
+        "spec": {
+          "containers": [
+            {
+              "name": "dispatcher",
+              "image": "registry.internal/payments/notification-dispatcher:3.4.0",
+              "resources": {
+                "requests": {
+                  "cpu": "150m",
+                  "memory": "192Mi"
+                },
+                "limits": {
+                  "cpu": "2",
+                  "memory": "6Gi"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "status": {
+      "observedGeneration": 6,
+      "replicas": 3,
+      "updatedReplicas": 1,
+      "readyReplicas": 2,
+      "availableReplicas": 2,
+      "conditions": [
+        {
+          "type": "Available",
+          "status": "True",
+          "reason": "MinimumReplicasAvailable",
+          "message": "Deployment has minimum availability.",
+          "lastUpdateTime": "2026-07-30T08:44:40Z",
+          "lastTransitionTime": "2026-07-30T08:44:40Z"
+        },
+        {
+          "type": "Progressing",
+          "status": "True",
+          "reason": "ReplicaSetUpdated",
+          "message": "ReplicaSet \"notification-dispatcher-5c9d7f6b8\" is progressing.",
+          "lastUpdateTime": "2026-07-30T08:44:40Z",
+          "lastTransitionTime": "2026-07-30T08:44:40Z"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "Deployment",
+    "apiVersion": "apps/v1",
+    "metadata": {
+      "name": "kube-prometheus-stack-operator",
+      "namespace": "monitoring",
+      "uid": "c8888888-8888-8888-8888-888888888881",
+      "generation": 2,
+      "creationTimestamp": "2026-06-01T10:00:00Z",
+      "labels": {
+        "app.kubernetes.io/instance": "monitoring-stack"
+      },
+      "annotations": {
+        "deployment.kubernetes.io/revision": "2"
+      }
+    },
+    "spec": {
+      "replicas": 1,
+      "selector": {
+        "matchLabels": {
+          "app.kubernetes.io/name": "kube-prometheus-stack-prometheus-operator"
+        }
+      },
+      "template": {
+        "metadata": {
+          "labels": {
+            "app.kubernetes.io/name": "kube-prometheus-stack-prometheus-operator"
+          }
+        },
+        "spec": {
+          "containers": [
+            {
+              "name": "kube-prometheus-stack",
+              "image": "quay.io/prometheus-operator/prometheus-operator:v0.76.0"
+            }
+          ]
+        }
+      }
+    },
+    "status": {
+      "observedGeneration": 2,
+      "replicas": 1,
+      "updatedReplicas": 1,
+      "readyReplicas": 1,
+      "availableReplicas": 1,
+      "conditions": [
+        {
+          "type": "Available",
+          "status": "True",
+          "reason": "MinimumReplicasAvailable",
+          "message": "Deployment has minimum availability.",
+          "lastUpdateTime": "2026-07-29T22:11:30Z",
+          "lastTransitionTime": "2026-07-29T22:11:30Z"
+        },
+        {
+          "type": "Progressing",
+          "status": "True",
+          "reason": "NewReplicaSetAvailable",
+          "message": "ReplicaSet \"kube-prometheus-stack-operator-5f7d9c8b6\" has successfully progressed.",
+          "lastUpdateTime": "2026-07-29T22:11:30Z",
+          "lastTransitionTime": "2026-07-29T22:11:30Z"
+        }
+      ]
+    }
   }
 ]

@@ -400,14 +400,14 @@ public class PaneLogsTests
     [Test]
     public async Task An_Argo_workload_with_nothing_behind_it_is_stated()
     {
-        // ledger-api is a managed Deployment the demo dataset has no object for — the
-        // demo's version of Argo reporting a resource Missing.
-        var (tab, detail) = ArgoDetail("ledger-api");
+        // monitoring-stack's Grafana is a managed Deployment the demo dataset has no
+        // object for — the demo's version of a resource that is gone by the time it is read.
+        var (tab, detail) = ArgoDetail("monitoring-stack");
 
-        await detail.Resources.Single(r => r.Kind == "Deployment").OpenLogsAsync(maximized: false);
+        await detail.Resources.Single(r => r.Name == "kube-prometheus-stack-grafana").OpenLogsAsync(maximized: false);
 
         await Assert.That(detail.HasLogsNotice).IsTrue();
-        await Assert.That(detail.LogsNotice!).Contains("ledger-api");
+        await Assert.That(detail.LogsNotice!).Contains("kube-prometheus-stack-grafana");
         await Assert.That(tab.SelectedInspectorTab).IsSameReferenceAs(detail);
     }
 

@@ -77,7 +77,14 @@ public sealed record WorkspaceSettings(
     /// back to the first.
     /// </summary>
     int? SelectedTabIndex = null,
-    Dictionary<string, List<string>>? RecentNamespaces = null);
+    Dictionary<string, List<string>>? RecentNamespaces = null,
+    /// <summary>
+    /// "Applications" or "Resources" — which of the two ways into a cluster the window was
+    /// showing. Session state, on the same test as the open tabs: it is what the window
+    /// looked like. Null in an older file, and then the window opens on Applications, the
+    /// mode built for the "something is broken, where do I look" moment a launch usually is.
+    /// </summary>
+    string? ShellMode = null);
 
 [JsonSerializable(typeof(WorkspaceSettings))]
 internal sealed partial class WorkspaceJsonContext : JsonSerializerContext;

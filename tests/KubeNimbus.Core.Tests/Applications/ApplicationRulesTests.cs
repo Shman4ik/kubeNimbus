@@ -189,7 +189,7 @@ public class ApplicationRulesTests
         var f = Rule(a, "unschedulable")!;
         await Assert.That(f.Title).IsEqualTo("None of 2 pods can be scheduled");
         await Assert.That(f.Short).IsEqualTo(
-            "0 of 2 pods scheduled: 1 node(s) had untolerated taint {node.kubernetes.io/disk-pressure: }, 2 Insufficient cpu");
+            "0 of 2 pods scheduled: 2 Insufficient cpu, 1 node(s) had untolerated taint {node.kubernetes.io/disk-pressure: }");
         await Assert.That(f.Evidence.Any(e => e.Field == "Event FailedScheduling ×5 on Pod web-1")).IsTrue();
         await Assert.That(a.Status).IsEqualTo(AppStatus.Degraded);
     }

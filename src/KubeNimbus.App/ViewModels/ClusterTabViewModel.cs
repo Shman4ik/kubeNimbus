@@ -132,6 +132,20 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// </summary>
     public bool IsIdle => !IsConnected && !IsConnecting;
 
+    partial void OnIsConnectedChanged(bool value) => Applications.OnTabConnectionChanged();
+
+    partial void OnIsConnectingChanged(bool value) => Applications.OnTabConnectionChanged();
+
+    /// <summary>
+    /// This tab's Applications mode. Created with the tab and started the first time the
+    /// mode is shown for it; its watches are its own, so switching modes never restarts the
+    /// Resources list's watch or loses its state, and the other way round.
+    /// </summary>
+    public ApplicationsViewModel Applications { get; }
+
+    /// <summary>The namespaces recently picked on this context — one of the Applications list's fallbacks under narrow RBAC.</summary>
+    internal IReadOnlyList<string> RecentNamespaceNames => _recentNamespaces;
+
     [ObservableProperty]
     private string _status = "Not connected.";
 
@@ -1348,6 +1362,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         // watch, the fleet merge, the demo dataset and the screenshot fixtures all
         // unaware that a filter exists.
         Rows.CollectionChanged += OnRowsChanged;
+        VisibleRows.CollectionChanged += OnRowsChangedForReveal;
+        Applications = new ApplicationsViewModel(this);
     }
 
     private bool CanConnect => !IsConnecting;
@@ -2870,6 +2886,36 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             client, descriptor, row.Namespace, row.Name, row.Resource.ToYaml(), row.ClusterName));
     }
 
+    /// <summary>
+    /// Opens (or re-selects) the YAML editor for an object that is not necessarily a row of
+    /// the list — the Applications page's Edit YAML. Same tab key and same editor as E on a
+    /// row, so the two routes can never open two editors for one object.
+    /// </summary>
+    public void OpenYamlFor(ResourceDescriptor descriptor, DynamicResource resource)
+    {
+        if (Client is null && !IsDemo)
+        {
+            return;
+        }
+
+        var key = YamlEditorTabViewModel.KeyFor("", descriptor, resource.Namespace, resource.Name);
+        if (InspectorTabs.FirstOrDefault(t => t.Key == key) is { } existing)
+        {
+            existing.IsPreview = false;
+            SelectedInspectorTab = existing;
+            return;
+        }
+
+        AddInspectorTab(new YamlEditorTabViewModel(
+            Client, descriptor, resource.Namespace, resource.Name, resource.ToYaml(), ""));
+    }
+
+    /// <summary>The descriptor this cluster's discovery gave a group/kind, or null — the Applications page's actions need the real one.</summary>
+    public ResourceDescriptor? DescriptorOf(string group, string kind) =>
+        SidebarSections.SelectMany(s => s.Kinds)
+            .Select(k => k.Descriptor)
+            .FirstOrDefault(d => d.Group == group && d.Kind == kind);
+
     // ----------------------------------------------------- the machine's terminal
     //
     // "Open a terminal here" — the daily gesture people leave a GUI for, and the one
@@ -3445,6 +3491,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     public async ValueTask DisposeAsync()
     {
+        await Applications.DisposeAsync();
+
         // A drain runs in this process and in this strip. Closing the tab stops it —
         // which is the honest behaviour and the one the confirm warned about, but it has
         // to be an explicit cancel rather than a task left running against a disposed

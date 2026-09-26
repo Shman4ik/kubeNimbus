@@ -313,7 +313,7 @@ public class ApplicationTimelineTests
     {
         var input = Input(
             pods: [Pod("web-1", "web", ready: false, containerStatus: Waiting("CrashLoopBackOff", restarts: 14, last: Terminated(1, "Error", 2)))],
-            replicaSets: [ReplicaSet("web", "new", 7, 0, Ago(12))],
+            replicaSets: [ReplicaSet("web", "new", 7, 0, Ago(12)), ReplicaSet("web", "restart", 8, 0, Ago(5))],
             events: [Event("BackOff", "Pod", "web-1", "Back-off", count: 42), Event("Pulled", "Pod", "web-1", "ok", type: "Normal")],
             argo: Argo("web", history: $$"""[{"id":3,"revision":"8f3c1d94b27ae5106f4e2c0b9a7d3e51c8b6042f","deployedAt":"{{Ago(12)}}"}]"""));
 
@@ -321,7 +321,8 @@ public class ApplicationTimelineTests
         await Assert.That(items.Count(i => i.Kind == TimelineKind.Termination)).IsEqualTo(1);
         await Assert.That(items.Count(i => i.Kind == TimelineKind.WarningEvent)).IsEqualTo(1);
         await Assert.That(items.Single(i => i.Kind == TimelineKind.WarningEvent).Label).IsEqualTo("BackOff ×42");
-        await Assert.That(items.Where(i => i.Kind == TimelineKind.Deploy).Select(i => i.Label)).IsEquivalentTo(["8f3c1d9", "rev 7"]);
+        // The sync and the ReplicaSet it created are one deploy; a restart seven minutes later is its own.
+        await Assert.That(items.Where(i => i.Kind == TimelineKind.Deploy).Select(i => i.Label)).IsEquivalentTo(["8f3c1d9 · rev 7", "rev 8"]);
     }
 }
 

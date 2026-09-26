@@ -460,6 +460,26 @@ public static class CommandCatalog
         // ----------------------------------------------------------------- View
         new()
         {
+            Id = CommandId.ShowApplications,
+            Title = "Applications mode",
+            CheatTitle = "Show the Applications list: every app's health and why",
+            Category = CommandCategory.View,
+            IconKey = "ApplicationsIconGeometry",
+            Chord = new(CommandKey.A, Cmd | ChordModifiers.Shift),
+            Surfaces = Everywhere,
+        },
+        new()
+        {
+            Id = CommandId.ShowResources,
+            Title = "Resources mode",
+            CheatTitle = "Show the Resources explorer: kinds, lists and the inspector",
+            Category = CommandCategory.View,
+            IconKey = "LayersIconGeometry",
+            Chord = new(CommandKey.R, Cmd | ChordModifiers.Shift),
+            Surfaces = Everywhere,
+        },
+        new()
+        {
             Id = CommandId.CommandPalette,
             Title = "Open the command palette",
             Category = CommandCategory.View,
