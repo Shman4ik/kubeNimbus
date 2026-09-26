@@ -201,6 +201,16 @@ exec-plugin auth (EKS, GKE, AKS) resolved through the kubeconfig at connect
 time. Multi-cluster tabs, drag-reorderable, restored with your workspace.
 **Credentials are never persisted** — see [SECURITY.md](SECURITY.md).
 
+**Triage** — a cluster opens on **Applications**: every Argo CD Application
+and every workload Argo does not track, with a health verdict and a one-line
+reason read from the cluster's own status ("Crash-looping (exit 1) · 2 pods not
+created: namespace quota"), what needs attention first. Enter opens the
+application: the facts behind the verdict, each quoting the field it came from;
+its pods; what it is wired to; a timeline of the last hour; what the last deploy
+changed, with a compare link to your Git host; and the logs, opened on the
+crashing pod's last run. Works under narrow RBAC, and says what it could not
+read. The explorer below is one click away as **Resources**.
+
 **Browse** — a discovery-driven sidebar covering built-in kinds *and* CRDs,
 filterable by name, API group or `kubectl` short name (`svc`, `po`), with a
 pinned Recent section. Lists are informer-style **list + watch**, so they

@@ -2138,3 +2138,26 @@ App tests: 283 passed.
 
 Not verified: the scenario on linux-x64, linux-arm64 and osx-arm64. CI and the next
 release run will cover those; the bug itself was only ever seen on Windows.
+
+### Applications mode (2026-09-26)
+
+A second way into a cluster tab, and now the first screen: a list of applications (Argo CD
+Applications, and the workloads no Application tracks) with a health verdict and a one-line
+reason, and an application page with findings, pods, linked resources, a timeline, what
+changed and the logs. The explorer is the Resources mode beside it, unchanged. The rules are
+a pure Core engine; see [applications-mode](engineering/applications-mode.md).
+
+Checks: solution build with no warnings; Core tests 487 passed and 18 skipped (no sandbox —
+the container has the Docker CLI but no daemon); App tests 300 passed. Two Core rules (the
+kubelet's one-run rule for a waiting container, and never printing an env value) and two App
+rules (a Reset clears only its own namespace, search never matches status) were
+mutation-checked red. All 266 screenshots render, including 28 new Applications ones, and
+every interaction check passes, among them the new `ux-applications-keys`. linux-x64
+NativeAOT publish shows only the known DataGrid IL2104/IL3053 warnings, and both
+`--smoke-test` and `--smoke-test=unreachable-cluster` pass under Xvfb.
+
+Not verified: any of it against a real cluster — in particular Argo CD's real
+`status.resources`, the 403 fallback against a real API server (it is pinned against the
+fixture seam), Azure SSO, the argocd-cm URL and the compare links opening in a browser. The
+win-x64 publish and macOS were not run.
+

@@ -12,6 +12,23 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+- A cluster now opens on **Applications**: every Argo CD Application, and every workload no
+  Application tracks, with its health and a one-line reason — "Crash-looping (exit 1) · 2 pods
+  not created: namespace quota" — sorted so what needs attention comes first. Chips narrow it
+  to what needs attention, what was deployed in the last hour, or what is not in Argo CD, and
+  the search box finds an app by name or namespace. The explorer is still there as
+  **Resources**, one click (or Ctrl/Cmd+Shift+R) away, and the choice is remembered.
+- Enter on an application opens its page: what the cluster reports is wrong, each fact with
+  the field it was read from; its pods; the Services, Ingresses, ConfigMaps, Secrets, HPA and
+  PDB it is wired to (click one to see it in Resources); a timeline of deploys, container
+  exits and warning events over the last hour; what the last deploy changed in the pod
+  template, with a link to compare the two commits on GitHub, GitLab, Azure DevOps or
+  Bitbucket; and the logs, opened on a crash-looping pod's last run and ending with its exit
+  code. Restart, Sync and Edit YAML are on the page, and Edit YAML warns first when Argo CD
+  would revert a manual edit.
+- Works with narrow permissions: when listing across the cluster is refused, the list reads
+  the namespaces it knows and says which it covers and which were refused.
+
 ## [0.4.0] - 2026-09-24
 
 - A cluster that cannot be reached now says why. When the kubeconfig's credential plugin

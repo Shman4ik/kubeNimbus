@@ -136,3 +136,14 @@ demo-unavailable.
 `extraQuery` string appended to the watch request. The one trap: the selector must be
 escaped identically on the list half and the watch half, or the watch reports additions
 the list never seeded — `LabelSelectorQuery` is the single place that renders it.
+
+**The pane is also the Applications page's log view**, through `WorkloadLogsOptions` rather
+than a second implementation ([applications-mode](applications-mode.md)): several selectors in
+one namespace (an Argo app of several workloads is one stream), a focus pod (the page's Pods
+list chooses which pod is included; every pod keeps streaming into the buffer, so "All pods"
+loses nothing), the run before (`previous=true`, never followed — the API server refuses
+follow with previous), an **Errors only** toggle over the same severity classes the lines are
+coloured with, and a `Footer` line the page ends a crashed run with. Embedded, the pod strip
+is hidden (the page's own list is the selector) and Errors only is shown; in the inspector
+dock the pane is exactly as before.
+

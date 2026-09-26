@@ -98,6 +98,14 @@ head, linux-x64, `docs/research/2026-08-17-kubeui-positioning.md`), plus **no
 telemetry** where KubeUI's is on by default. kubeNimbus is the narrower, faster,
 quieter one: Aptakube's polish, NativeAOT startup, MIT, Kubernetes-first.
 
+It opens a cluster on its **Applications** mode — every Argo CD Application and every
+workload no Application tracks, with its health and a one-line reason read from status, one
+Enter from a page with the facts, the pods and the right log line — because the moment
+someone opens a Kubernetes GUI in a hurry is "service X is broken". The explorer is the
+**Resources** mode beside it, one click away. Deterministic rules only: the page is the same
+every time, and anything that needs thinking is left to the tools built for that. See
+[applications-mode](docs/engineering/applications-mode.md).
+
 Where KubeUI is ahead and we are not: signed and notarized binaries, auto-update,
 winget/Store/Homebrew distribution, and schema-aware YAML completion. Node drain,
 server-side dry-run and *installers* were on that list and are not any more — see
@@ -479,7 +487,11 @@ Three rules about it:
    search pill, because tabs are this app's primary navigation and demoting them to a
    second row would put back the chrome rule 12 removed. But everything either side is
    now in the same order and drawn with the same glyphs: `☰` app menu, sidebar toggle,
-   then the app's own middle, then search pill, theme, `⚙` preferences, `?`. The help
+   then the app's own middle, then search pill, theme, `⚙` preferences, `?`. This app's
+   middle starts with the `Applications | Resources` mode switch (a segmented `ListBox`
+   bound by index, with the `User` role like everything else in the bar); the sidebar
+   toggle beside it is disabled, not hidden, in the Applications mode, so the switch never
+   moves under the pointer. The help
    button used to sit *before* the theme toggle here and *after* the cog there, which
    is precisely the kind of difference that makes two apps by the same author feel
    unrelated. The `☰` menu is the discoverable home for commands with no other visible
@@ -538,7 +550,9 @@ Three rules about it:
    spends a third row of chrome inside a ~300px dock (rule 10) on a question with a
    one-word answer; and a **menu item that acts immediately** puts a destructive verb one
    twitch away from Edit YAML. The strip is present only while an action is armed, so it
-   costs nothing the rest of the time (rule 1). It is docked *outside* `ContentRows`
+   costs nothing the rest of the time (rule 1). It is one control, `Views/RowActionStrip`,
+   hosted by the resource list and by the Applications page alike — the page's Restart and
+   Sync arm the very same confirm, not a copy. It is docked *outside* `ContentRows`
    for the same reason the demo banner is — that grid's row indices are load-bearing for
    `ApplyDockState`. And it is a `ContentControl` + inline `DataTemplate`, not a `Border`
    with `DataContext` and `x:DataType` both set on it: `x:DataType` re-roots an element's
@@ -586,6 +600,7 @@ Three rules about it:
 
 Each feature's design rules, and the incidents behind them, live in a page of their own under [`docs/engineering/`](docs/engineering/), so a session loads only the ones it touches. **Read the page for any feature you change before changing it**, and keep it current in the same PR — the same discipline as this file.
 
+- [The Applications mode](docs/engineering/applications-mode.md) — The first screen: apps (Argo or bare workloads) with health and a reason from Core's deterministic rules, per-namespace fallback under narrow RBAC, the application page (findings with quoted evidence, pods, linked resources, timeline, what changed, embedded logs), the kubelet's one-run-per-container log rule, DemoData.Now.
 - [Multi-pod logs (one workload, one stream)](docs/engineering/multi-pod-logs.md) — WorkloadLogsTabViewModel: selector-resolved pods, per-pod tail budget, 50-stream cap, two-stage timestamp merge.
 - [One click to logs from the row, and logs opened full-size](docs/engineering/row-logs-and-maximized.md) — The row's logs icon (hover/selected, IsVisible style, Shift+click), Shift+L, the "Open logs maximized" preference read by OpenLogsForAsync, Esc restore; L3's logs from every list that names a pod (OpenNamedLogs, RowLogsGesture, stated "gone").
 - [Log severity is three classes, not a brush binding](docs/engineering/log-severity-classes.md) — Why severity is style classes and never a Foreground binding (the invisible-plain-line bug, twice).
@@ -709,7 +724,8 @@ There are **two** persisted files and the split is not arbitrary:
   picked kubeconfig paths, log scrollback, metrics poll interval, delete confirmation,
   apply preview, open logs maximized.
 - **`workspace.json`** (`KubeNimbus.App/WorkspaceStore.cs`) is *session* — what the
-  window looked like: open tabs, pinned and recent contexts, environment overrides.
+  window looked like: open tabs, pinned and recent contexts, environment overrides, and
+  which mode (Applications or Resources) the window was showing.
 
 Each tab snapshot also carries the **kind and namespace** it was showing, and the
 workspace the index of the tab in front, so a restart lands where you left off instead
@@ -1433,7 +1449,9 @@ must be hosted inside a real `MainWindow`, not a bare wrapper — `ContentContro
 implicit `DataTemplate` lookup only resolves `PodDetailView`/`YamlEditorView`/etc
 by walking the visual tree to `MainWindow.axaml`'s `Window.DataTemplates`; a
 bare `Border`/`Window` wrapper falls back to a `ToString()`-in-a-TextBlock
-placeholder instead of the real view. See `HostInMainWindow` in `Program.cs`.
+placeholder instead of the real view. See `HostInMainWindow` in `Program.cs`, which
+also puts the window in the Resources mode unless a scenario asks for Applications — every
+cluster-tab scenario is about the explorer, and the shipped default is the other mode.
 
 Fixture data (`tools/Screenshot/Fixtures/*.json` — pods, deployments, events,
 a 72-kind CRD catalog spanning cert-manager/argoproj/istio/velero/keda/flux/etc
