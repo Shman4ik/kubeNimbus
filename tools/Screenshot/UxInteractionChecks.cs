@@ -123,7 +123,10 @@ internal static class UxInteractionChecks
         window.KeyTextInput("checkout");
         Dispatcher.UIThread.RunJobs();
         var titles = shell.Palette.FilteredItems.Select(i => i.Title).ToList();
-        if (titles.Count != 2 || titles[0] != "Logs: Deployment/checkout-worker" || !titles[1].StartsWith("Logs: checkout-worker-", StringComparison.Ordinal))
+        // The workload first, then each of its pods (the demo's checkout-worker has two: the
+        // crash-looping new replica and the old one still serving).
+        if (titles.Count < 2 || titles[0] != "Logs: Deployment/checkout-worker"
+            || titles.Skip(1).Any(t => !t.StartsWith("Logs: checkout-worker-", StringComparison.Ordinal)))
             throw new InvalidOperationException($"Typing did not narrow to the workload and its pod: {string.Join(", ", titles)}");
 
         // Down to the pod, Enter: pod detail on its Logs tab, as L on the row opens it.

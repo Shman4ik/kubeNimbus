@@ -1,0 +1,247 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:KubeNimbus.App.ViewModels"
+             xmlns:views="using:KubeNimbus.App.Views"
+             xmlns:conv="using:KubeNimbus.App.Converters"
+             xmlns:controls="using:KubeNimbus.App.Controls"
+             x:Class="KubeNimbus.App.Views.ApplicationsView"
+             x:DataType="vm:ApplicationsViewModel">
+
+  <!-- The Applications mode of one cluster tab. The list and the application page share
+       this view; the page covers the list while it is open, and Esc brings the list back
+       with the same row selected. Both stay alive underneath the mode switch, so flipping
+       to Resources and back loses nothing. -->
+  <Grid>
+    <DockPanel IsVisible="{Binding IsListVisible}">
+
+      <!-- The demo banner, for the tab's whole life (demo rule 6), in this mode too. -->
+      <Border DockPanel.Dock="Top" Classes="demoBar" Margin="0,0,0,8" IsVisible="{Binding IsDemo}">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <PathIcon Data="{StaticResource AlertCircleIconGeometry}" Width="12" Height="12" VerticalAlignment="Center" />
+          <TextBlock Text="{x:Static vm:ClusterTabViewModel.DemoBanner}" VerticalAlignment="Center"
+                     TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+      </Border>
+
+      <!-- Title row: what this is, which cluster, and what it covers — "All namespaces", or
+           the namespaces a narrow-RBAC fallback could read. -->
+      <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,*" Margin="2,0,0,10">
+        <TextBlock Grid.Column="0" Text="Applications" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <TextBlock Grid.Column="1" Text="{Binding Tab.Header}" FontSize="13" Opacity="0.6" Margin="12,4,0,0"
+                   VerticalAlignment="Center" />
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" Margin="12,4,0,0" VerticalAlignment="Center">
+          <TextBlock Text="·" Opacity="0.4" />
+          <TextBlock Name="ScopeLabel" Text="{Binding ScopeText}" FontSize="12" Opacity="0.6" TextTrimming="CharacterEllipsis" />
+          <TextBlock Text="{Binding StillReadingText}" FontSize="12" Opacity="0.5" FontStyle="Italic"
+                     IsVisible="{Binding IsPartiallyLoaded}" />
+        </StackPanel>
+      </Grid>
+
+      <!-- What the list was refused. Never a silently partial list (UI rule 9). -->
+      <Border DockPanel.Dock="Top" Classes="infoBar warn" Margin="0,0,0,8" IsVisible="{Binding HasScopeWarning}">
+        <SelectableTextBlock Text="{Binding ScopeWarning}" TextWrapping="Wrap" FontSize="12" />
+      </Border>
+      <Border DockPanel.Dock="Top" Classes="infoBar warn" Margin="0,0,0,8" IsVisible="{Binding HasConnectionWarning}">
+        <TextBlock Text="{Binding ConnectionWarning}" TextWrapping="Wrap" FontSize="12" />
+      </Border>
+
+      <!-- Search + chips. The chips are one-of (like a segmented control): each is a
+           two-way IsChecked and nothing else (UI rule 8b), on a RadioChip, which a click
+           turns on and never off — see that control for why. -->
+      <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,10">
+        <TextBox Name="FilterBox" Classes="filterbox" Width="260" Margin="0,0,10,0"
+                 Text="{Binding Filter}" PlaceholderText="Filter by name or namespace"
+                 KeyDown="OnFilterKeyDown">
+          <TextBox.InnerLeftContent>
+            <PathIcon Data="{StaticResource MagnifyIconGeometry}" Width="11" Height="11" Opacity="0.5" Margin="8,0,0,0" />
+          </TextBox.InnerLeftContent>
+          <TextBox.InnerRightContent>
+            <Button Classes="chip" Padding="0" MinWidth="16" MinHeight="16" Margin="0,0,4,0"
+                    IsVisible="{Binding IsFiltering}" Command="{Binding ClearFilterCommand}"
+                    ToolTip.Tip="Clear the search (Esc)">
+              <PathIcon Data="{StaticResource CloseIconGeometry}" Width="9" Height="9" />
+            </Button>
+          </TextBox.InnerRightContent>
+        </TextBox>
+        <controls:RadioChip Name="AllChip" Classes="chip checkedAccent" Padding="10,4" Margin="0,0,6,0" IsChecked="{Binding IsAllChip}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="All" FontSize="12" />
+            <TextBlock Text="{Binding AllCount}" FontSize="11" Opacity="0.6" />
+          </StackPanel>
+        </controls:RadioChip>
+        <controls:RadioChip Name="AttentionChip" Classes="chip checkedAccent" Padding="10,4" Margin="0,0,6,0" IsChecked="{Binding IsAttentionChip}"
+                      ToolTip.Tip="Degraded, missing, failed syncs, unknown, stalled and out-of-sync applications">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="Needs attention" FontSize="12" />
+            <TextBlock Text="{Binding AttentionCount}" FontSize="11" Opacity="0.6" />
+          </StackPanel>
+        </controls:RadioChip>
+        <controls:RadioChip Name="RecentChip" Classes="chip checkedAccent" Padding="10,4" Margin="0,0,6,0" IsChecked="{Binding IsRecentDeployChip}"
+                      ToolTip.Tip="Deployed in the last hour — the “I just deployed, is everything green?” question">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="Deployed &lt; 1 h" FontSize="12" />
+            <TextBlock Text="{Binding RecentDeployCount}" FontSize="11" Opacity="0.6" />
+          </StackPanel>
+        </controls:RadioChip>
+        <controls:RadioChip Name="NotInArgoChip" Classes="chip checkedAccent" Padding="10,4" Margin="0,0,6,0" IsChecked="{Binding IsNotInArgoChip}"
+                      ToolTip.Tip="Workloads no Argo CD Application tracks">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="Not in Argo CD" FontSize="12" />
+            <TextBlock Text="{Binding NotInArgoCount}" FontSize="11" Opacity="0.6" />
+          </StackPanel>
+        </controls:RadioChip>
+        <!-- Kubernetes' own namespaces, hidden by default; the chip states how many. -->
+        <ToggleButton Name="SystemChip" Classes="chip checkedAccent" Padding="10,4" IsChecked="{Binding ShowSystemNamespaces}"
+                      IsVisible="{Binding HasSystem}" Content="{Binding SystemChipText}"
+                      ToolTip.Tip="Show applications in kube-* namespaces" FontSize="12" />
+      </WrapPanel>
+
+      <Border Classes="card" Padding="0">
+        <Grid RowDefinitions="Auto,*">
+          <!-- Column header. The same fixed widths as the row template below — no Auto
+               column (datagrid-auto-columns.md): a width that follows its content moves
+               every other column when one cell grows. -->
+          <Border Grid.Row="0" BorderThickness="0,0,0,1" BorderBrush="{StaticResource CardBorderBrush}" Padding="12,8">
+            <Grid ColumnDefinitions="112,*,140,168,72,176,100">
+              <TextBlock Grid.Column="0" Text="Health" Classes="sectionHeader" />
+              <TextBlock Grid.Column="1" Text="Application" Classes="sectionHeader" />
+              <TextBlock Grid.Column="2" Text="Namespace" Classes="sectionHeader" />
+              <TextBlock Grid.Column="3" Text="Pods" Classes="sectionHeader" />
+              <TextBlock Grid.Column="4" Text="Restarts" Classes="sectionHeader" />
+              <TextBlock Grid.Column="5" Text="Last deploy" Classes="sectionHeader" />
+              <TextBlock Grid.Column="6" Text="Sync" Classes="sectionHeader" />
+            </Grid>
+          </Border>
+
+          <!-- Tapped/DoubleTapped are on the ListBox and resolve the row from the
+               selection (UI rule 8: a handler on the template's panel fires on the text
+               and nowhere else). -->
+          <ListBox Grid.Row="1" Name="AppList" Classes="appList" Margin="4"
+                   ItemsSource="{Binding VisibleRows}"
+                   SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
+                   Background="Transparent" BorderThickness="0"
+                   DoubleTapped="OnListDoubleTapped">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:ApplicationRowViewModel">
+                <StackPanel>
+                  <TextBlock Text="{Binding GroupHeader}" Classes="sectionHeader" Margin="8,8,0,4"
+                             IsVisible="{Binding HasGroupHeader}" />
+                  <Border Classes="appRowBody">
+                    <Grid ColumnDefinitions="112,*,140,168,72,176,100" Margin="8,0">
+                      <Border Grid.Column="0" Classes="statusPill"
+                              Classes.error="{Binding IsError}" Classes.warn="{Binding IsWarn}"
+                              Classes.ok="{Binding IsOk}" Classes.progress="{Binding IsProgress}">
+                        <TextBlock Text="{Binding StatusText}" FontSize="11.5" FontWeight="SemiBold" />
+                      </Border>
+
+                      <StackPanel Grid.Column="1" Margin="0,0,12,0" VerticalAlignment="Center">
+                        <!-- One TextBlock with two runs, so a long name and its source trim
+                             together at the column's edge instead of running into Namespace. -->
+                        <TextBlock FontSize="13" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}">
+                          <Run Text="{Binding Name}" FontWeight="SemiBold" />
+                          <Run Text="  " />
+                          <Run Text="{Binding SourceText}" FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                        </TextBlock>
+                        <TextBlock Text="{Binding Reason}" Classes="appReason"
+                                   Classes.error="{Binding IsError}" Classes.warn="{Binding IsWarn}"
+                                   Classes.progress="{Binding IsProgress}"
+                                   ToolTip.Tip="{Binding Reason}" />
+                      </StackPanel>
+
+                      <TextBlock Grid.Column="2" Text="{Binding NamespaceText}" FontSize="12" VerticalAlignment="Center"
+                                 TextTrimming="CharacterEllipsis" Margin="0,0,8,0" />
+
+                      <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" ToolTip.Tip="{Binding PodsTip}">
+                        <TextBlock Text="{Binding PodsText}" FontSize="12" Width="40" VerticalAlignment="Center"
+                                   FontFamily="Cascadia Mono,Consolas,monospace" />
+                        <ItemsControl ItemsSource="{Binding Marks}" VerticalAlignment="Center">
+                          <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                              <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                          </ItemsControl.ItemsPanel>
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:PodMarkViewModel">
+                              <Border Classes="podMark" Classes.ready="{Binding IsReady}" Classes.warn="{Binding IsWarn}"
+                                      Classes.error="{Binding IsError}" Classes.done="{Binding IsDone}"
+                                      Classes.gone="{Binding IsGone}" Classes.missing="{Binding IsMissing}"
+                                      ToolTip.Tip="{Binding Tip}" />
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="{Binding MarksOverflow}" FontSize="10.5" Opacity="0.55" VerticalAlignment="Center" />
+                      </StackPanel>
+
+                      <TextBlock Grid.Column="4" Text="{Binding RestartsText}" FontSize="12" VerticalAlignment="Center"
+                                 FontFamily="Cascadia Mono,Consolas,monospace"
+                                 Classes.hotRestarts="{Binding HasRecentRestart}" ToolTip.Tip="{Binding RestartsTip}" />
+
+                      <TextBlock Grid.Column="5" Text="{Binding LastDeployText}" FontSize="12" VerticalAlignment="Center"
+                                 FontFamily="Cascadia Mono,Consolas,monospace" TextTrimming="CharacterEllipsis"
+                                 Classes.recentDeploy="{Binding IsRecentDeploy}" ToolTip.Tip="{Binding LastDeployTip}" />
+
+                      <Border Grid.Column="6" Classes="statusPill" IsVisible="{Binding IsArgo}"
+                              Classes.ok="{Binding IsSynced}" Classes.warn="{Binding IsOutOfSync}">
+                        <TextBlock Text="{Binding SyncText}" FontSize="11.5" />
+                      </Border>
+                      <TextBlock Grid.Column="6" Text="—" Opacity="0.4" VerticalAlignment="Center" IsVisible="{Binding !IsArgo}" />
+                    </Grid>
+                  </Border>
+                </StackPanel>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+
+          <!-- Every state names itself (UI rules 9 and 18). -->
+          <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" MaxWidth="420"
+                      IsVisible="{Binding IsConnecting}">
+            <ProgressBar IsIndeterminate="True" Width="150" HorizontalAlignment="Center" />
+            <TextBlock Text="{Binding Tab.Header, StringFormat='Connecting to {0}…'}" FontWeight="SemiBold" FontSize="13"
+                       HorizontalAlignment="Center" Opacity="0.7" />
+          </StackPanel>
+
+          <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" MaxWidth="480"
+                      IsVisible="{Binding IsDisconnected}">
+            <PathIcon Data="{StaticResource AlertCircleIconGeometry}" Width="26" Height="26" Opacity="0.35" HorizontalAlignment="Center" />
+            <TextBlock Text="Not connected" FontWeight="SemiBold" FontSize="13" HorizontalAlignment="Center" Opacity="0.7" />
+            <TextBlock Text="{Binding Tab.Status}" FontSize="12" Opacity="0.6" TextWrapping="Wrap" TextAlignment="Center" />
+            <Button Classes="chip" HorizontalAlignment="Center" Content="Reconnect" Command="{Binding Tab.ConnectCommand}" />
+          </StackPanel>
+
+          <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" MaxWidth="420"
+                      IsVisible="{Binding IsLoading}">
+            <ProgressBar IsIndeterminate="True" Width="150" HorizontalAlignment="Center" />
+            <TextBlock Text="{Binding LoadingText}" FontWeight="SemiBold" FontSize="13" HorizontalAlignment="Center"
+                       Opacity="0.7" TextWrapping="Wrap" TextAlignment="Center" />
+            <TextBlock Text="{Binding ScopeText}" FontSize="12" Opacity="0.5" HorizontalAlignment="Center" />
+          </StackPanel>
+
+          <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" MaxWidth="440"
+                      IsVisible="{Binding IsEmpty}">
+            <PathIcon Data="{StaticResource ApplicationsIconGeometry}" Width="28" Height="28" Opacity="0.25" HorizontalAlignment="Center" />
+            <TextBlock Text="No applications found" FontWeight="SemiBold" FontSize="13" HorizontalAlignment="Center" Opacity="0.7" />
+            <TextBlock Text="{Binding ScopeText, StringFormat='No Argo CD Application, Deployment, StatefulSet, DaemonSet or CronJob in: {0}.'}"
+                       FontSize="12" Opacity="0.5" TextWrapping="Wrap" TextAlignment="Center" />
+          </StackPanel>
+
+          <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" MaxWidth="420"
+                      IsVisible="{Binding IsFilterEmpty}">
+            <PathIcon Data="{StaticResource MagnifyIconGeometry}" Width="26" Height="26" Opacity="0.25" HorizontalAlignment="Center" />
+            <TextBlock Text="{Binding FilterEmptyText}" FontWeight="SemiBold" FontSize="13" HorizontalAlignment="Center"
+                       Opacity="0.7" TextTrimming="CharacterEllipsis" />
+            <TextBlock Text="{Binding FilterEmptyDetail}" FontSize="12" Opacity="0.5" HorizontalAlignment="Center" />
+            <Button Classes="chip" HorizontalAlignment="Center" Command="{Binding ShowEverythingCommand}" Content="Show everything" />
+          </StackPanel>
+        </Grid>
+      </Border>
+    </DockPanel>
+
+    <ContentControl Content="{Binding Page}" IsVisible="{Binding IsPageOpen}">
+      <ContentControl.ContentTemplate>
+        <DataTemplate x:DataType="vm:ApplicationPageViewModel">
+          <views:ApplicationPageView />
+        </DataTemplate>
+      </ContentControl.ContentTemplate>
+    </ContentControl>
+  </Grid>
+</UserControl>

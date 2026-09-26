@@ -58,6 +58,8 @@ way in Preferences → Shortcut modifier.
 
 | Action | Windows / Linux | macOS |
 | --- | --- | --- |
+| Show the Applications list: every app's health and why | Ctrl+Shift+A | Cmd+Shift+A |
+| Show the Resources explorer: kinds, lists and the inspector | Ctrl+Shift+R | Cmd+Shift+R |
 | Open the command palette | Ctrl+K | Cmd+K |
 | Show every resource kind in the sidebar, or only the everyday ones | The eye-plus icon, top of the sidebar | The eye-plus icon, top of the sidebar |
 | Show or hide the resource sidebar | Ctrl+B | Cmd+B |

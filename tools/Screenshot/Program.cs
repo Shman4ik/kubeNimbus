@@ -224,6 +224,25 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("palette-logs-fleet", () => LogsPalette(ClusterTabScenarios.WorkloadsList(), "",
         fixture: tab => tab.SetLogTargetsForFixture(ClusterTabScenarios.FleetLogTargets(), loading: false))),
     ("palette-logs-disconnected", () => LogsPalette(ClusterTabScenarios.NotConnected(), "")),
+    // The Applications mode: the list (every state it can be in), and the application
+    // page for a crash-looping app, an app with no logs at all, a quiet one, and its two
+    // armed actions. All on the demo cluster, read at DemoData.Now, so the relative
+    // times in them are the same on every run.
+    ("applications-list", () => HostInMainWindow(ApplicationsScenarios.List(), mode: ShellMode.Applications)),
+    ("applications-list-attention", () => HostInMainWindow(ApplicationsScenarios.List(chip: ApplicationChip.NeedsAttention), mode: ShellMode.Applications)),
+    ("applications-list-system", () => HostInMainWindow(ApplicationsScenarios.List(showSystem: true), mode: ShellMode.Applications)),
+    ("applications-list-filtered-empty", () => HostInMainWindow(ApplicationsScenarios.List(filter: "zzz"), mode: ShellMode.Applications)),
+    ("applications-list-narrow", () => HostInMainWindow(ApplicationsScenarios.List(), width: 1024, mode: ShellMode.Applications)),
+    ("applications-list-loading", () => HostInMainWindow(ApplicationsScenarios.Loading(), mode: ShellMode.Applications)),
+    ("applications-list-rbac-fallback", () => HostInMainWindow(ApplicationsScenarios.RbacFallback(), mode: ShellMode.Applications)),
+    ("applications-page-crashloop", () => HostInMainWindow(ApplicationsScenarios.Page("checkout"), mode: ShellMode.Applications)),
+    ("applications-page-crashloop-merged", () => HostInMainWindow(ApplicationsScenarios.Page("checkout", merged: true), mode: ShellMode.Applications)),
+    ("applications-page-no-logs", () => HostInMainWindow(ApplicationsScenarios.Page("fraud-detector"), mode: ShellMode.Applications)),
+    ("applications-page-healthy", () => HostInMainWindow(ApplicationsScenarios.Page("redis-cache"), mode: ShellMode.Applications)),
+    ("applications-page-rollout", () => HostInMainWindow(ApplicationsScenarios.Page("notification-dispatcher"), mode: ShellMode.Applications)),
+    ("applications-page-selfheal", () => HostInMainWindow(ApplicationsScenarios.Page("checkout", editYaml: true), mode: ShellMode.Applications)),
+    ("applications-page-restart", () => HostInMainWindow(ApplicationsScenarios.Page("checkout", restart: true), mode: ShellMode.Applications)),
+    ("ux-applications-keys", () => HostInMainWindow(ApplicationsScenarios.List(), mode: ShellMode.Applications)),
     ("main-window", () => BuildMainWindowContent()),
     ("main-window-no-kubeconfig", () => BuildNoKubeconfigContent()),
     ("main-window-shortcuts", () => BuildMainWindowContent(openShortcuts: true)),
@@ -285,6 +304,8 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     Dispatcher.UIThread.RunJobs();
 
     if (name == "ux-namespace-picker") UxInteractionChecks.NamespacePicker(window);
+    if (name == "ux-applications-keys") ApplicationsChecks.Keys(window);
+    if (name.StartsWith("applications-page", StringComparison.Ordinal)) ApplicationsChecks.SettlePage(window);
     if (name == "ux-unhealthy-toggle") UxInteractionChecks.UnhealthyToggle(window);
     if (name == "ux-logs-palette") UxInteractionChecks.LogsPalette(window);
     if (name == "ux-row-logs") UxInteractionChecks.RowLogs(window);
@@ -309,12 +330,16 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
 // (see MainWindow.axaml), so an inspector tab only renders its real View —
 // PodDetailView/YamlEditorView/etc — when hosted under the actual MainWindow.
 // A bare wrapper falls back to a "ToString() in a TextBlock" placeholder.
-static Control HostInMainWindow(ClusterTabViewModel tab, int height = 800, int width = 1280)
+static Control HostInMainWindow(ClusterTabViewModel tab, int height = 800, int width = 1280, ShellMode mode = ShellMode.Resources)
 {
     var window = new MainWindow { Width = width, Height = height };
     var vm = new MainWindowViewModel();
     window.DataContext = vm;
     SeedContexts(vm);
+
+    // Every cluster-tab scenario predates the Applications mode and is about the
+    // Resources explorer; the Applications scenarios ask for their own mode.
+    vm.Mode = mode;
 
     // Read the scenario's choice before adding the tab, because adding it is what
     // makes the shell stamp its own (persisted, default-off) value onto the tab —
@@ -413,6 +438,7 @@ static Control BuildMainWindowContent(bool openShortcuts = false, bool openPrefe
     window.Width = 1280;
     window.Height = 800;
     SeedContexts(vm);
+    vm.Mode = ShellMode.Resources;
 
     vm.Tabs.Clear();
     var tabA = ClusterTabScenarios.WorkloadsList();
@@ -441,6 +467,7 @@ static Control BuildSwitcherContent(string? query = null)
     window.Width = 1280;
     window.Height = 800;
     SeedContexts(vm);
+    vm.Mode = ShellMode.Resources;
 
     vm.Tabs.Clear();
     var tab = ClusterTabScenarios.WorkloadsList();

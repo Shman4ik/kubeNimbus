@@ -122,6 +122,8 @@ internal static class MacMenu
             _advanced.IsChecked = vm.IsAdvancedView;
 
             var view = new NativeMenu();
+            view.Add(Item(CommandId.ShowApplications, () => vm.ShowApplicationsCommand.Execute(null)));
+            view.Add(Item(CommandId.ShowResources, () => vm.ShowResourcesCommand.Execute(null)));
             view.Add(Item(CommandId.CommandPalette, window.OpenPalette));
             view.Add(new NativeMenuItemSeparator());
             view.Add(_sidebar);

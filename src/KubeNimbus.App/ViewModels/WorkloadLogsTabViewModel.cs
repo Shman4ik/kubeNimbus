@@ -15,6 +15,22 @@ using KubeNimbus.Core;
 namespace KubeNimbus.App.ViewModels;
 
 /// <summary>
+/// How an application page hosts the aggregated pane, as opposed to the inspector dock.
+/// </summary>
+/// <param name="ExtraSelectors">More selectors in the same namespace — an Argo app of several workloads is one stream.</param>
+/// <param name="FocusPod">The pod shown when the pane opens; null for all pods merged.</param>
+/// <param name="Previous">Read each pod's run before the current one (never followed).</param>
+/// <param name="Embedded">Hosted in the application page: no pod strip, and an Errors-only toggle.</param>
+public sealed record WorkloadLogsOptions(
+    IReadOnlyList<LabelSelector> ExtraSelectors,
+    string? FocusPod = null,
+    bool Previous = false,
+    bool Embedded = false)
+{
+    public static readonly WorkloadLogsOptions Default = new([]);
+}
+
+/// <summary>
 /// One log pane over every pod a workload owns — the job <c>stern</c> exists for, and
 /// the thing that makes a rolling deployment readable: the pod going away and the pod
 /// coming up appear in the same stream, in time order, each line keyed to its pod by
@@ -88,7 +104,8 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
     private readonly ClusterClient? _client;
 
     private readonly DynamicResource _workload;
-    private readonly LabelSelector _selector;
+    private readonly IReadOnlyList<LabelSelector> _selectors;
+    private readonly WorkloadLogsOptions _options;
     private readonly string? _namespace;
     private readonly CancellationTokenSource _cts = new();
     private readonly List<LogLineViewModel> _allLogLines = [];
@@ -205,19 +222,22 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
         ResourceDescriptor descriptor,
         DynamicResource workload,
         LabelSelector selector,
-        string clusterName = "")
+        string clusterName = "",
+        WorkloadLogsOptions? options = null)
         : base(
             clusterName.Length == 0 ? $"Logs/{workload.Name}" : $"Logs/{workload.Name} · {clusterName}",
             isDemo: client is null)
     {
         _client = client;
         _workload = workload;
-        _selector = selector;
+        _options = options ?? WorkloadLogsOptions.Default;
+        _selectors = [selector, .. _options.ExtraSelectors];
+        _focusPodName = _options.FocusPod;
         _namespace = workload.Namespace;
         ClusterName = clusterName;
         WorkloadKind = descriptor.Kind;
         WorkloadName = workload.Name;
-        SelectorText = selector.ToQuery();
+        SelectorText = string.Join(" | ", _selectors.Select(s => s.ToQuery()));
         Key = KeyFor(clusterName, descriptor, _namespace, workload.Name);
 
         Sources.CollectionChanged += (_, _) => UpdateSummary();
@@ -251,16 +271,24 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
         }
 
         var token = _cts.Token;
+        foreach (var selector in _selectors)
+        {
+            WatchPods(_client, selector, token);
+        }
+    }
+
+    private void WatchPods(ClusterClient client, LabelSelector selector, CancellationToken token)
+    {
         _ = Task.Run(async () =>
         {
             try
             {
-                await foreach (var evt in _client.WatchResourceAsync(
+                await foreach (var evt in client.WatchResourceAsync(
                     ResourceDescriptor.Pods,
                     _namespace,
                     connectionLost: ex => Dispatcher.UIThread.Post(() => SetStatus(ex.Message, problem: true)),
                     cancellationToken: token,
-                    labelSelector: _selector))
+                    labelSelector: selector))
                 {
                     await Dispatcher.UIThread.InvokeAsync(() => ApplyPodEvent(evt));
                 }
@@ -291,7 +319,7 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
         IsResolvingPods = false;
         foreach (var pod in DemoData.Pods)
         {
-            if ((_namespace is null || pod.Namespace == _namespace) && _selector.Matches(pod.Labels))
+            if ((_namespace is null || pod.Namespace == _namespace) && _selectors.Any(s => s.Matches(pod.Labels)))
             {
                 AddSource(pod);
             }
@@ -393,6 +421,9 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
             LogSourcePalette.ShortNameFor(podName, WorkloadName),
             LogSourcePalette.BrushFor(_nextColourIndex++));
 
+        // An application page that opened on one pod shows that pod; the others still
+        // stream into the buffer, so choosing "All pods" later loses nothing.
+        source.IsIncluded = _focusPodName is null || string.Equals(podName, _focusPodName, StringComparison.Ordinal);
         source.PropertyChanged += OnSourceChanged;
         _sourcesByPod[podName] = source;
         Sources.Add(source);
@@ -427,6 +458,8 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
 
     private void StartStream(LogSourceViewModel source, bool follow = true)
     {
+        // The run before cannot be followed: the API server refuses follow with previous.
+        follow &= !_options.Previous;
         StopStream(source.PodName);
         _respondedPods.Remove(source.PodName);
         _streamGeneration++;
@@ -455,6 +488,7 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
                 await foreach (var line in _client.StreamPodLogsAsync(
                     podNamespace, source.PodName, source.ContainerName.Length == 0 ? null : source.ContainerName,
                     follow: follow, tailLines: tail, sinceSeconds: SelectedLogRange.SinceSeconds,
+                    previous: _options.Previous,
                     timestamps: true,
                     responseReady: () => OnLogResponseReady(source, token, follow),
                     cancellationToken: token))
@@ -759,7 +793,66 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
     /// </summary>
     private bool MatchesFilter(LogLineViewModel line) =>
         (line.Source?.IsIncluded ?? true)
+        && (!ShowErrorsOnly || line.IsErrorLine)
         && (LogSearchText.Length == 0 || line.Message.Contains(LogSearchText, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// The application page's "Errors only": the same class-based severity the lines are
+    /// coloured by (<c>log-severity-classes.md</c>), so what it keeps is exactly what is
+    /// drawn red. A narrowing of the projection, never of the buffer — turning it off
+    /// brings every line back in place.
+    /// </summary>
+    [ObservableProperty]
+    private bool _showErrorsOnly;
+
+    partial void OnShowErrorsOnlyChanged(bool value) => ApplyFilter();
+
+    /// <summary>
+    /// True when the pane is hosted inside the application page rather than the inspector
+    /// dock: the page's own pod list is the selector there, so the pod strip is hidden, and
+    /// the Errors-only toggle is offered. The dock's pane is unchanged.
+    /// </summary>
+    public bool IsEmbedded => _options.Embedded;
+
+    /// <summary>
+    /// A line the embedding page ends the log with — "Container worker exited with code 1
+    /// (Error) at 08:54:36". Drawn after the last log line, inside the same scroll, because
+    /// it is the end of that run's story rather than a banner about the pane.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasFooter))]
+    private string? _footer;
+
+    public bool HasFooter => Footer is not null;
+
+    /// <summary>Whether this pane reads each pod's run before the current one (<c>previous=true</c>).</summary>
+    public bool IsPreviousRun => _options.Previous;
+
+    private string? _focusPodName;
+
+    /// <summary>
+    /// Which pod the pane shows, or null for all of them merged. Setting it re-includes the
+    /// buffer's lines rather than re-reading anything: every pod keeps streaming either way.
+    /// </summary>
+    public string? FocusPod
+    {
+        get => _focusPodName;
+        set
+        {
+            if (string.Equals(_focusPodName, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _focusPodName = value;
+            foreach (var source in Sources)
+            {
+                source.IsIncluded = value is null || string.Equals(source.PodName, value, StringComparison.Ordinal);
+            }
+
+            OnPropertyChanged();
+        }
+    }
 
     private void ApplyFilter()
     {
@@ -927,9 +1020,11 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
             {
                 var buffered = $"{_allLogLines.Count:N0} line{(_allLogLines.Count == 1 ? "" : "s")} buffered "
                     + $"from {Sources.Count} pod{(Sources.Count == 1 ? "" : "s")}";
-                return LogSearchText.Length == 0
-                    ? $"The pods still shown have logged nothing — {buffered}."
-                    : $"No lines match “{LogSearchText}” — {buffered}.";
+                return LogSearchText.Length > 0
+                    ? $"No lines match “{LogSearchText}”{(ShowErrorsOnly ? " among the error lines" : "")} — {buffered}."
+                    : ShowErrorsOnly
+                        ? $"No error lines — {buffered}."
+                        : $"The pods still shown have logged nothing — {buffered}.";
             }
 
             if (LogStatus is { Length: > 0 } status)

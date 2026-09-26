@@ -56,6 +56,8 @@ public enum CommandId
     WhoCan,
 
     // --- View & app ---
+    ShowApplications,
+    ShowResources,
     CommandPalette,
     ToggleAdvancedView,
     ToggleSidebar,

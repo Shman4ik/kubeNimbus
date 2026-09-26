@@ -1,0 +1,292 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:KubeNimbus.App.ViewModels"
+             xmlns:views="using:KubeNimbus.App.Views"
+             xmlns:controls="using:KubeNimbus.App.Controls"
+             xmlns:conv="using:KubeNimbus.App.Converters"
+             x:Class="KubeNimbus.App.Views.ApplicationPageView"
+             x:DataType="vm:ApplicationPageViewModel"
+             Focusable="True">
+
+  <!-- One application, layout A: what is wrong, its pods and what they are wired to on
+       the left; the last hour and the logs on the right, the logs taking every pixel that
+       is left so they are readable at 1280×800 without scrolling the page. -->
+  <DockPanel>
+
+    <!-- Header: back, name, health and sync as two pills (they are two facts), actions. -->
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="2,0,0,6">
+      <StackPanel Grid.Column="0" Spacing="4">
+        <Button Classes="linkText" Command="{Binding BackCommand}" FontSize="12" HorizontalAlignment="Left"
+                ToolTip.Tip="Back to the list (Esc)">
+          <TextBlock Text="‹ Applications" />
+        </Button>
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <TextBlock Text="{Binding Name}" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
+          <Border Classes="statusPill" VerticalAlignment="Center"
+                  Classes.error="{Binding IsError}" Classes.warn="{Binding IsWarn}"
+                  Classes.ok="{Binding IsOk}" Classes.progress="{Binding IsProgress}">
+            <TextBlock Text="{Binding StatusText}" FontSize="11.5" FontWeight="SemiBold" />
+          </Border>
+          <Border Classes="statusPill" VerticalAlignment="Center" IsVisible="{Binding IsArgo}"
+                  Classes.ok="{Binding IsSynced}" Classes.warn="{Binding IsOutOfSync}">
+            <TextBlock Text="{Binding SyncText}" FontSize="11.5" />
+          </Border>
+        </StackPanel>
+        <TextBlock Text="{Binding Subtitle}" FontSize="12" Opacity="0.6" TextTrimming="CharacterEllipsis" />
+      </StackPanel>
+
+      <!-- The actions reuse what exists: Restart and Sync arm the shared confirm strip
+           (UI rule 17), Edit YAML opens the existing editor, and Open in Argo CD exists
+           only when argocd-cm names Argo's URL. -->
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Bottom" Margin="0,0,0,2">
+        <Button Content="Restart…" Command="{Binding RestartCommand}"
+                ToolTip.Tip="Rollout restart: stamps restartedAt so the controller rolls its pods" />
+        <Button Content="Sync…" Command="{Binding SyncCommand}" IsVisible="{Binding IsArgo}"
+                ToolTip.Tip="Ask Argo CD to sync this Application to what Git declares" />
+        <Button Content="Edit YAML…" Command="{Binding EditYamlCommand}"
+                ToolTip.Tip="Open the workload's manifest in the YAML editor (Resources mode)" />
+        <Button Classes="linkText" Command="{Binding OpenInArgoCommand}" IsVisible="{Binding HasArgoUrl}"
+                Margin="8,0,0,0" VerticalAlignment="Center" ToolTip.Tip="{Binding ArgoUrl}">
+          <StackPanel Orientation="Horizontal" Spacing="4">
+            <TextBlock Text="Open in Argo CD" />
+            <PathIcon Data="{StaticResource OpenInNewIconGeometry}" Width="11" Height="11" />
+          </StackPanel>
+        </Button>
+      </StackPanel>
+    </Grid>
+
+    <!-- The armed Restart / Sync. The same strip as the Resources list's, not a copy. -->
+    <ContentControl DockPanel.Dock="Top" Content="{Binding PendingAction}" Margin="0,4,0,8" IsVisible="{Binding HasPendingAction}">
+      <ContentControl.ContentTemplate>
+        <DataTemplate x:DataType="vm:RowActionViewModel">
+          <views:RowActionStrip />
+        </DataTemplate>
+      </ContentControl.ContentTemplate>
+    </ContentControl>
+
+    <!-- Edit YAML on an app Argo self-heals: said before the editor opens, with the place
+         the change belongs. -->
+    <Border DockPanel.Dock="Top" Classes="infoBar warn" Margin="0,4,0,8" IsVisible="{Binding IsSelfHealWarningOpen}">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" Margin="12,0,0,0" VerticalAlignment="Center">
+          <Button Content="Edit anyway" Command="{Binding EditAnywayCommand}" />
+          <Button Content="Cancel" Command="{Binding CancelEditCommand}" />
+        </StackPanel>
+        <SelectableTextBlock Text="{Binding SelfHealWarning}" TextWrapping="Wrap" FontSize="12" VerticalAlignment="Center" />
+      </DockPanel>
+    </Border>
+
+    <Grid ColumnDefinitions="390,14,*" Margin="0,6,0,0">
+
+      <!-- ================================================================ left -->
+      <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Spacing="12" Margin="0,0,6,0">
+
+          <Border Classes="card" Padding="0">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="10" Margin="14,10,14,8">
+                <TextBlock Text="What’s wrong" FontWeight="SemiBold" FontSize="13.5" />
+                <TextBlock Text="Facts read from the cluster, not a diagnosis" FontSize="11.5" Opacity="0.55"
+                           VerticalAlignment="Bottom" />
+              </StackPanel>
+
+              <ItemsControl ItemsSource="{Binding Findings}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:FindingViewModel">
+                    <Border BorderThickness="0,1,0,0" BorderBrush="{StaticResource CardBorderBrush}">
+                      <Border Classes="finding" Classes.error="{Binding IsError}" Classes.warn="{Binding IsWarn}"
+                              Classes.info="{Binding IsInfo}">
+                        <StackPanel Spacing="3">
+                          <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="12.5" TextWrapping="Wrap" />
+                          <TextBlock Text="{Binding Detail}" FontSize="12" Opacity="0.8" TextWrapping="Wrap" />
+                          <ItemsControl ItemsSource="{Binding Evidence}">
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate x:DataType="x:String">
+                                <Border Classes="evidence">
+                                  <SelectableTextBlock Text="{Binding}" />
+                                </Border>
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                        </StackPanel>
+                      </Border>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+
+              <!-- Nothing fired: said, and said honestly — a quiet cluster is not proof
+                   that users are fine. -->
+              <Border BorderThickness="0,1,0,0" BorderBrush="{StaticResource CardBorderBrush}" Padding="14,10"
+                      IsVisible="{Binding IsNothingWrong}">
+                <StackPanel Spacing="4">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <PathIcon Data="{StaticResource CheckIconGeometry}" Width="13" Height="13" Foreground="{StaticResource AppSuccessBrush}" />
+                    <TextBlock Text="Nothing wrong visible" FontWeight="SemiBold" FontSize="12.5" />
+                  </StackPanel>
+                  <TextBlock FontSize="12" Opacity="0.7" TextWrapping="Wrap"
+                             Text="No rule found a problem in what the cluster reports. That is not proof that users are fine: a bug that does not crash, fail a probe or log an error is invisible from here." />
+                </StackPanel>
+              </Border>
+
+              <TextBlock Text="{Binding EventsNote}" FontSize="11" Margin="14,6,14,10" TextWrapping="Wrap"
+                         Classes="statusText" Classes.warn="{Binding IsEventsNoteProblem}" Classes.dim="{Binding !IsEventsNoteProblem}" />
+            </StackPanel>
+          </Border>
+
+          <!-- What changed: the pod template of the current ReplicaSet against the one
+               before it, and Git's compare view for Argo's last two revisions. -->
+          <Border Classes="card" Padding="0" IsVisible="{Binding HasChangeCard}">
+            <Border Classes="finding info">
+              <StackPanel Spacing="4">
+                <TextBlock Text="{Binding ChangeTitle}" FontWeight="SemiBold" FontSize="12.5" TextWrapping="Wrap" />
+                <ItemsControl ItemsSource="{Binding Changes}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:TemplateChangeViewModel">
+                      <WrapPanel Margin="0,2">
+                        <TextBlock Text="{Binding Field, StringFormat='{}{0}: '}" FontSize="11.5"
+                                   FontFamily="Cascadia Mono,Consolas,monospace" />
+                        <TextBlock Text="{Binding Before}" Classes="diffBefore" FontSize="11.5"
+                                   FontFamily="Cascadia Mono,Consolas,monospace" IsVisible="{Binding HasBefore}" />
+                        <TextBlock Text=" → " FontSize="11.5" Opacity="0.6" IsVisible="{Binding HasBefore}" />
+                        <TextBlock Text="{Binding After}" Classes="diffAfter" FontSize="11.5"
+                                   FontFamily="Cascadia Mono,Consolas,monospace" />
+                      </WrapPanel>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Border Classes="evidence" IsVisible="{Binding ChangeEvidence, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}">
+                  <SelectableTextBlock Text="{Binding ChangeEvidence}" />
+                </Border>
+                <Button Classes="linkText" Command="{Binding OpenCompareCommand}" IsVisible="{Binding HasCompareLink}"
+                        Margin="0,4,0,0" HorizontalAlignment="Left">
+                  <StackPanel Orientation="Horizontal" Spacing="4">
+                    <TextBlock Text="{Binding CompareText}" FontSize="12" />
+                    <PathIcon Data="{StaticResource OpenInNewIconGeometry}" Width="10" Height="10" />
+                  </StackPanel>
+                </Button>
+                <SelectableTextBlock Text="{Binding CompareShas}" FontSize="11" Opacity="0.7" TextWrapping="Wrap"
+                                     FontFamily="Cascadia Mono,Consolas,monospace"
+                                     IsVisible="{Binding CompareShas, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}" />
+              </StackPanel>
+            </Border>
+          </Border>
+
+          <Border Classes="card" Padding="6,8">
+            <StackPanel>
+              <TextBlock Text="PODS" Classes="sectionHeader" Margin="8,0,0,6" />
+              <!-- AutoScrollToSelectedItem off: the page opens with a pod chosen, and bringing
+                   it into view scrolled the whole left column past What's wrong. -->
+              <ListBox Name="PodList" Classes="podList" ItemsSource="{Binding Pods}" AutoScrollToSelectedItem="False"
+                       SelectedItem="{Binding SelectedPod, Mode=TwoWay}" Background="Transparent">
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:PagePodViewModel">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                      <Ellipse Grid.Column="0" Classes="statusDot" Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,8,0"
+                               Classes.ok="{Binding IsReady}" Classes.warn="{Binding IsWarn}" Classes.error="{Binding IsError}"
+                               Classes.idle="{Binding IsGone}" />
+                      <StackPanel Grid.Column="1">
+                        <TextBlock Text="{Binding Name}" FontSize="12" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}"
+                                   FontFamily="Cascadia Mono,Consolas,monospace" />
+                        <TextBlock Text="{Binding StateText}" FontSize="11" Opacity="0.6" TextTrimming="CharacterEllipsis" />
+                      </StackPanel>
+                      <TextBlock Grid.Column="2" Text="{Binding RestartsText}" FontSize="11" Opacity="0.6" VerticalAlignment="Center"
+                                 Margin="8,0,0,0" />
+                    </Grid>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+            </StackPanel>
+          </Border>
+
+          <Border Classes="card" Padding="6,8">
+            <StackPanel>
+              <TextBlock Text="LINKED" Classes="sectionHeader" Margin="8,0,0,6" />
+              <ItemsControl ItemsSource="{Binding Linked}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:LinkedResourceViewModel">
+                    <Button Classes="linkRow"
+                            Command="{Binding $parent[views:ApplicationPageView].((vm:ApplicationPageViewModel)DataContext).RevealLinkedCommand}"
+                            CommandParameter="{Binding}"
+                            ToolTip.Tip="Show it in Resources mode">
+                      <StackPanel>
+                        <TextBlock Text="{Binding Title}" FontSize="12" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding Via}" FontSize="11" Opacity="0.55" TextTrimming="CharacterEllipsis" />
+                      </StackPanel>
+                    </Button>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock Text="{Binding LinkedNote}" FontSize="11.5" Opacity="0.6" Margin="8,2,8,0" TextWrapping="Wrap"
+                         IsVisible="{Binding LinkedNote, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+
+      <!-- ================================================================ right -->
+      <Grid Grid.Column="2" RowDefinitions="Auto,10,*">
+        <Border Grid.Row="0" Classes="card" Padding="14,8,14,4">
+          <StackPanel>
+            <Grid ColumnDefinitions="Auto,*,Auto">
+              <TextBlock Grid.Column="0" Text="{Binding TimelineTitle}" FontWeight="SemiBold" FontSize="13" />
+              <TextBlock Grid.Column="1" Text="{Binding TimelineBefore}" FontSize="11.5" Opacity="0.55" Margin="12,1,0,0"
+                         TextTrimming="CharacterEllipsis" />
+              <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <Rectangle Width="2" Height="10" Fill="{StaticResource AppAccentBrush}" VerticalAlignment="Center" />
+                  <TextBlock Text="deploy" FontSize="11" Opacity="0.65" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <Ellipse Width="8" Height="8" Fill="{StaticResource AppDangerBrush}" VerticalAlignment="Center" />
+                  <TextBlock Text="container ended" FontSize="11" Opacity="0.65" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <Rectangle Width="7" Height="7" Fill="{StaticResource AppWarningBrush}" VerticalAlignment="Center" />
+                  <TextBlock Text="warning event" FontSize="11" Opacity="0.65" />
+                </StackPanel>
+              </StackPanel>
+            </Grid>
+            <controls:TimelineStrip Window="{Binding Timeline}" Height="56" Margin="0,2,0,0" />
+            <TextBlock Text="{Binding TimelineEmpty}" FontSize="11" Opacity="0.55" Margin="0,0,0,4"
+                       IsVisible="{Binding TimelineEmpty, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}" />
+          </StackPanel>
+        </Border>
+
+        <Border Grid.Row="2" Classes="card" Padding="0">
+          <Grid RowDefinitions="Auto,*">
+            <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="14,8,12,0">
+              <TextBlock Grid.Column="0" Text="{Binding LogsCaption}" FontWeight="SemiBold" FontSize="12.5"
+                         VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                         FontFamily="Cascadia Mono,Consolas,monospace" />
+              <!-- Only where a distinct earlier run exists (the kubelet's own rule): a
+                   waiting container's "previous" is its current, so no toggle there. -->
+              <ToggleButton Grid.Column="1" Classes="chip checkedAccent" Padding="8,3" FontSize="11"
+                            IsVisible="{Binding CanShowRunBefore}" IsChecked="{Binding ShowRunBefore}"
+                            Content="Run before"
+                            ToolTip.Tip="The container run before the current one (kubectl logs --previous)" />
+            </Grid>
+
+            <ContentControl Grid.Row="1" Content="{Binding Logs}" IsVisible="{Binding HasLogs}">
+              <ContentControl.ContentTemplate>
+                <DataTemplate x:DataType="vm:WorkloadLogsTabViewModel">
+                  <views:WorkloadLogsView />
+                </DataTemplate>
+              </ContentControl.ContentTemplate>
+            </ContentControl>
+
+            <!-- "No logs" is a state with a reason (UI rule 9), taken from the waiting
+                 reason, the phase or the scheduling condition — never an empty panel. -->
+            <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8" MaxWidth="480"
+                        Margin="20" IsVisible="{Binding IsLogsUnavailable}">
+              <TextBlock Text="No logs to show" FontWeight="SemiBold" FontSize="13" HorizontalAlignment="Center" />
+              <TextBlock Text="{Binding LogsUnavailableText}" FontSize="12" Opacity="0.7" TextWrapping="Wrap" TextAlignment="Center" />
+              <TextBlock FontSize="11.5" Opacity="0.55" TextWrapping="Wrap" TextAlignment="Center"
+                         Text="Logs appear once a container has started. Why it has not is under What’s wrong." />
+            </StackPanel>
+          </Grid>
+        </Border>
+      </Grid>
+    </Grid>
+  </DockPanel>
+</UserControl>

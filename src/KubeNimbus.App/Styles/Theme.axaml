@@ -155,6 +155,8 @@
                  and a struck-through glyph, not one glyph at two opacities — the pair
                  reads as a toggle where the single glyph reads as "disabled". -->
             <StreamGeometry x:Key="EyeIconGeometry">M12,9A3,3 0 0,0 9,12A3,3 0 0,0 12,15A3,3 0 0,0 15,12A3,3 0 0,0 12,9M12,17A5,5 0 0,1 7,12A5,5 0 0,1 12,7A5,5 0 0,1 17,12A5,5 0 0,1 12,17M12,4.5C7,4.5 2.73,7.61 1,12C2.73,16.39 7,19.5 12,19.5C17,19.5 21.27,16.39 23,12C21.27,7.61 17,4.5 12,4.5Z</StreamGeometry>
+            <!-- mdi-apps — the Applications mode (command bar segment, palette, cheat sheet). -->
+            <StreamGeometry x:Key="ApplicationsIconGeometry">M16,20H20V16H16M16,14H20V10H16M10,8H14V4H10M16,8H20V4H16M10,14H14V10H10M4,14H8V10H4M4,20H8V16H4M10,20H14V16H10M4,8H8V4H4V8Z</StreamGeometry>
             <StreamGeometry x:Key="OpenInNewIconGeometry">M14,3V5H17.59L7.76,14.83L9.17,16.24L19,6.41V10H21V3M19,19H5V5H12V3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V12H19V19Z</StreamGeometry>
 
         </ResourceDictionary>
@@ -740,5 +742,171 @@
     </Style>
     <Style Selector="Button.rowAction:pressed /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{StaticResource AppSelectionBrush}" />
+    </Style>
+    <!-- ============================================================ Applications mode
+         The list and the application page. Every colour here is a class driven from a
+         bound bool on the view model, never a Foreground/Background binding (see
+         log-severity-classes.md for why a brush binding is not safe), and every colour
+         sits beside a word that says the same thing — the pill's text, the reason line —
+         so colour is never the only carrier. -->
+    <Style Selector="Border.statusPill.progress">
+        <Setter Property="Background" Value="#1C2D7FF9" />
+    </Style>
+    <Style Selector="Border.statusPill.progress TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource AppAccentBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.appReason">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Opacity" Value="0.7" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <Style Selector="TextBlock.appReason.error">
+        <Setter Property="Foreground" Value="{StaticResource AppDangerBrush}" />
+        <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="TextBlock.appReason.warn">
+        <Setter Property="Foreground" Value="{StaticResource AppWarningBrush}" />
+        <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="TextBlock.appReason.progress">
+        <Setter Property="Foreground" Value="{StaticResource AppAccentBrush}" />
+        <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="TextBlock.recentDeploy">
+        <Setter Property="Foreground" Value="{StaticResource AppAccentBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.hotRestarts">
+        <Setter Property="Foreground" Value="{StaticResource AppDangerBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <!-- One square per pod; a hollow one is a replica the controller wants and could not
+         create. The tooltip names the pod and its state in words. -->
+    <Style Selector="Border.podMark">
+        <Setter Property="Width" Value="9" />
+        <Setter Property="Height" Value="9" />
+        <Setter Property="CornerRadius" Value="2" />
+        <Setter Property="Margin" Value="0,0,3,0" />
+        <Setter Property="Background" Value="#80808080" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.podMark.ready">
+        <Setter Property="Background" Value="{StaticResource AppSuccessBrush}" />
+    </Style>
+    <Style Selector="Border.podMark.warn">
+        <Setter Property="Background" Value="{StaticResource AppWarningBrush}" />
+    </Style>
+    <Style Selector="Border.podMark.error">
+        <Setter Property="Background" Value="{StaticResource AppDangerBrush}" />
+    </Style>
+    <Style Selector="Border.podMark.done">
+        <Setter Property="Background" Value="#7046A758" />
+    </Style>
+    <Style Selector="Border.podMark.gone">
+        <Setter Property="Background" Value="#40808080" />
+    </Style>
+    <Style Selector="Border.podMark.missing">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="#A0808080" />
+    </Style>
+
+    <!-- The list's rows: the switcher's shape (a group title rides in the first row of its
+         group; the row body is what lights up), with a hit-testable Transparent body. -->
+    <Style Selector="ListBox.appList ListBoxItem">
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="ListBox.appList ListBoxItem /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.appRowBody">
+        <Setter Property="Padding" Value="0,6" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ListBox.appList ListBoxItem:pointerover Border.appRowBody">
+        <Setter Property="Background" Value="{StaticResource HoverBackgroundBrush}" />
+    </Style>
+    <Style Selector="ListBox.appList ListBoxItem:selected Border.appRowBody">
+        <Setter Property="Background" Value="{StaticResource AppSelectionBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource AppAccentBrush}" />
+    </Style>
+
+    <!-- A finding: a card with its severity as a left edge, title, one sentence, and the
+         evidence as monospace chips quoting the field it came from. -->
+    <Style Selector="Border.finding">
+        <Setter Property="BorderThickness" Value="3,0,0,0" />
+        <Setter Property="BorderBrush" Value="#80808080" />
+        <Setter Property="Padding" Value="12,8,10,10" />
+    </Style>
+    <Style Selector="Border.finding.error">
+        <Setter Property="BorderBrush" Value="{StaticResource AppDangerBrush}" />
+    </Style>
+    <Style Selector="Border.finding.warn">
+        <Setter Property="BorderBrush" Value="{StaticResource AppWarningBrush}" />
+    </Style>
+    <Style Selector="Border.finding.info">
+        <Setter Property="BorderBrush" Value="{StaticResource AppAccentBrush}" />
+    </Style>
+    <Style Selector="Border.evidence">
+        <Setter Property="Background" Value="{StaticResource HoverBackgroundBrush}" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="Padding" Value="6,2" />
+        <Setter Property="Margin" Value="0,4,0,0" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+    <Style Selector="Border.evidence SelectableTextBlock">
+        <Setter Property="FontFamily" Value="Cascadia Mono,Consolas,monospace" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="TextBlock.diffBefore">
+        <Setter Property="Foreground" Value="{StaticResource AppDangerBrush}" />
+        <Setter Property="TextDecorations" Value="Strikethrough" />
+    </Style>
+    <Style Selector="TextBlock.diffAfter">
+        <Setter Property="Foreground" Value="{StaticResource AppSuccessBrush}" />
+    </Style>
+
+    <!-- The page's pod list: a dot for state, the name, the state in words. -->
+    <Style Selector="ListBox.podList ListBoxItem">
+        <Setter Property="Padding" Value="8,5" />
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="ListBox.podList ListBoxItem:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource HoverBackgroundBrush}" />
+    </Style>
+    <Style Selector="ListBox.podList ListBoxItem:selected /template/ ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource AppSelectionBrush}" />
+    </Style>
+
+    <!-- A linked object: a link-styled button, whole row clickable. -->
+    <Style Selector="Button.linkRow">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="8,4" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.linkRow:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource HoverBackgroundBrush}" />
+    </Style>
+    <Style Selector="Button.linkText">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Foreground" Value="{StaticResource AppAccentBrush}" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.linkText:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{StaticResource AppAccentBrush}" />
     </Style>
 </Styles>

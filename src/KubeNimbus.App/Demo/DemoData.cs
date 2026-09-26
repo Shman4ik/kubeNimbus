@@ -47,6 +47,7 @@ public static class DemoData
     private static readonly JsonDocument CertificatesDoc = Load("certificates.json");
     private static readonly JsonDocument NodesDoc = Load("nodes.json");
     private static readonly JsonDocument ArgoApplicationsDoc = Load("argo-applications.json");
+    private static readonly JsonDocument WorkloadsDoc = Load("workloads.json");
 
     private static JsonDocument Load(string fileName)
     {
@@ -63,6 +64,35 @@ public static class DemoData
 
     public static IReadOnlyList<DynamicResource> Deployments { get; } =
         [.. DeploymentsDoc.RootElement.EnumerateArray().Select(e => new DynamicResource(e))];
+
+    /// <summary>
+    /// The instant the dataset describes. Its timestamps are fixed, so a relative time
+    /// ("deployed 15 min ago", the timeline's window) computed against the real clock
+    /// would drift further from the story every day the binary is old. The Applications
+    /// mode reads the demo cluster at this moment — the checkout deploy went out fifteen
+    /// minutes before it and its pod crashed at 08:54 — and the screenshots are
+    /// deterministic for the same reason. The Resources mode's ages still read the real
+    /// clock, as they always have.
+    /// </summary>
+    public static readonly DateTimeOffset Now = new(2026, 7, 30, 8, 56, 0, TimeSpan.Zero);
+
+    /// <summary>
+    /// Everything else the Applications mode reads — StatefulSets, DaemonSets, CronJobs,
+    /// Jobs, ReplicaSets (two revisions per Deployment, for "what changed"), and the
+    /// Services, Ingress, HPA and PDB its linked-resources panel finds from spec
+    /// references. One file, one dataset: the Resources mode lists the same objects.
+    /// </summary>
+    public static IReadOnlyList<DynamicResource> Workloads { get; } =
+        [.. WorkloadsDoc.RootElement.EnumerateArray().Select(e => new DynamicResource(e))];
+
+    /// <summary>Every object of one kind, from any demo file.</summary>
+    public static IReadOnlyList<DynamicResource> OfKind(string kind) => kind switch
+    {
+        "Pod" => Pods,
+        "Deployment" => Deployments,
+        "Event" => Events,
+        _ => [.. Workloads.Where(w => w.Kind == kind)],
+    };
 
     public static IReadOnlyList<DynamicResource> Events { get; } =
         [.. EventsDoc.RootElement.EnumerateArray().Select(e => new DynamicResource(e))];
@@ -198,7 +228,9 @@ public static class DemoData
         {
             "Secret" => (IReadOnlyList<DynamicResource>)[Secret],
             "ConfigMap" => ConfigMaps,
-            _ => [],
+            "Application" => ArgoApplicationObjects,
+            "Node" => Nodes,
+            _ => OfKind(kind),
         };
 
         return candidates.FirstOrDefault(r =>
@@ -453,6 +485,8 @@ public static class DemoData
             { Group: "", Kind: "Node" } => Nodes,
             { Group: "cert-manager.io", Kind: "Certificate" } => Certificates,
             { Group: "argoproj.io", Kind: "Application" } => ArgoApplicationObjects,
+            { Group: "apps" or "batch" or "autoscaling" or "policy" or "networking.k8s.io", Kind: var kind } => OfKind(kind),
+            { Group: "", Kind: "Service" } => OfKind("Service"),
             _ => [],
         };
 

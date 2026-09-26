@@ -216,6 +216,15 @@ public partial class MainWindow : Window
     /// </summary>
     internal void FocusRowFilter()
     {
+        foreach (var applications in this.GetVisualDescendants().OfType<ApplicationsView>())
+        {
+            if (applications.IsEffectivelyVisible)
+            {
+                applications.FocusFilter();
+                return;
+            }
+        }
+
         foreach (var view in this.GetVisualDescendants().OfType<ClusterTabView>())
         {
             if (view.IsEffectivelyVisible)

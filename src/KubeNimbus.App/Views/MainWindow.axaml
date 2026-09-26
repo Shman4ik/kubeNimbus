@@ -28,6 +28,9 @@
     <DataTemplate DataType="vm:ClusterTabViewModel">
       <views:ClusterTabView />
     </DataTemplate>
+    <DataTemplate DataType="vm:ApplicationsViewModel">
+      <views:ApplicationsView />
+    </DataTemplate>
     <DataTemplate DataType="vm:PodDetailTabViewModel">
       <views:PodDetailView />
     </DataTemplate>
@@ -135,13 +138,42 @@
                    wide resource list is exactly what you want it back for. One-way
                    IsChecked + an explicit command target, never an inverting command
                    beside a two-way binding (UI rule 8b). -->
+              <!-- Disabled, not hidden, in the Applications mode: the sidebar belongs to the
+                   Resources explorer, and a control that vanished would move the mode switch
+                   beside it under the pointer between two clicks. -->
               <ToggleButton Name="SidebarToggleButton" Classes="chip" Padding="5" VerticalAlignment="Center"
                             IsChecked="{Binding IsSidebarVisible, Mode=TwoWay}"
+                            IsEnabled="{Binding IsResourcesMode}"
                             cmd:CommandTip.Text="Show or hide the resource sidebar"
                             cmd:CommandTip.Command="ToggleSidebar">
                 <PathIcon Data="{OnPlatform Default={StaticResource SidebarToggleIconGeometry}, macOS={StaticResource SidebarToggleMacIconGeometry}}"
                           Width="14" Height="14" />
               </ToggleButton>
+
+              <!-- The mode switch: two ways into the same cluster tab. Left of the cluster
+                   tabs, because it applies to whichever tab is in front, and a segmented
+                   ListBox (the inspector strip's own control) bound by index — one value,
+                   no toggling command beside it (UI rule 8b). It needs the User role like
+                   every other control in the bar, or the caption would swallow its clicks
+                   (UI rules 12 and 15). -->
+              <ListBox Name="ModeSwitch" Classes="segmented modeSwitch" VerticalAlignment="Center" Margin="4,0,0,0"
+                       SelectedIndex="{Binding ModeIndex, Mode=TwoWay}"
+                       chrome:WindowDecorationProperties.ElementRole="User">
+                <ListBoxItem Name="ApplicationsModeItem" cmd:CommandTip.Text="Applications: every app's health and why"
+                             cmd:CommandTip.Command="ShowApplications">
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <PathIcon Data="{StaticResource ApplicationsIconGeometry}" Width="12" Height="12" />
+                    <TextBlock Text="Applications" FontSize="12" VerticalAlignment="Center" />
+                  </StackPanel>
+                </ListBoxItem>
+                <ListBoxItem Name="ResourcesModeItem" cmd:CommandTip.Text="Resources: kinds, lists and the inspector"
+                             cmd:CommandTip.Command="ShowResources">
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <PathIcon Data="{StaticResource LayersIconGeometry}" Width="12" Height="12" />
+                    <TextBlock Text="Resources" FontSize="12" VerticalAlignment="Center" />
+                  </StackPanel>
+                </ListBoxItem>
+              </ListBox>
 
               <Rectangle Width="1" Height="18" Margin="2,0,4,0" VerticalAlignment="Center"
                          Fill="{StaticResource CardBorderBrush}" />
@@ -308,7 +340,10 @@
       </Border>
 
       <Grid Margin="16">
-        <ContentControl Content="{Binding SelectedTab}" IsVisible="{Binding SelectedTab, Converter={x:Static aconv:ObjectConverters.IsNotNull}}" />
+        <!-- Both modes of the selected tab, one hidden: switching modes must not restart a
+             watch or drop list and inspector state, so neither view is torn down. -->
+        <ContentControl Content="{Binding SelectedTab}" IsVisible="{Binding ShowsResources}" />
+        <ContentControl Content="{Binding SelectedTab.Applications}" IsVisible="{Binding ShowsApplications}" />
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10"
                     IsVisible="{Binding SelectedTab, Converter={x:Static aconv:ObjectConverters.IsNull}}">
 
