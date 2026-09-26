@@ -623,7 +623,7 @@ public sealed partial class ApplicationPageViewModel : ObservableObject
         }
 
         ApplicationsViewModel.Sync(Pods, target);
-        Pods[0].SetMergedCount(facts.Count(p => p.IsLive));
+        Pods[0].SetMergedCount(facts.Count);
         if (SelectedPod is { IsMerged: false } selected && !Pods.Contains(selected))
         {
             SelectedPod = Pods[0];
@@ -658,9 +658,23 @@ public sealed partial class ApplicationPageViewModel : ObservableObject
         {
             var diff = PodTemplateDiff.Compare(pair.Previous, pair.Current);
             var when = pair.Current.CreationTimestamp is { } at ? $", {AppTime.Ago(entry.Input.Now, at)}" : "";
-            var label = entry.Argo is { History.Count: > 0 } argo
-                ? ApplicationRules.RevisionLabel(argo.History[0].Revision, ApplicationRules.IsChartSource(argo))
-                : $"rev {diff.CurrentRevision}";
+            // The Argo revision names this deploy only when it is the one that created the
+            // ReplicaSet: the newest history entry within a minute before it, or the sync
+            // running now. Otherwise the ReplicaSet came from something else (a restart, a
+            // manual edit) and its own revision is the honest name.
+            var label = $"rev {diff.CurrentRevision}";
+            if (entry.Argo is { } argo && pair.Current.CreationTimestamp is { } created)
+            {
+                if (argo.History.FirstOrDefault(h => h.DeployedAt is { } d
+                        && created - d >= TimeSpan.FromSeconds(-5) && created - d <= ApplicationTimeline.DeployMergeWindow) is { } sync)
+                {
+                    label = ApplicationRules.RevisionLabel(sync.Revision, ApplicationRules.IsChartSource(argo));
+                }
+                else if (argo.IsOperationRunning && argo.ShortRevision.Length > 0)
+                {
+                    label = $"{argo.ShortRevision} (sync in progress)";
+                }
+            }
             ChangeTitle = diff.Changes.Count == 0
                 ? $"Revision {diff.CurrentRevision}{when} changed nothing in the pod template the page compares."
                 : $"Started with deploy {label}{when}. The pod template changed:";
