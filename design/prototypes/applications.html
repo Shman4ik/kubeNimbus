@@ -1,0 +1,993 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Applications prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --desk: #e4e4e4; --bg: #f3f3f3; --shell: #ebebeb; --surface: #ffffff; --surface-2: #f6f6f6;
+  --line: #dcdcdc; --line-soft: #ececec; --hover: rgba(128,128,128,.10); --seg: rgba(128,128,128,.14);
+  --text: #1b1b1b; --muted: #5f5f5f; --faint: #8a8a8a;
+  --accent: #2d7ff9; --accent-text: #1e63d6; --accent-wash: rgba(45,127,249,.11);
+  --danger: #e5484d; --danger-text: #c2363b; --danger-wash: rgba(229,72,77,.11);
+  --warn: #d9822b; --warn-text: #a85d12; --warn-wash: rgba(217,130,43,.13);
+  --ok: #46a758; --ok-text: #2f7d3e; --ok-wash: rgba(70,167,88,.13);
+  --log-bg: #fafafa; --shadow: 0 1px 2px rgba(0,0,0,.10), 0 4px 14px rgba(0,0,0,.06);
+  --mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --desk: #141414; --bg: #202020; --shell: #1b1b1b; --surface: #2a2a2a; --surface-2: #252525;
+    --line: #3a3a3a; --line-soft: #323232; --hover: rgba(128,128,128,.14); --seg: rgba(128,128,128,.18);
+    --text: #f0f0f0; --muted: #a9a9a9; --faint: #7d7d7d;
+    --accent-text: #7fb1ff; --accent-wash: rgba(45,127,249,.18);
+    --danger-text: #ff8b8f; --danger-wash: rgba(229,72,77,.18);
+    --warn-text: #f2ab63; --warn-wash: rgba(217,130,43,.20);
+    --ok-text: #74c784; --ok-wash: rgba(70,167,88,.20);
+    --log-bg: #1d1d1d; --shadow: 0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --desk: #141414; --bg: #202020; --shell: #1b1b1b; --surface: #2a2a2a; --surface-2: #252525;
+  --line: #3a3a3a; --line-soft: #323232; --hover: rgba(128,128,128,.14); --seg: rgba(128,128,128,.18);
+  --text: #f0f0f0; --muted: #a9a9a9; --faint: #7d7d7d;
+  --accent-text: #7fb1ff; --accent-wash: rgba(45,127,249,.18);
+  --danger-text: #ff8b8f; --danger-wash: rgba(229,72,77,.18);
+  --warn-text: #f2ab63; --warn-wash: rgba(217,130,43,.20);
+  --ok-text: #74c784; --ok-wash: rgba(70,167,88,.20);
+  --log-bg: #1d1d1d; --shadow: 0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.35);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--desk); color: var(--text); font: 13px/1.45 Inter, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; overflow-x: auto; }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+kbd { font: 11px/1 var(--mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 2px 5px; color: var(--muted); background: var(--surface); }
+
+/* prototype chrome (not part of the product) */
+.proto { display: flex; align-items: center; gap: 14px; max-width: 1440px; min-width: 1040px; margin: 0 auto; padding: 9px 16px 0; color: var(--muted); font-size: 12px; }
+.proto b { color: var(--text); font-weight: 600; }
+.proto .spacer { flex: 1; }
+.proto button.plain { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 3px 10px; }
+
+.window { max-width: 1440px; min-width: 1040px; height: calc(100vh - 52px); min-height: 700px; margin: 8px auto 12px; display: grid; grid-template-rows: 40px minmax(0,1fr); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: var(--shadow); }
+.cmdbar { display: flex; align-items: center; gap: 6px; padding: 0 8px; background: var(--shell); border-bottom: 1px solid var(--line); }
+.ib { width: 32px; height: 28px; border: 0; background: transparent; border-radius: 6px; color: var(--muted); font-size: 15px; display: grid; place-items: center; }
+.ib:hover { background: var(--hover); color: var(--text); }
+.seg { display: inline-flex; background: var(--seg); border-radius: 7px; padding: 2px; gap: 2px; }
+.seg button { border: 0; background: transparent; padding: 3px 11px; border-radius: 5px; color: var(--muted); font-weight: 500; white-space: nowrap; }
+.seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.14); }
+.seg button:disabled { opacity: .45; cursor: default; }
+.tabs { display: flex; align-items: center; gap: 2px; margin-left: 10px; }
+.ctab { height: 28px; padding: 0 12px; display: flex; align-items: center; gap: 7px; border-radius: 6px; color: var(--muted); cursor: pointer; }
+.ctab.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.env { width: 8px; height: 8px; border-radius: 50%; }
+.env.prod { background: var(--danger); } .env.stg { background: var(--warn); }
+.spacer { flex: 1; }
+.searchpill { width: 250px; height: 28px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--line); color: var(--faint); display: flex; align-items: center; justify-content: space-between; padding: 0 6px 0 12px; }
+
+main.view { overflow: auto; padding: 18px 24px 28px; min-height: 0; }
+main.view[hidden] { display: none; }
+
+/* applications list */
+.titleline { display: flex; align-items: baseline; gap: 12px; }
+h1 { margin: 0; font-size: 20px; letter-spacing: -.01em; font-weight: 650; }
+.muted { color: var(--muted); }
+.faint { color: var(--faint); }
+.live { display: inline-flex; align-items: center; gap: 6px; }
+.live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+.filters { display: flex; align-items: center; gap: 10px; margin: 14px 0 12px; flex-wrap: wrap; }
+.search { display: flex; align-items: center; gap: 8px; width: 320px; height: 32px; padding: 0 6px 0 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+.search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-wash); }
+.search input { flex: 1; border: 0; outline: 0; background: transparent; min-width: 0; }
+.search svg { flex: none; color: var(--faint); }
+.chip { height: 28px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); padding: 0 11px; color: var(--muted); display: inline-flex; align-items: center; gap: 7px; }
+.chip:hover { color: var(--text); }
+.chip.on { background: var(--accent-wash); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+.chip .n { font-size: 11px; font-weight: 600; min-width: 18px; padding: 0 5px; height: 17px; border-radius: 9px; background: var(--seg); display: inline-grid; place-items: center; }
+.chip.on .n { background: var(--accent); color: #fff; }
+.chip.attn .n { background: var(--danger); color: #fff; }
+
+.table { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.cols { display: grid; grid-template-columns: 128px minmax(260px,1fr) 104px 128px 78px 176px 104px; gap: 0 12px; align-items: center; padding: 0 14px; }
+.thead { height: 32px; color: var(--muted); font-size: 12px; font-weight: 600; border-bottom: 1px solid var(--line); }
+.group { padding: 10px 14px 6px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); background: var(--surface-2); border-bottom: 1px solid var(--line-soft); }
+.row { min-height: 54px; border-bottom: 1px solid var(--line-soft); cursor: pointer; }
+.row:last-child { border-bottom: 0; }
+.row:hover { background: var(--hover); }
+.row.sel { background: var(--accent-wash); box-shadow: inset 3px 0 0 var(--accent); }
+.nm { min-width: 0; padding: 8px 0; }
+.nm strong { font-weight: 600; font-size: 13.5px; }
+.nm .src { color: var(--faint); font-size: 12px; margin-left: 8px; }
+.nm .why { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; color: var(--muted); }
+.why.err { color: var(--danger-text); } .why.warn { color: var(--warn-text); } .why.prog { color: var(--accent-text); }
+.num { font-variant-numeric: tabular-nums; }
+.restarts.hot { color: var(--danger-text); font-weight: 600; }
+.deploy { font-size: 12.5px; white-space: nowrap; }
+.nm .l1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.deploy code { font: 12px var(--mono); }
+.deploy.fresh { color: var(--accent-text); font-weight: 600; }
+.pill { display: inline-flex; align-items: center; gap: 5px; height: 21px; padding: 0 8px; border-radius: 11px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pill.err { background: var(--danger-wash); color: var(--danger-text); }
+.pill.warn { background: var(--warn-wash); color: var(--warn-text); }
+.pill.prog { background: var(--accent-wash); color: var(--accent-text); }
+.pill.ok { background: var(--ok-wash); color: var(--ok-text); }
+.pill.none { background: var(--seg); color: var(--muted); }
+.pill.none::before { display: none; }
+.pods { display: flex; align-items: center; gap: 8px; }
+.sq { display: inline-flex; gap: 2px; flex-wrap: wrap; max-width: 70px; }
+.sq i { width: 8px; height: 8px; border-radius: 2px; background: var(--ok); }
+.sq i.err { background: var(--danger); } .sq i.warn { background: var(--warn); } .sq i.miss { background: transparent; box-shadow: inset 0 0 0 1.5px var(--faint); }
+.empty { padding: 34px; text-align: center; color: var(--muted); }
+.hint { margin-top: 12px; font-size: 12px; color: var(--faint); display: flex; gap: 16px; }
+
+/* application page */
+.back { border: 0; background: none; color: var(--accent-text); padding: 2px 0; font-weight: 500; }
+.apptop { display: flex; align-items: flex-start; gap: 16px; margin: 6px 0 14px; }
+.apptop .t { flex: 1; min-width: 0; }
+.titlerow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.meta { color: var(--muted); margin-top: 4px; font-size: 12.5px; }
+.meta code { font: 12px var(--mono); }
+.actions { display: flex; gap: 8px; flex: none; }
+.btn { height: 30px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); display: inline-flex; align-items: center; gap: 6px; }
+.btn:hover { background: var(--hover); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn.link { border-color: transparent; background: transparent; color: var(--accent-text); }
+
+.strip { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 8px; border: 1px solid; margin: 0 0 14px; }
+.strip[hidden] { display: none; }
+.strip .msg { flex: 1; }
+.strip.info { background: var(--accent-wash); border-color: var(--accent); }
+.strip.warn { background: var(--warn-wash); border-color: var(--warn); }
+.strip.ok { background: var(--ok-wash); border-color: var(--ok); }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.cardhead { display: flex; align-items: baseline; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line-soft); }
+.cardhead h2 { margin: 0; font-size: 13.5px; font-weight: 650; }
+.cardhead .faint { font-size: 12px; }
+.finding { display: grid; grid-template-columns: 4px minmax(0,1fr); gap: 12px; padding: 10px 14px 11px 0; border-bottom: 1px solid var(--line-soft); }
+.finding:last-child { border-bottom: 0; }
+.finding .bar { border-radius: 0 3px 3px 0; background: var(--faint); }
+.finding.err .bar { background: var(--danger); } .finding.warn .bar { background: var(--warn); } .finding.info .bar { background: var(--accent); } .finding.ok .bar { background: var(--ok); }
+.finding .ft { font-weight: 600; }
+.finding .fd { color: var(--muted); margin-top: 2px; }
+.ev { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.ev code { font: 11.5px/1.4 var(--mono); background: var(--surface-2); border: 1px solid var(--line-soft); border-radius: 4px; padding: 2px 6px; color: var(--muted); }
+.ev a { font-size: 12px; color: var(--accent-text); text-decoration: none; align-self: center; }
+.ev a:hover { text-decoration: underline; }
+.diff { font: 12px/1.6 var(--mono); margin-top: 6px; }
+.diff .old { color: var(--danger-text); text-decoration: line-through; }
+.diff .new { color: var(--ok-text); }
+
+main.view.app { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 16px; }
+.appgrid { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(360px, 430px) minmax(0,1fr); gap: 12px; }
+.colL { min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 2px; }
+.colR { min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+.tl { padding: 10px 14px 12px; flex: none; }
+.tlhead { display: flex; gap: 12px; align-items: baseline; font-size: 12px; }
+.tlhead h2 { margin: 0; font-size: 13.5px; font-weight: 650; }
+.legend { display: flex; gap: 12px; margin-left: auto; color: var(--faint); }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.axis { position: relative; height: 46px; margin: 8px 6px 0; }
+.axis .line { position: absolute; left: 0; right: 0; top: 22px; height: 1px; background: var(--line); }
+.axis .tick { position: absolute; top: 30px; font-size: 11px; color: var(--faint); transform: translateX(-50%); white-space: nowrap; }
+.axis .tick:first-of-type { transform: none; }
+.mk { position: absolute; top: 17px; width: 11px; height: 11px; transform: translateX(-50%); border-radius: 50%; border: 2px solid var(--surface); }
+.mk.restart { background: var(--danger); }
+.mk.warn { background: var(--warn); }
+.mk.log { background: var(--warn); border-radius: 2px; }
+.mk.deploy { top: 2px; width: 2px; height: 30px; border: 0; border-radius: 0; background: var(--accent); }
+.mk.deploy b { position: absolute; left: 6px; top: -2px; font: 600 11px/1.2 var(--mono); color: var(--accent-text); white-space: nowrap; background: var(--surface); padding-right: 3px; }
+.lg-deploy { width: 2px; height: 11px; background: var(--accent); display: inline-block; }
+.lg-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.nothing { font-size: 12px; color: var(--faint); position: absolute; top: 4px; left: 50%; transform: translateX(-50%); background: var(--surface); padding: 0 8px; }
+
+.finding .fd { font-size: 12.5px; }
+.podrow { display: grid; grid-template-columns: 10px minmax(0,1fr) auto; gap: 9px; align-items: center; padding: 8px 14px; cursor: pointer; border-bottom: 1px solid var(--line-soft); }
+.podrow:hover { background: var(--hover); }
+.podrow.sel { background: var(--accent-wash); box-shadow: inset 3px 0 0 var(--accent); }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); }
+.dot.err { background: var(--danger); } .dot.warn { background: var(--warn); } .dot.miss { background: transparent; box-shadow: inset 0 0 0 1.5px var(--faint); }
+.podrow .pn { font: 12px var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.podrow .ps { font-size: 12px; color: var(--muted); }
+.podrow .ps.err { color: var(--danger-text); } .podrow .ps.warn { color: var(--warn-text); }
+.podrow .pr { font-size: 11.5px; color: var(--faint); text-align: right; white-space: nowrap; }
+.ghost { padding: 8px 14px 8px 33px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line-soft); font-style: italic; }
+.sub { padding: 12px 14px 4px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+.linked { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 14px 14px; }
+.linked button { border: 1px solid var(--line); background: var(--surface-2); border-radius: 5px; padding: 3px 8px; font-size: 12px; color: var(--muted); }
+.linked button:hover { color: var(--text); border-color: var(--faint); }
+.linked button b { color: var(--text); font-weight: 500; }
+
+.tree { padding: 6px 0 10px; }
+.node { display: flex; align-items: center; gap: 8px; padding: 5px 14px; cursor: pointer; white-space: nowrap; }
+.node:hover { background: var(--hover); }
+.node.sel { background: var(--accent-wash); box-shadow: inset 3px 0 0 var(--accent); }
+.node .k { color: var(--faint); font-size: 11.5px; }
+.node .n { font: 12px var(--mono); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.node .m { margin-left: auto; font-size: 11.5px; color: var(--faint); padding-left: 8px; }
+.node.ghostn { cursor: default; font-style: italic; color: var(--muted); font-size: 12px; }
+
+.logs { display: flex; flex-direction: column; min-width: 0; flex: 1; min-height: 0; }
+.logtools { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--line-soft); flex-wrap: wrap; }
+.logtools .src { font: 12px var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+.logtools .search { width: 190px; height: 28px; }
+.toggle { height: 28px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); padding: 0 10px; color: var(--muted); }
+.toggle.on { background: var(--danger-wash); border-color: var(--danger); color: var(--danger-text); font-weight: 600; }
+.follow { font-size: 12px; color: var(--ok-text); display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.follow::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+.logbody { flex: 1; min-height: 0; overflow: auto; background: var(--log-bg); font: 12px/1.6 var(--mono); padding: 8px 0; border-radius: 0 0 8px 8px; }
+.ll { display: grid; grid-template-columns: 70px minmax(0,1fr); gap: 10px; padding: 0 12px; }
+.ll.withpod { grid-template-columns: 70px 108px minmax(0,1fr); }
+.ll:hover { background: var(--hover); }
+.ll .ts { color: var(--faint); }
+.ll .po { color: var(--accent-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ll .tx { white-space: pre-wrap; word-break: break-word; }
+.ll.err .tx { color: var(--danger-text); }
+.ll.warn .tx { color: var(--warn-text); }
+.rep { display: inline-block; font-size: 10.5px; font-weight: 600; padding: 0 5px; margin-left: 6px; border-radius: 8px; background: var(--seg); color: var(--muted); }
+.exitline { margin: 6px 12px; padding: 5px 10px; border-radius: 5px; background: var(--danger-wash); color: var(--danger-text); font-family: Inter, "Segoe UI", sans-serif; font-size: 12px; font-weight: 600; }
+.logempty { padding: 40px 30px; text-align: center; font-family: Inter, "Segoe UI", sans-serif; }
+.logempty b { display: block; font-size: 14px; margin-bottom: 6px; }
+.logempty p { margin: 0 auto; max-width: 460px; color: var(--muted); }
+
+/* resources placeholder */
+.placeholder { max-width: 640px; margin: 80px auto; text-align: center; color: var(--muted); }
+.placeholder h1 { color: var(--text); margin-bottom: 10px; }
+
+/* notes drawer + toast */
+.notes { position: fixed; top: 0; right: 0; bottom: 0; width: 410px; max-width: 92vw; background: var(--surface); border-left: 1px solid var(--line); box-shadow: var(--shadow); padding: 18px 22px 30px; overflow: auto; z-index: 20; font-size: 13px; }
+.notes[hidden] { display: none; }
+.notes h2 { font-size: 15px; margin: 18px 0 6px; }
+.notes h2:first-of-type { margin-top: 4px; }
+.notes ul { margin: 0; padding-left: 18px; }
+.notes li { margin: 5px 0; }
+.notes .close { float: right; }
+.toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(10px); background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 12.5px; opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s; z-index: 30; max-width: 80vw; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<div class="proto">
+  <span><b>Prototype</b> · Applications mode · demo-cluster data, no requests to Kubernetes</span>
+  <span class="spacer"></span>
+  <span>App page layout:</span>
+  <div class="seg" id="variant">
+    <button data-v="A" class="on" title="Findings and timeline on top, pods on the left, logs on the right">A · Pods + logs</button>
+    <button data-v="B" title="The same, with an Argo CD style resource tree in place of the pod list">B · Resource tree</button>
+  </div>
+  <button class="plain" id="notesBtn">Notes (RU)</button>
+</div>
+
+<div class="window">
+  <header class="cmdbar">
+    <button class="ib" title="Menu">&#9776;</button>
+    <div class="seg" id="mode">
+      <button data-mode="apps" class="on">Applications</button>
+      <button data-mode="res">Resources</button>
+    </div>
+    <div class="tabs">
+      <div class="ctab on"><span class="env prod"></span>prod-eu</div>
+      <div class="ctab"><span class="env stg"></span>staging</div>
+      <button class="ib" title="Open a cluster">+</button>
+    </div>
+    <div class="spacer"></div>
+    <div class="searchpill">Search or run a command <kbd>Ctrl K</kbd></div>
+    <button class="ib" id="themeBtn" title="Toggle theme">&#9680;</button>
+    <button class="ib" title="Preferences">&#9881;</button>
+    <button class="ib" title="Help">?</button>
+  </header>
+
+  <!-- Applications list: the first screen -->
+  <main class="view" id="listView">
+    <div class="titleline">
+      <h1>Applications</h1>
+      <span class="muted">prod-eu</span>
+      <span class="muted live">live</span>
+    </div>
+    <div class="filters">
+      <label class="search">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="q" placeholder="Filter by name or namespace" autocomplete="off" spellcheck="false">
+        <kbd>/</kbd>
+      </label>
+      <div id="chips" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+    </div>
+    <div class="table" id="table"></div>
+    <div class="hint"><span><kbd>/</kbd> filter</span><span><kbd>&uarr;</kbd><kbd>&darr;</kbd> move</span><span><kbd>Enter</kbd> open</span><span><kbd>Esc</kbd> back</span></div>
+  </main>
+
+  <!-- Application page -->
+  <main class="view app" id="appView" hidden>
+    <div><button class="back" id="backBtn">&lsaquo; Applications</button></div>
+    <div class="apptop">
+      <div class="t">
+        <div class="titlerow"><h1 id="aName"></h1><span id="aPills" style="display:flex;gap:6px"></span></div>
+        <div class="meta" id="aMeta"></div>
+      </div>
+      <div class="actions">
+        <button class="btn" data-act="restart">Restart&hellip;</button>
+        <button class="btn" data-act="sync">Sync&hellip;</button>
+        <button class="btn" data-act="edit">Edit YAML&hellip;</button>
+        <button class="btn link" data-act="argo">Open in Argo CD &#8599;</button>
+      </div>
+    </div>
+    <div class="strip" id="strip" hidden></div>
+    <div class="appgrid">
+     <div class="colL">
+      <section class="card" id="findings"></section>
+      <section class="card" id="left"></section>
+     </div>
+     <div class="colR">
+      <section class="card tl" id="timeline"></section>
+      <div class="card logs">
+        <div class="logtools">
+          <div class="seg" id="logTabs"></div>
+          <span class="src" id="logSrc"></span>
+          <label class="search"><input id="logQ" placeholder="Filter lines" spellcheck="false"></label>
+          <button class="toggle" id="errOnly" title="Show only warning and error lines">Errors only</button>
+          <span class="follow" id="follow">following</span>
+        </div>
+        <div class="logbody" id="logBody"></div>
+      </div>
+     </div>
+    </div>
+  </main>
+
+  <!-- Resources mode: the current explorer -->
+  <main class="view" id="resView" hidden>
+    <div class="placeholder">
+      <h1>Resources</h1>
+      <p>This is today's explorer, unchanged: the sidebar of kinds, the list, the inspector dock. It stays one click away for anything the Applications page does not answer.</p>
+      <p>Drilling down from an application (a linked Service, a ConfigMap, a node) lands here with that object selected.</p>
+    </div>
+  </main>
+</div>
+
+<aside class="notes" id="notes" hidden>
+  <button class="btn close" id="notesClose">Закрыть</button>
+  <h2>Что проверяет прототип</h2>
+  <ul>
+    <li><b>Первый экран — список приложений</b> (твой ответ 3). Нездоровые сверху; вторая строка — причина одной фразой, детерминированно из статусов и events.</li>
+    <li><b>Приложение</b> = Argo Application; без Argo — Deployment / StatefulSet / Job (группа «Not in Argo CD»). Состав — из ссылок в spec, а не из меток.</li>
+    <li><b>«Deployed &lt; 1 h»</b> — сценарий «после деплоя всё зелёное?» одним кликом.</li>
+    <li><b>Что поменялось</b> — без своей истории и без API Argo: <code>status.history</code> (SHA и время), разница pod template между старым и новым ReplicaSet, events Application. Ссылка на compare коммитов открывает git-хостинг.</li>
+    <li><b>CrashLoop</b> — сразу выбран падающий pod и его последний запуск, в конце строка с exit code.</li>
+    <li><b>Логов нет</b> — отдельное состояние с причиной (fraud-detector, settlement-batch).</li>
+    <li><b>selfHeal</b> — Edit YAML предупреждает, что Argo откатит правку, и ведёт в Git.</li>
+    <li>URL Argo UI для «Open in Argo CD» можно взять из <code>argocd-cm</code> → <code>data.url</code>, если его разрешено читать.</li>
+  </ul>
+  <h2>Открытые вопросы</h2>
+  <ul>
+    <li><b>A или B</b> — поды списком или дерево как в Argo? Переключатель вверху.</li>
+    <li><b>Что вверху страницы</b> — здесь «What's wrong» и лента за час. Или логи сразу на всю высоту?</li>
+    <li><b>Кластеры</b> — вкладки оставлены как сейчас. Альтернатива: один список по всем кластерам с колонкой Cluster.</li>
+    <li><b>Режим Resources</b> — переключатель в command bar или просто drill-down со страницы приложения?</li>
+  </ul>
+  <h2>Что попробовать</h2>
+  <ul>
+    <li>Открыть <b>checkout</b>: падающий pod, нехватка quota, что поменялось в шаблоне.</li>
+    <li>Открыть <b>fraud-detector</b>: нет логов, почему pod не запланирован.</li>
+    <li>Нажать <b>Edit YAML…</b> на Argo-приложении.</li>
+    <li>Клавиатура: <kbd>/</kbd>, стрелки, <kbd>Enter</kbd>, <kbd>Esc</kbd>.</li>
+  </ul>
+</aside>
+<div class="toast" id="toast"></div>
+
+<script>
+// ---------------------------------------------------------------- sample data
+// Derived from the demo cluster (src/KubeNimbus.App/Demo/Fixtures). "now" is 08:56.
+const NOW_MIN = 8 * 60 + 56;
+const REPO = 'github.com/example-org/platform-manifests';
+
+const L = (ts, text, lv = '', rep = 0) => ({ ts, text, lv, rep });
+
+const APPS = [
+  {
+    id: 'checkout', name: 'checkout', argo: true, ns: 'payments', health: 'Degraded', sync: 'Synced',
+    source: 'apps/checkout/overlays/prod', rev: '8f3c1d9', prevRev: '5d27ea0', deployedMin: 12, deployedText: '12 min ago',
+    selfHeal: true, workload: 'Deployment checkout-worker',
+    pods: { ready: 1, desired: 4, sq: ['ok', 'err', 'miss', 'miss'] }, restarts: 6,
+    why: 'Crash-looping (exit 1) · 2 pods not created: namespace quota', whySev: 'err',
+    findings: [
+      { sev: 'err', title: '1 pod is crash-looping',
+        detail: 'Container worker in checkout-worker-5d8f7b9c4-qz9pl exits with code 1 a few seconds after start. 6 restarts since the deploy; next attempt in about 3 min.',
+        ev: ['lastState.terminated: Error, exit 1, 08:54:36', 'Event BackOff ×9'] },
+      { sev: 'err', title: '2 of 4 pods were never created',
+        detail: 'The namespace quota is used up, so the new ReplicaSet cannot create the rest of its pods.',
+        ev: ['Event FailedCreate on ReplicaSet checkout-worker-5d8f7b9c4 ×3', 'exceeded quota: payments-quota, requested limits.memory=512Mi, used 3584Mi, limited 4Gi'] },
+      { sev: 'info', title: 'Started with deploy 8f3c1d9, 12 min ago. The pod template changed:',
+        diff: [['image', 'checkout-worker:9.0.0', 'checkout-worker:9.0.1'], ['env PAYMENT_GATEWAY_URL', 'from ConfigMap checkout-config', 'removed']],
+        ev: ['ReplicaSet 7b4c6d8f5 (rev 5d27ea0) vs 5d8f7b9c4 (rev 8f3c1d9)'], compare: true },
+      { sev: 'warn', title: 'The old version still serves traffic alone',
+        detail: '1 pod of the previous ReplicaSet (rev 5d27ea0) is Ready; the rollout cannot finish while the new pods fail.',
+        ev: ['Deployment condition Progressing: ReplicaSetUpdated'] },
+    ],
+    prevDeploy: '5d27ea0 · 4 days ago',
+    timeline: [
+      { t: -12, k: 'deploy', label: '8f3c1d9' }, { t: -11.8, k: 'warn', label: 'FailedCreate ×3 (quota)' },
+      { t: -11.5, k: 'restart', label: 'Restart 1' }, { t: -11.2, k: 'restart', label: 'Restart 2' },
+      { t: -10.5, k: 'restart', label: 'Restart 3' }, { t: -9.2, k: 'restart', label: 'Restart 4' },
+      { t: -6.5, k: 'restart', label: 'Restart 5' }, { t: -1.5, k: 'restart', label: 'Restart 6' },
+    ],
+    podList: [
+      { id: 'qz9pl', name: 'checkout-worker-5d8f7b9c4-qz9pl', sev: 'err', state: 'CrashLoopBackOff', ready: '0/1', restarts: 6, rev: '8f3c1d9', age: '12m', crash: true,
+        last: [L('08:54:31', 'checkout-worker 9.0.1 starting, queue=checkout-events group=workers-a'), L('08:54:31', 'loading config from /etc/checkout/config.yaml'), L('08:54:32', 'subscribed to 12 partitions'), L('08:54:36', 'payment gateway client: missing required setting PAYMENT_GATEWAY_URL', 'err'), L('08:54:36', 'fatal: configuration invalid (1 error), exiting', 'err')],
+        lastExit: 'Container worker exited with code 1 (Error) at 08:54:36 · restart 6 · next attempt ~08:59',
+        before: [L('08:49:31', 'checkout-worker 9.0.1 starting, queue=checkout-events group=workers-a'), L('08:49:31', 'loading config from /etc/checkout/config.yaml'), L('08:49:32', 'subscribed to 12 partitions'), L('08:49:36', 'payment gateway client: missing required setting PAYMENT_GATEWAY_URL', 'err'), L('08:49:36', 'fatal: configuration invalid (1 error), exiting', 'err')],
+        beforeExit: 'Container worker exited with code 1 (Error) at 08:49:36 · restart 5' },
+      { id: 'hx2vd', name: 'checkout-worker-7b4c6d8f5-hx2vd', sev: 'ok', state: 'Running', ready: '1/1', restarts: 0, rev: '5d27ea0', age: '4d',
+        last: [L('08:52:02', 'processed order 8812-4471 in 61ms'), L('08:52:04', 'processed order 8812-4472 in 44ms'), L('08:52:09', 'WARN payment gateway latency above threshold (912ms, budget 500ms)', 'warn', 12), L('08:53:12', 'processed order 8812-4473 in 58ms'), L('08:54:31', 'committed offsets for 12 partitions'), L('08:55:40', 'processed order 8812-4474 in 52ms')] },
+    ],
+    ghosts: ['2 pods not created (payments-quota exhausted)'],
+    linked: ['Service checkout-worker', 'ConfigMap checkout-config', 'HorizontalPodAutoscaler checkout-worker', 'PodDisruptionBudget checkout-worker', 'ServiceAccount checkout'],
+    tree: [
+      { k: 'Deployment', n: 'checkout-worker', m: '1/4', sev: 'err', all: true, kids: [
+        { k: 'ReplicaSet', n: 'checkout-worker-5d8f7b9c4', m: 'rev 8f3c1d9 · 0/3', sev: 'err', kids: [{ pod: 'qz9pl' }, { ghost: '2 pods not created · quota' }] },
+        { k: 'ReplicaSet', n: 'checkout-worker-7b4c6d8f5', m: 'rev 5d27ea0 · 1/1', sev: 'ok', kids: [{ pod: 'hx2vd' }] } ] },
+      { k: 'Service', n: 'checkout-worker', m: '1 endpoint', sev: 'warn' },
+      { k: 'ConfigMap', n: 'checkout-config', sev: 'ok' },
+      { k: 'HorizontalPodAutoscaler', n: 'checkout-worker', m: 'min 4 · max 10', sev: 'ok' },
+      { k: 'PodDisruptionBudget', n: 'checkout-worker', m: 'maxUnavailable 1', sev: 'ok' },
+    ],
+    defaultPod: 'qz9pl', defaultMode: 'last',
+  },
+  {
+    id: 'fraud', name: 'fraud-detector', argo: true, ns: 'payments', health: 'Degraded', sync: 'Synced',
+    source: 'apps/fraud-detector/overlays/prod', rev: '8f3c1d9', prevRev: '5d27ea0', deployedMin: 12, deployedText: '12 min ago',
+    selfHeal: true, workload: 'Deployment fraud-detector',
+    pods: { ready: 0, desired: 2, sq: ['warn', 'warn'] }, restarts: 0,
+    why: '0 of 2 pods scheduled: Insufficient cpu', whySev: 'err',
+    findings: [
+      { sev: 'err', title: 'No pod is running: none can be scheduled',
+        detail: 'Both pods are Pending. The scheduler reports 0/3 nodes available: 2 have too little free cpu, 1 is tainted for disk pressure.',
+        ev: ['Event FailedScheduling ×5', '0/3 nodes are available: 1 node(s) had untolerated taint {node.kubernetes.io/disk-pressure}, 2 Insufficient cpu'] },
+      { sev: 'info', title: 'Started with deploy 8f3c1d9, 12 min ago. The pod template changed:',
+        diff: [['requests.cpu', '500m', '2'], ['limits.cpu', '1', '2']],
+        ev: ['ReplicaSet 4b8e2c7d1 (rev 5d27ea0) vs 6c7d9f8b5 (rev 8f3c1d9)'], compare: true },
+      { sev: 'warn', title: 'The old pods were removed first',
+        detail: 'The Deployment uses strategy Recreate, so the previous version stopped before the new one could be placed. Nothing serves this app right now.',
+        ev: ['spec.strategy.type: Recreate'] },
+    ],
+    prevDeploy: '5d27ea0 · 4 days ago',
+    timeline: [{ t: -12, k: 'deploy', label: '8f3c1d9' }, { t: -11.7, k: 'warn', label: 'FailedScheduling' }, { t: -10, k: 'warn', label: 'FailedScheduling' }, { t: -7, k: 'warn', label: 'FailedScheduling' }, { t: -4, k: 'warn', label: 'FailedScheduling' }, { t: -1, k: 'warn', label: 'FailedScheduling' }],
+    podList: [
+      { id: '2n8wt', name: 'fraud-detector-6c7d9f8b5-2n8wt', sev: 'warn', state: 'Pending', ready: '0/1', restarts: 0, rev: '8f3c1d9', age: '12m', last: [] },
+      { id: '7jq4x', name: 'fraud-detector-6c7d9f8b5-7jq4x', sev: 'warn', state: 'Pending', ready: '0/1', restarts: 0, rev: '8f3c1d9', age: '12m', last: [] },
+    ],
+    noLogs: { title: 'No logs: no container has started', text: 'Both pods are Pending, waiting for a node. Logs appear once a container starts; the reason it has not is under What’s wrong.' },
+    linked: ['Service fraud-detector', 'ConfigMap fraud-rules', 'Node demo-worker-2 (DiskPressure)'],
+    tree: [{ k: 'Deployment', n: 'fraud-detector', m: '0/2', sev: 'err', all: true, kids: [{ k: 'ReplicaSet', n: 'fraud-detector-6c7d9f8b5', m: 'rev 8f3c1d9 · 0/2', sev: 'err', kids: [{ pod: '2n8wt' }, { pod: '7jq4x' }] }] }, { k: 'Service', n: 'fraud-detector', m: '0 endpoints', sev: 'err' }, { k: 'ConfigMap', n: 'fraud-rules', sev: 'ok' }],
+    defaultMode: 'all',
+  },
+  {
+    id: 'settle', name: 'settlement-batch', argo: true, ns: 'payments', health: 'Missing', sync: 'OutOfSync',
+    source: 'apps/settlement-batch/overlays/prod', rev: null, deployedMin: null, deployedText: 'never synced',
+    selfHeal: true, workload: 'CronJob settlement-batch',
+    pods: { ready: 0, desired: 0, sq: [] }, restarts: 0,
+    why: 'Sync failed: CronJob batch/v1beta1 is not served by this cluster', whySev: 'err',
+    findings: [
+      { sev: 'err', title: 'CronJob settlement-batch was never created',
+        detail: 'Every sync fails: the manifest asks for batch/v1beta1, which Kubernetes 1.25+ no longer serves. The fix is apiVersion batch/v1 in Git.',
+        ev: ['status.operationState: Failed', 'no matches for kind "CronJob" in version "batch/v1beta1"'] },
+    ],
+    prevDeploy: 'no successful sync',
+    timeline: [{ t: -41, k: 'warn', label: 'Sync failed' }, { t: -11, k: 'warn', label: 'Sync failed' }],
+    podList: [], noLogs: { title: 'No logs: nothing was ever created', text: 'The CronJob does not exist in the cluster, so no Job or pod has run.' },
+    linked: [], tree: [{ k: 'CronJob', n: 'settlement-batch', m: 'Missing', sev: 'err' }, { k: 'ConfigMap', n: 'settlement-config', m: 'Missing', sev: 'err' }],
+    defaultMode: 'all',
+  },
+  {
+    id: 'risk', name: 'risk-scoring', argo: true, ns: 'payments', health: 'Unknown', sync: 'Unknown',
+    source: 'git.internal.example.org/platform/risk-scoring.git · deploy', rev: null, deployedMin: 190, deployedText: '3 h ago',
+    selfHeal: false, workload: 'Deployment risk-scoring',
+    pods: { ready: 2, desired: 2, sq: ['ok', 'ok'] }, restarts: 0,
+    why: 'Argo CD cannot reach its Git repository', whySev: 'warn',
+    findings: [
+      { sev: 'warn', title: 'Argo CD cannot compare this app with Git',
+        detail: 'The repository is unreachable from Argo, so Argo does not know what should run. What runs is found here by Argo’s tracking label and looks healthy.',
+        ev: ['condition ComparisonError: dial tcp 10.0.4.12:443: i/o timeout', 'label app.kubernetes.io/instance=risk-scoring'] },
+    ],
+    prevDeploy: 'last compared 3 h ago',
+    timeline: [],
+    podList: [
+      { id: 'k2x9p', name: 'risk-scoring-7d9c6b5f4-k2x9p', sev: 'ok', state: 'Running', ready: '1/1', restarts: 0, rev: '—', age: '6d', last: [L('08:51:10', 'scored 214 transactions (p99 38ms)'), L('08:53:10', 'scored 198 transactions (p99 41ms)'), L('08:55:10', 'scored 231 transactions (p99 36ms)')] },
+      { id: 'w7m3c', name: 'risk-scoring-7d9c6b5f4-w7m3c', sev: 'ok', state: 'Running', ready: '1/1', restarts: 0, rev: '—', age: '6d', last: [L('08:52:10', 'scored 205 transactions (p99 39ms)'), L('08:54:10', 'model cache refreshed (v42)'), L('08:55:40', 'scored 188 transactions (p99 35ms)')] },
+    ],
+    linked: ['Service risk-scoring'],
+    tree: [{ k: 'Deployment', n: 'risk-scoring', m: '2/2 · found by label', sev: 'ok', all: true, kids: [{ pod: 'k2x9p' }, { pod: 'w7m3c' }] }, { k: 'Service', n: 'risk-scoring', m: '2 endpoints', sev: 'ok' }],
+    defaultMode: 'all',
+  },
+  {
+    id: 'report', name: 'payment-service-report-generator', argo: false, ns: 'payments', health: 'Stalled', sync: null,
+    source: 'Deployment · not managed by Argo CD', rev: '8c1a4f2e91', deployedMin: 125, deployedText: '2 h ago',
+    workload: 'Deployment payment-service-report-generator',
+    pods: { ready: 2, desired: 3, sq: ['ok', 'ok', 'warn'] }, restarts: 0,
+    why: 'Rollout stalled for 2 h: the new pod never became Ready', whySev: 'warn',
+    findings: [
+      { sev: 'warn', title: 'Rollout stalled: the new pod never became Ready',
+        detail: 'The pod of the new ReplicaSet runs but fails its readiness probe, so the old pods keep serving. The Deployment gave up after its progress deadline.',
+        ev: ['condition Progressing: ProgressDeadlineExceeded', 'Readiness probe failed: HTTP probe failed with statuscode: 500 (/healthz)'] },
+      { sev: 'info', title: 'The pod template changed in this rollout:',
+        diff: [['image', 'report-generator:2.14.2', 'report-generator:2.14.3'], ['env BLOB_BUCKET', 'reports-prod', 'reports-prod-v2']],
+        ev: ['ReplicaSet 7f9c8d6bcd vs 8c1a4f2e91'] },
+    ],
+    prevDeploy: 'ReplicaSet 7f9c8d6bcd · 9 days ago',
+    timeline: [],
+    podList: [
+      { id: 'tq6rn', name: 'payment-service-report-generator-8c1a4f2e91-tq6rn', sev: 'warn', state: 'Running, not Ready', ready: '0/2', restarts: 0, rev: 'new', age: '2h',
+        last: [L('08:55:02', 'report-generator 2.14.3 up on :8080'), L('08:55:12', 'healthz: blob store check failed: bucket "reports-prod-v2" not found', 'err', 36), L('08:55:44', 'GET /healthz 500')] },
+      { id: 'x7k2m', name: 'payment-service-report-generator-7f9c8d6bcd-x7k2m', sev: 'ok', state: 'Running', ready: '2/2', restarts: 0, rev: 'old', age: '9d', last: [L('08:44:17', 'uploaded report daily-2026-07-20.pdf (1.9 MB)'), L('08:52:30', 'GET /healthz 200')] },
+      { id: 'm4v8s', name: 'payment-service-report-generator-7f9c8d6bcd-m4v8s', sev: 'ok', state: 'Running', ready: '2/2', restarts: 0, rev: 'old', age: '9d', last: [L('08:45:03', 'uploaded report weekly-2026-29.pdf (1.9 MB)'), L('08:53:30', 'GET /healthz 200')] },
+    ],
+    linked: ['Service report-generator', 'Secret blob-credentials'],
+    tree: [{ k: 'Deployment', n: 'payment-service-report-generator', m: '2/3', sev: 'warn', all: true, kids: [
+      { k: 'ReplicaSet', n: '…-8c1a4f2e91', m: 'new · 0/1', sev: 'warn', kids: [{ pod: 'tq6rn' }] },
+      { k: 'ReplicaSet', n: '…-7f9c8d6bcd', m: 'old · 2/2', sev: 'ok', kids: [{ pod: 'x7k2m' }, { pod: 'm4v8s' }] } ] }, { k: 'Service', n: 'report-generator', m: '2 endpoints', sev: 'ok' }],
+    defaultPod: 'tq6rn', defaultMode: 'last',
+  },
+  {
+    id: 'notify', name: 'notification-dispatcher', argo: true, ns: 'payments', health: 'Progressing', sync: 'OutOfSync',
+    source: 'apps/notification-dispatcher/overlays/prod', rev: 'a91e2b7', prevRev: '5d27ea0', deployedMin: 3, deployedText: '3 min ago',
+    selfHeal: true, workload: 'Deployment notification-dispatcher',
+    pods: { ready: 2, desired: 2, sq: ['ok', 'ok'] }, restarts: 0,
+    why: 'Rolling out a91e2b7 · 1 of 2 pods updated', whySev: 'prog',
+    findings: [
+      { sev: 'info', title: 'Rollout in progress: 1 of 2 pods on the new version', detail: 'Started 3 min ago; both pods are Ready, so nothing is down while it finishes.', ev: ['updatedReplicas 1 / 2'], compare: true },
+      { sev: 'warn', title: 'Errors in the logs of both versions', detail: 'The SMS provider throttles the dispatcher (HTTP 429), before and after the deploy — so this is not the new version’s doing.', ev: ['4 ERROR lines in 15 min, 2 pods'] },
+    ],
+    prevDeploy: '5d27ea0 · 4 days ago',
+    timeline: [{ t: -14, k: 'log', label: 'ERROR 429 in logs' }, { t: -9, k: 'log', label: 'ERROR 429 in logs' }, { t: -3, k: 'deploy', label: 'a91e2b7' }, { t: -2.2, k: 'log', label: 'ERROR 429 in logs' }, { t: -0.6, k: 'log', label: 'ERROR 429 in logs' }],
+    podList: [
+      { id: 'p2x7n', name: 'notification-dispatcher-6f4d8c2a1-p2x7n', sev: 'ok', state: 'Running', ready: '1/1', restarts: 0, rev: 'a91e2b7', age: '3m', last: [L('08:53:04', 'dispatcher up, providers=[email sms push]'), L('08:53:48', 'sent 12 notifications (email=9 sms=2 push=1)'), L('08:54:12', 'ERROR sms provider returned 429 Too Many Requests; backing off 30s', 'err'), L('08:55:24', 'ERROR sms provider returned 429 Too Many Requests; backing off 30s', 'err'), L('08:55:58', 'sms provider recovered')] },
+      { id: 'k9m3q', name: 'notification-dispatcher-8b6f5d7c9-k9m3q', sev: 'ok', state: 'Running', ready: '1/1', restarts: 0, rev: '5d27ea0', age: '4d', last: [L('08:42:38', 'ERROR sms provider returned 429 Too Many Requests; backing off 30s', 'err'), L('08:47:01', 'ERROR sms provider returned 429 Too Many Requests; backing off 30s', 'err'), L('08:49:18', 'sent 41 notifications (email=30 sms=7 push=4)'), L('08:55:19', 'sent 17 notifications (email=14 sms=3 push=0)')] },
+    ],
+    linked: ['Service notification-dispatcher', 'Secret sms-provider'],
+    tree: [{ k: 'Deployment', n: 'notification-dispatcher', m: '2/2 · updating', sev: 'prog', all: true, kids: [
+      { k: 'ReplicaSet', n: '…-6f4d8c2a1', m: 'rev a91e2b7 · 1/1', sev: 'ok', kids: [{ pod: 'p2x7n' }] },
+      { k: 'ReplicaSet', n: '…-8b6f5d7c9', m: 'rev 5d27ea0 · 1/1', sev: 'ok', kids: [{ pod: 'k9m3q' }] } ] }, { k: 'Service', n: 'notification-dispatcher', m: '2 endpoints', sev: 'ok' }],
+    defaultMode: 'all',
+  },
+  {
+    id: 'ledger', name: 'ledger-api', argo: true, ns: 'payments', health: 'Healthy', sync: 'OutOfSync',
+    source: 'apps/ledger-api/overlays/prod', rev: 'c41f0b8', deployedMin: 2900, deployedText: '2 days ago',
+    selfHeal: false, workload: 'Deployment ledger-api',
+    pods: { ready: 3, desired: 3, sq: ['ok', 'ok', 'ok'] }, restarts: 0,
+    why: 'Differs from Git · auto-sync is off for this app', whySev: 'warn',
+    findings: [
+      { sev: 'warn', title: 'The live state differs from Git: Deployment ledger-api',
+        detail: 'Auto-sync is off for this app, so the difference stays until someone syncs. Which fields differ is known only to Argo CD (or to the optional Argo API connection).',
+        ev: ['status.resources: Deployment ledger-api · OutOfSync'] },
+      { sev: 'ok', title: 'Everything runs', detail: '3 of 3 pods Ready, no restarts and no warning events in the last hour.' },
+    ],
+    prevDeploy: 'c41f0b8 · 2 days ago', timeline: [],
+    podList: ['7c9d4', 'm2k8w', 'r5t1z'].map((s, i) => ({ id: s, name: 'ledger-api-5f6b7c8d9-' + s, sev: 'ok', state: 'Running', ready: '1/1', restarts: 0, rev: 'c41f0b8', age: '2d', last: [L('08:5' + (i + 1) + ':0' + i, 'POST /v1/entries 201 (12ms)'), L('08:5' + (i + 3) + ':2' + i, 'GET /v1/balances/acct-' + (4410 + i) + ' 200 (4ms)')] })),
+    linked: ['Service ledger-api', 'Ingress ledger.example.org', 'Secret ledger-db'],
+    tree: [{ k: 'Deployment', n: 'ledger-api', m: '3/3 · OutOfSync', sev: 'warn', all: true, kids: [{ pod: '7c9d4' }, { pod: 'm2k8w' }, { pod: 'r5t1z' }] }, { k: 'Service', n: 'ledger-api', m: '3 endpoints', sev: 'ok' }, { k: 'Ingress', n: 'ledger.example.org', sev: 'ok' }],
+    defaultMode: 'all',
+  },
+  {
+    id: 'mon', name: 'monitoring-stack', argo: true, ns: 'monitoring', health: 'Healthy', sync: 'Synced',
+    source: 'Helm chart kube-prometheus-stack 62.3.0', rev: '62.3.0', helm: true, deployedMin: 4000, deployedText: '3 days ago',
+    selfHeal: true, workload: 'StatefulSet prometheus-monitoring-stack',
+    pods: { ready: 6, desired: 6, sq: ['ok', 'ok', 'ok', 'ok', 'ok', 'ok'] }, restarts: 0,
+    why: '', whySev: '',
+    findings: [{ sev: 'ok', title: 'Nothing wrong visible', detail: '6 of 6 pods Ready, no restarts and no warning events in the last hour. That is not proof users are fine: check request errors and latency if complaints continue.' }],
+    prevDeploy: 'chart 62.1.0 · 3 weeks ago', timeline: [],
+    podList: [
+      { id: 'prom', name: 'prometheus-monitoring-stack-0', sev: 'ok', state: 'Running', ready: '2/2', restarts: 0, rev: '62.3.0', age: '3d', last: [L('08:54:00', 'level=info component=tsdb msg="Head GC completed" duration=41ms'), L('08:55:00', 'level=info component=tsdb msg="WAL checkpoint complete"')] },
+      { id: 'graf', name: 'monitoring-stack-grafana-6d8f7c9b-q2w3e', sev: 'ok', state: 'Running', ready: '3/3', restarts: 0, rev: '62.3.0', age: '3d', last: [L('08:53:12', 'logger=context t=2026-07-20T08:53:12Z level=info msg="Request Completed" status=200 path=/api/health')] },
+    ],
+    linked: ['Service monitoring-stack-grafana', 'Ingress grafana.example.org'],
+    tree: [{ k: 'StatefulSet', n: 'prometheus-monitoring-stack', m: '1/1', sev: 'ok', kids: [{ pod: 'prom' }] }, { k: 'Deployment', n: 'monitoring-stack-grafana', m: '1/1', sev: 'ok', kids: [{ pod: 'graf' }] }, { k: 'DaemonSet', n: 'node-exporter', m: '3/3', sev: 'ok' }],
+    defaultMode: 'all',
+  },
+  {
+    id: 'redis', name: 'redis-cache', argo: false, ns: 'payments', health: 'Healthy', sync: null,
+    source: 'StatefulSet · not managed by Argo CD', rev: null, deployedMin: 30000, deployedText: '21 days ago',
+    workload: 'StatefulSet redis-cache',
+    pods: { ready: 1, desired: 1, sq: ['ok'] }, restarts: 0,
+    why: '', whySev: '',
+    findings: [{ sev: 'ok', title: 'Nothing wrong visible', detail: '1 of 1 pod Ready. 2 restarts, the last 3 days ago (OOMKilled) — outside the last hour.', ev: ['lastState.terminated: OOMKilled, 3 days ago'] }],
+    prevDeploy: 'ReplicaSet-less (StatefulSet) · 21 days ago', timeline: [],
+    podList: [{ id: 'r0', name: 'redis-cache-0', sev: 'ok', state: 'Running', ready: '1/1', restarts: 2, rev: '—', age: '21d', last: [L('08:42:44', '1:M * 1 changes in 3600 seconds. Saving...'), L('08:42:44', '1:M * Background saving terminated with success')] }],
+    linked: ['Service redis-cache', 'PersistentVolumeClaim data-redis-cache-0'],
+    tree: [{ k: 'StatefulSet', n: 'redis-cache', m: '1/1', sev: 'ok', all: true, kids: [{ pod: 'r0' }] }, { k: 'PersistentVolumeClaim', n: 'data-redis-cache-0', m: 'Bound · 8Gi', sev: 'ok' }],
+    defaultMode: 'all',
+  },
+];
+
+// ---------------------------------------------------------------- helpers
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const inInput = e => e.target.closest('input, textarea');
+
+function rank(a) {
+  if (a.health === 'Degraded' || a.health === 'Missing') return 0;
+  if (a.health === 'Unknown' || a.health === 'Stalled') return 1;
+  if (a.health === 'Progressing') return 2;
+  if (a.sync === 'OutOfSync') return 3;
+  return 4;
+}
+const needsAttention = a => rank(a) <= 1 || (rank(a) === 3);
+const healthCls = h => ({ Degraded: 'err', Missing: 'err', Unknown: 'warn', Stalled: 'warn', Progressing: 'prog', Healthy: 'ok' }[h] || 'none');
+const syncCls = s => ({ Synced: 'ok', OutOfSync: 'warn', Unknown: 'none' }[s] || 'none');
+const pill = (text, cls) => `<span class="pill ${cls}">${esc(text)}</span>`;
+
+let toastTimer;
+function toast(text) {
+  const t = $('#toast');
+  t.textContent = text;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+// ---------------------------------------------------------------- state
+const state = { mode: 'apps', view: 'list', chip: 'all', sel: 0, visible: [], app: null, pod: null, logMode: 'all', errOnly: false, variant: 'A' };
+
+// ---------------------------------------------------------------- list
+const CHIPS = [
+  { id: 'all', label: 'All', test: () => true },
+  { id: 'attn', label: 'Needs attention', test: needsAttention, cls: 'attn' },
+  { id: 'recent', label: 'Deployed < 1 h', test: a => a.deployedMin !== null && a.deployedMin < 60 },
+  { id: 'noargo', label: 'Not in Argo CD', test: a => !a.argo },
+];
+
+function renderChips() {
+  $('#chips').innerHTML = CHIPS.map(c => {
+    const n = APPS.filter(c.test).length;
+    return `<button class="chip ${c.id === state.chip ? 'on' : ''} ${c.cls || ''}" data-chip="${c.id}">${esc(c.label)} <span class="n">${n}</span></button>`;
+  }).join('');
+}
+
+function podsCell(a) {
+  if (!a.pods.desired) return '<span class="faint">—</span>';
+  const sq = a.pods.sq.map(s => `<i class="${s === 'ok' ? '' : s}"></i>`).join('');
+  return `<span class="pods"><span class="num">${a.pods.ready}/${a.pods.desired}</span><span class="sq">${sq}</span></span>`;
+}
+
+function deployCell(a) {
+  const fresh = a.deployedMin !== null && a.deployedMin < 60;
+  const rev = a.rev ? `<code>${esc(a.helm ? 'chart ' + a.rev : a.rev.slice(0, 7))}</code> · ` : '';
+  return `<span class="deploy ${fresh ? 'fresh' : ''}">${rev}${esc(a.deployedText)}</span>`;
+}
+
+function rowHtml(a, i) {
+  const src = a.argo ? 'Argo CD' : 'no Argo';
+  const why = a.why ? `<div class="why ${a.whySev}">${esc(a.why)}</div>` : `<div class="why">${a.pods.ready}/${a.pods.desired} pods ready</div>`;
+  return `<div class="row cols ${i === state.sel ? 'sel' : ''}" data-i="${i}" role="option">
+    <span>${pill(a.health, healthCls(a.health))}</span>
+    <div class="nm"><div class="l1"><strong>${esc(a.name)}</strong><span class="src">${src}</span></div>${why}</div>
+    <span class="muted">${esc(a.ns)}</span>
+    ${podsCell(a)}
+    <span class="num restarts ${a.restarts ? 'hot' : 'faint'}">${a.restarts || '0'}</span>
+    ${deployCell(a)}
+    <span>${a.sync ? pill(a.sync, syncCls(a.sync)) : '<span class="faint">—</span>'}</span>
+  </div>`;
+}
+
+function renderList() {
+  renderChips();
+  const q = $('#q').value.trim().toLowerCase();
+  const chip = CHIPS.find(c => c.id === state.chip);
+  const vis = APPS.filter(a => chip.test(a) && (!q || a.name.toLowerCase().includes(q) || a.ns.includes(q)))
+    .sort((x, y) => rank(x) - rank(y) || x.name.localeCompare(y.name));
+  state.visible = vis;
+  if (state.sel >= vis.length) state.sel = Math.max(0, vis.length - 1);
+
+  const head = `<div class="cols thead"><span>Health</span><span>Application</span><span>Namespace</span><span>Pods</span><span>Restarts 1h</span><span>Last deploy</span><span>Sync</span></div>`;
+  if (!vis.length) {
+    $('#table').innerHTML = head + `<div class="empty">No application matches <b>${esc(q || chip.label)}</b>. <button class="btn link" id="clearQ">Show all</button></div>`;
+    $('#clearQ').onclick = () => { $('#q').value = ''; state.chip = 'all'; renderList(); };
+    return;
+  }
+  const attn = vis.filter(needsAttention), rest = vis.filter(a => !needsAttention(a));
+  let html = head, i = 0;
+  const group = (label, list) => { if (!list.length) return; html += `<div class="group">${label} · ${list.length}</div>`; for (const a of list) html += rowHtml(a, i++); };
+  // keep indexes aligned with `visible`, which is already sorted attention-first
+  state.visible = [...attn, ...rest];
+  group('Needs attention', attn);
+  group('Everything else', rest);
+  $('#table').innerHTML = html;
+}
+
+// ---------------------------------------------------------------- app page
+function openApp(a) {
+  state.app = a;
+  state.view = 'app';
+  state.pod = a.defaultPod || (a.podList[0] && a.podList[0].id) || null;
+  state.logMode = a.defaultMode || 'all';
+  state.errOnly = false;
+  $('#logQ').value = '';
+  $('#listView').hidden = true;
+  $('#appView').hidden = false;
+  $('#strip').hidden = true;
+  $('#appView').scrollTop = 0;
+  renderApp();
+}
+
+function backToList() {
+  state.view = 'list';
+  $('#appView').hidden = true;
+  $('#listView').hidden = false;
+  renderList();
+  const sel = document.querySelector('.row.sel');
+  if (sel) sel.scrollIntoView({ block: 'nearest' });
+}
+
+function renderApp() {
+  const a = state.app;
+  $('#aName').textContent = a.name;
+  $('#aPills').innerHTML = pill(a.health, healthCls(a.health)) + (a.sync ? pill(a.sync, syncCls(a.sync)) : '');
+  const where = `prod-eu / ${a.ns}`;
+  const src = a.argo ? `Argo CD · <code>${esc(a.source)}</code>` : esc(a.source);
+  const heal = a.argo ? (a.selfHeal ? ' · auto-sync + self-heal' : ' · auto-sync off') : '';
+  $('#aMeta').innerHTML = `${esc(where)} · ${src}${heal}`;
+  document.querySelector('[data-act=sync]').disabled = !a.argo;
+  document.querySelector('[data-act=argo]').hidden = !a.argo;
+  document.querySelector('[data-act=restart]').disabled = !a.podList.length;
+  renderFindings();
+  renderTimeline();
+  renderLeft();
+  renderLogs();
+}
+
+function renderFindings() {
+  const a = state.app;
+  const bad = a.findings.some(f => f.sev === 'err' || f.sev === 'warn');
+  let html = `<div class="cardhead"><h2>${bad ? 'What’s wrong' : 'Status'}</h2><span class="faint">Facts read from the cluster, not a diagnosis</span></div>`;
+  for (const f of a.findings) {
+    let body = '';
+    if (f.detail) body += `<div class="fd">${esc(f.detail)}</div>`;
+    if (f.diff) body += `<div class="diff">${f.diff.map(([k, o, n]) => `${esc(k)}: <span class="old">${esc(o)}</span> &rarr; <span class="new">${esc(n)}</span>`).join('<br>')}</div>`;
+    const ev = (f.ev || []).map(e => `<code>${esc(e)}</code>`);
+    if (f.compare && a.prevRev) {
+      const url = `https://${REPO}/compare/${a.prevRev}...${a.rev}`;
+      ev.push(`<a href="#" data-url="${esc(url)}" title="${esc(url)}">Compare ${esc(a.prevRev)}…${esc(a.rev)} in Git &#8599;</a>`);
+    }
+    if (ev.length) body += `<div class="ev">${ev.join('')}</div>`;
+    html += `<div class="finding ${f.sev}"><span class="bar"></span><div><div class="ft">${esc(f.title)}</div>${body}</div></div>`;
+  }
+  $('#findings').innerHTML = html;
+}
+
+function clock(minAgo) {
+  const m = Math.round(NOW_MIN - minAgo);
+  return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+}
+
+function renderTimeline() {
+  const a = state.app;
+  // The window fits the events: 15, 30, 45 or 60 minutes, so recent restarts do not pile up at the right edge.
+  const oldest = a.timeline.reduce((m, e) => Math.max(m, -e.t), 0);
+  const span = Math.min(60, Math.max(15, Math.ceil((oldest + 3) / 15) * 15));
+  const x = t => ((t + span) / span * 100).toFixed(2) + '%';
+  let marks = '';
+  for (const m of a.timeline) {
+    const title = esc(m.label + ' · ' + (m.t === 0 ? 'now' : Math.round(-m.t) + ' min ago'));
+    marks += m.k === 'deploy'
+      ? `<span class="mk deploy" style="left:${x(m.t)}" title="Deploy ${title}"><b>${esc(m.label)}</b></span>`
+      : `<span class="mk ${m.k}" style="left:${x(m.t)}" title="${title}"></span>`;
+  }
+  if (!a.timeline.length) marks = `<span class="nothing">Nothing happened in the last hour</span>`;
+  const ticks = [0, 1, 2, 3, 4].map(i => { const ago = span - i * span / 4; return `<span class="tick" style="left:${i * 25}%${i === 4 ? ';transform:translateX(-100%)' : ''}">${i === 4 ? 'now ' + clock(0) : clock(ago)}</span>`; }).join('');
+  const title = a.timeline.length ? `Last ${span === 60 ? 'hour' : span + ' min'}` : 'Last hour';
+  $('#timeline').innerHTML = `<div class="tlhead"><h2>${title}</h2><span class="faint">Before that: ${esc(a.prevDeploy)}</span>
+      <span class="legend"><span><i class="lg-deploy"></i>deploy</span><span><i class="lg-dot" style="background:var(--danger)"></i>restart</span><span><i class="lg-dot" style="background:var(--warn)"></i>warning event</span><span><i class="lg-dot" style="background:var(--warn);border-radius:2px"></i>error in logs</span></span></div>
+    <div class="axis"><span class="line"></span>${marks}${ticks}</div>`;
+}
+
+const podById = id => state.app.podList.find(p => p.id === id);
+
+function podRow(p) {
+  const sel = state.logMode !== 'all' && state.pod === p.id;
+  return `<div class="podrow ${sel ? 'sel' : ''}" data-pod="${p.id}">
+    <span class="dot ${p.sev === 'ok' ? '' : p.sev}"></span>
+    <div style="min-width:0"><div class="pn" title="${esc(p.name)}">${esc(p.name)}</div><div class="ps ${p.sev === 'ok' ? '' : p.sev}">${esc(p.state)} · ${esc(p.ready)}${p.restarts ? ' · ' + p.restarts + ' restarts' : ''}</div></div>
+    <span class="pr">${p.rev && p.rev !== '—' ? esc(p.rev) + '<br>' : ''}${esc(p.age)}</span>
+  </div>`;
+}
+
+function renderLeft() {
+  const a = state.app;
+  let html = '';
+  if (state.variant === 'A') {
+    html += `<div class="sub" style="padding-top:10px">Pods · ${a.podList.length}</div>`;
+    if (a.podList.length > 1) html += `<div class="podrow ${state.logMode === 'all' ? 'sel' : ''}" data-pod="*"><span class="dot" style="background:var(--accent)"></span><div><div class="pn" style="font-family:inherit;font-weight:600">All pods, merged</div><div class="ps">one stream, ordered by time</div></div><span></span></div>`;
+    html += a.podList.map(podRow).join('');
+    html += (a.ghosts || []).map(g => `<div class="ghost">${esc(g)}</div>`).join('');
+    if (!a.podList.length) html += `<div class="ghost">No pods</div>`;
+    if (a.linked.length) html += `<div class="sub">Linked</div><div class="linked">${a.linked.map(l => { const [k, ...n] = l.split(' '); return `<button data-linked="${esc(l)}">${esc(k)} <b>${esc(n.join(' '))}</b></button>`; }).join('')}</div>`;
+  } else {
+    html += `<div class="tree">`;
+    if (a.argo) html += nodeHtml({ k: 'Application', n: a.name, sev: healthCls(a.health), m: a.sync || '' }, 0, false);
+    const walk = (nodes, depth) => {
+      for (const n of nodes) {
+        if (n.pod) {
+          const p = podById(n.pod);
+          html += nodeHtml({ k: 'Pod', n: p.name, sev: p.sev, m: p.state, pod: p.id }, depth, state.logMode !== 'all' && state.pod === p.id);
+        } else if (n.ghost) {
+          html += `<div class="node ghostn" style="padding-left:${14 + depth * 16}px"><span class="dot miss"></span>${esc(n.ghost)}</div>`;
+        } else {
+          html += nodeHtml(n, depth, n.all && state.logMode === 'all');
+          if (n.kids) walk(n.kids, depth + 1);
+        }
+      }
+    };
+    walk(a.tree, a.argo ? 1 : 0);
+    html += `</div>`;
+  }
+  $('#left').innerHTML = html;
+}
+
+function nodeHtml(n, depth, sel) {
+  const data = n.pod ? `data-pod="${n.pod}"` : n.all ? 'data-pod="*"' : `data-linked="${esc(n.k + ' ' + n.n)}"`;
+  const sev = n.sev === 'ok' ? '' : n.sev === 'prog' ? '' : n.sev;
+  return `<div class="node ${sel ? 'sel' : ''}" ${data} style="padding-left:${14 + depth * 16}px">
+    <span class="dot ${sev}" ${n.sev === 'prog' ? 'style="background:var(--accent)"' : ''}></span>
+    <span class="k">${esc(n.k)}</span><span class="n" title="${esc(n.n)}">${esc(n.n)}</span>${n.m ? `<span class="m">${esc(n.m)}</span>` : ''}
+  </div>`;
+}
+
+function currentLines() {
+  const a = state.app;
+  if (state.logMode === 'all') {
+    const lines = [];
+    for (const p of a.podList) for (const l of p.last) lines.push({ ...l, pod: p.name });
+    lines.sort((x, y) => x.ts.localeCompare(y.ts));
+    return { lines, exit: null, withPod: true };
+  }
+  const p = podById(state.pod);
+  if (state.logMode === 'before') return { lines: p.before || [], exit: p.beforeExit, withPod: false };
+  return { lines: p.last, exit: p.lastExit, withPod: false };
+}
+
+function renderLogs() {
+  const a = state.app;
+  const p = state.pod && podById(state.pod);
+  // tabs
+  let tabs = '';
+  if (p) {
+    tabs += `<button data-lm="last" class="${state.logMode === 'last' ? 'on' : ''}">${p.crash ? 'Last run' : 'Live'}</button>`;
+    if (p.before) tabs += `<button data-lm="before" class="${state.logMode === 'before' ? 'on' : ''}">Run before</button>`;
+  }
+  tabs += `<button data-lm="all" class="${state.logMode === 'all' ? 'on' : ''}" ${a.podList.length ? '' : 'disabled'}>All pods · ${a.podList.length}</button>`;
+  $('#logTabs').innerHTML = tabs;
+  $('#logSrc').textContent = state.logMode === 'all' ? `${a.workload}` : p.name;
+  $('#errOnly').classList.toggle('on', state.errOnly);
+  const crashed = state.logMode !== 'all' && p && p.crash;
+  $('#follow').hidden = !!crashed || !!a.noLogs || !a.podList.length;
+
+  if (a.noLogs || !a.podList.length) {
+    const e = a.noLogs || { title: 'No logs', text: 'This application has no pods.' };
+    $('#logBody').innerHTML = `<div class="logempty"><b>${esc(e.title)}</b><p>${esc(e.text)}</p></div>`;
+    return;
+  }
+  const { lines, exit, withPod } = currentLines();
+  const q = $('#logQ').value.trim().toLowerCase();
+  const shown = lines.filter(l => (!state.errOnly || l.lv) && (!q || l.text.toLowerCase().includes(q)));
+  let html = shown.map(l => `<div class="ll ${l.lv} ${withPod ? 'withpod' : ''}"><span class="ts">${esc(l.ts)}</span>${withPod ? `<span class="po" title="${esc(l.pod)}">${esc(l.pod.slice(-11))}</span>` : ''}<span class="tx">${esc(l.text)}${l.rep ? `<span class="rep" title="The same line, repeated">×${l.rep}</span>` : ''}</span></div>`).join('');
+  if (!shown.length) html = `<div class="logempty"><b>No line matches</b><p>${esc(lines.length)} lines hidden by the filter.</p></div>`;
+  if (exit) html += `<div class="exitline">${esc(exit)}</div>`;
+  $('#logBody').innerHTML = html;
+  $('#logBody').scrollTop = $('#logBody').scrollHeight;
+}
+
+// ---------------------------------------------------------------- actions (confirm strip)
+function arm(act) {
+  const a = state.app, s = $('#strip');
+  if (act === 'argo') { toast('Would open the Argo CD UI at the URL from argocd-cm (data.url)'); return; }
+  let cls = 'info', msg = '', ok = '', danger = false, done = '';
+  if (act === 'restart') {
+    msg = `Restart <b>${esc(a.workload)}</b>? Its pods are replaced one at a time.`;
+    ok = 'Restart'; done = 'Restart requested. New pods appear in the list as they start.';
+  } else if (act === 'sync') {
+    msg = `Sync <b>${esc(a.name)}</b> to the revision its Application targets (<code>HEAD</code> of <code>${esc(a.source)}</code>)?`;
+    ok = 'Sync'; done = 'Sync requested. Argo CD reports the result in a few seconds.';
+  } else if (act === 'edit') {
+    if (a.argo && a.selfHeal) {
+      cls = 'warn';
+      msg = `Argo CD self-heal is on for <b>${esc(a.name)}</b>: a manual edit is reverted within minutes. The lasting fix is in Git, <code>${esc(a.source)}</code>.`;
+      ok = 'Edit anyway'; danger = true; done = 'Opening the YAML editor (Resources mode)…';
+    } else {
+      msg = `Open <b>${esc(a.workload)}</b> in the YAML editor?${a.argo ? ' Auto-sync is off, so the edit stays until the next sync.' : ''}`;
+      ok = 'Edit'; done = 'Opening the YAML editor (Resources mode)…';
+    }
+  }
+  s.className = 'strip ' + cls;
+  s.innerHTML = `<span class="msg">${msg}</span><button class="btn ${danger ? 'danger' : 'primary'}" id="stripOk">${ok}</button><button class="btn" id="stripCancel">Cancel</button>`;
+  s.hidden = false;
+  $('#stripOk').onclick = () => { s.className = 'strip ok'; s.innerHTML = `<span class="msg">${esc(done)}</span><button class="btn" id="stripCancel">Close</button>`; $('#stripCancel').onclick = () => s.hidden = true; };
+  $('#stripCancel').onclick = () => s.hidden = true;
+  $('#stripOk').focus();
+}
+
+// ---------------------------------------------------------------- events
+$('#chips').addEventListener('click', e => {
+  const c = e.target.closest('[data-chip]');
+  if (!c) return;
+  state.chip = c.dataset.chip; state.sel = 0; renderList();
+});
+$('#q').addEventListener('input', () => { state.sel = 0; renderList(); });
+$('#table').addEventListener('click', e => {
+  const r = e.target.closest('.row');
+  if (!r) return;
+  state.sel = +r.dataset.i;
+  openApp(state.visible[state.sel]);
+});
+$('#backBtn').onclick = backToList;
+document.querySelector('.actions').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b && !b.disabled) arm(b.dataset.act); });
+$('#findings').addEventListener('click', e => { const l = e.target.closest('[data-url]'); if (l) { e.preventDefault(); toast('Would open ' + l.dataset.url); } });
+$('#left').addEventListener('click', e => {
+  const n = e.target.closest('[data-pod], [data-linked]');
+  if (!n) return;
+  if (n.dataset.linked) { toast(`Opens ${n.dataset.linked} in Resources mode`); return; }
+  if (n.dataset.pod === '*') state.logMode = 'all';
+  else { state.pod = n.dataset.pod; state.logMode = 'last'; }
+  renderLeft(); renderLogs();
+});
+$('#logTabs').addEventListener('click', e => { const b = e.target.closest('[data-lm]'); if (!b || b.disabled) return; state.logMode = b.dataset.lm; renderLeft(); renderLogs(); });
+$('#logQ').addEventListener('input', renderLogs);
+$('#errOnly').onclick = () => { state.errOnly = !state.errOnly; renderLogs(); };
+
+$('#variant').addEventListener('click', e => {
+  const b = e.target.closest('[data-v]');
+  if (!b) return;
+  state.variant = b.dataset.v;
+  for (const x of document.querySelectorAll('#variant button')) x.classList.toggle('on', x === b);
+  if (state.view === 'app') renderLeft();
+});
+$('#mode').addEventListener('click', e => {
+  const b = e.target.closest('[data-mode]');
+  if (!b) return;
+  state.mode = b.dataset.mode;
+  for (const x of document.querySelectorAll('#mode button')) x.classList.toggle('on', x === b);
+  $('#resView').hidden = state.mode !== 'res';
+  $('#listView').hidden = state.mode !== 'apps' || state.view !== 'list';
+  $('#appView').hidden = state.mode !== 'apps' || state.view !== 'app';
+});
+$('#themeBtn').onclick = () => {
+  const root = document.documentElement;
+  const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  root.dataset.theme = dark ? 'light' : 'dark';
+};
+$('#notesBtn').onclick = () => { $('#notes').hidden = !$('#notes').hidden; };
+$('#notesClose').onclick = () => { $('#notes').hidden = true; };
+
+document.addEventListener('keydown', e => {
+  if (state.mode !== 'apps') return;
+  if (state.view === 'list') {
+    if (e.key === '/' && !inInput(e)) { e.preventDefault(); $('#q').focus(); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      state.sel = Math.min(state.visible.length - 1, Math.max(0, state.sel + (e.key === 'ArrowDown' ? 1 : -1)));
+      renderList();
+      const sel = document.querySelector('.row.sel'); if (sel) sel.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    if (e.key === 'Enter' && state.visible[state.sel]) { e.preventDefault(); openApp(state.visible[state.sel]); return; }
+    if (e.key === 'Escape' && e.target.id === 'q') { if (e.target.value) { e.target.value = ''; renderList(); } else e.target.blur(); }
+  } else if (e.key === 'Escape') {
+    if (inInput(e)) { if (e.target.value) { e.target.value = ''; renderLogs(); } else e.target.blur(); return; }
+    if (!$('#strip').hidden) { $('#strip').hidden = true; return; }
+    backToList();
+  }
+});
+
+renderList();
+</script>
+</body>
+</html>
