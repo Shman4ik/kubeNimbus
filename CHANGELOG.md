@@ -12,6 +12,8 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-26
+
 - A cluster now opens on **Applications**: every Argo CD Application, and every workload no
   Application tracks, with its health and a one-line reason — "Crash-looping (exit 1) · 2 pods
   not created: namespace quota" — sorted so what needs attention comes first. Chips narrow it
@@ -634,7 +636,8 @@ First public release. Everything below is new.
 - Usage history is session-scoped and bounded at 30 minutes by design. Long-range
   metrics history is a non-goal — that's Prometheus's job.
 
-[Unreleased]: https://github.com/Shman4ik/kubeNimbus/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/Shman4ik/kubeNimbus/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.4.0
 [0.3.3]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.3.3
 [0.3.2]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.3.2
