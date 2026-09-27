@@ -29,15 +29,15 @@ then copy the ones the README uses:
 
 | This file | Harness scenario |
 |---|---|
-| `workloads-list.light.png` / `.dark.png` | `cluster-tab-workloads-list-metrics` |
-| `applications-list.dark.png` | `applications-list` |
-| `application-page.dark.png` | `applications-page-crashloop` |
+| `applications-list.light.png` / `.dark.png` | `applications-list` |
+| `application-page.light.png` | `applications-page-crashloop` |
 | `pod-detail.dark.png` | `cluster-tab-pod-detail` |
-| `yaml-editor.dark.png` | `cluster-tab-yaml-editor-maximized` |
-| `rbac-who-can.dark.png` | `cluster-tab-rbac-who-can` |
-| `fleet-list.dark.png` | `cluster-tab-fleet-list` |
-| `cluster-switcher.dark.png` | `main-window-switcher` |
 | `exec-terminal.dark.png` | `cluster-tab-exec-fullscreen-maximized` |
+| `yaml-editor.light.png` | `cluster-tab-yaml-editor-maximized` |
+| `cluster-switcher.light.png` | `main-window-switcher` |
+| `fleet-list.dark.png` | `cluster-tab-fleet-list` |
+| `workloads-list.dark.png` | `cluster-tab-workloads-list-metrics` |
+| `rbac-who-can.light.png` | `cluster-tab-rbac-who-can` |
 
 Two of these are the **maximized** variant of their scenario
 (`yaml-editor.dark.png`, `exec-terminal.dark.png`), and that is not a stylistic
@@ -46,9 +46,13 @@ inspector dock inside a 1280px window shrinks to a band whose text nobody can
 read. The pane is the subject of those two images, so it gets the whole content
 area.
 
-Only the hero image is checked in for both themes — GitHub's `<picture>` element
-switches it with the reader's theme. The gallery below it is dark-only, to keep
-the repository from carrying twice the bytes for a marginal gain.
+The hero is the Applications list, the screen a cluster opens on, and it is the one
+image checked in for both themes — GitHub's `<picture>` element switches it with the
+reader's theme. The gallery under it is half light and half dark, laid out as a
+checkerboard (light left in odd rows, right in even ones), so a reader of either theme
+sees that the app has both and neither theme dominates the page. Each gallery image is
+checked in for one theme only, to keep the repository from carrying twice the bytes; the
+theme is in its filename, and a swap is a re-copy plus the README's `src`.
 
 The Microsoft Store listing has its own set, at the size the Store asks for, in
 [`../store/screenshots`](../store/screenshots/README.md).

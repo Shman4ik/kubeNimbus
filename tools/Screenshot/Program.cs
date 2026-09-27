@@ -339,6 +339,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("store-fleet-list", () => HostInMainWindow(ClusterTabScenarios.FleetList(), width: 1920, height: 1080)),
     ("store-cluster-switcher", () => BuildSwitcherContent(width: 1920, height: 1080)),
     ("store-exec-terminal", () => HostInMainWindow(ClusterTabScenarios.ExecFullScreenMaximized(), width: 1920, height: 1080)),
+    ("store-rbac-who-can", () => HostInMainWindow(ClusterTabScenarios.RbacWhoCan(), width: 1920, height: 1080)),
 };
 
 foreach (var (name, build) in scenarios)
