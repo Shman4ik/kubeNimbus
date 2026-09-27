@@ -81,22 +81,31 @@ does hide unleveled lines, and says so in its tooltip).
 
 ## Clear keeps the stream (FEAT-40)
 
-The eraser in the toolbar empties the pane and leaves every stream running, so "clear, then
+**Clear** (in the pane's `⋯` menu) empties the pane and leaves every stream running, so "clear, then
 watch what happens next" no longer means stopping and restarting — which lost the follow
 and fetched the tail again, bringing back the very lines being cleared. Lines received but
 not yet drawn go too. Until something new arrives the pane says "Cleared N lines — still
 following", not "no lines", which after a clear would be a verdict about the stream it has
-no grounds for. It is a toolbar icon rather than only a palette entry, as the backlog row
-guessed: the palette has no notion of the focused inspector tab, and the row turned out to
-have room at 1280px (checked in `cluster-tab-demo-pod-detail-find`).
+no grounds for. It lives in the pane rather than only in the palette, as the backlog row
+guessed: the palette has no notion of the focused inspector tab.
+
+## The toolbar keeps what is read, and the `⋯` menu keeps the rest
+
+The bar carries Range, Follow, Previous, Levels and Copy. Everything else — Timestamps, UTC,
+Wrap, Clear and Save — is in the `⋯` menu beside Copy, in both panes. The bar used to hold all
+ten in one row of mixed icons and words, which read as noise at the moment someone is scanning
+it for Previous. Copy stays out because it is the one gesture that gets a log into a bug report;
+the three display toggles went in because they are set once and remembered (below). They are
+CheckBoxes with a two-way `IsChecked` and no Command (UI rule 8b), and Clear and Save close the
+menu as they run (`OnLogMenuActionClick`), which a `Flyout` does not do for a Button inside it.
 
 ## Local time, UTC one click away (FEAT-39)
 
 With timestamps on, lines print `2026-07-20 10:41:02.114` in this machine's local time, no
-offset (every line shares it). A **UTC** chip appears beside the clock only while timestamps
+offset (every line shares it). An **In UTC** box under Timestamps in the `⋯` menu is enabled only while timestamps
 are shown; checked, the line prints the server's own RFC3339 token untouched, nanoseconds
-and all, so it can be matched character for character against another system's log. The
-chip's tooltip names the local offset. Local conversion is `DateTimeOffset.ToLocalTime()`
+and all, so it can be matched character for character against another system's log. Its
+tooltip names the local offset. Local conversion is `DateTimeOffset.ToLocalTime()`
 (through the `LogLineViewModel.ToLocal` seam the tests pin a zone with), never a
 `TimeZoneInfo` lookup by id, which wants tzdata a NativeAOT binary on Linux may lack.
 **Copy and Download always write `RawLine`** — the server's line, UTC — whatever the

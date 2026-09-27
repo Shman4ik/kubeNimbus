@@ -36,7 +36,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             newValue.IsSelected = true;
         }
 
-        OnPropertyChanged(nameof(SwitcherLabel));
         OnPropertyChanged(nameof(SwitcherTooltip));
         OnPropertyChanged(nameof(ShowsApplications));
         OnPropertyChanged(nameof(ShowsResources));
@@ -56,13 +55,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             Switcher.Refresh();
         }
     }
-
-    /// <summary>
-    /// What the switcher button reads. It names the cluster you are looking at, not
-    /// "select a context" — the top bar's job is to answer "which cluster am I in?"
-    /// without being asked, which is the single most-cited multi-cluster complaint.
-    /// </summary>
-    public string SwitcherLabel => SelectedTab?.Header ?? (HasContexts ? "Select a cluster" : "No clusters");
 
     /// <summary>
     /// The switcher button's tooltip. It names a Ctrl/Cmd chord, so it depends on the
@@ -1051,7 +1043,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     partial void OnHasContextsChanged(bool value)
     {
         AddNewTabCommand.NotifyCanExecuteChanged();
-        OnPropertyChanged(nameof(SwitcherLabel));
         OnPropertyChanged(nameof(SwitcherTooltip));
     }
 

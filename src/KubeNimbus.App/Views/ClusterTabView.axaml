@@ -215,8 +215,15 @@
           <!-- The same title size as the Applications mode's "Applications", so the two
                modes read as one app. -->
           <TextBlock Grid.Column="0" Text="{Binding SelectedKind.DisplayName}" FontWeight="SemiBold" FontSize="20" VerticalAlignment="Center" />
+          <!-- A cluster-scoped kind has no namespace, and says so in words. The picker
+               used to stay on screen disabled, still reading the namespace the last kind
+               was in — "Nodes  payments" read as a node list filtered to payments. -->
+          <TextBlock Grid.Column="1" Text="Cluster-wide" FontSize="12" Opacity="0.55" Margin="14,4,0,0"
+                     VerticalAlignment="Center" IsVisible="{Binding !SelectedKind.Descriptor.Namespaced, FallbackValue=False}"
+                     ToolTip.Tip="This kind is not namespaced: the list is the whole cluster's." />
           <Button Grid.Column="1" Name="NamespaceButton" Classes="soft"
-                  Margin="12,0,0,0" MinWidth="170" MaxWidth="280" IsEnabled="{Binding SelectedKind.Descriptor.Namespaced}"
+                  Margin="12,0,0,0" MinWidth="170" MaxWidth="280"
+                  IsVisible="{Binding SelectedKind.Descriptor.Namespaced, FallbackValue=True}"
                   ToolTip.Tip="Choose namespace — type to filter">
             <Grid ColumnDefinitions="*,Auto">
               <TextBlock Text="{Binding SelectedNamespace}" TextTrimming="CharacterEllipsis"/>
@@ -305,7 +312,7 @@
                is a different list. -->
           <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="8" Margin="8,0,0,0"
                       VerticalAlignment="Center" IsVisible="{Binding IsResourceListVisible}">
-            <TextBox Name="RowFilterBox" Classes="filterbox" Width="230"
+            <TextBox Name="RowFilterBox" Classes="filterbox" Width="240"
                      Text="{Binding RowFilter}" PlaceholderText="{Binding RowFilterPlaceholder}"
                      KeyDown="OnRowFilterKeyDown">
               <TextBox.InnerLeftContent>

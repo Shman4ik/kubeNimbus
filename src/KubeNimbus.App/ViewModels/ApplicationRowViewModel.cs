@@ -53,6 +53,15 @@ public sealed partial class ApplicationRowViewModel : ObservableObject
 
     [ObservableProperty] private string _lastDeployText = "";
 
+    /// <summary>
+    /// The two halves of <see cref="LastDeployText"/>, drawn apart: the revision is a code
+    /// (a commit, a chart version, "rev 7") and is set monospace; the age and "never synced"
+    /// are words and are not. The column used to set the whole sentence monospace.
+    /// </summary>
+    [ObservableProperty] private string _lastDeployRevision = "";
+
+    [ObservableProperty] private string _lastDeployAge = "";
+
     [ObservableProperty] private string _lastDeployTip = "";
 
     [ObservableProperty] private bool _isRecentDeploy;
@@ -146,6 +155,8 @@ public sealed partial class ApplicationRowViewModel : ObservableObject
         {
             var revision = deploy.Revision.Length > 0 ? deploy.Revision : deploy.Source;
             LastDeployText = deploy.At is { } at ? $"{revision} · {AppTime.Ago(now, at)}" : revision;
+            LastDeployRevision = revision;
+            LastDeployAge = deploy.At is { } age ? $" · {AppTime.Ago(now, age)}" : "";
             IsRecentDeploy = deploy.At is { } t && now - t < TimeSpan.FromHours(1);
             LastDeployTip = deploy.At is { } when
                 ? $"{deploy.Source}: {deploy.Revision} at {when.ToLocalTime():yyyy-MM-dd HH:mm:ss}"
@@ -154,6 +165,8 @@ public sealed partial class ApplicationRowViewModel : ObservableObject
         else
         {
             LastDeployText = entry.IsArgo ? "never synced" : "—";
+            LastDeployRevision = "";
+            LastDeployAge = LastDeployText;
             IsRecentDeploy = false;
             LastDeployTip = entry.IsArgo
                 ? "Argo CD's status.history is empty: this app has never completed a sync."

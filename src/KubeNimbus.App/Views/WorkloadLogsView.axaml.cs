@@ -103,4 +103,9 @@ public partial class WorkloadLogsView : UserControl
 
     private bool IsScrolledToBottom() =>
         LogScroll.Offset.Y >= LogScroll.Extent.Height - LogScroll.Viewport.Height - ScrollLockSlack;
+
+    // Clear and Save in the log overflow menu run their Command; this closes the menu
+    // behind them, which a Flyout does not do on its own for a Button inside it.
+    private void OnLogMenuActionClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
+        LogMenuButton.Flyout?.Hide();
 }

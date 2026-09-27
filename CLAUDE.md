@@ -634,14 +634,34 @@ Three rules about it:
    (Fluent's AltHigh, pure black in the dark theme) is for overlays only. The Resources
    mode used to sit on a `layer`, so flipping the mode switch swapped the whole content
    area between a black panel and a grey one, and the owner preferred the Applications
-   side. Its table type is now every grid's (`Styles/Theme.axaml`): column headers small,
-   semibold and dimmed like the Applications list's header row, cells at 12px with the row's
-   name in semibold 13px, row rules at 10% grey. Two traps: the DataGrid's header paints its
-   own AltHigh background, invisible on the old black panel and a black band on a card, so
-   `DataGridColumnHeader` is `Transparent`; and a card behind a dock-state row needs
-   `ClipToBounds`, because maximizing sets that row to zero height and a Grid does not clip.
-   This is kubeNimbus's own style, not yet nimbusUi's, so pgNimbus's grids are unchanged —
-   pulling it up is a paired change like any other shared surface.
+   side. Its table type is now every grid's, in both apps: column headers small, semibold
+   and dimmed like the Applications list's header row, with row rules at 10% grey — shared,
+   [`DESIGN.md`](shared/nimbusUi/DESIGN.md) rule 14 — and, this app's own beside the rule-12
+   gutter, cells at 12px with the row's name in semibold 13px. Two traps: the DataGrid's
+   header paints its own AltHigh background, invisible on the old black panel and a black
+   band on a card, which is why the shared style makes it `Transparent`; and a card behind a
+   dock-state row needs `ClipToBounds`, because maximizing sets that row to zero height and a
+   Grid does not clip.
+20. **Nothing on screen repeats what is already on screen, and nothing states a fact it does
+   not have.** Rule 1 applied to the chrome the design review of the surface pass found:
+   - The cluster in front was printed twice in the command bar — on the switcher chip before
+     the tabs and on its own highlighted tab. The switcher is a `+` after the last tab now,
+     where a browser keeps "new tab" ([cluster-switcher](docs/engineering/cluster-switcher.md)).
+   - The status bar read "Connected — Kubernetes v1.31.2" for the life of every healthy tab.
+     It is shown only while `ClusterTabViewModel.IsStatusWorthShowing` — anything but that
+     routine line (recorded where it is written, never matched by wording), or a warning.
+   - A cluster-scoped kind kept the namespace picker on screen, disabled, still reading the
+     last kind's namespace: "Nodes  payments" looks filtered. It says "Cluster-wide" instead.
+   - The Applications list's group caption shows only when two groups are on screen, and its
+     Sync column and "Not in Argo CD" chip only when some application is an Argo one
+     ([applications-mode](docs/engineering/applications-mode.md)).
+   - A pod's status is the same pill wherever a list names the pod (the main list, workload
+     and node detail); a health dot beside a pill is the same verdict twice (status-dot.md).
+   - A destructive button looks destructive and does not sit beside the primary one: the
+     YAML editor's Delete is `soft danger`, across Reload from Apply.
+   - The log panes' bar keeps what is read (Range, Follow, Previous, Levels, Copy); the
+     remembered display toggles, Clear and Save are in a `⋯` menu
+     ([log-pane-reading](docs/engineering/log-pane-reading.md)).
 
 [fluent-basics]: https://learn.microsoft.com/en-us/windows/apps/design/basics/
 

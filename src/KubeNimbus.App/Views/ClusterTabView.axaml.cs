@@ -17,7 +17,7 @@ public partial class ClusterTabView : UserControl
 {
     private void OnNamespaceShortcut(object? sender, KeyEventArgs e)
     {
-        if (Hotkeys.NamespacePicker.Matches(e) && NamespaceButton.IsEnabled)
+        if (Hotkeys.NamespacePicker.Matches(e) && NamespaceButton.IsEffectivelyVisible)
         {
             NamespaceButton.Flyout?.ShowAt(NamespaceButton);
             e.Handled = true;

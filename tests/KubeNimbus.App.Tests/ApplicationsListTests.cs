@@ -78,6 +78,39 @@ public class ApplicationsListTests
     }
 
     /// <summary>
+    /// A group caption only where there are two groups to tell apart. On a healthy cluster,
+    /// or under the Needs attention chip, it would repeat what the chip already says.
+    /// </summary>
+    [Test]
+    public async Task A_single_group_carries_no_caption()
+    {
+        var apps = List();
+        Add(apps, "Deployment", Deployment("web", 1, 1));
+        Add(apps, "Deployment", Deployment("broken", 1, 0));
+        Add(apps, "Pod", ReadyPod("web-1", "web"));
+        Add(apps, "Pod", CrashingPod("broken-1", "broken"));
+        await Assert.That(apps.VisibleRows[0].GroupHeader).IsNotNull();
+
+        apps.IsAttentionChip = true;
+        await Assert.That(Names(apps)).IsEqualTo("broken");
+        await Assert.That(apps.VisibleRows[0].GroupHeader).IsNull();
+
+        apps.IsAllChip = true;
+        apps.Filter = "web";
+        await Assert.That(Names(apps)).IsEqualTo("web");
+        await Assert.That(apps.VisibleRows[0].GroupHeader).IsNull();
+    }
+
+    /// <summary>With no Argo CD application in the list the Sync column and the Not in Argo CD chip go.</summary>
+    [Test]
+    public async Task A_list_with_no_Argo_application_says_so()
+    {
+        var apps = List();
+        Add(apps, "Deployment", Deployment("web", 1, 1));
+        await Assert.That(apps.HasArgo).IsFalse();
+    }
+
+    /// <summary>
     /// A row is updated in place when its objects change — the same instance, so the
     /// selection and the scroll position survive a watch event — and it moves between the
     /// groups when its verdict does.
@@ -302,6 +335,10 @@ public class ApplicationsListTests
         // A workload an Argo Application tracks has no row of its own.
         await Assert.That(rows.Any(r => r.Name == "checkout-worker")).IsFalse();
         await Assert.That(rows[0].LastDeployText).IsEqualTo("8f3c1d9 · 14 min ago");
+        // Drawn as two runs: the revision monospace, the age in the body face.
+        await Assert.That(rows[0].LastDeployRevision).IsEqualTo("8f3c1d9");
+        await Assert.That(rows[0].LastDeployAge).IsEqualTo(" · 14 min ago");
+        await Assert.That(tab.Applications.HasArgo).IsTrue();
         await Assert.That(rows[0].IsRecentDeploy).IsTrue();
     }
 }

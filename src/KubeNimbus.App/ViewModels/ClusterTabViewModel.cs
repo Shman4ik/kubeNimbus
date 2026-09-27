@@ -146,7 +146,11 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [ObservableProperty]
     private bool _connectionWarningOffersReconnect;
 
-    partial void OnConnectionWarningChanged(string? value) => ConnectionWarningOffersReconnect = false;
+    partial void OnConnectionWarningChanged(string? value)
+    {
+        ConnectionWarningOffersReconnect = false;
+        OnPropertyChanged(nameof(IsStatusWorthShowing));
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsIdle))]
@@ -175,6 +179,31 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     [ObservableProperty]
     private string _status = "Not connected.";
+
+    /// <summary>
+    /// The status that says nothing a glance at the tab does not: "Connected — Kubernetes
+    /// v1.33", or the demo line under the demo bar. Recorded where it is written rather
+    /// than recognized by its wording.
+    /// </summary>
+    private string? _routineStatus;
+
+    /// <summary>
+    /// Whether the shell's status bar is worth its row for this tab. It used to show
+    /// "Connected — Kubernetes v1.31.2" for the whole life of every healthy tab, a row of
+    /// chrome for a fact the tab's green dot already carries (its tooltip keeps the
+    /// version). Anything else — connecting, a failure, a watch that ended, a connection
+    /// warning — still gets the bar.
+    /// </summary>
+    public bool IsStatusWorthShowing => Status != _routineStatus || ConnectionWarning is not null;
+
+    partial void OnStatusChanged(string value) => OnPropertyChanged(nameof(IsStatusWorthShowing));
+
+    /// <summary>The routine connected line, recorded as routine. The screenshot harness's fixture tabs set it the same way.</summary>
+    internal void SetConnectedStatus(string gitVersion)
+    {
+        _routineStatus = $"Connected — Kubernetes {gitVersion}.";
+        Status = _routineStatus;
+    }
 
     [ObservableProperty]
     private string? _connectionWarning;
@@ -1454,7 +1483,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             Client = client;
             created = null;
             IsConnected = true;
-            Status = $"Connected — Kubernetes {version.GitVersion}.";
+            SetConnectedStatus(version.GitVersion);
 
             var sidebar = BuildSidebarAsync();
             var namespaces = RefreshNamespacesAsync();
@@ -1565,6 +1594,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     private void ConnectDemo()
     {
         IsConnected = true;
+        _routineStatus = DemoStatus;
         Status = DemoStatus;
 
         var catalog = Demo.DemoData.BuildCatalog();
