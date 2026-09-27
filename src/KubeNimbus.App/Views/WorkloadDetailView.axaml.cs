@@ -18,6 +18,13 @@ public partial class WorkloadDetailView : UserControl
         // Shift+click are the resource list's own (RowLogsGesture).
         PodsGrid.AddHandler(KeyDownEvent, OnPodKeyDown, RoutingStrategies.Tunnel);
         _rowLogs = RowLogsGesture.Track(PodsGrid);
+
+        // Not a two-way SelectedItem binding: that wrote the grid's teardown null back into
+        // the view model whenever the inspector switched tabs, and the pane came back with
+        // no pod selected (ENG-43).
+        GridSelectionSync<WorkloadDetailTabViewModel, ResourceRowViewModel>.Track(
+            this, PodsGrid, vm => vm.Pods, vm => vm.SelectedPod, (vm, pod) => vm.SelectedPod = pod,
+            nameof(WorkloadDetailTabViewModel.SelectedPod));
     }
 
     private void OnPodDoubleTapped(object? sender, TappedEventArgs e)

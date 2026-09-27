@@ -38,14 +38,18 @@ internal static class PaneLogsChecks
             throw new InvalidOperationException("Workload detail: a click on a pod's logs icon did not open that pod's logs.");
         if (tab.IsInspectorMaximized || tab.InspectorTabs.Count != 2)
             throw new InvalidOperationException("Workload detail: the logs icon replaced the pane or opened maximized with the preference off.");
-        // Not asserted here: that the icon selected its row. It does (PaneLogsTests pins it),
-        // but switching the inspector to the new logs tab tears the pane's view down, and the
-        // grid's two-way SelectedItem writes null back as it goes — so by now it reads null.
-
-        // Back to the pane: Shift+L on another pod, then plain L.
+        // ENG-43: the icon selected its row, and that selection survives the round trip to
+        // the logs tab and back. It used not to — switching the inspector tore the pane's
+        // view down and the grid's two-way SelectedItem wrote null back as it went.
+        if (!ReferenceEquals(detail.SelectedPod, target))
+            throw new InvalidOperationException("Workload detail: switching to the logs tab cleared the pane's pod selection.");
         tab.SelectedInspectorTab = detail;
         Settle();
         grid = window.GetVisualDescendants().OfType<WorkloadDetailView>().First().FindControl<DataGrid>("PodsGrid")!;
+        if (!ReferenceEquals(detail.SelectedPod, target) || !ReferenceEquals(grid.SelectedItem, target))
+            throw new InvalidOperationException("Workload detail: the pod selection did not survive switching inspector tabs and back.");
+
+        // Back to the pane: Shift+L on another pod, then plain L.
         detail.SelectedPod = detail.Pods[0];
         grid.Focus();
         window.KeyPress(Key.L, RawInputModifiers.Shift, PhysicalKey.L, "L");
@@ -93,6 +97,11 @@ internal static class PaneLogsChecks
         tab.SelectedInspectorTab = detail;
         Settle();
         grid = window.GetVisualDescendants().OfType<NodeDetailView>().First().FindControl<DataGrid>("PodsGrid")!;
+
+        // ENG-43, the node pane's half: the Shift+clicked row is still the selected one.
+        if (!ReferenceEquals(detail.SelectedPod, target) || !ReferenceEquals(grid.SelectedItem, target))
+            throw new InvalidOperationException("Node detail: the pod selection did not survive switching inspector tabs and back.");
+
         detail.SelectedPod = detail.Pods[0];
         grid.Focus();
         window.KeyPress(Key.L, RawInputModifiers.None, PhysicalKey.L, "l");
@@ -100,8 +109,66 @@ internal static class PaneLogsChecks
         if (tab.IsInspectorMaximized || tab.SelectedInspectorTab is not PodDetailTabViewModel plain || plain.PodName != detail.Pods[0].Name)
             throw new InvalidOperationException("Node detail: L did not open the selected pod's logs in the split.");
 
+        // ENG-44: Enter and a double-click open the pod, as they do in every other list
+        // (UI rule 2) — this one used to keep the default action on a chevron column alone.
+        tab.SelectedInspectorTab = detail;
+        Settle();
+        grid = window.GetVisualDescendants().OfType<NodeDetailView>().First().FindControl<DataGrid>("PodsGrid")!;
+        detail.SelectedPod = detail.Pods[1];
+        Settle();
+        grid.Focus();
+        window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, "\r");
+        Settle();
+        if (tab.SelectedInspectorTab is not PodDetailTabViewModel entered || entered.PodName != detail.Pods[1].Name)
+            throw new InvalidOperationException("Node detail: Enter on a pod row did not open that pod.");
+
+        tab.SelectedInspectorTab = detail;
+        Settle();
+        grid = window.GetVisualDescendants().OfType<NodeDetailView>().First().FindControl<DataGrid>("PodsGrid")!;
+        var doubled = detail.Pods[0];
+        var row = grid.GetVisualDescendants().OfType<DataGridRow>().First(r => ReferenceEquals(r.DataContext, doubled));
+        var point = row.TranslatePoint(new Point(row.Bounds.Width * 0.3, row.Bounds.Height / 2), window)!.Value;
+        window.MouseMove(point);
+        window.MouseDown(point, MouseButton.Left);
+        window.MouseUp(point, MouseButton.Left);
+        window.MouseDown(point, MouseButton.Left);
+        window.MouseUp(point, MouseButton.Left);
+        Settle();
+        if (tab.SelectedInspectorTab is not PodDetailTabViewModel opened || opened.PodName != doubled.Name)
+            throw new InvalidOperationException("Node detail: a double-click on a pod row did not open that pod.");
+
         Park(window);
-        Console.WriteLine($"Node detail pane logs passed (icon rest/selected/hover, Shift+click at edge, L; {tab.InspectorTabs.Count} tabs).");
+        Console.WriteLine($"Node detail pane logs passed (icon rest/selected/hover, Shift+click at edge, L, selection round trip, Enter, double-click; {tab.InspectorTabs.Count} tabs).");
+    }
+
+    /// <summary>
+    /// ENG-46: at an 860px window, node detail's Pods grid fits the dock — its columns add
+    /// up to no more than the grid is wide, so there is nothing to scroll sideways to and
+    /// every header reads in full. It used to have Auto columns, which took whatever the
+    /// widest realized cell asked for.
+    /// </summary>
+    internal static void NodePodsFit(Window window)
+    {
+        Settle();
+        var grid = window.GetVisualDescendants().OfType<NodeDetailView>().First().FindControl<DataGrid>("PodsGrid")!;
+        var columns = grid.Columns.Where(c => c.IsVisible).Sum(c => c.ActualWidth);
+        if (columns > grid.Bounds.Width + 0.5)
+            throw new InvalidOperationException(
+                $"Node detail at 860px: the Pods grid's columns take {columns:0}px of a {grid.Bounds.Width:0}px grid, so it scrolls sideways.");
+        // DataGrid does not always scroll when it runs out: it squeezes the fixed columns
+        // below their declared widths instead, which clips their headers ("CPU r", "Ag") —
+        // the same failure seen from the other side.
+        foreach (var column in grid.Columns.Where(c => c.IsVisible && c.Width.IsAbsolute))
+        {
+            if (column.ActualWidth < column.Width.Value - 0.5)
+                throw new InvalidOperationException(
+                    $"Node detail at 860px: the {column.Header} column is squeezed to {column.ActualWidth:0}px of its {column.Width.Value:0}px.");
+        }
+
+        var name = grid.Columns.Single(c => Equals(c.Header, "Name"));
+        if (name.ActualWidth < name.MinWidth - 0.5)
+            throw new InvalidOperationException("Node detail at 860px: the Name column is narrower than its minimum.");
+        Console.WriteLine($"Node detail pods fit at 860px ({columns:0}px of {grid.Bounds.Width:0}px; Name {name.ActualWidth:0}px).");
     }
 
     internal static void Events(Window window)

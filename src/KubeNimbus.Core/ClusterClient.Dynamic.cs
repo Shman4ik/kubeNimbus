@@ -16,18 +16,24 @@ public sealed partial class ClusterClient
     /// <summary>
     /// Live stream of one resource kind, informer-style (see <see cref="WatchPodsAsync"/>
     /// for the semantics). <paramref name="labelSelector"/> narrows both the initial list
-    /// and the watch to the objects a workload owns — the same selector on both halves,
-    /// or the watch would report additions the list never seeded.
+    /// and the watch to the objects a workload owns, and <paramref name="fieldSelector"/>
+    /// to the objects a server-side field names (the pods on one node) — each the same
+    /// selector on both halves, or the watch would report additions the list never
+    /// seeded. An object that starts matching a field selector (a pod bound to the node)
+    /// arrives as an Added and one that stops matching as a Deleted, which is the API
+    /// server's own contract for a selected watch.
     /// </summary>
     public IAsyncEnumerable<ResourceEvent<DynamicResource>> WatchResourceAsync(
         ResourceDescriptor descriptor,
         string? @namespace = null,
         Action<Exception>? connectionLost = null,
         CancellationToken cancellationToken = default,
-        LabelSelector? labelSelector = null) =>
+        LabelSelector? labelSelector = null,
+        string? fieldSelector = null) =>
         WatchAsync(
             listPath: descriptor.CollectionPath(descriptor.Namespaced ? @namespace : null),
-            listPage: (continueToken, ct) => ListResourcePageAsync(descriptor, @namespace, continueToken, ct, labelSelector: labelSelector),
+            listPage: (continueToken, ct) => ListResourcePageAsync(
+                descriptor, @namespace, continueToken, ct, fieldSelector: fieldSelector, labelSelector: labelSelector),
             // Watch frames do carry kind/apiVersion, so this is a clone in
             // practice — routing both sources through one factory is what keeps
             // "came from the list" and "came from the watch" indistinguishable.
@@ -35,7 +41,7 @@ public sealed partial class ClusterClient
             resourceVersionOf: static r => r.ResourceVersion,
             connectionLost: connectionLost,
             cancellationToken: cancellationToken,
-            extraQuery: LabelSelectorQuery(labelSelector));
+            extraQuery: SelectorQuery(fieldSelector, labelSelector));
 
     /// <summary>One full (non-watching) list — used for events, typeahead and one-shot lookups.</summary>
     public async Task<IReadOnlyList<DynamicResource>> ListResourceOnceAsync(
@@ -128,12 +134,7 @@ public sealed partial class ClusterClient
             query += $"&continue={Uri.EscapeDataString(continueToken)}";
         }
 
-        if (!string.IsNullOrEmpty(fieldSelector))
-        {
-            query += $"&fieldSelector={Uri.EscapeDataString(fieldSelector)}";
-        }
-
-        query += LabelSelectorQuery(labelSelector);
+        query += SelectorQuery(fieldSelector, labelSelector);
 
         using var doc = await GetJsonDocumentAsync(path + query, ct).ConfigureAwait(false);
         var root = doc.RootElement;
@@ -401,13 +402,14 @@ public sealed partial class ClusterClient
     }
 
     /// <summary>
-    /// The <c>&amp;labelSelector=…</c> fragment for a selector, or an empty string when
-    /// there is none. One place, so the list page and the watch cannot escape it
+    /// The <c>&amp;fieldSelector=…&amp;labelSelector=…</c> fragment, or an empty string when
+    /// there is neither. One place, so the list page and the watch cannot escape either
     /// differently — a selector escaped on one half and not the other silently gives a
     /// watch a different population from the list that seeded it.
     /// </summary>
-    private static string LabelSelectorQuery(LabelSelector? labelSelector) =>
-        labelSelector is null ? "" : $"&labelSelector={Uri.EscapeDataString(labelSelector.ToQuery())}";
+    private static string SelectorQuery(string? fieldSelector, LabelSelector? labelSelector) =>
+        (string.IsNullOrEmpty(fieldSelector) ? "" : $"&fieldSelector={Uri.EscapeDataString(fieldSelector)}")
+        + (labelSelector is null ? "" : $"&labelSelector={Uri.EscapeDataString(labelSelector.ToQuery())}");
 
     /// <summary>The Status <c>message</c>, or the body verbatim when it isn't one.</summary>
     private static string ExtractStatusMessage(string body) =>
