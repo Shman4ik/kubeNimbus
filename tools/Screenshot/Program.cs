@@ -179,6 +179,8 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-cronjob-run-now-done", () => HostInMainWindow(ClusterTabScenarios.CronJobRunNowDone())),
     ("cluster-tab-cronjob-resume", () => HostInMainWindow(ClusterTabScenarios.CronJobResume())),
     ("cluster-tab-job-detail", () => HostInMainWindow(ClusterTabScenarios.JobDetail(), height: 1000)),
+    // FEAT-47 — a bound PersistentVolume naming its claim, beside one nothing has claimed.
+    ("cluster-tab-persistent-volumes", () => HostInMainWindow(ClusterTabScenarios.PersistentVolumes())),
 
     // FEAT-4 — the node surface. All on the demo cluster, which is where the node
     // dataset lives; the drain's progress states are the two the harness cannot produce

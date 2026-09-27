@@ -459,6 +459,14 @@
                     <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
+                <!-- FEAT-47: the other end of a PV/PVC binding, named in the header so the
+                     item says what it opens. Present only on a bound claim or volume. -->
+                <MenuItem Header="{Binding BoundObjectLabel}" Command="{Binding OpenBoundObjectCommand}"
+                          IsVisible="{Binding CanOpenBoundObject}">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource LinkIconGeometry}" Width="13" Height="13" />
+                  </MenuItem.Icon>
+                </MenuItem>
                 <Separator />
                 <MenuItem Header="Edit YAML" Command="{Binding EditSelectedYamlCommand}" InputGesture="E">
                   <MenuItem.Icon>

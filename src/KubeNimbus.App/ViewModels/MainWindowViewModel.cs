@@ -1444,6 +1444,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
                     () => rowTab.ResumeSelectedCommand.Execute(null));
             }
 
+            // The other end of a PV/PVC binding (FEAT-47).
+            if (rowTab.BoundObjectLabel is { } bound)
+            {
+                yield return new PaletteItem(
+                    bound, $"{where} · the other end of its binding", "LinkIconGeometry",
+                    () => rowTab.OpenBoundObjectCommand.Execute(null));
+            }
+
             yield return Catalog(CommandId.EditYaml, where,
                 () => rowTab.EditSelectedYamlCommand.Execute(null));
 
