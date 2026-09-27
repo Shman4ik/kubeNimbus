@@ -503,6 +503,9 @@ public static class DemoData
             { Group: "apps" or "batch" or "autoscaling" or "policy" or "networking.k8s.io", Kind: var kind } => OfKind(kind),
             { Group: "", Kind: "Service" or "Endpoints" } => OfKind(descriptor.Kind),
             { Group: "discovery.k8s.io", Kind: "EndpointSlice" } => OfKind("EndpointSlice"),
+            // A bound claim and its volume, plus a volume nothing has claimed — the two
+            // ends FEAT-47's links join, and the one that has nothing to link to.
+            { Group: "", Kind: "PersistentVolumeClaim" or "PersistentVolume" } => OfKind(descriptor.Kind),
             _ => [],
         };
 

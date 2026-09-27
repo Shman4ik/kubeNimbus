@@ -121,5 +121,8 @@ public sealed partial class ClusterTabViewModel
         ResumeSelectedCommand.NotifyCanExecuteChanged();
         CordonSelectedCommand.NotifyCanExecuteChanged();
         UncordonSelectedCommand.NotifyCanExecuteChanged();
+
+        // A claim that binds while it is selected gains its volume link the same way.
+        NotifyStorageBinding();
     }
 }

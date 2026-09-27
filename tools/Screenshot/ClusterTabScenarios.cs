@@ -989,6 +989,21 @@ internal static class ClusterTabScenarios
         return tab;
     }
 
+    /// <summary>
+    /// FEAT-47: the demo's PersistentVolumes, a bound one and one nothing has claimed. The
+    /// Details column names the bound volume's claim, as kubectl's CLAIM column does; the
+    /// row's menu then carries "Open claim payments/data-redis-cache-0".
+    /// </summary>
+    public static ClusterTabViewModel PersistentVolumes()
+    {
+        var tab = DemoTab();
+        var storage = tab.SidebarSections.First(s => s.Kinds.Any(k => k.Descriptor is { Group: "", Kind: "PersistentVolume" }));
+        storage.IsExpanded = true;
+        tab.SelectKindCommand.Execute(storage.Kinds.First(k => k.Descriptor is { Group: "", Kind: "PersistentVolume" }));
+        tab.SelectedRow = tab.Rows.FirstOrDefault(r => r.Name.StartsWith("pvc-", StringComparison.Ordinal));
+        return tab;
+    }
+
     // ------------------------------------------------------------------ nodes
     //
     // Every one of these runs on the demo cluster, which is where the node dataset lives

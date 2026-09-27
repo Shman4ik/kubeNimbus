@@ -1946,6 +1946,18 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     private Task OpenEnvFromSource(EnvFromSourceViewModel source) =>
         _openOwner(new OwnerRef("v1", source.Kind, source.Name, Uid: null, Controller: false), PodNamespace);
 
+    /// <summary>
+    /// Opens the Secret/ConfigMap a single <c>secretKeyRef</c>/<c>configMapKeyRef</c> row
+    /// names (FEAT-45) — the same way through the <c>envFrom</c> lines already had. A
+    /// Secret opens in the YAML editor, where its values stay base64 and masked behind that
+    /// editor's own reveal, so opening it is not a way round the row's eye.
+    /// </summary>
+    [RelayCommand]
+    private Task OpenEnvVarSource(EnvVarViewModel variable) =>
+        variable is { SecretOrConfigMapKind: { } kind, SecretOrConfigMapName: { Length: > 0 } name }
+            ? _openOwner(new OwnerRef("v1", kind, name, Uid: null, Controller: false), PodNamespace)
+            : Task.CompletedTask;
+
     public override async Task OnClosingAsync()
     {
         _row.PropertyChanged -= OnRowChanged;

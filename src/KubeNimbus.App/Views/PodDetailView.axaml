@@ -299,7 +299,7 @@
                        value at a different x and the list would read as a ragged edge. A
                        name longer than the column wraps inside it. -->
                   <DataTemplate x:DataType="vm:EnvVarViewModel">
-                    <Grid ColumnDefinitions="200,*" Margin="0,3">
+                    <Grid ColumnDefinitions="200,*,Auto" Margin="0,3">
                       <TextBlock Grid.Column="0" Text="{Binding Name}" Margin="0,0,12,0"
                                  FontFamily="Cascadia Mono,Consolas,monospace" FontWeight="SemiBold" FontSize="11.5"
                                  TextWrapping="Wrap" VerticalAlignment="Top" />
@@ -352,6 +352,17 @@
                                    Classes.warn="{Binding !IsOptionalReference}" Classes.dim="{Binding IsOptionalReference}"
                                    IsVisible="{Binding RevealError, Converter={x:Static aconv:ObjectConverters.IsNotNull}}" />
                       </StackPanel>
+                      <!-- FEAT-45: the object a key reference names, one click away — the
+                           same chevron the envFrom lines below carry, on the rows that name
+                           an object and on no other. A Secret opens in the YAML editor, whose
+                           values stay masked behind its own reveal. -->
+                      <Button Grid.Column="2" Classes="toolbar" Padding="4" VerticalAlignment="Top"
+                              IsVisible="{Binding CanOpenSource}"
+                              ToolTip.Tip="Open the object this value comes from"
+                              Command="{Binding $parent[UserControl].((vm:PodDetailTabViewModel)DataContext).OpenEnvVarSourceCommand}"
+                              CommandParameter="{Binding}">
+                        <PathIcon Data="{StaticResource ChevronRightIconGeometry}" Width="12" Height="12" />
+                      </Button>
                     </Grid>
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>

@@ -504,10 +504,16 @@ public static class ResourceStatusSummary
             KeyCount(PropertyCount(Obj(raw, "data")) + PropertyCount(Obj(raw, "stringData")))),
         ("", "Service") => DescribeService(spec, status),
         ("", "Node") => Join(NodeRoles(raw), Str(Obj(status, "nodeInfo"), "kubeletVersion")),
+        // kubectl's VOLUME and CLAIM columns, the other end of the binding (FEAT-47) — and
+        // what the row's "Open bound …" menu item opens.
         ("", "PersistentVolumeClaim") => Join(
-            Str(Obj(status, "capacity"), "storage"), AccessModes(spec), Str(spec, "storageClassName")),
+            Str(Obj(status, "capacity"), "storage"), AccessModes(spec), Str(spec, "storageClassName"),
+            Str(spec, "volumeName") is { Length: > 0 } volume ? $"volume {volume}" : ""),
         ("", "PersistentVolume") => Join(
-            Str(Obj(spec, "capacity"), "storage"), AccessModes(spec), Str(spec, "storageClassName")),
+            Str(Obj(spec, "capacity"), "storage"), AccessModes(spec), Str(spec, "storageClassName"),
+            Obj(spec, "claimRef") is var claim && Str(claim, "name") is { Length: > 0 } claimName
+                ? $"claim {Str(claim, "namespace")}/{claimName}"
+                : ""),
         ("batch", "CronJob") => DescribeCronJob(spec, status),
 
         // The four networking kinds, in kubectl's own columns (printers.go: printIngress,
