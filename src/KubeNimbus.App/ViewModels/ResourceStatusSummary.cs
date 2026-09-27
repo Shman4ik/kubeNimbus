@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using KubeNimbus.Core;
+using KubeNimbus.Core.Networking;
 
 namespace KubeNimbus.App.ViewModels;
 
@@ -508,9 +509,96 @@ public static class ResourceStatusSummary
         ("", "PersistentVolume") => Join(
             Str(Obj(spec, "capacity"), "storage"), AccessModes(spec), Str(spec, "storageClassName")),
         ("batch", "CronJob") => DescribeCronJob(spec, status),
-        ("networking.k8s.io", "Ingress") => Join(IngressHosts(spec), LoadBalancerAddress(status)),
+
+        // The four networking kinds, in kubectl's own columns (printers.go: printIngress,
+        // printEndpoints, printEndpointSlice, printNetworkPolicy). Before these a
+        // NetworkPolicy list was name and age — less than `kubectl get netpol`.
+        ("networking.k8s.io", "Ingress") => Join(
+            IngressRules.Read(new DynamicResource(raw)).ClassName,
+            IngressRules.HostsColumn(spec),
+            LoadBalancerAddresses(status),
+            ArrayLength(Arr(spec, "tls")) > 0 ? "80, 443" : "80"),
+        ("", "Endpoints") => DescribeEndpoints(raw),
+        ("discovery.k8s.io", "EndpointSlice") => Join(
+            Str(raw, "addressType"), SliceColumn(SlicePorts(raw)), SliceColumn(SliceAddresses(raw))),
+        ("networking.k8s.io", "NetworkPolicy") => NetworkPolicyRules.ListSummary(new DynamicResource(raw)),
         _ => "",
     };
+
+    /// <summary>
+    /// kubectl's ENDPOINTS column (<c>formatEndpoints</c>): the ready addresses only
+    /// (<c>subsets[].addresses</c>, never <c>notReadyAddresses</c>), each joined with every
+    /// port as host:port, the first three shown and the rest counted — "&lt;none&gt;" for an
+    /// object with no subsets. Headless services with no ports list bare IPs.
+    /// </summary>
+    internal static string DescribeEndpoints(JsonElement raw)
+    {
+        const int max = 3;
+        var subsets = Arr(raw, "subsets");
+        if (ArrayLength(subsets) == 0)
+        {
+            return "<none>";
+        }
+
+        var list = new List<string>();
+        var count = 0;
+        foreach (var subset in Items(subsets))
+        {
+            var addresses = Items(Arr(subset, "addresses")).Select(a => Str(a, "ip")).ToList();
+            var ports = Items(Arr(subset, "ports")).ToList();
+            if (ports.Count == 0)
+            {
+                count += addresses.Count;
+                list.AddRange(addresses.Take(Math.Max(0, max - list.Count)));
+                continue;
+            }
+
+            foreach (var port in ports)
+            {
+                count += addresses.Count;
+                foreach (var address in addresses)
+                {
+                    if (list.Count == max)
+                    {
+                        break;
+                    }
+
+                    // net.JoinHostPort: an IPv6 address is bracketed.
+                    list.Add(address.Contains(':', StringComparison.Ordinal)
+                        ? $"[{address}]:{Int(port, "port")}"
+                        : $"{address}:{Int(port, "port")}");
+                }
+            }
+        }
+
+        var text = string.Join(",", list);
+        return count > max ? $"{text} + {count - max} more..." : text;
+    }
+
+    /// <summary>kubectl's EndpointSlice PORTS: each port's number, else its name, else <c>*</c>.</summary>
+    private static List<string> SlicePorts(JsonElement raw) =>
+        [.. Items(Arr(raw, "ports")).Select(p => p.TryGetProperty("port", out var port) && port.ValueKind == JsonValueKind.Number
+            ? port.GetRawText()
+            : Str(p, "name") is { Length: > 0 } name ? name : "*")];
+
+    /// <summary>kubectl's EndpointSlice ENDPOINTS: every address of every endpoint, readiness regardless.</summary>
+    private static List<string> SliceAddresses(JsonElement raw) =>
+        [.. Items(Arr(raw, "endpoints")).SelectMany(e => Items(Arr(e, "addresses")))
+            .Where(a => a.ValueKind == JsonValueKind.String)
+            .Select(a => a.GetString() ?? "")];
+
+    /// <summary>kubectl's <c>listWithMoreString</c>: three shown, the rest counted, "&lt;unset&gt;" for none.</summary>
+    private static string SliceColumn(List<string> values)
+    {
+        const int max = 3;
+        if (values.Count == 0)
+        {
+            return "<unset>";
+        }
+
+        var text = string.Join(",", values.Take(max));
+        return values.Count > max ? $"{text} + {values.Count - max} more..." : text;
+    }
 
     private static string DescribeCronJob(JsonElement spec, JsonElement status)
     {
@@ -578,26 +666,11 @@ public static class ResourceStatusSummary
         return "";
     }
 
-    private static string IngressHosts(JsonElement spec)
-    {
-        var hosts = new StringBuilder();
-        foreach (var rule in Items(Arr(spec, "rules")))
-        {
-            if (Str(rule, "host") is not { Length: > 0 } host)
-            {
-                continue;
-            }
-
-            if (hosts.Length > 0)
-            {
-                hosts.Append(',');
-            }
-
-            hosts.Append(host);
-        }
-
-        return hosts.ToString();
-    }
+    /// <summary>kubectl's Ingress ADDRESS: every load-balancer IP or hostname, comma-joined.</summary>
+    private static string LoadBalancerAddresses(JsonElement status) =>
+        string.Join(",", Items(Arr(Obj(status, "loadBalancer"), "ingress"))
+            .Select(i => Str(i, "ip") is { Length: > 0 } ip ? ip : Str(i, "hostname"))
+            .Where(a => a.Length > 0));
 
     private static string NodeRoles(JsonElement raw)
     {
@@ -692,6 +765,7 @@ public static class ResourceStatusSummary
     {
         "/ConfigMap", "/Secret", "/Service", "/Node", "/PersistentVolumeClaim", "/PersistentVolume",
         "batch/CronJob", "networking.k8s.io/Ingress",
+        "/Endpoints", "discovery.k8s.io/EndpointSlice", "networking.k8s.io/NetworkPolicy",
     };
 
     private static string KeyOf(ResourceDescriptor descriptor) => $"{descriptor.Group}/{descriptor.Kind}";

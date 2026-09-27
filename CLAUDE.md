@@ -222,7 +222,8 @@ Three rules about it:
 1. **Minimalist.** Every always-visible control must be justified; default answer
    is no. Secondary actions live in a command palette (Ctrl+K) or context menus.
 2. **Double-click = default action** everywhere (pod → logs/describe, deployment
-   → details, context → connect); Space = quick-peek.
+   → details, service → its pods and endpoints, ingress → its routes, network policy →
+   its rules, context → connect); Space = quick-peek.
 3. **Multi-cluster via tabs** (like pgNimbus query tabs): each tab bound to a
    kubeconfig context; drag-reorder; workspace snapshot restores tabs. Reaching
    a cluster that isn't already a tab goes through the **cluster switcher**, never
@@ -252,7 +253,11 @@ Three rules about it:
    core group (Kind still decides inside `""`, the one group that holds
    workloads, networking, storage and machinery at once), which has no such
    residue — and stops a CRD that happens to be called `Deployment` from being
-   classified as a built-in workload, which the old rule did.
+   classified as a built-in workload, which the old rule did. One CRD-installed
+   group is filed with the built-ins on purpose: `gateway.networking.k8s.io`
+   (Gateway API, the Kubernetes project's own successor to Ingress) is in
+   Network, still by group, so its route kinds stop being more rows of CRDs —
+   see [networking-detail](docs/engineering/networking-detail.md).
    The filter matches display name, **API group and short names**
    (`SidebarKindViewModel.Matches`), because the group is the only thing
    telling two same-named CRD kinds apart and "svc"/"po" is how people think.
@@ -622,6 +627,7 @@ Each feature's design rules, and the incidents behind them, live in a page of th
 - [Unhealthy only: the list's second narrowing](docs/engineering/unhealthy-only.md) — Warn/error predicate over StatusHealth, per-Modified re-evaluation, kind gate, third empty state, list-scoped Ctrl+Z.
 - [An Auto DataGrid column ratchets, and only one grid can afford it](docs/engineering/datagrid-auto-columns.md) — Why the resource list has no Width=Auto columns (measured ratchet) and why Helm/Argo keep them.
 - [Mutating workload actions (scale, rollout restart, delete)](docs/engineering/workload-actions.md) — Scale / rollout restart / delete: merge patches, scale subresource, capability from discovery.
+- [Networking: Service, Ingress and NetworkPolicy panes, and the list columns](docs/engineering/networking-detail.md) — Service pane joins selector-matched pods to EndpointSlice endpoints (slices by the `kubernetes.io/service-name` label, not owner refs; no verdict before both watches sync; the three degenerate shapes as three sentences); Ingress routes with a URL built from a validated host, never copied; NetworkPolicy rules in words with the empty selector meaning every pod; kubectl's list columns for Ingress/Endpoints/EndpointSlice/NetworkPolicy; Gateway API filed under Network by group.
 - [Node operations (detail, cordon / uncordon, drain)](docs/engineering/node-operations.md) — Node detail (System card, Events by kind+name, measured Usage vs allocatable), cordon/uncordon, drain: allocatable math, eviction plan table, partial-drain lifetime.
 - [The exec terminal](docs/engineering/exec-terminal.md) — SvcSystems.UI.Terminal over XTerm.NET: bytes in/out, stateful UTF-8 decoder, keyboard ownership, reverse-video defect.
 - [The machine's own terminal ("open a terminal on this cluster")](docs/engineering/machine-terminal.md) — TerminalLauncher: one-key overlay kubeconfig, env-inheritance trap on wt.exe/open, per-platform launch.
@@ -674,7 +680,9 @@ Six rules:
 3. **One dataset, not two.** `src/KubeNimbus.App/Demo/` owns it — `DemoData` (objects,
    catalog, sidebar, Helm, and the one CRD whose `additionalPrinterColumns` the demo
    list draws — `crds.json` is a real-shaped `CustomResourceDefinition`, read through
-   the same `PrinterColumns.Parse` a live cluster's GET goes through), `DemoLogs`
+   the same `PrinterColumns.Parse` a live cluster's GET goes through, and
+   `networking.json`, one object per state the Service, Ingress and NetworkPolicy panes
+   render), `DemoLogs`
    (canned streams), `DemoUsage` (replayed metric polls) — and `tools/Screenshot/FixtureData.cs` is now a passthrough to it. What a
    screenshot shows and what a user clicking "Explore demo cluster" sees cannot drift
    apart. The JSON is an `EmbeddedResource` with an explicit `LogicalName`
@@ -1272,7 +1280,9 @@ container picker), env vars of every ref kind (Environment tab + Reveal), a
 StatefulSet with PVCs (Storage), a CronJob firing every minute (a visibly live
 watch), a whole `demo-broken` namespace of CrashLoopBackOff/ImagePullBackOff/
 unschedulable/never-Ready pods (the status pills and empty/error states of UI
-rule 9), three CRDs **two of which share the Kind `Widget` in different API
+rule 9) — with the Service pane's states beside them (a not-ready endpoint, a typo'd
+selector, an ExternalName, a selector-less service with a hand-written EndpointSlice)
+and two NetworkPolicies, one of them a default deny —, three CRDs **two of which share the Kind `Widget` in different API
 groups** (the sidebar's group-aware filter) whose `additionalPrinterColumns` between
 them produce every column state the list can render — mixed scalar types, a
 `priority: 1` column, a condition filter, a `type: date` that is not the creation

@@ -1,0 +1,240 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:KubeNimbus.App.ViewModels"
+             xmlns:net="using:KubeNimbus.Core.Networking"
+             xmlns:conv="using:KubeNimbus.App.Converters"
+             xmlns:app="using:KubeNimbus.App"
+             x:Class="KubeNimbus.App.Views.ServiceDetailView"
+             x:DataType="vm:ServiceDetailTabViewModel">
+
+  <!-- No title row: the dock tab already reads `Service/<name>` (UI rule 10). One chrome row
+       — the segmented strip, the service's own one-line summary, and the Events tab's tools
+       — and the headerless TabControl underneath, the pattern node detail uses. -->
+  <Grid RowDefinitions="Auto,*" Margin="10,8,10,10">
+
+    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,0,0,8">
+      <ListBox Grid.Column="0" Classes="segmented" SelectedIndex="{Binding SelectedTabIndex}">
+        <ListBoxItem Content="Backends" />
+        <ListBoxItem Content="Overview" />
+        <ListBoxItem Content="Events" />
+      </ListBox>
+
+      <TextBlock Grid.Column="1" Text="{Binding SummaryText}" Opacity="0.6" FontSize="12"
+                 VerticalAlignment="Center" Margin="12,0,0,0"
+                 TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SummaryText}" />
+
+      <TextBlock Grid.Column="2" Text="{Binding EventsCaption}" Opacity="0.6" FontSize="12"
+                 VerticalAlignment="Center" Margin="8,0,8,0"
+                 IsVisible="{Binding SelectedTabIndex, Converter={x:Static conv:IndexEqualsConverter.Instance}, ConverterParameter=2}" />
+      <Button Grid.Column="3" Classes="toolbar" Padding="6" Command="{Binding RefreshEventsCommand}"
+              ToolTip.Tip="Re-read the events about this service"
+              IsVisible="{Binding SelectedTabIndex, Converter={x:Static conv:IndexEqualsConverter.Instance}, ConverterParameter=2}">
+        <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="14" Height="14" />
+      </Button>
+    </Grid>
+
+    <TabControl Grid.Row="1" Classes="headerless" SelectedIndex="{Binding SelectedTabIndex}">
+
+      <!-- ============================================================ Backends -->
+      <!-- The verdict first, then the join: every pod the selector matches with what its
+           endpoint is doing, and every endpoint no matched pod accounts for. While either
+           list is still being read the bar says what it is reading and claims nothing
+           (UI rule 18). -->
+      <TabItem Header="Backends">
+        <Grid RowDefinitions="Auto,Auto,Auto,*">
+          <Border Grid.Row="0" Classes="infoBar" Margin="0,0,0,8"
+                  Classes.success="{Binding VerdictLevel, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=success}"
+                  Classes.warn="{Binding VerdictLevel, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=warn}"
+                  Classes.error="{Binding VerdictLevel, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=error}">
+            <StackPanel Spacing="2">
+              <TextBlock Text="{Binding VerdictHeadline}" FontWeight="SemiBold" FontSize="12" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding VerdictDetail}" FontSize="11.5" Opacity="0.75" TextWrapping="Wrap"
+                         IsVisible="{Binding VerdictDetail, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}" />
+              <ProgressBar IsIndeterminate="True" Height="2" MinHeight="2" Margin="0,4,0,0"
+                           IsVisible="{Binding IsLoading}" />
+            </StackPanel>
+          </Border>
+
+          <Border Grid.Row="1" Classes="infoBar error" Margin="0,0,0,8" IsVisible="{Binding HasReadError}">
+            <TextBlock Text="{Binding ReadError}" TextWrapping="Wrap" FontSize="12" />
+          </Border>
+
+          <Border Grid.Row="2" Classes="infoBar warn" Margin="0,0,0,8" IsVisible="{Binding HasLogsNotice}">
+            <TextBlock Text="{Binding LogsNotice}" TextWrapping="Wrap" FontSize="12" />
+          </Border>
+
+          <!-- L / Shift+L, Enter and the row icon's Shift+click are the resource list's own
+               (RowLogsGesture, Tunnel, in code-behind); the menu captions are display-only. -->
+          <DataGrid Grid.Row="3" Name="BackendsGrid" ItemsSource="{Binding Backends}" IsVisible="{Binding HasBackends}"
+                    SelectedItem="{Binding SelectedBackend}" DoubleTapped="OnBackendDoubleTapped"
+                    IsReadOnly="True" GridLinesVisibility="Horizontal" CanUserResizeColumns="True">
+            <DataGrid.ContextMenu>
+              <ContextMenu>
+                <MenuItem Header="Logs" Command="{Binding PodLogsCommand}" InputGesture="L" />
+                <MenuItem Header="Logs, maximized" Command="{Binding PodLogsMaximizedCommand}" InputGesture="Shift+L" />
+                <MenuItem Header="Open pod" Command="{Binding OpenPodCommand}" InputGesture="Enter" />
+              </ContextMenu>
+            </DataGrid.ContextMenu>
+            <DataGrid.Columns>
+              <DataGridTemplateColumn Header="" Width="28">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ServiceBackendViewModel">
+                    <Ellipse Classes="statusDot" Width="8" Height="8" VerticalAlignment="Center"
+                             Fill="{Binding StateHealth, Converter={x:Static conv:HealthToBrushConverter.Instance}}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Pod" Width="2*" MinWidth="200">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ServiceBackendViewModel">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                                 TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                      <!-- The Panel says whether the row names a pod at all; the button's own
+                           style says when it is drawn (hovered / selected), as on the list. -->
+                      <Panel Grid.Column="1" IsVisible="{Binding HasLogs}">
+                        <Button Classes="rowAction logs" Click="OnBackendLogsClick"
+                                ToolTip.Tip="{x:Static app:CommandTip.RowLogs}">
+                          <PathIcon Data="{StaticResource LogsIconGeometry}" Width="12" Height="12" />
+                        </Button>
+                      </Panel>
+                    </Grid>
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Pod status" Width="140">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ServiceBackendViewModel">
+                    <TextBlock Text="{Binding PodStatus}" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PodStatus}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Endpoint" Width="110">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ServiceBackendViewModel">
+                    <Border Classes="statusPill" HorizontalAlignment="Left" VerticalAlignment="Center"
+                            ToolTip.Tip="{Binding StateTooltip}"
+                            Classes.ok="{Binding StateHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=ok}"
+                            Classes.warn="{Binding StateHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=warn}"
+                            Classes.error="{Binding StateHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=error}">
+                      <TextBlock Text="{Binding StateText}" FontSize="11" />
+                    </Border>
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Address" Width="140">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ServiceBackendViewModel">
+                    <TextBlock Text="{Binding AddressText}" VerticalAlignment="Center"
+                               FontFamily="Cascadia Mono,Consolas,monospace" FontSize="12"
+                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding AddressTooltip}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Why" Width="*" MinWidth="140">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ServiceBackendViewModel">
+                    <TextBlock Text="{Binding Reason}" VerticalAlignment="Center" Opacity="0.75" FontSize="12"
+                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Reason}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Node" Width="150">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ServiceBackendViewModel">
+                    <TextBlock Text="{Binding NodeName}" VerticalAlignment="Center" Opacity="0.75"
+                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding NodeName}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+            </DataGrid.Columns>
+          </DataGrid>
+        </Grid>
+      </TabItem>
+
+      <!-- ============================================================ Overview -->
+      <TabItem Header="Overview">
+        <ScrollViewer>
+          <StackPanel Spacing="8">
+            <Border Classes="card" Padding="12,10">
+              <StackPanel Spacing="4">
+                <TextBlock Classes="sectionHeader" Text="SERVICE" />
+                <ItemsControl ItemsSource="{Binding OverviewRows}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:DetailRow">
+                      <Grid ColumnDefinitions="130,*" Margin="0,1">
+                        <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="12" Opacity="0.6" />
+                        <SelectableTextBlock Grid.Column="1" FontSize="12" Text="{Binding Value}" TextWrapping="Wrap" />
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+
+            <!-- Port → target: the one mapping that is easy to get wrong and invisible in a
+                 list cell. A named target port is resolved per pod, which is why the
+                 Backends tab shows each endpoint's own resolved port. -->
+            <Border Classes="card" Padding="12,10">
+              <StackPanel Spacing="4">
+                <TextBlock Classes="sectionHeader" Text="PORTS" />
+                <TextBlock Classes="statusText dim" IsVisible="{Binding HasNoPorts}"
+                           Text="No ports declared. A headless or ExternalName service may have none; any other service with none routes nothing." />
+                <ItemsControl ItemsSource="{Binding Ports}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="net:ServicePortInfo">
+                      <Grid ColumnDefinitions="130,*" Margin="0,1">
+                        <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="12" Opacity="0.6" />
+                        <SelectableTextBlock Grid.Column="1" FontSize="12" Text="{Binding Display}"
+                                             FontFamily="Cascadia Mono,Consolas,monospace" />
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <!-- ============================================================== Events -->
+      <TabItem Header="Events">
+        <Grid RowDefinitions="Auto,Auto,*">
+          <Border Grid.Row="0" Classes="infoBar error" Margin="0,0,0,8" IsVisible="{Binding HasEventsError}">
+            <TextBlock Text="{Binding EventsError}" TextWrapping="Wrap" FontSize="12" />
+          </Border>
+          <TextBlock Grid.Row="1" Classes="statusText dim" Margin="2,0,0,8" TextWrapping="Wrap"
+                     IsVisible="{Binding HasNoEvents}"
+                     Text="No recent events for this service. Events expire after an hour by default; a quiet service has none." />
+          <ScrollViewer Grid.Row="2">
+            <ItemsControl ItemsSource="{Binding Events}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:EventRowViewModel">
+                  <Border Classes="card" Padding="8,6" Margin="0,0,0,4">
+                    <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto">
+                      <Border Grid.Row="0" Grid.Column="0" Classes="statusPill" Margin="0,0,8,0"
+                              Classes.ok="{Binding Health, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=ok}"
+                              Classes.warn="{Binding Health, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=warn}">
+                        <TextBlock Text="{Binding Type}" FontSize="11" />
+                      </Border>
+                      <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Reason}" FontWeight="SemiBold" FontSize="12.5"
+                                 VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Grid.Row="0" Grid.Column="2" FontSize="10.5" Opacity="0.5" VerticalAlignment="Center" Margin="8,0,0,0">
+                        <Run Text="{Binding Count, StringFormat='×{0}'}" />
+                        <Run Text=" · " />
+                        <Run Text="{Binding LastSeen}" />
+                      </TextBlock>
+                      <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Text="{Binding Message}" FontSize="11.5" Opacity="0.75"
+                                 TextWrapping="Wrap" Margin="0,3,0,0" />
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </Grid>
+      </TabItem>
+    </TabControl>
+  </Grid>
+</UserControl>

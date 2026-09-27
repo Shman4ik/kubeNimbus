@@ -40,6 +40,15 @@
     <DataTemplate DataType="vm:NodeDetailTabViewModel">
       <views:NodeDetailView />
     </DataTemplate>
+    <DataTemplate DataType="vm:ServiceDetailTabViewModel">
+      <views:ServiceDetailView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:IngressDetailTabViewModel">
+      <views:IngressDetailView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:NetworkPolicyDetailTabViewModel">
+      <views:NetworkPolicyDetailView />
+    </DataTemplate>
     <DataTemplate DataType="vm:WorkloadLogsTabViewModel">
       <views:WorkloadLogsView />
     </DataTemplate>

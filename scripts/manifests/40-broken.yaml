@@ -86,3 +86,114 @@ spec:
             periodSeconds: 5
           resources:
             requests: { cpu: 5m, memory: 8Mi }
+---
+# The Service pane's states (docs/engineering/networking-detail.md): a selector that
+# matches a pod that never passes readiness (a "Not ready" endpoint), a selector with a
+# typo that matches nothing, an ExternalName, and a selector-less service whose one
+# endpoint is written by hand — the three degenerate shapes plus the most common failure.
+apiVersion: v1
+kind: Service
+metadata:
+  name: never-ready
+  namespace: demo-broken
+spec:
+  selector:
+    app: never-ready
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: typo-selector
+  namespace: demo-broken
+spec:
+  selector:
+    app: neverready
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: external-db
+  namespace: demo-broken
+spec:
+  type: ExternalName
+  externalName: db.example.com
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: manual-endpoints
+  namespace: demo-broken
+spec:
+  ports:
+    - name: https
+      port: 443
+      targetPort: 8443
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: manual-endpoints-1
+  namespace: demo-broken
+  labels:
+    kubernetes.io/service-name: manual-endpoints
+    endpointslice.kubernetes.io/managed-by: kubenimbus-sandbox
+addressType: IPv4
+ports:
+  - name: https
+    port: 8443
+    protocol: TCP
+endpoints:
+  - addresses: ["10.255.255.1"]
+    conditions:
+      ready: true
+---
+# NetworkPolicy's two traps: an empty podSelector (every pod here — how default deny is
+# written) and a policy with rules in both directions. k3s enforces policies; nothing in
+# this namespace serves traffic (the readiness probes are exec), so the deny costs nothing.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: demo-broken
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: never-ready
+  namespace: demo-broken
+spec:
+  podSelector:
+    matchLabels:
+      app: never-ready
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53

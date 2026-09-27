@@ -1,0 +1,181 @@
+[
+  {
+    "kind": "Service",
+    "apiVersion": "v1",
+    "metadata": { "name": "payments-db", "namespace": "payments", "uid": "e3333331-3333-3333-3333-333333333333", "creationTimestamp": "2026-03-04T10:15:00Z" },
+    "spec": { "type": "ExternalName", "externalName": "payments-db.cluster-c9x2k4.eu-west-1.rds.amazonaws.com", "ports": [ { "name": "postgres", "port": 5432, "protocol": "TCP" } ] }
+  },
+  {
+    "kind": "Service",
+    "apiVersion": "v1",
+    "metadata": { "name": "legacy-billing", "namespace": "payments", "uid": "e3333332-3333-3333-3333-333333333333", "creationTimestamp": "2026-03-04T10:15:00Z" },
+    "spec": { "type": "ClusterIP", "clusterIP": "10.43.12.60", "ports": [ { "name": "https", "port": 443, "targetPort": 8443, "protocol": "TCP" } ] }
+  },
+  {
+    "kind": "Service",
+    "apiVersion": "v1",
+    "metadata": { "name": "checkout-canary", "namespace": "payments", "uid": "e3333333-3333-3333-3333-333333333333", "creationTimestamp": "2026-07-29T16:02:00Z" },
+    "spec": { "type": "ClusterIP", "clusterIP": "10.43.12.61", "selector": { "app": "checkout-canary", "track": "canary" }, "ports": [ { "name": "http", "port": 80, "targetPort": 8080, "protocol": "TCP" } ] }
+  },
+  {
+    "kind": "EndpointSlice",
+    "apiVersion": "discovery.k8s.io/v1",
+    "metadata": {
+      "name": "checkout-7kx2p", "namespace": "payments", "uid": "e4444441-4444-4444-4444-444444444444", "creationTimestamp": "2026-03-04T10:15:01Z",
+      "labels": { "kubernetes.io/service-name": "checkout", "endpointslice.kubernetes.io/managed-by": "endpointslice-controller.k8s.io" },
+      "ownerReferences": [ { "apiVersion": "v1", "kind": "Service", "name": "checkout", "uid": "e1111111-1111-1111-1111-111111111111", "controller": true } ]
+    },
+    "addressType": "IPv4",
+    "endpoints": [
+      { "addresses": [ "10.42.1.18" ], "conditions": { "ready": false, "serving": false, "terminating": false }, "nodeName": "demo-worker-1",
+        "targetRef": { "kind": "Pod", "name": "checkout-worker-5d8f7b9c4-qz9pl", "namespace": "payments", "uid": "a2222222-2222-2222-2222-222222222222" } },
+      { "addresses": [ "10.42.2.31" ], "conditions": { "ready": true, "serving": true, "terminating": false }, "nodeName": "demo-worker-2",
+        "targetRef": { "kind": "Pod", "name": "checkout-worker-7b4c6d8f5-h2x7d", "namespace": "payments" } }
+    ],
+    "ports": [ { "name": "http", "port": 8080, "protocol": "TCP" } ]
+  },
+  {
+    "kind": "EndpointSlice",
+    "apiVersion": "discovery.k8s.io/v1",
+    "metadata": {
+      "name": "fraud-detector-q8w3n", "namespace": "payments", "uid": "e4444442-4444-4444-4444-444444444444", "creationTimestamp": "2026-03-04T10:15:01Z",
+      "labels": { "kubernetes.io/service-name": "fraud-detector", "endpointslice.kubernetes.io/managed-by": "endpointslice-controller.k8s.io" },
+      "ownerReferences": [ { "apiVersion": "v1", "kind": "Service", "name": "fraud-detector", "uid": "e1111112-1111-1111-1111-111111111111", "controller": true } ]
+    },
+    "addressType": "IPv4",
+    "endpoints": [],
+    "ports": [ { "name": "grpc", "port": 9000, "protocol": "TCP" } ]
+  },
+  {
+    "kind": "EndpointSlice",
+    "apiVersion": "discovery.k8s.io/v1",
+    "metadata": {
+      "name": "ledger-api-m4t9c", "namespace": "payments", "uid": "e4444443-4444-4444-4444-444444444444", "creationTimestamp": "2026-03-04T10:15:01Z",
+      "labels": { "kubernetes.io/service-name": "ledger-api", "endpointslice.kubernetes.io/managed-by": "endpointslice-controller.k8s.io" },
+      "ownerReferences": [ { "apiVersion": "v1", "kind": "Service", "name": "ledger-api", "uid": "e1111113-1111-1111-1111-111111111111", "controller": true } ]
+    },
+    "addressType": "IPv4",
+    "endpoints": [
+      { "addresses": [ "10.42.2.40" ], "conditions": { "ready": true, "serving": true, "terminating": false }, "nodeName": "demo-worker-2",
+        "targetRef": { "kind": "Pod", "name": "ledger-api-6d5c8b7f9-x4k9p", "namespace": "payments" } },
+      { "addresses": [ "10.42.2.41" ], "conditions": { "ready": true, "serving": true, "terminating": false }, "nodeName": "demo-worker-2",
+        "targetRef": { "kind": "Pod", "name": "ledger-api-6d5c8b7f9-m2v7q", "namespace": "payments" } }
+    ],
+    "ports": [ { "name": "http", "port": 8080, "protocol": "TCP" } ]
+  },
+  {
+    "kind": "EndpointSlice",
+    "apiVersion": "discovery.k8s.io/v1",
+    "metadata": {
+      "name": "checkout-canary-z2r8d", "namespace": "payments", "uid": "e4444444-4444-4444-4444-444444444444", "creationTimestamp": "2026-07-29T16:02:01Z",
+      "labels": { "kubernetes.io/service-name": "checkout-canary", "endpointslice.kubernetes.io/managed-by": "endpointslice-controller.k8s.io" },
+      "ownerReferences": [ { "apiVersion": "v1", "kind": "Service", "name": "checkout-canary", "uid": "e3333333-3333-3333-3333-333333333333", "controller": true } ]
+    },
+    "addressType": "IPv4",
+    "endpoints": [],
+    "ports": [ { "name": "http", "port": 8080, "protocol": "TCP" } ]
+  },
+  {
+    "kind": "EndpointSlice",
+    "apiVersion": "discovery.k8s.io/v1",
+    "metadata": {
+      "name": "legacy-billing-dc1", "namespace": "payments", "uid": "e4444445-4444-4444-4444-444444444444", "creationTimestamp": "2026-03-04T10:20:00Z",
+      "labels": { "kubernetes.io/service-name": "legacy-billing", "endpointslice.kubernetes.io/managed-by": "platform-team" }
+    },
+    "addressType": "IPv4",
+    "endpoints": [
+      { "addresses": [ "192.168.40.12" ], "conditions": { "ready": true } },
+      { "addresses": [ "192.168.40.13" ], "conditions": { "ready": false } }
+    ],
+    "ports": [ { "name": "https", "port": 8443, "protocol": "TCP" } ]
+  },
+  {
+    "kind": "Endpoints",
+    "apiVersion": "v1",
+    "metadata": { "name": "checkout", "namespace": "payments", "uid": "e5555551-5555-5555-5555-555555555555", "creationTimestamp": "2026-03-04T10:15:01Z" },
+    "subsets": [
+      {
+        "addresses": [ { "ip": "10.42.2.31", "nodeName": "demo-worker-2", "targetRef": { "kind": "Pod", "name": "checkout-worker-7b4c6d8f5-h2x7d", "namespace": "payments" } } ],
+        "notReadyAddresses": [ { "ip": "10.42.1.18", "nodeName": "demo-worker-1", "targetRef": { "kind": "Pod", "name": "checkout-worker-5d8f7b9c4-qz9pl", "namespace": "payments" } } ],
+        "ports": [ { "name": "http", "port": 8080, "protocol": "TCP" } ]
+      }
+    ]
+  },
+  {
+    "kind": "Endpoints",
+    "apiVersion": "v1",
+    "metadata": { "name": "ledger-api", "namespace": "payments", "uid": "e5555552-5555-5555-5555-555555555555", "creationTimestamp": "2026-03-04T10:15:01Z" },
+    "subsets": [
+      {
+        "addresses": [
+          { "ip": "10.42.2.40", "nodeName": "demo-worker-2", "targetRef": { "kind": "Pod", "name": "ledger-api-6d5c8b7f9-x4k9p", "namespace": "payments" } },
+          { "ip": "10.42.2.41", "nodeName": "demo-worker-2", "targetRef": { "kind": "Pod", "name": "ledger-api-6d5c8b7f9-m2v7q", "namespace": "payments" } }
+        ],
+        "ports": [ { "name": "http", "port": 8080, "protocol": "TCP" } ]
+      }
+    ]
+  },
+  {
+    "kind": "Ingress",
+    "apiVersion": "networking.k8s.io/v1",
+    "metadata": { "name": "payments-public", "namespace": "payments", "uid": "e6666661-6666-6666-6666-666666666666", "creationTimestamp": "2026-05-12T09:30:00Z" },
+    "spec": {
+      "ingressClassName": "nginx",
+      "tls": [ { "hosts": [ "api.payments.example.com" ], "secretName": "payments-public-tls" } ],
+      "rules": [
+        { "host": "api.payments.example.com", "http": { "paths": [
+          { "path": "/ledger", "pathType": "Prefix", "backend": { "service": { "name": "ledger-api", "port": { "name": "http" } } } },
+          { "path": "/checkout", "pathType": "Prefix", "backend": { "service": { "name": "checkout", "port": { "number": 80 } } } }
+        ] } },
+        { "host": "admin.payments.example.com", "http": { "paths": [
+          { "path": "/reports(/|$)(.*)", "pathType": "ImplementationSpecific", "backend": { "service": { "name": "checkout-canary", "port": { "number": 80 } } } }
+        ] } },
+        { "host": "*.internal.payments.example.com", "http": { "paths": [
+          { "path": "/", "pathType": "Prefix", "backend": { "service": { "name": "fraud-detector", "port": { "number": 9000 } } } }
+        ] } }
+      ]
+    },
+    "status": { "loadBalancer": { "ingress": [ { "ip": "203.0.113.10" } ] } }
+  },
+  {
+    "kind": "NetworkPolicy",
+    "apiVersion": "networking.k8s.io/v1",
+    "metadata": { "name": "default-deny-ingress", "namespace": "payments", "uid": "e7777771-7777-7777-7777-777777777777", "creationTimestamp": "2026-03-04T10:10:00Z" },
+    "spec": { "podSelector": {}, "policyTypes": [ "Ingress" ] }
+  },
+  {
+    "kind": "NetworkPolicy",
+    "apiVersion": "networking.k8s.io/v1",
+    "metadata": { "name": "checkout-worker", "namespace": "payments", "uid": "e7777772-7777-7777-7777-777777777777", "creationTimestamp": "2026-03-04T10:10:00Z" },
+    "spec": {
+      "podSelector": { "matchLabels": { "app": "checkout-worker" } },
+      "policyTypes": [ "Ingress", "Egress" ],
+      "ingress": [
+        { "from": [ { "namespaceSelector": { "matchLabels": { "kubernetes.io/metadata.name": "ingress-nginx" } },
+                      "podSelector": { "matchLabels": { "app.kubernetes.io/name": "ingress-nginx" } } } ],
+          "ports": [ { "protocol": "TCP", "port": 8080 } ] },
+        { "from": [ { "podSelector": { "matchLabels": { "app": "payment-service-report-generator" } } } ],
+          "ports": [ { "protocol": "TCP", "port": "http" } ] }
+      ],
+      "egress": [
+        { "to": [ { "podSelector": { "matchLabels": { "app": "ledger-api" } } } ], "ports": [ { "protocol": "TCP", "port": 8080 } ] },
+        { "to": [ { "namespaceSelector": {}, "podSelector": { "matchLabels": { "k8s-app": "kube-dns" } } } ],
+          "ports": [ { "protocol": "UDP", "port": 53 }, { "protocol": "TCP", "port": 53 } ] },
+        { "to": [ { "ipBlock": { "cidr": "10.0.0.0/8", "except": [ "10.43.0.0/16" ] } } ], "ports": [ { "protocol": "TCP", "port": 5432 } ] }
+      ]
+    }
+  },
+  {
+    "kind": "NetworkPolicy",
+    "apiVersion": "networking.k8s.io/v1",
+    "metadata": { "name": "allow-prometheus-scrape", "namespace": "payments", "uid": "e7777773-7777-7777-7777-777777777777", "creationTimestamp": "2026-04-18T14:00:00Z" },
+    "spec": {
+      "podSelector": {},
+      "policyTypes": [ "Ingress" ],
+      "ingress": [
+        { "from": [ { "namespaceSelector": { "matchLabels": { "kubernetes.io/metadata.name": "monitoring" } } } ],
+          "ports": [ { "protocol": "TCP", "port": 9090 }, { "protocol": "TCP", "port": 8080 } ] }
+      ]
+    }
+  }
+]

@@ -1,0 +1,150 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:KubeNimbus.App.ViewModels"
+             xmlns:conv="using:KubeNimbus.App.Converters"
+             xmlns:app="using:KubeNimbus.App"
+             x:Class="KubeNimbus.App.Views.NetworkPolicyDetailView"
+             x:DataType="vm:NetworkPolicyDetailTabViewModel">
+
+  <!-- One chrome row (UI rule 10): the strip, what the policy selects and which ways it
+       restricts, and the Pods tab's caption and Refresh. -->
+  <Grid RowDefinitions="Auto,*" Margin="10,8,10,10">
+
+    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,0,0,8">
+      <ListBox Grid.Column="0" Classes="segmented" SelectedIndex="{Binding SelectedTabIndex}">
+        <ListBoxItem Content="Rules" />
+        <ListBoxItem Content="Pods" />
+      </ListBox>
+
+      <TextBlock Grid.Column="1" FontSize="12" VerticalAlignment="Center" Margin="12,0,0,0" Opacity="0.75"
+                 TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SelectsText}">
+        <Run Text="{Binding SelectsText}" /><Run Text=" · restricts " /><Run Text="{Binding PolicyTypesText}" />
+      </TextBlock>
+
+      <TextBlock Grid.Column="2" Text="{Binding PodsCaption}" Opacity="0.6" FontSize="12"
+                 VerticalAlignment="Center" Margin="8,0,8,0" TextTrimming="CharacterEllipsis" MaxWidth="320"
+                 IsVisible="{Binding SelectedTabIndex, Converter={x:Static conv:IndexEqualsConverter.Instance}, ConverterParameter=1}" />
+      <Button Grid.Column="3" Classes="toolbar" Padding="6" Command="{Binding RefreshPodsCommand}"
+              ToolTip.Tip="Re-read the pods this policy selects"
+              IsVisible="{Binding SelectedTabIndex, Converter={x:Static conv:IndexEqualsConverter.Instance}, ConverterParameter=1}">
+        <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="14" Height="14" />
+      </Button>
+    </Grid>
+
+    <TabControl Grid.Row="1" Classes="headerless" SelectedIndex="{Binding SelectedTabIndex}">
+
+      <!-- =============================================================== Rules -->
+      <!-- One card per direction. The sentence at the top of each is the part the YAML
+           hides: a direction in policyTypes with no rules denies, a rule with no peers
+           allows anyone, a rule with no ports allows every port. -->
+      <TabItem Header="Rules">
+        <ScrollViewer>
+          <StackPanel Spacing="8">
+            <TextBlock Classes="statusText dim" FontSize="11.5" TextWrapping="Wrap" Text="{Binding PolicyTypesNote}"
+                       IsVisible="{Binding PolicyTypesNote, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}" />
+
+            <Border Classes="card" Padding="12,10">
+              <StackPanel Spacing="6">
+                <TextBlock Classes="sectionHeader" Text="INGRESS — WHO MAY REACH THESE PODS" />
+                <TextBlock Text="{Binding IngressSummary}" FontSize="12" TextWrapping="Wrap" />
+                <ItemsControl ItemsSource="{Binding IngressRules}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:PolicyRuleViewModel">
+                      <Grid ColumnDefinitions="64,56,*" RowDefinitions="Auto,Auto" Margin="0,4,0,0">
+                        <TextBlock Grid.Column="0" Grid.RowSpan="2" Text="{Binding Title}" FontSize="12" FontWeight="SemiBold" />
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding PeersLabel}" FontSize="12" Opacity="0.6" />
+                        <SelectableTextBlock Grid.Row="0" Grid.Column="2" Text="{Binding PeersText}" FontSize="12" TextWrapping="Wrap" />
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="Ports" FontSize="12" Opacity="0.6" />
+                        <SelectableTextBlock Grid.Row="1" Grid.Column="2" Text="{Binding PortsText}" FontSize="12"
+                                             FontFamily="Cascadia Mono,Consolas,monospace" TextWrapping="Wrap" />
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+
+            <Border Classes="card" Padding="12,10">
+              <StackPanel Spacing="6">
+                <TextBlock Classes="sectionHeader" Text="EGRESS — WHAT THESE PODS MAY REACH" />
+                <TextBlock Text="{Binding EgressSummary}" FontSize="12" TextWrapping="Wrap" />
+                <ItemsControl ItemsSource="{Binding EgressRules}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:PolicyRuleViewModel">
+                      <Grid ColumnDefinitions="64,56,*" RowDefinitions="Auto,Auto" Margin="0,4,0,0">
+                        <TextBlock Grid.Column="0" Grid.RowSpan="2" Text="{Binding Title}" FontSize="12" FontWeight="SemiBold" />
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding PeersLabel}" FontSize="12" Opacity="0.6" />
+                        <SelectableTextBlock Grid.Row="0" Grid.Column="2" Text="{Binding PeersText}" FontSize="12" TextWrapping="Wrap" />
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="Ports" FontSize="12" Opacity="0.6" />
+                        <SelectableTextBlock Grid.Row="1" Grid.Column="2" Text="{Binding PortsText}" FontSize="12"
+                                             FontFamily="Cascadia Mono,Consolas,monospace" TextWrapping="Wrap" />
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+
+            <TextBlock Classes="statusText dim" FontSize="11.5" TextWrapping="Wrap"
+                       Text="Policies add up: traffic is allowed when any policy that selects the pod allows it. This pane shows one policy; a deny here can be lifted by another policy's allow." />
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <!-- ================================================================ Pods -->
+      <TabItem Header="Pods">
+        <Grid RowDefinitions="Auto,Auto,Auto,*">
+          <Border Grid.Row="0" Classes="infoBar error" Margin="0,0,0,8" IsVisible="{Binding HasPodsError}">
+            <TextBlock Text="{Binding PodsError}" TextWrapping="Wrap" FontSize="12" />
+          </Border>
+          <Border Grid.Row="1" Classes="infoBar warn" Margin="0,0,0,8" IsVisible="{Binding HasLogsNotice}">
+            <TextBlock Text="{Binding LogsNotice}" TextWrapping="Wrap" FontSize="12" />
+          </Border>
+          <TextBlock Grid.Row="2" Classes="statusText dim" Margin="2,0,0,8" TextWrapping="Wrap"
+                     IsVisible="{Binding HasNoPods}"
+                     Text="No pod in this namespace carries the labels this policy selects, so it constrains nothing today. A selector that should match and does not is the usual mistake — compare it with the pods' labels." />
+
+          <DataGrid Grid.Row="3" Name="PodsGrid" ItemsSource="{Binding Pods}" SelectedItem="{Binding SelectedPod}"
+                    DoubleTapped="OnPodDoubleTapped"
+                    IsReadOnly="True" GridLinesVisibility="Horizontal" CanUserResizeColumns="True">
+            <DataGrid.ContextMenu>
+              <ContextMenu>
+                <MenuItem Header="Logs" Command="{Binding PodLogsCommand}" InputGesture="L" />
+                <MenuItem Header="Logs, maximized" Command="{Binding PodLogsMaximizedCommand}" InputGesture="Shift+L" />
+                <MenuItem Header="Open pod" Command="{Binding OpenPodCommand}" InputGesture="Enter" />
+              </ContextMenu>
+            </DataGrid.ContextMenu>
+            <DataGrid.Columns>
+              <DataGridTemplateColumn Header="" Width="28">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:MatchedPodViewModel">
+                    <Ellipse Classes="statusDot" Width="8" Height="8" VerticalAlignment="Center"
+                             Fill="{Binding StatusHealth, Converter={x:Static conv:HealthToBrushConverter.Instance}}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Name" Width="*" MinWidth="180">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:MatchedPodViewModel">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                                 TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                      <Button Grid.Column="1" Classes="rowAction logs" Click="OnPodLogsClick"
+                              ToolTip.Tip="{x:Static app:CommandTip.RowLogs}">
+                        <PathIcon Data="{StaticResource LogsIconGeometry}" Width="12" Height="12" />
+                      </Button>
+                    </Grid>
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTextColumn Header="Ready" Binding="{Binding ReadyText}" Width="80" />
+              <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="170" />
+              <DataGridTextColumn Header="Node" Binding="{Binding NodeName}" Width="160" />
+              <DataGridTextColumn Header="Age" Binding="{Binding AgeText}" Width="80" />
+            </DataGrid.Columns>
+          </DataGrid>
+        </Grid>
+      </TabItem>
+    </TabControl>
+  </Grid>
+</UserControl>

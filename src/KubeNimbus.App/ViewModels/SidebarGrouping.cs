@@ -58,8 +58,21 @@ public static class SidebarGrouping
     private static readonly HashSet<string> WorkloadGroups =
         ["apps", "batch", "autoscaling"];
 
+    /// <summary>
+    /// The built-in networking groups, plus Gateway API. <c>gateway.networking.k8s.io</c>
+    /// is installed as CRDs rather than served by the API server, but it is the Kubernetes
+    /// project's own successor to Ingress (SIG Network, a <c>k8s.io</c> group), and a
+    /// cluster routing through Gateway and HTTPRoute had them filed as five or more rows
+    /// of an already hundred-row CRDs section while its Ingress-shaped twin sat in
+    /// Network. Still a group rule, not a Kind list, so every route kind the project adds
+    /// (TLSRoute, UDPRoute, BackendTLSPolicy…) lands here with no change, and a cluster
+    /// without Gateway API is unchanged. FreeLens declined the same move in 2026-07 on
+    /// the grounds that the API is still CRD-installed; Headlamp and Lens both ship it.
+    /// The standard channel's Gateway, GatewayClass and HTTPRoute have been GA since
+    /// v1.0, which is the side of that argument this takes.
+    /// </summary>
     private static readonly HashSet<string> NetworkGroups =
-        ["networking.k8s.io", "discovery.k8s.io"];
+        ["networking.k8s.io", "discovery.k8s.io", "gateway.networking.k8s.io"];
 
     private static readonly HashSet<string> StorageGroups =
         ["storage.k8s.io"];

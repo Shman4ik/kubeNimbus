@@ -68,10 +68,22 @@ public sealed partial class ClusterClient
     /// whether the server had more, which the caller has to state rather than imply the
     /// list was complete.
     /// </summary>
+    public Task<CappedResourceList> ListResourceCappedAsync(
+        ResourceDescriptor descriptor,
+        string? @namespace,
+        int maxItems,
+        CancellationToken cancellationToken = default) =>
+        ListResourceCappedAsync(descriptor, @namespace, maxItems, labelSelector: null, cancellationToken);
+
+    /// <summary>The same capped list, narrowed server-side by <paramref name="labelSelector"/>.</summary>
+    /// <param name="labelSelector">The NetworkPolicy pane's "pods this policy selects"; null
+    /// lists everything in scope. A separate overload rather than an optional parameter so
+    /// the four-argument form stays a method group the palette's log rows can bind to.</param>
     public async Task<CappedResourceList> ListResourceCappedAsync(
         ResourceDescriptor descriptor,
         string? @namespace,
         int maxItems,
+        LabelSelector? labelSelector,
         CancellationToken cancellationToken = default)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(maxItems, 1);
@@ -81,7 +93,7 @@ public sealed partial class ClusterClient
         do
         {
             var (items, next, _) = await ListResourcePageAsync(
-                descriptor, @namespace, continueToken, cancellationToken,
+                descriptor, @namespace, continueToken, cancellationToken, labelSelector: labelSelector,
                 pageSize: Math.Min(DynamicListPageSize, maxItems - result.Count)).ConfigureAwait(false);
 
             // A server is allowed to ignore `limit` (an aggregated API often does), so

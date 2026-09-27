@@ -221,13 +221,12 @@ public class PrinterColumnTests
     /// An absent field and an unresolvable path are one outcome: an empty cell. The API
     /// server emits a null cell for each and kubectl prints nothing for it, and the
     /// object-that-has-no-status-yet case is common enough that it must never read as an
-    /// error. (A non-scalar value used to be in this list; a real server prints it as JSON
-    /// in a string column — see <c>PrinterColumnsLiveTests</c> and
-    /// <c>Evaluate_prints_a_non_scalar_as_kubectl_does</c>.)
+    /// error. A non-scalar value is a different case — see the FEAT-61 tests below.
     /// </summary>
     [Test]
     [Arguments(".status.conditions[?(@.type==\"Ready\")].status")]
     [Arguments(".spec.missing")]
+    [Arguments(".status.conditions")]
     [Arguments("..spec.name")]
     [Arguments("")]
     public async Task Evaluate_renders_nothing_it_cannot_resolve_as_an_empty_cell(string path)
@@ -339,5 +338,71 @@ public class PrinterColumnTests
             """);
 
         await Assert.That(PrinterColumns.Evaluate(new PrinterColumn("C", "string", path), resource)).IsEqualTo(expected);
+    }
+
+    // ------------------------------------------------- non-scalar values (FEAT-61)
+
+    /// <summary>
+    /// HTTPRoute's HOSTNAMES column. For <c>type: string</c> the API server runs client-go's
+    /// JSONPath printer, which writes a slice as compact JSON: this is the exact cell
+    /// <c>kubectl get httproute</c> printed for the same object against the sandbox's k3s
+    /// 1.33. It used to render blank here.
+    /// </summary>
+    [Test]
+    public async Task Evaluate_prints_a_string_column_over_an_array_the_way_the_api_server_does()
+    {
+        var route = Json("""
+            { "spec": { "hostnames": [ "shop.example.com", "www.shop.example.com" ] } }
+            """);
+
+        await Assert.That(PrinterColumns.Evaluate(new PrinterColumn("Hostnames", "string", ".spec.hostnames"), route))
+            .IsEqualTo("""["shop.example.com","www.shop.example.com"]""");
+    }
+
+    /// <summary>
+    /// An object under a string column is JSON too, keys sorted the way Go marshals a map,
+    /// with Go's HTML-safe escapes — the API server's bytes, not a re-serialization that
+    /// merely means the same thing.
+    /// </summary>
+    [Test]
+    public async Task Evaluate_prints_a_string_column_over_an_object_as_go_would()
+    {
+        var resource = Json("""
+            { "spec": { "selector": { "tier": "wéb", "app": "a&b", "n": 3, "on": true, "list": [] } } }
+            """);
+
+        await Assert.That(PrinterColumns.Evaluate(new PrinterColumn("S", "string", ".spec.selector"), resource))
+            .IsEqualTo("""{"app":"a\u0026b","list":[],"n":3,"on":true,"tier":"wéb"}""");
+    }
+
+    /// <summary>
+    /// Every other column type goes through the API server's <c>cellForJSONValue</c>,
+    /// which has no case for a map or a slice and emits a null cell — so those stay empty,
+    /// exactly as before.
+    /// </summary>
+    [Test]
+    [Arguments("integer")]
+    [Arguments("number")]
+    [Arguments("boolean")]
+    [Arguments("date")]
+    public async Task Evaluate_keeps_non_string_columns_over_arrays_and_objects_empty(string type)
+    {
+        var resource = Json("""{ "spec": { "hostnames": [ "a" ], "obj": { "a": 1 } } }""");
+
+        await Assert.That(PrinterColumns.Evaluate(new PrinterColumn("C", type, ".spec.hostnames"), resource)).IsEqualTo("");
+        await Assert.That(PrinterColumns.Evaluate(new PrinterColumn("C", type, ".spec.obj"), resource)).IsEqualTo("");
+    }
+
+    /// <summary>
+    /// <c>[*]</c> still takes the first match only — the API server reads
+    /// <c>results[0][0]</c> — so a wildcard over scalars prints one value, not a list.
+    /// </summary>
+    [Test]
+    public async Task Evaluate_still_takes_only_the_first_wildcard_match()
+    {
+        var resource = Json("""{ "spec": { "rules": [ { "host": "a" }, { "host": "b" } ] } }""");
+
+        await Assert.That(PrinterColumns.Evaluate(new PrinterColumn("H", "string", ".spec.rules[*].host"), resource))
+            .IsEqualTo("a");
     }
 }
