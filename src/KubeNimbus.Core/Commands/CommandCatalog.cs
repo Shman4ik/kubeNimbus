@@ -118,6 +118,25 @@ public static class CommandCatalog
         },
         new()
         {
+            Id = CommandId.AddKubeconfigFolder,
+            Title = "Add kubeconfig folder…",
+            Category = CommandCategory.Clusters,
+            IconKey = "OpenInNewIconGeometry",
+            Surfaces = PaletteOnly,
+        },
+        new()
+        {
+            Id = CommandId.ReconnectCluster,
+            Title = "Reconnect",
+            CheatTitle = "Re-read the kubeconfig and reconnect the cluster tab",
+            Category = CommandCategory.Clusters,
+            IconKey = "RefreshIconGeometry",
+            // No chord: it is the answer to an expired session, reached from the warning
+            // or the failure page that says so, or by name here.
+            Surfaces = PaletteOnly,
+        },
+        new()
+        {
             Id = CommandId.OpenTerminal,
             Title = "Open a terminal on this cluster",
             Category = CommandCategory.Clusters,

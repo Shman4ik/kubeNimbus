@@ -90,6 +90,7 @@ internal static class SmokeTest
     private const int ExitStartupFailed = 66;
     private const int ExitTimedOut = 67;
     private const int ExitKubeconfigUnreadable = 68;
+    private const int ExitNoFailureState = 69;
 
     private static readonly Stopwatch Clock = Stopwatch.StartNew();
 
@@ -356,6 +357,19 @@ internal static class SmokeTest
 
             timer.Stop();
             Report($"restored tab reported: {tab.Status}");
+
+            // The failure has to be *stated* in the content area, not only in the status
+            // bar: a failed connect that leaves the pane blank is the state UI rule 9
+            // forbids, and it is what every failed connect looked like before FEAT-51.
+            if (tab.ConnectionFailure is not { } failure)
+            {
+                StopWatchdog();
+                Fail("the restored tab's connect failed but the content area has no failure view to show", ExitNoFailureState);
+                desktop.Shutdown(ExitNoFailureState);
+                return;
+            }
+
+            Report($"failure view: {failure.Step} — {failure.Headline}");
             _ = VerifyClientConfigAsync(desktop, window, tab.Context);
         };
         timer.Start();

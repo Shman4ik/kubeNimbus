@@ -1,0 +1,157 @@
+using System.Collections.Concurrent;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+
+namespace KubeNimbus.Core.Tests;
+
+/// <summary>
+/// A plain-HTTP stand-in for an API server (or a proxy) on a loopback port: every request
+/// is recorded, and a handler decides the answer. A raw <see cref="TcpListener"/> rather
+/// than <c>HttpListener</c>, which on Windows needs a URL reservation (an elevated
+/// <c>netsh</c>) to listen on 127.0.0.1 — a test that only passes as administrator is a
+/// test that does not run.
+/// </summary>
+internal sealed class ScriptedApiServer : IDisposable
+{
+    private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
+    private readonly CancellationTokenSource _stop = new();
+    private readonly Func<ScriptedRequest, ScriptedResponse> _handler;
+
+    public ScriptedApiServer(Func<ScriptedRequest, ScriptedResponse> handler)
+    {
+        _handler = handler;
+        _listener.Start();
+        Url = $"http://127.0.0.1:{((IPEndPoint)_listener.LocalEndpoint).Port}";
+        _ = Task.Run(AcceptLoopAsync);
+    }
+
+    public string Url { get; }
+
+    public ConcurrentQueue<ScriptedRequest> Requests { get; } = new();
+
+    /// <summary>A Kubernetes <c>/version</c> body.</summary>
+    public const string VersionBody = """{"major":"1","minor":"31","gitVersion":"v1.31.0","platform":"linux/amd64"}""";
+
+    public static ScriptedResponse Unauthorized() => new(401,
+        """{"kind":"Status","apiVersion":"v1","status":"Failure","message":"Unauthorized","reason":"Unauthorized","code":401}""");
+
+    private async Task AcceptLoopAsync()
+    {
+        while (!_stop.IsCancellationRequested)
+        {
+            TcpClient connection;
+            try
+            {
+                connection = await _listener.AcceptTcpClientAsync(_stop.Token);
+            }
+            catch (Exception) when (_stop.IsCancellationRequested)
+            {
+                return;
+            }
+
+            _ = Task.Run(() => ServeAsync(connection));
+        }
+    }
+
+    private async Task ServeAsync(TcpClient connection)
+    {
+        using (connection)
+        {
+            try
+            {
+                await using var stream = connection.GetStream();
+                var request = await ReadRequestAsync(stream);
+                if (request is null)
+                {
+                    return;
+                }
+
+                Requests.Enqueue(request);
+                var response = _handler(request);
+                var body = Encoding.UTF8.GetBytes(response.Body);
+                var head = response.Hold
+                    ? $"HTTP/1.1 {response.Status} X\r\nContent-Type: {response.ContentType}\r\nConnection: close\r\n\r\n"
+                    : $"HTTP/1.1 {response.Status} X\r\nContent-Type: {response.ContentType}\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n";
+                await stream.WriteAsync(Encoding.ASCII.GetBytes(head), _stop.Token);
+                await stream.WriteAsync(body, _stop.Token);
+                await stream.FlushAsync(_stop.Token);
+
+                if (response.Hold)
+                {
+                    // An open watch: the stream stays up, sending nothing, until the test ends.
+                    await Task.Delay(Timeout.Infinite, _stop.Token);
+                }
+            }
+            catch (Exception) when (_stop.IsCancellationRequested)
+            {
+            }
+            catch (IOException)
+            {
+            }
+        }
+    }
+
+    private static async Task<ScriptedRequest?> ReadRequestAsync(NetworkStream stream)
+    {
+        var buffer = new List<byte>();
+        var one = new byte[1];
+        while (buffer.Count < 64 * 1024)
+        {
+            if (await stream.ReadAsync(one) == 0)
+            {
+                return null;
+            }
+
+            buffer.Add(one[0]);
+            if (buffer.Count >= 4 && buffer[^4] == '\r' && buffer[^3] == '\n' && buffer[^2] == '\r' && buffer[^1] == '\n')
+            {
+                break;
+            }
+        }
+
+        var lines = Encoding.ASCII.GetString([.. buffer]).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+        var requestLine = lines[0].Split(' ');
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var line in lines.Skip(1))
+        {
+            var colon = line.IndexOf(':', StringComparison.Ordinal);
+            if (colon > 0)
+            {
+                headers[line[..colon].Trim()] = line[(colon + 1)..].Trim();
+            }
+        }
+
+        // Drain a body so the client is not left writing into a closed socket.
+        if (headers.TryGetValue("Content-Length", out var length) && int.TryParse(length, out var count) && count > 0)
+        {
+            var body = new byte[count];
+            var read = 0;
+            while (read < count)
+            {
+                var n = await stream.ReadAsync(body.AsMemory(read));
+                if (n == 0)
+                {
+                    break;
+                }
+
+                read += n;
+            }
+        }
+
+        return new ScriptedRequest(requestLine[0], requestLine.Length > 1 ? requestLine[1] : "", headers);
+    }
+
+    public void Dispose()
+    {
+        _stop.Cancel();
+        _listener.Stop();
+    }
+}
+
+internal sealed record ScriptedRequest(string Method, string Target, IReadOnlyDictionary<string, string> Headers)
+{
+    public string? Authorization => Headers.TryGetValue("Authorization", out var value) ? value : null;
+}
+
+internal sealed record ScriptedResponse(int Status, string Body, string ContentType = "application/json", bool Hold = false);

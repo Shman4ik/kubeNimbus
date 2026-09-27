@@ -133,8 +133,7 @@ public static class TerminalLauncher
 
     /// <summary>Where the overlay (and the macOS launcher script) live.</summary>
     public static string StateDirectory => Path.Combine(
-        DirectoryOverride ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "kubeNimbus"),
+        DirectoryOverride ?? AppDataDirectory.Roaming,
         "terminal");
 
     /// <summary>

@@ -1210,6 +1210,72 @@ internal static class ClusterTabScenarios
     {
         var tab = BaseTab();
         tab.ConnectionWarning = "Watch connection lost (SocketException); retrying in 4s.";
+        tab.ConnectionWarningOffersReconnect = true;
+        return tab;
+    }
+
+    /// <summary>
+    /// A watch whose credential was refused mid-session (an SSO session ending) — the
+    /// warning the informer raises for a 401, with the Reconnect button beside it.
+    /// </summary>
+    public static ClusterTabViewModel CredentialsExpired()
+    {
+        var tab = BaseTab();
+        tab.ConnectionWarning =
+            "The cluster rejected the credentials (401) — they have probably expired. kubeNimbus re-read the kubeconfig; retrying in 4s. Sign in again and the retry picks it up.";
+        tab.ConnectionWarningOffersReconnect = true;
+        return tab;
+    }
+
+    /// <summary>
+    /// A connect that failed, as the content area states it. The report is written in
+    /// rather than produced by a failing connect so the shot is the same on every machine
+    /// (no temp paths, no developer home directory); its sentences are the ones
+    /// <see cref="ConnectionReport"/> produces for the same cause, which
+    /// <c>ConnectionReportTests</c> pins.
+    /// </summary>
+    public static ClusterTabViewModel ConnectionFailed(string kind = "plugin")
+    {
+        var context = new ClusterContext("prod-eks-eu", "arn:aws:eks:eu-west-1:1234:cluster/prod", null, "prod-sso", "fixture");
+        var tab = new ClusterTabViewModel(context);
+        var server = "https://4F2A9C.gr7.eu-west-1.eks.amazonaws.com";
+        IReadOnlyList<ConnectionFact> facts = kind == "plugin"
+            ?
+            [
+                new("Kubeconfig", "/Users/reviewer/.kube/config"),
+                new("Context", context.Name),
+                new("Cluster", context.ClusterName),
+                new("Server", server),
+                new("User", "prod-sso"),
+                new("Signs in with", "credential plugin aws (not found on PATH or in the usual install folders)"),
+                new("Plugin install hint", "Install the AWS CLI: https://aws.amazon.com/cli/"),
+            ]
+            :
+            [
+                new("Kubeconfig", "/Users/reviewer/.kube/config"),
+                new("Context", context.Name),
+                new("Cluster", context.ClusterName),
+                new("Server", server),
+                new("User", "prod-sso"),
+                new("Signs in with", "credential plugin aws (runs /opt/homebrew/bin/aws)"),
+            ];
+
+        var report = kind == "plugin"
+            ? new ConnectionFailureReport(
+                ConnectionReport.RunningPlugin,
+                "The kubeconfig's credential plugin could not be started.",
+                "Could not run the kubeconfig's credential plugin: An error occurred trying to start process 'aws' with working directory '/'. No such file or directory",
+                "Install it, or put its full path in the kubeconfig's exec command. kubeNimbus looked on this app's PATH and in /usr/local/bin, /opt/homebrew/bin, /opt/local/bin, /Users/reviewer/.local/bin, /Users/reviewer/bin.",
+                facts)
+            : new ConnectionFailureReport(
+                ConnectionReport.SigningIn,
+                "The API server rejected the credentials (401 Unauthorized).",
+                "Unauthorized (401 Unauthorized)",
+                "They have most likely expired. Sign in again the way you normally do — aws sso login, az login, gcloud auth login — then Retry. kubeNimbus re-reads the kubeconfig on every attempt and keeps no copy of any credential.",
+                facts);
+
+        tab.ConnectionFailure = new ConnectionFailureViewModel(report, tab);
+        tab.Status = $"Connection failed ({report.StepPhrase}).";
         return tab;
     }
 

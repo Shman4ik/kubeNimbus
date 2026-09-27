@@ -205,8 +205,18 @@
             <PathIcon Data="{StaticResource AlertCircleIconGeometry}" Width="26" Height="26" Opacity="0.35" HorizontalAlignment="Center" />
             <TextBlock Text="Not connected" FontWeight="SemiBold" FontSize="13" HorizontalAlignment="Center" Opacity="0.7" />
             <TextBlock Text="{Binding Tab.Status}" FontSize="12" Opacity="0.6" TextWrapping="Wrap" TextAlignment="Center" />
-            <Button Classes="chip" HorizontalAlignment="Center" Content="Reconnect" Command="{Binding Tab.ConnectCommand}" />
+            <Button Classes="chip" HorizontalAlignment="Center" Content="Connect" Command="{Binding Tab.ReconnectCommand}" />
           </StackPanel>
+
+          <!-- A failed connect: the same view the Resources list shows, so the two modes
+               cannot tell the same failure differently. -->
+          <ContentControl Grid.Row="1" Content="{Binding Tab.ConnectionFailure}" IsVisible="{Binding ShowsConnectionFailure}">
+            <ContentControl.ContentTemplate>
+              <DataTemplate x:DataType="vm:ConnectionFailureViewModel">
+                <views:ConnectionFailureView />
+              </DataTemplate>
+            </ContentControl.ContentTemplate>
+          </ContentControl>
 
           <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" MaxWidth="420"
                       IsVisible="{Binding IsLoading}">

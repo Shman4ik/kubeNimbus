@@ -62,7 +62,13 @@ public sealed partial class PreferencesViewModel : ObservableObject
     /// because "I added a file and nothing happened" is the failure this page most
     /// needs to be able to explain (rule 7).
     /// </summary>
-    public string KubeconfigStatus => _main.Status;
+    /// <summary>
+    /// The search's result for this page: the full diagnosis when nothing was found (the
+    /// card's heading, with the parser's message in it), the shell's status line otherwise.
+    /// </summary>
+    public string KubeconfigStatus => _main.HasContexts || _main.KubeconfigDiagnosis.Length == 0
+        ? _main.Status
+        : _main.KubeconfigDiagnosis;
 
     public PreferencesViewModel(MainWindowViewModel main)
     {
@@ -116,6 +122,17 @@ public sealed partial class PreferencesViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Adds a folder whose kubeconfigs are all searched, including ones added later —
+    /// through the shell's own command, same reason as <see cref="AddKubeconfigAsync"/>.
+    /// </summary>
+    [RelayCommand]
+    private async Task AddKubeconfigFolderAsync()
+    {
+        await _main.AddKubeconfigFolderCommand.ExecuteAsync(null);
+        RefreshKubeconfigPaths();
+    }
+
+    /// <summary>
     /// Forgets a picked kubeconfig path. Only the app's own memory of the path is
     /// dropped — the file itself is untouched, which is worth being obvious about on a
     /// page that lists other people's cluster credentials by filename.
@@ -163,7 +180,7 @@ public sealed partial class PreferencesViewModel : ObservableObject
             case nameof(MainWindowViewModel.IsSidebarVisible):
                 OnPropertyChanged(nameof(IsSidebarVisible));
                 break;
-            case nameof(MainWindowViewModel.Status):
+            case nameof(MainWindowViewModel.Status) or nameof(MainWindowViewModel.KubeconfigDiagnosis):
                 OnPropertyChanged(nameof(KubeconfigStatus));
                 break;
         }

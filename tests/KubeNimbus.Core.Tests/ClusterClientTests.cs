@@ -32,6 +32,32 @@ public class ClusterClientTests
         await Assert.That(version.GitVersion).Contains("k3s");
     }
 
+    /// <summary>
+    /// Reconnect against a real API server with client-certificate auth: the credential
+    /// is re-read from the kubeconfig into the same <see cref="ClusterClient"/>, and a
+    /// watch opened before the refresh is still readable after it (the old client is
+    /// retired, not disposed, so streams already open on it are not cut).
+    /// </summary>
+    [Test]
+    [Timeout(60_000)]
+    public async Task Refreshing_credentials_keeps_the_client_and_its_open_watch_working(CancellationToken ct)
+    {
+        using var client = await ConnectAsync();
+        if (client is null)
+        {
+            return;
+        }
+
+        await using var watch = client.WatchPodsAsync("kube-system", cancellationToken: ct).GetAsyncEnumerator(ct);
+        await Assert.That(await watch.MoveNextAsync()).IsTrue();
+
+        await client.RefreshCredentialsAsync(force: true, ct);
+        var version = await client.GetServerVersionAsync(ct);
+
+        await Assert.That(version.GitVersion).Contains("k3s");
+        await Assert.That(await watch.MoveNextAsync()).IsTrue();
+    }
+
     [Test]
     [Timeout(60_000)]
     public async Task WatchPods_emits_reset_then_existing_kube_system_pods(CancellationToken ct)

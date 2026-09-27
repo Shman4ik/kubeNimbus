@@ -9,8 +9,10 @@ namespace KubeNimbus.Core;
 internal sealed class DiscoveryCache(string? directory = null)
 {
     internal static readonly TimeSpan Lifetime = TimeSpan.FromHours(6);
-    private readonly string _directory = directory ?? Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "kubeNimbus", "discovery");
+    // AppDataDirectory, not GetFolderPath directly: on Linux with a fresh HOME the latter
+    // is "" and this cache used to land in ./kubeNimbus/discovery of whatever directory
+    // the app was started from.
+    private readonly string _directory = directory ?? Path.Combine(AppDataDirectory.Local, "discovery");
     private string PathFor(string identity) => Path.Combine(_directory,
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity))) + ".json");
 

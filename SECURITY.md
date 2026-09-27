@@ -46,7 +46,11 @@ work by kubeNimbus executing the command your kubeconfig names, exactly as
 `kubectl` does. A malicious kubeconfig can therefore run arbitrary code —
 treat a kubeconfig from an untrusted source the way you would treat a shell
 script from one. This is inherent to the kubeconfig format, not specific to
-kubeNimbus.
+kubeNimbus. A command named bare (`command: aws`) that is not on the app's own
+`PATH` is also looked for in the directories a login shell adds (`/usr/local/bin`,
+`/opt/homebrew/bin`, `/opt/local/bin`, `~/.local/bin`, `~/bin`) — the same
+program a terminal on the same machine would run. When a credential is rejected
+(401), the plugin is run again rather than its previous output reused.
 
 **The app is read-mostly, and every write is explicit.** Writes happen only
 through actions you take: server-side apply from the YAML editor, delete
@@ -54,7 +58,8 @@ through actions you take: server-side apply from the YAML editor, delete
 no auto-apply, and no "fix it for you" behaviour.
 
 **No telemetry, ever.** kubeNimbus makes no network connection other than to
-the Kubernetes API servers of the contexts you connect to. No analytics, no
+the Kubernetes API servers of the contexts you connect to (through the proxy a
+cluster's `proxy-url` names, when it names one). No analytics, no
 crash reporting, no update pings. This is a permanent non-goal, not a default
 that might change.
 

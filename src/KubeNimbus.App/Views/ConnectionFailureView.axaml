@@ -1,0 +1,82 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:KubeNimbus.App.ViewModels"
+             xmlns:core="using:KubeNimbus.Core"
+             x:Class="KubeNimbus.App.Views.ConnectionFailureView"
+             x:DataType="vm:ConnectionFailureViewModel">
+
+  <!-- A failed connect, in the content area (UI rule 9: "disconnected" is a state and gets
+       a visual, never a blank rectangle). Hosted by the Resources list and by the
+       Applications page, so both modes say the same thing. Scrolls, because the inspector
+       dock and a short window can leave it less height than it needs. -->
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+    <Border Classes="card" Padding="20" MaxWidth="680" Margin="0,24"
+            HorizontalAlignment="Center" VerticalAlignment="Center">
+      <StackPanel Spacing="12">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <PathIcon Data="{StaticResource AlertCircleIconGeometry}" Width="15" Height="15"
+                    VerticalAlignment="Center" Foreground="{StaticResource AppDangerBrush}" />
+          <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center"
+                     TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+
+        <!-- The step and the cause: state in an InfoBar (UI rule 11), severity as a class. -->
+        <Border Classes="infoBar error">
+          <StackPanel Spacing="3">
+            <TextBlock Text="{Binding Step}" FontSize="11.5" Opacity="0.7" />
+            <TextBlock Text="{Binding Headline}" TextWrapping="Wrap" FontWeight="SemiBold" FontSize="12.5" />
+          </StackPanel>
+        </Border>
+
+        <TextBlock Text="{Binding Advice}" IsVisible="{Binding HasAdvice}" TextWrapping="Wrap" FontSize="12"
+                   Opacity="0.8" />
+
+        <!-- What the attempt was made with: facts the app always had and never showed. No
+             credential is ever one of them (ConnectionReport). -->
+        <StackPanel Spacing="4">
+          <TextBlock Classes="fieldLabel" Text="What was tried" />
+          <ItemsControl ItemsSource="{Binding Facts}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="core:ConnectionFact">
+                <Grid ColumnDefinitions="120,*" Margin="0,1">
+                  <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="12" Opacity="0.6" />
+                  <SelectableTextBlock Grid.Column="1" Text="{Binding Value}" FontSize="12" TextWrapping="Wrap"
+                                       FontFamily="Cascadia Mono,Consolas,monospace" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+
+        <!-- The exception's own text, untouched and selectable: the thing to paste into an
+             issue or a search box. -->
+        <StackPanel Spacing="4">
+          <TextBlock Classes="fieldLabel" Text="What failed" />
+          <Border Classes="evidence" HorizontalAlignment="Stretch">
+            <SelectableTextBlock Text="{Binding Detail}" TextWrapping="Wrap" />
+          </Border>
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Button Classes="accent" Command="{Binding RetryCommand}"
+                  ToolTip.Tip="Read the kubeconfig again, run its credential plugin again, and connect">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="12" Height="12" VerticalAlignment="Center" />
+              <TextBlock Text="Retry" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+          <Button Command="{Binding OpenTerminalCommand}"
+                  ToolTip.Tip="A terminal with KUBECONFIG pointed at this context — for signing in again (aws sso login, az login…) or running the plugin by hand">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <PathIcon Data="{StaticResource ConsoleIconGeometry}" Width="12" Height="12" VerticalAlignment="Center" />
+              <TextBlock Text="Open a terminal on this cluster" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+
+        <TextBlock Text="{Binding TerminalNotice}" IsVisible="{Binding HasTerminalNotice}" TextWrapping="Wrap"
+                   FontSize="12" Opacity="0.7" />
+      </StackPanel>
+    </Border>
+  </ScrollViewer>
+</UserControl>

@@ -15,6 +15,8 @@ public enum CommandId
     OpenDemoCluster,
     OpenKubeconfigFile,
     RescanKubeconfig,
+    AddKubeconfigFolder,
+    ReconnectCluster,
     OpenTerminal,
     ToggleFleetView,
     SetEnvironment,

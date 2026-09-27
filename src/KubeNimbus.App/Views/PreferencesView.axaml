@@ -69,11 +69,11 @@
             <Border Classes="card" Padding="14,12">
                 <StackPanel Spacing="8">
                     <StackPanel Spacing="2">
-                        <TextBlock Classes="label" Text="Kubeconfig files" />
+                        <TextBlock Classes="label" Text="Kubeconfig files and folders" />
                         <!-- Says what is stored, in the place someone is most likely to
                              worry about it. The claim in SECURITY.md is that the app
                              never persists a credential; this is where that is visible. -->
-                        <TextBlock Classes="hint" Text="Files you have opened here, searched before $KUBECONFIG and the default location. kubeNimbus remembers the path only — never the contents — and re-reads the file each time it connects. Removing one here does not delete the file." />
+                        <TextBlock Classes="hint" Text="Files and folders you have opened here, searched before $KUBECONFIG and the default location; a folder contributes every kubeconfig in it, including ones added later. kubeNimbus remembers the path only — never the contents — and re-reads the file each time it connects. Removing one here does not delete anything." />
                     </StackPanel>
 
                     <!-- Empty is a state, not a blank box (rule 7): with no picked file
@@ -94,13 +94,15 @@
                             <TextBlock Classes="hint" Margin="12" TextWrapping="Wrap"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
                                        TextAlignment="Center"
-                                       Text="No files added. kubeNimbus is still reading $KUBECONFIG and the default location."
+                                       Text="No files or folders added. kubeNimbus is still reading $KUBECONFIG and the default location."
                                        IsVisible="{Binding !KubeconfigPaths.Count}" />
                         </Panel>
                     </Border>
 
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Button Classes="soft" Content="Add file…" Command="{Binding AddKubeconfigCommand}" />
+                        <Button Classes="soft" Content="Add folder…" Command="{Binding AddKubeconfigFolderCommand}"
+                                ToolTip.Tip="Every kubeconfig in the folder, including files added to it later" />
                         <Button Classes="soft" Content="Remove" Command="{Binding RemoveKubeconfigCommand}" />
                         <Button Classes="soft" Content="Rescan" Command="{Binding RescanCommand}" />
                     </StackPanel>
