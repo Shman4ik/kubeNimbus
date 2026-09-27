@@ -65,8 +65,6 @@ it as the GitHub Release body, so headings must match tags exactly
 - Ingress, Endpoints, EndpointSlice and NetworkPolicy lists show kubectl's own columns.
 - Gateway API kinds (Gateway, HTTPRoute, GRPCRoute…) are listed under Network instead of
   CRDs.
-- A CRD printer column of type string over a list (such as HTTPRoute's HOSTNAMES) now
-  shows the list, the way `kubectl get` does, instead of an empty cell.
 - The log search finds as well as filters. Matches are highlighted in place with
   "n of m", and Enter / Shift+Enter step between them; the funnel switches to filtering.
 - A Levels filter (Error / Warn / Info) in the log panes. Lines with no level are always
