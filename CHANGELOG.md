@@ -12,6 +12,13 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+- A crash-looping application no longer flickers between Degraded and Healthy. Between two
+  back-offs a crash-looping container is briefly running and then terminated, and only the
+  waiting phase was being read, so the same app read Healthy, then "0 of 1 pods Ready", then
+  crash-looping within half a minute. Every phase of the loop now gives the same verdict.
+- Esc now returns from an application page to the list when the page was opened by
+  double-click. Before, focus stayed on the hidden list row and Esc did nothing.
+
 ## [0.5.0] - 2026-09-26
 
 - A cluster now opens on **Applications**: every Argo CD Application, and every workload no

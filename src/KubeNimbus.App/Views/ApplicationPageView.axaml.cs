@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 using AvaloniaEdit;
 using KubeNimbus.App.ViewModels;
 
@@ -17,6 +18,25 @@ public partial class ApplicationPageView : UserControl
     {
         InitializeComponent();
         AddHandler(KeyDownEvent, OnPageKeyDown, RoutingStrategies.Bubble);
+        AddHandler(PointerPressedEvent, OnPagePointerPressed, RoutingStrategies.Bubble, handledEventsToo: true);
+    }
+
+    /// <summary>
+    /// A click on the page's background (a finding, the timeline, a caption) moves nothing
+    /// by itself — none of those is focusable — so focus could stay wherever it was, including
+    /// on the list the page hides, and Esc would go there. A control on the page that takes
+    /// focus on press (the pod list, the log filter) has done so before this bubbles here, and
+    /// is left alone.
+    /// </summary>
+    private void OnPagePointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is Visual focused
+            && (ReferenceEquals(focused, this) || this.IsVisualAncestorOf(focused)))
+        {
+            return;
+        }
+
+        Focus(NavigationMethod.Pointer);
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)

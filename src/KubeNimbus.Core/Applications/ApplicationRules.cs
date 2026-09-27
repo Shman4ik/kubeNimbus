@@ -166,7 +166,7 @@ public static class ApplicationRules
         {
             var example = group.OrderByDescending(x => x.Container.LatestTermination!.FinishedAt).First();
             var ended = example.Container.LatestTermination!;
-            var looping = group.Any(x => x.Container.IsCrashLooping);
+            var looping = group.Any(x => x.Container.IsCrashLoopingAt(now));
             var recent = ended.FinishedAt is { } f && now - f <= RecentWindow;
             foreach (var x in group)
             {
@@ -200,19 +200,34 @@ public static class ApplicationRules
 
         var crashing = live
             .SelectMany(p => p.Containers.Select(c => (Pod: p, Container: c)))
-            .Where(x => x.Container.IsCrashLooping && !oomKilled.Contains((x.Pod.Name, x.Container.Name)))
-            .OrderByDescending(x => x.Container.RestartCount)
+            .Where(x => x.Container.IsCrashLoopingAt(now) && !oomKilled.Contains((x.Pod.Name, x.Container.Name)))
+            // The kubelet's own CrashLoopBackOff first, so the evidence quotes it whenever any
+            // pod is in that phase; then the most restarts.
+            .OrderByDescending(x => x.Container.IsWaitingInCrashLoop)
+            .ThenByDescending(x => x.Container.RestartCount)
             .ToList();
         if (crashing.Count > 0)
         {
             var (pod, container) = crashing[0];
             var pods2 = crashing.Select(x => x.Pod.Name).Distinct().Count();
-            var ended = container.LastTerminated;
+            var ended = container.LatestTermination;
             var evidence = new List<Evidence>
             {
-                new($"{pod.Name} {container.Name} state.waiting.reason", "CrashLoopBackOff"),
+                // Quote the phase of the loop the container is actually in: between two
+                // back-offs it is running or terminated, and "waiting: CrashLoopBackOff"
+                // would then be a field the object does not hold.
+                container.State switch
+                {
+                    ContainerStateKind.Running => new($"{pod.Name} {container.Name} state.running.startedAt", J.Iso(container.RunningSince)),
+                    ContainerStateKind.Terminated => new(
+                        $"{pod.Name} {container.Name} state.terminated",
+                        ended is null ? "terminated" : $"{ended.ExitText}, finishedAt {J.Iso(ended.FinishedAt)}"),
+                    _ => new($"{pod.Name} {container.Name} state.waiting.reason", "CrashLoopBackOff"),
+                },
             };
-            if (ended is not null)
+
+            // A terminated container's latest run is its current state, already quoted above.
+            if (ended is not null && container.State != ContainerStateKind.Terminated)
             {
                 evidence.Add(new Evidence("lastState.terminated", $"{ended.ExitText}, finishedAt {J.Iso(ended.FinishedAt)}"));
             }
@@ -234,7 +249,10 @@ public static class ApplicationRules
                         : $"exited with {ended.ExitText}"
                           + (lived is { } l ? $" {AppTime.Span(l)} after it started" : "")
                           + (ended.FinishedAt is { } at ? $", {AppTime.Ago(now, at)}" : ""))
-                    + $". It has restarted {container.RestartCount} time{(container.RestartCount == 1 ? "" : "s")}, and the kubelet is backing off before the next start.",
+                    + $". It has restarted {container.RestartCount} time{(container.RestartCount == 1 ? "" : "s")}"
+                    + (container.State == ContainerStateKind.Running
+                        ? $" and is running again, started {AppTime.Ago(now, container.RunningSince ?? now)}; the kubelet resets its back-off only after {AppTime.Span(ContainerFacts.CrashLoopWindow)} without a crash."
+                        : ", and the kubelet is backing off before the next start."),
                 evidence,
                 ended?.ExitCode is { } code ? $"Crash-looping (exit {code})" : "Crash-looping",
                 AppStatus.Degraded,

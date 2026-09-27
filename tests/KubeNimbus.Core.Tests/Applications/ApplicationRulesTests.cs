@@ -85,6 +85,96 @@ public class ApplicationRulesTests
         await Assert.That(a.Restarts).IsEqualTo(3);
     }
 
+    /// <summary>
+    /// The sandbox's <c>crashloop</c> Deployment read Healthy, then "0 of 1 pods Ready",
+    /// then crash-looping, on one page within 25 seconds: between two back-offs the
+    /// container runs (Ready, with no readiness probe) and then sits terminated, and only
+    /// the waiting phase was read. Every phase of the loop must give the same verdict.
+    /// </summary>
+    [Test]
+    public async Task Every_phase_of_a_crash_loop_gives_the_same_verdict()
+    {
+        string[] phases =
+        [
+            Waiting("CrashLoopBackOff", restarts: 503, last: Terminated(1, "Error", minutesAgo: 2)),
+            Running(restarts: 503, last: Terminated(1, "Error", minutesAgo: 0), startedMinutesAgo: 0),
+            Exited(Terminated(1, "Error", minutesAgo: 0), restarts: 503, last: Terminated(1, "Error", minutesAgo: 5)),
+        ];
+
+        foreach (var phase in phases)
+        {
+            var a = Evaluate(
+                [Deployment("web", replicas: 1, ready: 0)],
+                [Pod("web-1", "web", ready: phase.Contains("\"running\""), containerStatus: phase)]);
+
+            await Assert.That(a.Status).IsEqualTo(AppStatus.Degraded);
+            await Assert.That(Rule(a, "crash-loop")?.Title).IsEqualTo("1 pod is crash-looping");
+            await Assert.That(a.Reason).StartsWith("Crash-looping (exit 1)");
+        }
+    }
+
+    [Test]
+    public async Task A_container_running_between_two_crashes_quotes_its_running_state_not_a_waiting_one()
+    {
+        var a = Evaluate(
+            [Deployment("web", replicas: 1, ready: 1)],
+            [Pod("web-1", "web", containerStatus: Running(restarts: 7, last: Terminated(1, "Error", minutesAgo: 0), startedMinutesAgo: 0))]);
+
+        var f = Rule(a, "crash-loop")!;
+        var evidence = f.Evidence.Select(e => e.Text).ToList();
+        await Assert.That(evidence).Contains($"web-1 app state.running.startedAt: {Ago(0)}");
+        await Assert.That(evidence.Any(e => e.Contains("state.waiting"))).IsFalse();
+        await Assert.That(evidence).Contains($"lastState.terminated: exit 1 (Error), finishedAt {Ago(0)}");
+        await Assert.That(f.Detail).Contains("is running again");
+    }
+
+    [Test]
+    public async Task A_container_terminated_between_two_crashes_quotes_that_termination_once()
+    {
+        var a = Evaluate(
+            [Deployment("web", replicas: 1, ready: 0)],
+            [Pod("web-1", "web", ready: false,
+                containerStatus: Exited(Terminated(1, "Error", minutesAgo: 0), restarts: 7, last: Terminated(1, "Error", minutesAgo: 3)))]);
+
+        var evidence = Rule(a, "crash-loop")!.Evidence.Select(e => e.Text).ToList();
+        await Assert.That(evidence).Contains($"web-1 app state.terminated: exit 1 (Error), finishedAt {Ago(0)}");
+        await Assert.That(evidence.Any(e => e.StartsWith("lastState.terminated"))).IsFalse();
+    }
+
+    [Test]
+    public async Task A_long_run_ended_by_a_node_restart_is_not_a_crash_loop()
+    {
+        // What the sandbox's healthy pods look like after its container restarts: many
+        // restarts, a non-zero exit a few minutes ago, but the run it ended had lasted hours.
+        var a = Evaluate(
+            [Deployment("web", replicas: 1, ready: 1)],
+            [Pod("web-1", "web", containerStatus: Running(restarts: 22, last: Terminated(255, "Unknown", minutesAgo: 3, ranMinutes: 600), startedMinutesAgo: 2))]);
+
+        await Assert.That(Rule(a, "crash-loop")).IsNull();
+        await Assert.That(a.Status).IsEqualTo(AppStatus.Healthy);
+    }
+
+    [Test]
+    public async Task A_single_crash_is_not_a_loop()
+    {
+        var a = Evaluate(
+            [Deployment("web", replicas: 1, ready: 1)],
+            [Pod("web-1", "web", containerStatus: Running(restarts: 1, last: Terminated(1, "Error", minutesAgo: 0), startedMinutesAgo: 0))]);
+
+        await Assert.That(Rule(a, "crash-loop")).IsNull();
+    }
+
+    [Test]
+    public async Task Ten_minutes_of_running_since_the_last_crash_ends_the_loop()
+    {
+        var a = Evaluate(
+            [Deployment("web", replicas: 1, ready: 1)],
+            [Pod("web-1", "web", containerStatus: Running(restarts: 9, last: Terminated(1, "Error", minutesAgo: 10), startedMinutesAgo: 10))]);
+
+        await Assert.That(Rule(a, "crash-loop")).IsNull();
+        await Assert.That(a.Status).IsEqualTo(AppStatus.Healthy);
+    }
+
     // --------------------------------------------------------------------- OOM
 
     [Test]

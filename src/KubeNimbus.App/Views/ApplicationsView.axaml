@@ -236,7 +236,7 @@
       </Border>
     </DockPanel>
 
-    <ContentControl Content="{Binding Page}" IsVisible="{Binding IsPageOpen}">
+    <ContentControl Name="PageHost" Content="{Binding Page}" IsVisible="{Binding IsPageOpen}">
       <ContentControl.ContentTemplate>
         <DataTemplate x:DataType="vm:ApplicationPageViewModel">
           <views:ApplicationPageView />

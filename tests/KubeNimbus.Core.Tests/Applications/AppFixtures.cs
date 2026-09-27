@@ -91,9 +91,14 @@ internal static class AppFixtures
                     ("r", ready ? "True" : "False"), ("t", Ago(20)))),
             ("status", containerStatus.Length > 0 ? containerStatus : Running(ready: ready))));
 
-    public static string Running(string name = "app", bool ready = true, int restarts = 0, string last = "") =>
+    public static string Running(string name = "app", bool ready = true, int restarts = 0, string last = "", int startedMinutesAgo = 25) =>
         T("""{"name":"%name%","ready":%ready%,"restartCount":%restarts%,"state":{"running":{"startedAt":"%t%"}}%last%}""",
-            ("name", name), ("ready", ready), ("restarts", restarts), ("t", Ago(25)), ("last", LastState(last)));
+            ("name", name), ("ready", ready), ("restarts", restarts), ("t", Ago(startedMinutesAgo)), ("last", LastState(last)));
+
+    /// <summary>A container whose current state is <c>terminated</c> — the moment between a crash and the kubelet's back-off.</summary>
+    public static string Exited(string terminated, string name = "app", int restarts = 0, string last = "") =>
+        T("""{"name":"%name%","ready":false,"restartCount":%restarts%,"state":{"terminated":%state%}%last%}""",
+            ("name", name), ("restarts", restarts), ("state", terminated), ("last", LastState(last)));
 
     public static string Waiting(string reason, string message = "", string name = "app", int restarts = 0, string last = "") =>
         T("""{"name":"%name%","ready":false,"restartCount":%restarts%,"state":{"waiting":{"reason":"%reason%","message":%message%}}%last%}""",
@@ -101,9 +106,9 @@ internal static class AppFixtures
 
     private static string LastState(string last) => last.Length > 0 ? $",\"lastState\":{{\"terminated\":{last}}}" : "";
 
-    public static string Terminated(int exitCode, string reason, int minutesAgo, string id = "containerd://abc") =>
+    public static string Terminated(int exitCode, string reason, int minutesAgo, string id = "containerd://abc", int ranMinutes = 1) =>
         T("""{"exitCode":%code%,"reason":"%reason%","startedAt":"%s%","finishedAt":"%f%","containerID":"%id%"}""",
-            ("code", exitCode), ("reason", reason), ("s", Ago(minutesAgo + 1)), ("f", Ago(minutesAgo)), ("id", id));
+            ("code", exitCode), ("reason", reason), ("s", Ago(minutesAgo + ranMinutes)), ("f", Ago(minutesAgo)), ("id", id));
 
     public static DynamicResource Event(string reason, string kind, string name, string message, int count = 1,
         int minutesAgo = 2, string type = "Warning", string ns = "shop") =>

@@ -2161,3 +2161,27 @@ Not verified: any of it against a real cluster — in particular Argo CD's real
 fixture seam), Azure SSO, the argocd-cm URL and the compare links opening in a browser. The
 win-x64 publish and macOS were not run.
 
+
+### Applications mode on a live cluster: crash-loop verdict and Esc (2026-09-27)
+
+The first run of the Applications mode against the k3s sandbox, driven by hand, found two
+bugs that the fixtures and the harness had not.
+
+The `crashloop` Deployment's verdict changed three times in 25 seconds on one page: Healthy,
+then "0 of 1 pods Ready", then crash-looping. Only the `waiting: CrashLoopBackOff` phase was
+read, and between two back-offs the container is running or terminated instead. The crash
+loop is now read in every phase of the cycle (`ContainerFacts.IsCrashLoopingAt`, bounded by
+the kubelet's own ten-minute back-off reset), and the evidence quotes the phase the container
+is in. Opening a page by double-click left focus on the list row the page had hidden, so Esc
+did nothing; the page now takes focus after the press, and a press on its background focuses
+it too.
+
+Checks: solution build clean; Core tests 511 passed, 0 skipped (sandbox up); App tests 300
+passed. Mutation-checked red: removing the new crash-loop branch fails three rule tests, and
+removing the focus fix fails the new double-click step in `ux-applications-keys`. The whole
+harness renders and every interaction check passes. On the live sandbox, a temporary key log
+confirmed that after a double-click the page holds focus and Esc returns to the list with
+the row focused.
+
+Not verified: the NativeAOT publish (no change touches trimming), macOS. The computer-use
+tool drops Escape before it reaches the window, so the live Esc check was pressed by hand.

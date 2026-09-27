@@ -74,6 +74,22 @@ and *now*) to a status, a one-line reason and findings. Every rule is pinned by
    as evidence (BackOff, FailedScheduling, FailedCreate, Unhealthy) and as timeline marks.
 8. **A workload short of Ready pods that no rule explains still says so** (`unavailable`), so
    the list never calls an app healthy on the strength of silence.
+9. **A crash loop is read in every phase of its cycle, not only while it waits.**
+   `waiting: CrashLoopBackOff` is one phase. Between two back-offs the kubelet starts the
+   container, it runs for a few seconds (and is Ready, with no readiness probe), then sits
+   `terminated` until the kubelet notices. Reading only the waiting phase made the sandbox's
+   `crashloop` Deployment read Healthy, then "0 of 1 pods Ready", then crash-looping, on one
+   page within 25 seconds — the opposite of "the same answer every time".
+   `ContainerFacts.IsCrashLoopingAt(now)` therefore also counts a running or terminated
+   container that has restarted at least twice and whose latest run failed (non-zero exit),
+   lasted under ten minutes and ended under ten minutes ago. Ten minutes is the kubelet's own
+   number: it resets the restart back-off after a container has run that long without a
+   problem. The run-length bound is what keeps a node restart out: every pod on the node comes
+   back with a fresh non-zero exit and a high restart count, but the run that exit ended had
+   lasted hours. The evidence quotes the phase the container is actually in
+   (`state.running.startedAt`, `state.terminated`, or `state.waiting.reason`), never a field
+   the object does not hold. `Every_phase_of_a_crash_loop_gives_the_same_verdict` pins it,
+   with a node restart, a single crash and ten quiet minutes as the negative cases.
 
 The rule set for this pass: CrashLoopBackOff, OOMKilled (with the memory limit, or the fact
 that there is none), ErrImagePull/ImagePullBackOff, CreateContainerConfigError /
@@ -193,7 +209,14 @@ and Argo's own Degraded/Unknown when nothing read from the workloads explains it
    manual edit and names the Git path. "Open in Argo CD" exists only when `argocd-cm`
    `data.url` was readable (hidden in the demo cluster, which has no Argo UI to open).
 7. **Esc returns to the list with the same row selected**, from anywhere on the page except a
-   text box, whose Esc is its own.
+   text box, whose Esc is its own. The page takes focus when it opens, and that is posted at
+   Background priority from `ApplicationsView` rather than done on attach: a double-click
+   opens the page from inside the second press, and the ListBoxItem under the pointer took
+   focus *after* that handler returned — so focus sat on a row the page had just hidden, and
+   Esc went to the hidden list. A press on the page's background also focuses the page,
+   because nothing there is focusable and focus would otherwise stay wherever it was. The
+   harness opened pages with Enter only, which is why it passed; `ux-applications-keys` now
+   double-clicks a row and presses Esc, and that step fails without the fix.
 
 ## The mode switch
 
