@@ -1712,9 +1712,12 @@ alone made 189 of 272 PNGs differ between two runs (sidebar sections expanded in
 collapsed in the other). Each run now gets its own directory and removes it at the end.
 **What remains:** panes
 that merge several replayed streams (`cluster-tab-workload-logs*`,
-`applications-page-crashloop-merged`, `applications-page-rollout`) still order lines by
+`applications-page-crashloop-merged`, `applications-page-rollout`, and `ux-logs-palette`, which ends
+on a workload's logs) still order lines by
 which flush tick they arrived in — the log panes' documented design for a live tail — so
 those PNGs can differ between runs; a byte diff that flags only them is not a regression.
+Measured after the fix: two sequential runs of one build differ in 4 of 272 PNGs, all of
+them that class.
 
 When Docker is available (unlike this session — `docker version` succeeds but
 `dockerd` isn't running here), prefer driving the harness against a real
