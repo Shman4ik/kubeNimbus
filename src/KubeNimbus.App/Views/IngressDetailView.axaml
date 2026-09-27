@@ -1,0 +1,173 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:KubeNimbus.App.ViewModels"
+             xmlns:conv="using:KubeNimbus.App.Converters"
+             x:Class="KubeNimbus.App.Views.IngressDetailView"
+             x:DataType="vm:IngressDetailTabViewModel">
+
+  <!-- One chrome row (UI rule 10): the strip, the class and address, and the Events tab's
+       tools. The routes follow the list's own watch of the Ingress and have nothing to
+       refresh. -->
+  <Grid RowDefinitions="Auto,*" Margin="10,8,10,10">
+
+    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,0,0,8">
+      <ListBox Grid.Column="0" Classes="segmented" SelectedIndex="{Binding SelectedTabIndex}">
+        <ListBoxItem Content="Rules" />
+        <ListBoxItem Content="Events" />
+      </ListBox>
+
+      <TextBlock Grid.Column="1" Text="{Binding SummaryText}" Opacity="0.6" FontSize="12"
+                 VerticalAlignment="Center" Margin="12,0,0,0"
+                 TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SummaryText}" />
+
+      <TextBlock Grid.Column="2" Text="{Binding EventsCaption}" Opacity="0.6" FontSize="12"
+                 VerticalAlignment="Center" Margin="8,0,8,0"
+                 IsVisible="{Binding SelectedTabIndex, Converter={x:Static conv:IndexEqualsConverter.Instance}, ConverterParameter=1}" />
+      <Button Grid.Column="3" Classes="toolbar" Padding="6" Command="{Binding RefreshEventsCommand}"
+              ToolTip.Tip="Re-read the events about this ingress"
+              IsVisible="{Binding SelectedTabIndex, Converter={x:Static conv:IndexEqualsConverter.Instance}, ConverterParameter=1}">
+        <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="14" Height="14" />
+      </Button>
+    </Grid>
+
+    <TabControl Grid.Row="1" Classes="headerless" SelectedIndex="{Binding SelectedTabIndex}">
+
+      <!-- =============================================================== Rules -->
+      <!-- One row per path. The URL column is the validated URL or the reason there is
+           none — a wildcard, an empty host, a host that is not a DNS name — never manifest
+           text made to look like a link. Open and Copy are disabled on those rows rather
+           than hidden, so the reader can see there is nothing to open. The backend opens
+           the Service's own pane: which pods it routes to, and are they serving. -->
+      <TabItem Header="Rules">
+        <Grid RowDefinitions="Auto,Auto,*,Auto">
+          <Border Grid.Row="0" Classes="infoBar warn" Margin="0,0,0,8" IsVisible="{Binding HasTlsWarning}">
+            <TextBlock Text="{Binding TlsWarning}" TextWrapping="Wrap" FontSize="12" />
+          </Border>
+          <TextBlock Grid.Row="1" Classes="statusText dim" Margin="2,0,0,8" TextWrapping="Wrap"
+                     IsVisible="{Binding HasNoRoutes}"
+                     Text="This ingress declares no rules and no default backend, so it routes nothing." />
+
+          <DataGrid Grid.Row="2" Name="RoutesGrid" ItemsSource="{Binding Routes}" SelectedItem="{Binding SelectedRoute}"
+                    IsReadOnly="True" GridLinesVisibility="Horizontal" CanUserResizeColumns="True">
+            <DataGrid.ContextMenu>
+              <ContextMenu>
+                <MenuItem Header="Open URL" Command="{Binding OpenUrlCommand}" />
+                <MenuItem Header="Copy URL" Command="{Binding CopyUrlCommand}" />
+                <MenuItem Header="Open backend service" Command="{Binding OpenBackendCommand}" />
+              </ContextMenu>
+            </DataGrid.ContextMenu>
+            <DataGrid.Columns>
+              <DataGridTemplateColumn Header="Host" Width="*" MinWidth="170">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:IngressRouteViewModel">
+                    <TextBlock Text="{Binding HostText}" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding HostText}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Path" Width="140">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:IngressRouteViewModel">
+                    <TextBlock Text="{Binding PathText}" VerticalAlignment="Center"
+                               FontFamily="Cascadia Mono,Consolas,monospace" FontSize="12"
+                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PathTypeText}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Backend" Width="170">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:IngressRouteViewModel">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock Text="{Binding BackendText}" VerticalAlignment="Center"
+                                 TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding BackendText}" />
+                      <Button Grid.Column="1" Classes="chip" Padding="0" MinWidth="20" MinHeight="20" Margin="4,0,0,0"
+                              VerticalAlignment="Center" Cursor="Hand"
+                              IsVisible="{Binding CanOpenBackend}"
+                              ToolTip.Tip="Open this service: its pods and whether they are serving"
+                              Command="{Binding $parent[UserControl].((vm:IngressDetailTabViewModel)DataContext).OpenBackendCommand}"
+                              CommandParameter="{Binding}">
+                        <PathIcon Data="{StaticResource ChevronRightIconGeometry}" Width="10" Height="10" />
+                      </Button>
+                    </Grid>
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="TLS" Width="170">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:IngressRouteViewModel">
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                      <Ellipse Classes="statusDot" Width="8" Height="8" VerticalAlignment="Center"
+                               Fill="{Binding TlsHealth, Converter={x:Static conv:HealthToBrushConverter.Instance}}" />
+                      <TextBlock Text="{Binding TlsText}" VerticalAlignment="Center" FontSize="12"
+                                 TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding TlsText}" />
+                    </StackPanel>
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="URL" Width="2*" MinWidth="200">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:IngressRouteViewModel">
+                    <Grid ColumnDefinitions="*,Auto,Auto">
+                      <TextBlock Text="{Binding UrlText}" VerticalAlignment="Center" FontSize="12"
+                                 Classes="statusText" Classes.dim="{Binding !HasUrl}"
+                                 TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding UrlText}" />
+                      <Button Grid.Column="1" Classes="chip" Padding="4,0" MinHeight="20" Margin="4,0,0,0" Cursor="Hand"
+                              Content="Open" FontSize="11" ToolTip.Tip="Open in the default browser"
+                              Command="{Binding $parent[UserControl].((vm:IngressDetailTabViewModel)DataContext).OpenUrlCommand}"
+                              CommandParameter="{Binding}" />
+                      <Button Grid.Column="2" Classes="chip" Padding="4,0" MinHeight="20" Margin="4,0,0,0" Cursor="Hand"
+                              Content="Copy" FontSize="11" ToolTip.Tip="Copy the URL"
+                              Command="{Binding $parent[UserControl].((vm:IngressDetailTabViewModel)DataContext).CopyUrlCommand}"
+                              CommandParameter="{Binding}" />
+                    </Grid>
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+            </DataGrid.Columns>
+          </DataGrid>
+
+          <TextBlock Grid.Row="3" Text="{Binding ActionMessage}" FontSize="11.5" Opacity="0.7" Margin="2,6,0,0"
+                     IsVisible="{Binding ActionMessage, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}" />
+        </Grid>
+      </TabItem>
+
+      <!-- ============================================================== Events -->
+      <TabItem Header="Events">
+        <Grid RowDefinitions="Auto,Auto,*">
+          <Border Grid.Row="0" Classes="infoBar error" Margin="0,0,0,8" IsVisible="{Binding HasEventsError}">
+            <TextBlock Text="{Binding EventsError}" TextWrapping="Wrap" FontSize="12" />
+          </Border>
+          <TextBlock Grid.Row="1" Classes="statusText dim" Margin="2,0,0,8" TextWrapping="Wrap"
+                     IsVisible="{Binding HasNoEvents}"
+                     Text="No recent events for this ingress. Events expire after an hour by default." />
+          <ScrollViewer Grid.Row="2">
+            <ItemsControl ItemsSource="{Binding Events}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:EventRowViewModel">
+                  <Border Classes="card" Padding="8,6" Margin="0,0,0,4">
+                    <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto">
+                      <Border Grid.Row="0" Grid.Column="0" Classes="statusPill" Margin="0,0,8,0"
+                              Classes.ok="{Binding Health, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=ok}"
+                              Classes.warn="{Binding Health, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=warn}">
+                        <TextBlock Text="{Binding Type}" FontSize="11" />
+                      </Border>
+                      <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Reason}" FontWeight="SemiBold" FontSize="12.5"
+                                 VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Grid.Row="0" Grid.Column="2" FontSize="10.5" Opacity="0.5" VerticalAlignment="Center" Margin="8,0,0,0">
+                        <Run Text="{Binding Count, StringFormat='×{0}'}" />
+                        <Run Text=" · " />
+                        <Run Text="{Binding LastSeen}" />
+                      </TextBlock>
+                      <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Text="{Binding Message}" FontSize="11.5" Opacity="0.75"
+                                 TextWrapping="Wrap" Margin="0,3,0,0" />
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </Grid>
+      </TabItem>
+    </TabControl>
+  </Grid>
+</UserControl>

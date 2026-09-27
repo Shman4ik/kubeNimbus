@@ -195,9 +195,22 @@ public static class PrinterColumns
     /// <para>
     /// An absent field and an unresolvable path render as an empty cell. The API server
     /// emits a null cell for both and kubectl prints nothing for a null; an empty cell in
-    /// a grid says the same thing without inventing a word for it. An object or array is
-    /// compact JSON in a <c>string</c> column and empty in any other, which is also what
-    /// the server does.
+    /// a grid says the same thing without inventing a word for it.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>A non-scalar value depends on the column's type, because it does upstream.</b>
+    /// For <c>type: string</c> the API server does not go through
+    /// <c>cellForJSONValue</c> at all: it runs client-go's JSONPath printer
+    /// (<c>JSONPath.PrintResults</c>), which writes a map or a slice as compact JSON. So
+    /// Gateway API's HTTPRoute, whose only non-Age column is HOSTNAMES over
+    /// <c>.spec.hostnames</c>, prints <c>["a.example.com","b.example.com"]</c> in
+    /// <c>kubectl get httproute</c> — confirmed against the sandbox's k3s 1.33 — and this
+    /// renders the same string. For every other type the value goes through
+    /// <c>cellForJSONValue</c>, which has no case for a map or a slice and returns a null
+    /// cell, so those stay empty here. The JSON rather than a friendlier comma list is a
+    /// decision, not an accident: a reader comparing the two screens should see the same
+    /// characters, and the brackets are what tell a one-element list from a scalar.
     /// </para>
     ///
     /// <para>
@@ -215,13 +228,8 @@ public static class PrinterColumns
         var text = SimpleJsonPath.ScalarText(value);
         if (text is null)
         {
-            // An object or array. For a `string` column the API server prints it as
-            // compact JSON — kubectl shows Gateway API's HTTPRoute Hostnames column as
-            // ["shop.example.com","www.shop.example.com"] — and for every other type it
-            // emits a null cell. Observed on k3s v1.33 (PrinterColumnsLiveTests); this used
-            // to render an empty cell for both, on the belief that the server skipped them.
-            return column.Type == "string" && value.ValueKind is JsonValueKind.Object or JsonValueKind.Array
-                ? CompactJson(value)
+            return column.Type == "string" && value.ValueKind is JsonValueKind.Array or JsonValueKind.Object
+                ? GoJson.Marshal(value)
                 : "";
         }
 
@@ -261,26 +269,6 @@ public static class PrinterColumns
         // metav1.Time's zero value round-trips as "0001-01-01T00:00:00Z"; the API
         // server prints <unknown> for it rather than an age of two thousand years.
         return parsed.UtcDateTime == DateTime.MinValue ? "<unknown>" : RelativeTime.Compact(now - parsed);
-    }
-
-    /// <summary>
-    /// One JSON value on one line. Re-written rather than taken with <c>GetRawText</c>,
-    /// because an object read from an indented document (the demo dataset) would otherwise
-    /// carry its line breaks into a grid cell. Relaxed escaping, so a URL or a non-ASCII
-    /// name reads as itself rather than as <c>+</c> sequences.
-    /// </summary>
-    private static string CompactJson(JsonElement value)
-    {
-        var buffer = new System.Buffers.ArrayBufferWriter<byte>();
-        using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions
-               {
-                   Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-               }))
-        {
-            value.WriteTo(writer);
-        }
-
-        return System.Text.Encoding.UTF8.GetString(buffer.WrittenSpan);
     }
 
     private static string Str(JsonElement parent, string name) =>

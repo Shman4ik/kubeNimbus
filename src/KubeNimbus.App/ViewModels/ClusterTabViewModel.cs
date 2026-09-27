@@ -3437,6 +3437,23 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             return;
         }
 
+        // Services, Ingresses and NetworkPolicies open their own panes for the same reason:
+        // "why is traffic not reaching my pods" is answered by what they select and route to,
+        // not by their manifest. See docs/engineering/networking-detail.md.
+        if (NetworkingDetailFor(descriptor, row, client) is { } networking)
+        {
+            if (InspectorTabs.FirstOrDefault(t => t.Key == networking.Key) is { } openedNetworking)
+            {
+                if (!preview) openedNetworking.IsPreview = false;
+                SelectedInspectorTab = openedNetworking;
+                return;
+            }
+
+            networking.Tab.Value.IsPreview = preview;
+            AddInspectorTab(networking.Tab.Value, replacePreview: preview);
+            return;
+        }
+
         var isPod = descriptor is { Kind: "Pod", Group: "" };
         var isNode = NodeActions.IsNodeKind(descriptor);
         var key = (isPod, isNode) switch

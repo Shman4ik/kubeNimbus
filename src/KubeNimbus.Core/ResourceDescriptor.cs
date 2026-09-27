@@ -108,6 +108,15 @@ public sealed record ResourceDescriptor(
         Group: "", Version: "v1", Kind: "Namespace", Plural: "namespaces", SingularName: "namespace",
         Namespaced: false, ShortNames: ["ns"], Categories: []);
 
+    /// <summary>
+    /// Well-known descriptor for discovery.k8s.io/v1 EndpointSlices — the Service pane's
+    /// endpoints. GA since Kubernetes 1.21; an older server answers the list with a 404,
+    /// which the pane states in place of its endpoints.
+    /// </summary>
+    public static readonly ResourceDescriptor EndpointSlices = new(
+        Group: "discovery.k8s.io", Version: "v1", Kind: "EndpointSlice", Plural: "endpointslices",
+        SingularName: "endpointslice", Namespaced: true, ShortNames: [], Categories: []);
+
     /// <summary>Well-known descriptor for core/v1 ConfigMaps — used by the env-var reveal path.</summary>
     public static readonly ResourceDescriptor ConfigMaps = new(
         Group: "", Version: "v1", Kind: "ConfigMap", Plural: "configmaps", SingularName: "configmap",

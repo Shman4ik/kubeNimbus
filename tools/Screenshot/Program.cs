@@ -184,6 +184,23 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-demo-terminal-unavailable",
         () => HostInMainWindow(ClusterTabScenarios.DemoTerminalUnavailable())),
 
+    // Bundle A — networking. "Why is traffic not reaching my pods": the Service pane's five
+    // states (partial, no match, nothing serving, no selector, ExternalName), the Ingress
+    // and NetworkPolicy panes, and the four kinds' kubectl list columns.
+    ("net-service-list", () => HostInMainWindow(NetworkingScenarios.ServiceList())),
+    ("net-service-detail", () => HostInMainWindow(NetworkingScenarios.ServiceDetail(), height: 1000)),
+    ("net-service-overview", () => HostInMainWindow(NetworkingScenarios.ServiceOverview(), height: 1000)),
+    ("net-service-no-match", () => HostInMainWindow(NetworkingScenarios.ServiceNoMatch(), height: 1000)),
+    ("net-service-nothing-serving", () => HostInMainWindow(NetworkingScenarios.ServiceNothingServing(), height: 1000)),
+    ("net-service-no-selector", () => HostInMainWindow(NetworkingScenarios.ServiceNoSelector(), height: 1000)),
+    ("net-service-external-name", () => HostInMainWindow(NetworkingScenarios.ServiceExternalName(), height: 1000)),
+    ("net-ingress-list", () => HostInMainWindow(NetworkingScenarios.IngressList())),
+    ("net-ingress-detail", () => HostInMainWindow(NetworkingScenarios.IngressDetail(), height: 1000)),
+    ("net-netpol-list", () => HostInMainWindow(NetworkingScenarios.NetworkPolicyList())),
+    ("net-netpol-detail", () => HostInMainWindow(NetworkingScenarios.NetworkPolicyDetail(), height: 1000)),
+    ("net-netpol-default-deny-pods", () => HostInMainWindow(NetworkingScenarios.NetworkPolicyDefaultDenyPods(), height: 1000)),
+    ("net-endpointslice-list", () => HostInMainWindow(NetworkingScenarios.EndpointSliceList())),
+
     // Argo CD. The dashboard is the headline shot: two independent pills per row, the
     // seven counts, and the attention ordering that puts a Synced-but-Degraded
     // Application at the top.

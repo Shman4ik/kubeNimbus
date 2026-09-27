@@ -109,6 +109,8 @@ and a "Logs" menu item — on each list that names a pod or a workload:
 | Node detail → Pods | yes | yes | Logs, Logs maximized, Open pod | the chevron still opens the pod |
 | Events list, an Event about a pod | yes | yes, in the Object cell | the list's own "Logs" | only when `involvedObject`/`regarding` is a core pod |
 | Argo Application → Resources | no | yes, on hover | none | pods, built-in workloads and Argo Rollouts |
+| Service detail → Backends | yes | yes, on rows that name a pod | Logs, Logs maximized, Open pod | an endpoint that names no pod has no icon and no L; see [networking-detail](networking-detail.md) |
+| NetworkPolicy detail → Pods | yes | yes | Logs, Logs maximized, Open pod | the pods the policy selects, one capped read |
 
 Where it deliberately is **not**: pod detail's Events tab (every event there is about the
 pod whose Logs tab is one click away), workload detail's Events tab (its events are about

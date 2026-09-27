@@ -44,6 +44,22 @@ Seven things are load-bearing:
    an empty cell, never an exception on a watch tick. Only the *first* match is used,
    matching the API server's own `tableconvertor` ("as we only support simple JSON path,
    we can assume to have only one result").
+   **A `type: string` column over an array or an object prints it as JSON, and every other
+   type leaves it blank — because that is what the API server does, not a preference.**
+   For a string column `tableconvertor` bypasses `cellForJSONValue` and runs client-go's
+   JSONPath printer (`PrintResults`), which writes a map or a slice with `json.Marshal`;
+   `cellForJSONValue`, used for every other type, has no case for either and returns a null
+   cell. This app used to blank both, and `PrinterColumns.Evaluate`'s own doc-comment
+   claimed the API server did the same — true only for the non-string types. The kind it
+   bit is the most-installed Gateway API one: HTTPRoute's only non-Age column is HOSTNAMES
+   over `.spec.hostnames`, and `kubectl get httproute` against the sandbox's k3s 1.33 prints
+   `["shop.example.com","www.shop.example.com"]`, which is now exactly the cell here
+   (FEAT-61). JSON rather than a friendlier comma list is a stated choice: someone comparing
+   the two screens should see the same characters, and the brackets are what tell a
+   one-element list from a scalar. `GoJson` writes Go's bytes — compact, object keys sorted
+   (the server holds the object as a Go map), `<`, `>` and `&` escaped as Go escapes them,
+   other non-ASCII left alone — so the match holds for objects too, not only for lists of
+   hostnames.
    **Checked against a real server, cell for cell** (`Live/PrinterColumnsLiveTests`,
    VER-23): every CRD on the sandbox that has objects and declares columns — this repo's
    two, k3s's `helm.cattle.io` HelmCharts and `k3s.cattle.io` Addons, Argo CD's Application CRD and, when one exists, a Gateway API HTTPRoute — is compared
