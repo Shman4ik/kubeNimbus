@@ -30,8 +30,10 @@
         <!-- L / Shift+L and Enter are handled in the Tunnel phase from code-behind
              (RowLogsGesture + OnPodKeyDown): DataGrid's own class handler consumes Enter
              before a bubble handler here would see it. The menu captions are display-only
-             and follow CommandCatalog's List-scoped rows by hand. -->
-        <DataGrid Grid.Row="2" Name="PodsGrid" ItemsSource="{Binding Pods}" SelectedItem="{Binding SelectedPod}"
+             and follow CommandCatalog's List-scoped rows by hand. The selection is synced
+             from code-behind (GridSelectionSync) rather than bound two-way, which lost it
+             every time the inspector switched tabs. -->
+        <DataGrid Grid.Row="2" Name="PodsGrid" ItemsSource="{Binding Pods}"
                   IsReadOnly="True" AutoGenerateColumns="False" DoubleTapped="OnPodDoubleTapped">
           <DataGrid.ContextMenu><ContextMenu>
             <MenuItem Header="Logs" Command="{Binding PodLogsCommand}" InputGesture="L"/>

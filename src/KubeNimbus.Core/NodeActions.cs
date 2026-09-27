@@ -80,6 +80,14 @@ public static class NodeActions
         return Str(Object(pod.Raw, "spec"), "nodeName");
     }
 
+    /// <summary>
+    /// The <c>fieldSelector</c> for the pods scheduled on one node. One place for the
+    /// string, because the node pane's watch, the drain's watch and the one-shot list the
+    /// drain plan is read from must all select the same population — the API server
+    /// indexes <c>spec.nodeName</c> precisely for this query.
+    /// </summary>
+    public static string PodsOnNodeSelector(string nodeName) => $"spec.nodeName={nodeName}";
+
     /// <summary>True for core/v1 Node.</summary>
     public static bool IsNodeKind(ResourceDescriptor descriptor) =>
         descriptor is { Group: "", Kind: "Node" };

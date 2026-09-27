@@ -19,6 +19,7 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
     private readonly Func<OwnerRef, string?, Task> _openOwner;
     private readonly Func<string, bool>? _activateTab;
     private readonly OpenNamedLogs? _openLogs;
+    private readonly Action<ResourceRowViewModel>? _rowRefreshed;
     private readonly CancellationTokenSource _cts = new();
     private readonly Task _watch;
     private readonly Task _initialRefresh;
@@ -58,7 +59,8 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
 
     public WorkloadDetailTabViewModel(ClusterClient? client, ResourceDescriptor descriptor,
         ResourceRowViewModel row, Action<InspectorTabViewModelBase> openTab, Func<RowActionKind, Task> armAction,
-        Func<OwnerRef, string?, Task> openOwner, Func<string, bool>? activateTab = null, OpenNamedLogs? openLogs = null)
+        Func<OwnerRef, string?, Task> openOwner, Func<string, bool>? activateTab = null, OpenNamedLogs? openLogs = null,
+        Action<ResourceRowViewModel>? rowRefreshed = null)
         : base($"{descriptor.Kind}/{row.Name}" + (row.ClusterName.Length > 0 ? $" · {row.ClusterName}" : ""), client is null)
     {
         _client = client;
@@ -69,6 +71,7 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
         _openOwner = openOwner;
         _activateTab = activateTab;
         _openLogs = openLogs;
+        _rowRefreshed = rowRefreshed;
         Key = KeyFor(row.ClusterName, descriptor, row.Namespace, row.Name);
         row.PropertyChanged += RowChanged;
         ReadStatus();
@@ -165,7 +168,7 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
             {
                 var current = await _client.ReadResourceAsync(_descriptor, _row.Namespace, _row.Name, token);
                 if (current is null) { Error = "This workload no longer exists."; }
-                else _row.Update(current);
+                else ApplyRefreshed(current);
             }
         }
         catch (OperationCanceledException) { return; }
@@ -181,6 +184,18 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { EventsStatus = ex.Message; }
+    }
+
+    /// <summary>
+    /// A Refresh's read of the workload, written into the row the list holds. The row is
+    /// updated in place, which no <c>CollectionChanged</c> reports, so the owning list is
+    /// told — otherwise a Refresh that heals or breaks a workload leaves the unhealthy-only
+    /// view (and a sort by Status) wrong until the watch's own Modified arrives (ENG-33).
+    /// </summary>
+    internal void ApplyRefreshed(DynamicResource current)
+    {
+        _row.Update(current);
+        _rowRefreshed?.Invoke(_row);
     }
 
     [RelayCommand]

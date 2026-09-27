@@ -21,16 +21,14 @@ namespace KubeNimbus.Core;
 public sealed partial class ClusterClient
 {
     /// <summary>
-    /// How long the drain waits between passes while pods terminate. The one place this
-    /// app polls other than the metrics API, and the exception is argued rather than
-    /// assumed: the loop's decision is "is this specific set of pods gone yet", it has a
-    /// natural end (the set empties), it is scoped to the drain's own
-    /// <see cref="CancellationToken"/>, and it is what <c>kubectl drain</c>'s own
-    /// <c>waitForDelete</c> does. A watch would report the deletions but not the
-    /// question — and re-listing is also how the drain notices a pod that appeared
-    /// <em>after</em> it started, which a watch seeded once would not.
+    /// How long the drain waits before asking again for an eviction a
+    /// PodDisruptionBudget refused. That is the Eviction API's documented contract — a
+    /// 429 means "not now, try again later" — and it is the only timer left in the drain:
+    /// what the pods on the node are doing (terminating, gone, newly scheduled here) is
+    /// observed through a field-selected watch rather than by re-listing. Five seconds is
+    /// <c>kubectl drain</c>'s own retry interval after a 429.
     /// </summary>
-    private static readonly TimeSpan DrainPollInterval = TimeSpan.FromSeconds(2);
+    internal static TimeSpan EvictionRetryInterval { get; set; } = TimeSpan.FromSeconds(5);
 
     /// <summary>
     /// Cordons or uncordons a node — a one-field merge patch of <c>spec.unschedulable</c>,
@@ -75,8 +73,31 @@ public sealed partial class ClusterClient
         return ListResourceOnceAsync(
             podDescriptor,
             @namespace: null,
-            fieldSelector: $"spec.nodeName={nodeName}",
+            fieldSelector: NodeActions.PodsOnNodeSelector(nodeName),
             cancellationToken: cancellationToken);
+    }
+
+    /// <summary>
+    /// The pods on one node, live: the same field-selected population as
+    /// <see cref="ListPodsOnNodeAsync"/>, through the informer loop every other live list
+    /// uses. A pod the scheduler binds here arrives as an Added (it has just started
+    /// matching <c>spec.nodeName</c>) and one that is deleted or evicted leaves as a
+    /// Deleted, so neither the node pane nor the drain has to re-list to find out.
+    /// </summary>
+    public IAsyncEnumerable<ResourceEvent<DynamicResource>> WatchPodsOnNodeAsync(
+        ResourceDescriptor podDescriptor,
+        string nodeName,
+        Action<Exception>? connectionLost = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(podDescriptor);
+
+        return WatchResourceAsync(
+            podDescriptor,
+            @namespace: null,
+            connectionLost: connectionLost,
+            cancellationToken: cancellationToken,
+            fieldSelector: NodeActions.PodsOnNodeSelector(nodeName));
     }
 
     /// <summary>
@@ -166,7 +187,14 @@ public sealed partial class ClusterClient
             .ConfigureAwait(false);
         yield return DrainProgress.At(DrainStage.Cordoned, $"{nodeName} is cordoned — nothing new will schedule here.");
 
-        var pods = await ListPodsOnNodeAsync(podDescriptor, nodeName, cancellationToken).ConfigureAwait(false);
+        // The pods on the node, kept current for the whole drain by one field-selected
+        // watch: its initial list is the plan's input, and after that every eviction that
+        // completes (a Deleted) and every pod that lands here anyway (an Added — a
+        // DaemonSet controller and the kubelet both ignore cordon) arrives as it happens.
+        await using var onNode = PodsOnNodeWatch.Start(this, podDescriptor, nodeName, cancellationToken);
+        await onNode.Synced.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        var (pods, version) = onNode.Snapshot();
         var plan = NodeActions.Plan(pods, options);
         yield return DrainProgress.At(DrainStage.Planned, plan.Summary) with { Plan = plan };
 
@@ -204,13 +232,14 @@ public sealed partial class ClusterClient
                 break;
             }
 
+            var blocked = false;
             foreach (var pod in targets)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
                 if (accepted.Contains(pod.Key) || pod.Disposition == DrainDisposition.AlreadyTerminating)
                 {
-                    // Already on its way out; the re-list below is what confirms it.
+                    // Already on its way out; the watch's Deleted is what confirms it.
                     continue;
                 }
 
@@ -232,6 +261,7 @@ public sealed partial class ClusterClient
                         break;
 
                     case EvictionOutcome.Blocked:
+                        blocked = true;
                         yield return DrainProgress.At(DrainStage.PodBlocked, result.Message, pod.Key);
                         break;
 
@@ -242,27 +272,48 @@ public sealed partial class ClusterClient
                 }
             }
 
-            // Re-list rather than assume. It answers two questions at once — which of the
-            // evictions have actually completed, and whether anything new landed here
-            // (a DaemonSet controller and the kubelet both ignore cordon).
-            await Task.Delay(DrainPollInterval, cancellationToken).ConfigureAwait(false);
-            pods = await ListPodsOnNodeAsync(podDescriptor, nodeName, cancellationToken).ConfigureAwait(false);
-            plan = NodeActions.Plan(pods, options);
+            // Wait for the watch to report something — an eviction completing, a pod
+            // terminating, a pod landing here — rather than re-listing on a timer. The one
+            // exception is a PodDisruptionBudget's 429, whose contract is "ask again later":
+            // while a pod is held back, the wait also ends after the retry interval so it
+            // is asked again even if nothing else on the node moves.
+            var remaining = Remaining(plan, failed);
+            var retryAt = DateTimeOffset.UtcNow + EvictionRetryInterval;
+            while (remaining > 0)
+            {
+                // A deadline rather than a fresh interval per wake-up: a pod whose status
+                // keeps ticking over must not postpone the retry of a blocked one forever.
+                var wait = blocked ? Max(retryAt - DateTimeOffset.UtcNow, TimeSpan.Zero) : Timeout.InfiniteTimeSpan;
+                var changed = await onNode.WaitForChangeAsync(version, wait, cancellationToken).ConfigureAwait(false);
+                (pods, version) = onNode.Snapshot();
+                plan = NodeActions.Plan(pods, options);
+                var now = Remaining(plan, failed);
 
-            var remaining = plan.Pods.Count(p =>
-                p.Disposition is DrainDisposition.Evict or DrainDisposition.AlreadyTerminating
-                && !failed.ContainsKey(p.Key));
+                // A change that leaves the count where it was (a pod's status ticking
+                // over while it terminates) is not worth a line on the strip, and neither
+                // is it worth another eviction pass: only a count that moved, a timer
+                // that expired, or a pod the drain has not asked about yet re-runs it.
+                var hasUnaskedPod = plan.Pods.Any(p => p.Disposition == DrainDisposition.Evict
+                    && !accepted.Contains(p.Key) && !failed.ContainsKey(p.Key));
+                if (now != remaining || !changed || hasUnaskedPod)
+                {
+                    remaining = now;
+                    break;
+                }
+            }
 
             if (remaining == 0)
             {
                 break;
             }
 
+            var problem = onNode.ConnectionProblem is { } lost ? $" {lost}" : "";
             yield return DrainProgress.At(
                 DrainStage.Waiting,
-                remaining == 1
+                (remaining == 1
                     ? "1 pod still on the node."
-                    : $"{remaining} pods still on the node.") with { Remaining = remaining, Evicted = evicted, Failed = failed.Count };
+                    : $"{remaining} pods still on the node.") + problem)
+                with { Remaining = remaining, Evicted = evicted, Failed = failed.Count };
         }
 
         yield return DrainProgress.At(
@@ -272,6 +323,208 @@ public sealed partial class ClusterClient
                 : $"{nodeName} is not fully drained: {failed.Count} pod(s) could not be evicted. "
                   + $"{evicted} pod(s) were. The node stays cordoned.")
             with { Evicted = evicted, Failed = failed.Count, Plan = plan };
+    }
+
+    /// <summary>Pods the drain is still responsible for: to evict, or evicted and not gone yet.</summary>
+    private static int Remaining(DrainPlan plan, Dictionary<string, string> failed) =>
+        plan.Pods.Count(p =>
+            p.Disposition is DrainDisposition.Evict or DrainDisposition.AlreadyTerminating
+            && !failed.ContainsKey(p.Key));
+
+    private static TimeSpan Max(TimeSpan a, TimeSpan b) => a > b ? a : b;
+
+    /// <summary>
+    /// The drain's live view of the pods on its node: a field-selected watch folded into a
+    /// dictionary, with a version counter the eviction loop waits on. Its own type rather
+    /// than inline state in the iterator, because the watch has to be consumed on its own
+    /// task — the drain spends most of its life awaiting an eviction or a change, not
+    /// reading frames.
+    /// </summary>
+    private sealed class PodsOnNodeWatch : IAsyncDisposable
+    {
+        private readonly Dictionary<string, DynamicResource> _pods = new(StringComparer.Ordinal);
+        private readonly TaskCompletionSource _synced = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly CancellationTokenSource _cts;
+        private readonly object _gate = new();
+        private TaskCompletionSource _changed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private long _version;
+        private Task _pump = Task.CompletedTask;
+
+        private PodsOnNodeWatch(CancellationToken cancellationToken) =>
+            _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        /// <summary>Completes when the initial list has landed; faults if it never can.</summary>
+        public Task Synced => _synced.Task;
+
+        /// <summary>
+        /// The watch's last connection failure after the initial list, until it recovers —
+        /// appended to the drain's waiting line so a stalled count says why.
+        /// </summary>
+        public string? ConnectionProblem { get; private set; }
+
+        public static PodsOnNodeWatch Start(
+            ClusterClient client, ResourceDescriptor podDescriptor, string nodeName, CancellationToken cancellationToken)
+        {
+            var watch = new PodsOnNodeWatch(cancellationToken);
+            watch._pump = Task.Run(() => watch.PumpAsync(client, podDescriptor, nodeName));
+            return watch;
+        }
+
+        private async Task PumpAsync(ClusterClient client, ResourceDescriptor podDescriptor, string nodeName)
+        {
+            var token = _cts.Token;
+            try
+            {
+                await foreach (var evt in client.WatchPodsOnNodeAsync(
+                    podDescriptor, nodeName, ConnectionLost, token).ConfigureAwait(false))
+                {
+                    Apply(evt);
+                }
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                // The drain finished, was stopped, or failed.
+            }
+            catch (Exception ex)
+            {
+                _synced.TrySetException(ex);
+            }
+        }
+
+        /// <summary>
+        /// Before the initial list has landed a lost connection is the drain's answer — a
+        /// 403 on listing pods, or a server that is not there — and it fails the drain the
+        /// way the one-shot list it replaces did. After that the watch reconnects on its
+        /// own, and the failure is only worth saying while it lasts.
+        /// </summary>
+        private void ConnectionLost(Exception ex)
+        {
+            if (!_synced.Task.IsCompleted)
+            {
+                _synced.TrySetException(ex.InnerException ?? ex);
+                _cts.Cancel();
+                return;
+            }
+
+            ConnectionProblem = ex.Message;
+            Changed();
+        }
+
+        /// <summary>
+        /// Folds one frame in. A relist (the initial one, or after a 410) is collected
+        /// aside and swapped in whole on Synced: the drain reads "no pods left" as
+        /// "drained", so it must never be shown the half-filled dictionary a relist passes
+        /// through on its way to complete.
+        /// </summary>
+        private void Apply(ResourceEvent<DynamicResource> evt)
+        {
+            lock (_gate)
+            {
+                switch (evt.Type)
+                {
+                    case ResourceEventType.Reset:
+                        _relist = new(StringComparer.Ordinal);
+                        return;
+                    case ResourceEventType.Synced:
+                        if (_relist is { } complete)
+                        {
+                            _pods.Clear();
+                            foreach (var (key, pod) in complete)
+                            {
+                                _pods[key] = pod;
+                            }
+
+                            _relist = null;
+                        }
+
+                        ConnectionProblem = null;
+                        _synced.TrySetResult();
+                        break;
+                    case ResourceEventType.Added when _relist is { } listing && evt.Resource is { } listed:
+                        listing[Key(listed)] = listed;
+                        return;
+                    case ResourceEventType.Deleted when evt.Resource is { } gone:
+                        _pods.Remove(Key(gone));
+                        break;
+                    case ResourceEventType.Added or ResourceEventType.Modified when evt.Resource is { } pod:
+                        _pods[Key(pod)] = pod;
+                        ConnectionProblem = null;
+                        break;
+                    default:
+                        return;
+                }
+            }
+
+            Changed();
+        }
+
+        private Dictionary<string, DynamicResource>? _relist;
+
+        private void Changed()
+        {
+            TaskCompletionSource previous;
+            lock (_gate)
+            {
+                _version++;
+                previous = _changed;
+                _changed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            }
+
+            previous.TrySetResult();
+        }
+
+        /// <summary>The pods on the node now, and the version they are as of.</summary>
+        public (IReadOnlyList<DynamicResource> Pods, long Version) Snapshot()
+        {
+            lock (_gate)
+            {
+                return ([.. _pods.Values], _version);
+            }
+        }
+
+        /// <summary>
+        /// Waits until something has changed since <paramref name="since"/>, or until
+        /// <paramref name="timeout"/> passes. True when something changed.
+        /// </summary>
+        public async Task<bool> WaitForChangeAsync(long since, TimeSpan timeout, CancellationToken cancellationToken)
+        {
+            Task changed;
+            lock (_gate)
+            {
+                if (_version != since)
+                {
+                    return true;
+                }
+
+                changed = _changed.Task;
+            }
+
+            try
+            {
+                await changed.WaitAsync(timeout, cancellationToken).ConfigureAwait(false);
+                return true;
+            }
+            catch (TimeoutException)
+            {
+                return false;
+            }
+        }
+
+        private static string Key(DynamicResource pod) => $"{pod.Namespace}/{pod.Name}";
+
+        public async ValueTask DisposeAsync()
+        {
+            await _cts.CancelAsync().ConfigureAwait(false);
+            try
+            {
+                await _pump.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+
+            _cts.Dispose();
+        }
     }
 }
 

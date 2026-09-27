@@ -673,6 +673,22 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     }
 
     /// <summary>
+    /// A pane updated one of this list's rows in place from its own read — workload
+    /// detail's Refresh — which, like a watch Modified, reaches no <c>CollectionChanged</c>.
+    /// Only a row the watch still holds is re-evaluated: a pane opened by owner navigation,
+    /// or left open after the list moved to another kind, holds a row that is not in
+    /// <see cref="Rows"/>, and inserting that into <see cref="VisibleRows"/> would put an
+    /// object on screen that the list does not have.
+    /// </summary>
+    internal void RowRefreshedInPlace(ResourceRowViewModel row)
+    {
+        if (Rows.Any(r => ReferenceEquals(r, row)))
+        {
+            RefreshRowVisibility(row);
+        }
+    }
+
+    /// <summary>
     /// Where a row belongs in an unsorted <see cref="VisibleRows"/>, which is then a
     /// subsequence of <see cref="Rows"/>: count the visible rows that come before it in
     /// arrival order. One walk over both lists, and only on a visibility change.
@@ -3420,7 +3436,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 existingTab.IsPreview = false;
                 SelectedInspectorTab = existingTab;
                 return true;
-            }, NamedLogsOpener(row.ClusterName, client)) { IsPreview = preview };
+            }, NamedLogsOpener(row.ClusterName, client), RowRefreshedInPlace) { IsPreview = preview };
             AddInspectorTab(detail, replacePreview: preview);
             return;
         }

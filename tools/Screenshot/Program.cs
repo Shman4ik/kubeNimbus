@@ -350,6 +350,7 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     if (name == "ux-row-logs") UxInteractionChecks.RowLogs(window);
     if (name == "ux-pane-logs-workload") PaneLogsChecks.WorkloadDetail(window);
     if (name == "ux-pane-logs-node") PaneLogsChecks.NodeDetail(window);
+    if (name == "cluster-tab-pane-logs-narrow-node") PaneLogsChecks.NodePodsFit(window);
     if (name == "ux-pane-logs-events") PaneLogsChecks.Events(window);
     if (name == "ux-pane-logs-argo") PaneLogsChecks.Argo(window);
     if (name == "cluster-tab-argo-resource-logs-hover") PaneLogsChecks.HoverArgoRow(window, "Deployment");
