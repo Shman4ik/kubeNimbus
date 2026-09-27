@@ -280,8 +280,17 @@ public sealed partial class ClusterClient
             throw new ServerSideApplyConflictException(message, body);
         }
 
-        if (status is System.Net.HttpStatusCode.BadRequest or System.Net.HttpStatusCode.UnprocessableEntity
-            && LooksLikeFieldValidationRejection(message))
+        // A real API server refuses an unknown field in an apply patch with a **500**, not
+        // the 400/422 this was first written against: the apply handler fails building the
+        // typed patch ("failed to create typed patch object (ns/name; v1, Kind=ConfigMap):
+        // .dta: field not declared in schema") and reports it as an internal error. Observed
+        // on k3s v1.33.4 for a core kind, an apps/v1 kind and a CRD alike — and in every
+        // fieldValidation mode, Strict, Warn and Ignore (ApplyLiveTests). A 500 is accepted
+        // only with that wording, the one a real server sends with it.
+        if ((status is System.Net.HttpStatusCode.BadRequest or System.Net.HttpStatusCode.UnprocessableEntity
+                && LooksLikeFieldValidationRejection(message))
+            || (status is System.Net.HttpStatusCode.InternalServerError
+                && message.Contains("field not declared in schema", StringComparison.OrdinalIgnoreCase)))
         {
             throw new ServerSideApplyValidationException(message, body);
         }

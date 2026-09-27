@@ -218,16 +218,16 @@ public class PrinterColumnTests
     }
 
     /// <summary>
-    /// An absent field, an unresolvable path and a non-scalar value are all one outcome:
-    /// an empty cell. The API server emits a null cell for each and kubectl prints
-    /// nothing for it, and the object-that-has-no-status-yet case is common enough that
-    /// it must never read as an error.
+    /// An absent field and an unresolvable path are one outcome: an empty cell. The API
+    /// server emits a null cell for each and kubectl prints nothing for it, and the
+    /// object-that-has-no-status-yet case is common enough that it must never read as an
+    /// error. (A non-scalar value used to be in this list; a real server prints it as JSON
+    /// in a string column — see <c>PrinterColumnsLiveTests</c> and
+    /// <c>Evaluate_prints_a_non_scalar_as_kubectl_does</c>.)
     /// </summary>
     [Test]
     [Arguments(".status.conditions[?(@.type==\"Ready\")].status")]
     [Arguments(".spec.missing")]
-    [Arguments(".spec")]
-    [Arguments(".status.conditions")]
     [Arguments("..spec.name")]
     [Arguments("")]
     public async Task Evaluate_renders_nothing_it_cannot_resolve_as_an_empty_cell(string path)

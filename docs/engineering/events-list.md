@@ -91,6 +91,17 @@ Nine things are load-bearing.
    the "No Events found / in <ns>" state carries a third line saying so (`EmptyListHint`),
    and a quiet namespace after yesterday's incident does not read as a broken watch.
 
+**Checked against a real server** (`Live/EventsLiveTests`, VER-41, k3s v1.33): a live
+series (`demo-broken/unschedulable`'s `FailedScheduling`, count 18) reads its
+`lastObservedTime` as Last seen and its series count in both groups, and a kubelet's
+counted `Unhealthy` event reads `count`/`lastTimestamp` through core/v1 and
+`deprecatedCount`/`deprecatedLastTimestamp` through `events.k8s.io` identically. Both are
+compared with the API server's own Table (what `kubectl get events` prints) for Type,
+Reason, Message, Count and Last seen. Two differences are known and kept: kubectl
+lower-cases the kind in OBJECT (`pod/x`, the app prints `Pod/x`, as its dock tabs do), and
+the kubelet's probe messages end in a newline that kubectl trims — which the list trims
+too, so the row reads as kubectl's.
+
 **Double-click and Enter open the involved object**, as before, through the same
 resolve-and-open path owner chips use — and in fleet mode now on the *event's* cluster.
 The route used to call `OpenOwnerAsync` without the row's cluster and client, so a fleet
