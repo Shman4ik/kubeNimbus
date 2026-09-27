@@ -36,23 +36,27 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="design/screenshots/workloads-list.dark.png">
-    <img src="design/screenshots/workloads-list.light.png" alt="Pod list with live status pills and CPU/memory sparklines" width="900">
+    <source media="(prefers-color-scheme: dark)" srcset="design/screenshots/applications-list.dark.png">
+    <img src="design/screenshots/applications-list.light.png" alt="Applications list: every app with a health verdict and a one-line reason, what needs attention first" width="900">
   </picture>
 </p>
 
 <table>
   <tr>
+    <td width="50%"><img src="design/screenshots/application-page.light.png" alt="Application page: findings quoting the fields they came from, a timeline, and the crashing pod's last run"><br><sub><b>One Enter to the why</b> — findings that quote the field they came from, the last hour on a timeline, and the crashing pod's last run.</sub></td>
     <td width="50%"><img src="design/screenshots/pod-detail.dark.png" alt="Pod detail docked along the bottom with container chips and live logs"><br><sub><b>Pod detail</b> docks along the bottom — full-width logs, not a cramped sidecar.</sub></td>
-    <td width="50%"><img src="design/screenshots/yaml-editor.dark.png" alt="YAML editor with syntax highlighting"><br><sub><b>YAML editing</b> with syntax highlighting and server-side apply.</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src="design/screenshots/rbac-who-can.dark.png" alt="RBAC access review showing which subjects can perform a verb"><br><sub><b>Who can do X?</b> — every subject a binding grants a verb, verifiable against the API server.</sub></td>
+    <td width="50%"><img src="design/screenshots/exec-terminal.dark.png" alt="top running full-screen inside the exec pane's terminal emulator"><br><sub><b>A real terminal</b> in the exec pane — <code>vi</code>, <code>top</code> and <code>mc</code> draw, with colour and cursor addressing, and Ctrl+C still reaches the container.</sub></td>
+    <td width="50%"><img src="design/screenshots/yaml-editor.light.png" alt="YAML editor with syntax highlighting"><br><sub><b>YAML editing</b> with syntax highlighting and server-side apply.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="design/screenshots/cluster-switcher.light.png" alt="Searchable cluster switcher with pinned clusters and environment labels"><br><sub><b>Cluster switcher</b> (Ctrl/Cmd+P) — fuzzy search over every context, pinned favourites, and prod/staging/dev colour so you always know where you are.</sub></td>
     <td width="50%"><img src="design/screenshots/fleet-list.dark.png" alt="One list aggregating a resource kind across several clusters"><br><sub><b>All clusters</b> — one list across the whole fleet, honest about partial coverage.</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src="design/screenshots/cluster-switcher.dark.png" alt="Searchable cluster switcher with pinned clusters and environment labels"><br><sub><b>Cluster switcher</b> (Ctrl/Cmd+P) — fuzzy search over every context, pinned favourites, and prod/staging/dev colour so you always know where you are.</sub></td>
-    <td width="50%"><img src="design/screenshots/exec-terminal.dark.png" alt="top running full-screen inside the exec pane's terminal emulator"><br><sub><b>A real terminal</b> in the exec pane — <code>vi</code>, <code>top</code> and <code>mc</code> draw, with colour and cursor addressing, and Ctrl+C still reaches the container.</sub></td>
+    <td width="50%"><img src="design/screenshots/workloads-list.dark.png" alt="Pod list with live status pills and CPU/memory sparklines"><br><sub><b>Resources</b> — every kind the cluster serves, CRDs included, with live status and CPU/memory sparklines.</sub></td>
+    <td width="50%"><img src="design/screenshots/rbac-who-can.light.png" alt="RBAC access review showing which subjects can perform a verb"><br><sub><b>Who can do X?</b> — every subject a binding grants a verb, verifiable against the API server.</sub></td>
   </tr>
 </table>
 

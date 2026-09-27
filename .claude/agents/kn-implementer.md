@@ -59,6 +59,10 @@ dotnet publish src/KubeNimbus.App -c Release -r linux-x64 -p:PublishAot=true -o 
 - The screenshot harness is the only XAML smoke test there is. A build that
   compiles can still die on a stale `avares://` URI or an unresolved
   `DataTemplate`. Run it for every UI change, both themes.
+- A UI change also re-renders the **published** screenshots it affects — the README's
+  `design/screenshots/` and the Store's `design/store/screenshots/` — and commits them with
+  the item (CLAUDE.md UI rule 21; each directory's README maps file to scenario and theme).
+  Only on Windows: in a Linux container, report it as unverifiable instead.
 - The AOT publish is required for any new package, any new binding, anything
   touching serialization. Known-acceptable warnings: `Avalonia.Controls.DataGrid`
   IL2104/IL3053. **Any other new trim/AOT warning is a failure.**

@@ -38,6 +38,7 @@ public sealed partial class RbacTabViewModel : InspectorTabViewModelBase
     public ObservableCollection<SubjectBinding> Bindings { get; } = [];
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowsReviewLoading))]
     private bool _isLoading;
 
     [ObservableProperty]
@@ -59,7 +60,15 @@ public sealed partial class RbacTabViewModel : InspectorTabViewModelBase
 
     /// <summary>Which section is showing; the palette opens the tab straight onto "Who can…".</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowsReviewLoading))]
     private int _selectedTabIndex;
+
+    /// <summary>
+    /// The header's "Loading…" is the review's own load — My permissions and Bindings — so it
+    /// shows beside those tabs only. On "Who can…" it read as that query still running, which
+    /// has its own progress line and had finished.
+    /// </summary>
+    public bool ShowsReviewLoading => IsLoading && SelectedTabIndex != WhoCanTabIndex;
 
     // ---- "Who can do X?" ----------------------------------------------------------
 

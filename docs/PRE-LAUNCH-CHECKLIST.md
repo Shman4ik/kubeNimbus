@@ -91,8 +91,9 @@ The history becomes permanently public the moment the switch flips.
       proves the binary starts on a runner; it does not prove the zip you
       published extracts into something that starts on a real desktop.
 - [ ] **Confirm the README screenshots still match the UI.** They are generated
-      (`design/screenshots/`) and drift on their own, because the Age column is
-      computed from the clock — regenerate only if the layout itself has moved.
+      (`design/screenshots/`) and should already be current — every UI change
+      re-renders them (CLAUDE.md UI rule 21); the Age column drifting with the
+      clock is not a reason to regenerate.
       Screenshots are the first thing every visitor judges.
 - [ ] **Code signing — decide, don't necessarily block.** The Store channel below
       buys the SmartScreen trust for $0; a purchased Authenticode certificate
@@ -130,7 +131,8 @@ and reasoning are in CLAUDE.md, "Microsoft Store (MSIX)".
       moment.
 - [ ] **Partner Center → kubeNimbus → Packages** — upload the `.msix`.
 - [ ] **Store listing** — description, at least one screenshot (1366×768 or
-      larger; the generated `design/screenshots/` shots qualify), search terms
+      larger: `design/store/screenshots/`, 1920×1080 — the README's
+      `design/screenshots/` are 1280 wide and do not qualify), search terms
       (`kubernetes`, `k8s`, `kubectl`, `cluster`, `devops`), and the support and
       privacy links (this repo's Issues, and `SECURITY.md` for the "no telemetry,
       no persisted credentials" claim).

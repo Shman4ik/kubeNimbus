@@ -36,11 +36,8 @@ internal static class ClusterTabScenarios
     private static ClusterTabViewModel BaseTab(bool populateRows = true, bool seedUsage = true)
     {
         var context = new ClusterContext("prod-payments", "prod-payments-cluster", "payments", "fake-user", "fixture");
-        var tab = new ClusterTabViewModel(context)
-        {
-            IsConnected = true,
-            Status = "Connected — Kubernetes v1.31.2.",
-        };
+        var tab = new ClusterTabViewModel(context) { IsConnected = true };
+        tab.SetConnectedStatus("v1.31.2");
 
         var catalog = FixtureData.BuildCatalog();
         foreach (var section in FixtureData.BuildSidebarSections(catalog))

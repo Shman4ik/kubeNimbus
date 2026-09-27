@@ -28,7 +28,7 @@
         </Border>
       </StackPanel>
       <TextBlock Grid.Column="2" Text="Loading…" Opacity="0.55" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"
-                 IsVisible="{Binding IsLoading}" />
+                 IsVisible="{Binding ShowsReviewLoading}" />
       <Button Grid.Column="3" Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="Re-run the review" Padding="6">
         <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="14" Height="14" />
       </Button>

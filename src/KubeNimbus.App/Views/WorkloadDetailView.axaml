@@ -8,8 +8,16 @@
         <ListBoxItem Content="Pods"/><ListBoxItem Content="Conditions"/><ListBoxItem Content="Events"/>
       </ListBox>
       <TextBlock Grid.Column="1" Text="{Binding Rollout}" VerticalAlignment="Center" Margin="12,0" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Rollout}"/>
-      <Button Grid.Column="2" Classes="chip" Content="Refresh" Command="{Binding RefreshCommand}"/>
-      <Button Grid.Column="3" Classes="chip" Content="Actions" Margin="4,0,0,0">
+      <!-- Refresh is the resource list's own icon button; Actions a real button with a
+           chevron. Both were chips holding a bare word, which drew as plain text. -->
+      <Button Grid.Column="2" Classes="toolbar" Padding="6" Command="{Binding RefreshCommand}" ToolTip.Tip="Refresh">
+        <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="13" Height="13"/>
+      </Button>
+      <Button Grid.Column="3" Classes="soft" Padding="10,4" Margin="6,0,0,0" VerticalAlignment="Center">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <TextBlock Text="Actions" FontSize="12" VerticalAlignment="Center"/>
+          <PathIcon Data="{StaticResource ChevronDownIconGeometry}" Width="9" Height="9" Opacity="0.6" VerticalAlignment="Center"/>
+        </StackPanel>
         <Button.Flyout><MenuFlyout>
           <MenuItem Header="Edit YAML (E)" Command="{Binding OpenYamlCommand}"/>
           <MenuItem Header="Scale…" Command="{Binding ScaleCommand}" IsVisible="{Binding CanScale}"/>
@@ -48,7 +56,7 @@
               <DataGridTemplateColumn.CellTemplate>
                 <DataTemplate x:DataType="vm:ResourceRowViewModel">
                   <Grid ColumnDefinitions="*,Auto">
-                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" VerticalAlignment="Center" FontWeight="SemiBold"/>
                     <Button Grid.Column="1" Classes="rowAction logs" Click="OnPodLogsClick"
                             ToolTip.Tip="{x:Static app:CommandTip.RowLogs}">
                       <PathIcon Data="{StaticResource LogsIconGeometry}" Width="12" Height="12"/>
@@ -57,9 +65,35 @@
                 </DataTemplate>
               </DataGridTemplateColumn.CellTemplate>
             </DataGridTemplateColumn>
-            <DataGridTextColumn Header="Ready" Binding="{Binding ReadyText}" Width="80"/>
-            <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="180"/>
-            <DataGridTextColumn Header="Restarts" Binding="{Binding RestartsText}" Width="100"/>
+            <DataGridTemplateColumn Header="Ready" Width="80">
+              <DataGridTemplateColumn.CellTemplate>
+                <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                  <TextBlock Text="{Binding ReadyText}" VerticalAlignment="Center" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5"/>
+                </DataTemplate>
+              </DataGridTemplateColumn.CellTemplate>
+            </DataGridTemplateColumn>
+            <!-- The same pill as the resource list's Status column: this is the same pod,
+                 and it read as plain text here. -->
+            <DataGridTemplateColumn Header="Status" Width="180">
+              <DataGridTemplateColumn.CellTemplate>
+                <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                  <Border Classes="statusPill" Classes.ok="{Binding StatusHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=ok}"
+                          Classes.warn="{Binding StatusHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=warn}"
+                          Classes.error="{Binding StatusHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=error}"
+                          IsVisible="{Binding Status, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}"
+                          ToolTip.Tip="{Binding Status}">
+                    <TextBlock Text="{Binding Status}" FontSize="11.5" TextTrimming="CharacterEllipsis"/>
+                  </Border>
+                </DataTemplate>
+              </DataGridTemplateColumn.CellTemplate>
+            </DataGridTemplateColumn>
+            <DataGridTemplateColumn Header="Restarts" Width="100">
+              <DataGridTemplateColumn.CellTemplate>
+                <DataTemplate x:DataType="vm:ResourceRowViewModel">
+                  <TextBlock Text="{Binding RestartsText}" VerticalAlignment="Center" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5"/>
+                </DataTemplate>
+              </DataGridTemplateColumn.CellTemplate>
+            </DataGridTemplateColumn>
           </DataGrid.Columns>
         </DataGrid>
       </Grid></TabItem>

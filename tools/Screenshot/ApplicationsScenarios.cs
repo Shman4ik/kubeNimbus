@@ -40,7 +40,8 @@ public static class ApplicationsScenarios
     public static ClusterTabViewModel Loading()
     {
         var context = new ClusterContext("prod-payments", "payments-prod-euw1", "payments", "fixture-user", "/home/fixture/.kube/config");
-        var tab = new ClusterTabViewModel(context) { IsConnected = true, Status = "Connected — Kubernetes v1.31.2." };
+        var tab = new ClusterTabViewModel(context) { IsConnected = true };
+        tab.SetConnectedStatus("v1.31.2");
         tab.Applications.MarkPending("Deployment");
         tab.Applications.MarkPending("Pod");
         tab.Applications.MarkPending("Application");

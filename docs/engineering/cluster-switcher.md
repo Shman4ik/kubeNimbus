@@ -17,7 +17,7 @@ replacement is shaped by what every comparable tool converged on:
 - **It wasn't a switcher.** It only chose what the `+` button would open, so
   reaching an already-open cluster was a different gesture entirely.
 
-`ClusterSwitcherViewModel` (Ctrl/Cmd+P, or the top bar's cluster button) is one
+`ClusterSwitcherViewModel` (Ctrl/Cmd+P, or the `+` after the last cluster tab) is one
 ranked, fuzzy-searchable list over **both** open tabs and unopened contexts,
 grouped Open / Pinned / Recent / All. Ranking is prefix > contiguous >
 subsequence > cluster-name/kubeconfig-path, so `ppr` finds `payments-prod`.
@@ -63,10 +63,17 @@ rules:
 4. **Production is not `ErrorBrush`.** An environment is not a failure; reusing
    the error colour would make every prod cluster look broken.
 
-Where it shows: a dot on the switcher button, a left edge on each cluster tab, a
+Where it shows: a left edge on each cluster tab, a
 pill in the switcher, and a 2px band under the command bar **only** while the
 selected cluster is production — the sole always-visible chrome the scheme adds
 (UI rule 1), and it costs nothing the rest of the time because it isn't there.
+
+**The switcher button is a `+` after the last tab, not a chip before the first.** The chip
+named the selected cluster, which its own tab — highlighted, two inches to the right — named
+as well, so the bar printed the cluster in front twice and the chip read as one more tab.
+The `+` sits where a browser keeps "new tab", opens the same popup, and says "Open a cluster"
+in words when no tab is open, where a bare glyph would be a guess. "Which cluster am I in?" is
+answered by the highlighted tab and, for production, by the band.
 
 `WorkspaceStore.DirectoryOverride` exists for the screenshot harness: scenarios
 construct real `MainWindowViewModel`s, which read the workspace on construction

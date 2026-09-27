@@ -327,6 +327,19 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // maximized" switch sits below the fold of the shot above.
     ("main-window-preferences-logs", () => BuildMainWindowContent(openPreferences: true)),
     ("main-window-about", () => BuildMainWindowContent(openAbout: true)),
+
+    // The Microsoft Store listing's screenshots (design/store/screenshots). The Store asks
+    // for 1366×768 or larger and every scenario above is 1280 wide, so these are the same
+    // fixtures at 1920×1080 — which also makes them the harness's only look at a wide
+    // window, where a star column that should absorb the width and does not shows up.
+    ("store-applications-list", () => HostInMainWindow(ApplicationsScenarios.List(), width: 1920, height: 1080, mode: ShellMode.Applications)),
+    ("store-applications-page", () => HostInMainWindow(ApplicationsScenarios.Page("checkout"), width: 1920, height: 1080, mode: ShellMode.Applications)),
+    ("store-pod-detail", () => HostInMainWindow(ClusterTabScenarios.PodDetail(), width: 1920, height: 1080)),
+    ("store-yaml-editor", () => HostInMainWindow(ClusterTabScenarios.YamlEditorMaximized(), width: 1920, height: 1080)),
+    ("store-fleet-list", () => HostInMainWindow(ClusterTabScenarios.FleetList(), width: 1920, height: 1080)),
+    ("store-cluster-switcher", () => BuildSwitcherContent(width: 1920, height: 1080)),
+    ("store-exec-terminal", () => HostInMainWindow(ClusterTabScenarios.ExecFullScreenMaximized(), width: 1920, height: 1080)),
+    ("store-rbac-who-can", () => HostInMainWindow(ClusterTabScenarios.RbacWhoCan(), width: 1920, height: 1080)),
 };
 
 foreach (var (name, build) in scenarios)
@@ -390,7 +403,7 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
         || name == "cluster-tab-list-unhealthy-fleet-partial-narrow")
         LayoutChecks.GridReachesLastColumn(window);
     if (name == "ux-exec-keys") KeyboardChecks.ExecKeys(window);
-    if (name.StartsWith("applications-page", StringComparison.Ordinal)) ApplicationsChecks.SettlePage(window);
+    if (name.StartsWith("applications-page", StringComparison.Ordinal) || name == "store-applications-page") ApplicationsChecks.SettlePage(window);
     if (name == "ux-unhealthy-toggle") UxInteractionChecks.UnhealthyToggle(window);
     if (name == "ux-logs-palette") UxInteractionChecks.LogsPalette(window);
     if (name == "ux-row-logs") UxInteractionChecks.RowLogs(window);
@@ -554,13 +567,13 @@ static Control BuildMainWindowContent(bool openShortcuts = false, bool openPrefe
 
 // The cluster switcher, open. `query` renders the searching state — one flat
 // ranked list — against the grouped Open/Pinned/All layout of the empty query.
-static Control BuildSwitcherContent(string? query = null)
+static Control BuildSwitcherContent(string? query = null, int width = 1280, int height = 800)
 {
     var window = new MainWindow();
     var vm = new MainWindowViewModel();
     window.DataContext = vm;
-    window.Width = 1280;
-    window.Height = 800;
+    window.Width = width;
+    window.Height = height;
     SeedContexts(vm);
     vm.Mode = ShellMode.Resources;
 

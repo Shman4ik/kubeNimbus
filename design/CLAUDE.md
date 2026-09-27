@@ -9,7 +9,9 @@ mark's geometry was derived. Four rules matter here:
    `src/KubeNimbus.App/Assets/*.ico|Msix/**` is generated and checked in.
    (`design/screenshots/` comes out of `tools/Screenshot`, not the logo
    pipeline — see [`design/screenshots/README.md`](../design/screenshots/README.md)
-   for the scenario→file mapping.) Draw in the `.af`, then run the pipeline
+   for the scenario→file mapping; `design/store/screenshots/` likewise, from the
+   `store-*` scenarios, see [its README](../design/store/screenshots/README.md) —
+   `make-store-logos.ps1` writes beside it and never touches it.) Draw in the `.af`, then run the pipeline
    **in this order** — each step eats the previous one's output:
 
    ```powershell

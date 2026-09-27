@@ -12,6 +12,36 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+- The Resources mode now looks like the Applications mode. The resource list sits in a card
+  on the window's own tone instead of on a black panel, its title is the same size as
+  "Applications", and every table uses the Applications list's type: small semibold column
+  headers, 12px rows with the name in semibold, and fainter row rules. Before, switching
+  modes swapped the whole content area between two different-looking surfaces. The same
+  table style now applies to pgNimbus through the shared nimbusUi library.
+- The cluster switcher is a `+` after the last cluster tab. The cluster in front is no longer
+  named twice in the top bar.
+- The status bar appears only when there is something to report. A healthy connected tab no
+  longer spends a row on "Connected — Kubernetes v…"; the version is in the tab's tooltip.
+- Nodes, PersistentVolumes and other cluster-scoped kinds say "Cluster-wide" in place of a
+  greyed-out namespace picker that still showed the previous namespace.
+- The Applications search box is at the right of the title row, where the Resources list
+  keeps its own. The Sync column and the "Not in Argo CD" chip only appear on a cluster with
+  an Argo CD application, a group heading only appears when there are two groups, and only
+  the revision in Last deploy is monospace.
+- Pods in workload and node detail show their status as the same coloured pill as the main
+  list. The workload pane's Refresh and Actions are real buttons instead of bare words.
+- The YAML editor has a light-theme palette. It used the dark one on both themes, so numbers,
+  keys and anchors were pale on white; every colour now reads at 4.5:1 or better.
+- The access review's "Loading…" no longer shows on the "Who can…" tab, where it read as that
+  query still running.
+- The YAML editor's Delete button is drawn as a destructive button and no longer sits right
+  beside Apply.
+- The README opens on the Applications list, and every README screenshot was re-rendered;
+  the gallery is now half light theme and half dark. The Microsoft Store listing has its own
+  1920×1080 set of eight, also half and half, in `design/store/screenshots/`; the README's
+  1280-wide images were below the Store's minimum.
+- The log panes' toolbar is shorter: Timestamps, UTC, Wrap, Clear and Save moved into a `⋯`
+  menu. Copy stays on the toolbar.
 - A crash-looping application no longer flickers between Degraded and Healthy. Between two
   back-offs a crash-looping container is briefly running and then terminated, and only the
   waiting phase was being read, so the same app read Healthy, then "0 of 1 pods Ready", then

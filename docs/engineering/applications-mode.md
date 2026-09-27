@@ -155,15 +155,23 @@ and Argo's own Degraded/Unknown when nothing read from the workloads explains it
    two-way binding unchecked itself while the list stayed narrowed — the binding does not
    re-read a source that refused the write, which only the harness's pointer click caught.
    Workloads whose every namespace is `kube-*` are hidden behind a chip stating their count.
-   Filter-matched-nothing is its own state, with the way back.
+   Filter-matched-nothing is its own state, with the way back. The search box sits at the right
+   end of the title row, where the Resources list keeps its own, so "find a thing in this list"
+   is in one place in both modes; the chips have the row under it to themselves.
 7. **No `Width="Auto"` columns** ([datagrid-auto-columns](datagrid-auto-columns.md)): the list
    is a `ListBox` with fixed-width columns and one star column, header and rows sharing the
    same `ColumnDefinitions`. A group caption rides in the first row of its group, the
-   switcher's pattern, and the row body is what lights up.
+   switcher's pattern, and the row body is what lights up — **only when two groups are on
+   screen**: under the Needs attention chip, or on a cluster with nothing wrong, the one caption
+   repeated what the chip already said. The Sync column (header and cells) and the "Not in
+   Argo CD" chip are shown only while some application is an Argo one (`HasArgo`): otherwise
+   the column is a column of dashes and the chip is the same list as All. Its `Auto` column
+   holds a fixed 100px or nothing, so it cannot ratchet.
 8. **Last deploy** is Argo's newest `status.history` entry (a short SHA, or `chart 62.3.0` for a
    Helm chart source), else the newest ReplicaSet's creation with its revision; accent when
    under an hour, which is also the "Deployed < 1 h" chip. A StatefulSet or DaemonSet outside
-   Argo shows "—": its ControllerRevisions are not read for the list.
+   Argo shows "—": its ControllerRevisions are not read for the list. Only the revision is set
+   monospace (`LastDeployRevision`); the age and "never synced" are words (`LastDeployAge`).
 
 ## The page (layout A)
 

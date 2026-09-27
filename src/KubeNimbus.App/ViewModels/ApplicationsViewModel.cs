@@ -805,6 +805,13 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
     [ObservableProperty] private int _recentDeployCount;
     [ObservableProperty] private int _notInArgoCount;
 
+    /// <summary>
+    /// Whether any application here is an Argo CD one. Without one the Sync column is a
+    /// column of dashes and "Not in Argo CD" is the same list as "All", so the view drops
+    /// both.
+    /// </summary>
+    [ObservableProperty] private bool _hasArgo;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSystem), nameof(SystemChipText))]
     private int _systemCount;
@@ -842,13 +849,18 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
         RecentDeployCount = inScope.Count(r => r.IsRecentDeploy);
         NotInArgoCount = inScope.Count(r => !r.IsArgo);
         SystemCount = _ordered.Count(r => r.IsSystem);
+        HasArgo = _ordered.Any(r => r.IsArgo);
 
         var target = inScope.Where(r => PassesChip(r) && r.Matches(query)).ToList();
 
         var attention = target.Count(r => r.NeedsAttention);
         var rest = target.Count - attention;
-        var firstAttention = true;
-        var firstRest = true;
+        // A heading earns its row only when it separates two groups. With one group on
+        // screen — the Needs attention chip, or a healthy cluster — it repeated what the
+        // chip above already says, count included.
+        var grouped = attention > 0 && rest > 0;
+        var firstAttention = grouped;
+        var firstRest = grouped;
         foreach (var row in target)
         {
             if (row.NeedsAttention)
