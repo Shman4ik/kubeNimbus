@@ -23,14 +23,17 @@ public class ExecPluginPathTests
     [Test]
     public async Task On_windows_a_bare_command_resolves_through_pathext_and_one_with_an_extension_as_itself()
     {
+        // PATHEXT in the case the files below are written in. Windows would match either
+        // case; the CI runner's filesystem is Linux's and would not, which made this test
+        // pass on Windows only. The Windows rule under test is the extension search.
+        const string PathExt = ".com;.exe;.bat;.cmd";
         var (directory, _) = Tool("kubelogin.exe");
         var (cmdDirectory, _) = Tool("az.cmd");
 
-        var bare = ExecPluginPath.Resolve("kubelogin", null, directory, ".COM;.EXE;.BAT;.CMD", windows: true, []);
-        var withExtension = ExecPluginPath.Resolve("kubelogin.exe", null, directory, ".COM;.EXE;.BAT;.CMD", windows: true, []);
-        var wrapper = ExecPluginPath.Resolve("az", null, cmdDirectory, ".COM;.EXE;.BAT;.CMD", windows: true, []);
+        var bare = ExecPluginPath.Resolve("kubelogin", null, directory, PathExt, windows: true, []);
+        var withExtension = ExecPluginPath.Resolve("kubelogin.exe", null, directory, PathExt, windows: true, []);
+        var wrapper = ExecPluginPath.Resolve("az", null, cmdDirectory, PathExt, windows: true, []);
 
-        // Case as PATHEXT spells it; Windows file names are case-insensitive.
         await Assert.That(bare!.ToLowerInvariant()).IsEqualTo(Path.Combine(directory, "kubelogin.exe").ToLowerInvariant());
         await Assert.That(withExtension!.ToLowerInvariant()).IsEqualTo(Path.Combine(directory, "kubelogin.exe").ToLowerInvariant());
 
