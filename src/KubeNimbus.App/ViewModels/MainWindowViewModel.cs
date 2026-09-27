@@ -609,7 +609,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         try
         {
-            var contexts = await Kubeconfig.LoadContextsAsync(extraPaths: _pickedKubeconfigPaths);
+            // One unreadable file costs that file, not the chain: the rest still load,
+            // and the status line names the file and the parser's own sentence.
+            var failures = new List<KubeconfigReadFailure>();
+            var contexts = await Kubeconfig.LoadContextsAsync(
+                extraPaths: _pickedKubeconfigPaths, failures: failures);
             AvailableContexts.Clear();
             foreach (var ctx in contexts)
             {
@@ -626,11 +630,21 @@ public sealed partial class MainWindowViewModel : ObservableObject
             // improvement. Splitting the two needs a second property and a decision
             // about the parse-failure case, which the card also shows; that is filed
             // rather than done here.
-            Status = HasContexts
-                ? $"{AvailableContexts.Count} context(s) available."
-                : "No kubeconfig contexts found.";
+            var unreadable = failures.Count switch
+            {
+                0 => "",
+                1 => $"Could not read {failures[0].Path}: {failures[0].Message}",
+                _ => $"Could not read {failures.Count} kubeconfig files — first, {failures[0].Path}: {failures[0].Message}",
+            };
+            Status = (HasContexts, failures.Count) switch
+            {
+                (true, 0) => $"{AvailableContexts.Count} context(s) available.",
+                (true, _) => $"{AvailableContexts.Count} context(s) available. {unreadable}",
+                (false, 0) => "No kubeconfig contexts found.",
+                (false, _) => $"Failed to read kubeconfig. {unreadable}",
+            };
             AddNewTabCommand.NotifyCanExecuteChanged();
-            return true;
+            return HasContexts || failures.Count == 0;
         }
         catch (Exception ex)
         {

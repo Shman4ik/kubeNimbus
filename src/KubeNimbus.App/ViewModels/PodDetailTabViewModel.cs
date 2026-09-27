@@ -1266,11 +1266,16 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
             return;
         }
 
+        // The run being followed, so a restart can be told apart from the same run still
+        // going once the stream ends.
+        var atStart = PodDetails.ContainerRunOf(_row.Resource.Raw, container.Name);
+        var client = _client;
+
         _ = Task.Run(async () =>
         {
             try
             {
-                await foreach (var line in _client.StreamPodLogsAsync(
+                await foreach (var line in client.StreamPodLogsAsync(
                     PodNamespace, PodName, container.Name, follow: follow,
                     tailLines: SelectedLogRange.TailLines, sinceSeconds: SelectedLogRange.SinceSeconds,
                     timestamps: true,
@@ -1280,11 +1285,28 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
                     Enqueue(line);
                 }
 
-                // follow=true returning means the container exited; the API server
-                // closes the stream rather than erroring.
-                await EndLogStreamAsync(generation,
-                    follow ? $"Stream ended — {container.Name} exited." : "Selected range loaded — this is a snapshot.",
-                    problem: false);
+                if (!follow)
+                {
+                    await EndLogStreamAsync(generation, "Selected range loaded — this is a snapshot.", problem: false);
+                    return;
+                }
+
+                // A follow that returns cleanly is the container exiting — or a proxy, a
+                // load balancer or the API server closing the connection. The pod says
+                // which; the pane used to say "exited" for all of them.
+                await EndLogStreamAsync(generation, LogStreamEnd.Checking(container.Name), problem: false);
+                var (text, problem) = await LogStreamEnd.ExplainAsync(
+                    client, PodNamespace, PodName, container.Name, atStart, token);
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    if (generation != _logGeneration || _streaming is not null)
+                    {
+                        return;
+                    }
+
+                    LogStatus = text;
+                    IsLogStatusProblem = problem;
+                });
             }
             catch (OperationCanceledException)
             {

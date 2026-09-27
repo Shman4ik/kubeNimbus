@@ -36,7 +36,7 @@ public partial class ClusterTabView : UserControl
     {
         if (DataContext is ClusterTabViewModel vm && vm.NamespaceCandidate is { } candidate)
         {
-            vm.SelectedNamespace = candidate.Name;
+            vm.ChooseNamespace(candidate);
             NamespaceButton.Flyout?.Hide();
         }
     }
@@ -463,6 +463,10 @@ public partial class ClusterTabView : UserControl
                 ResourceColumn.EventLastSeen or ResourceColumn.EventType or ResourceColumn.EventReason
                     or ResourceColumn.EventObject or ResourceColumn.EventCount or ResourceColumn.EventMessage => isEvents,
                 ResourceColumn.Name or ResourceColumn.Age => !isEvents,
+                // A node, a PV or a ClusterRole has no namespace, so the column was 130px
+                // of blank cells on exactly the kinds that list the most rows. Null (no
+                // kind yet) keeps it, which is the shape the list opens with.
+                ResourceColumn.Namespace => descriptor?.Namespaced != false,
                 ResourceColumn.Ready => ResourceStatusSummary.ShowsReady(descriptor),
                 ResourceColumn.Restarts => ResourceStatusSummary.ShowsRestarts(descriptor),
                 ResourceColumn.Details => !hasPrinterColumns && ResourceStatusSummary.ShowsDetails(descriptor),

@@ -240,6 +240,29 @@ public class NodeActionTests
     }
 
     /// <summary>
+    /// A running drain cannot be confirmed a second time. The Confirm button is not
+    /// rendered while it runs, but that is layout; the command itself has to refuse, or
+    /// any other route to it (a key, a future menu entry) starts a second eviction loop
+    /// over the same node.
+    /// </summary>
+    [Test]
+    public async Task A_running_drain_cannot_be_confirmed_again()
+    {
+        var action = new RowActionViewModel(
+            RowActionKind.Drain, TestObjects.OfflineClient(), TestObjects.NodeDescriptor, null, "worker-1")
+        {
+            DrainPlan = new DrainPlan([]),
+        };
+        await Assert.That(action.ConfirmCommand.CanExecute(null)).IsTrue();
+
+        action.IsDraining = true;
+        await Assert.That(action.ConfirmCommand.CanExecute(null)).IsFalse();
+
+        action.IsDraining = false;
+        await Assert.That(action.ConfirmCommand.CanExecute(null)).IsTrue();
+    }
+
+    /// <summary>
     /// Double-click on a node opens its detail pane, not its manifest (UI rule 2) — the
     /// conditions, taints and headroom are what the gesture is for.
     /// </summary>

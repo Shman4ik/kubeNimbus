@@ -1814,6 +1814,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         try
         {
             var namespaces = await Client.ListResourceOnceAsync(ResourceDescriptor.Namespaces);
+            MarkNamespacesListed();
             var previousSelection = SelectedNamespace;
             NamespaceOptions.Clear();
             NamespaceOptions.Add(AllNamespaces);

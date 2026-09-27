@@ -89,6 +89,7 @@ internal static class SmokeTest
     private const int ExitWindowNotShown = 65;
     private const int ExitStartupFailed = 66;
     private const int ExitTimedOut = 67;
+    private const int ExitKubeconfigUnreadable = 68;
 
     private static readonly Stopwatch Clock = Stopwatch.StartNew();
 
@@ -355,10 +356,37 @@ internal static class SmokeTest
 
             timer.Stop();
             Report($"restored tab reported: {tab.Status}");
-            _stage = "connection failed, waiting for a frame composited after it";
-            window.RequestAnimationFrame(_ => Pass(desktop, window, ", restored an unreachable cluster"));
+            _ = VerifyClientConfigAsync(desktop, window, tab.Context);
         };
         timer.Start();
+    }
+
+    /// <summary>
+    /// "Connection failed" is also what a binary that cannot read a kubeconfig at all
+    /// reports, and that binary reaches no cluster anywhere — the YamlDotNet 18 bump
+    /// produced exactly that, and a window-only check passed it. So the seeded context is
+    /// built into a client configuration here, through the same call the connect path
+    /// uses; only a failure at the socket, after the configuration was built, is the
+    /// failure this scenario expects.
+    /// </summary>
+    private static async Task VerifyClientConfigAsync(
+        IClassicDesktopStyleApplicationLifetime desktop, Window window, ClusterContext context)
+    {
+        _stage = "connection failed, checking the kubeconfig itself could be read";
+        try
+        {
+            await Kubeconfig.BuildClientConfigAsync(context);
+        }
+        catch (Exception e)
+        {
+            StopWatchdog();
+            Fail($"the seeded kubeconfig could not be built into a client configuration, so this binary can reach no cluster: {e.GetType().FullName}: {e.Message}", ExitKubeconfigUnreadable);
+            desktop.Shutdown(ExitKubeconfigUnreadable);
+            return;
+        }
+
+        _stage = "connection failed, waiting for a frame composited after it";
+        window.RequestAnimationFrame(_ => Pass(desktop, window, ", restored an unreachable cluster"));
     }
 
     private static void Pass(IClassicDesktopStyleApplicationLifetime desktop, Window window, string detail)

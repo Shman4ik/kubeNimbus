@@ -33,12 +33,53 @@ internal static class TestObjects
         Directory.CreateDirectory(directory);
         AppSettingsStore.DirectoryOverride = directory;
         WorkspaceStore.DirectoryOverride = directory;
+
+        // The shell reads the kubeconfig chain on construction and, with no saved tabs,
+        // opens one on the current context — against the real ~/.kube/config that was a
+        // connect to the developer's own cluster from inside a unit test, and the async
+        // restore it started made the shell-mode tests order-dependent.
+        Kubeconfig.EnvironmentSearchOverride = [];
     }
 
     public static ClusterTabViewModel Tab()
     {
         RedirectStores();
         return new ClusterTabViewModel(Context);
+    }
+
+    /// <summary>
+    /// A real <c>ClusterClient</c> pointed at <c>https://127.0.0.1:1</c>, where nothing
+    /// listens — for the paths that behave differently once a client exists (a
+    /// client-less view model is the demo cluster, which refuses every mutation before
+    /// the logic under test is reached). Any request it makes fails fast; the tests that
+    /// use it make none. Built with the synchronous <c>Connect</c>, which is fine off the
+    /// UI thread and is what that overload is kept for.
+    /// </summary>
+    public static ClusterClient OfflineClient()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "kubenimbus-app-tests", Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "kubeconfig.yaml");
+        File.WriteAllText(path, """
+            apiVersion: v1
+            kind: Config
+            clusters:
+              - name: offline
+                cluster:
+                  server: https://127.0.0.1:1
+                  insecure-skip-tls-verify: true
+            contexts:
+              - name: offline
+                context:
+                  cluster: offline
+                  user: offline
+            current-context: offline
+            users:
+              - name: offline
+                user:
+                  token: not-a-credential
+            """);
+        return ClusterClient.Connect(new ClusterContext("offline", "offline", null, "offline", path));
     }
 
     public static ResourceDescriptor PodDescriptor { get; } =

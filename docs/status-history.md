@@ -2185,3 +2185,45 @@ the row focused.
 
 Not verified: the NativeAOT publish (no change touches trimming), macOS. The computer-use
 tool drops Escape before it reaches the window, so the live Esc check was pressed by hand.
+
+### Backlog review: narrow RBAC, one bad kubeconfig, and a launch check that trusted a status line (2026-09-27)
+
+A skeptical pass over `docs/BACKLOG.md`'s Ready table and the Inbox rows the recent work
+had overtaken; the reasoning for each close, rejection and demotion is in the Ready
+section's 2026-09-27 note. Built: the namespace picker opens a typed name while namespaces
+have not been listed (FEAT-52's remaining half); one unparseable kubeconfig file costs that
+file (FEAT-55); `--smoke-test=unreachable-cluster` builds the seeded context's client
+configuration and exits 68 if it cannot (VER-14); `CanConfirm` refuses during a drain
+(ENG-22); no Namespace column on cluster-scoped kinds (ENG-23); the "three RIDs" figure
+corrected (VER-12); CS8425 (ENG-7).
+
+Found on the way: `TestObjects.RedirectStores` did not redirect the kubeconfig search, so
+any App test that built `MainWindowViewModel` read the developer's real `~/.kube/config`
+and opened a tab on its current context — a real connect from a unit test. Its async
+restore also wrote the workspace late, so `ShellModeTests` passed or failed depending on
+which class ran before it (reproduced on an unmodified `main` checkout by running it
+beside `ClusterTabSortTests`, `LogPaletteTests`, `PaneLogsTests` or `RowLogsTests`).
+`Kubeconfig.EnvironmentSearchOverride` closes it; parallel runs were green 8 of 8 after.
+
+Checks: solution build clean (CS8425 gone); App tests 306 passed; Core tests 513 passed,
+0 skipped (sandbox up). Mutation-checked red: dropping `!IsDraining` fails
+`A_running_drain_cannot_be_confirmed_again`. The launch check was proved on a Debug build:
+with `BuildClientConfigAsync` made to throw, the tab reported `Connection failed:
+simulated…`, which the old condition accepted, and the check exited 68; restored, both
+scenarios pass. Screenshots `cluster-tab-node-list` and `cluster-tab-workloads-list`
+render; the node list has no Namespace column.
+
+Not verified: the NativeAOT publish (left to CI's `aot` job, which runs both launch
+scenarios; nothing added uses reflection — the one regex is `[GeneratedRegex]`), the
+picker's typed row against a real RBAC-restricted user, and the status line with a real
+broken file in a real `$KUBECONFIG` chain.
+
+Follow-up in the same pass, after the owner's answers: FEAT-32 rejected (the services the
+owner reads do not log JSON); FEAT-34 narrowed to its message. A follow that ends cleanly
+now reads the pod after a two-second settle and says which of connection dropped (same
+container id still running), restart, exit (reason and exit code), not started (no
+container id — which also closes ENG-40), or pod gone it was, in both the single-pod and
+the multi-pod pane. No reconnect, deliberately. `LogStreamEndTests` (7) pin the verdicts
+and `ContainerRunOf`; against the sandbox, `ContainerRunOf` read a running `redis`, a
+`CrashLoopBackOff` `app` and a 404 correctly. Not observed: a real idle-timeout drop, and
+the two-second settle against a real container exit. App tests 313 passed.

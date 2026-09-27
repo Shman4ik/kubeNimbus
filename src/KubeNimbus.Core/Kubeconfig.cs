@@ -1,4 +1,5 @@
 using k8s;
+using k8s.KubeConfigModels;
 
 namespace KubeNimbus.Core;
 
@@ -14,6 +15,16 @@ public static class Kubeconfig
     /// distinguishes it from the two locations the app looks in on its own.
     /// </summary>
     public const string PickedSource = "picked";
+
+    /// <summary>
+    /// When set, replaces the machine's own search — <c>$KUBECONFIG</c> and
+    /// <c>~/.kube/config</c> — with these paths. For test harnesses only, and for a
+    /// stronger reason than the stores' <c>DirectoryOverride</c>: without it a view-model
+    /// test that builds the shell reads the developer's real kubeconfig and opens a tab
+    /// on its current context, which connects to their real cluster and can run its
+    /// credential plugin. User-picked paths are still searched first.
+    /// </summary>
+    public static IReadOnlyList<string>? EnvironmentSearchOverride { get; set; }
 
     /// <summary>
     /// Kubeconfig file paths in precedence order: any user-picked file, then every
@@ -52,6 +63,16 @@ public static class Kubeconfig
             }
         }
 
+        if (EnvironmentSearchOverride is { } seeded)
+        {
+            foreach (var path in seeded)
+            {
+                candidates.Add(new KubeconfigCandidate(path, File.Exists(path), "override"));
+            }
+
+            return candidates;
+        }
+
         var env = Environment.GetEnvironmentVariable("KUBECONFIG");
         if (!string.IsNullOrWhiteSpace(env))
         {
@@ -87,9 +108,17 @@ public static class Kubeconfig
     /// <see cref="DiscoverPaths"/> before it gets here, so a stale pick costs a
     /// missing row in the empty state's search list, not an exception.
     /// </param>
+    /// <param name="failures">
+    /// When supplied, a file that exists but cannot be read or parsed is recorded here
+    /// and skipped, and the rest of the chain still loads — one hand-edited file in a
+    /// five-entry <c>$KUBECONFIG</c> used to cost every context in the other four.
+    /// When null, the first such file throws, which is what a caller holding one
+    /// explicit file wants.
+    /// </param>
     public static async Task<IReadOnlyList<ClusterContext>> LoadContextsAsync(
         IEnumerable<string>? kubeconfigPaths = null,
         IEnumerable<string>? extraPaths = null,
+        ICollection<KubeconfigReadFailure>? failures = null,
         CancellationToken cancellationToken = default)
     {
         var result = new List<ClusterContext>();
@@ -99,7 +128,16 @@ public static class Kubeconfig
         foreach (var path in kubeconfigPaths ?? DiscoverPaths(extraPaths))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var config = await KubernetesClientConfiguration.LoadKubeConfigAsync(path).ConfigureAwait(false);
+            K8SConfiguration config;
+            try
+            {
+                config = await KubernetesClientConfiguration.LoadKubeConfigAsync(path).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (failures is not null && ex is not OperationCanceledException)
+            {
+                failures.Add(new KubeconfigReadFailure(path, FirstLine(ex.Message)));
+                continue;
+            }
 
             // kubectl's merge rule: the first file in the chain that sets current-context wins.
             if (currentContext is null && !string.IsNullOrEmpty(config.CurrentContext))
@@ -182,7 +220,17 @@ public static class Kubeconfig
                     new FileInfo(context.KubeconfigPath),
                     currentContext: context.Name)),
             cancellationToken);
+
+    // The YAML parser's messages can run to several lines; the first names the problem.
+    private static string FirstLine(string message)
+    {
+        var end = message.IndexOfAny(['\r', '\n']);
+        return end < 0 ? message : message[..end];
+    }
 }
+
+/// <summary>A kubeconfig file that exists and could not be read, and what the parser said.</summary>
+public sealed record KubeconfigReadFailure(string Path, string Message);
 
 /// <summary>One place the kubeconfig search looked, and whether anything was there.</summary>
 public sealed record KubeconfigCandidate(string Path, bool Exists, string Source);

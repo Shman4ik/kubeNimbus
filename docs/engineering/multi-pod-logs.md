@@ -147,3 +147,33 @@ coloured with, and a `Footer` line the page ends a crashed run with. Embedded, t
 is hidden (the page's own list is the selector) and Errors only is shown; in the inspector
 dock the pane is exactly as before.
 
+
+## When a follow ends (both log panes)
+
+A followed stream that the API server closes without an error used to be reported as
+"Stream ended — app exited." in the single-pod pane and "app exited." on a multi-pod
+source, on faith. That is true when the container exits, and false when a load balancer,
+a proxy or the API server itself drops the connection — AKS and EKS load balancers close
+idle connections after a few minutes, which is exactly how long a quiet service goes
+without logging. It was also said about a container that had never started (ENG-40).
+
+`LogStreamEnd` reads the pod instead. The pane shows "checking whether app is still
+running…", waits `SettleDelay` (two seconds — the kubelet closes the stream as the
+container exits and reports the exit on a later status sync, so an immediate read finds
+the ended run still `running` and blames the connection), then GETs the pod and compares
+the container's run with the one the follow started on (`PodDetails.ContainerRunOf`, from
+the watched pod at stream start):
+
+- same container id, still running — the connection closed, not the container; said as a
+  warning, with Follow as the way back;
+- a different container id — a restart; Follow picks up the new run, Previous the old one;
+- terminated — "exited" with the kubelet's reason and exit code;
+- waiting with no container id — it has not started yet; waiting with one — not running,
+  with the reason (`CrashLoopBackOff`);
+- 404 — the pod is gone; any other read failure — said, with the server's first line.
+
+It does **not** reconnect. The owner's usage is open, look, close, and a silent reconnect
+would hide the one fact worth knowing — that lines between the drop and the resume may be
+missing. Restarting the stream is one press of Follow, and the sentence says so.
+`LogStreamEndTests` pins the verdicts; the real status shapes (running, waiting
+CrashLoopBackOff, 404) were read from the sandbox. Not observed: a real idle-timeout drop.

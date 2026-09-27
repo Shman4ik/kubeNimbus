@@ -216,7 +216,7 @@
             <Button.Flyout>
               <Flyout Opened="OnNamespaceOpened" Closed="OnNamespaceClosed">
                 <Grid RowDefinitions="Auto,Auto,*" Width="320" MaxHeight="420" KeyDown="OnNamespaceKeyDown">
-                  <TextBox Name="NamespaceSearch" Text="{Binding NamespaceFilter}" PlaceholderText="Filter namespaces…"/>
+                  <TextBox Name="NamespaceSearch" Text="{Binding NamespaceFilter}" PlaceholderText="{Binding NamespaceSearchPlaceholder}"/>
                   <TextBlock Grid.Row="1" Text="No matching namespaces." IsVisible="{Binding NoNamespaceMatches}" Margin="4,12" Opacity="0.65"/>
                   <ListBox Grid.Row="2" Name="NamespaceList" ItemsSource="{Binding FilteredNamespaces}"
                            SelectedItem="{Binding NamespaceCandidate}" Tapped="OnNamespaceTapped" Margin="0,6,0,0">
@@ -224,6 +224,8 @@
                       <Grid ColumnDefinitions="*,Auto">
                         <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}"/>
                         <TextBlock Grid.Column="1" Text="Recent" IsVisible="{Binding IsRecent}" Opacity="0.45" Margin="12,0,0,0"/>
+                        <TextBlock Grid.Column="1" Text="Open by name" IsVisible="{Binding IsTyped}" Opacity="0.45" Margin="12,0,0,0"
+                                   ToolTip.Tip="This cluster's namespaces could not be listed, so this name is opened as typed."/>
                       </Grid>
                     </DataTemplate></ListBox.ItemTemplate>
                   </ListBox>

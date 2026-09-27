@@ -115,7 +115,7 @@ jobs:
       # Launch check. Deliberately BEFORE staging: a binary that cannot start
       # must fail its matrix leg rather than be archived, checksummed and
       # attached to a public release. That is not hypothetical — v0.1.0 shipped
-      # three RIDs that died on startup with `FileNotFoundException: The
+      # every RID dying on startup with `FileNotFoundException: The
       # resource /Assets/app.ico could not be found`, because this workflow
       # published each binary and never once ran it. See
       # src/KubeNimbus.App/WindowIcons.cs for the bug and

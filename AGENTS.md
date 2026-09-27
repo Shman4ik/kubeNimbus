@@ -898,7 +898,7 @@ Three things about it are load-bearing:
    reports as unverifiable in its environment — no live cluster, no Windows or
    macOS box, no display — becomes its own Inbox row in the same cycle. This
    repo has repeatedly lost track of exactly that, and the cost is on record:
-   three of four release RIDs shipped a binary that could not start, because
+   every release RID shipped a binary that could not start, because
    `ci.yml` publishes the AOT output and has never launched it.
 3. **`MAX_FIX_ROUNDS` exists so a stuck item becomes a `blocked` row with a
    precise note** rather than a fifth round of the same failure.
@@ -1165,14 +1165,16 @@ same two DataGrid warnings, exit 0 — and then died before the first frame with
 `FileNotFoundException: The resource /Assets/app.ico could not be found` out of
 `IconTypeConverter.CreateIconFromPath` (see `WindowIcons`). Because `ci.yml`
 published the AOT output and never ran it, and `release.yml` published four RIDs and
-never ran any of them, **v0.1.0 shipped three release binaries that could not
+never ran any of them, **v0.1.0 shipped four release binaries — every RID — that could not
 launch**, and nobody found out from CI. That is what this check exists to stop, and
 it is the reason "publishes cleanly" is never again allowed to stand in for "works".
 
 `kubeNimbus --smoke-test` (`src/KubeNimbus.App/SmokeTest.cs`) starts the app the
 ordinary way and exits **0 only after the main window has opened and composited a
 frame**. Anything else is a distinct non-zero code: 64 no MainWindow, 65 a frame
-rendered but the window is hidden or 0×0, 66 startup threw, 67 the watchdog expired.
+rendered but the window is hidden or 0×0, 66 startup threw, 67 the watchdog expired, 68 the
+unreachable-cluster scenario's kubeconfig could not be built into a client
+configuration (see below).
 Five things about it are deliberate:
 
 - **It lives in the app, not beside it.** A GUI process never exits on its own, so an
