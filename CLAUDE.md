@@ -617,7 +617,7 @@ Each feature's design rules, and the incidents behind them, live in a page of th
 - [Log severity is three classes, not a brush binding](docs/engineering/log-severity-classes.md) — Why severity is style classes and never a Foreground binding (the invisible-plain-line bug, twice).
 - [Pod detail's Overview tab (conditions, tolerations, QoS, priority, probes)](docs/engineering/pod-overview-tab.md) — Conditions/tolerations/QoS/probes tab: index 4, condition polarity, API-server probe defaults, signature-guarded rebuild.
 - [Requests and limits are text on the Usage tab](docs/engineering/requests-and-limits.md) — Usage tab's declared requests/limits: words not blanks, not gated on metrics.
-- [ConfigMaps are shown, Secrets are masked](docs/engineering/configmaps-and-secrets.md) — Env tab: ConfigMap refs resolve on open, Secret refs stay masked behind an eye.
+- [ConfigMaps are shown, Secrets are masked](docs/engineering/configmaps-and-secrets.md) — Env tab: ConfigMap refs resolve on open, Secret refs stay masked behind an eye, every key ref opens its object; a Secret's certificates (subject, SANs, expiry) are read without a Reveal, the key never.
 - [The sidebar is 224px and the reader can drag it](docs/engineering/sidebar-width.md) — Absolute sidebar width, GridSplitter bounds, the SidebarWidthChanged write-back.
 - [macOS has a real menu bar, and the app is called kubeNimbus](docs/engineering/macos-menu-bar.md) — Application.Name, MacMenu.cs, platform-gated native menu built from CommandCatalog.
 - [The theme toggle wrote a string nothing could read](docs/engineering/theme-toggle-string.md) — Stringly-typed settings must write through the same helper that reads them.
@@ -627,9 +627,9 @@ Each feature's design rules, and the incidents behind them, live in a page of th
 - [The Events list reads like `kubectl get events`](docs/engineering/events-list.md) — Last seen (fallback chain, series before eventTime) / Type / Reason / Object / Count / Message, newest-first default with a remembered clear, both Event groups, why not printer slots.
 - [Unhealthy only: the list's second narrowing](docs/engineering/unhealthy-only.md) — Warn/error predicate over StatusHealth, per-Modified re-evaluation, kind gate, third empty state, list-scoped Ctrl+Z.
 - [An Auto DataGrid column ratchets, and only one grid can afford it](docs/engineering/datagrid-auto-columns.md) — Why the resource list has no Width=Auto columns (measured ratchet) and why Helm/Argo keep them.
-- [Mutating workload actions (scale, rollout restart, delete)](docs/engineering/workload-actions.md) — Scale / rollout restart / delete: merge patches, scale subresource, capability from discovery.
+- [Mutating workload actions (scale, rollout restart, delete, CronJob run/suspend)](docs/engineering/workload-actions.md) — Scale / rollout restart / delete: merge patches, scale subresource, capability from discovery; a CronJob's run-now (kubectl's Job, server-named), suspend/resume, Open Job.
 - [Networking: Service, Ingress and NetworkPolicy panes, and the list columns](docs/engineering/networking-detail.md) — Service pane joins selector-matched pods to EndpointSlice endpoints (slices by the `kubernetes.io/service-name` label, not owner refs; no verdict before both watches sync; the three degenerate shapes as three sentences); Ingress routes with a URL built from a validated host, never copied; NetworkPolicy rules in words with the empty selector meaning every pod; kubectl's list columns for Ingress/Endpoints/EndpointSlice/NetworkPolicy; Gateway API filed under Network by group.
-- [Node operations (detail, cordon / uncordon, drain)](docs/engineering/node-operations.md) — Node detail (System card, Events by kind+name, measured Usage vs allocatable), cordon/uncordon, drain: allocatable math, eviction plan table, partial-drain lifetime.
+- [Node operations (detail, cordon / uncordon, drain)](docs/engineering/node-operations.md) — Node detail (System card, Events by kind+name, measured Usage vs allocatable), cordon/uncordon, drain: allocatable math, eviction plan table, partial-drain lifetime; pods-on-node and the drain are one field-selected watch, not a poll.
 - [The exec terminal](docs/engineering/exec-terminal.md) — SvcSystems.UI.Terminal over XTerm.NET: bytes in/out, stateful UTF-8 decoder, keyboard ownership, reverse-video defect.
 - [The machine's own terminal ("open a terminal on this cluster")](docs/engineering/machine-terminal.md) — TerminalLauncher: one-key overlay kubeconfig, env-inheritance trap on wt.exe/open, per-platform launch.
 - [The apply preview (server-side dry run)](docs/engineering/apply-preview.md) — Server-side dry-run diff, TextDiff/LCS bounds, view modes, strict fieldValidation with pre-1.27 fallback.
@@ -801,11 +801,16 @@ the page and the command bar's own toggles cannot disagree while both are on scr
 
 ## Workload detail and namespace navigation
 
-Double-click opens Deployments, StatefulSets and DaemonSets in
-`WorkloadDetailTabViewModel`. The pane shows replica counts, controller progress,
+Double-click opens Deployments, StatefulSets, DaemonSets and batch Jobs in
+`WorkloadDetailTabViewModel`. The pane shows replica counts (a Job's completions,
+running and failed against its backoff limit), controller progress,
 conditions, events and a live pod list. The pod watch uses the workload selector,
 including match expressions. Closing the pane cancels its requests and watch.
-The workload status follows its list row; Refresh also reads the object directly.
+The workload status follows its list row; Refresh also reads the object directly,
+and tells the list so a row it heals or breaks is re-filtered (ENG-33). The pod
+grids of this pane and node detail sync their selection from code-behind
+(`Views/GridSelectionSync`), never a two-way `SelectedItem`: DataGrid writes a null
+back as the inspector switches tabs, which lost the selection (ENG-43).
 
 Double-click and Enter open a selected pod. L opens its logs and Shift+L opens
 them maximized, through the resource list's own open-logs path (see

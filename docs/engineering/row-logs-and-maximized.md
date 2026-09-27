@@ -111,7 +111,7 @@ and a "Logs" menu item — on each list that names a pod or a workload:
 | Where | L / Shift+L | Row icon | Menu | Notes |
 | --- | --- | --- | --- | --- |
 | Workload detail → Pods | yes | yes | Logs, Logs maximized | Enter / double-click still open the pod |
-| Node detail → Pods | yes | yes | Logs, Logs maximized, Open pod | the chevron still opens the pod |
+| Node detail → Pods | yes | yes | Logs, Logs maximized, Open pod | Enter / double-click open the pod (ENG-44; the chevron column is gone) |
 | Events list, an Event about a pod | yes | yes, in the Object cell | the list's own "Logs" | only when `involvedObject`/`regarding` is a core pod |
 | Argo Application → Resources | no | yes, on hover | none | pods, built-in workloads and Argo Rollouts |
 | Service detail → Backends | yes | yes, on rows that name a pod | Logs, Logs maximized, Open pod | an endpoint that names no pod has no icon and no L; see [networking-detail](networking-detail.md) |
@@ -123,7 +123,7 @@ the workload), and node detail's Events tab (about the node). The Argo resource 
 no L because they have no selection — they are an `ItemsControl`, with nothing for a key to
 act on.
 
-Eight things are load-bearing.
+Nine things are load-bearing.
 
 1. **One resolver, and the panes are handed it.** `ClusterTabViewModel.OpenNamedLogsAsync`
    is the only new entry point, and it ends in `OpenLogsForAsync` — so the pane chosen (pod
@@ -137,8 +137,9 @@ Eight things are load-bearing.
    preference tests red.
 2. **The object is read before its logs open, and that is how "gone" gets said.** A pane
    that names an object does not always hold it (an Argo row is a kind and a name), and a
-   pane's list can be older than the cluster: node detail's pods are one list, not a watch,
-   and an Event outlives its pod by up to an hour. So the resolver GETs it first. Missing,
+   pane's list can be older than the cluster: even a watched list (node detail's pods are
+   one since ENG-24) can lag a deletion by the frame in flight, and an Event outlives its
+   pod by up to an hour. So the resolver GETs it first. Missing,
    it returns "Pod shop/web-1 no longer exists — it was deleted or replaced since this was
    listed."; refused, the server's own 403 sentence; resolved but naming no pods (a
    Deployment with an empty selector, a Job the kind hint let through), it says so. The
@@ -187,7 +188,7 @@ Eight things are load-bearing.
    is an always-visible control whose only answer is "names no pods" (UI rule 1). Other
    selector-bearing CRDs keep their L on their own list rows.
 7. **A name is not an identity, so the UID is checked.** A pane that listed a pod passes
-   its UID along (workload detail from the watch, node detail from its one list, an Event
+   its UID along (workload and node detail from their watches, an Event
    from `involvedObject.uid`). A StatefulSet recreates `web-0` as `web-0`, so a GET by name
    can return a *different* pod; when the UIDs differ the resolver says "was replaced since
    this was listed" and opens nothing, rather than showing the new instance's logs as if
@@ -203,6 +204,19 @@ Eight things are load-bearing.
    previously selected pod. `RowLogsGesture.Track` does it for every grid it tracks —
    the resource list's own copy of the same handler moved there — first from the event
    source, then by which realized row spans the pointer's height.
+9. **A pane grid's selection is synced from code-behind, not bound two-way (ENG-43).**
+   Switching the inspector to another tab re-points the pane view's `DataContext`; the
+   grid's `ItemsSource` follows, and Avalonia's `DataGrid` clears its selection on the way —
+   writing that null back through a two-way `SelectedItem` into the view model it was
+   leaving (a `ListBox` defers selection while its data context updates; `DataGrid` does
+   not). So an icon click's selection was gone by the time the reader came back, and L, S
+   and Enter had nothing to act on. `Views/GridSelectionSync` replaces the binding in
+   workload and node detail: grid-to-view-model ignores a change that only removes rows the
+   current view model does not hold, or arrives while the data context is another pane's,
+   and view-model-to-grid re-applies the selection after every data-context change, at
+   `Loaded` priority so the grid's own rebind has landed first. The harness's
+   `ux-pane-logs-workload` and `-node` now assert the selection survives the round trip,
+   and putting the two-way binding back turns the workload check red.
 
 **Verification.** `PaneLogsTests` (App tests) drives each pane the real double-click opens
 on the demo cluster, plus the resolver's real-cluster sentences through a stand-in source.

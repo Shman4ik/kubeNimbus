@@ -39,9 +39,14 @@ Status and scanning, once per kind; the search box deliberately does not match s
    mode off and on reproduces the list the events produced. Both halves were written
    wrong on purpose and confirmed red in `ClusterTabHealthFilterTests` before the tests
    were called done: calling `RepositionRow` alone fails five tests, appending instead of
-   inserting fails two. The workload detail pane's Refresh also updates a list row in
-   place (`WorkloadDetailTabViewModel.RefreshAsync`) and does not re-evaluate it; the
-   watch's own Modified for the same change does, a moment later.
+   inserting fails two. The workload detail pane's Refresh is a second in-place update
+   path (`WorkloadDetailTabViewModel.ApplyRefreshed`), and since ENG-33 it tells the list
+   through `ClusterTabViewModel.RowRefreshedInPlace`, which runs the same
+   `RefreshRowVisibility` — but only for a row still in `Rows`: a pane opened by owner
+   navigation, or left open after the list moved to another kind, holds a row the list
+   does not, and inserting it would put an object on screen the list is not showing.
+   `WorkloadRefreshVisibilityTests` pins both directions and that case; dropping the call
+   turns two of them red.
 5. **A kind with no verdict disables the chip instead of emptying the list.**
    `CanFilterUnhealthy` is `ResourceStatusSummary.ShowsStatus` — the same classification
    that hides the Status column for ConfigMaps, Secrets, Services and the rest, where

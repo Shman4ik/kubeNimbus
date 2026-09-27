@@ -65,3 +65,52 @@ Six things are load-bearing:
 **Not shipped, deliberately:** rollout *status*/history/undo, pause/resume, and scaling
 from a row's inline editor. `kubectl rollout undo` needs ReplicaSet revision walking and
 is its own item; the rest are backlog candidates, not omissions this pass forgot.
+
+## CronJobs: run now, suspend, resume (FEAT-8)
+
+`CronJobActions.cs` (Core) and `ClusterTabViewModel.CronJobs.cs` (App). The three arm the
+same strip, from the row menu and the palette; nothing is always visible. Six things are
+load-bearing:
+
+1. **Run now is `kubectl create job --from=cronjob/…`, byte for byte where it matters.**
+   The Job is the CronJob's `jobTemplate.spec` verbatim, with the template's labels, its
+   annotations plus `cronjob.kubernetes.io/instantiate: manual` (the template's own value
+   wins, as in kubectl), and a controller owner reference back to the CronJob — so the
+   CronJob's history limits clean it up and deleting the CronJob deletes it.
+   `CronJobActionsTests` pins the body. The CronJob is **read at the moment of the run**, so
+   an edit since the list last ticked is what runs.
+2. **The name is the server's (`generateName: <cronjob>-manual-`).** kubectl demands one on
+   the command line; a client-side random suffix would be a weaker copy of what the API
+   server already does, including truncating a long prefix so the result still fits the
+   63-character label value the Job controller copies it into. The success line therefore
+   comes from the server's answer — which is also the only way "Open Job" can know what to
+   open.
+3. **The schedule is unaffected, and the confirm says only that.** Verified against k3s 1.33:
+   the CronJob controller does not put a Job it did not create on `status.active` (it logs
+   an `UnexpectedJob` event about it), so `concurrencyPolicy` does not count a manual run.
+   An earlier draft of the sentence claimed the opposite, from reading the controller's
+   source rather than a cluster.
+4. **Suspend and resume are one slot, like cordon and uncordon** (UI rule 11), chosen by the
+   CronJob's own `spec.suspend`. Resume writes an explicit `false` (a merge-patch `null`
+   would delete the field) and its confirm names the surprise: a run the CronJob missed while
+   suspended can start straight away unless `startingDeadlineSeconds` has passed — the API's
+   documented behaviour.
+5. **Capability is the object's evidence and discovery's**: a Job template to run
+   (`HasJobTemplate`) and a creatable Job kind on the row's own cluster for run-now; the
+   template and `patch` for suspend. The menu items read the selected object, which the
+   watch changes in place when a suspend goes through — no `SelectedRow` change reports
+   that — so `OnSelectedRowChanged` subscribes to the selected row and re-raises the
+   state-dependent `Can…` properties (cordon/uncordon included, which had the same latent
+   staleness). `CronJobActionTests` pins it, mutation-checked.
+6. **"Open Job" is the strip's one follow-up.** After a run the confirm's slot offers the
+   created Job, which opens in the workload pane — a batch Job is now one of
+   `WorkloadDetailTabViewModel.Supports`' kinds, with a run line in kubectl's COMPLETIONS
+   shape plus running/failed against `backoffLimit` — so "a Job's pods are reachable from
+   it" is one click. The pane's row is built from the server's answer rather than a list
+   row, so its run line is as of the create until Refresh; the pods list is its own live
+   watch. A Job is **not** offered a rollout restart any more: its pod template is immutable
+   (the stamp is a 422), the one kind `WorkloadActions.SupportsRestart` now names, argued in
+   place like `NodeActions.SupportsCordon`.
+
+The demo cluster ships one scheduled and one suspended CronJob, so both halves of the slot
+render; the strip refuses in place there like every other action.

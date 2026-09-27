@@ -80,12 +80,48 @@ menu and the command palette. Nothing new is always visible.
 - **Taints are shown even though the cordon flag is too**, because the scheduler enforces
   `spec.unschedulable` by way of the `node.kubernetes.io/unschedulable` taint. A cordoned
   node has both, and a reader shown only one of them wonders which is real.
-- **"Pods on this node" is one field-selected list with an explicit Refresh**, not a
-  second watch. `spec.nodeName=<node>` is server-side (the API server indexes it), and the
-  precedent for a one-shot inside an inspector pane is pod detail's Events tab. The node
-  object itself stays live: the pane tracks the same `ResourceRowViewModel` the list holds
-  and re-reads conditions, taints and the cordon flag on every watch tick, the same way
-  pod detail tracks its row.
+- **"Pods on this node" is a field-selected watch (ENG-24), not a one-shot list.**
+  `spec.nodeName=<node>` is server-side (the API server indexes it), and
+  `ClusterClient.WatchResourceAsync` takes a `fieldSelector` for it the way it took a
+  `labelSelector` for multi-pod logs — rendered once, by `SelectorQuery`, for the list half
+  and the watch half alike, because a selector on one half only gives the watch a
+  different population from the list that seeded it (the trap FEAT-3 hit; the escaped
+  query is pinned by `NodeWatchHttpTests`). `NodeActions.PodsOnNodeSelector` is the one
+  place the string is built, for the pane, the drain and the drain plan's one-shot read. A
+  pod the scheduler binds here arrives as an Added (it has just started matching the
+  selector) and an evicted one leaves as a Deleted, so the pane is the live picture of a
+  drain in progress — which is the moment someone has it open. Four details:
+  - Rows are updated **in place** (`NodePodViewModel` is observable and keyed
+    namespace/name), and kept in namespace/name order by insertion, so a status change
+    never costs the reader their selection.
+  - The allocatable-vs-requested arithmetic follows every change once the initial list is
+    `Synced`, and is **withheld while a list is still arriving** — the first one, or a
+    relist after a 410 — because a half-read node prints as a half-empty one (UI rule 18).
+    The pane opens in the loading state for the same reason: "no pods here" is a verdict it
+    does not have until the list has landed.
+  - The Refresh button on the Pods tab is gone (UI rule 1: a live list has nothing to
+    refresh). A 403 on listing pods lands in the error InfoBar with the server's sentence;
+    the watch keeps retrying and the next frame clears it.
+  - The demo replays its pods as the frames a real initial list produces (Reset, Added…,
+    Synced) through the same `ApplyPodEvent`, so the demo pane is the production path.
+
+  `NodePodsLiveTests` (App) pins the four; the pane's watch was driven against the k3s
+  sandbox (a Job's pod arriving as an Added and moving on as a Modified).
+
+  The node object itself stays live: the pane tracks the same `ResourceRowViewModel` the
+  list holds and re-reads conditions, taints and the cordon flag on every watch tick, the
+  same way pod detail tracks its row.
+- **Double-click and Enter open a pod (ENG-44)**, the default action every other list has
+  (UI rule 2). The list used to keep it on a chevron column alone, which was also 34px of
+  the width the next item needed; the chevron is gone and the menu's "Open pod" names Enter.
+- **The Pods grid's columns are fixed widths, Name the only star (ENG-46).** It had `Auto`
+  columns, which took whatever the widest realized cell asked for, so at an 860px window the
+  grid ran out of room — and Avalonia's DataGrid then *squeezes* the fixed columns below
+  their declared widths rather than scrolling, which clipped the headers to "CPU r" and "Ag".
+  Dot 20, Namespace 116, Status 112, CPU req 92, Mem req 100, Age 64: sized for the dock at
+  that window width with the headers in full (a header needs about 40px beyond its text).
+  The harness's `cluster-tab-pane-logs-narrow-node` asserts it — no column squeezed, Name at
+  or above its minimum — and was confirmed to fail with a wider Name minimum.
 
 - **The System card lists what the node reported, and nothing it did not.** Kubelet,
   OS image, platform (`operatingSystem/architecture`), kernel, runtime, every
@@ -114,8 +150,9 @@ deleted and re-registered under the same name shows its predecessor's events unt
 expire (an hour by default), which is the lesser wrong answer. `ClusterClient
 .EventSelectorFor` owns the rule and `NodeResourcesTests` pins it; the demo dataset carries
 both UID shapes so the demo tab exercises both. The tab is a one-shot with a Refresh on the
-chrome row, like the Pods tab and pod detail's Events — node events arrive minutes apart,
-and a second watch per pane is the wrong trade. "No recent events" is its own sentence:
+chrome row, like pod detail's Events — node events arrive minutes apart, and a watch per
+pane is the wrong trade for them (the Pods tab is the opposite case: a drain moves pods by
+the second, and that is when the pane is open). "No recent events" is its own sentence:
 events expire, so a quiet node is the healthy case and must not look like a fetch that
 never returned. A 403 (listing events across namespaces is a permission many roles lack)
 renders the server's sentence in an error InfoBar.
@@ -213,13 +250,33 @@ Seven things are load-bearing:
    PodDisruptionBudget, still retrying". It gets its own per-pod row and its own colour
    (warn, not error). A 403 is separated from it deliberately: retrying will not fix that
    one, so it is recorded as failed and not asked again.
-4. **The eviction loop polls, and that is a stated exception to hard rule 2.** It re-lists
-   the node's pods every 2s between passes. The loop's question is "is this specific set of
-   pods gone yet", which has a natural end (the set empties), it is scoped to the drain's
-   own `CancellationToken`, and re-listing is also how it notices a pod that appeared
-   *after* it started — a watch seeded once would not. It is what `kubectl drain`'s own
-   `waitForDelete` does. This is the second documented poll in the app, after the metrics
-   API.
+4. **The eviction loop watches (ENG-24); the only timer left is the Eviction API's own.**
+   It used to re-list the node's pods every 2s between passes — a stated exception to hard
+   rule 2, argued on the grounds that a watch seeded once would miss a pod that landed
+   *after* the drain started. A field-selected watch does not: a pod bound to the node
+   while it drains arrives as an Added, and every completed eviction as a Deleted. So the
+   drain runs one watch for its whole life (`PodsOnNodeWatch` in `ClusterClient.Nodes.cs`):
+   its initial list is the plan's input, and between passes the loop waits for the pod set
+   to change instead of sleeping. Three details carry the weight:
+   - **A relist is collected aside and swapped in whole on `Synced`.** The drain reads "no
+     pods left" as "drained", so it must never see the half-filled set a relist (after a
+     410) passes through.
+   - **A PodDisruptionBudget's 429 still has a timer, because that is its contract** —
+     "not now, ask again later". While a pod is held back the wait also ends after
+     `EvictionRetryInterval` (5s, kubectl drain's own), measured as a deadline so a pod
+     whose status keeps ticking cannot postpone the retry for ever. Nothing else in the
+     drain is timed.
+   - **A watch that cannot list at all fails the drain with the server's sentence**, as the
+     one-shot list it replaced did — a 403 on listing pods cluster-wide would otherwise be a
+     watch retrying for ever behind a strip that says nothing. After the first list, a lost
+     connection is appended to the waiting line while the watch reconnects.
+
+   `NodeWatchHttpTests` pins all of it over real HTTP against a stand-in API server that
+   holds its watch open: one list and no second one (the old loop's re-list, reinstated as
+   a mutation, turns it red), the blocked pod asked again after the interval, and the 403.
+   The metrics API is now the app's only poll again. The drain *plan* shown before
+   anything is evicted stays a one-shot read (`LoadDrainPlanAsync`) — it is a question
+   asked once, and the drain re-plans from its own watch the moment it starts.
 5. **Cordon happens first, always.** Evicting from a node that still accepts work is a way
    to have the scheduler put the pod back on the same node.
 6. **A partial drain is a designed state, not an accident — this is the constraint that
@@ -228,7 +285,10 @@ Seven things are load-bearing:
    So (a) the confirm sentence says exactly that *before* anything starts, which is the one
    thing someone must know; (b) the strip cannot be dismissed while a drain runs — Cancel
    is replaced by **Stop draining**, because "Cancel" over a loop that is already evicting
-   reads as undo and there is no undo; (c) stopping reports how many pods moved, that the
+   reads as undo and there is no undo. Stop sits at the right-hand end of the options row
+   rather than on a row of its own (ENG-28): the confirm/cancel row is hidden for as long as
+   the drain runs, and the two options stay on screen read-only, since they are what the
+   loop was started with and ticking one mid-drain would change nothing; (c) stopping reports how many pods moved, that the
    node is still cordoned, and the two ways out (run it again, or uncordon and leave it as
    it is); and (d) `ClusterTabViewModel.DisposeAsync` cancels the loop explicitly rather
    than leaving a task running against a disposed client. `cluster-tab-node-drain-stopped`
