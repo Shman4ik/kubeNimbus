@@ -43,6 +43,7 @@ public class UxScenariosTests
     {
         var tab = TestObjects.Tab();
         for (var i = 0; i < 300; i++) tab.NamespaceOptions.Add($"team-{i:D3}");
+        tab.MarkNamespacesListed();
         for (var i = 0; i < 7; i++) tab.SelectedNamespace = $"team-{i:D3}";
         tab.NamespaceFilter = "TEAM-29";
         await Assert.That(tab.FilteredNamespaces.Count).IsEqualTo(10);

@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using KubeNimbus.Core;
 
 namespace KubeNimbus.Core.Tests;
@@ -124,7 +125,7 @@ public class AsyncMergeTests
     }
 
     /// <summary>A source that produces nothing and never completes — a watch on an idle kind.</summary>
-    private static async IAsyncEnumerable<int> Blocking(CancellationToken token)
+    private static async IAsyncEnumerable<int> Blocking([EnumeratorCancellation] CancellationToken token)
     {
         await Task.Delay(Timeout.Infinite, token);
         yield break;

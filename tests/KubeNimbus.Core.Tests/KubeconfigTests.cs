@@ -124,6 +124,50 @@ public class KubeconfigTests
         }
     }
 
+    // ------------------------------------------------- one unreadable file in the chain
+    //
+    // A five-entry $KUBECONFIG with one hand-edited file used to yield zero contexts:
+    // the loader threw on that file and the shell caught once, for the whole chain.
+
+    [Test]
+    public async Task LoadContexts_skips_an_unparseable_file_and_names_it_when_asked()
+    {
+        var good = WriteKubeconfig("good-ctx");
+        var broken = Path.Combine(Path.GetTempPath(), $"kubenimbus-broken-{Guid.NewGuid():N}.yaml");
+        File.WriteAllText(broken, "apiVersion: v1\nkind: Config\ncontexts: [ this is: not: yaml\n");
+        try
+        {
+            var failures = new List<KubeconfigReadFailure>();
+            var contexts = await Kubeconfig.LoadContextsAsync([broken, good], failures: failures);
+
+            await Assert.That(contexts.Select(c => c.Name)).IsEquivalentTo(["good-ctx"]);
+            await Assert.That(failures.Count).IsEqualTo(1);
+            await Assert.That(failures[0].Path).IsEqualTo(broken);
+            await Assert.That(failures[0].Message).IsNotEmpty();
+            await Assert.That(failures[0].Message).DoesNotContain("\n");
+        }
+        finally
+        {
+            File.Delete(good);
+            File.Delete(broken);
+        }
+    }
+
+    [Test]
+    public async Task LoadContexts_still_throws_on_an_unparseable_file_when_no_failure_list_is_given()
+    {
+        var broken = Path.Combine(Path.GetTempPath(), $"kubenimbus-broken-{Guid.NewGuid():N}.yaml");
+        File.WriteAllText(broken, "apiVersion: v1\nkind: Config\ncontexts: [ this is: not: yaml\n");
+        try
+        {
+            await Assert.That(async () => await Kubeconfig.LoadContextsAsync([broken])).Throws<Exception>();
+        }
+        finally
+        {
+            File.Delete(broken);
+        }
+    }
+
     /// <summary>A minimal but real kubeconfig — enough for the client library's loader to parse.</summary>
     private static string WriteKubeconfig(string contextName)
     {

@@ -18,6 +18,18 @@ it as the GitHub Release body, so headings must match tags exactly
   crash-looping within half a minute. Every phase of the loop now gives the same verdict.
 - Esc now returns from an application page to the list when the page was opened by
   double-click. Before, focus stayed on the hidden list row and Esc did nothing.
+- Where RBAC does not allow listing namespaces, the namespace picker now opens a namespace
+  by name: type it and press Enter. Before, a user granted one namespace and no context
+  namespace had no way to narrow the list to it.
+- One kubeconfig file that cannot be parsed no longer hides every context. The other
+  files in `$KUBECONFIG` still load, and the status bar names the file that failed and
+  what the parser said.
+- Nodes, PersistentVolumes, ClusterRoles and other cluster-scoped kinds no longer show an
+  empty Namespace column.
+- When a followed log stream ends, the log pane now says why: the connection closed while
+  the container is still running, the container restarted, it exited (with its exit
+  code), or it has not started yet. It used to say the container had exited in every case,
+  including when a load balancer had only dropped an idle connection.
 
 ## [0.5.0] - 2026-09-26
 

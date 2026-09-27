@@ -110,6 +110,10 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
     private readonly CancellationTokenSource _cts = new();
     private readonly List<LogLineViewModel> _allLogLines = [];
     private readonly Dictionary<string, LogSourceViewModel> _sourcesByPod = new(StringComparer.Ordinal);
+
+    // The latest object the pod watch delivered per pod, so a stream knows which run of its
+    // container it started on — see LogStreamEnd.
+    private readonly Dictionary<string, DynamicResource> _latestPods = new(StringComparer.Ordinal);
     private readonly Dictionary<string, CancellationTokenSource> _streamsByPod = new(StringComparer.Ordinal);
     private readonly HashSet<string> _respondedPods = new(StringComparer.Ordinal);
     private readonly List<(string Raw, LogSourceViewModel Source)> _pending = [];
@@ -355,12 +359,18 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
                 IsResolvingPods = false;
                 if (evt.Resource is { } pod)
                 {
+                    _latestPods[pod.Name] = pod;
                     AddSource(pod);
                 }
 
                 break;
 
             case ResourceEventType.Deleted:
+                if (evt.Resource is { } gone)
+                {
+                    _latestPods.Remove(gone.Name);
+                }
+
                 if (evt.Resource is { } deleted && _sourcesByPod.TryGetValue(deleted.Name, out var source))
                 {
                     StopStream(deleted.Name);
@@ -481,11 +491,15 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
         }
 
         var podNamespace = _namespace ?? "";
+        var client = _client;
+        var atStart = _latestPods.TryGetValue(source.PodName, out var latest)
+            ? PodDetails.ContainerRunOf(latest.Raw, source.ContainerName)
+            : null;
         _ = Task.Run(async () =>
         {
             try
             {
-                await foreach (var line in _client.StreamPodLogsAsync(
+                await foreach (var line in client.StreamPodLogsAsync(
                     podNamespace, source.PodName, source.ContainerName.Length == 0 ? null : source.ContainerName,
                     follow: follow, tailLines: tail, sinceSeconds: SelectedLogRange.SinceSeconds,
                     previous: _options.Previous,
@@ -496,9 +510,24 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
                     Enqueue(line, source);
                 }
 
-                await EndSourceAsync(source, follow ? LogSourceState.Ended : LogSourceState.Loaded,
-                    follow ? $"{source.ContainerName} exited." : "Selected range loaded — snapshot, not a live stream.",
-                    token);
+                if (!follow)
+                {
+                    await EndSourceAsync(source, LogSourceState.Loaded,
+                        "Selected range loaded — snapshot, not a live stream.", token);
+                    return;
+                }
+
+                // Not "exited" on faith: a dropped connection ends a follow the same way.
+                await EndSourceAsync(source, LogSourceState.Ended, LogStreamEnd.Checking(source.ContainerName), token);
+                var (text, _) = await LogStreamEnd.ExplainAsync(
+                    client, podNamespace, source.PodName, source.ContainerName, atStart, token);
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    if (!token.IsCancellationRequested && source.State is LogSourceState.Ended)
+                    {
+                        source.StatusMessage = text;
+                    }
+                });
             }
             catch (OperationCanceledException)
             {

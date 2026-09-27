@@ -601,7 +601,7 @@ Three rules about it:
 Each feature's design rules, and the incidents behind them, live in a page of their own under [`docs/engineering/`](docs/engineering/), so a session loads only the ones it touches. **Read the page for any feature you change before changing it**, and keep it current in the same PR — the same discipline as this file.
 
 - [The Applications mode](docs/engineering/applications-mode.md) — The first screen: apps (Argo or bare workloads) with health and a reason from Core's deterministic rules, per-namespace fallback under narrow RBAC, the application page (findings with quoted evidence, pods, linked resources, timeline, what changed, embedded logs), the kubelet's one-run-per-container log rule, DemoData.Now.
-- [Multi-pod logs (one workload, one stream)](docs/engineering/multi-pod-logs.md) — WorkloadLogsTabViewModel: selector-resolved pods, per-pod tail budget, 50-stream cap, two-stage timestamp merge.
+- [Multi-pod logs (one workload, one stream)](docs/engineering/multi-pod-logs.md) — WorkloadLogsTabViewModel: selector-resolved pods, per-pod tail budget, 50-stream cap, two-stage timestamp merge; and what both log panes say when a follow ends (LogStreamEnd reads the pod).
 - [One click to logs from the row, and logs opened full-size](docs/engineering/row-logs-and-maximized.md) — The row's logs icon (hover/selected, IsVisible style, Shift+click), Shift+L, the "Open logs maximized" preference read by OpenLogsForAsync, Esc restore; L3's logs from every list that names a pod (OpenNamedLogs, RowLogsGesture, stated "gone").
 - [Log severity is three classes, not a brush binding](docs/engineering/log-severity-classes.md) — Why severity is style classes and never a Foreground binding (the invisible-plain-line bug, twice).
 - [Pod detail's Overview tab (conditions, tolerations, QoS, priority, probes)](docs/engineering/pod-overview-tab.md) — Conditions/tolerations/QoS/probes tab: index 4, condition polarity, API-server probe defaults, signature-guarded rebuild.
@@ -800,6 +800,18 @@ Ctrl/Cmd+Shift+N opens it and focuses its search field. Escape closes it.
 Five recent namespaces appear first after All namespaces. `workspace.json`
 persists them per kubeconfig path and context. Deleted namespaces stay out of
 its results. The existing palette entries still work.
+Until the cluster's namespaces have been listed — and for good when RBAC refuses
+`list namespaces`, the expected case on a shared cluster — the picker also keeps
+the recent namespaces in its list and offers the typed name as a first row marked
+"Open by name", so Enter opens it. Only a valid RFC 1123 label is offered. Once the
+list has been read, a typed name is not offered: a name missing from a list that
+was read has been deleted, and opening it looks like a broken watch.
+`ClusterTabNamespacePickerTests` pins both sides.
+
+One kubeconfig file that exists and does not parse costs that file, not the chain:
+`Kubeconfig.LoadContextsAsync` records it in its `failures` list and loads the rest,
+and the status line names the file and the parser's first line. A single explicit
+file passed with no failure list still throws.
 
 ## The command catalog (shortcuts, palette, cheat sheet, docs)
 
@@ -1035,8 +1047,8 @@ never released. Five things about the train are load-bearing:
 3. **Verification debt is still an item, not a footnote.** Whatever the verifier
    reports as unverifiable in its environment — no live cluster, no Windows or macOS
    box, no display — becomes its own Inbox row in the same step. This repo has
-   repeatedly lost track of exactly that, and the cost is on record: three of four release
-   RIDs shipped a binary that could not start, because `ci.yml` published the AOT
+   repeatedly lost track of exactly that, and the cost is on record: every release
+   RID shipped a binary that could not start, because `ci.yml` published the AOT
    output and never launched it.
 4. **`MAX_FIX_ROUNDS` ends in a revert, not a stall.** An item still failing
    verification is reverted off the train branch and marked `blocked` with the
@@ -1295,6 +1307,12 @@ Four things about it:
   `WorkspaceStore.DirectoryOverride` are set to a temp directory in
   `TestObjects.RedirectStores`, same reason the screenshot harness sets them —
   a test run must not read, still less write, the files of whoever is running it.
+  It also empties `Kubeconfig.EnvironmentSearchOverride`, and that one was a live
+  bug rather than hygiene: a test that builds `MainWindowViewModel` read the
+  developer's real `~/.kube/config` and, with no saved tabs, opened one on its
+  current context — a real connect, credential plugin included, from inside a unit
+  test. Its async restore also wrote the workspace after the test had moved on,
+  which made the shell-mode tests fail or pass depending on which class ran first.
 - **The screenshot harness cannot replace it, and that is the whole argument.**
   `Rows` and `VisibleRows` agree with each other in every state a PNG can capture;
   the difference between a correct mirror and one that filters `Rows` in place only
@@ -1327,14 +1345,16 @@ same two DataGrid warnings, exit 0 — and then died before the first frame with
 `FileNotFoundException: The resource /Assets/app.ico could not be found` out of
 `IconTypeConverter.CreateIconFromPath` (see `WindowIcons`). Because `ci.yml`
 published the AOT output and never ran it, and `release.yml` published four RIDs and
-never ran any of them, **v0.1.0 shipped three release binaries that could not
+never ran any of them, **v0.1.0 shipped four release binaries — every RID — that could not
 launch**, and nobody found out from CI. That is what this check exists to stop, and
 it is the reason "publishes cleanly" is never again allowed to stand in for "works".
 
 `kubeNimbus --smoke-test` (`src/KubeNimbus.App/SmokeTest.cs`) starts the app the
 ordinary way and exits **0 only after the main window has opened and composited a
 frame**. Anything else is a distinct non-zero code: 64 no MainWindow, 65 a frame
-rendered but the window is hidden or 0×0, 66 startup threw, 67 the watchdog expired.
+rendered but the window is hidden or 0×0, 66 startup threw, 67 the watchdog expired, 68 the
+unreachable-cluster scenario's kubeconfig could not be built into a client
+configuration (see below).
 Five things about it are deliberate:
 
 - **It lives in the app, not beside it.** A GUI process never exits on its own, so an
@@ -1396,6 +1416,17 @@ has composited after that. The watchdog stays armed until then, and the stage it
 reports names the tab status it last saw. Against the unfixed build it failed 3 runs in
 6 with exit 67. Both CI's `aot` job and every `release.yml` leg run it after the plain
 check. The installer legs do not, because those check packaging, not connect.
+
+**"Connection failed" is also what a binary that cannot read any kubeconfig says**, so
+the scenario does not stop at the tab's status. Once the tab has failed, it builds the
+seeded context into a client configuration through `Kubeconfig.BuildClientConfigAsync`,
+the same call the connect path makes, and exits **68** if that throws: only a failure at
+the socket, after the configuration was built, is the failure it expects. The YamlDotNet
+18 bump (#21) produced exactly the other kind — no cluster reachable from the binary at
+all — and the window-only check passed it; what caught it was the test suite. Proved the
+way the icon check was: with `BuildClientConfigAsync` made to throw, the tab reported
+`Connection failed: simulated…`, which the old condition accepted, and the check now
+exits 68.
 
 **The check is only worth having if a broken binary fails it, so prove that, don't
 assume it.** Restore `Icon="/Assets/app.ico"` on `MainWindow`, publish, and run the

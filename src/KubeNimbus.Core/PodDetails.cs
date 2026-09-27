@@ -226,6 +226,71 @@ public static class PodDetails
         return result;
     }
 
+    /// <summary>
+    /// One container's current run, read from the pod's status across all three status
+    /// arrays: which state it is in, why, its exit code, and the runtime's container id —
+    /// the id is what tells a restart apart from the same run still going. Null when the
+    /// pod reports no status for the container yet.
+    /// </summary>
+    public static ContainerRun? ContainerRunOf(JsonElement pod, string containerName)
+    {
+        if (pod.ValueKind != JsonValueKind.Object
+            || !pod.TryGetProperty("status", out var status) || status.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        foreach (var arrayName in (string[])["containerStatuses", "initContainerStatuses", "ephemeralContainerStatuses"])
+        {
+            if (!status.TryGetProperty(arrayName, out var array) || array.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            foreach (var c in array.EnumerateArray())
+            {
+                if (c.ValueKind != JsonValueKind.Object
+                    || !c.TryGetProperty("name", out var name) || name.GetString() != containerName)
+                {
+                    continue;
+                }
+
+                var restarts = c.TryGetProperty("restartCount", out var rc) && rc.TryGetInt32(out var count) ? count : 0;
+                var id = c.TryGetProperty("containerID", out var cid) && cid.ValueKind == JsonValueKind.String
+                    ? cid.GetString()
+                    : null;
+                if (!c.TryGetProperty("state", out var state) || state.ValueKind != JsonValueKind.Object)
+                {
+                    return new ContainerRun(ContainerRunState.Unknown, null, null, id, restarts);
+                }
+
+                foreach (var prop in state.EnumerateObject())
+                {
+                    var kind = prop.Name switch
+                    {
+                        "running" => ContainerRunState.Running,
+                        "waiting" => ContainerRunState.Waiting,
+                        "terminated" => ContainerRunState.Terminated,
+                        _ => ContainerRunState.Unknown,
+                    };
+                    var reason = prop.Value.ValueKind == JsonValueKind.Object
+                        && prop.Value.TryGetProperty("reason", out var r) && r.ValueKind == JsonValueKind.String
+                            ? r.GetString()
+                            : null;
+                    int? exitCode = prop.Value.ValueKind == JsonValueKind.Object
+                        && prop.Value.TryGetProperty("exitCode", out var ec) && ec.TryGetInt32(out var code)
+                            ? code
+                            : null;
+                    return new ContainerRun(kind, reason, exitCode, id, restarts);
+                }
+
+                return new ContainerRun(ContainerRunState.Unknown, null, null, id, restarts);
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>One container's spec, across all three of a pod's container arrays.</summary>
     public static JsonElement? ContainerSpec(JsonElement podSpec, string containerName)
     {
@@ -496,3 +561,24 @@ public sealed record ContainerProbe(
         $"delay={InitialDelaySeconds}s timeout={TimeoutSeconds}s period={PeriodSeconds}s "
         + $"#success={SuccessThreshold} #failure={FailureThreshold}";
 }
+
+/// <summary>Which of the kubelet's three container states a run is in.</summary>
+public enum ContainerRunState
+{
+    Unknown,
+    Running,
+    Waiting,
+    Terminated,
+}
+
+/// <summary>
+/// One container's current run: state, the state's reason (<c>Completed</c>,
+/// <c>Error</c>, <c>CrashLoopBackOff</c>, <c>ContainerCreating</c>…), the exit code when
+/// terminated, the runtime's container id and the restart count.
+/// </summary>
+public sealed record ContainerRun(
+    ContainerRunState State,
+    string? Reason,
+    int? ExitCode,
+    string? ContainerId,
+    int RestartCount);

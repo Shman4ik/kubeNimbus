@@ -261,6 +261,7 @@ public sealed partial class RowActionViewModel : ObservableObject
     /// <summary>True while the eviction loop is running, which is when the strip cannot be dismissed.</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StopDrainCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ConfirmCommand))]
     [NotifyPropertyChangedFor(nameof(CanDismiss))]
     [NotifyPropertyChangedFor(nameof(IsPromptVisible))]
     private bool _isDraining;
@@ -315,6 +316,10 @@ public sealed partial class RowActionViewModel : ObservableObject
     private bool CanConfirm =>
         IsEditable
         && !IsDemo
+        // A running drain is confirmed already. The Confirm button is not rendered while
+        // it runs, but the command must refuse on its own: a hidden button is a layout
+        // fact, and a second eviction loop over the same node is not recoverable.
+        && !IsDraining
         && (!IsScale || Replicas is not null)
         // A drain confirms against a plan, never against a guess: until the pods on the
         // node have been read there is nothing to agree to, and a plan with refusals is

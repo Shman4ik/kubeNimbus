@@ -124,7 +124,7 @@ design decisions behind it are here.
   RID a runner of its own OS and architecture (it has to — NativeAOT cannot
   cross-compile), so each one also *runs* the binary it just built, via
   `--smoke-test`, between Publish and Stage. See "The launch check" above. This
-  step is not optional polish: without it, v0.1.0 attached three binaries that
+  step is not optional polish: without it, v0.1.0 attached four binaries — every RID — that
   could not start to a public release page.
 - **Only a tag with a pre-release suffix (`v0.4.0-rc.1`) ships flagged as a
   pre-release; a plain `0.x` tag is a full release and takes the Latest
