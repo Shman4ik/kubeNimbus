@@ -30,6 +30,82 @@ it as the GitHub Release body, so headings must match tags exactly
   the container is still running, the container restarted, it exited (with its exit
   code), or it has not started yet. It used to say the container had exited in every case,
   including when a load balancer had only dropped an idle connection.
+- A misspelled field in a YAML apply now shows as a refused field on real clusters, which
+  answer it with HTTP 500 rather than 400.
+- CRD list columns now show an array or object value as kubectl does (for example Gateway
+  API HTTPRoute hostnames), and resolve backslash-escaped dotted keys such as Crossplane's
+  `crossplane\.io/external-name`.
+- The multi-pod log pane no longer leaves a freshly started pod without lines when its
+  stream was opened just before the container started.
+- Kubeconfig folders: pick a folder and every kubeconfig in it is read, including files
+  added later. The kubeconfig is rescanned when the window regains focus.
+- The cluster's `proxy-url` is honoured (HTTP, HTTPS, SOCKS5), including for exec and
+  port-forward.
+- A connect that fails now says, in place of the list, which step failed, why, and with
+  what (kubeconfig, context, server, user, sign-in method), with Retry and a terminal on
+  the cluster.
+- Reconnect: re-read the kubeconfig and re-run its credential plugin without closing the
+  tab. A 401 is treated as expired credentials and re-resolved automatically.
+- A credential plugin named bare in the kubeconfig (`command: aws`) is found where a login
+  shell would find it, so it works from an app launched from Finder, the Dock or a desktop
+  launcher.
+- On Linux with a fresh home directory, the discovery cache and settings could be written
+  into the current directory.
+- The no-kubeconfig screen no longer prints the same sentence in its card and in the
+  status bar.
+- Service detail: double-click a Service to see the pods its selector matches next to the
+  endpoints actually serving, with one sentence saying whether traffic can reach them.
+  "The selector matches no pod", a selector-less service and an ExternalName are each
+  stated plainly.
+- Ingress detail: every route as host/path → backend, TLS per host, and a URL you can open
+  or copy. The backend opens its Service.
+- NetworkPolicy detail: the rules in words (who may reach the selected pods, on which
+  ports) and the pods the policy selects. An empty selector means all pods, and the pane
+  says so.
+- Ingress, Endpoints, EndpointSlice and NetworkPolicy lists show kubectl's own columns.
+- Gateway API kinds (Gateway, HTTPRoute, GRPCRoute…) are listed under Network instead of
+  CRDs.
+- A CRD printer column of type string over a list (such as HTTPRoute's HOSTNAMES) now
+  shows the list, the way `kubectl get` does, instead of an empty cell.
+- The log search finds as well as filters. Matches are highlighted in place with
+  "n of m", and Enter / Shift+Enter step between them; the funnel switches to filtering.
+- A Levels filter (Error / Warn / Info) in the log panes. Lines with no level are always
+  shown.
+- Clear in the log panes, without restarting the stream.
+- Log timestamps in local time, with UTC one click away.
+- The log panes remember timestamps, UTC and wrap across panes and restarts. They do not
+  remember Previous or the search.
+- Logs and shells open on the container named by `kubectl.kubernetes.io/default-container`,
+  as kubectl does.
+- Logs have one icon everywhere.
+- A PersistentVolumeClaim or ServiceMonitor no longer offers "Logs (all pods)".
+- Pods that never started read "not started" in the multi-pod log pane, and are picked up
+  once they run.
+- Run a CronJob now, suspend it or resume it from the list's menu or the palette, with a
+  confirm naming what happens. After a run, "Open Job" shows the Job's pods.
+- Jobs open in the workload pane, which shows their pods, completions and failures against
+  the backoff limit.
+- A Secret carrying a certificate shows whose it is and when it expires, coloured as expiry
+  nears, plus the whole chain (subject, SANs, issuer, validity). This works without
+  revealing values, and the key is never read.
+- PersistentVolumeClaims and PersistentVolumes name the other end of their binding and
+  open it.
+- An environment variable taken from a ConfigMap or Secret key opens that object.
+- Node detail's pod list is live — pods appear and disappear as they are scheduled and
+  evicted — and a drain now watches for evictions instead of re-listing every two seconds.
+- Node detail's pods open on double-click and Enter; the list fits a narrow window.
+- Workload and node detail kept losing the selected pod when you switched inspector tabs
+  and back.
+- Refreshing a workload's detail now updates the "Unhealthy only" list immediately.
+- A Job was offered a rollout restart, which its immutable template can only refuse.
+- The sidebar's Recent kinds are remembered per cluster across restarts.
+- Only one sidebar row is highlighted at a time, including its copy in Recent.
+- The list header keeps search, the unhealthy-only chip and Refresh on screen at 1024px in
+  fleet mode with a connection warning.
+- The fleet list fits 1280px; the Events list's headers keep their sort arrow at 1024px.
+- The command palette fits windows narrower than itself.
+- The demo cluster shows usage for every running pod.
+- Discovery no longer lists a resource whose server reports `"verbs": []`.
 
 ## [0.5.0] - 2026-09-26
 
