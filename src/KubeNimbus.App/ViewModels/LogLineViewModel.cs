@@ -1,3 +1,4 @@
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace KubeNimbus.App.ViewModels;
@@ -19,6 +20,15 @@ public enum LogSeverity
 /// </summary>
 public sealed partial class LogLineViewModel : ObservableObject
 {
+    /// <summary>
+    /// How a server instant becomes this machine's local time. <see cref="DateTimeOffset.ToLocalTime"/>
+    /// rather than a <c>TimeZoneInfo</c> lookup by id, which wants tzdata a NativeAOT
+    /// binary on Linux may not have. A seam only so the tests can pin a zone that is not
+    /// the machine's; nothing in the app assigns it.
+    /// </summary>
+    internal static Func<DateTimeOffset, DateTimeOffset> ToLocal { get; set; } = at => at.ToLocalTime();
+
+    /// <summary>The server's own line, timestamp included — what Copy and Download write.</summary>
     public string RawLine { get; }
 
     public string? Timestamp { get; }
@@ -51,17 +61,69 @@ public sealed partial class LogLineViewModel : ObservableObject
     public bool HasSource => Source is not null;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DisplayText))]
+    [NotifyPropertyChangedFor(nameof(MessageOffset))]
     private bool _showTimestamp;
 
-    public string DisplayText => ShowTimestamp && Timestamp is not null ? RawLine : Message;
+    /// <summary>
+    /// Print the timestamp as the server sent it (RFC3339, UTC, nanoseconds) rather than
+    /// in local time. Only matters while <see cref="ShowTimestamp"/> is on.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DisplayText))]
+    [NotifyPropertyChangedFor(nameof(MessageOffset))]
+    private bool _utcTimestamp;
 
-    public LogLineViewModel(string rawLine, bool showTimestamp, LogSourceViewModel? source = null)
+    /// <summary>
+    /// The match the log search's next/previous is on. The line's matches are drawn in the
+    /// stronger highlight, so "3 of 17" can be found on screen.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isCurrentMatch;
+
+    private readonly DateTimeOffset? _at;
+    private string? _localTimestamp;
+
+    /// <summary>
+    /// What the pane prints. Local time is <c>2026-07-20 10:41:02.114</c> — no offset, since
+    /// every line on screen shares it and the toggle's tooltip names it; UTC is the server's
+    /// token untouched, so a line can be matched character for character against another
+    /// system's log. Copy and Download ignore both and write <see cref="RawLine"/>.
+    /// </summary>
+    public string DisplayText
+    {
+        get
+        {
+            if (!ShowTimestamp || Timestamp is null)
+            {
+                return Message;
+            }
+
+            if (UtcTimestamp || _at is not { } at)
+            {
+                return RawLine;
+            }
+
+            _localTimestamp ??= FormatLocal(at);
+            return $"{_localTimestamp} {Message}";
+        }
+    }
+
+    /// <summary>
+    /// Where <see cref="Message"/> starts inside <see cref="DisplayText"/>. Search matches
+    /// the message, never the timestamp, so the highlight has to skip the prefix — or a
+    /// search for "08:41" would light up text the match count does not include.
+    /// </summary>
+    public int MessageOffset => DisplayText.Length - Message.Length;
+
+    public LogLineViewModel(string rawLine, bool showTimestamp, LogSourceViewModel? source = null, bool utcTimestamp = false)
     {
         RawLine = rawLine;
-        (Timestamp, Message) = SplitTimestamp(rawLine);
+        (Timestamp, _at, Message) = SplitTimestamp(rawLine);
         Severity = DetectSeverity(Message);
         Source = source;
         _showTimestamp = showTimestamp;
+        _utcTimestamp = utcTimestamp;
     }
 
     /// <summary>
@@ -69,20 +131,41 @@ public sealed partial class LogLineViewModel : ObservableObject
     /// was not one. The merge in an aggregated pane orders on this; the single-pod pane
     /// never needs it, since one stream is already in order.
     /// </summary>
-    public DateTimeOffset? At =>
-        Timestamp is { } timestamp && DateTimeOffset.TryParse(timestamp, out var parsed) ? parsed : null;
+    public DateTimeOffset? At => _at;
 
-    partial void OnShowTimestampChanged(bool value) => OnPropertyChanged(nameof(DisplayText));
+    /// <summary>Whether the message contains <paramref name="query"/> — the one rule both search modes and the highlight use.</summary>
+    public bool Contains(string query) =>
+        query.Length > 0 && Message.Contains(query, StringComparison.OrdinalIgnoreCase);
 
-    private static (string? Timestamp, string Message) SplitTimestamp(string line)
+    internal static string FormatLocal(DateTimeOffset at) =>
+        ToLocal(at).ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// The UTC chip's tooltip. It names the local offset, because local timestamps are
+    /// printed without one — every line on screen shares it — and someone lining a line up
+    /// against another system's log needs to know what it is.
+    /// </summary>
+    public static string ZoneTooltip
+    {
+        get
+        {
+            var offset = ToLocal(DateTimeOffset.UtcNow).Offset;
+            var local = $"UTC{(offset < TimeSpan.Zero ? "-" : "+")}{offset:hh\\:mm}";
+            return $"Show timestamps in UTC, as the server sent them. Off: local time ({local}). "
+                + "Copy and Download always write the server's own UTC line.";
+        }
+    }
+
+    private static (string? Timestamp, DateTimeOffset? At, string Message) SplitTimestamp(string line)
     {
         var spaceIndex = line.IndexOf(' ');
-        if (spaceIndex > 0 && DateTimeOffset.TryParse(line[..spaceIndex], out _))
+        if (spaceIndex > 0
+            && DateTimeOffset.TryParse(line.AsSpan(0, spaceIndex), CultureInfo.InvariantCulture, DateTimeStyles.None, out var at))
         {
-            return (line[..spaceIndex], line[(spaceIndex + 1)..]);
+            return (line[..spaceIndex], at, line[(spaceIndex + 1)..]);
         }
 
-        return (null, line);
+        return (null, null, line);
     }
 
     private static LogSeverity DetectSeverity(string message)

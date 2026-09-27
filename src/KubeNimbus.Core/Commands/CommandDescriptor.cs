@@ -44,6 +44,7 @@ public enum CommandId
     LogsPalette,
     PreviousLogs,
     FollowLogs,
+    LogSearchStep,
     Exec,
     PortForward,
     ExecInterrupt,

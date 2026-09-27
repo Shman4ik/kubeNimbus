@@ -163,6 +163,12 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-workload-logs", () => HostInMainWindow(ClusterTabScenarios.DemoWorkloadLogs(), height: 1000)),
     ("cluster-tab-workload-logs-filtered-empty",
         () => HostInMainWindow(ClusterTabScenarios.DemoWorkloadLogs("checkout"))),
+    // The log panes' reading tools (FEAT-33/36/39) and ENG-45's never-started pods.
+    ("cluster-tab-workload-logs-find", () => HostInMainWindow(ClusterTabScenarios.DemoWorkloadLogsFind(), height: 1000)),
+    ("cluster-tab-workload-logs-not-started", () => HostInMainWindow(ClusterTabScenarios.DemoWorkloadLogsNotStarted())),
+    ("cluster-tab-demo-pod-detail-find", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetailSearch(), height: 1000)),
+    ("cluster-tab-demo-pod-detail-levels",
+        () => HostInMainWindow(ClusterTabScenarios.DemoPodDetailSearch(query: "", hideInfo: true), height: 1000)),
     // The CRD printer-column pair: the same Certificate list without and with the
     // advanced view, which is where the CRD's own `priority: 1` columns live.
     ("cluster-tab-crd-printer-columns", () => HostInMainWindow(ClusterTabScenarios.DemoCrdPrinterColumns())),

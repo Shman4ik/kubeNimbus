@@ -3325,26 +3325,14 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     }
 
     /// <summary>
-    /// The pod's first container, which is what <c>kubectl exec</c> defaults to. The
-    /// pane's own picker is where a different one gets chosen.
+    /// The container <c>kubectl exec</c> defaults to: the pod's
+    /// <c>kubectl.kubernetes.io/default-container</c>, else its first container
+    /// (<see cref="PodDetails.DefaultContainer"/>, FEAT-38) — a shell opened into an
+    /// injected mesh proxy is not the shell anyone pressed S for. The pane's own picker is
+    /// where a different one gets chosen.
     /// </summary>
-    private static string FirstContainerOf(ResourceRowViewModel row)
-    {
-        if (row.Resource.Raw.TryGetProperty("spec", out var spec)
-            && spec.TryGetProperty("containers", out var containers)
-            && containers.ValueKind == System.Text.Json.JsonValueKind.Array)
-        {
-            foreach (var container in containers.EnumerateArray())
-            {
-                if (container.TryGetProperty("name", out var name) && name.GetString() is { Length: > 0 } text)
-                {
-                    return text;
-                }
-            }
-        }
-
-        return "";
-    }
+    private static string FirstContainerOf(ResourceRowViewModel row) =>
+        PodDetails.DefaultContainer(row.Resource.Raw) ?? "";
 
     /// <summary>Every TCP port every container declares, so the forward pane can offer them.</summary>
     private static IReadOnlyList<ContainerPort> DeclaredPortsOf(ResourceRowViewModel row)

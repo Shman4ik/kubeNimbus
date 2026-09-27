@@ -53,6 +53,7 @@ way in Preferences → Shortcut modifier.
 | Copy the terminal selection | Ctrl+Shift+C | Ctrl+Shift+C |
 | Paste into the terminal | Ctrl+Shift+V | Ctrl+Shift+V |
 | Follow the log stream | The Follow toggle, above the log pane | The Follow toggle, above the log pane |
+| Step through a log search's matches (the funnel filters instead) | Enter / Shift+Enter in a log pane's search box | Enter / Shift+Enter in a log pane's search box |
 
 ## View & app
 

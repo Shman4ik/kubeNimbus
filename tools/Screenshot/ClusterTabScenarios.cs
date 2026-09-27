@@ -4,6 +4,7 @@ using KubeNimbus.App;
 using KubeNimbus.App.Demo;
 using KubeNimbus.App.ViewModels;
 using KubeNimbus.Core;
+using KubeNimbus.Core.Settings;
 
 namespace KubeNimbus.Screenshot;
 
@@ -334,7 +335,8 @@ internal static class ClusterTabScenarios
     /// <see cref="LabelSelector.Matches"/>, and the lines go through the same merge,
     /// buffer and filter a live cluster's would.
     /// </remarks>
-    public static ClusterTabViewModel DemoWorkloadLogs(string filter = "")
+    public static ClusterTabViewModel DemoWorkloadLogs(
+        string filter = "", bool filterMode = true, string workload = "payment-service-report-generator")
     {
         var tab = DemoTab();
         var kind = tab.SidebarSections
@@ -342,14 +344,82 @@ internal static class ClusterTabScenarios
             .First(k => k.Descriptor is { Group: "apps", Kind: "Deployment" });
         tab.SelectKindCommand.Execute(kind);
 
-        tab.SelectedRow = tab.Rows.FirstOrDefault(r => r.Name == "payment-service-report-generator")
+        tab.SelectedRow = tab.Rows.FirstOrDefault(r => r.Name == workload)
             ?? tab.Rows.FirstOrDefault();
         tab.OpenWorkloadLogsCommand.Execute(null);
 
         DrainWorkloadLogs(tab);
         if (tab.SelectedInspectorTab is WorkloadLogsTabViewModel logs)
         {
+            // Filtering is the search's second mode since FEAT-33; the filtered-empty shot
+            // is about that mode's own empty state, so it asks for it.
+            logs.IsLogFilterMode = filterMode && filter.Length > 0;
             logs.LogSearchText = filter;
+        }
+
+        return tab;
+    }
+
+    /// <summary>
+    /// ENG-45: the demo's fraud detector, whose two pods are unschedulable. The chips read
+    /// "not started" and the body says why, in the sentence a live cluster's pane reads
+    /// from the pod (LogStreamEnd) — they used to read "ended" over "waiting for output".
+    /// </summary>
+    public static ClusterTabViewModel DemoWorkloadLogsNotStarted()
+    {
+        var tab = DemoWorkloadLogs(workload: "fraud-detector");
+        if (tab.SelectedInspectorTab is WorkloadLogsTabViewModel logs)
+        {
+            for (var i = 0; i < 300 && logs.Sources.Any(s => s.State is LogSourceState.Starting or LogSourceState.Streaming); i++)
+            {
+                Dispatcher.UIThread.RunJobs();
+                Thread.Sleep(10);
+            }
+
+            Dispatcher.UIThread.RunJobs();
+        }
+
+        return tab;
+    }
+
+    /// <summary>
+    /// FEAT-33 in the multi-pod pane: finding keeps every pod's lines on screen with the
+    /// matches highlighted and the current one marked, the counter in the box.
+    /// </summary>
+    public static ClusterTabViewModel DemoWorkloadLogsFind() => DemoWorkloadLogs("report", filterMode: false);
+
+    /// <summary>
+    /// FEAT-33, FEAT-36 and FEAT-39 in pod detail's pane, on the demo pod's whole canned
+    /// stream: a search in find mode (every line kept, matches highlighted, "n of m" and
+    /// the arrows in the box), timestamps shown in local time with the UTC chip beside the
+    /// clock, and optionally the Info level hidden — the Levels button then names what is
+    /// left and turns accent.
+    /// </summary>
+    public static ClusterTabViewModel DemoPodDetailSearch(string query = "report", bool hideInfo = false)
+    {
+        var tab = DemoTab();
+        tab.SelectedRow = tab.Rows.FirstOrDefault(r => r.Name.StartsWith("payment-service-report-generator", StringComparison.Ordinal))
+            ?? tab.Rows.FirstOrDefault();
+        tab.OpenSelectedCommand.Execute(null);
+
+        if (tab.SelectedInspectorTab is PodDetailTabViewModel detail)
+        {
+            for (var i = 0; i < 600 && detail.LogStatus is null; i++)
+            {
+                Dispatcher.UIThread.RunJobs();
+                Thread.Sleep(10);
+            }
+
+            detail.ShowLogTimestamps = true;
+            detail.Levels.ShowInfo = !hideInfo;
+            detail.LogSearchText = query;
+            detail.FindPreviousLogMatchCommand.Execute(null);
+
+            // The toggle is a preference and writes settings.json (FEAT-37) — redirected
+            // here, but shared by every scenario after this one, which would all open with
+            // timestamps on. Put the file back; this pane keeps its own state.
+            var store = new AppSettingsStore();
+            store.Save(store.Load() with { LogShowTimestamps = false });
         }
 
         return tab;

@@ -71,7 +71,11 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     [NotifyPropertyChangedFor(nameof(HasLogPlaceholder))]
     private ContainerViewModel? _selectedContainer;
 
-    /// <summary>Filtered (by <see cref="LogSearchText"/>) view over the buffered log lines — this is what's rendered.</summary>
+    /// <summary>
+    /// The shown projection of the buffered log lines — narrowed by <see cref="Levels"/>,
+    /// and by <see cref="LogSearchText"/> only while <see cref="IsLogFilterMode"/> is on.
+    /// This is what's rendered.
+    /// </summary>
     public ObservableCollection<LogLineViewModel> LogLines { get; } = [];
 
     [ObservableProperty]
@@ -81,14 +85,61 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     [ObservableProperty]
     private bool _isShowingPreviousLogs;
 
+    /// <summary>
+    /// The log search. By default it <em>finds</em>: every line stays, matches are
+    /// highlighted, and next/previous step through them (FEAT-33). With
+    /// <see cref="IsLogFilterMode"/> on it filters instead, hiding the lines that do not
+    /// match — the pane's older behaviour, kept as the other mode.
+    /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasLogSearch), nameof(IsFinding))]
     private string _logSearchText = "";
 
+    /// <summary>Hide non-matching lines rather than highlight matches. Not persisted — see <c>AppSettings.LogShowTimestamps</c>.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsFinding))]
+    private bool _isLogFilterMode;
+
+    public bool HasLogSearch => LogSearchText.Length > 0;
+
+    /// <summary>A search is running in find mode — the box shows its previous/next arrows.</summary>
+    public bool IsFinding => HasLogSearch && !IsLogFilterMode;
+
+    /// <summary>The search box's counter: "3 of 17" while finding, "12 lines" while filtering.</summary>
+    [ObservableProperty]
+    private string _logSearchSummary = "";
+
+    /// <summary>The line next/previous is on. The view scrolls it into sight when it changes.</summary>
+    [ObservableProperty]
+    private LogLineViewModel? _currentLogMatch;
+
+    /// <summary>Which severities are shown; unclassified lines always are (FEAT-36).</summary>
+    public LogLevelFilter Levels { get; } = new();
+
+    // The three display toggles are preferences (FEAT-37): read from settings when the
+    // pane opens and written back when they change, so the next pane opens the way the
+    // last one was left. Previous is deliberately not among them.
     [ObservableProperty]
     private bool _showLogTimestamps;
 
     [ObservableProperty]
     private bool _wrapLogLines;
+
+    /// <summary>Print timestamps as the server sent them (UTC) instead of in local time (FEAT-39).</summary>
+    [ObservableProperty]
+    private bool _useUtcTimestamps;
+
+    /// <summary>Set while the constructor applies the saved display toggles, so reading a preference does not write it back.</summary>
+    private bool _restoringDisplayPreferences;
+
+    /// <summary>
+    /// How many lines the reader cleared, while nothing has arrived since — the placeholder
+    /// says "cleared" rather than "no lines", which after a clear would be a false verdict
+    /// about the stream (FEAT-40). Null once a new stream starts.
+    /// </summary>
+    private int? _clearedLines;
+
+    private readonly LogFind _find = new();
 
     public IReadOnlyList<LogRange> LogRanges => LogRange.Choices;
 
@@ -267,6 +318,8 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         Key = KeyFor(clusterName, PodNamespace, PodName);
 
         _row.PropertyChanged += OnRowChanged;
+        Levels.Changed += (_, _) => ApplyLogFilter();
+        RestoreDisplayPreferences();
         RefreshFromRow();
 
         // Logs start on open, with no click. Double-click on a pod is documented as
@@ -538,13 +591,29 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         ReadContainerSpecs(spec, "containers", ContainerRole.App, statuses);
         ReadContainerSpecs(spec, "ephemeralContainers", ContainerRole.Ephemeral, statuses);
 
-        // The first *app* container, not the first row: with init containers present
-        // the list starts on one that has already exited, and `kubectl logs` with no
-        // -c picks the first app container for the same reason.
-        SelectedContainer ??= Containers.FirstOrDefault(c => c.Role == ContainerRole.App) ?? Containers.FirstOrDefault();
+        // The container `kubectl logs` picks with no -c: the one the pod names with
+        // kubectl.kubernetes.io/default-container, else the first *app* container — not
+        // the first row, which with init containers present has already exited. A mesh
+        // sidecar injected ahead of the app is why the annotation exists, and opening on
+        // the proxy's access log is the wrong first screen (FEAT-38).
+        if (SelectedContainer is null)
+        {
+            var preferred = PodDetails.DefaultContainer(raw);
+            SelectedContainer = Containers.FirstOrDefault(c => c.Name == preferred)
+                ?? Containers.FirstOrDefault(c => c.Role == ContainerRole.App)
+                ?? Containers.FirstOrDefault();
+        }
 
         RefreshEnvironment();
         RefreshOverview();
+
+        if (_followWhenStarted is { } waiting
+            && SelectedContainer?.Name == waiting
+            && _streaming is null
+            && !LogStreamEnd.DescribePod(raw, waiting, atStart: null).NotStarted)
+        {
+            StartLogs();
+        }
     }
 
     private static void ReadContainerStatuses(
@@ -1059,6 +1128,15 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     private (string Container, bool Previous, bool Follow)? _streaming;
 
     /// <summary>
+    /// The container whose follow ended because it had never started (an unscheduled pod
+    /// answers a follow request with an immediate 204 No Content). The next watch tick
+    /// that shows it running starts the follow again, so a pane opened on a pod that is
+    /// coming up does not sit on "has not started" after it has. Cleared by any start or
+    /// stop, which is the reader choosing something else.
+    /// </summary>
+    private string? _followWhenStarted;
+
+    /// <summary>
     /// Why the pane looks the way it does — the reason a stream ended, or null while
     /// one is healthy. Rendered next to the state line, because "no lines" and "no
     /// lines because the container has not started yet" need different next steps.
@@ -1095,9 +1173,27 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
 
             if (_allLogLines.Count > 0)
             {
-                return LogSearchText.Length == 0
-                    ? null
-                    : $"No lines match “{LogSearchText}” — {_allLogLines.Count:N0} line{(_allLogLines.Count == 1 ? "" : "s")} buffered.";
+                var buffered = $"{_allLogLines.Count:N0} line{(_allLogLines.Count == 1 ? "" : "s")} buffered";
+                if (IsLogFilterMode && LogSearchText.Length > 0)
+                {
+                    return Levels.IsFiltering
+                        ? $"No lines match “{LogSearchText}” at the shown levels ({Levels.Label}) — {buffered}."
+                        : $"No lines match “{LogSearchText}” — {buffered}.";
+                }
+
+                return Levels.IsFiltering
+                    ? $"Every buffered line is at a hidden level — {buffered}. Levels shows them again."
+                    : null;
+            }
+
+            if (_clearedLines is { } cleared)
+            {
+                var what = $"Cleared {cleared:N0} line{(cleared == 1 ? "" : "s")}";
+                return LogStatus is { Length: > 0 } after
+                    ? $"{what}. {after}"
+                    : IsFollowingLogs
+                        ? $"{what} — still following; new lines appear here."
+                        : $"{what}. Nothing new arrives until Follow is pressed.";
             }
 
             if (LogStatus is { Length: > 0 } status)
@@ -1295,7 +1391,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
                 // load balancer or the API server closing the connection. The pod says
                 // which; the pane used to say "exited" for all of them.
                 await EndLogStreamAsync(generation, LogStreamEnd.Checking(container.Name), problem: false);
-                var (text, problem) = await LogStreamEnd.ExplainAsync(
+                var (text, problem, notStarted) = await LogStreamEnd.ExplainAsync(
                     client, PodNamespace, PodName, container.Name, atStart, token);
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
@@ -1306,6 +1402,10 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
 
                     LogStatus = text;
                     IsLogStatusProblem = problem;
+
+                    // Picked up again by RefreshFromRow once the container runs — the
+                    // multi-pod pane does the same for a pod that was pending.
+                    _followWhenStarted = notStarted ? container.Name : null;
                 });
             }
             catch (OperationCanceledException)
@@ -1357,12 +1457,15 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
             return; // container switched, Follow turned off, or the tab closed
         }
 
+        // A stream with no lines is a container that never ran, and it is said from the pod
+        // the way a real cluster's ending is (LogStreamEnd), so the demo cannot teach a
+        // different sentence for the same state (ENG-45).
         await EndLogStreamAsync(
             generation,
             previous
                 ? "Previous logs loaded — this is a snapshot, not a live stream."
                 : lines.Count == 0
-                    ? $"{container} has not started yet, so it has produced no logs."
+                    ? LogStreamEnd.DescribePod(_row.Resource.Raw, container, atStart: null).Text
                     : "Demo cluster: the sample stream has finished. A real cluster would keep following.",
             problem: false);
     }
@@ -1377,6 +1480,8 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         _streaming = (container, previous, follow);
         _loadingLogRange = true;
         _logHeadersReady = false;
+        _clearedLines = null;
+        _followWhenStarted = null;
         LogStatus = null;
         IsLogStatusProblem = false;
         ClearLogBuffer();
@@ -1437,6 +1542,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         _logCts = null;
         _logGeneration++;
         _streaming = null;
+        _followWhenStarted = null;
         _loadingLogRange = false;
         _logHeadersReady = false;
         StopLogFlushTimer();
@@ -1456,8 +1562,35 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         _allLogLines.Clear();
         LogLines.Clear();
         TrimNotice = null;
+        UpdateLogFind(newQuery: false);
+        ClearLogsCommand.NotifyCanExecuteChanged();
         RaiseLogPlaceholder();
     }
+
+    /// <summary>
+    /// Empties the pane and keeps the stream (FEAT-40). "Clear, then watch what happens
+    /// next" used to mean stopping and restarting the stream, which lost the follow and
+    /// fetched the tail all over again — so the lines being cleared came straight back.
+    /// Lines that arrived but were not drawn yet go too: they are part of "everything so
+    /// far". Copy and Download then write only what arrived after the clear, which is
+    /// what the pane shows.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(HasBufferedLogLines))]
+    private void ClearLogs()
+    {
+        int pending;
+        lock (_pendingLogLock)
+        {
+            pending = _pendingLogLines.Count;
+        }
+
+        var cleared = _allLogLines.Count + pending;
+        ClearLogBuffer();
+        _clearedLines = cleared;
+        RaiseLogPlaceholder();
+    }
+
+    private bool HasBufferedLogLines => _allLogLines.Count > 0;
 
     // --- throughput -----------------------------------------------------------
     //
@@ -1474,7 +1607,10 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     private readonly Lock _pendingLogLock = new();
     private DispatcherTimer? _logFlushTimer;
 
-    private void Enqueue(string rawLine)
+    // Enqueue and FlushLogLines are internal for the reason WorkloadLogsTabViewModel's
+    // twins are: the view-model tests push lines through the two methods the socket pump
+    // and the flush timer call, rather than through a copy of them.
+    internal void Enqueue(string rawLine)
     {
         lock (_pendingLogLock)
         {
@@ -1497,7 +1633,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         return timer;
     }
 
-    private void FlushLogLines()
+    internal void FlushLogLines()
     {
         string[] raw;
         lock (_pendingLogLock)
@@ -1513,7 +1649,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
 
         foreach (var rawLine in raw)
         {
-            var line = new LogLineViewModel(rawLine, ShowLogTimestamps);
+            var line = new LogLineViewModel(rawLine, ShowLogTimestamps, utcTimestamp: UseUtcTimestamps);
             _allLogLines.Add(line);
             if (MatchesLogFilter(line))
             {
@@ -1522,8 +1658,11 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         }
 
         _loadingLogRange = false;
+        _clearedLines = null;
 
         TrimLogBuffer();
+        UpdateLogFind(newQuery: false);
+        ClearLogsCommand.NotifyCanExecuteChanged();
         RaiseLogPlaceholder();
     }
 
@@ -1567,10 +1706,30 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         OnPropertyChanged(nameof(HasLogPlaceholder));
     }
 
+    /// <summary>
+    /// Whether a buffered line is shown. The level filter always applies; the search text
+    /// narrows only in filter mode — in find mode every line stays and matches are
+    /// highlighted instead.
+    /// </summary>
     private bool MatchesLogFilter(LogLineViewModel line) =>
-        LogSearchText.Length == 0 || line.Message.Contains(LogSearchText, StringComparison.OrdinalIgnoreCase);
+        Levels.Admits(line)
+        && (!IsLogFilterMode || LogSearchText.Length == 0 || line.Contains(LogSearchText));
 
-    partial void OnLogSearchTextChanged(string value) => ApplyLogFilter();
+    partial void OnLogSearchTextChanged(string value)
+    {
+        if (IsLogFilterMode)
+        {
+            ApplyLogFilter();
+        }
+
+        UpdateLogFind(newQuery: true);
+    }
+
+    partial void OnIsLogFilterModeChanged(bool value)
+    {
+        ApplyLogFilter();
+        UpdateLogFind(newQuery: true);
+    }
 
     private void ApplyLogFilter()
     {
@@ -1583,7 +1742,64 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
             }
         }
 
+        UpdateLogFind(newQuery: false);
         RaiseLogPlaceholder();
+    }
+
+    /// <summary>
+    /// Re-reads the search's matches after the shown lines changed. In filter mode every
+    /// shown line matches already, so there is nothing to step through and the counter is
+    /// a count; in find mode it is the match position.
+    /// </summary>
+    private void UpdateLogFind(bool newQuery)
+    {
+        if (IsLogFilterMode || LogSearchText.Length == 0)
+        {
+            _find.Clear();
+            LogSearchSummary = LogSearchText.Length == 0
+                ? ""
+                : $"{LogLines.Count:N0} line{(LogLines.Count == 1 ? "" : "s")}";
+        }
+        else
+        {
+            _find.Update(LogLines, LogSearchText, newQuery);
+            LogSearchSummary = _find.Summary(LogSearchText);
+        }
+
+        CurrentLogMatch = _find.Current;
+        FindNextLogMatchCommand.NotifyCanExecuteChanged();
+        FindPreviousLogMatchCommand.NotifyCanExecuteChanged();
+    }
+
+    private bool HasLogMatches => _find.Count > 0;
+
+    /// <summary>The next (later) match — Enter in the search box.</summary>
+    [RelayCommand(CanExecute = nameof(HasLogMatches))]
+    private void FindNextLogMatch()
+    {
+        _find.Next();
+        CurrentLogMatch = _find.Current;
+        LogSearchSummary = _find.Summary(LogSearchText);
+    }
+
+    /// <summary>The previous (earlier) match — Shift+Enter in the search box.</summary>
+    [RelayCommand(CanExecute = nameof(HasLogMatches))]
+    private void FindPreviousLogMatch()
+    {
+        _find.Previous();
+        CurrentLogMatch = _find.Current;
+        LogSearchSummary = _find.Summary(LogSearchText);
+    }
+
+    /// <summary>Applies the saved display toggles without writing them straight back.</summary>
+    private void RestoreDisplayPreferences()
+    {
+        var settings = App.LoadSettings();
+        _restoringDisplayPreferences = true;
+        ShowLogTimestamps = settings.LogShowTimestamps;
+        WrapLogLines = settings.LogWrapLines;
+        UseUtcTimestamps = settings.LogTimestampsUtc;
+        _restoringDisplayPreferences = false;
     }
 
     partial void OnShowLogTimestampsChanged(bool value)
@@ -1592,7 +1808,36 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         {
             line.ShowTimestamp = value;
         }
+
+        if (!_restoringDisplayPreferences)
+        {
+            App.Update(s => s with { LogShowTimestamps = value });
+        }
     }
+
+    partial void OnWrapLogLinesChanged(bool value)
+    {
+        if (!_restoringDisplayPreferences)
+        {
+            App.Update(s => s with { LogWrapLines = value });
+        }
+    }
+
+    partial void OnUseUtcTimestampsChanged(bool value)
+    {
+        foreach (var line in _allLogLines)
+        {
+            line.UtcTimestamp = value;
+        }
+
+        if (!_restoringDisplayPreferences)
+        {
+            App.Update(s => s with { LogTimestampsUtc = value });
+        }
+    }
+
+    /// <summary>The UTC chip's tooltip, which names the local offset — see <see cref="LogLineViewModel.ZoneTooltip"/>.</summary>
+    public string TimestampZoneTooltip => LogLineViewModel.ZoneTooltip;
 
     /// <summary>Parser/HTTP messages can run to several lines; an inline notice gets the first.</summary>
     private static string FirstLine(string message)

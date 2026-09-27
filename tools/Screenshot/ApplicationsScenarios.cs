@@ -96,7 +96,7 @@ public static class ApplicationsScenarios
         for (var i = 0; i < 600; i++)
         {
             Dispatcher.UIThread.RunJobs();
-            if (page.Logs is not { } logs || logs.Sources.All(s => s.State is LogSourceState.Ended or LogSourceState.Failed))
+            if (page.Logs is not { } logs || logs.Sources.All(s => s.State is LogSourceState.Ended or LogSourceState.NotStarted or LogSourceState.Failed))
             {
                 break;
             }

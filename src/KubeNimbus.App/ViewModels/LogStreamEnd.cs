@@ -1,3 +1,4 @@
+using System.Text.Json;
 using KubeNimbus.Core;
 
 namespace KubeNimbus.App.ViewModels;
@@ -23,20 +24,20 @@ public static class LogStreamEnd
     /// Throws <see cref="OperationCanceledException"/> when <paramref name="token"/> is
     /// cancelled — the pane has moved on and nothing should be written.
     /// </summary>
-    public static async Task<(string Text, bool Problem)> ExplainAsync(
+    public static async Task<(string Text, bool Problem, bool NotStarted)> ExplainAsync(
         ClusterClient client, string @namespace, string podName, string container,
         ContainerRun? atStart, CancellationToken token)
     {
-        var (text, problem, _) = await ExplainWithRunAsync(client, @namespace, podName, container, atStart, token)
-            .ConfigureAwait(false);
-        return (text, problem);
+        var (text, problem, notStarted, _) = await ExplainWithRunAsync(
+            client, @namespace, podName, container, atStart, token).ConfigureAwait(false);
+        return (text, problem, notStarted);
     }
 
     /// <summary>
     /// <see cref="ExplainAsync"/>, plus the container's run as read — so a caller can act
     /// on <see cref="StartedAfterRequest"/> rather than only print the sentence.
     /// </summary>
-    public static async Task<(string Text, bool Problem, ContainerRun? Now)> ExplainWithRunAsync(
+    public static async Task<(string Text, bool Problem, bool NotStarted, ContainerRun? Now)> ExplainWithRunAsync(
         ClusterClient client, string @namespace, string podName, string container,
         ContainerRun? atStart, CancellationToken token)
     {
@@ -52,19 +53,61 @@ public static class LogStreamEnd
             var message = ex.Message;
             var end = message.IndexOfAny(['\r', '\n']);
             var (text, problem) = Describe(container, atStart, null, readError: end < 0 ? message : message[..end]);
-            return (text, problem, null);
+            return (text, problem, false, null);
         }
 
         if (pod is null)
         {
             var (text, problem) = Describe(container, atStart, null, podGone: true);
-            return (text, problem, null);
+            return (text, problem, false, null);
         }
 
-        var now = PodDetails.ContainerRunOf(pod.Raw, container);
-        var (said, isProblem) = Describe(container, atStart, now);
-        return (said, isProblem, now);
+        var (said, isProblem, notStarted) = DescribePod(pod.Raw, container, atStart);
+        return (said, isProblem, notStarted, PodDetails.ContainerRunOf(pod.Raw, container));
     }
+
+    /// <summary>
+    /// The verdict for a pod object already in hand — what <see cref="ExplainAsync"/> says
+    /// once its read returns, and what the demo cluster says about its own dataset, so a
+    /// demo pod that never started reads exactly as a real one would (ENG-45).
+    /// <c>NotStarted</c> is true when the container has never run at all — the multi-pod
+    /// pane's chip then reads "not started" rather than "ended", which beside a sentence
+    /// saying it never started was the contradiction ENG-45 is about.
+    /// </summary>
+    public static (string Text, bool Problem, bool NotStarted) DescribePod(
+        JsonElement pod, string container, ContainerRun? atStart)
+    {
+        var now = PodDetails.ContainerRunOf(pod, container);
+
+        // No status for the container and no node: the scheduler has not placed the pod, so
+        // no runtime has ever been asked to create the container. The API server answers a
+        // follow request for such a pod with an immediate 204 No Content (read on the k3s
+        // 1.33 sandbox), which is what ended the stream, and "reports no state" would leave
+        // the reader guessing why.
+        if (now is null && !IsScheduled(pod))
+        {
+            var reason = UnscheduledReason(pod);
+            return ($"{container} has not started — the pod is not scheduled onto a node yet"
+                + (reason is null ? "" : $" ({reason})")
+                + ", so there is no log to read.", false, true);
+        }
+
+        var (text, problem) = Describe(container, atStart, now);
+        return (text, problem, now is { State: ContainerRunState.Waiting, ContainerId: null or "" });
+    }
+
+    private static bool IsScheduled(JsonElement pod) =>
+        pod.ValueKind == JsonValueKind.Object
+        && pod.TryGetProperty("spec", out var spec) && spec.ValueKind == JsonValueKind.Object
+        && spec.TryGetProperty("nodeName", out var node) && node.ValueKind == JsonValueKind.String
+        && node.GetString() is { Length: > 0 };
+
+    /// <summary>The PodScheduled condition's reason when it is False ("Unschedulable").</summary>
+    private static string? UnscheduledReason(JsonElement pod) =>
+        pod.ValueKind == JsonValueKind.Object && pod.TryGetProperty("status", out var status)
+            ? PodDetails.Conditions(status)
+                .FirstOrDefault(c => c is { Type: "PodScheduled", Status: "False" } && c.Reason.Length > 0)?.Reason
+            : null;
 
     /// <summary>
     /// True when the follow was opened before the container had started and it is running

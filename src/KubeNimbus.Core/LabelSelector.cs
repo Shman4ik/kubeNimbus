@@ -69,6 +69,11 @@ public sealed record LabelSelector(IReadOnlyList<LabelRequirement> Requirements)
     /// </remarks>
     public static LabelSelector? ForPodsOf(DynamicResource workload)
     {
+        if (SelectsSomethingElse(workload))
+        {
+            return null;
+        }
+
         if (workload.Raw.ValueKind != JsonValueKind.Object
             || !workload.Raw.TryGetProperty("spec", out var spec)
             || spec.ValueKind != JsonValueKind.Object
@@ -80,6 +85,28 @@ public sealed record LabelSelector(IReadOnlyList<LabelRequirement> Requirements)
 
         return Parse(selector);
     }
+
+    /// <summary>
+    /// Objects whose <c>spec.selector</c> is documented to select something other than
+    /// pods, so reading it as a pod selector would tail whichever pods happen to carry
+    /// those labels. A PersistentVolumeClaim's selector picks the PersistentVolumes it may
+    /// bind; a prometheus-operator ServiceMonitor's picks Services. Both are the ordinary
+    /// <c>LabelSelector</c> shape, so nothing in the object itself tells them apart from a
+    /// Deployment's — this is the one place a kind is named here, and it is a refusal, so a
+    /// mistake in it hides an action rather than offering a wrong one.
+    /// </summary>
+    /// <remarks>
+    /// Matched on group and kind rather than on one version, for the reason
+    /// <c>LogTarget.MayHaveLogs</c> gives for Rollouts: the object should not change
+    /// meaning the day its CRD is served at a new version. The core group's apiVersion is
+    /// the bare version (<c>v1</c>), which is why that case compares it whole.
+    /// </remarks>
+    private static bool SelectsSomethingElse(DynamicResource resource) => (resource.ApiVersion, resource.Kind) switch
+    {
+        ("v1", "PersistentVolumeClaim") => true,
+        (var apiVersion, "ServiceMonitor") => apiVersion.StartsWith("monitoring.coreos.com/", StringComparison.Ordinal),
+        _ => false,
+    };
 
     /// <summary>Parses either <c>spec.selector</c> shape; null when it carries no requirement.</summary>
     public static LabelSelector? Parse(JsonElement selector)

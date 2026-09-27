@@ -61,6 +61,12 @@ spec:
     metadata:
       labels:
         app: shop-web
+      # The log panes and the shells open on the container this names (FEAT-38), as
+      # kubectl does. It names the *second* container on purpose: with the annotation
+      # honoured, a shop-web pod's logs open on the tailer, whose levelled lines are also
+      # what the Levels filter is tried on; with it ignored they would open on nginx.
+      annotations:
+        kubectl.kubernetes.io/default-container: access-log-tailer
     spec:
       # Pod detail's Overview tab reads all four of these, and nothing else in the
       # sandbox produced any of them: a node selector that still schedules everywhere

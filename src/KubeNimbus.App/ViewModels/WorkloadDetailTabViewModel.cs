@@ -230,9 +230,8 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
     private void Shell()
     {
         if (SelectedPod is not { } pod) return;
-        var container = pod.Resource.Raw.TryGetProperty("spec", out var spec)
-            && spec.TryGetProperty("containers", out var containers) && containers.GetArrayLength() > 0
-            ? Text(containers[0], "name") : "";
+        // kubectl exec's default: the pod's default-container annotation, else the first (FEAT-38).
+        var container = PodDetails.DefaultContainer(pod.Resource.Raw) ?? "";
         var shell = new ExecTabViewModel(_client, pod.Namespace, pod.Name, container);
         if (_row.ClusterName.Length > 0) shell.Title += $" · {_row.ClusterName}";
         _openTab(shell);

@@ -24,6 +24,13 @@ this is the second time the same bug shipped:
   binding at all**, so it inherits the way every other `TextBlock` in the window does.
   The three colours are the converter's own, unchanged.
 
+The same three severities drive the log panes' **Levels** filter (FEAT-36,
+[log-pane-reading](log-pane-reading.md)), and it inherits this page's lesson directly: a line
+with no severity keyword is *always* shown whatever the filter says, because that population
+is most real output and is the one this pane has already lost once. The search highlight is
+painted under the glyphs by `Controls/LogLineText`, a `SelectableTextBlock` that keeps
+`StyleKeyOverride => typeof(SelectableTextBlock)` so these classes still reach it.
+
 Two things about how this survived so long, both of which generalize. It is invisible in
 the **light** theme, whose own text is nearly black — so a light-theme screenshot of a
 correct pane and of a broken one are identical. And the population it hits is exactly the
