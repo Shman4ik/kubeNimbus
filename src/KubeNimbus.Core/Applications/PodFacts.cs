@@ -71,7 +71,41 @@ public sealed record ContainerFacts(
         "ErrImageNeverPull", "PreCreateHookError", "PreStartHookError", "PostStartHookError",
     };
 
-    public bool IsCrashLooping => State == ContainerStateKind.Waiting && WaitingReason == "CrashLoopBackOff";
+    /// <summary>
+    /// How long a container must run without a crash before the kubelet resets its restart
+    /// back-off ("once a container has executed for 10 minutes without any problems, the
+    /// kubelet resets the restart backoff timer" — the pod lifecycle docs). Until then the
+    /// kubelet itself still treats the container as crash-looping.
+    /// </summary>
+    public static readonly TimeSpan CrashLoopWindow = TimeSpan.FromMinutes(10);
+
+    /// <summary>Restarts a container must have before a short failed run reads as a loop rather than a one-off crash.</summary>
+    public const int CrashLoopMinRestarts = 2;
+
+    /// <summary>The kubelet's own word for it: waiting in <c>CrashLoopBackOff</c>.</summary>
+    public bool IsWaitingInCrashLoop => State == ContainerStateKind.Waiting && WaitingReason == "CrashLoopBackOff";
+
+    /// <summary>
+    /// Whether the container is in a crash loop at <paramref name="now"/>. Waiting in
+    /// <c>CrashLoopBackOff</c> is only one phase of the cycle: between two back-offs the
+    /// kubelet starts the container, it runs for a few seconds (Ready, if it has no readiness
+    /// probe) and then sits <c>terminated</c> until the kubelet notices. Reading only the
+    /// waiting phase made the verdict flip between Degraded and Healthy every few seconds on
+    /// the same pod. So a container that is running or just terminated also counts when it
+    /// has restarted at least <see cref="CrashLoopMinRestarts"/> times and its latest run
+    /// failed (non-zero exit), was short, and ended recently — all three bounded by
+    /// <see cref="CrashLoopWindow"/>, the kubelet's own reset. A long run ended by a node
+    /// reboot is therefore not a loop, and neither is a container that has now run for ten
+    /// minutes since its last crash.
+    /// </summary>
+    public bool IsCrashLoopingAt(DateTimeOffset now) =>
+        IsWaitingInCrashLoop
+        || (!IsInit
+            && State is ContainerStateKind.Running or ContainerStateKind.Terminated
+            && RestartCount >= CrashLoopMinRestarts
+            && LatestTermination is { ExitCode: not (null or 0), StartedAt: { } started, FinishedAt: { } finished }
+            && finished - started < CrashLoopWindow
+            && now - finished < CrashLoopWindow);
 
     public bool IsFailing =>
         (State == ContainerStateKind.Waiting && FailingWaitingReasons.Contains(WaitingReason))

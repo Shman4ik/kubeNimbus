@@ -102,6 +102,25 @@ internal static class ApplicationsChecks
         if (vm.Chip != ApplicationChip.All)
             throw new InvalidOperationException("The All chip did not bring every row back.");
 
+        // Double-click a row, then Esc. Enter alone hid this: a double-click opens the page
+        // from inside the second press, the row under the pointer then took focus, and Esc
+        // went to the list the page had hidden — found on a live cluster, not here.
+        var target = vm.VisibleRows[0];
+        var container = list.ContainerFromItem(target) as Control
+            ?? throw new InvalidOperationException("The first application row has no container.");
+        var centre = container.TranslatePoint(new Point(container.Bounds.Width / 2, container.Bounds.Height / 2), window)!.Value;
+        window.MouseDown(centre, MouseButton.Left);
+        window.MouseUp(centre, MouseButton.Left);
+        window.MouseDown(centre, MouseButton.Left);
+        window.MouseUp(centre, MouseButton.Left);
+        SettlePage(window);
+        if (vm.Page?.Key != target.Key)
+            throw new InvalidOperationException("Double-clicking a row did not open its application.");
+        window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        Dispatcher.UIThread.RunJobs();
+        if (vm.IsPageOpen)
+            throw new InvalidOperationException("Esc after a double-click did not return to the list: focus stayed on the hidden row.");
+
         // The mode switch, by pointer, and back — nothing is restarted either way.
         var rows = vm.Rows.Count;
         var switcher = window.FindControl<ListBox>("ModeSwitch")!;
@@ -112,7 +131,7 @@ internal static class ApplicationsChecks
         if (shell.Mode != ShellMode.Applications || vm.Rows.Count != rows || switcher.SelectedIndex != 0)
             throw new InvalidOperationException("Switching back to Applications lost the list.");
 
-        Console.WriteLine($"Applications interaction passed ({rows} applications; arrows, Enter, Esc, /, {Hotkeys.PrimaryLabel}+F, chips, mode switch).");
+        Console.WriteLine($"Applications interaction passed ({rows} applications; arrows, Enter, Esc, /, {Hotkeys.PrimaryLabel}+F, chips, double-click then Esc, mode switch).");
     }
 
     private static void Click(Window window, Control target)

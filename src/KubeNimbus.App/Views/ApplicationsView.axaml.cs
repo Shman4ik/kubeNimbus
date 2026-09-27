@@ -43,10 +43,25 @@ public partial class ApplicationsView : UserControl
         }
     }
 
-    /// <summary>Back from the page: focus goes to the row it was opened from, so arrows and Enter keep working.</summary>
+    /// <summary>
+    /// Into the page: focus goes to the page, so Esc works at once. Back from it: focus goes
+    /// to the row it was opened from, so arrows and Enter keep working.
+    /// </summary>
+    /// <remarks>
+    /// The page's own <c>Focus()</c> on attach is not enough, and the harness cannot show why:
+    /// it opens with Enter. A double-click opens the page from inside the second press, and
+    /// the ListBoxItem under the pointer takes focus *after* that handler returns — so focus
+    /// ended on a row the page had just hidden, Esc went to the hidden list, and the page
+    /// never saw it. Posting at Background runs after the press and after layout has made the
+    /// page visible.
+    /// </remarks>
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(ApplicationsViewModel.IsPageOpen) && _subscribed is { IsPageOpen: false })
+        if (e.PropertyName == nameof(ApplicationsViewModel.IsPageOpen) && _subscribed is { IsPageOpen: true })
+        {
+            Dispatcher.UIThread.Post(() => FocusPage(), DispatcherPriority.Background);
+        }
+        else if (e.PropertyName == nameof(ApplicationsViewModel.IsPageOpen) && _subscribed is { IsPageOpen: false })
         {
             Dispatcher.UIThread.Post(() =>
             {
@@ -143,6 +158,11 @@ public partial class ApplicationsView : UserControl
             e.Handled = true;
         }
     }
+
+    internal bool FocusPage() =>
+        _subscribed is { IsPageOpen: true }
+        && PageHost.GetVisualDescendants().OfType<ApplicationPageView>().FirstOrDefault() is { } page
+        && page.Focus();
 
     internal void FocusList()
     {
