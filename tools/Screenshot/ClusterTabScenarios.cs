@@ -65,7 +65,10 @@ internal static class ClusterTabScenarios
         var podKind = tab.SidebarSections
             .First(s => s.Title == "Workloads").Kinds
             .First(k => k.Descriptor.Kind == "Pod");
-        podKind.IsSelected = true;
+
+        // No IsSelected here or anywhere below: the highlight follows SelectedKind
+        // (ClusterTabViewModel.MarkSelectedKind). Setting it by hand is how
+        // cluster-tab-row-action-scale came to draw Pods and Deployments both selected.
         tab.SelectedKind = podKind;
 
         if (populateRows)
@@ -575,7 +578,6 @@ internal static class ClusterTabScenarios
 
         tab.SelectedNamespace = @namespace;
         var eventsKind = config.Kinds.First(k => k.Descriptor.Kind == "Event");
-        eventsKind.IsSelected = true;
         tab.SelectedKind = eventsKind;
         return tab;
     }
@@ -719,7 +721,6 @@ internal static class ClusterTabScenarios
         var kind = tab.SidebarSections
             .First(s => s.Title == "Workloads").Kinds
             .First(k => k.Descriptor.Kind == "Deployment");
-        kind.IsSelected = true;
         tab.SelectedKind = kind;
 
         foreach (var deployment in FixtureData.Deployments)
@@ -1322,11 +1323,6 @@ internal static class ClusterTabScenarios
         tab.IsUnhealthyOnly = true;
         var configMaps = tab.SidebarSections.SelectMany(s => s.Kinds)
             .First(k => k.Descriptor is { Group: "", Kind: "ConfigMap" });
-        foreach (var kind in tab.SidebarSections.SelectMany(s => s.Kinds))
-        {
-            kind.IsSelected = kind == configMaps;
-        }
-
         tab.SelectedKind = configMaps;
         foreach (var configMap in DemoData.ConfigMaps.Where(c => c.Namespace == "payments"))
         {
@@ -1696,12 +1692,6 @@ internal static class ClusterTabScenarios
             SidebarGrouping.HelmReleaseDescriptor, SidebarGrouping.IconKeyFor(SidebarGrouping.HelmSection));
         helmSection.Kinds.Add(helmKind);
         tab.SidebarSections.Add(helmSection);
-
-        foreach (var kind in tab.SidebarSections.SelectMany(s => s.Kinds))
-        {
-            kind.IsSelected = ReferenceEquals(kind, helmKind);
-        }
-
         tab.SelectedKind = helmKind;
         tab.IsHelmView = true;
         tab.AreMetricsVisible = false;

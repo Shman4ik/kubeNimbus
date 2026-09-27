@@ -25,7 +25,14 @@ Directory.CreateDirectory(outDir);
 // construction and save it whenever a cluster is pinned. Point that at a scratch
 // directory so rendering fixtures can't read — or clobber — the developer's own
 // open tabs, pins and theme.
-WorkspaceStore.DirectoryOverride = Path.Combine(Path.GetTempPath(), "kubenimbus-screenshot-workspace");
+//
+// One directory per run, not one shared name under %TEMP%: two harness runs at once —
+// two worktrees, two agents, a CI matrix — used to read and write each other's
+// workspace.json and settings.json mid-render, so a sidebar section one run expanded
+// showed up collapsed or expanded in the other's PNGs at random (ENG-10). Removed again
+// when the run ends.
+var scratch = Path.Combine(Path.GetTempPath(), "kubenimbus-screenshot-workspace", Guid.NewGuid().ToString("n"));
+WorkspaceStore.DirectoryOverride = scratch;
 Directory.CreateDirectory(WorkspaceStore.DirectoryOverride);
 File.Delete(Path.Combine(WorkspaceStore.DirectoryOverride, "workspace.json"));
 
@@ -38,13 +45,15 @@ File.Delete(Path.Combine(WorkspaceStore.DirectoryOverride, "workspace.json"));
 KubeNimbus.Core.Settings.AppSettingsStore.DirectoryOverride = WorkspaceStore.DirectoryOverride;
 File.Delete(Path.Combine(WorkspaceStore.DirectoryOverride, "settings.json"));
 
-// And the kubeconfig chain. Every MainWindowViewModel reads it on construction and, with
-// no saved tabs, opens a tab on the current context — on a developer's machine that was
-// a live connect to their own cluster, landing asynchronously on top of whatever the
-// scenario had just set up (main-window-no-kubeconfig rendered "Connecting to
-// kubenimbus-sandbox…" over its empty state). CI has no kubeconfig, which is why it
-// never showed there. Scenarios that want contexts seed them (SeedContexts).
-KubeNimbus.Core.Kubeconfig.EnvironmentSearchOverride = [];
+// And the kubeconfig chain. Every scenario builds a real MainWindowViewModel, whose
+// constructor reads $KUBECONFIG and ~/.kube/config and, with no saved tabs, opens one on
+// the current context — i.e. connects to whatever cluster the developer running the
+// harness has. That made main-window-no-kubeconfig render the developer's own pods on a
+// machine with a live sandbox and the empty state everywhere else, differing between two
+// runs of the same commit by whether the connect had landed before the capture (ENG-10).
+// CI has no kubeconfig, which is why it never showed there. Scenarios that want contexts
+// seed them by hand (SeedContexts).
+Kubeconfig.EnvironmentSearchOverride = [];
 
 BuildAvaloniaApp().SetupWithoutStarting();
 
@@ -135,6 +144,11 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // box are the two things this item added to the header row, and 1024px is where
     // that row runs out first.
     ("cluster-tab-list-unhealthy-narrow", () => HostInMainWindow(ClusterTabScenarios.UnhealthyList(), width: 1024)),
+    // ENG-32: the fullest header row there is — the fleet chip and its summary, a
+    // connection warning, the "n of m" caption and the unhealthy chip — at the width it
+    // runs out first. Search, the chip and Refresh have to stay on screen.
+    ("cluster-tab-list-unhealthy-fleet-partial-narrow",
+        () => HostInMainWindow(ClusterTabScenarios.UnhealthyFleetPartial(), height: 1000, width: 1024)),
     ("cluster-tab-list-unhealthy-unavailable", () => HostInMainWindow(ClusterTabScenarios.UnhealthyUnavailable())),
     ("cluster-tab-list-unhealthy-demo", () => HostInMainWindow(ClusterTabScenarios.DemoUnhealthy())),
     // The mutating workload actions and their armed confirm strip.
@@ -258,7 +272,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-logs-maximized", () => HostInMainWindow(ClusterTabScenarios.DemoLogsMaximized())),
     ("palette-logs", () => LogsPalette(ClusterTabScenarios.DemoList(), "")),
     ("palette-logs-search", () => LogsPalette(ClusterTabScenarios.DemoList(), "report")),
-    ("palette-logs-narrow", () => LogsPalette(ClusterTabScenarios.DemoList(), "", width: 800)),
+    ("palette-logs-narrow", () => LogsPalette(ClusterTabScenarios.DemoList(), "", width: 560)),
     // Without the prefix: a plain Ctrl/Cmd+K search for a name finds the log rows too,
     // after whatever commands match — which here is none.
     ("palette-logs-unprefixed", () => LogsPalette(ClusterTabScenarios.DemoList(), "checkout", prefix: false)),
@@ -292,6 +306,9 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("applications-page-selfheal", () => HostInMainWindow(ApplicationsScenarios.Page("checkout", editYaml: true), mode: ShellMode.Applications)),
     ("applications-page-restart", () => HostInMainWindow(ApplicationsScenarios.Page("checkout", restart: true), mode: ShellMode.Applications)),
     ("ux-applications-keys", () => HostInMainWindow(ApplicationsScenarios.List(), mode: ShellMode.Applications)),
+    // VER-19 and ENG-20: keyboard contracts that need a real window (KeyboardChecks).
+    ("ux-hotkey-scheme", () => BuildMainWindowContent()),
+    ("ux-exec-keys", () => HostInMainWindow(ClusterTabScenarios.Exec())),
     ("main-window", () => BuildMainWindowContent()),
     ("main-window-no-kubeconfig", () => BuildNoKubeconfigContent()),
     ("main-window-shortcuts", () => BuildMainWindowContent(openShortcuts: true)),
@@ -326,6 +343,14 @@ foreach (var (name, build) in scenarios)
 }
 
 Console.WriteLine($"Wrote screenshots to {Path.GetFullPath(outDir)}");
+try
+{
+    Directory.Delete(scratch, recursive: true);
+}
+catch (IOException)
+{
+    // Best effort: a file still held open leaves a few KB in %TEMP%, not a failed run.
+}
 return;
 
 void Capture(string name, ThemeVariant theme, Func<Control> build)
@@ -336,8 +361,11 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     // (see SortedList) would otherwise leave it in the shared scratch workspace for
     // every later scenario that lists the same kind. Cleared here rather than in the
     // scenario, because the view reads the layout while the window is laid out — which
-    // is after the builder has returned.
-    WorkspaceStore.Save(WorkspaceStore.Load() with { GridLayouts = [] });
+    // is after the builder has returned. The sidebar's Recent kinds are persisted per
+    // cluster too, and every demo scenario is the same cluster: without the reset, a
+    // scenario that selects Deployments would put a Recent section into every demo shot
+    // rendered after it, and each PNG would depend on the order the scenarios ran in.
+    WorkspaceStore.Save(WorkspaceStore.Load() with { GridLayouts = [], RecentKinds = [] });
 
     var content = build();
     var window = content as Window ?? new Window
@@ -354,6 +382,14 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
 
     if (name == "ux-namespace-picker") UxInteractionChecks.NamespacePicker(window);
     if (name == "ux-applications-keys") ApplicationsChecks.Keys(window);
+    if (name == "ux-hotkey-scheme") KeyboardChecks.HotkeyScheme(window);
+    if (name is "cluster-tab-list-unhealthy-fleet-partial-narrow" or "cluster-tab-list-unhealthy-narrow")
+        LayoutChecks.ListHeaderFits(window);
+    if (name == "palette-logs-narrow") LayoutChecks.PaletteFollowsWindow(window);
+    if (name.StartsWith("cluster-tab-fleet-list", StringComparison.Ordinal)
+        || name == "cluster-tab-list-unhealthy-fleet-partial-narrow")
+        LayoutChecks.GridReachesLastColumn(window);
+    if (name == "ux-exec-keys") KeyboardChecks.ExecKeys(window);
     if (name.StartsWith("applications-page", StringComparison.Ordinal)) ApplicationsChecks.SettlePage(window);
     if (name == "ux-unhealthy-toggle") UxInteractionChecks.UnhealthyToggle(window);
     if (name == "ux-logs-palette") UxInteractionChecks.LogsPalette(window);
@@ -366,6 +402,10 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     if (name == "cluster-tab-argo-resource-logs-hover") PaneLogsChecks.HoverArgoRow(window, "Deployment");
     if (name == "main-window-preferences-logs") UxInteractionChecks.ScrollPreferencesTo(window, "Open logs maximized");
     if (name.StartsWith("cluster-tab-row-logs", StringComparison.Ordinal)) UxInteractionChecks.HoverRow(window, 3);
+
+    // Last, so a pane a check just opened settles too: capture when the log streams have
+    // stopped moving, not whenever the builder happened to return (ENG-10).
+    LogSettle.Run(window);
     using var frame = window.CaptureRenderedFrame();
     var themeLabel = theme == ThemeVariant.Dark ? "dark" : "light";
     var path = Path.Combine(outDir, $"{name}.{themeLabel}.png");
@@ -412,6 +452,11 @@ static Control LogsPalette(
     ClusterTabViewModel tab, string query, Action<ClusterTabViewModel>? fixture = null, int width = 1280, bool prefix = true)
 {
     var window = (Window)HostInMainWindow(tab, width: width);
+
+    // Below the shell's 960px minimum only on purpose: palette-logs-narrow asks for 560 to show
+    // the palette following the window (ENG-35), which the minimum would otherwise hide by
+    // quietly rendering at 960 — what happened to this scenario when it asked for 800.
+    window.MinWidth = Math.Min(window.MinWidth, width);
     var vm = (MainWindowViewModel)window.DataContext!;
     vm.Palette.Open((prefix ? CommandPaletteViewModel.LogsPrefix : "") + query);
     fixture?.Invoke(tab);

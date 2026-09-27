@@ -24,6 +24,17 @@
        WindowIcons.Apply, from code-behind, loads the same file by absolute avares://
        URI and skips the converter — see WindowIcons for the full story. -->
 
+  <!-- MinWidth="960" is a stated number, not a default (ENG-35). It is the narrowest
+       window in which the resource list's header row still holds all of its fixed
+       controls beside a 224px sidebar — the kind title, the 170px namespace button, the
+       230px search box, the unhealthy chip and Refresh (~560px of a ~700px content
+       column) — and in which the command bar keeps the mode switch, a cluster tab, the
+       search pill, three icons and, on Windows, the 135px caption strip. Below it
+       something always-visible has to go, which is a design decision rather than a
+       minimum to lower. The overlays are written not to depend on it: the palette follows
+       the window below its own 560px (palette-logs-narrow renders it at 560). -->
+
+
   <Window.DataTemplates>
     <DataTemplate DataType="vm:ClusterTabViewModel">
       <views:ClusterTabView />
@@ -507,9 +518,12 @@
       </Border>
     </Border>
 
-    <!-- Command palette overlay -->
+    <!-- Command palette overlay. MaxWidth with a stretch, not Width="560": the panel is
+         560px wherever the window allows it and the window's width less a 16px gutter
+         each side where it does not (ENG-35). A stretched element held back by MaxWidth is
+         centred, so nothing changes at any width the app can be today. -->
     <Border Background="#80000000" IsVisible="{Binding Palette.IsOpen}" PointerPressed="OnPaletteBackdropPressed">
-      <Border Classes="layer" Width="560" MaxHeight="440" VerticalAlignment="Top" Margin="0,90,0,0" HorizontalAlignment="Center" Padding="0">
+      <Border Classes="layer" MaxWidth="560" MaxHeight="440" VerticalAlignment="Top" Margin="16,90,16,0" HorizontalAlignment="Stretch" Padding="0">
         <Grid RowDefinitions="Auto,*">
           <TextBox Grid.Row="0" Name="PaletteQueryBox" Text="{Binding Palette.Query}"
                     PlaceholderText="Type a command…" Margin="10" FontSize="14" KeyDown="OnPaletteKeyDown" />

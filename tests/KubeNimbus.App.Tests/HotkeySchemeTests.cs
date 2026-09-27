@@ -314,7 +314,7 @@ public class HotkeySchemeTests
     }
 
     /// <summary>The caps of one cheat-sheet row, found by the action text it renders.</summary>
-    private static string Caps(ShortcutsViewModel sheet, string action)
+    internal static string Caps(ShortcutsViewModel sheet, string action)
     {
         var row = sheet.Sections
             .SelectMany(s => s.Rows)

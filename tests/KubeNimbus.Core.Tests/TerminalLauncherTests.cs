@@ -112,6 +112,27 @@ public class TerminalLauncherTests
     }
 
     /// <summary>
+    /// ENG-15: the directory is never pruned, and this is the half of the argument that
+    /// keeps that safe — what it holds is bounded by the number of distinct context names
+    /// ever opened, never by the number of launches. Re-opening a context rewrites its own
+    /// two files (the overlay, and on macOS the launcher script) in place. Pruning is the
+    /// dangerous direction: deleting an overlay a still-open terminal names in its
+    /// KUBECONFIG makes its next kubectl fall back to the real file's current-context —
+    /// a different cluster, silently.
+    /// </summary>
+    [Test]
+    public async Task RelaunchingAContextWritesTheSameFilesNotNewOnes()
+    {
+        var launches = Enumerable.Range(0, 20)
+            .Select(_ => Plan(TerminalHostPlatform.MacOs, "payments-prod"))
+            .ToList();
+
+        await Assert.That(launches.Select(p => p.OverlayPath).Distinct().Count()).IsEqualTo(1);
+        await Assert.That(launches.Select(p => p.LauncherScriptPath).Distinct().Count()).IsEqualTo(1);
+        await Assert.That(launches[0].LauncherScriptPath).IsNotNull();
+    }
+
+    /// <summary>
     /// The file name is derived, not sanitized: real context names contain <c>/</c>,
     /// <c>:</c> and <c>\</c>, and any scheme that stripped those would map two different
     /// clusters onto one overlay.

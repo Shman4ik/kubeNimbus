@@ -49,7 +49,12 @@ Seven things are load-bearing:
    the one thing it is for. Copy and Paste therefore move up one modifier to
    Ctrl+Shift+C/V, as they do in every terminal emulator, handled in a **Tunnel**
    handler in `ExecView` because the control's own bubble-phase mapping ignores Shift
-   and would send a plain `^C`. Right-click opens a Copy/Paste/Select-all menu rather
+   and would send a plain `^C`. That mapping — `^C` 0x03, `^D` 0x04, Tab 0x09, and
+   Ctrl+Shift+C *not* 0x03 — used to be held by one session's scratch probe; the screenshot
+   harness's `ux-exec-keys` check (`tools/Screenshot/KeyboardChecks.cs`) now presses the
+   keys on a real rendered pane and reads the bytes off the view model's terminal model,
+   and it goes red when the Tunnel handler stops requiring Shift (ENG-20, mutation-checked).
+   Right-click opens a Copy/Paste/Select-all menu rather
    than `RightClickAction.CopyOrPaste`, whose paste-on-empty-selection is one stray
    click away from running the clipboard in someone's production container.
 5. **The pane is one row of chrome now** (UI rule 10): status dot, status, shell box,

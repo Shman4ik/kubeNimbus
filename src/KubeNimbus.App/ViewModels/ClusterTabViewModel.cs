@@ -207,7 +207,9 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// </summary>
     partial void OnSelectedKindChanged(SidebarKindViewModel? value)
     {
-        var layout = value is { IsHelmReleases: false, IsArgoDashboard: false, Descriptor: { } descriptor }
+        MarkSelectedKind();
+
+        var layout =value is { IsHelmReleases: false, IsArgoDashboard: false, Descriptor: { } descriptor }
             ? GridLayoutStore.Load(GridLayoutStore.KeyFor(descriptor))
             : GridLayout.Empty;
 
@@ -1568,7 +1570,6 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         var catalog = Demo.DemoData.BuildCatalog();
         RecordPodDescriptor("", catalog);
         SidebarSections.Clear();
-        _recentKinds.Clear();
         foreach (var section in Demo.DemoData.BuildSidebarSections(catalog))
         {
             SidebarSections.Add(section);
@@ -1583,6 +1584,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         SidebarGrouping.LabelAmbiguousKinds(SidebarSections);
         ApplySidebarChrome();
+        RestoreRecentKinds();
 
         NamespaceOptions.Clear();
         NamespaceOptions.Add(AllNamespaces);
@@ -1668,8 +1670,6 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             && k.Descriptor.Group == selected.Descriptor.Group && k.Descriptor.Kind == selected.Descriptor.Kind);
         if (replacement is not null)
         {
-            selected.IsSelected = false;
-            replacement.IsSelected = true;
             SelectedKind = replacement;
         }
         if (!IsFleetView && !AreMetricsVisible && _metricsApiAvailable && Client is { } client
@@ -1716,10 +1716,6 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         SidebarSections.Clear();
 
-        // The Recent entries hold descriptor instances from the catalog being replaced,
-        // so a reconnect starts the history over rather than pointing at stale ones.
-        _recentKinds.Clear();
-
         foreach (var title in SidebarGrouping.SectionOrder)
         {
             if (sections[title].Kinds.Count > 0)
@@ -1732,6 +1728,10 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         SidebarGrouping.AddArgoDashboard(SidebarSections, catalog);
         await AddHelmSectionIfPresentAsync();
         ApplySidebarChrome();
+
+        // Last, so the Helm row is there to be matched. The entries are rebuilt against
+        // this catalog's descriptor instances, never the ones being replaced.
+        RestoreRecentKinds();
     }
 
     /// <summary>
@@ -1823,8 +1823,63 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// </summary>
     private const int MaxRecentKinds = 5;
 
-    /// <summary>Most-recent-first, deduplicated by (group, kind). Session-scoped — not persisted.</summary>
+    /// <summary>
+    /// Most-recent-first, deduplicated by (group, kind). Persisted per cluster in
+    /// <c>workspace.json</c> (<see cref="WorkspaceSettings.RecentKinds"/>) and restored on
+    /// connect (ENG-5): usage is open, look, close, so a Recent section that started empty
+    /// on every launch was empty exactly when it would have saved a scroll.
+    /// </summary>
     private readonly List<ResourceDescriptor> _recentKinds = [];
+
+    /// <summary>True once <see cref="RestoreRecentKinds"/> has read the saved list.</summary>
+    private bool _recentKindsRestored;
+
+    /// <summary>
+    /// Rebuilds Recent from the saved keys against the catalog just built. Keys, not
+    /// descriptors, are what is saved, so every entry is this catalog's own instance —
+    /// the thing a reconnect used to clear the history over — and a kind the cluster no
+    /// longer serves (a CRD uninstalled since) is simply not restored.
+    /// </summary>
+    private void RestoreRecentKinds()
+    {
+        _recentKindsRestored = true;
+        _recentKinds.Clear();
+        var saved = WorkspaceStore.Load().RecentKinds?.GetValueOrDefault(NamespaceHistoryKey) ?? [];
+        var catalog = SidebarSections
+            .Where(s => s.Title != SidebarGrouping.RecentSection)
+            .SelectMany(s => s.Kinds)
+            .Where(k => !k.IsRecentEntry)
+            .ToList();
+
+        foreach (var key in saved)
+        {
+            if (catalog.FirstOrDefault(k => GridLayoutStore.KeyFor(k.Descriptor) == key)?.Descriptor is { } descriptor
+                && !_recentKinds.Contains(descriptor))
+            {
+                _recentKinds.Add(descriptor);
+            }
+
+            if (_recentKinds.Count == MaxRecentKinds)
+            {
+                break;
+            }
+        }
+
+        if (_recentKinds.Count > 0)
+        {
+            RebuildRecentSection();
+        }
+    }
+
+    private void SaveRecentKinds()
+    {
+        var settings = WorkspaceStore.Load();
+        var recent = new Dictionary<string, List<string>>(settings.RecentKinds ?? [], StringComparer.Ordinal)
+        {
+            [NamespaceHistoryKey] = [.. _recentKinds.Select(GridLayoutStore.KeyFor)],
+        };
+        WorkspaceStore.Save(settings with { RecentKinds = recent });
+    }
 
     /// <summary>
     /// Pushes a kind to the top of the Recent section. Selecting a recent entry itself
@@ -1848,6 +1903,14 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
 
         RebuildRecentSection();
+
+        // Not before the saved list has been read: on a real cluster the first Pods list
+        // starts before discovery has finished (StartInitialPods), and saving then would
+        // overwrite the whole history with that one entry.
+        if (_recentKindsRestored)
+        {
+            SaveRecentKinds();
+        }
     }
 
     /// <summary>
@@ -1885,7 +1948,41 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         // the first time round, inserts a section that has never seen the tab's
         // display state.
         ApplySidebarChrome();
+
+        // …and the highlight: the new Recent copy of the kind on screen has to light up
+        // with its row.
+        MarkSelectedKind();
     }
+
+    /// <summary>
+    /// Draws exactly one kind as selected (ENG-26): every sidebar row whose descriptor is
+    /// the selected kind's, which is its own row plus its copy in Recent, and no other.
+    /// Derived from <see cref="SelectedKind"/> rather than set by whoever selects, because
+    /// several things select — the sidebar, the Recent section, a restore, discovery
+    /// replacing the early Pods entry, the screenshot harness — and a highlight set by
+    /// only some of them is how two rows came to be lit at once while the Recent copy of
+    /// the kind being shown was not. By descriptor reference: a Recent entry holds the
+    /// catalog's own instance, and two same-named kinds from different groups are
+    /// different instances.
+    /// </summary>
+    private void MarkSelectedKind()
+    {
+        var selected = SelectedKind?.Descriptor;
+        foreach (var section in SidebarSections)
+        {
+            foreach (var kind in section.Kinds)
+            {
+                kind.IsSelected = selected is not null && ReferenceEquals(kind.Descriptor, selected);
+            }
+        }
+    }
+
+    /// <summary>The sidebar's own row for a Recent entry's kind, if it still has one.</summary>
+    private SidebarKindViewModel? CanonicalKind(SidebarKindViewModel recent) =>
+        SidebarSections
+            .Where(s => s.Title != SidebarGrouping.RecentSection)
+            .SelectMany(s => s.Kinds)
+            .FirstOrDefault(k => !k.IsRecentEntry && ReferenceEquals(k.Descriptor, recent.Descriptor));
 
     partial void OnSidebarFilterChanged(string value) => ApplySidebarFilter();
 
@@ -1965,26 +2062,34 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [RelayCommand]
     private void SelectKind(SidebarKindViewModel kind)
     {
+        // A Recent entry is a shortcut to a row the sidebar already has, so it selects that
+        // row. SelectedKind is then always the canonical instance, which is what makes a
+        // click on the Recent copy of the kind already showing the no-op that a click on
+        // the row itself is, rather than a reload of the same list.
+        var fromRecent = kind.IsRecentEntry;
+        if (fromRecent && CanonicalKind(kind) is { } canonical)
+        {
+            kind = canonical;
+        }
+
         if (SelectedKind == kind)
         {
             return;
         }
 
-        RecordRecentKind(kind);
+        // Not from a Recent click: reordering the section under the pointer that just
+        // clicked it makes the section unusable.
+        if (!fromRecent)
+        {
+            RecordRecentKind(kind);
+        }
 
         // A name filter is a question about the list it was typed into: carrying
         // "nginx" from Pods over to ConfigMaps lands on an empty list that looks
         // like a broken watch.
         RowFilter = "";
 
-        foreach (var section in SidebarSections)
-        {
-            foreach (var k in section.Kinds)
-            {
-                k.IsSelected = k == kind;
-            }
-        }
-
+        // The selected-row highlight follows from this, in OnSelectedKindChanged.
         SelectedKind = kind;
 
         if (kind.IsHelmReleases)

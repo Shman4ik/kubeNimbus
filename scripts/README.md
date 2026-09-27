@@ -1,7 +1,12 @@
 # Scripts
 
 `sandbox-*` bring up a throwaway Kubernetes cluster to develop and test
-against (below). The rest is the logo/icon pipeline, documented in full in
+against (below). `test.ps1` / `test.sh` build the solution and run both test
+suites by launching their executables directly — the invocation that cannot
+silently run nothing, which `dotnet test` has done here twice (the header of each
+script says how) — and fail a run in which a suite ran zero tests. Runner
+arguments pass through: `./scripts/test.ps1 -RunnerArgs '--treenode-filter','/*/*/DemoRowsTests/*'`
+or `scripts/test.sh -- --treenode-filter '/*/*/DemoRowsTests/*'`. The rest is the logo/icon pipeline, documented in full in
 [`design/LOGO-ASSETS.md`](../design/LOGO-ASSETS.md), plus the release packaging:
 
 | Script | Rebuilds |
