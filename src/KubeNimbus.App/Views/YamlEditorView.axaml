@@ -19,6 +19,21 @@
            tab above them. Column 0 is left empty deliberately, so the tools stay
            right-aligned exactly where they were. -->
 
+      <!-- FEAT-30: a Secret that carries a certificate says whose it is and when it
+           expires, in the header row's empty column — no row of its own in a ~300px dock
+           (UI rule 10), and no Reveal: a certificate is public, and the key beside it is
+           never read. The chip opens the card with the whole chain. A two-way IsChecked and
+           no command (UI rule 8b). -->
+      <ToggleButton Grid.Column="0" Classes="chip" Padding="7,3" FontSize="11" HorizontalAlignment="Left"
+                    Margin="0,0,8,0" IsVisible="{Binding HasCertificates}" IsChecked="{Binding IsCertificateDetailOpen}"
+                    ToolTip.Tip="The certificate this Secret carries — subject, issuer, names and validity">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <Ellipse Classes="statusDot" Width="7" Height="7" VerticalAlignment="Center"
+                   Fill="{Binding CertificateHealth, Converter={x:Static kconv:HealthToBrushConverter.Instance}}" />
+          <TextBlock Text="{Binding CertificateSummary}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+        </StackPanel>
+      </ToggleButton>
+
       <!-- Every in-flight state says so: an editor that silently swaps its text under
            you is indistinguishable from one that lost your edit (CLAUDE.md UI rule 9). -->
       <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="0,0,8,0" VerticalAlignment="Center">
@@ -242,10 +257,47 @@
       </ContentControl.ContentTemplate>
     </ContentControl>
 
+    <StackPanel Grid.Row="3">
+    <!-- The certificate card (FEAT-30): every certificate the Secret carries, leaf first,
+         each with its expiry worded and coloured — the one thing people open a TLS Secret
+         to find out. Height-capped like the reveal panel below it, for the same dock. -->
+    <Border Classes="card" Padding="10" Margin="0,8,0,0" MaxHeight="160"
+            IsVisible="{Binding IsCertificateDetailOpen}">
+      <ScrollViewer>
+        <ItemsControl ItemsSource="{Binding Certificates}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:CertificateViewModel">
+              <Grid ColumnDefinitions="150,*" Margin="0,3" ToolTip.Tip="{Binding Tooltip}">
+                <StackPanel Grid.Column="0" Spacing="1">
+                  <TextBlock Text="{Binding Position}" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5"
+                             TextTrimming="CharacterEllipsis" />
+                  <TextBlock Text="{Binding Role}" FontSize="10.5" Opacity="0.55" IsVisible="{Binding IsAuthority}" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="1">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <SelectableTextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding ExpiryText}" FontSize="11.5" Classes="statusText" VerticalAlignment="Center"
+                               Classes.warn="{Binding Health, Converter={x:Static kconv:HealthEqualsConverter.Instance}, ConverterParameter=warn}"
+                               Classes.error="{Binding Health, Converter={x:Static kconv:HealthEqualsConverter.Instance}, ConverterParameter=error}" />
+                  </StackPanel>
+                  <SelectableTextBlock Text="{Binding NamesText}" FontSize="11" Opacity="0.8" TextWrapping="Wrap" />
+                  <TextBlock FontSize="10.5" Opacity="0.55" TextWrapping="Wrap">
+                    <Run Text="{Binding IssuerText}" />
+                    <Run Text=" · " />
+                    <Run Text="{Binding ValidityText}" />
+                  </TextBlock>
+                </StackPanel>
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </Border>
+
     <!-- Decoded values. Height-capped and value-capped on purpose: this sits in a ~300px
          bottom dock, and a single 1 MiB Secret value would otherwise lay out in full to
          show one screenful of it. -->
-    <Border Grid.Row="3" Classes="card" Padding="10" Margin="0,8,0,0" MaxHeight="160"
+    <Border Classes="card" Padding="10" Margin="0,8,0,0" MaxHeight="160"
             IsVisible="{Binding IsSecretValuesRevealed}">
       <DockPanel>
         <TextBlock DockPanel.Dock="Top" Text="{Binding RevealCaption}" FontSize="11" Opacity="0.6" TextWrapping="Wrap" />
@@ -281,6 +333,7 @@
         </ScrollViewer>
       </DockPanel>
     </Border>
+    </StackPanel>
 
     <!-- Delete step 2. Its own strip rather than a pair of buttons swapped into the
          header: at dock height the header is a crowded row, and "Confirm delete" has

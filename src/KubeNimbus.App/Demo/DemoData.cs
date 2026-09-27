@@ -150,6 +150,15 @@ public static class DemoData
     public static DynamicResource Secret { get; } = new(SecretDoc.RootElement[0]);
 
     /// <summary>
+    /// Every demo Secret: <see cref="Secret"/>, and a <c>kubernetes.io/tls</c> Secret
+    /// carrying a real certificate chain generated for the demo — the one the
+    /// <c>checkout-tls</c> Certificate names — so the YAML editor's certificate card
+    /// (FEAT-30) has a certificate to read. Its <c>tls.key</c> is a placeholder string.
+    /// </summary>
+    public static IReadOnlyList<DynamicResource> Secrets { get; } =
+        [.. SecretDoc.RootElement.EnumerateArray().Select(e => new DynamicResource(e))];
+
+    /// <summary>
     /// The ConfigMaps the demo pods reference. Pod detail resolves
     /// <c>configMapKeyRef</c>s on open, so without these the Environment tab's most
     /// visible behaviour would land on a per-row error in the one place a reviewer is
@@ -241,7 +250,7 @@ public static class DemoData
     {
         var candidates = kind switch
         {
-            "Secret" => (IReadOnlyList<DynamicResource>)[Secret],
+            "Secret" => Secrets,
             "ConfigMap" => ConfigMaps,
             "Application" => ArgoApplicationObjects,
             "Node" => Nodes,
@@ -495,7 +504,7 @@ public static class DemoData
             { Group: "", Kind: "Pod" } => Pods,
             { Group: "apps", Kind: "Deployment" } => Deployments,
             { Group: "", Kind: "Event" } => Events,
-            { Group: "", Kind: "Secret" } => [Secret],
+            { Group: "", Kind: "Secret" } => Secrets,
             { Group: "", Kind: "ConfigMap" } => ConfigMaps,
             { Group: "", Kind: "Node" } => Nodes,
             { Group: "cert-manager.io", Kind: "Certificate" } => Certificates,
