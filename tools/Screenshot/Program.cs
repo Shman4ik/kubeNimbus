@@ -38,6 +38,14 @@ File.Delete(Path.Combine(WorkspaceStore.DirectoryOverride, "workspace.json"));
 KubeNimbus.Core.Settings.AppSettingsStore.DirectoryOverride = WorkspaceStore.DirectoryOverride;
 File.Delete(Path.Combine(WorkspaceStore.DirectoryOverride, "settings.json"));
 
+// And the kubeconfig chain. Every MainWindowViewModel reads it on construction and, with
+// no saved tabs, opens a tab on the current context — on a developer's machine that was
+// a live connect to their own cluster, landing asynchronously on top of whatever the
+// scenario had just set up (main-window-no-kubeconfig rendered "Connecting to
+// kubenimbus-sandbox…" over its empty state). CI has no kubeconfig, which is why it
+// never showed there. Scenarios that want contexts seed them (SeedContexts).
+KubeNimbus.Core.Kubeconfig.EnvironmentSearchOverride = [];
+
 BuildAvaloniaApp().SetupWithoutStarting();
 
 
@@ -137,6 +145,14 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-empty-namespace", () => HostInMainWindow(ClusterTabScenarios.EmptyNamespace())),
     ("cluster-tab-loading", () => HostInMainWindow(ClusterTabScenarios.Loading())),
     ("cluster-tab-disconnected", () => HostInMainWindow(ClusterTabScenarios.Disconnected())),
+    // FEAT-51 / FEAT-53: a connect that failed, stated in the content area in both modes
+    // (a plugin that is not installed, and credentials that expired), and a running
+    // watch whose credential was refused, with Reconnect beside the warning.
+    ("cluster-tab-connection-failed-plugin", () => HostInMainWindow(ClusterTabScenarios.ConnectionFailed("plugin"), height: 900)),
+    ("cluster-tab-connection-failed-expired", () => HostInMainWindow(ClusterTabScenarios.ConnectionFailed("expired"))),
+    ("applications-connection-failed",
+        () => HostInMainWindow(ClusterTabScenarios.ConnectionFailed("plugin"), height: 900, mode: ShellMode.Applications)),
+    ("cluster-tab-credentials-expired", () => HostInMainWindow(ClusterTabScenarios.CredentialsExpired())),
     // The demo cluster, built by running the real ConnectCommand — see ClusterTabScenarios.
     ("cluster-tab-demo-list", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
     ("cluster-tab-demo-pod-detail", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetail(), height: 1000)),
@@ -418,11 +434,11 @@ static Control BuildNoKubeconfigContent()
     vm.Tabs.Clear();
     vm.AvailableContexts.Clear();
     vm.HasContexts = false;
-    // What LoadContextsAsync sets for this state. It is also what the empty-state card
-    // renders as its heading — the card and the status bar bind the same property — so
-    // this one string is deliberately doing both jobs.
+    // What LoadContextsAsync sets for this state: the card's heading and the status bar
+    // are two properties now (ENG-29), and this shot is where they are seen together.
     vm.KubeconfigSearchPathCount = 1;
-    vm.Status = "No kubeconfig contexts found.";
+    vm.KubeconfigDiagnosis = "No kubeconfig contexts found.";
+    vm.Status = "No clusters: the kubeconfig location searched does not exist.";
     vm.KubeconfigSearchPaths = string.Join(
         System.Environment.NewLine,
         "missing  C:\\Users\\reviewer\\.kube\\config   (default location)");

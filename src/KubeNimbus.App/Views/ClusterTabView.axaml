@@ -196,7 +196,10 @@
           </DockPanel>
         </Border>
 
-      <Grid Name="ContentRows">
+      <!-- A Panel so the connection-failure view below can take ContentRows' place; the
+           grid itself is unchanged, and its row indices are what ApplyDockState uses. -->
+      <Panel>
+      <Grid Name="ContentRows" IsVisible="{Binding !HasConnectionFailure}">
         <Grid.RowDefinitions>
           <RowDefinition Height="Auto" />
           <RowDefinition Height="*" MinHeight="90" />
@@ -259,6 +262,13 @@
             <DockPanel>
               <PathIcon DockPanel.Dock="Left" Data="{StaticResource AlertCircleIconGeometry}" Width="12" Height="12"
                         Margin="0,0,6,0" />
+              <!-- Only for a lost or refused watch, the one warning a reconnect can fix:
+                   after `aws sso login` in a terminal, this is the way back without
+                   closing the tab. -->
+              <Button DockPanel.Dock="Right" Classes="chip" Padding="6,1" Margin="8,0,0,0" FontSize="11.5"
+                      Content="Reconnect" Command="{Binding ReconnectCommand}"
+                      IsVisible="{Binding ConnectionWarningOffersReconnect}"
+                      ToolTip.Tip="Read the kubeconfig again, run its credential plugin again and restart the list" />
               <TextBlock Text="{Binding ConnectionWarning}" FontSize="12" TextTrimming="CharacterEllipsis" />
             </DockPanel>
           </Border>
@@ -1162,6 +1172,17 @@
           </Grid>
         </Border>
       </Grid>
+
+        <!-- A failed connect, in place of the list (UI rule 9), which is hidden while it
+             shows. Inline template for the same reason as the row action strip above. -->
+        <ContentControl Content="{Binding ConnectionFailure}" IsVisible="{Binding HasConnectionFailure}">
+          <ContentControl.ContentTemplate>
+            <DataTemplate x:DataType="vm:ConnectionFailureViewModel">
+              <views:ConnectionFailureView />
+            </DataTemplate>
+          </ContentControl.ContentTemplate>
+        </ContentControl>
+      </Panel>
       </DockPanel>
     </Border>
   </Grid>

@@ -28,4 +28,12 @@ public sealed record ResourceEvent<T>(ResourceEventType Type, T? Resource) where
 }
 
 /// <summary>Raised inside a watch stream when the connection drops and a reconnect is scheduled.</summary>
-public sealed class WatchConnectionException(string message, Exception? inner = null) : Exception(message, inner);
+/// <param name="credentialsRejected">
+/// The API server answered 401: the credential has expired or been revoked, and the
+/// kubeconfig was re-read before the retry. The UI offers a reconnect for this one.
+/// </param>
+public sealed class WatchConnectionException(string message, Exception? inner = null, bool credentialsRejected = false)
+    : Exception(message, inner)
+{
+    public bool CredentialsRejected => credentialsRejected;
+}

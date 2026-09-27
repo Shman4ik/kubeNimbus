@@ -170,13 +170,17 @@ sha256sum -c SHA256SUMS.txt --ignore-missing     # shasum -a 256 -c on macOS
 Then point it at a cluster — kubeNimbus reads your `$KUBECONFIG` chain and
 `~/.kube/config` and lists what it finds. If neither turns anything up, the
 first screen has an **Open kubeconfig file…** button: pick the file and it's
-added. Only the *path* is remembered — the file is re-read through the normal
-kubeconfig chain every time, so nothing is ever copied into app storage.
+added — or **Add folder…**, and every kubeconfig in that folder is read,
+including ones added to it later. Only the *path* is remembered — the file is
+re-read through the normal kubeconfig chain every time, so nothing is ever
+copied into app storage.
 
 > **Note on `$KUBECONFIG`:** an app launched from Explorer, Finder or a
 > shortcut doesn't inherit environment variables set in your shell. That's
 > what the file picker is for; kubeNimbus also tells you exactly which paths
-> it searched.
+> it searched. The same goes for `$PATH`: a credential plugin named bare in the
+> kubeconfig (`command: aws`) is also looked for where a login shell would find
+> it — `/usr/local/bin`, `/opt/homebrew/bin`, `~/.local/bin` and friends.
 
 ### No cluster yet? Try the demo
 
@@ -198,7 +202,10 @@ sample objects.
 
 **Connect** — every `$KUBECONFIG` entry plus `~/.kube/config`, with
 exec-plugin auth (EKS, GKE, AKS) resolved through the kubeconfig at connect
-time. Multi-cluster tabs, drag-reorderable, restored with your workspace.
+time, and the cluster's `proxy-url` (HTTP or SOCKS5, for a bastion) honoured.
+A connect that fails says which step failed, why, and with what, with Retry;
+an expired session is picked up again without closing the tab. Multi-cluster
+tabs, drag-reorderable, restored with your workspace.
 **Credentials are never persisted** — see [SECURITY.md](SECURITY.md).
 
 **Triage** — a cluster opens on **Applications**: every Argo CD Application

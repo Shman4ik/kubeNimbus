@@ -612,8 +612,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
             // One unreadable file costs that file, not the chain: the rest still load,
             // and the status line names the file and the parser's own sentence.
             var failures = new List<KubeconfigReadFailure>();
+            var picked = _pickedKubeconfigPaths.ToArray();
+
+            // Taken before the read, so a file rewritten while this load runs still reads
+            // as changed on the next focus rather than being missed. Inline: it is a
+            // handful of stat calls, the same cost as the search-path refresh below.
+            var fingerprint = Kubeconfig.ChainFingerprint(picked);
             var contexts = await Kubeconfig.LoadContextsAsync(
-                extraPaths: _pickedKubeconfigPaths, failures: failures);
+                extraPaths: picked, failures: failures);
             AvailableContexts.Clear();
             foreach (var ctx in contexts)
             {
@@ -621,27 +627,37 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
 
             HasContexts = AvailableContexts.Count > 0;
-            RefreshSearchPaths();
-            // NOTE: `Status` is not only the status bar's text — the no-kubeconfig
-            // empty-state card binds its *heading* to this same property, so the
-            // apparent duplication between the card and the status bar is one string
-            // rendered twice, not two strings that happen to agree. Shortening it here
-            // therefore replaces the card's own diagnosis, which is the opposite of an
-            // improvement. Splitting the two needs a second property and a decision
-            // about the parse-failure case, which the card also shows; that is filed
-            // rather than done here.
+            var existing = RefreshSearchPaths();
+            _lastChainFingerprint = fingerprint;
+
+            // The no-kubeconfig card and the status bar are both on screen in that state,
+            // and they used to render the one `Status` property — the same sentence twice.
+            // So the card has its own property (the diagnosis, which is where the parser's
+            // message belongs) and the status bar says something shorter and different.
+            // The obvious fix, shortening `Status`, silently replaced the card's heading
+            // the first time it was tried (ENG-29); `KubeconfigDiagnosisTests` pins both.
             var unreadable = failures.Count switch
             {
                 0 => "",
                 1 => $"Could not read {failures[0].Path}: {failures[0].Message}",
                 _ => $"Could not read {failures.Count} kubeconfig files — first, {failures[0].Path}: {failures[0].Message}",
             };
-            Status = (HasContexts, failures.Count) switch
+            KubeconfigDiagnosis = (HasContexts, failures.Count) switch
             {
-                (true, 0) => $"{AvailableContexts.Count} context(s) available.",
-                (true, _) => $"{AvailableContexts.Count} context(s) available. {unreadable}",
+                (true, _) => "",
                 (false, 0) => "No kubeconfig contexts found.",
                 (false, _) => $"Failed to read kubeconfig. {unreadable}",
+            };
+            Status = (HasContexts, failures.Count, existing) switch
+            {
+                (true, 0, _) => $"{AvailableContexts.Count} context(s) available.",
+                (true, _, _) => $"{AvailableContexts.Count} context(s) available. {unreadable}",
+                (false, 0, 0) => KubeconfigSearchPathCount == 1
+                    ? "No clusters: the kubeconfig location searched does not exist."
+                    : $"No clusters: none of the {KubeconfigSearchPathCount} kubeconfig locations searched exists.",
+                (false, 0, _) => $"No clusters: {existing} kubeconfig file(s) found, none with a context.",
+                (false, 1, _) => "No clusters: the kubeconfig could not be read.",
+                (false, _, _) => $"No clusters: {failures.Count} kubeconfig files could not be read.",
             };
             AddNewTabCommand.NotifyCanExecuteChanged();
             return HasContexts || failures.Count == 0;
@@ -652,8 +668,66 @@ public sealed partial class MainWindowViewModel : ObservableObject
             // when "here is what was read" matters, and leaving the previous list on
             // screen would name the wrong file (UI rule 9).
             RefreshSearchPaths();
-            Status = $"Failed to read kubeconfig: {ex.Message}";
+            KubeconfigDiagnosis = $"Failed to read kubeconfig: {ex.Message}";
+            Status = "No clusters: the kubeconfig could not be read.";
             return false;
+        }
+    }
+
+    /// <summary>
+    /// The no-kubeconfig card's heading: what was wrong with the search, including the
+    /// parser's own message for a file that would not read. Empty while contexts exist —
+    /// the card is hidden then. Not <see cref="Status"/>, which the status bar under the
+    /// card shows at the same time; see <c>LoadContextsAsync</c>.
+    /// </summary>
+    [ObservableProperty]
+    private string _kubeconfigDiagnosis = "";
+
+    /// <summary>What <see cref="Kubeconfig.ChainFingerprint"/> said at the last load, for <see cref="RescanIfChangedAsync"/>.</summary>
+    private string? _lastChainFingerprint;
+
+    private bool _rescanning;
+
+    /// <summary>
+    /// Reloads the context list if any kubeconfig file the search reads — including every
+    /// file in a picked folder — was added, removed or rewritten since the last load. The
+    /// window calls this when it regains focus, which is the moment someone comes back from
+    /// <c>aws eks update-kubeconfig</c> in a terminal or from dropping a file into a synced
+    /// folder. Metadata only until something has changed, so an ordinary Alt+Tab costs a
+    /// handful of <c>stat</c> calls.
+    /// </summary>
+    /// <remarks>
+    /// Rescan-on-focus rather than a <c>FileSystemWatcher</c>: a watcher on <c>~/.kube</c>
+    /// fires on every write every tool makes there (kubectl's discovery cache, kubectx's
+    /// state file, lock files), and each of those would re-parse the whole chain while the
+    /// app is in the background and nobody is looking. Open tabs are never touched — a
+    /// context that disappears from the files keeps its live tab, and simply is not
+    /// restorable next launch.
+    /// </remarks>
+    public async Task RescanIfChangedAsync()
+    {
+        if (_rescanning || _lastChainFingerprint is null)
+        {
+            return;
+        }
+
+        _rescanning = true;
+        try
+        {
+            var picked = _pickedKubeconfigPaths.ToArray();
+            var current = await Task.Run(() => Kubeconfig.ChainFingerprint(picked));
+            if (current != _lastChainFingerprint)
+            {
+                await LoadContextsAsync();
+                if (Switcher.IsOpen)
+                {
+                    Switcher.Refresh();
+                }
+            }
+        }
+        finally
+        {
+            _rescanning = false;
         }
     }
 
@@ -663,20 +737,21 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// found — and a picked file that has since been moved shows as <c>missing</c>
     /// instead of vanishing without explanation.
     /// </summary>
-    private void RefreshSearchPaths()
+    private int RefreshSearchPaths()
     {
         var candidates = Kubeconfig.CandidatePaths(_pickedKubeconfigPaths).ToList();
-        KubeconfigSearchPathCount = candidates.Count;
+        KubeconfigSearchPathCount = candidates.Count(c => !c.IsFolder);
         KubeconfigSearchPaths = string.Join(
             Environment.NewLine,
             candidates.Select(c =>
-                $"{(c.Exists ? "found  " : "missing")}  {c.Path}   ({c.Source})"));
+                $"{(c.IsFolder ? "folder " : c.Exists ? "found  " : "missing")}  {c.Path}   ({c.Source})"));
+        return candidates.Count(c => c.Exists && !c.IsFolder);
     }
 
     /// <summary>
-    /// How many locations the last load looked in. Nothing renders it yet — it is what a
-    /// split between the empty-state card's heading and the status bar's line would use;
-    /// see the note in <c>LoadContextsAsync</c> and the backlog row it points at.
+    /// How many file locations the last load looked in — the status bar's count in the
+    /// no-kubeconfig state, where the card above it lists them. A picked folder is not
+    /// one; the files found in it are.
     /// </summary>
     [ObservableProperty]
     private int _kubeconfigSearchPathCount;
@@ -740,7 +815,19 @@ public sealed partial class MainWindowViewModel : ObservableObject
             _pickedKubeconfigPaths.Clear();
             _pickedKubeconfigPaths.AddRange(previous);
             await LoadContextsAsync();
-            Status = $"No clusters in {Path.GetFileName(path)} — it has no contexts, or it isn't a kubeconfig file.";
+            var refused = $"No clusters in {Path.GetFileName(path)} — it has no contexts, or it isn't a kubeconfig file.";
+            if (HasContexts)
+            {
+                Status = refused;
+            }
+            else
+            {
+                // The card is on screen: the reason goes in its heading, and the status
+                // bar keeps its own shorter line (ENG-29).
+                KubeconfigDiagnosis = refused;
+                Status = "The picked file was not added.";
+            }
+
             return;
         }
 
@@ -751,6 +838,66 @@ public sealed partial class MainWindowViewModel : ObservableObject
         if (Tabs.Count == 0)
         {
             await AddTabAsync(AvailableContexts[0]);
+        }
+    }
+
+    /// <summary>
+    /// "Add kubeconfig folder…" — a folder instead of a file, searched on every rescan,
+    /// so a kubeconfig dropped into it later (a CI job's output, a teammate's handoff, a
+    /// tool that writes one file per cluster) turns up without being picked itself. The
+    /// window's rescan-on-focus is what makes "later" mean "when you next look".
+    /// </summary>
+    /// <remarks>
+    /// Kept even when it holds no kubeconfig yet, unlike a picked file that yields no
+    /// contexts: an empty folder is the ordinary starting state of the thing this is for,
+    /// and it cannot poison a start the way a mis-picked file could — it simply
+    /// contributes nothing until something is in it. Only the path is stored (rule 4).
+    /// </remarks>
+    [RelayCommand]
+    private async Task AddKubeconfigFolderAsync()
+    {
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop
+            || desktop.MainWindow?.StorageProvider is not { } storage)
+        {
+            return;
+        }
+
+        var folders = await storage.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = "Add kubeconfig folder",
+            AllowMultiple = false,
+        });
+
+        if (folders.Count == 0 || folders[0].TryGetLocalPath() is not { Length: > 0 } path)
+        {
+            return;
+        }
+
+        await AddKubeconfigFolderPathAsync(path);
+    }
+
+    /// <summary>The folder half of <see cref="AddKubeconfigFolderCommand"/>, after the picker.</summary>
+    internal async Task AddKubeconfigFolderPathAsync(string path)
+    {
+        _pickedKubeconfigPaths.RemoveAll(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
+        _pickedKubeconfigPaths.Insert(0, path);
+        SaveWorkspace();
+
+        await LoadContextsAsync();
+        if (Switcher.IsOpen)
+        {
+            Switcher.Refresh();
+        }
+
+        var found = Kubeconfig.FolderKubeconfigs(path).Count;
+        if (found == 0)
+        {
+            Status = $"No kubeconfig in {Path.GetFileName(path.TrimEnd('/', '\\'))} yet — files added there are picked up when kubeNimbus is next focused.";
+        }
+
+        if (Tabs.Count == 0 && AvailableContexts.Count > 0)
+        {
+            await AddTabAsync(AvailableContexts.FirstOrDefault(c => c.IsCurrentContext) ?? AvailableContexts[0]);
         }
     }
 
@@ -1077,6 +1224,25 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 $"KUBECONFIG and the current context, pointed at {terminalTab.Header}",
                 () => terminalTab.OpenInTerminalCommand.Execute(null));
         }
+
+        // The answer to an expired session, by name: re-read the kubeconfig, re-run the
+        // credential plugin, restart the list. Only where it can run (not the demo tab,
+        // not mid-connect) — a palette row that refuses is worse than no row.
+        if (SelectedTab is { IsDemo: false } reconnectTab && reconnectTab.ReconnectCommand.CanExecute(null))
+        {
+            yield return Catalog(
+                CommandId.ReconnectCluster,
+                $"Re-read the kubeconfig and run its credential plugin again for {reconnectTab.Header}",
+                () => reconnectTab.ReconnectCommand.Execute(null));
+        }
+
+        // The ☰ menu's kubeconfig rows, so the palette carries the same commands (UI rule 15).
+        yield return Catalog(CommandId.OpenKubeconfigFile, "Add a kubeconfig file's clusters — only its path is kept",
+            () => OpenKubeconfigFileCommand.Execute(null));
+        yield return Catalog(CommandId.AddKubeconfigFolder, "Every kubeconfig in a folder, including ones added later",
+            () => AddKubeconfigFolderCommand.Execute(null));
+        yield return Catalog(CommandId.RescanKubeconfig, "Read $KUBECONFIG, ~/.kube/config and picked files and folders again",
+            () => ReloadContextsCommand.Execute(null));
 
         foreach (var tab in Tabs)
         {

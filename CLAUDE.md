@@ -320,7 +320,11 @@ Three rules about it:
    because `$KUBECONFIG` is not inherited by a GUI launched from Explorer/VS,
    and "empty dropdown, dead + button" is the most likely first-run
    experience there. Any command that cannot run must be disabled
-   (`AddNewTabCommand`'s `CanExecute`), never silently no-op.
+   (`AddNewTabCommand`'s `CanExecute`), never silently no-op. The same goes for a
+   **failed connect**: it used to leave the content area blank with the reason in a
+   status bar that does not wrap, and is now `ClusterTabViewModel.ConnectionFailure`,
+   rendered in both modes by one `ConnectionFailureView` — see
+   [connecting](docs/engineering/connecting.md).
 10. **An inspector panel gets two rows of chrome above its content, and the tab
    strip is one of them.** The dock is ~300px by default and every stacked row
    comes straight out of the thing you opened the panel to read. Pod detail
@@ -600,6 +604,7 @@ Three rules about it:
 
 Each feature's design rules, and the incidents behind them, live in a page of their own under [`docs/engineering/`](docs/engineering/), so a session loads only the ones it touches. **Read the page for any feature you change before changing it**, and keep it current in the same PR — the same discipline as this file.
 
+- [Connecting: credential plugins, proxies, failures and reconnect](docs/engineering/connecting.md) — BuildClientSetupAsync as the one entry→client path, bare plugin commands found like a login shell would, proxy-url on both transports, the failure view (step, cause, facts, no credential ever a fact), RefreshCredentialsAsync's in-place swap and 401-as-expiry, kubeconfig folders with rescan-on-focus, AppDataDirectory.
 - [The Applications mode](docs/engineering/applications-mode.md) — The first screen: apps (Argo or bare workloads) with health and a reason from Core's deterministic rules, per-namespace fallback under narrow RBAC, the application page (findings with quoted evidence, pods, linked resources, timeline, what changed, embedded logs), the kubelet's one-run-per-container log rule, DemoData.Now.
 - [Multi-pod logs (one workload, one stream)](docs/engineering/multi-pod-logs.md) — WorkloadLogsTabViewModel: selector-resolved pods, per-pod tail budget, 50-stream cap, two-stage timestamp merge; and what both log panes say when a follow ends (LogStreamEnd reads the pod).
 - [One click to logs from the row, and logs opened full-size](docs/engineering/row-logs-and-maximized.md) — The row's logs icon (hover/selected, IsVisible style, Shift+click), Shift+L, the "Open logs maximized" preference read by OpenLogsForAsync, Esc restore; L3's logs from every list that names a pod (OpenNamedLogs, RowLogsGesture, stated "gone").
@@ -763,13 +768,17 @@ Five rules:
    who turns it back on after a near-miss expects the *next* delete to ask), while the
    log cap is read per tab (re-trimming a live buffer would discard lines someone was
    reading).
-4. **Nothing here may become a credential** (rule 4). `KubeconfigPaths` is the closest
+4. **Nothing here may become a credential** (rule 4). `KubeconfigPaths` (files *or
+   folders* — a folder contributes every kubeconfig in it on each search) is the closest
    it comes and is paths only, re-resolved through the chain at connect time. The
    preferences page says so in the panel, which is where someone would worry about it.
 5. **`AppSettingsStore.DirectoryOverride`** exists for the screenshot harness, same as
    `WorkspaceStore.DirectoryOverride` and for a stronger reason: the preferences a
    scenario touches are exactly the ones the developer running it has chosen for
-   themselves.
+   themselves. Without an override, both files — and the discovery cache and the terminal
+   overlays — live under `AppDataDirectory`, which never resolves to a relative path:
+   `GetFolderPath` returns `""` for a folder that does not exist yet, and on a fresh Linux
+   `HOME` that used to put the discovery cache in the current directory (ENG-39).
 
 The page itself (`PreferencesWindow` + `PreferencesViewModel`) is deliberately the same
 shape as pgNimbus's — section header, one card per setting, label and explanation left,
@@ -1095,6 +1104,18 @@ with `HttpCompletionOption.ResponseHeadersRead`:
   paginated initial list (Reset + Added per item) → resumable watch →
   relist on `ERROR` frame / 410 Gone → exponential backoff with
   `connectionLost` callback on transient failures.
+- **A 401 is not a transient failure.** It means the credential expired or was revoked,
+  and retrying with it fails the same way for ever — which the loop used to do. On a 401
+  it calls `ClusterClient.RefreshCredentialsAsync` (re-read the kubeconfig, re-run the
+  plugin, swap the generated client inside the same `ClusterClient`), reports a
+  `WatchConnectionException` with `CredentialsRejected`, relists and retries. The swap is
+  why a reconnect reaches every pane without any of them holding a new object; the
+  replaced client is retired rather than disposed so open streams survive it. Never cache
+  what the plugin returned instead — hard rule 4. See
+  [connecting](docs/engineering/connecting.md).
+- **`_client` is replaced, so read it once per operation** when an operation touches it
+  more than once. Mixing two generated clients for the same server within one request is
+  harmless; a new file that holds on to `_client` across awaits for its own lifetime is not.
 
 If you add a new **typed** watched resource, reuse the generic `WatchAsync<T>`
 core; only supply the list path, a paged lister, and a
@@ -1388,7 +1409,8 @@ ordinary way and exits **0 only after the main window has opened and composited 
 frame**. Anything else is a distinct non-zero code: 64 no MainWindow, 65 a frame
 rendered but the window is hidden or 0×0, 66 startup threw, 67 the watchdog expired, 68 the
 unreachable-cluster scenario's kubeconfig could not be built into a client
-configuration (see below).
+configuration (see below), 69 that scenario's failed connect left no failure view in the
+content area.
 Five things about it are deliberate:
 
 - **It lives in the app, not beside it.** A GUI process never exits on its own, so an
@@ -1461,6 +1483,13 @@ all — and the window-only check passed it; what caught it was the test suite. 
 way the icon check was: with `BuildClientConfigAsync` made to throw, the tab reported
 `Connection failed: simulated…`, which the old condition accepted, and the check now
 exits 68.
+
+**And the failure has to be stated on the page, not only in the status bar.** Before
+the socket check, the scenario requires the tab's `ConnectionFailure` — the view that
+takes the list's place and says which step failed, why, and with what (see
+[connecting](docs/engineering/connecting.md)). Missing, it exits **69**. Proved with a build
+whose connect path computed the report and dropped it: `SMOKE-FAIL (69) the restored tab's
+connect failed but the content area has no failure view to show`.
 
 **The check is only worth having if a broken binary fails it, so prove that, don't
 assume it.** Restore `Icon="/Assets/app.ico"` on `MainWindow`, publish, and run the
@@ -1588,7 +1617,12 @@ the only check that catches that without a display. `SeedContexts` in
 `Program.cs` fills `MainWindowViewModel.AvailableContexts` so the command bar
 reads a real context name rather than "No kubeconfig contexts"; that is a real
 state, but it is not what these scenarios are about and it makes every shot
-look like a failed connection.
+look like a failed connection. The harness sets `Kubeconfig.EnvironmentSearchOverride`
+to empty for the same reason the stores are redirected: every `MainWindowViewModel`
+reads the kubeconfig chain and opens a tab on the current context, and on a developer's
+machine that was a live connect landing on top of the scenario — the no-kubeconfig shot
+rendered "Connecting to kubenimbus-sandbox…" over its own empty state. CI has no
+kubeconfig, which is why it never showed there.
 
 Its PNGs upload as a CI artifact **only when the render step went red**
 (`if: failure()`, `if-no-files-found: ignore`, `retention-days: 3`). That is

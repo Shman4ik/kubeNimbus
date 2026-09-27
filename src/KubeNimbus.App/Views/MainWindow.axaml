@@ -113,6 +113,7 @@
                     <MenuItem Header="Explore demo cluster" Command="{Binding OpenDemoClusterCommand}" />
                     <Separator />
                     <MenuItem Header="Open kubeconfig file…" Command="{Binding OpenKubeconfigFileCommand}" />
+                    <MenuItem Header="Add kubeconfig folder…" Command="{Binding AddKubeconfigFolderCommand}" />
                     <MenuItem Header="Rescan kubeconfig" Command="{Binding ReloadContextsCommand}" />
                     <Separator />
                     <!-- The machine's own terminal, on the selected cluster. Here and in
@@ -123,6 +124,9 @@
                          in place with a sentence instead. -->
                     <MenuItem Header="Open a terminal on this cluster"
                               Command="{Binding SelectedTab.OpenInTerminalCommand}" />
+                    <!-- Re-read the kubeconfig and re-run the credential plugin without
+                         closing the tab: the way back after `aws sso login`. -->
+                    <MenuItem Header="Reconnect" Command="{Binding SelectedTab.ReconnectCommand}" />
                     <MenuItem Header="Close cluster tab" Command="{Binding CloseTabCommand}"
                               CommandParameter="{Binding SelectedTab}" />
                     <Separator />
@@ -357,14 +361,21 @@
                it. An "Open a tab" button here would be a button that cannot work. -->
           <Border Classes="card" Padding="20" MaxWidth="640" IsVisible="{Binding !HasContexts}">
             <StackPanel Spacing="12">
-              <StackPanel Orientation="Horizontal" Spacing="8">
-                <PathIcon Data="{StaticResource AlertCircleIconGeometry}" Width="15" Height="15" VerticalAlignment="Center"
+              <!-- A DockPanel, not a horizontal StackPanel: the diagnosis can carry a
+                   parser's message, and a StackPanel measures at infinite width, so it
+                   would never wrap. -->
+              <DockPanel>
+                <PathIcon DockPanel.Dock="Left" Data="{StaticResource AlertCircleIconGeometry}" Width="15" Height="15"
+                          VerticalAlignment="Top" Margin="0,1,8,0"
                           Foreground="{StaticResource AppWarningBrush}" />
-                <TextBlock Text="{Binding Status}" FontWeight="SemiBold" VerticalAlignment="Center" />
-              </StackPanel>
+                <!-- Not Status: the status bar shows that under this card at the same time,
+                     and the two used to be one sentence printed twice (ENG-29). -->
+                <TextBlock Text="{Binding KubeconfigDiagnosis}" FontWeight="SemiBold" VerticalAlignment="Center"
+                           TextWrapping="Wrap" />
+              </DockPanel>
 
               <TextBlock TextWrapping="Wrap" Opacity="0.75" FontSize="12"
-                         Text="kubeNimbus never stores credentials — it reads clusters from your kubeconfig: any file you have opened here, then every entry of $KUBECONFIG, then the default location. Searched:" />
+                         Text="kubeNimbus never stores credentials — it reads clusters from your kubeconfig: any file or folder you have opened here, then every entry of $KUBECONFIG, then the default location. Searched:" />
               <TextBlock Text="{Binding KubeconfigSearchPaths}" FontFamily="Cascadia Mono,Consolas,monospace"
                          FontSize="11.5" Opacity="0.85" TextWrapping="Wrap" />
 
@@ -378,6 +389,8 @@
 
               <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Left">
                 <Button Content="Open kubeconfig file…" Command="{Binding OpenKubeconfigFileCommand}" />
+                <Button Content="Add folder…" Command="{Binding AddKubeconfigFolderCommand}"
+                        ToolTip.Tip="Every kubeconfig in a folder, including files added to it later" />
                 <Button Content="Rescan" Command="{Binding ReloadContextsCommand}" />
               </StackPanel>
 

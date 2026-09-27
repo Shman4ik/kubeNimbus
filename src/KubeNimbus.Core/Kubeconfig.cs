@@ -1,3 +1,6 @@
+using System.Net;
+using System.Text;
+using System.Text.RegularExpressions;
 using k8s;
 using k8s.KubeConfigModels;
 
@@ -7,7 +10,7 @@ namespace KubeNimbus.Core;
 /// Kubeconfig discovery and loading. Kubeconfig is the single source of truth:
 /// $KUBECONFIG (path-separator list) plus the default ~/.kube/config.
 /// </summary>
-public static class Kubeconfig
+public static partial class Kubeconfig
 {
     /// <summary>
     /// The source label <see cref="CandidatePaths"/> stamps on a path the user
@@ -15,6 +18,19 @@ public static class Kubeconfig
     /// distinguishes it from the two locations the app looks in on its own.
     /// </summary>
     public const string PickedSource = "picked";
+
+    /// <summary>The source label of a picked <em>folder</em> — the entry for the folder itself.</summary>
+    public const string PickedFolderSource = "picked folder";
+
+    /// <summary>The source label of a kubeconfig found inside a picked folder.</summary>
+    public const string InPickedFolderSource = "in picked folder";
+
+    /// <summary>
+    /// Files larger than this in a picked folder are not considered kubeconfigs. A real
+    /// one with hundreds of contexts is well under it; a folder that also holds a log or
+    /// an archive should not cost a read of the whole thing on every rescan.
+    /// </summary>
+    private const long MaxFolderFileBytes = 1024 * 1024;
 
     /// <summary>
     /// When set, replaces the machine's own search — <c>$KUBECONFIG</c> and
@@ -39,7 +55,7 @@ public static class Kubeconfig
     /// anywhere (CLAUDE.md rule #4).
     /// </param>
     public static IReadOnlyList<string> DiscoverPaths(IEnumerable<string>? extraPaths = null) =>
-        [.. CandidatePaths(extraPaths).Where(c => c.Exists).Select(c => c.Path).Distinct()];
+        [.. CandidatePaths(extraPaths).Where(c => c.Exists && !c.IsFolder).Select(c => c.Path).Distinct()];
 
     /// <summary>
     /// The same search, including paths that don't exist — so a UI with no
@@ -56,11 +72,30 @@ public static class Kubeconfig
         // to be carrying.
         foreach (var path in extraPaths ?? [])
         {
-            if (!string.IsNullOrWhiteSpace(path)
-                && !candidates.Any(c => string.Equals(c.Path, path, StringComparison.OrdinalIgnoreCase)))
+            if (string.IsNullOrWhiteSpace(path)
+                || candidates.Any(c => string.Equals(c.Path, path, StringComparison.OrdinalIgnoreCase)))
             {
-                candidates.Add(new KubeconfigCandidate(path, File.Exists(path), PickedSource));
+                continue;
             }
+
+            // A picked folder is expanded here, on every search, which is what makes a
+            // file dropped into it later appear on the next rescan without being picked
+            // itself. The folder is still only a path in settings (rule 4).
+            if (Directory.Exists(path))
+            {
+                candidates.Add(new KubeconfigCandidate(path, true, PickedFolderSource, IsFolder: true));
+                foreach (var file in FolderKubeconfigs(path))
+                {
+                    if (!candidates.Any(c => string.Equals(c.Path, file, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        candidates.Add(new KubeconfigCandidate(file, true, InPickedFolderSource));
+                    }
+                }
+
+                continue;
+            }
+
+            candidates.Add(new KubeconfigCandidate(path, File.Exists(path), PickedSource));
         }
 
         if (EnvironmentSearchOverride is { } seeded)
@@ -94,6 +129,143 @@ public static class Kubeconfig
         }
 
         return candidates;
+    }
+
+    /// <summary>
+    /// The kubeconfig files directly inside <paramref name="directory"/>, in ordinal name
+    /// order so the first-file-wins rule for duplicate context names is the same on every
+    /// machine.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Top level only. The folder people point this at is most often <c>~/.kube</c>, whose
+    /// <c>cache/</c> holds thousands of discovery and HTTP cache files; walking that on
+    /// every rescan would be the cost of a feature nobody asked for.
+    /// </para>
+    /// <para>
+    /// A file is taken when it says it is a kubeconfig — a <c>kind: Config</c> line, in YAML
+    /// or JSON spelling. <c>~/.kube</c> also holds <c>kubectx</c>'s one-line state file, lock
+    /// files and editor backups; offering those to the parser would turn each into a
+    /// "could not read" line on every rescan. A file that does say <c>kind: Config</c> and
+    /// then fails to parse is a real kubeconfig that is broken, and is reported as one.
+    /// Hidden files are skipped for the same reason as the rest.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<string> FolderKubeconfigs(string directory)
+    {
+        try
+        {
+            return [.. Directory.EnumerateFiles(directory)
+                .Where(f => !Path.GetFileName(f).StartsWith('.') && LooksLikeKubeconfig(f))
+                .Order(StringComparer.Ordinal)];
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
+    }
+
+    private static bool LooksLikeKubeconfig(string file)
+    {
+        try
+        {
+            var info = new FileInfo(file);
+            return info.Length is > 0 and <= MaxFolderFileBytes && KindConfigLine().IsMatch(File.ReadAllText(file));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    [GeneratedRegex("""^\s*["']?kind["']?\s*:\s*["']?Config["']?\s*,?\s*$""", RegexOptions.Multiline | RegexOptions.CultureInvariant)]
+    private static partial Regex KindConfigLine();
+
+    /// <summary>
+    /// A cheap summary of everything the kubeconfig search would read — each candidate
+    /// file's size and write time, and every file directly inside a picked folder — so a
+    /// caller can tell whether a rescan would find anything new without parsing a file.
+    /// Reads metadata only.
+    /// </summary>
+    /// <remarks>
+    /// This is what lets the shell rescan when the window regains focus: that is the
+    /// moment someone returns from <c>aws eks update-kubeconfig</c> in a terminal, or from
+    /// dropping a file into a synced folder, and a <c>FileSystemWatcher</c> on
+    /// <c>~/.kube</c> would instead fire on every write every tool makes there.
+    /// </remarks>
+    public static string ChainFingerprint(IEnumerable<string>? extraPaths = null)
+    {
+        var builder = new StringBuilder();
+        foreach (var candidate in CandidatePathsShallow(extraPaths))
+        {
+            if (Directory.Exists(candidate))
+            {
+                builder.Append("D|").Append(candidate).Append('\n');
+                try
+                {
+                    foreach (var file in Directory.EnumerateFiles(candidate).Order(StringComparer.Ordinal))
+                    {
+                        Stamp(builder, file);
+                    }
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                {
+                    builder.Append("!\n");
+                }
+            }
+            else
+            {
+                Stamp(builder, candidate);
+            }
+        }
+
+        return builder.ToString();
+
+        static void Stamp(StringBuilder builder, string file)
+        {
+            var info = new FileInfo(file);
+            builder.Append(file).Append('|');
+            if (info.Exists)
+            {
+                builder.Append(info.Length).Append('|').Append(info.LastWriteTimeUtc.Ticks);
+            }
+
+            builder.Append('\n');
+        }
+    }
+
+    /// <summary>The search's own entries, without expanding folders or checking anything exists.</summary>
+    private static IEnumerable<string> CandidatePathsShallow(IEnumerable<string>? extraPaths)
+    {
+        foreach (var path in extraPaths ?? [])
+        {
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                yield return path;
+            }
+        }
+
+        if (EnvironmentSearchOverride is { } seeded)
+        {
+            foreach (var path in seeded)
+            {
+                yield return path;
+            }
+
+            yield break;
+        }
+
+        var env = Environment.GetEnvironmentVariable("KUBECONFIG");
+        if (!string.IsNullOrWhiteSpace(env))
+        {
+            foreach (var path in env.Split(
+                Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                yield return path;
+            }
+        }
+
+        yield return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".kube", "config");
     }
 
     /// <summary>
@@ -178,9 +350,11 @@ public static class Kubeconfig
     /// is written there.
     /// </remarks>
     public static KubernetesClientConfiguration BuildClientConfig(ClusterContext context) =>
-        KubernetesClientConfiguration.BuildConfigFromConfigFile(
-            kubeconfigPath: context.KubeconfigPath,
-            currentContext: context.Name);
+        BuildClientSetup(context).Configuration;
+
+    /// <summary>The synchronous <see cref="BuildClientSetupAsync"/> — tests and tooling only, see <see cref="BuildClientConfig"/>.</summary>
+    internal static ClientSetup BuildClientSetup(ClusterContext context) =>
+        Task.Run(() => BuildClientSetupCoreAsync(context)).GetAwaiter().GetResult();
 
     /// <summary>
     /// <see cref="BuildClientConfig"/> for a caller that must not block — the UI thread,
@@ -211,15 +385,70 @@ public static class Kubeconfig
     /// library's JSON parser error — see there.
     /// </para>
     /// </remarks>
-    public static Task<KubernetesClientConfiguration> BuildClientConfigAsync(
+    public static async Task<KubernetesClientConfiguration> BuildClientConfigAsync(
         ClusterContext context,
         CancellationToken cancellationToken = default) =>
-        Task.Run(
-            () => ExecCredentialCapture.RunAsync(
-                () => KubernetesClientConfiguration.BuildConfigFromConfigFileAsync(
-                    new FileInfo(context.KubeconfigPath),
-                    currentContext: context.Name)),
-            cancellationToken);
+        (await BuildClientSetupAsync(context, cancellationToken).ConfigureAwait(false)).Configuration;
+
+    /// <summary>
+    /// <see cref="BuildClientConfigAsync"/> plus the proxy the configuration was built with,
+    /// which the caller needs a second time for the WebSocket transport (see
+    /// <see cref="KubeconfigProxy"/>). Everything that happens to the kubeconfig entry
+    /// between the file and the client is here, in one place:
+    /// <list type="number">
+    /// <item>the file is read through the library's own loader (relative certificate
+    /// paths resolve against the file, as before);</item>
+    /// <item>an exec plugin's command is resolved the way a login shell would
+    /// (<see cref="ExecPluginPath"/>) — on the parsed object, in memory;</item>
+    /// <item>the cluster's <c>proxy-url</c>, which the library drops, is read and
+    /// validated before any plugin runs, so a typo in it does not cost an SSO prompt;</item>
+    /// <item>the configuration is built, which is where the plugin runs.</item>
+    /// </list>
+    /// Nothing read here is kept after the call beyond the configuration itself, and the
+    /// whole thing re-runs on every connect and every credential refresh (hard rule 4).
+    /// </summary>
+    internal static Task<ClientSetup> BuildClientSetupAsync(
+        ClusterContext context,
+        CancellationToken cancellationToken = default) =>
+        Task.Run(() => BuildClientSetupCoreAsync(context), cancellationToken);
+
+    private static Task<ClientSetup> BuildClientSetupCoreAsync(ClusterContext context) =>
+        ExecCredentialCapture.RunAsync(async () =>
+        {
+            var file = new FileInfo(context.KubeconfigPath);
+            var config = await KubernetesClientConfiguration.LoadKubeConfigAsync(file).ConfigureAwait(false);
+            var (clusterName, user) = Entry(config, context.Name);
+
+            if (user?.UserCredentials?.ExternalExecution is { } exec)
+            {
+                ExecPluginPath.Apply(exec, file.DirectoryName);
+            }
+
+            var proxy = clusterName is null
+                ? null
+                : KubeconfigProxy.Create(KubeconfigProxy.Read(
+                    await File.ReadAllTextAsync(file.FullName).ConfigureAwait(false), clusterName));
+
+            var configuration = KubernetesClientConfiguration.BuildConfigFromConfigObject(config, context.Name);
+            if (proxy is not null)
+            {
+                configuration.FirstMessageHandlerSetup = handler =>
+                {
+                    handler.Proxy = proxy;
+                    handler.UseProxy = true;
+                };
+            }
+
+            return new ClientSetup(configuration, proxy);
+        });
+
+    /// <summary>The cluster name and user entry a context points at, when the file has them.</summary>
+    internal static (string? ClusterName, User? User) Entry(K8SConfiguration config, string contextName)
+    {
+        var details = config.Contexts?.FirstOrDefault(c => c.Name == contextName)?.ContextDetails;
+        var user = details?.User is { } userName ? config.Users?.FirstOrDefault(u => u.Name == userName) : null;
+        return (details?.Cluster, user);
+    }
 
     // The YAML parser's messages can run to several lines; the first names the problem.
     private static string FirstLine(string message)
@@ -233,4 +462,8 @@ public static class Kubeconfig
 public sealed record KubeconfigReadFailure(string Path, string Message);
 
 /// <summary>One place the kubeconfig search looked, and whether anything was there.</summary>
-public sealed record KubeconfigCandidate(string Path, bool Exists, string Source);
+/// <param name="IsFolder">A picked folder; its kubeconfigs follow it as their own candidates.</param>
+public sealed record KubeconfigCandidate(string Path, bool Exists, string Source, bool IsFolder = false);
+
+/// <summary>A client configuration and the proxy it was built with (null when direct).</summary>
+internal sealed record ClientSetup(KubernetesClientConfiguration Configuration, IWebProxy? Proxy);

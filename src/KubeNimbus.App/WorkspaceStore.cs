@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using KubeNimbus.Core;
 
 namespace KubeNimbus.App;
 
@@ -110,8 +111,7 @@ public static class WorkspaceStore
     public static string? DirectoryOverride { get; set; }
 
     private static string FilePath => Path.Combine(
-        DirectoryOverride ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "kubeNimbus"),
+        DirectoryOverride ?? AppDataDirectory.Roaming,
         "workspace.json");
 
     public static WorkspaceSettings Load()

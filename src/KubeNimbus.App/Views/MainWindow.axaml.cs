@@ -69,7 +69,15 @@ public partial class MainWindow : Window
             UpdateThemeIcon();
             ApplyBackdrop();
         };
-        Activated += (_, _) => ApplyBackdrop();
+        Activated += (_, _) =>
+        {
+            ApplyBackdrop();
+
+            // Coming back to the window is when a kubeconfig written elsewhere — by
+            // `aws eks update-kubeconfig`, or into a picked folder — should show up. The
+            // view model reads file metadata only, and reloads only if something changed.
+            _ = Vm?.RescanIfChangedAsync();
+        };
         Deactivated += (_, _) => ApplyBackdrop();
     }
 

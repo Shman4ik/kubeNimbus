@@ -124,13 +124,20 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
     {
         OnPropertyChanged(nameof(IsConnecting));
         OnPropertyChanged(nameof(IsDisconnected));
+        OnPropertyChanged(nameof(ShowsConnectionFailure));
         TryStart();
     }
 
     public bool IsConnecting => _tab.IsConnecting && !HasStarted;
 
-    /// <summary>The tab is not connected and not trying: its status line says why.</summary>
-    public bool IsDisconnected => !_tab.IsConnected && !_tab.IsConnecting && !HasStarted;
+    /// <summary>
+    /// The tab is not connected, not trying, and has no failure to explain — the moment
+    /// before its first connect starts. A failed connect is <see cref="ShowsConnectionFailure"/>.
+    /// </summary>
+    public bool IsDisconnected => !_tab.IsConnected && !_tab.IsConnecting && !HasStarted && !_tab.HasConnectionFailure;
+
+    /// <summary>The tab's connect failed: the page shows the same failure view the Resources list does.</summary>
+    public bool ShowsConnectionFailure => _tab.HasConnectionFailure && !_tab.IsConnecting && !HasStarted;
 
     private void TryStart()
     {

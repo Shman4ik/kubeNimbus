@@ -119,7 +119,34 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsIdle))]
+    [NotifyCanExecuteChangedFor(nameof(ReconnectCommand))]
     private bool _isConnecting;
+
+    /// <summary>
+    /// The last connect's failure, stated where the list would be; null while connecting
+    /// and once connected. See <see cref="ConnectionFailureViewModel"/>.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasConnectionFailure))]
+    private ConnectionFailureViewModel? _connectionFailure;
+
+    public bool HasConnectionFailure => ConnectionFailure is not null;
+
+    partial void OnConnectionFailureChanging(ConnectionFailureViewModel? value) => ConnectionFailure?.Detach();
+
+    partial void OnConnectionFailureChanged(ConnectionFailureViewModel? value) => Applications.OnTabConnectionChanged();
+
+    /// <summary>
+    /// Whether the warning beside the list carries a Reconnect button: true for a watch
+    /// that lost its connection or had its credentials refused, false for the other things
+    /// that warning reports (a refused namespace list, a missing owner), where
+    /// re-resolving credentials would change nothing. Reset whenever the warning changes,
+    /// so a later warning of the other kind cannot inherit the button.
+    /// </summary>
+    [ObservableProperty]
+    private bool _connectionWarningOffersReconnect;
+
+    partial void OnConnectionWarningChanged(string? value) => ConnectionWarningOffersReconnect = false;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsIdle))]
@@ -1379,19 +1406,35 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         IsConnecting = true;
         ConnectionWarning = null;
+        ConnectionFailure = null;
         Status = $"Connecting to {Context.Name}…";
+        ClusterClient? created = null;
         try
         {
             // Awaited, never the synchronous Connect: blocking this (UI) thread on the
             // kubeconfig read hung the NativeAOT build at startup whenever a restored tab
             // connected — see Kubeconfig.BuildClientConfigAsync.
-            var client = await ClusterClient.ConnectAsync(Context);
+            //
+            // A tab that already has a client (a connect that got past /version and failed
+            // later) keeps it and re-resolves its credentials in place, so whatever holds
+            // that object sees the retry too.
+            ClusterClient client;
+            if (Client is { } existing)
+            {
+                await existing.RefreshCredentialsAsync(force: true);
+                client = existing;
+            }
+            else
+            {
+                client = created = await ClusterClient.ConnectAsync(Context);
+            }
 
             // First and alone: it is the reachability check, and it is the request that
             // runs an exec credential plugin. Everything after it reuses that token, so
             // the fan-out below cannot start a dozen `aws eks get-token`s at once.
             var version = await client.GetServerVersionAsync();
             Client = client;
+            created = null;
             IsConnected = true;
             Status = $"Connected — Kubernetes {version.GitVersion}.";
 
@@ -1414,8 +1457,77 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
         catch (Exception ex)
         {
-            Status = $"Connection failed: {ex.Message}";
+            // A client that never answered /version was never handed to anything.
+            created?.Dispose();
+
+            // The report reads the kubeconfig again for the facts, off this thread, and is
+            // set before the status and the flags so that anything waiting for
+            // "Connection failed" (the smoke test's unreachable-cluster scenario, for one)
+            // finds the explanation already in place.
+            ConnectionFailure = new ConnectionFailureViewModel(await ConnectionReport.CreateAsync(Context, ex), this);
+
+            // The status bar gets the step; the content area has the rest. The two used to
+            // be the same sentence twice on one screen.
+            Status = $"Connection failed ({ConnectionFailure.Report.StepPhrase}).";
             IsConnected = false;
+        }
+        finally
+        {
+            IsConnecting = false;
+        }
+    }
+
+    private bool CanReconnect => !IsConnecting && !IsDemo;
+
+    /// <summary>
+    /// Retry after a failed connect; on a connected tab, re-read the kubeconfig, re-run
+    /// its credential plugin and restart the list — without closing the tab.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The case it exists for is an expired session: <c>aws sso login</c> (or
+    /// <c>az login</c>, or a new Teleport certificate) in a terminal, then back to the app.
+    /// The only way back used to be closing the tab and opening it again, which also threw
+    /// away its kind, namespace, filters and inspector panes.
+    /// </para>
+    /// <para>
+    /// The credential is re-resolved inside the tab's existing <see cref="ClusterClient"/>
+    /// (<see cref="ClusterClient.RefreshCredentialsAsync"/>), so every pane that holds it —
+    /// pod detail, logs, workload detail, a fleet merge — uses the new credential on its
+    /// next request without being told. Re-running rather than remembering is hard rule 4:
+    /// nothing the plugin printed is kept anywhere but inside that client.
+    /// </para>
+    /// </remarks>
+    [RelayCommand(CanExecute = nameof(CanReconnect))]
+    private async Task ReconnectAsync()
+    {
+        if (IsDemo)
+        {
+            return;
+        }
+
+        if (Client is not { } client || !IsConnected)
+        {
+            await ConnectAsync();
+            return;
+        }
+
+        IsConnecting = true;
+        ConnectionWarning = null;
+        Status = $"Re-reading the kubeconfig for {Context.Name}…";
+        try
+        {
+            await client.RefreshCredentialsAsync(force: true);
+            var version = await client.GetServerVersionAsync();
+            Status = $"Connected — Kubernetes {version.GitVersion}. Credentials re-read from the kubeconfig.";
+            Refresh();
+        }
+        catch (Exception ex)
+        {
+            var report = await ConnectionReport.CreateAsync(Context, ex);
+            Status = $"Reconnect failed ({report.StepPhrase}).";
+            ConnectionWarning = $"Reconnect failed: {report.Headline} {report.Detail}";
+            ConnectionWarningOffersReconnect = true;
         }
         finally
         {
@@ -2291,7 +2403,14 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             {
                 await foreach (var evt in client.WatchResourceAsync(
                     descriptor, @namespace,
-                    connectionLost: ex => Dispatcher.UIThread.Post(() => ConnectionWarning = ex.Message),
+                    connectionLost: ex => Dispatcher.UIThread.Post(() =>
+                    {
+                        ConnectionWarning = ex.Message;
+
+                        // After the warning, which resets it: a lost or refused watch is
+                        // the one warning a reconnect can actually do something about.
+                        ConnectionWarningOffersReconnect = true;
+                    }),
                     cancellationToken: token))
                 {
                     await Dispatcher.UIThread.InvokeAsync(() => Apply(evt));
