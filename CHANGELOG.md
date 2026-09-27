@@ -12,6 +12,11 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+- The Resources mode now looks like the Applications mode. The resource list sits in a card
+  on the window's own tone instead of on a black panel, its title is the same size as
+  "Applications", and every table uses the Applications list's type: small semibold column
+  headers, 12px rows with the name in semibold, and fainter row rules. Before, switching
+  modes swapped the whole content area between two different-looking surfaces.
 - A crash-looping application no longer flickers between Degraded and Healthy. Between two
   back-offs a crash-looping container is briefly running and then terminated, and only the
   waiting phase was being read, so the same app read Healthy, then "0 of 1 pods Ready", then

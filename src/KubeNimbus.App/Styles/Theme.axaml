@@ -217,6 +217,30 @@
          from butting into Ready. -->
     <Style Selector="DataGridCell">
         <Setter Property="Padding" Value="10,0,10,0" />
+        <!-- Body text at 12px, the size the Applications list uses for everything but
+             the name. Fluent's 14px made a namespace repeated down forty rows the
+             loudest thing on the screen. A cell that sets its own size keeps it. -->
+        <Setter Property="FontSize" Value="12" />
+    </Style>
+
+    <!-- Every grid in the app reads like the Applications list: headers in the same
+         small, semibold, spaced, dimmed type as its column header (`sectionHeader`), and
+         row rules faint enough to guide the eye along a dense single-line row without
+         ruling the table into boxes. The shared DataGrid style (nimbusUi Controls.axaml)
+         uses BaseLow for the rules, which in the dark theme is the brightest line on
+         the page; this is kubeNimbus's own until pgNimbus takes it too. -->
+    <Style Selector="DataGrid">
+        <Setter Property="HorizontalGridLinesBrush" Value="#1A808080" />
+    </Style>
+    <Style Selector="DataGridColumnHeader">
+        <!-- Fluent paints the header row in AltHigh, which is pure black in the dark
+             theme. It was invisible only while the list sat on a black `layer`; on a
+             card it is a black band across the top of every grid. -->
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="LetterSpacing" Value="0.4" />
+        <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
     </Style>
 
     <!-- Compact TabItem headers. FluentTheme sizes these at 24px, which dwarfs the

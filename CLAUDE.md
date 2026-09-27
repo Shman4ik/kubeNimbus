@@ -629,6 +629,20 @@ Three rules about it:
      local one**, and anything gated on a round trip has to be reasoned about with a
      second of latency in it.
 
+19. **Both modes sit on the same surface and use the same table type.** The content area is
+   the shell's own tone with each list, and the inspector dock, in a `card`; `layer`
+   (Fluent's AltHigh, pure black in the dark theme) is for overlays only. The Resources
+   mode used to sit on a `layer`, so flipping the mode switch swapped the whole content
+   area between a black panel and a grey one, and the owner preferred the Applications
+   side. Its table type is now every grid's (`Styles/Theme.axaml`): column headers small,
+   semibold and dimmed like the Applications list's header row, cells at 12px with the row's
+   name in semibold 13px, row rules at 10% grey. Two traps: the DataGrid's header paints its
+   own AltHigh background, invisible on the old black panel and a black band on a card, so
+   `DataGridColumnHeader` is `Transparent`; and a card behind a dock-state row needs
+   `ClipToBounds`, because maximizing sets that row to zero height and a Grid does not clip.
+   This is kubeNimbus's own style, not yet nimbusUi's, so pgNimbus's grids are unchanged —
+   pulling it up is a paired change like any other shared surface.
+
 [fluent-basics]: https://learn.microsoft.com/en-us/windows/apps/design/basics/
 
 ## Feature deep dives (docs/engineering/)
