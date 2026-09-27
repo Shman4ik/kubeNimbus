@@ -156,8 +156,10 @@ events filter and ordering, the empty-events state, the history seed and the gap
 
 Cordon is a one-field merge patch of `spec.unschedulable`, structurally identical to
 FEAT-1's `restartedAt` patch, and uncordon writes an explicit `false` rather than a JSON
-`null` — a null would *remove* the field under RFC 7386, which means the same thing to the
-scheduler and is not what `kubectl uncordon` leaves behind.
+`null` — the body `kubectl uncordon` sends. The stored object is the same either way: the
+field is `omitempty`, so an uncordoned node reads with no `spec.unschedulable` at all
+(observed against k3s v1.33 by `NodeOperationsLiveTests`, which also reads kubectl's own
+`Ready,SchedulingDisabled` status off the server's Table while the node is cordoned).
 
 The capability check names the kind, and that is deliberate rather than a shortcut.
 Scale has a discovery signal (a `scale` subresource) and restart has an object signal (a

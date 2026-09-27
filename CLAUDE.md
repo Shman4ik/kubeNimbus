@@ -1178,6 +1178,37 @@ Two things about that gate, both learned the hard way (`SandboxCluster.cs`):
   `SandboxCluster.TryGetContextAsync` calls TUnit's `Skip.Test(reason)` instead, so the
   summary reads `succeeded: 370, skipped: 16` and names why.
 
+**The live-verification tests (`tests/KubeNimbus.Core.Tests/Live/`, the `*LiveTests`
+classes) are the place a "needs a live cluster" backlog row gets paid.** They drive the
+same Core methods the app does against the sandbox and assert what the *cluster* did next,
+not that the request was accepted — a restart patch with the wrong key is a 200 that rolls
+nothing, and only watching the pods roll catches it. Four rules, because the sandbox is
+shared with other sessions running at the same time:
+
+- **Every mutation happens in the one namespace they create and delete themselves**
+  (`LiveCluster.Namespace`, removed by an `[After(Assembly)]` hook), with per-run object
+  names so a namespace a killed run left behind is reused rather than collided with.
+  Reading the rest of the cluster — the demo namespaces, every CRD, the node — is fine.
+- **The reference for "matches kubectl" is the API server's own `Table`** (`Accept:
+  application/json;as=Table;v=v1;g=meta.k8s.io`, `LiveCluster.GetTableAsync`). It is what
+  kubectl asks for and prints, so parity is checked with no kubectl binary on the machine.
+- **A narrow-RBAC user is a real ServiceAccount token** (`LiveCluster.CreateNarrowUserAsync`,
+  a TokenRequest and a temp kubeconfig), because the app has no impersonation to exercise
+  and a real identity is where the 403s it surfaces come from.
+- **The single node is cordoned only for about a second, and never drained.** A drain that
+  evicts would take CoreDNS, Traefik and every other session's pods down with it; the
+  drain's refusal path, the plan over the real node and evictions of the tests' own pods
+  (PodDisruptionBudget 429 included) are what is run instead. The cordon tests are
+  `[NotInParallel]`, skip if the node is already cordoned, and uncordon in a `finally`.
+
+They found real disagreements on their first run, each now fixed with a no-cluster test
+beside it: a strict-validation refusal arrives as HTTP **500**, not 400/422
+([apply-preview](docs/engineering/apply-preview.md)); a CRD `string` column prints an
+object or array as JSON, and `\.` is how kubectl's JSONPath reaches a dotted key
+([crd-printer-columns](docs/engineering/crd-printer-columns.md)); and a follow opened
+between a container's creation and its start ends at once with no lines
+([multi-pod-logs](docs/engineering/multi-pod-logs.md)).
+
 **Use the script** (`scripts/sandbox-up.ps1`, or `scripts/sandbox-up.sh` on
 Linux/macOS — Docker required). It starts single-node k3s in Docker, writes
 `.sandbox/kubeconfig.yaml` pointed at the published host port with the context

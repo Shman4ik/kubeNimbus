@@ -36,12 +36,28 @@ Seven things are load-bearing:
 3. **The JSONPath subset includes the condition filter, and that is the point.**
    `.status.conditions[?(@.type=="Ready")].status` is how cert-manager, Flux, KEDA *and*
    Argo all spell their Ready column, so a subset without it would blank the single
-   most-wanted column on the most-installed CRDs. Supported: dotted fields, `['key']`
-   (the only way to reach a key containing a dot), `[n]`, `[*]`, and `==`/`!=` filters.
+   most-wanted column on the most-installed CRDs. Supported: dotted fields, with `\.`
+   escaping a dot inside a key (`.metadata.annotations.crossplane\.io/external-name`,
+   Crossplane's column on every managed resource — the form kubectl's JSONPath actually
+   resolves), `['key']`, `[n]`, `[*]`, and `==`/`!=` filters.
    Anything else resolves to **no match**, which is the same outcome as an absent field:
    an empty cell, never an exception on a watch tick. Only the *first* match is used,
    matching the API server's own `tableconvertor` ("as we only support simple JSON path,
    we can assume to have only one result").
+   **Checked against a real server, cell for cell** (`Live/PrinterColumnsLiveTests`,
+   VER-23): every CRD on the sandbox that has objects and declares columns — this repo's
+   two, k3s's `helm.cattle.io` HelmCharts and `k3s.cattle.io` Addons, Argo CD's Application CRD and, when one exists, a Gateway API HTTPRoute — is compared
+   with the API server's own Table, which is what `kubectl get` prints. That found two
+   disagreements, both fixed: an **object or array in a `string` column** is printed by
+   the server as compact JSON (Gateway API's HTTPRoute Hostnames reads
+   `["shop.example.com","www.shop.example.com"]`) and the app printed nothing; and the
+   escaped-dot form above resolved to nothing in the app. It also found one the app keeps:
+   a **bracketed key containing a dot** (`['shop.kubenimbus.io/colour']`, the sandbox
+   Widget's own Colour column) is blank in `kubectl get`, because kubectl's JSONPath does
+   not read the quoted key as one key, while the app resolves it. Keeping it can only
+   ever show a value the object really has; the test pins the divergence so it is known
+   rather than rediscovered. Date cells are compared as *times*, not text, because the app
+   prints one unit (`RelativeTime`) where kubectl prints its two-unit `HumanDuration`.
 4. **Every declared column is drawn, `priority: 1` included.** kubectl shows `priority: 0`
    in the default table and the rest only under `-o wide`, and this app used to spell that
    `-o wide` as the Advanced view. That gate is gone with the rework that confined the

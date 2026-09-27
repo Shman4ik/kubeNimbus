@@ -15,9 +15,14 @@ namespace KubeNimbus.Core;
 /// and this supports exactly those:
 /// </para>
 /// <list type="bullet">
-/// <item><c>.spec.replicas</c> — dotted field access.</item>
-/// <item><c>.metadata.labels['app.kubernetes.io/name']</c> — bracketed field access,
-/// which is the only way to reach a key containing a dot.</item>
+/// <item><c>.spec.replicas</c> — dotted field access, with <c>\.</c> escaping a dot inside
+/// a key (<c>.metadata.labels.app\.kubernetes\.io/name</c>) — which is how kubectl's own
+/// JSONPath reaches such a key.</item>
+/// <item><c>.metadata.labels['app.kubernetes.io/name']</c> — bracketed field access. A
+/// real API server does <em>not</em> resolve this form when the key contains a dot (its
+/// cell is empty in <c>kubectl get</c>; observed on k3s v1.33); the app does. Kept,
+/// because it can only ever show a value the object really has, and recorded as the one
+/// known place the list and kubectl disagree.</item>
 /// <item><c>.spec.ports[0].port</c> / <c>.spec.rules[*].host</c> — index and wildcard.</item>
 /// <item><c>.status.conditions[?(@.type=="Ready")].status</c> — the condition filter.
 /// This one is not exotic: it is how cert-manager, Flux, KEDA and Argo all spell
@@ -69,17 +74,13 @@ public static class SimpleJsonPath
                 }
 
                 var start = i;
-                while (i < span.Length && span[i] != '.' && span[i] != '[')
-                {
-                    i++;
-                }
-
+                var name = ReadFieldName(span, ref i);
                 if (i == start)
                 {
                     continue; // a trailing or doubled separator: nothing to select
                 }
 
-                if (!TryField(current, span[start..i].ToString(), out current))
+                if (!TryField(current, name, out current))
                 {
                     return false;
                 }
@@ -102,13 +103,7 @@ public static class SimpleJsonPath
             else
             {
                 // A bare leading segment ("spec.replicas" with no dot).
-                var start = i;
-                while (i < span.Length && span[i] != '.' && span[i] != '[')
-                {
-                    i++;
-                }
-
-                if (!TryField(current, span[start..i].ToString(), out current))
+                if (!TryField(current, ReadFieldName(span, ref i), out current))
                 {
                     return false;
                 }
@@ -117,6 +112,43 @@ public static class SimpleJsonPath
 
         value = current;
         return true;
+    }
+
+    /// <summary>
+    /// One dotted segment's field name, ending at the next unescaped <c>.</c> or <c>[</c>.
+    /// A backslash escapes the character after it, which is how kubectl's own JSONPath
+    /// reaches a key containing a dot — <c>.metadata.annotations.crossplane\.io/external-name</c>
+    /// is Crossplane's printer column on every managed resource. Observed against a real
+    /// API server: that form resolves in <c>kubectl get</c>, and the bracketed
+    /// <c>['crossplane.io/external-name']</c> form does <em>not</em> (see
+    /// <c>PrinterColumnsLiveTests</c>).
+    /// </summary>
+    private static string ReadFieldName(ReadOnlySpan<char> span, ref int i)
+    {
+        var start = i;
+        while (i < span.Length && span[i] != '.' && span[i] != '[')
+        {
+            i += span[i] == '\\' && i + 1 < span.Length ? 2 : 1;
+        }
+
+        var raw = span[start..i];
+        return raw.Contains('\\') ? Unescape(raw) : raw.ToString();
+    }
+
+    private static string Unescape(ReadOnlySpan<char> raw)
+    {
+        var builder = new System.Text.StringBuilder(raw.Length);
+        for (var j = 0; j < raw.Length; j++)
+        {
+            if (raw[j] == '\\' && j + 1 < raw.Length)
+            {
+                j++;
+            }
+
+            builder.Append(raw[j]);
+        }
+
+        return builder.ToString();
     }
 
     private static bool TryField(JsonElement parent, string name, out JsonElement value)

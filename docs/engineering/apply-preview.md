@@ -150,7 +150,23 @@ load-bearing.
    `LooksLikeFieldValidationRejection` matches the API server's own three wordings —
    `strict decoding error`, `unknown field`, `field not declared in schema` (apply's typed
    patch conversion) — and is checked at 400 *and* 422, since the two paths do not agree
-   on the code.
+   on the code. **A real server adds a third code: 500.** Against k3s v1.33
+   (`Live/ApplyLiveTests`, VER-36) a server-side apply carrying an unknown field — top
+   level of a ConfigMap, nested in a Deployment's spec, or in a custom resource — is
+   refused with `HTTP 500`, `{"kind":"Status",…,"message":"failed to create typed patch
+   object (ns/name; apps/v1, Kind=Deployment): .spec.replicaz: field not declared in
+   schema","code":500}`, on the dry run and on the real apply alike. Classified by the
+   400/422 gate it fell through to "Apply failed: … (500 Internal Server Error)" instead
+   of the rejected-field panel, so a 500 is now accepted *only* with that wording
+   (`ApplyRefusalStatusTests` replays the verbatim body; any other 500 stays a server
+   failure).
+   The same test shows the server refuses the field **in every `fieldValidation` mode** —
+   `Ignore` and `Warn` too — because the typed-patch conversion runs before validation
+   mode is consulted. So for a server-side apply of a typed object the "Warn prunes the
+   typo" premise above does not hold on this server: the apply is refused either way, and
+   the fallback's "an unknown or misspelled field is dropped rather than refused" note is
+   pessimistic here. Whether it is accurate on a pre-1.27 server — the only kind that ever
+   shows it — is unobserved.
 3. **The strict rejection is ruled out before the parameter is suspected, and the order is
    the whole safety of the fallback.** A document carrying an unknown field literally
    named `fieldValidation` produces a 400 whose message mentions the word, and a fallback

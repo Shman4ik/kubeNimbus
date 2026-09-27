@@ -193,10 +193,11 @@ public static class PrinterColumns
     /// wonder which of them is guessing.
     ///
     /// <para>
-    /// An absent field, an unresolvable path and a non-scalar value all render as an
-    /// empty cell. The API server emits a null cell for all three and kubectl prints
-    /// nothing for a null; an empty cell in a grid says the same thing without
-    /// inventing a word for it.
+    /// An absent field and an unresolvable path render as an empty cell. The API server
+    /// emits a null cell for both and kubectl prints nothing for a null; an empty cell in
+    /// a grid says the same thing without inventing a word for it. An object or array is
+    /// compact JSON in a <c>string</c> column and empty in any other, which is also what
+    /// the server does.
     /// </para>
     ///
     /// <para>
@@ -211,12 +212,17 @@ public static class PrinterColumns
             return "";
         }
 
-        // The API server skips object/array values outright rather than dumping JSON
-        // into a table cell, and so does this.
         var text = SimpleJsonPath.ScalarText(value);
         if (text is null)
         {
-            return "";
+            // An object or array. For a `string` column the API server prints it as
+            // compact JSON — kubectl shows Gateway API's HTTPRoute Hostnames column as
+            // ["shop.example.com","www.shop.example.com"] — and for every other type it
+            // emits a null cell. Observed on k3s v1.33 (PrinterColumnsLiveTests); this used
+            // to render an empty cell for both, on the belief that the server skipped them.
+            return column.Type == "string" && value.ValueKind is JsonValueKind.Object or JsonValueKind.Array
+                ? CompactJson(value)
+                : "";
         }
 
         // integer / number / boolean / string all render as the scalar's own text —
@@ -255,6 +261,26 @@ public static class PrinterColumns
         // metav1.Time's zero value round-trips as "0001-01-01T00:00:00Z"; the API
         // server prints <unknown> for it rather than an age of two thousand years.
         return parsed.UtcDateTime == DateTime.MinValue ? "<unknown>" : RelativeTime.Compact(now - parsed);
+    }
+
+    /// <summary>
+    /// One JSON value on one line. Re-written rather than taken with <c>GetRawText</c>,
+    /// because an object read from an indented document (the demo dataset) would otherwise
+    /// carry its line breaks into a grid cell. Relaxed escaping, so a URL or a non-ASCII
+    /// name reads as itself rather than as <c>+</c> sequences.
+    /// </summary>
+    private static string CompactJson(JsonElement value)
+    {
+        var buffer = new System.Buffers.ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions
+               {
+                   Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+               }))
+        {
+            value.WriteTo(writer);
+        }
+
+        return System.Text.Encoding.UTF8.GetString(buffer.WrittenSpan);
     }
 
     private static string Str(JsonElement parent, string name) =>

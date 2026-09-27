@@ -27,6 +27,19 @@ public static class LogStreamEnd
         ClusterClient client, string @namespace, string podName, string container,
         ContainerRun? atStart, CancellationToken token)
     {
+        var (text, problem, _) = await ExplainWithRunAsync(client, @namespace, podName, container, atStart, token)
+            .ConfigureAwait(false);
+        return (text, problem);
+    }
+
+    /// <summary>
+    /// <see cref="ExplainAsync"/>, plus the container's run as read — so a caller can act
+    /// on <see cref="StartedAfterRequest"/> rather than only print the sentence.
+    /// </summary>
+    public static async Task<(string Text, bool Problem, ContainerRun? Now)> ExplainWithRunAsync(
+        ClusterClient client, string @namespace, string podName, string container,
+        ContainerRun? atStart, CancellationToken token)
+    {
         await Task.Delay(SettleDelay, token).ConfigureAwait(false);
         DynamicResource? pod;
         try
@@ -38,13 +51,38 @@ public static class LogStreamEnd
         {
             var message = ex.Message;
             var end = message.IndexOfAny(['\r', '\n']);
-            return Describe(container, atStart, null, readError: end < 0 ? message : message[..end]);
+            var (text, problem) = Describe(container, atStart, null, readError: end < 0 ? message : message[..end]);
+            return (text, problem, null);
         }
 
-        return pod is null
-            ? Describe(container, atStart, null, podGone: true)
-            : Describe(container, atStart, PodDetails.ContainerRunOf(pod.Raw, container));
+        if (pod is null)
+        {
+            var (text, problem) = Describe(container, atStart, null, podGone: true);
+            return (text, problem, null);
+        }
+
+        var now = PodDetails.ContainerRunOf(pod.Raw, container);
+        var (said, isProblem) = Describe(container, atStart, now);
+        return (said, isProblem, now);
     }
+
+    /// <summary>
+    /// True when the follow was opened before the container had started and it is running
+    /// now — so the stream that ended was never this run's, and following again is the
+    /// whole remedy.
+    /// </summary>
+    /// <remarks>
+    /// Observed against a real kubelet (k3s v1.33, <c>WorkloadLogsLiveTests</c>): a follow
+    /// requested in the moment between a container being created and started is answered
+    /// 200 with an empty body that closes at once, because the kubelet ends a follow when it
+    /// reaches the end of the log of a container that is not running. During a rollout the
+    /// multi-pod pane opens its stream the instant the watch reports a new pod, so it hits
+    /// that window; left alone, the new pod sat in the strip with no lines and a sentence
+    /// blaming a dropped connection.
+    /// </remarks>
+    public static bool StartedAfterRequest(ContainerRun? atStart, ContainerRun? now) =>
+        now is { State: ContainerRunState.Running }
+        && atStart is not { State: ContainerRunState.Running };
 
     /// <summary>Shown between the stream ending and the pod being read.</summary>
     public static string Checking(string container) =>

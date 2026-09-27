@@ -177,3 +177,20 @@ would hide the one fact worth knowing — that lines between the drop and the re
 missing. Restarting the stream is one press of Follow, and the sentence says so.
 `LogStreamEndTests` pins the verdicts; the real status shapes (running, waiting
 CrashLoopBackOff, 404) were read from the sandbox. Not observed: a real idle-timeout drop.
+
+**The one exception: a follow opened before its container started.** A real kubelet
+answers a follow requested between a container being *created* and *started* with a 200
+and an empty body that closes at once — it ends a follow at the end of the log of a
+container that is not running, and this one has not run yet. The multi-pod pane opens a
+stream the instant its watch reports a pod, so during a rollout a new replica lands in that
+window (observed, with its empty 200, in one of about eight `Live/WorkloadLogsLiveTests` runs against k3s v1.33; the other
+runs saw the server's `is waiting to start: ContainerCreating` and `is not available` 400s,
+which the pane already retries on the pod's next Modified). Left alone, the new pod sat in
+the strip with no lines, blamed on a dropped connection, and no later event restarted it.
+So when the stream that ended was opened on a container that was not running
+(`LogStreamEnd.StartedAfterRequest`: not running at the start, running now), the
+multi-pod pane follows it again instead of printing a verdict. Nothing can have been lost —
+the follow never had a run to lose lines from, and the new one backfills with the pod's
+tail. It cannot loop: the restarted follow starts from a running container. The single-pod
+pane is unchanged; it is opened on a pod someone chose, not the instant one appears.
+`LogStreamStartRaceTests` (App) pins the predicate.

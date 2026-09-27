@@ -519,14 +519,27 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
 
                 // Not "exited" on faith: a dropped connection ends a follow the same way.
                 await EndSourceAsync(source, LogSourceState.Ended, LogStreamEnd.Checking(source.ContainerName), token);
-                var (text, _) = await LogStreamEnd.ExplainAsync(
+                var (text, _, now) = await LogStreamEnd.ExplainWithRunAsync(
                     client, podNamespace, source.PodName, source.ContainerName, atStart, token);
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
-                    if (!token.IsCancellationRequested && source.State is LogSourceState.Ended)
+                    if (token.IsCancellationRequested || source.State is not LogSourceState.Ended)
                     {
-                        source.StatusMessage = text;
+                        return;
                     }
+
+                    // Asked before the container started, and it has started since: the
+                    // stream that ended was never this run's, so follow it now. A new pod in
+                    // a rollout lands here routinely (see LogStreamEnd.StartedAfterRequest);
+                    // it cannot loop, because the restarted follow starts from a running
+                    // container and so never meets this condition again.
+                    if (LogStreamEnd.StartedAfterRequest(atStart, now))
+                    {
+                        StartStream(source);
+                        return;
+                    }
+
+                    source.StatusMessage = text;
                 });
             }
             catch (OperationCanceledException)
