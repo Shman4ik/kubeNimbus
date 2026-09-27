@@ -98,6 +98,12 @@
         <Button Grid.Column="3" Content="{Binding ConfirmLabel}" Classes="accent" Margin="8,0,0,0"
                 VerticalAlignment="Bottom" Command="{Binding ConfirmCommand}"
                 IsVisible="{Binding IsPromptVisible}" />
+        <!-- The confirm's slot after a CronJob's run-now: the one action with a natural
+             next step, which is watching the run it just started. Present only once the
+             server has named the Job. -->
+        <Button Grid.Column="3" Content="Open Job" Classes="accent" Margin="8,0,0,0"
+                VerticalAlignment="Bottom" Command="{Binding OpenCreatedJobCommand}"
+                IsVisible="{Binding HasFollowUp}" />
         <!-- Cancel before, Close after: one slot, swapped on the state, rather
              than a live button beside a dead one (UI rule 11 again). Cancel goes
              dead while the request is in flight, and that is the honest state:

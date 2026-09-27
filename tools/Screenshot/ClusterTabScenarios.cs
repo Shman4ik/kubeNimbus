@@ -916,6 +916,79 @@ internal static class ClusterTabScenarios
         return tab;
     }
 
+    // --------------------------------------------------------------- CronJobs
+    //
+    // FEAT-8 on the demo cluster, which ships one CronJob on its schedule and one
+    // suspended. The capability checks, the confirm sentences and the demo refusal run
+    // through the real commands; the created-Job state is written in, as the drain's
+    // progress is, because creating a Job needs an API server.
+
+    private static ClusterTabViewModel CronJobTab(string name)
+    {
+        var tab = DemoTab();
+        tab.SelectKindCommand.Execute(tab.SidebarSections
+            .SelectMany(s => s.Kinds)
+            .First(k => k.Descriptor is { Group: "batch", Kind: "CronJob" }));
+        tab.SelectedRow = tab.Rows.First(r => r.Name == name);
+        return tab;
+    }
+
+    /// <summary>Run now, armed on the demo cluster: the sentence, and the in-place refusal.</summary>
+    public static ClusterTabViewModel CronJobRunNow()
+    {
+        var tab = CronJobTab("nightly-reconcile");
+        tab.TriggerSelectedCommand.Execute(null);
+        return tab;
+    }
+
+    /// <summary>
+    /// After a run-now went through: the server's name for the Job, and "Open Job" in the
+    /// confirm's slot — the one follow-up any of the strip's actions has.
+    /// </summary>
+    public static ClusterTabViewModel CronJobRunNowDone()
+    {
+        var tab = CronJobRunNow();
+        var action = tab.PendingRowAction!;
+        using var document = JsonDocument.Parse("""
+            {"apiVersion":"batch/v1","kind":"Job","metadata":{"name":"nightly-reconcile-manual-x7k2m","namespace":"payments"}}
+            """);
+        action.OpenJob = _ => Task.CompletedTask;
+        action.CreatedJob = new DynamicResource(document.RootElement.Clone());
+        action.IsDone = true;
+        action.IsSuccess = true;
+        action.Message = "Created Job/nightly-reconcile-manual-x7k2m. Its pods appear as the Job controller starts them.";
+        return tab;
+    }
+
+    /// <summary>Resume, armed on the suspended CronJob: the missed-run clause is the thing to read.</summary>
+    public static ClusterTabViewModel CronJobResume()
+    {
+        var tab = CronJobTab("quarterly-report");
+        tab.ResumeSelectedCommand.Execute(null);
+        return tab;
+    }
+
+    /// <summary>
+    /// A Job in the workload pane: its run progress against the backoff limit and, on the
+    /// Conditions tab, why it failed. The demo run's pods are gone, which is the ordinary
+    /// state of a failed Job an hour later and reads as such.
+    /// </summary>
+    public static ClusterTabViewModel JobDetail()
+    {
+        var tab = DemoTab();
+        tab.SelectKindCommand.Execute(tab.SidebarSections
+            .SelectMany(s => s.Kinds)
+            .First(k => k.Descriptor is { Group: "batch", Kind: "Job" }));
+        tab.SelectedRow = tab.Rows.First(r => r.Name == "nightly-reconcile-29230920");
+        tab.OpenSelectedCommand.Execute(null);
+        if (tab.SelectedInspectorTab is WorkloadDetailTabViewModel detail)
+        {
+            detail.SelectedTabIndex = 1;
+        }
+
+        return tab;
+    }
+
     // ------------------------------------------------------------------ nodes
     //
     // Every one of these runs on the demo cluster, which is where the node dataset lives

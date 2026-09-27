@@ -31,15 +31,25 @@ public enum RowActionKind
 
     /// <summary>Ask Argo CD to re-compare an Application against Git, changing nothing.</summary>
     ArgoRefresh,
+
+    /// <summary>Create a Job from a CronJob's template now (<c>kubectl create job --from=cronjob/…</c>).</summary>
+    Trigger,
+
+    /// <summary>Stop a CronJob scheduling new Jobs (<c>spec.suspend: true</c>).</summary>
+    Suspend,
+
+    /// <summary>Let a suspended CronJob schedule again.</summary>
+    Resume,
 }
 
 /// <summary>
 /// The armed state of one mutating action on one object: what it is about to do, the
 /// replica count or the drain options when it needs them, whether it is running, and how
 /// it ended. It is the app's confirm step for scale / rollout restart / delete / cordon /
-/// uncordon / drain, and it is one view model for all six deliberately — the confirm
-/// sentence, the in-flight state, the RBAC 403 and the success line are identical work six
-/// times over otherwise, and six near-identical strips is exactly how they drift apart.
+/// uncordon / drain / a CronJob's run-now, suspend and resume / Argo's sync and refresh, and
+/// it is one view model for all of them deliberately — the confirm sentence, the in-flight
+/// state, the RBAC 403 and the success line are identical work many times over otherwise,
+/// and near-identical strips are exactly how they drift apart.
 ///
 /// <para>
 /// Drain is the one that is not a single request. It streams
@@ -78,6 +88,9 @@ public sealed partial class RowActionViewModel : ObservableObject
 
     /// <summary>The Pod kind's descriptor on this row's own cluster; only a drain needs it.</summary>
     private readonly ResourceDescriptor? _podDescriptor;
+
+    /// <summary>The Job kind's descriptor on this row's own cluster; only a CronJob's run-now needs it.</summary>
+    private readonly ResourceDescriptor? _jobDescriptor;
     private readonly string? _namespace;
     private readonly string _name;
 
@@ -95,12 +108,14 @@ public sealed partial class RowActionViewModel : ObservableObject
         string name,
         string clusterName = "",
         int? replicas = null,
-        ResourceDescriptor? podDescriptor = null)
+        ResourceDescriptor? podDescriptor = null,
+        ResourceDescriptor? jobDescriptor = null)
     {
         Kind = kind;
         _client = client;
         _descriptor = descriptor;
         _podDescriptor = podDescriptor;
+        _jobDescriptor = jobDescriptor;
         _namespace = @namespace;
         _name = name;
         _replicas = replicas;
@@ -166,6 +181,21 @@ public sealed partial class RowActionViewModel : ObservableObject
         RowActionKind.ArgoRefresh =>
             $"Refresh {Target}? Argo re-compares it against Git. Nothing on the cluster changes — this only "
             + "updates what Argo thinks the difference is.",
+        // The run is a Job owned by the CronJob, like a scheduled one: its history limits
+        // clean it up and deleting the CronJob deletes it. What it is not is scheduled —
+        // the CronJob controller does not put a Job it did not create on its active list,
+        // so the schedule and its concurrencyPolicy carry on as if nothing had run.
+        RowActionKind.Trigger =>
+            $"Run {Target} now? A Job is created from its job template, as kubectl create job --from=cronjob does. "
+            + "The schedule is unchanged.",
+        RowActionKind.Suspend =>
+            $"Suspend {Target}? No new Jobs are scheduled until it is resumed. Jobs already running keep running.",
+        // The missed-run clause is the thing people are surprised by, and it is the API's
+        // documented behaviour: resuming a CronJob with no startingDeadlineSeconds starts
+        // the most recent run it missed while suspended straight away.
+        RowActionKind.Resume =>
+            $"Resume {Target}? Its schedule applies again — and a run it missed while suspended can start straight "
+            + "away, unless startingDeadlineSeconds has passed.",
         _ => $"Delete {Target}? This cannot be undone.",
     };
 
@@ -178,6 +208,9 @@ public sealed partial class RowActionViewModel : ObservableObject
         RowActionKind.Drain => "Drain",
         RowActionKind.ArgoSync => "Sync",
         RowActionKind.ArgoRefresh => "Refresh",
+        RowActionKind.Trigger => "Run now",
+        RowActionKind.Suspend => "Suspend",
+        RowActionKind.Resume => "Resume",
         _ => "Delete",
     };
 
@@ -189,9 +222,34 @@ public sealed partial class RowActionViewModel : ObservableObject
     public bool IsDemo => _client is null;
 
     public const string DemoNotice =
-        "Scale, restart, delete, cordon, drain and the Argo CD actions all change objects on a live API "
-        + "server — the demo cluster has none. Everything else about this step is exactly what a real "
-        + "cluster shows.";
+        "Scale, restart, delete, cordon, drain, running or suspending a CronJob and the Argo CD actions all "
+        + "change objects on a live API server — the demo cluster has none. Everything else about this step is "
+        + "exactly what a real cluster shows.";
+
+    /// <summary>
+    /// The Job a run-now created, once the server has answered — the one follow-up any of
+    /// these actions has, because the reason to run a CronJob by hand is to watch that run.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasFollowUp))]
+    [NotifyCanExecuteChangedFor(nameof(OpenCreatedJobCommand))]
+    private DynamicResource? _createdJob;
+
+    /// <summary>Opens the created Job's detail (its pods, live); set by the owning cluster tab.</summary>
+    public Func<DynamicResource, Task>? OpenJob { get; set; }
+
+    /// <summary>True once there is a created Job to open and somewhere to open it.</summary>
+    public bool HasFollowUp => CreatedJob is not null && OpenJob is not null;
+
+    [RelayCommand(CanExecute = nameof(HasFollowUp))]
+    private async Task OpenCreatedJobAsync()
+    {
+        if (CreatedJob is { } job && OpenJob is { } open)
+        {
+            await open(job);
+            Dismissed?.Invoke();
+        }
+    }
 
     /// <summary>
     /// The target replica count. Null while the authoritative read of the <c>scale</c>
@@ -321,6 +379,8 @@ public sealed partial class RowActionViewModel : ObservableObject
         // fact, and a second eviction loop over the same node is not recoverable.
         && !IsDraining
         && (!IsScale || Replicas is not null)
+        // A run-now creates a Job, and without this cluster's Job kind there is nowhere to.
+        && (Kind != RowActionKind.Trigger || _jobDescriptor is not null)
         // A drain confirms against a plan, never against a guess: until the pods on the
         // node have been read there is nothing to agree to, and a plan with refusals is
         // one the drain will not run.
@@ -561,6 +621,9 @@ public sealed partial class RowActionViewModel : ObservableObject
             RowActionKind.Uncordon => "Uncordoning…",
             RowActionKind.ArgoSync => "Asking Argo to sync…",
             RowActionKind.ArgoRefresh => "Asking Argo to refresh…",
+            RowActionKind.Trigger => "Creating the Job…",
+            RowActionKind.Suspend => "Suspending…",
+            RowActionKind.Resume => "Resuming…",
             _ => "Deleting…",
         };
 
@@ -610,6 +673,24 @@ public sealed partial class RowActionViewModel : ObservableObject
                     Message =
                         "Refresh requested. Argo clears the annotation once it has re-compared, so there is "
                         + "nothing on the object to watch — the sync status updates when it is done.";
+                    break;
+
+                // The Job's name is the server's (generateName), so it is only known from
+                // the answer — and it is the one thing the next step needs.
+                case RowActionKind.Trigger:
+                    var job = await client.CreateJobFromCronJobAsync(_descriptor, _jobDescriptor!, _namespace, _name);
+                    CreatedJob = job;
+                    Message = $"Created Job/{job.Name}. Its pods appear as the Job controller starts them.";
+                    break;
+
+                case RowActionKind.Suspend:
+                    await client.SetCronJobSuspendedAsync(_descriptor, _namespace, _name, suspended: true);
+                    Message = $"{_name} is suspended. Jobs already running carry on; nothing new is scheduled until it is resumed.";
+                    break;
+
+                case RowActionKind.Resume:
+                    await client.SetCronJobSuspendedAsync(_descriptor, _namespace, _name, suspended: false);
+                    Message = $"{_name} is scheduled again.";
                     break;
 
                 default:

@@ -1420,6 +1420,30 @@ public sealed partial class MainWindowViewModel : ObservableObject
                     () => rowTab.DrainSelectedCommand.Execute(null));
             }
 
+            // A CronJob's run-now and its suspend/resume pair, gated like the node actions:
+            // on a Job template and a creatable Job kind, and on the CronJob's own
+            // spec.suspend for which of the pair applies.
+            if (rowTab.CanTriggerSelectedRow)
+            {
+                yield return new PaletteItem(
+                    "Run CronJob now…", $"{where} · create a Job from its template", "PlayIconGeometry",
+                    () => rowTab.TriggerSelectedCommand.Execute(null));
+            }
+
+            if (rowTab.CanSuspendSelectedRow)
+            {
+                yield return new PaletteItem(
+                    "Suspend CronJob…", $"{where} · stop scheduling new Jobs", "PauseIconGeometry",
+                    () => rowTab.SuspendSelectedCommand.Execute(null));
+            }
+
+            if (rowTab.CanResumeSelectedRow)
+            {
+                yield return new PaletteItem(
+                    "Resume CronJob…", $"{where} · back on its schedule", "ClockOutlineIconGeometry",
+                    () => rowTab.ResumeSelectedCommand.Execute(null));
+            }
+
             yield return Catalog(CommandId.EditYaml, where,
                 () => rowTab.EditSelectedYamlCommand.Execute(null));
 

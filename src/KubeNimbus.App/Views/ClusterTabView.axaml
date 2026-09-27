@@ -417,6 +417,30 @@
                     <PathIcon Data="{StaticResource DrainIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
+                <!-- CronJob actions (FEAT-8), present only on an object with a Job template,
+                     for the reason cordon is present only on a node. Suspend and resume are
+                     one slot, like cordon and uncordon: exactly one is ever shown. -->
+                <MenuItem Header="Run now…" Command="{Binding TriggerSelectedCommand}"
+                          IsVisible="{Binding CanTriggerSelectedRow}"
+                          ToolTip.Tip="Create a Job from this CronJob's template now — kubectl create job --from=cronjob">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource PlayIconGeometry}" Width="13" Height="13" />
+                  </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="Suspend…" Command="{Binding SuspendSelectedCommand}"
+                          IsVisible="{Binding CanSuspendSelectedRow}"
+                          ToolTip.Tip="Stop scheduling new Jobs. Jobs already running carry on.">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource PauseIconGeometry}" Width="13" Height="13" />
+                  </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="Resume…" Command="{Binding ResumeSelectedCommand}"
+                          IsVisible="{Binding CanResumeSelectedRow}"
+                          ToolTip.Tip="Put this CronJob back on its schedule">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource ClockOutlineIconGeometry}" Width="13" Height="13" />
+                  </MenuItem.Icon>
+                </MenuItem>
                 <!-- Argo CD, on an ordinary Applications list. Present only for that kind,
                      for the same reason cordon is present only on a node: "sync this
                      ConfigMap" is not a question anyone has. The dashboard's own rows carry

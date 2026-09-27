@@ -173,6 +173,12 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // advanced view, which is where the CRD's own `priority: 1` columns live.
     ("cluster-tab-crd-printer-columns", () => HostInMainWindow(ClusterTabScenarios.DemoCrdPrinterColumns())),
     ("cluster-tab-demo-scale-unavailable", () => HostInMainWindow(ClusterTabScenarios.DemoScaleUnavailable())),
+    // FEAT-8 — a CronJob's run-now and resume on the shared strip, the created-Job state
+    // with its "Open Job" follow-up, and a Job opened in the workload pane.
+    ("cluster-tab-cronjob-run-now", () => HostInMainWindow(ClusterTabScenarios.CronJobRunNow())),
+    ("cluster-tab-cronjob-run-now-done", () => HostInMainWindow(ClusterTabScenarios.CronJobRunNowDone())),
+    ("cluster-tab-cronjob-resume", () => HostInMainWindow(ClusterTabScenarios.CronJobResume())),
+    ("cluster-tab-job-detail", () => HostInMainWindow(ClusterTabScenarios.JobDetail(), height: 1000)),
 
     // FEAT-4 — the node surface. All on the demo cluster, which is where the node
     // dataset lives; the drain's progress states are the two the harness cannot produce

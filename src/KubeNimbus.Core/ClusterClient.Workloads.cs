@@ -100,6 +100,65 @@ public sealed partial class ClusterClient
         await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Suspends or resumes a CronJob — a one-field merge patch of <c>spec.suspend</c>.
+    /// Jobs already running are not touched either way; that is the CronJob controller's
+    /// own contract for the field.
+    /// </summary>
+    public async Task SetCronJobSuspendedAsync(
+        ResourceDescriptor descriptor,
+        string? @namespace,
+        string name,
+        bool suspended,
+        CancellationToken cancellationToken = default)
+    {
+        using var content = new StringContent(CronJobActions.SuspendPatch(suspended), Encoding.UTF8, MergePatchContentType);
+        using var response = await SendRequestAsync(
+            HttpMethod.Patch,
+            descriptor.ItemPath(@namespace, name),
+            content,
+            HttpCompletionOption.ResponseContentRead,
+            cancellationToken).ConfigureAwait(false);
+
+        await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Runs a CronJob now: reads it, and creates the Job
+    /// <c>kubectl create job --from=cronjob/…</c> would (<see cref="CronJobActions.ManualJobBody"/>).
+    /// The CronJob is read at the moment of the run rather than taken from the list, so an
+    /// edit made since the list last ticked is what runs. Returns the Job the server
+    /// created, whose name the server chose.
+    /// </summary>
+    public async Task<DynamicResource> CreateJobFromCronJobAsync(
+        ResourceDescriptor cronJobDescriptor,
+        ResourceDescriptor jobDescriptor,
+        string? @namespace,
+        string name,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(cronJobDescriptor);
+        ArgumentNullException.ThrowIfNull(jobDescriptor);
+
+        var cronJob = await ReadResourceAsync(cronJobDescriptor, @namespace, name, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"CronJob {name} no longer exists.");
+
+        using var content = new StringContent(
+            CronJobActions.ManualJobBody(cronJob, jobDescriptor.ApiVersion), Encoding.UTF8, "application/json");
+        using var response = await SendRequestAsync(
+            HttpMethod.Post,
+            jobDescriptor.CollectionPath(@namespace),
+            content,
+            HttpCompletionOption.ResponseContentRead,
+            cancellationToken).ConfigureAwait(false);
+
+        await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+
+        var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+        return DynamicResource.FromListItem(doc.RootElement, jobDescriptor);
+    }
+
     /// <summary>Reads an <c>autoscaling/v1 Scale</c> object's spec/status replica counts.</summary>
     private static ScaleState ReadScale(JsonElement scale)
     {

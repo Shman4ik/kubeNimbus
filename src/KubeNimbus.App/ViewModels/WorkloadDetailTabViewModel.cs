@@ -24,8 +24,14 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
     private readonly Task _watch;
     private readonly Task _initialRefresh;
 
-    public static bool Supports(ResourceDescriptor descriptor) => descriptor.Group == "apps"
-        && descriptor.Kind is "Deployment" or "StatefulSet" or "DaemonSet";
+    /// <summary>
+    /// The kinds a double-click opens here rather than in the YAML editor: the three
+    /// controllers that roll pods, and a batch Job — whose pods are the whole of what there
+    /// is to see about a run, and which is where a CronJob's "Open Job" lands (FEAT-8).
+    /// </summary>
+    public static bool Supports(ResourceDescriptor descriptor) =>
+        (descriptor.Group == "apps" && descriptor.Kind is "Deployment" or "StatefulSet" or "DaemonSet")
+        || descriptor is { Group: "batch", Kind: "Job" };
     public static string KeyFor(string cluster, ResourceDescriptor descriptor, string? ns, string name) =>
         $"workload:{cluster}/{descriptor.Group}/{descriptor.Kind}/{ns}/{name}";
     public override string Key { get; }
@@ -93,6 +99,15 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
             if (status.TryGetProperty("conditions", out var conditions) && conditions.ValueKind == JsonValueKind.Array)
                 foreach (var c in conditions.EnumerateArray())
                     Conditions.Add(new(Text(c, "type"), Text(c, "status"), Text(c, "reason"), Text(c, "message")));
+            if (_descriptor is { Group: "batch", Kind: "Job" })
+            {
+                Rollout = JobProgress(raw, status);
+                OnPropertyChanged(nameof(HasNoConditions));
+                OnPropertyChanged(nameof(CanRestart));
+                RestartCommand.NotifyCanExecuteChanged();
+                return;
+            }
+
             var daemon = _descriptor.Kind == "DaemonSet";
             var desired = daemon ? Number(status, "desiredNumberScheduled")
                 : raw.TryGetProperty("spec", out var spec) ? Number(spec, "replicas", 1) : 1;
@@ -107,6 +122,23 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
         OnPropertyChanged(nameof(HasNoConditions));
         OnPropertyChanged(nameof(CanRestart));
         RestartCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>
+    /// A Job's line: kubectl's COMPLETIONS figure (succeeded of <c>spec.completions</c>,
+    /// which defaults to one), then how many pods are running and how many have failed —
+    /// the failed count against <c>backoffLimit</c> is what a crash-looping run is read by.
+    /// </summary>
+    internal static string JobProgress(JsonElement raw, JsonElement status)
+    {
+        var spec = raw.TryGetProperty("spec", out var s) ? s : default;
+        var completions = spec.ValueKind == JsonValueKind.Object ? Number(spec, "completions", 1) : 1;
+        var backoff = spec.ValueKind == JsonValueKind.Object && spec.TryGetProperty("backoffLimit", out var b)
+            && b.TryGetInt64(out var limit) ? $" (backoff limit {limit})" : "";
+        var suspended = spec.ValueKind == JsonValueKind.Object && spec.TryGetProperty("suspend", out var sus)
+            && sus.ValueKind == JsonValueKind.True ? " · suspended" : "";
+        return $"{Number(status, "succeeded")}/{completions} succeeded · {Number(status, "active")} running · "
+            + $"{Number(status, "failed")} failed{backoff}{suspended}";
     }
 
     private static string Text(JsonElement el, string key) => el.TryGetProperty(key, out var v) ? v.ToString() : "";
