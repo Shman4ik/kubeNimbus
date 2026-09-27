@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using KubeNimbus.App.ViewModels;
 using KubeNimbus.Core;
+using KubeNimbus.Core.Commands;
 
 namespace KubeNimbus.App.Tests;
 
@@ -386,8 +387,38 @@ public class LogPaletteTests
         await Assert.That(landed).IsEqualTo(1);
         await Assert.That(tab.LogTargetsState.IsLoading).IsFalse();
         await Assert.That(tab.LogTargetRows.Any(r => r.Title.StartsWith("Logs: Deployment/", StringComparison.Ordinal))).IsTrue();
-        var podRows = tab.LogTargetRows.Count(r => r.IconKey == LogPaletteRows.PodIcon);
+        var podRows = tab.LogTargetRows.Count(IsPodRow);
         await Assert.That(podRows).IsEqualTo(tab.Rows.Count);
+    }
+
+    /// <summary>
+    /// A pod's row, told apart by its title — "Logs: api-7f9c-x7k2m" against a workload's
+    /// "Logs: Deployment/api". It used to be told apart by its icon, which ENG-38 made the
+    /// same logs glyph for both; a note has no action.
+    /// </summary>
+    private static bool IsPodRow(PaletteItem row) =>
+        row.Execute is not null
+        && row.Title.StartsWith("Logs: ", StringComparison.Ordinal)
+        && !row.Title.Contains('/', StringComparison.Ordinal);
+
+    /// <summary>
+    /// ENG-38: one glyph for logs, wherever logs are opened — the palette's pod and
+    /// workload rows, its notes, the list's "Logs (all pods)", and the catalog's Logs,
+    /// Previous logs and logs-palette commands — and it is the row icon's glyph, not the
+    /// clock that sits beside an Age column reading as "age".
+    /// </summary>
+    [Test]
+    public async Task Every_logs_entry_uses_the_one_logs_glyph()
+    {
+        var tab = DemoTab();
+        tab.RequestLogTargets();
+
+        await Assert.That(LogPaletteRows.Icon).IsEqualTo("LogsIconGeometry");
+        await Assert.That(tab.LogTargetRows.All(r => r.IconKey == LogPaletteRows.Icon)).IsTrue();
+        foreach (var id in (CommandId[])[CommandId.PodLogs, CommandId.PreviousLogs, CommandId.LogsPalette])
+        {
+            await Assert.That(CommandCatalog.Get(id).IconKey).IsEqualTo(LogPaletteRows.Icon);
+        }
     }
 
     [Test]
@@ -395,7 +426,7 @@ public class LogPaletteTests
     {
         var tab = DemoTab();
         tab.RequestLogTargets();
-        var row = tab.LogTargetRows.First(r => r.IconKey == LogPaletteRows.PodIcon);
+        var row = tab.LogTargetRows.First(IsPodRow);
 
         row.Execute!();
         row.Execute!();

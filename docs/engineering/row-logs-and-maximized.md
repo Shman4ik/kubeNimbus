@@ -41,6 +41,11 @@ Nine things are load-bearing.
    Node, a Deployment with an empty selector, a CRD that happens to be called `Pod` in
    another group — or be missing where L works (a Service, a Job, a CRD with a pod
    selector). It is a public static so L3's panes that name pods can ask the same question.
+   A `spec.selector` that selects something else is refused at the source (ENG-36):
+   `ForPodsOf` returns null for a PersistentVolumeClaim (it selects volumes) and a
+   ServiceMonitor (it selects Services), so neither gets the icon, L or "Logs (all pods)".
+   The glyph is `LogsIconGeometry` here and wherever else logs are opened (ENG-38,
+   [log-pane-reading](log-pane-reading.md)).
 4. **The icon is inside the Name cell, not a column of its own.** A column is one more
    width the per-kind layout remembers ("The resource grid is the reader's to re-cut") and
    one more thing a CRD's printer columns compete with at 1280px. It sits in an `Auto`

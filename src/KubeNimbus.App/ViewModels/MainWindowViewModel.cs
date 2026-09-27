@@ -1366,7 +1366,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             if (rowTab.CanAggregateLogsForSelectedRow)
             {
                 yield return new PaletteItem(
-                    "Logs (all pods)", $"{where} · one stream across every pod", "LayersIconGeometry",
+                    "Logs (all pods)", $"{where} · one stream across every pod", LogPaletteRows.Icon,
                     () => rowTab.OpenWorkloadLogsCommand.Execute(null));
             }
 

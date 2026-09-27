@@ -143,6 +143,40 @@ public class LabelSelectorTests
     }
 
     /// <summary>
+    /// ENG-36. A PersistentVolumeClaim's <c>spec.selector</c> selects the volumes it may
+    /// bind, and a ServiceMonitor's selects Services; both are the ordinary LabelSelector
+    /// shape, so reading them as pod selectors offered L, "Logs (all pods)" and the row
+    /// logs icon on a claim and tailed whichever pods happened to share the volume's
+    /// labels. The same selector on a Deployment still reads — the refusal is about what
+    /// the object is, not about the selector.
+    /// </summary>
+    [Test]
+    public async Task A_selector_that_selects_volumes_or_services_is_not_a_pod_selector()
+    {
+        const string selector = """{ "matchLabels": { "app": "api" } }""";
+        var claim = Object($$"""
+            {
+              "apiVersion": "v1",
+              "kind": "PersistentVolumeClaim",
+              "metadata": { "name": "data", "namespace": "payments" },
+              "spec": { "selector": {{selector}}, "resources": { "requests": { "storage": "1Gi" } } }
+            }
+            """);
+        var serviceMonitor = Object($$"""
+            {
+              "apiVersion": "monitoring.coreos.com/v1",
+              "kind": "ServiceMonitor",
+              "metadata": { "name": "api", "namespace": "payments" },
+              "spec": { "selector": {{selector}}, "endpoints": [ { "port": "metrics" } ] }
+            }
+            """);
+
+        await Assert.That(LabelSelector.ForPodsOf(claim)).IsNull();
+        await Assert.That(LabelSelector.ForPodsOf(serviceMonitor)).IsNull();
+        await Assert.That(LabelSelector.ForPodsOf(Workload(selector))!.ToQuery()).IsEqualTo("app=api");
+    }
+
+    /// <summary>
     /// An unknown operator drops that requirement, and dropping a requirement *widens*
     /// the selector. So a selector whose only requirement is unreadable comes back null
     /// instead of matching everything.

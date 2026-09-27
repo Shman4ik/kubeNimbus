@@ -307,4 +307,52 @@ public class PodDetailsTests
 
         await Assert.That(probes.Single().Handler).IsEqualTo("unrecognized handler");
     }
+
+    // ------------------------------------------------------------ default container
+
+    private static JsonElement DefaultContainerPod(string? annotation)
+    {
+        var annotations = annotation is null
+            ? ""
+            : $$""", "annotations": { "kubectl.kubernetes.io/default-container": "{{annotation}}" }""";
+        return Parse($$"""
+            {
+              "apiVersion": "v1", "kind": "Pod",
+              "metadata": { "name": "p"{{annotations}} },
+              "spec": {
+                "initContainers": [ { "name": "migrate" } ],
+                "containers": [ { "name": "istio-proxy" }, { "name": "app" } ]
+              }
+            }
+            """).Raw;
+    }
+
+    /// <summary>
+    /// FEAT-38. A mesh sidecar injected ahead of the app is the case the annotation
+    /// exists for: kubectl and stern open on the container it names, and so must every
+    /// pane here. With no annotation the rule is kubectl's own older one, the first entry
+    /// of spec.containers — never an init container, which has long since exited.
+    /// </summary>
+    [Test]
+    public async Task The_default_container_annotation_is_honoured_and_the_first_container_is_the_fallback()
+    {
+        await Assert.That(PodDetails.DefaultContainer(DefaultContainerPod("app"))).IsEqualTo("app");
+        await Assert.That(PodDetails.DefaultContainer(DefaultContainerPod(null))).IsEqualTo("istio-proxy");
+
+        // kubectl looks the name up across all three arrays, so an init container can be
+        // the named default.
+        await Assert.That(PodDetails.DefaultContainer(DefaultContainerPod("migrate"))).IsEqualTo("migrate");
+    }
+
+    /// <summary>
+    /// An annotation that names a container the pod does not have is ignored, as kubectl
+    /// ignores it: a stream opened on a missing container is a 400 and an empty pane.
+    /// </summary>
+    [Test]
+    public async Task A_default_container_annotation_naming_nothing_falls_back_to_the_first_container()
+    {
+        await Assert.That(PodDetails.DefaultContainer(DefaultContainerPod("no-such"))).IsEqualTo("istio-proxy");
+        await Assert.That(PodDetails.DefaultContainer(DefaultContainerPod(""))).IsEqualTo("istio-proxy");
+        await Assert.That(PodDetails.DefaultContainer(Parse("""{ "kind": "Pod", "spec": {} }""").Raw)).IsNull();
+    }
 }

@@ -29,6 +29,18 @@ public partial class PodDetailView : UserControl
             Unbind();
             Bind();
         };
+
+        LogSearchGestures.Attach(
+            LogSearchBox,
+            next: () => _vm?.FindNextLogMatchCommand,
+            previous: () => _vm?.FindPreviousLogMatchCommand,
+            clear: () =>
+            {
+                if (_vm is not null)
+                {
+                    _vm.LogSearchText = "";
+                }
+            });
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -49,6 +61,11 @@ public partial class PodDetailView : UserControl
         {
             _vm = vm;
             _vm.LogLines.CollectionChanged += OnLogLinesChanged;
+            _vm.PropertyChanged += OnViewModelChanged;
+
+            // A search can already be on a match when the view is (re)attached — the dock
+            // tab was switched away and back — and the reader expects to be put back on it.
+            LogSearchGestures.BringIntoView(LogItems, _vm.CurrentLogMatch);
         }
     }
 
@@ -57,7 +74,16 @@ public partial class PodDetailView : UserControl
         if (_vm is not null)
         {
             _vm.LogLines.CollectionChanged -= OnLogLinesChanged;
+            _vm.PropertyChanged -= OnViewModelChanged;
             _vm = null;
+        }
+    }
+
+    private void OnViewModelChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(PodDetailTabViewModel.CurrentLogMatch))
+        {
+            LogSearchGestures.BringIntoView(LogItems, _vm?.CurrentLogMatch);
         }
     }
 

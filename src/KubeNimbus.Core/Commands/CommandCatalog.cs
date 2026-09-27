@@ -321,7 +321,7 @@ public static class CommandCatalog
             // PodLogsMaximized's) through RowLogsGesture.MatchLogsKey, and the Events
             // list's L opens the involved pod's logs. Still never a window binding — each
             // of those lists is a read-only grid that owns the bare letter.
-            IconKey = "ClockOutlineIconGeometry",
+            IconKey = "LogsIconGeometry",
             Chord = new(CommandKey.L),
             Surfaces = PaletteAndSheet,
         },
@@ -348,7 +348,7 @@ public static class CommandCatalog
             Title = "Logs: find a pod or workload…",
             CheatTitle = "Logs of any pod or workload, from anywhere",
             Category = CommandCategory.Pods,
-            IconKey = "ClockOutlineIconGeometry",
+            IconKey = "LogsIconGeometry",
             // The palette, opened already narrowed to the tab's pods and workloads. A
             // window binding, not a list key like L: it has to work with focus in the
             // sidebar, the inspector or nowhere, which is the whole point of "from
@@ -363,7 +363,7 @@ public static class CommandCatalog
             Title = "Previous logs (crashed container)",
             Category = CommandCategory.Pods,
             Scope = CommandScope.List,
-            IconKey = "ClockOutlineIconGeometry",
+            IconKey = "LogsIconGeometry",
             Chord = new(CommandKey.P),
             Surfaces = PaletteAndSheet,
         },
@@ -597,6 +597,19 @@ public static class CommandCatalog
             Category = CommandCategory.Pods,
             IconKey = "PlayIconGeometry",
             GestureNote = "The Follow toggle, above the log pane",
+            Surfaces = SheetOnly,
+        },
+        new()
+        {
+            Id = CommandId.LogSearchStep,
+            Title = "Next / previous log search match",
+            CheatTitle = "Step through a log search's matches (the funnel filters instead)",
+            Category = CommandCategory.Pods,
+            IconKey = "MagnifyIconGeometry",
+            // Keys of the log panes' search box, not window or list chords: Enter belongs to
+            // that box only while it has focus, which is why this is a note rather than a
+            // Chord the window would bind. Esc there empties the box.
+            GestureNote = "Enter / Shift+Enter in a log pane's search box",
             Surfaces = SheetOnly,
         },
         new()

@@ -105,12 +105,17 @@ Eight things are load-bearing.
    410-Gone relist) deliberately does **not** clear the sources, because every pod still
    there arrives again as `Added` a moment later and clearing would cancel healthy
    streams and discard a buffer no reconnect can refetch.
-8. **One container per pod: the one `kubectl logs` picks with no `-c`.** The chip names
-   it, so what is being tailed is stated rather than assumed. Tailing *every* container of
-   a pod, colour-keyed by container, is a separate and strictly smaller feature; sources
-   here are keyed by pod **and** container from the start, so that becomes a change to
-   which sources are created and to nothing else — not a change to the merge, the buffer,
-   the legend or the view.
+8. **One container per pod: the one `kubectl logs` picks with no `-c`** — the pod's
+   `kubectl.kubernetes.io/default-container` when it names one it has, else its first
+   container (`PodDetails.DefaultContainer`, FEAT-38; see
+   [log-pane-reading](log-pane-reading.md)). The chip names it, so what is being tailed is
+   stated rather than assumed. Tailing *every* container of a pod, colour-keyed by
+   container (FEAT-35), was looked at in the logs bundle and **not built**: the
+   `LogSourceViewModel` carries pod and container, but the pane's own state —
+   `_sourcesByPod`, `_streamsByPod`, `_respondedPods`, `_latestPods` — is keyed by pod name
+   alone, so "a change to which sources are created and nothing else" was not true of this
+   code, and the demand behind the row is ambiguous (k9s#827 may mean pods). A sidecar is
+   one click away on pod detail's container strip.
 
 **The colour palette is one set for both themes**, eight mid-tone hues in
 `LogSourcePalette`, cycling past eight. Same argument as the exec terminal's palette: a
@@ -129,7 +134,13 @@ ReplicaSet and one on the new — and their canned streams interleave by timesta
 what the pane renders offline is a rolling deployment read as one stream. The pods are
 found through the same `LabelSelector.Matches` a live cluster's query is rendered from,
 and every line goes through the same merge, buffer and filter. Nothing about this pane is
-demo-unavailable.
+demo-unavailable. A demo pod whose canned stream is empty (the unschedulable
+`fraud-detector`) ends through `LogStreamEnd.DescribePod` on its own dataset object, the
+sentence a live cluster's pane reads from the pod — it used to end "the sample stream has
+finished" over zero lines, a chip reading "ended" beside a body that disagreed (ENG-45).
+
+The search box, Levels, Clear, the UTC chip and the remembered display toggles are the same
+as pod detail's and are described once, in [log-pane-reading](log-pane-reading.md).
 
 **Core gained `labelSelector` to make it possible.** `WatchResourceAsync` and
 `ListResourceOnceAsync` take a `LabelSelector?`, and the watch engine gained an
@@ -170,6 +181,11 @@ the watched pod at stream start):
 - terminated — "exited" with the kubelet's reason and exit code;
 - waiting with no container id — it has not started yet; waiting with one — not running,
   with the reason (`CrashLoopBackOff`);
+- no status for the container and no node — the pod is not scheduled yet, with the
+  PodScheduled reason (`Unschedulable`). An unscheduled pod's follow request is an
+  immediate 204, so this is what such a stream's ending is; the multi-pod pane's chip then
+  reads **not started** rather than "ended", the body repeats the chips' sentence, and the
+  source is re-opened once the pod runs (ENG-45, [log-pane-reading](log-pane-reading.md));
 - 404 — the pod is gone; any other read failure — said, with the server's first line.
 
 It does **not** reconnect. The owner's usage is open, look, close, and a silent reconnect

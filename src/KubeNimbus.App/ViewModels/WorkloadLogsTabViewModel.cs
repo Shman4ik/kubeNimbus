@@ -48,7 +48,8 @@ public sealed record WorkloadLogsOptions(
 /// </para>
 /// <para>
 /// <b>Which container.</b> One per pod — the one <c>kubectl logs</c> with no <c>-c</c>
-/// picks, i.e. the first app container — and the chip names it. Tailing every container
+/// picks, i.e. the pod's <c>kubectl.kubernetes.io/default-container</c> or else its first
+/// app container — and the chip names it. Tailing every container
 /// of a pod is a separate, smaller feature (colour-keyed by container rather than by
 /// pod); sources here are already keyed by pod <em>and</em> container so that becomes a
 /// change to which sources are created and to nothing else.
@@ -150,14 +151,51 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
     /// <summary>Filtered view over the buffer — this is what is rendered.</summary>
     public ObservableCollection<LogLineViewModel> LogLines { get; } = [];
 
+    /// <summary>
+    /// The log search: finds (highlights, next/previous) by default, filters while
+    /// <see cref="IsLogFilterMode"/> is on — the same two modes as pod detail's pane.
+    /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasLogSearch), nameof(IsFinding))]
     private string _logSearchText = "";
 
+    /// <summary>Hide non-matching lines rather than highlight matches.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsFinding))]
+    private bool _isLogFilterMode;
+
+    public bool HasLogSearch => LogSearchText.Length > 0;
+
+    /// <summary>A search is running in find mode — the box shows its previous/next arrows.</summary>
+    public bool IsFinding => HasLogSearch && !IsLogFilterMode;
+
+    /// <summary>The search box's counter: "3 of 17" while finding, "12 lines" while filtering.</summary>
+    [ObservableProperty]
+    private string _logSearchSummary = "";
+
+    /// <summary>The line next/previous is on. The view scrolls it into sight when it changes.</summary>
+    [ObservableProperty]
+    private LogLineViewModel? _currentLogMatch;
+
+    /// <summary>Which severities are shown; unclassified lines always are.</summary>
+    public LogLevelFilter Levels { get; } = new();
+
+    // Display preferences, shared with pod detail's pane through settings.json (FEAT-37).
     [ObservableProperty]
     private bool _showLogTimestamps;
 
     [ObservableProperty]
     private bool _wrapLogLines;
+
+    [ObservableProperty]
+    private bool _useUtcTimestamps;
+
+    private bool _restoringDisplayPreferences;
+
+    /// <summary>Lines the reader cleared while nothing has arrived since; see pod detail's twin.</summary>
+    private int? _clearedLines;
+
+    private readonly LogFind _find = new();
 
     public IReadOnlyList<LogRange> LogRanges => LogRange.Choices;
 
@@ -245,6 +283,8 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
         Key = KeyFor(clusterName, descriptor, _namespace, workload.Name);
 
         Sources.CollectionChanged += (_, _) => UpdateSummary();
+        Levels.Changed += (_, _) => ApplyFilter();
+        RestoreDisplayPreferences();
         UpdateSummary();
         Start();
     }
@@ -396,7 +436,19 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
     {
         if (_sourcesByPod.TryGetValue(pod.Name, out var existing))
         {
-            if (existing.State is LogSourceState.Failed && !_streamsByPod.ContainsKey(pod.Name))
+            // A pod whose container had not started when the pane opened is picked up once
+            // it has: an unscheduled pod's follow request is an immediate 204 No Content, so
+            // its stream ends cleanly rather than failing (a scheduled pod still creating its
+            // container is a 400 instead, the Failed path), and without this it stayed "not
+            // started" after the pod was running. Re-opened only once the pod no longer reads as never
+            // started, so a pending pod's status updates do not each cost a request.
+            var retry = existing.State switch
+            {
+                LogSourceState.Failed => true,
+                LogSourceState.NotStarted => !LogStreamEnd.DescribePod(pod.Raw, existing.ContainerName, null).NotStarted,
+                _ => false,
+            };
+            if (retry && !_streamsByPod.ContainsKey(pod.Name))
             {
                 StartStream(existing);
             }
@@ -441,30 +493,14 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
     }
 
     /// <summary>
-    /// The container <c>kubectl logs</c> would pick with no <c>-c</c>: the first app
-    /// container. Init and ephemeral containers are deliberately not streamed here —
-    /// an init container has already exited by the time a workload has running pods, and
-    /// a debug attachment is not part of the workload's own output.
+    /// The container <c>kubectl logs</c> would pick with no <c>-c</c>: the one named by
+    /// <c>kubectl.kubernetes.io/default-container</c>, else the first app container
+    /// (<see cref="PodDetails.DefaultContainer"/>, FEAT-38). Init and ephemeral containers
+    /// are otherwise not streamed here — an init container has already exited by the time a
+    /// workload has running pods, and a debug attachment is not part of the workload's own
+    /// output — unless the pod itself names one as its default.
     /// </summary>
-    private static string FirstContainerOf(DynamicResource pod)
-    {
-        if (pod.Raw.ValueKind == JsonValueKind.Object
-            && pod.Raw.TryGetProperty("spec", out var spec)
-            && spec.ValueKind == JsonValueKind.Object
-            && spec.TryGetProperty("containers", out var containers)
-            && containers.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var container in containers.EnumerateArray())
-            {
-                if (container.TryGetProperty("name", out var name) && name.GetString() is { Length: > 0 } value)
-                {
-                    return value;
-                }
-            }
-        }
-
-        return "";
-    }
+    private static string FirstContainerOf(DynamicResource pod) => PodDetails.DefaultContainer(pod.Raw) ?? "";
 
     private void StartStream(LogSourceViewModel source, bool follow = true)
     {
@@ -519,7 +555,7 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
 
                 // Not "exited" on faith: a dropped connection ends a follow the same way.
                 await EndSourceAsync(source, LogSourceState.Ended, LogStreamEnd.Checking(source.ContainerName), token);
-                var (text, _, now) = await LogStreamEnd.ExplainWithRunAsync(
+                var (text, _, notStarted, now) = await LogStreamEnd.ExplainWithRunAsync(
                     client, podNamespace, source.PodName, source.ContainerName, atStart, token);
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
@@ -540,6 +576,12 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
                     }
 
                     source.StatusMessage = text;
+                    if (notStarted)
+                    {
+                        source.State = LogSourceState.NotStarted;
+                    }
+
+                    RaisePlaceholder();
                 });
             }
             catch (OperationCanceledException)
@@ -622,8 +664,17 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
             return;
         }
 
-        await EndSourceAsync(
-            source, LogSourceState.Ended, "Demo cluster: the sample stream has finished.", token);
+        // No lines at all is a container that never ran, and it is said from the pod the
+        // way a live stream's ending is — "the sample stream has finished" over zero lines
+        // was a chip saying "ended" beside a body that disagreed (ENG-45).
+        if (lines.Count == 0 && DemoData.Pods.FirstOrDefault(p => p.Name == source.PodName) is { } pod)
+        {
+            var (text, _, notStarted) = LogStreamEnd.DescribePod(pod.Raw, source.ContainerName, atStart: null);
+            await EndSourceAsync(source, notStarted ? LogSourceState.NotStarted : LogSourceState.Ended, text, token);
+            return;
+        }
+
+        await EndSourceAsync(source, LogSourceState.Ended, "Demo cluster: the sample stream has finished.", token);
     }
 
     private async Task EndSourceAsync(LogSourceViewModel source, LogSourceState state, string message, CancellationToken token) =>
@@ -731,9 +782,11 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
         var built = new List<LogLineViewModel>(pending.Length);
         foreach (var (raw, source) in pending)
         {
-            built.Add(new LogLineViewModel(raw, ShowLogTimestamps, source));
+            built.Add(new LogLineViewModel(raw, ShowLogTimestamps, source, UseUtcTimestamps));
             source.LineCount++;
         }
+
+        _clearedLines = null;
 
         foreach (var line in OrderBatch(built))
         {
@@ -751,6 +804,8 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
 
         TrimBuffer();
         _loadingLogRange = _streamsByPod.Keys.Any(pod => !_respondedPods.Contains(pod));
+        UpdateFind(newQuery: false);
+        ClearLogsCommand.NotifyCanExecuteChanged();
         UpdateSummary();
         RaisePlaceholder();
     }
@@ -828,15 +883,17 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
     }
 
     /// <summary>
-    /// A line is shown when its pod is included <em>and</em> the text filter matches.
-    /// Both halves are re-evaluated over the whole buffer rather than applied as lines
-    /// arrive, so re-including a pod brings its earlier lines back in place instead of
-    /// only its future ones.
+    /// A line is shown when its pod is included, its level is shown (unclassified lines
+    /// always are) <em>and</em>, in filter mode only, the search text matches — in find mode
+    /// every line stays and the matches are highlighted instead. All of it is re-evaluated
+    /// over the whole buffer rather than applied as lines arrive, so re-including a pod
+    /// brings its earlier lines back in place instead of only its future ones.
     /// </summary>
     private bool MatchesFilter(LogLineViewModel line) =>
         (line.Source?.IsIncluded ?? true)
         && (!ShowErrorsOnly || line.IsErrorLine)
-        && (LogSearchText.Length == 0 || line.Message.Contains(LogSearchText, StringComparison.OrdinalIgnoreCase));
+        && Levels.Admits(line)
+        && (!IsLogFilterMode || LogSearchText.Length == 0 || line.Contains(LogSearchText));
 
     /// <summary>
     /// The application page's "Errors only": the same class-based severity the lines are
@@ -907,10 +964,123 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
             }
         }
 
+        UpdateFind(newQuery: false);
         RaisePlaceholder();
     }
 
-    partial void OnLogSearchTextChanged(string value) => ApplyFilter();
+    partial void OnLogSearchTextChanged(string value)
+    {
+        if (IsLogFilterMode)
+        {
+            ApplyFilter();
+        }
+
+        UpdateFind(newQuery: true);
+        RaisePlaceholder();
+    }
+
+    partial void OnIsLogFilterModeChanged(bool value)
+    {
+        ApplyFilter();
+        UpdateFind(newQuery: true);
+    }
+
+    /// <summary>Re-reads the search's matches after the shown lines changed — pod detail's <c>UpdateLogFind</c>, line for line.</summary>
+    private void UpdateFind(bool newQuery)
+    {
+        if (IsLogFilterMode || LogSearchText.Length == 0)
+        {
+            _find.Clear();
+            LogSearchSummary = LogSearchText.Length == 0
+                ? ""
+                : $"{LogLines.Count:N0} line{(LogLines.Count == 1 ? "" : "s")}";
+        }
+        else
+        {
+            _find.Update(LogLines, LogSearchText, newQuery);
+            LogSearchSummary = _find.Summary(LogSearchText);
+        }
+
+        CurrentLogMatch = _find.Current;
+        FindNextLogMatchCommand.NotifyCanExecuteChanged();
+        FindPreviousLogMatchCommand.NotifyCanExecuteChanged();
+    }
+
+    private bool HasLogMatches => _find.Count > 0;
+
+    /// <summary>The next (later) match — Enter in the search box.</summary>
+    [RelayCommand(CanExecute = nameof(HasLogMatches))]
+    private void FindNextLogMatch()
+    {
+        _find.Next();
+        CurrentLogMatch = _find.Current;
+        LogSearchSummary = _find.Summary(LogSearchText);
+    }
+
+    /// <summary>The previous (earlier) match — Shift+Enter in the search box.</summary>
+    [RelayCommand(CanExecute = nameof(HasLogMatches))]
+    private void FindPreviousLogMatch()
+    {
+        _find.Previous();
+        CurrentLogMatch = _find.Current;
+        LogSearchSummary = _find.Summary(LogSearchText);
+    }
+
+    /// <summary>
+    /// Empties the pane and keeps every stream running (FEAT-40) — see pod detail's
+    /// <c>ClearLogs</c>. Each pod's line count starts again from nothing, since the chips'
+    /// counts are of lines in the pane.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(HasBufferedLines))]
+    private void ClearLogs()
+    {
+        int pending;
+        lock (_pendingLock)
+        {
+            pending = _pending.Count;
+        }
+
+        var cleared = _allLogLines.Count + pending;
+        ClearBuffer();
+        _clearedLines = cleared;
+        RaisePlaceholder();
+    }
+
+    private bool HasBufferedLines => _allLogLines.Count > 0;
+
+    private void RestoreDisplayPreferences()
+    {
+        var settings = App.LoadSettings();
+        _restoringDisplayPreferences = true;
+        ShowLogTimestamps = settings.LogShowTimestamps;
+        WrapLogLines = settings.LogWrapLines;
+        UseUtcTimestamps = settings.LogTimestampsUtc;
+        _restoringDisplayPreferences = false;
+    }
+
+    partial void OnWrapLogLinesChanged(bool value)
+    {
+        if (!_restoringDisplayPreferences)
+        {
+            App.Update(s => s with { LogWrapLines = value });
+        }
+    }
+
+    partial void OnUseUtcTimestampsChanged(bool value)
+    {
+        foreach (var line in _allLogLines)
+        {
+            line.UtcTimestamp = value;
+        }
+
+        if (!_restoringDisplayPreferences)
+        {
+            App.Update(s => s with { LogTimestampsUtc = value });
+        }
+    }
+
+    /// <summary>The UTC chip's tooltip, which names the local offset.</summary>
+    public string TimestampZoneTooltip => LogLineViewModel.ZoneTooltip;
 
     partial void OnSelectedLogRangeChanged(LogRange value)
     {
@@ -936,6 +1106,11 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
         foreach (var line in _allLogLines)
         {
             line.ShowTimestamp = value;
+        }
+
+        if (!_restoringDisplayPreferences)
+        {
+            App.Update(s => s with { LogShowTimestamps = value });
         }
     }
 
@@ -996,11 +1171,14 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
         _allLogLines.Clear();
         LogLines.Clear();
         TrimNotice = null;
+        _clearedLines = null;
         foreach (var source in Sources)
         {
             source.LineCount = 0;
         }
 
+        UpdateFind(newQuery: false);
+        ClearLogsCommand.NotifyCanExecuteChanged();
         UpdateSummary();
         RaisePlaceholder();
     }
@@ -1062,16 +1240,43 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
             {
                 var buffered = $"{_allLogLines.Count:N0} line{(_allLogLines.Count == 1 ? "" : "s")} buffered "
                     + $"from {Sources.Count} pod{(Sources.Count == 1 ? "" : "s")}";
-                return LogSearchText.Length > 0
+                return IsLogFilterMode && LogSearchText.Length > 0
                     ? $"No lines match “{LogSearchText}”{(ShowErrorsOnly ? " among the error lines" : "")} — {buffered}."
                     : ShowErrorsOnly
                         ? $"No error lines — {buffered}."
-                        : $"The pods still shown have logged nothing — {buffered}.";
+                        : Levels.IsFiltering
+                            ? $"Every line from the pods shown is at a hidden level — {buffered}. Levels shows them again."
+                            : $"The pods still shown have logged nothing — {buffered}.";
+            }
+
+            if (_clearedLines is { } cleared)
+            {
+                var what = $"Cleared {cleared:N0} line{(cleared == 1 ? "" : "s")}";
+                return IsFollowing
+                    ? $"{what} — still following {Sources.Count} pod{(Sources.Count == 1 ? "" : "s")}; new lines appear here."
+                    : $"{what}. Nothing new arrives until Follow is pressed.";
             }
 
             if (LogStatus is { Length: > 0 } status)
             {
                 return status;
+            }
+
+            // Every stream closed without a line, and the pods said why — typically a
+            // workload whose pods have never been scheduled. The sentence the chips carry is
+            // the body's too, so the two cannot disagree (ENG-45). Only while nothing is
+            // still loading: a stream that has not answered yet has not said anything.
+            if (!_loadingLogRange
+                && Sources.Count > 0
+                && Sources.All(s => s.State is LogSourceState.Ended or LogSourceState.NotStarted or LogSourceState.Failed)
+                && Sources.Any(s => s.State is LogSourceState.NotStarted)
+                && Sources.FirstOrDefault(s => s.StatusMessage is { Length: > 0 }) is { } first)
+            {
+                return Sources.Count == 1
+                    ? first.StatusMessage
+                    : Sources.All(s => s.State is LogSourceState.NotStarted)
+                        ? $"None of the {Sources.Count} pods has started. {first.ShortName}: {first.StatusMessage}"
+                        : $"No lines from {Sources.Count} pods. {first.ShortName}: {first.StatusMessage}";
             }
 
             if (_loadingLogRange)
