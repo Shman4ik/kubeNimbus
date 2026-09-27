@@ -32,9 +32,9 @@ public class LogPaneTests
     }
 
     /// <summary>A multi-pod pane whose selector matches nothing in the demo dataset, so the test fills it.</summary>
-    private static WorkloadLogsTabViewModel Pane()
+    private static WorkloadLogsTabViewModel Pane(bool freshStores = true)
     {
-        TestObjects.RedirectStores();
+        if (freshStores) TestObjects.RedirectStores();
         var workload = Object("""
             {
               "apiVersion": "apps/v1", "kind": "Deployment",
@@ -50,9 +50,9 @@ public class LogPaneTests
     /// never-started container, for which the demo replay has no lines — which keeps the
     /// canned stream out of what the test enqueues. <c>null</c> leaves the annotation off.
     /// </summary>
-    private static PodDetailTabViewModel Detail(string? defaultContainer = "model-server")
+    private static PodDetailTabViewModel Detail(string? defaultContainer = "model-server", bool freshStores = true)
     {
-        TestObjects.RedirectStores();
+        if (freshStores) TestObjects.RedirectStores();
         var annotations = defaultContainer is null
             ? ""
             : $$""", "annotations": { "kubectl.kubernetes.io/default-container": "{{defaultContainer}}" }""";
@@ -332,8 +332,11 @@ public class LogPaneTests
     /// carried over: the search text, the levels, and above all Previous (freelens#2095,
     /// where a persisted Previous made a crashed run the default view of healthy pods).
     /// </summary>
+    // Unkeyed [NotInParallel], and every pane after the first built on the same stores:
+    // since App resolves its settings path per call (ENG-37), a RedirectStores between the
+    // write and the read — this test's own helpers included — would move it to an empty file.
     [Test]
-    [NotInParallel(nameof(AppSettings))]
+    [NotInParallel]
     public async Task Display_toggles_follow_the_reader_into_the_next_pane_and_nothing_else_does()
     {
         var first = Detail();
@@ -345,7 +348,7 @@ public class LogPaneTests
             first.LogSearchText = "timeout";
             first.Levels.ShowInfo = false;
 
-            var next = Detail();
+            var next = Detail(freshStores: false);
             await Assert.That(next.ShowLogTimestamps).IsTrue();
             await Assert.That(next.WrapLogLines).IsTrue();
             await Assert.That(next.UseUtcTimestamps).IsTrue();
@@ -353,7 +356,7 @@ public class LogPaneTests
             await Assert.That(next.Levels.IsFiltering).IsFalse();
             await Assert.That(next.IsShowingPreviousLogs).IsFalse();
 
-            var multi = Pane();
+            var multi = Pane(freshStores: false);
             await Assert.That(multi.ShowLogTimestamps).IsTrue();
             await Assert.That(multi.WrapLogLines).IsTrue();
 
