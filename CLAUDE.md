@@ -1025,7 +1025,10 @@ review) → RELEASE → RECORD — and is driven by `/loop /release-train`, norm
 Claude Code cloud session. Three agents do the heavy lifting: `kn-implementer`
 (Opus, builds one item), `kn-verifier` (Sonnet, re-runs the checks and reviews
 against the rules above, with no Edit tool so it cannot quietly fix what it should
-be reporting), and `kn-researcher` (the competitor delta and matrix). Its files live
+be reporting), and `kn-researcher` (the competitor delta and matrix). Outside the train,
+`kn-bundle` (Opus, high effort) builds a *bundle* of related backlog rows as one PR, for
+parallel runs where the owner wants fewer, larger PRs; bundles never edit `BACKLOG.md`,
+`CHANGELOG.md` or `status-history.md`, which the orchestrating session applies afterwards. Its files live
 in [`docs/product-loop/`](docs/product-loop/): `TRAIN.md` (the live state),
 `CURRENT_STATE.md`, `COMPETITOR_MATRIX.md`, and `history/<date>-v<version>/` for
 every shipped train.
