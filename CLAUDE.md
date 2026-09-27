@@ -1025,7 +1025,10 @@ review) → RELEASE → RECORD — and is driven by `/loop /release-train`, norm
 Claude Code cloud session. Three agents do the heavy lifting: `kn-implementer`
 (Opus, builds one item), `kn-verifier` (Sonnet, re-runs the checks and reviews
 against the rules above, with no Edit tool so it cannot quietly fix what it should
-be reporting), and `kn-researcher` (the competitor delta and matrix). Its files live
+be reporting), and `kn-researcher` (the competitor delta and matrix). Outside the train,
+`kn-bundle` (Opus, high effort) builds a *bundle* of related backlog rows as one PR, for
+parallel runs where the owner wants fewer, larger PRs; bundles never edit `BACKLOG.md`,
+`CHANGELOG.md` or `status-history.md`, which the orchestrating session applies afterwards. Its files live
 in [`docs/product-loop/`](docs/product-loop/): `TRAIN.md` (the live state),
 `CURRENT_STATE.md`, `COMPETITOR_MATRIX.md`, and `history/<date>-v<version>/` for
 every shipped train.
@@ -1458,6 +1461,41 @@ in unnoticed.
 calls `WithDeveloperTools()` under `#if DEBUG`, so the Avalonia DevTools MCP can
 attach to a running Debug build and screenshot/inspect the tree. It never enters
 the Release/AOT build.
+
+### Checking the running app (`kn-qa`, Windows)
+
+The screenshot harness renders views bound to fixtures and the view-model tests drive
+view models; neither exercises real input, a real window or a real API server's timing.
+Those halves are most of the backlog's verification debt ("driven by a real mouse",
+"against a real API server"), and they are *scripted* checks with a plain expected
+state — work a cheap model can do. So there is a third kind of check:
+
+- `scripts/qa-app.ps1` starts a Debug build on an **isolated profile** and against the
+  local sandbox only, and `-Stop` ends it. `KUBENIMBUS_PROFILE_DIR` (read in
+  `Program.ApplyIsolatedProfile`) points settings and workspace at a fresh directory
+  and restricts the kubeconfig search to `$KUBECONFIG` alone. Without it a launched
+  Debug build restores the developer's own tabs and lists their real contexts, and an
+  automated check that presses Delete or Drain would press it wherever the developer
+  last was. The script also refuses any kubeconfig whose `server:` is not loopback.
+- `scripts/qa-ui.ps1` drives it through **Windows UI Automation**: Avalonia publishes
+  its control tree there, so every element's type, name, `x:Name`, enabled/selected
+  state and bounds come back as one line of text. Pattern actions (`invoke`, `select`,
+  `set-text`) do not touch the mouse; `click`/`double-click`/`right-click`/`keys` are real
+  OS input and move the user's pointer, so they are for checks that are *about* real
+  input. The DevTools MCP would do this too, but it is not available on every
+  subscription, and UIA needs nothing but Windows.
+- `kn-qa` (`.claude/agents/kn-qa.md`, Sonnet) takes a list of checks and returns PASS /
+  FAIL / UNSURE, quoting what it observed. No Edit or Write tool, same reason as
+  `kn-verifier`. Sonnet rather than Haiku by the owner's call: a false PASS is the one
+  failure this agent must not have, and its cost outweighs the price difference. UNSURE
+  is still the honest answer for anything that needs visual judgement; the orchestrating
+  session looks at those itself.
+
+One instance at a time — one desktop, one pointer — so QA runs are never parallel, and
+they do not run in CI or the cloud (no desktop there). The accessibility tree is a
+finding source of its own: icon-only buttons currently report their accessible name as
+`Avalonia.Controls.PathIcon` (shown as `<unnamed>`), which is ENG-4's problem made
+measurable.
 
 ### Headless screenshot harness (`tools/Screenshot`)
 

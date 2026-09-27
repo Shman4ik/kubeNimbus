@@ -1,4 +1,14 @@
 {
+  "permissions": {
+    "allow": [
+      "PowerShell(./scripts/qa-app.ps1)",
+      "PowerShell(./scripts/qa-app.ps1 *)",
+      "PowerShell(./scripts/qa-ui.ps1 *)",
+      "Bash(pwsh -File scripts/qa-app.ps1)",
+      "Bash(pwsh -File scripts/qa-app.ps1 *)",
+      "Bash(pwsh -File scripts/qa-ui.ps1 *)"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {

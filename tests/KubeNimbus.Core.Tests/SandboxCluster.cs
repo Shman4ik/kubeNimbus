@@ -37,17 +37,21 @@ internal static class SandboxCluster
                 return env;
             }
 
-            // Walk up from the test binary to the repo root's .sandbox/kubeconfig.yaml.
-            var dir = new DirectoryInfo(AppContext.BaseDirectory);
-            while (dir is not null)
+            // Walk up from the test binary to the repo root's .sandbox/kubeconfig.yaml — and
+            // then from $KUBENIMBUS_REPO_ROOT, for a build made with --artifacts-path, whose
+            // binaries live outside the repository (the way to build when the repository's
+            // drive is full). Not the working directory: the test platform sets it to the
+            // binary's own folder.
+            foreach (var start in (string[])[AppContext.BaseDirectory, Environment.GetEnvironmentVariable("KUBENIMBUS_REPO_ROOT") ?? ""])
             {
-                var candidate = Path.Combine(dir.FullName, ".sandbox", "kubeconfig.yaml");
-                if (File.Exists(candidate))
+                for (var dir = start.Length == 0 ? null : new DirectoryInfo(start); dir is not null; dir = dir.Parent)
                 {
-                    return candidate;
+                    var candidate = Path.Combine(dir.FullName, ".sandbox", "kubeconfig.yaml");
+                    if (File.Exists(candidate))
+                    {
+                        return candidate;
+                    }
                 }
-
-                dir = dir.Parent;
             }
 
             return null;

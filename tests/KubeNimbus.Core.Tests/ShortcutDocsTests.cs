@@ -43,16 +43,23 @@ public class ShortcutDocsTests
     }
 
     // The tests run from bin/<config>/net10.0; walk up to the directory that holds the
-    // repository's own marker rather than hardcoding a relative hop count.
+    // repository's own marker rather than hardcoding a relative hop count. Then from
+    // $KUBENIMBUS_REPO_ROOT, for a build made with --artifacts-path outside the repository
+    // (the test platform sets the working directory to the binary's folder).
     private static string RepositoryRoot()
     {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "CLAUDE.md")))
+        foreach (var start in (string[])[AppContext.BaseDirectory, Environment.GetEnvironmentVariable("KUBENIMBUS_REPO_ROOT") ?? ""])
         {
-            dir = dir.Parent;
+            for (var dir = start.Length == 0 ? null : new DirectoryInfo(start); dir is not null; dir = dir.Parent)
+            {
+                if (File.Exists(Path.Combine(dir.FullName, "CLAUDE.md")))
+                {
+                    return dir.FullName;
+                }
+            }
         }
 
-        return dir?.FullName
-               ?? throw new InvalidOperationException("Repository root not found from " + AppContext.BaseDirectory);
+        throw new InvalidOperationException(
+            $"Repository root not found from {AppContext.BaseDirectory}; set KUBENIMBUS_REPO_ROOT for a build outside the repository");
     }
 }
