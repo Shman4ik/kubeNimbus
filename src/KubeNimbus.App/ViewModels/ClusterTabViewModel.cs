@@ -2590,6 +2590,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         {
             _podDescriptors[clusterName] = pods;
         }
+
+        RecordJobDescriptor(clusterName, catalog);
     }
 
     /// <summary>
@@ -3326,7 +3328,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         var action = new RowActionViewModel(
             kind, client, descriptor, row.Namespace, row.Name, row.ClusterName,
             kind == RowActionKind.Scale ? WorkloadActions.DeclaredReplicas(row.Resource) : null,
-            PodDescriptorFor(row));
+            PodDescriptorFor(row), JobDescriptorFor(row));
+        ConfigureCronJobAction(action, row, client);
 
         action.Dismissed = () =>
         {

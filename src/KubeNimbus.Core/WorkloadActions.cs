@@ -48,8 +48,17 @@ public static class WorkloadActions
     /// and no <c>spec.template</c>, so it correctly answers false (deleting it is the
     /// gesture that restarts a pod, and that is a separate action).
     /// </summary>
+    /// <remarks>
+    /// One kind is named, and it is the same honest exception
+    /// <see cref="NodeActions.SupportsCordon"/> argues: a batch Job carries a pod template
+    /// too, but the API server holds it immutable, so the restart stamp is a 422 and there
+    /// is no controller that would roll anything. There is no discovery or object signal
+    /// that separates "a template a controller rolls" from "a template frozen at creation",
+    /// so the kind is the accurate test. A Job's work is re-run by running its CronJob
+    /// again, which creates a new Job.
+    /// </remarks>
     public static bool SupportsRestart(ResourceDescriptor descriptor, DynamicResource resource) =>
-        descriptor.AllowsVerb("patch") && HasPodTemplate(resource);
+        descriptor.AllowsVerb("patch") && HasPodTemplate(resource) && descriptor is not { Group: "batch", Kind: "Job" };
 
     /// <summary>Whether the server says this kind can be deleted at all.</summary>
     public static bool SupportsDelete(ResourceDescriptor descriptor) => descriptor.AllowsVerb("delete");

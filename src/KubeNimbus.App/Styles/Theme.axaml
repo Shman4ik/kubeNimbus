@@ -140,6 +140,9 @@
                  pods leaving through a door for drain. -->
             <StreamGeometry x:Key="CordonIconGeometry">M12,2C17.53,2 22,6.47 22,12C22,17.53 17.53,22 12,22C6.47,22 2,17.53 2,12C2,6.47 6.47,2 12,2M12,4C10.17,4 8.47,4.61 7.11,5.66L18.34,16.89C19.39,15.53 20,13.83 20,12C20,7.58 16.42,4 12,4M16.89,18.34L5.66,7.11C4.61,8.47 4,10.17 4,12C4,16.42 7.58,20 12,20C13.83,20 15.53,19.39 16.89,18.34Z</StreamGeometry>
             <StreamGeometry x:Key="DrainIconGeometry">M17,17.25V14H10V10H17V6.75L22.25,12L17,17.25M13,2A2,2 0 0,1 15,4V8H13V4H4V20H13V16H15V20A2,2 0 0,1 13,22H4A2,2 0 0,1 2,20V4A2,2 0 0,1 4,2H13Z</StreamGeometry>
+            <!-- MDI pause, for suspending a CronJob's schedule (FEAT-8). Its resume is the
+                 clock — "back on schedule" — rather than a second play glyph beside Run now. -->
+            <StreamGeometry x:Key="PauseIconGeometry">M14,19H18V5H14M6,19H10V5H6V19Z</StreamGeometry>
             <!-- Argo CD. Same membership argument again: "reconcile this cluster with the
                  revision Git declares" cannot be described without naming Kubernetes, so
                  both stay app-local. mdi-source-branch for the section (GitOps is a branch
