@@ -30,6 +30,8 @@ then copy the ones the README uses:
 | This file | Harness scenario |
 |---|---|
 | `workloads-list.light.png` / `.dark.png` | `cluster-tab-workloads-list-metrics` |
+| `applications-list.dark.png` | `applications-list` |
+| `application-page.dark.png` | `applications-page-crashloop` |
 | `pod-detail.dark.png` | `cluster-tab-pod-detail` |
 | `yaml-editor.dark.png` | `cluster-tab-yaml-editor-maximized` |
 | `rbac-who-can.dark.png` | `cluster-tab-rbac-who-can` |
@@ -47,6 +49,9 @@ area.
 Only the hero image is checked in for both themes — GitHub's `<picture>` element
 switches it with the reader's theme. The gallery below it is dark-only, to keep
 the repository from carrying twice the bytes for a marginal gain.
+
+The Microsoft Store listing has its own set, at the size the Store asks for, in
+[`../store/screenshots`](../store/screenshots/README.md).
 
 **The data is synthetic.** Cluster names, pod names, usage numbers, RBAC
 subjects and Secret values all come from the demo cluster's dataset,

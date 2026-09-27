@@ -32,6 +32,9 @@ it as the GitHub Release body, so headings must match tags exactly
   list. The workload pane's Refresh and Actions are real buttons instead of bare words.
 - The YAML editor's Delete button is drawn as a destructive button and no longer sits right
   beside Apply.
+- The README gallery opens on the Applications list and page, and every README screenshot
+  was re-rendered. The Microsoft Store listing has its own 1920×1080 set in
+  `design/store/screenshots/`; the README's 1280-wide images were below the Store's minimum.
 - The log panes' toolbar is shorter: Timestamps, UTC, Wrap, Clear and Save moved into a `⋯`
   menu. Copy stays on the toolbar.
 - A crash-looping application no longer flickers between Degraded and Healthy. Between two

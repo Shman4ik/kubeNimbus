@@ -43,6 +43,10 @@
 
 <table>
   <tr>
+    <td width="50%"><img src="design/screenshots/applications-list.dark.png" alt="Applications list: every app with a health verdict and a one-line reason, what needs attention first"><br><sub><b>Applications</b> — where a cluster opens: every app's health and the reason, read from the cluster's own status, what needs attention first.</sub></td>
+    <td width="50%"><img src="design/screenshots/application-page.dark.png" alt="Application page: findings quoting the fields they came from, a timeline, and the crashing pod's last run"><br><sub><b>One Enter to the why</b> — findings that quote the field they came from, the last hour on a timeline, and the crashing pod's last run.</sub></td>
+  </tr>
+  <tr>
     <td width="50%"><img src="design/screenshots/pod-detail.dark.png" alt="Pod detail docked along the bottom with container chips and live logs"><br><sub><b>Pod detail</b> docks along the bottom — full-width logs, not a cramped sidecar.</sub></td>
     <td width="50%"><img src="design/screenshots/yaml-editor.dark.png" alt="YAML editor with syntax highlighting"><br><sub><b>YAML editing</b> with syntax highlighting and server-side apply.</sub></td>
   </tr>

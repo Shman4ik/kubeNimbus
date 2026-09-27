@@ -130,7 +130,8 @@ and reasoning are in CLAUDE.md, "Microsoft Store (MSIX)".
       moment.
 - [ ] **Partner Center → kubeNimbus → Packages** — upload the `.msix`.
 - [ ] **Store listing** — description, at least one screenshot (1366×768 or
-      larger; the generated `design/screenshots/` shots qualify), search terms
+      larger: `design/store/screenshots/`, 1920×1080 — the README's
+      `design/screenshots/` are 1280 wide and do not qualify), search terms
       (`kubernetes`, `k8s`, `kubectl`, `cluster`, `devops`), and the support and
       privacy links (this repo's Issues, and `SECURITY.md` for the "no telemetry,
       no persisted credentials" claim).
