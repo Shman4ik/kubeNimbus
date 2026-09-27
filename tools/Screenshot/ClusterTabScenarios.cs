@@ -2063,6 +2063,31 @@ internal static class ClusterTabScenarios
     /// <summary>Same Secret with "Reveal values" toggled on — exercises the real decode path (YamlJson parse + base64), not a stand-in.</summary>
     public static ClusterTabViewModel YamlEditorSecretRevealed() => BuildYamlEditorSecret(reveal: true);
 
+    /// <summary>
+    /// FEAT-30: the demo's <c>kubernetes.io/tls</c> Secret, opened through the real list on
+    /// the demo cluster. The header's chip names the leaf and how long it has left (a real
+    /// certificate generated for the demo, so the wording follows the wall clock the way
+    /// every Age does), and the card is open on the chain — the leaf, and the CA that signed
+    /// it, twice (once in the tls.crt bundle, once as ca.crt). Values stay masked: the card
+    /// needs no Reveal, and the key is never read.
+    /// </summary>
+    public static ClusterTabViewModel YamlEditorTlsSecret()
+    {
+        var tab = DemoTab();
+        var config = tab.SidebarSections.First(s => s.Kinds.Any(k => k.Descriptor is { Group: "", Kind: "Secret" }));
+        config.IsExpanded = true;
+        tab.SelectKindCommand.Execute(config.Kinds.First(k => k.Descriptor is { Group: "", Kind: "Secret" }));
+        tab.SelectedRow = tab.Rows.First(r => r.Name == "checkout-tls");
+        tab.OpenSelectedCommand.Execute(null);
+        if (tab.SelectedInspectorTab is YamlEditorTabViewModel editor)
+        {
+            editor.IsCertificateDetailOpen = true;
+        }
+
+        tab.IsInspectorMaximized = true;
+        return tab;
+    }
+
     private static ClusterTabViewModel BuildYamlEditorSecret(bool reveal)
     {
         var tab = BaseTab();
