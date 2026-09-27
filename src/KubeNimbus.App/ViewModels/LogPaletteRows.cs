@@ -23,9 +23,13 @@ public sealed record LogTargetsState(
 /// </summary>
 public static class LogPaletteRows
 {
-    public const string PodIcon = "ClockOutlineIconGeometry";
-
-    public const string WorkloadIcon = "LayersIconGeometry";
+    /// <summary>
+    /// The one logs glyph (ENG-38) — the row icon's lines of text, for a pod's row and a
+    /// workload's alike. It used to be a clock for pods and a stack for workloads, which put
+    /// three pictures on one action; the title ("Logs: api-7f9c-x7k2m" against
+    /// "Logs: Deployment/api") is what tells the two rows apart.
+    /// </summary>
+    public const string Icon = "LogsIconGeometry";
 
     /// <summary>
     /// One row per target, in the order given. A pod reads <c>Logs: api-7f9c-x7k2m</c> over
@@ -56,7 +60,7 @@ public static class LogPaletteRows
         if (target.IsPod)
         {
             var status = summary.Status.Length > 0 ? summary.Status : "no status yet";
-            return new PaletteItem($"Logs: {resource.Name}", $"{ns} · {status}{onCluster}", PodIcon, () => open(target))
+            return new PaletteItem($"Logs: {resource.Name}", $"{ns} · {status}{onCluster}", Icon, () => open(target))
             {
                 Scope = PaletteScope.Logs,
                 SearchText = $"{resource.Name} {ns} {cluster}",
@@ -68,7 +72,7 @@ public static class LogPaletteRows
         var subtitle = state.Length > 0
             ? $"{ns} · {state} · every pod, one stream{onCluster}"
             : $"{ns} · every pod, one stream{onCluster}";
-        return new PaletteItem($"Logs: {kind}/{resource.Name}", subtitle, WorkloadIcon, () => open(target))
+        return new PaletteItem($"Logs: {kind}/{resource.Name}", subtitle, Icon, () => open(target))
         {
             Scope = PaletteScope.Logs,
             SearchText = $"{kind}/{resource.Name} {ns} {cluster}",
@@ -91,7 +95,7 @@ public static class LogPaletteRows
                     "Logs: waiting for the cluster to connect",
                     "Pods and workloads are listed as soon as it answers",
                     PaletteScope.Logs,
-                    PodIcon)
+                    Icon)
                 : PaletteItem.Note(
                     "Logs: not connected",
                     "Pods and workloads are listed from a connected cluster",
@@ -106,7 +110,7 @@ public static class LogPaletteRows
                 $"Loading pods and workloads in {state.Scope}…",
                 shown > 0 ? $"Showing the {shown:N0} from the last look meanwhile — keep typing" : "Keep typing — they appear here as they arrive",
                 PaletteScope.Logs,
-                PodIcon));
+                Icon));
         }
 
         if (state.Result is not { } result)
@@ -133,7 +137,7 @@ public static class LogPaletteRows
                 $"No pods or workloads in {state.Scope}",
                 "Nothing here has logs to open — try another namespace",
                 PaletteScope.Logs,
-                PodIcon));
+                Icon));
         }
 
         return notes;

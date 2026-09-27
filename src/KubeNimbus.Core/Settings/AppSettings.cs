@@ -185,6 +185,36 @@ public sealed record AppSettings
     /// </summary>
     public bool OpenLogsMaximized { get; set; }
 
+    /// <summary>
+    /// Whether the log panes print each line's timestamp. It used to be a per-pane toggle
+    /// that reset on every pod opened, so someone who always reads with timestamps turned
+    /// them on again for every pane. The last choice made in any log pane — pod detail's,
+    /// the multi-pod pane's, the application page's — is what the next one opens with.
+    ///
+    /// <para>
+    /// These three are the log panes' <em>display</em> toggles, and the line is drawn
+    /// deliberately: nothing that changes <em>which</em> lines are read is persisted.
+    /// Previous (the crashed run) is the case that proves it — Freelens persisted it and
+    /// had to take it back (freelens#2095, #2096), because it made a crashed run's logs
+    /// the default view of every healthy pod. The search text and the level filter are not
+    /// persisted either: a filter carried into the next pane hides lines in a pane that
+    /// never showed you it was filtering.
+    /// </para>
+    /// </summary>
+    public bool LogShowTimestamps { get; set; }
+
+    /// <summary>Whether the log panes wrap long lines. See <see cref="LogShowTimestamps"/>.</summary>
+    public bool LogWrapLines { get; set; }
+
+    /// <summary>
+    /// Whether log timestamps are printed as the server sent them (RFC3339 UTC) rather than
+    /// in this machine's local time. Local is the default because that is the clock the
+    /// reader's incident timeline, chat and dashboards are in; UTC is kept one click away
+    /// because it is what every other system's logs are in. Copy and Download always write
+    /// the server's own line, whichever this says. See <see cref="LogShowTimestamps"/>.
+    /// </summary>
+    public bool LogTimestampsUtc { get; set; }
+
     /// <summary>Default for <see cref="LogBufferLines"/>, and the value the app shipped with.</summary>
     public const int DefaultLogBufferLines = 4000;
 

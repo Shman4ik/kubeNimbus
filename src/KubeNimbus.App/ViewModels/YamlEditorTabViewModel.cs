@@ -230,6 +230,8 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
         {
             _ = RefreshFromServerAsync();
         }
+
+        RefreshCertificates(DateTimeOffset.UtcNow);
     }
 
     partial void OnYamlTextChanged(string value)
@@ -239,7 +241,10 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
         // makes it a description of something that is no longer on screen, and a stale
         // diff above a live editor is worse than no diff at all.
         PendingPreview = null;
-        if (!IsSecretValuesRevealed)
+
+        // The certificate card reads the editor's text like the reveal panel does, so a
+        // Reload (or a pasted renewal) is what it describes — on the same debounce.
+        if (!IsSecretValuesRevealed && !IsSecret)
         {
             return;
         }
@@ -252,8 +257,139 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
     private DispatcherTimer CreateRevealTimer()
     {
         var timer = new DispatcherTimer { Interval = RevealDebounceInterval };
-        timer.Tick += (_, _) => RefreshRevealedValues();
+        timer.Tick += (_, _) =>
+        {
+            RefreshRevealedValues();
+            RefreshCertificates(DateTimeOffset.UtcNow);
+        };
         return timer;
+    }
+
+    // ------------------------------------------------------------ certificates
+    //
+    // FEAT-30. A certificate is public by construction — it is sent to every client that
+    // connects — so reading one reveals nothing the Reveal toggle guards, and the card is
+    // offered without it. The private key beside it is never read: only keys
+    // TlsCertificates.IsCertificateKey names are decoded, and only their CERTIFICATE blocks.
+
+    /// <summary>Warn when a certificate has this long or less left — Let's Encrypt's own renewal window.</summary>
+    internal static readonly TimeSpan CertificateWarningWindow = TimeSpan.FromDays(30);
+
+    /// <summary>Every certificate the Secret carries, leaf first, in the order its keys and bundles list them.</summary>
+    public ObservableCollection<CertificateViewModel> Certificates { get; } = [];
+
+    /// <summary>The header's one line — the first certificate's name and when it expires — or null when there is none.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasCertificates))]
+    private string? _certificateSummary;
+
+    /// <summary>ok / warn / error for the header line: expired or not yet valid is an error, the last 30 days a warning.</summary>
+    [ObservableProperty]
+    private string _certificateHealth = ResourceHealth.Idle;
+
+    /// <summary>
+    /// Whether the certificate card is open. A two-way <c>IsChecked</c> binding and no
+    /// command (UI rule 8b). Closed by default: the header line already says the part that
+    /// matters, and the dock is ~300px.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isCertificateDetailOpen;
+
+    public bool HasCertificates => CertificateSummary is not null;
+
+    private (int Hash, int Length)? _certificateSignature;
+
+    /// <summary>
+    /// Re-reads the certificates from the editor's current text. <paramref name="now"/> is a
+    /// parameter so the expiry wording is testable; the view passes the wall clock.
+    /// </summary>
+    internal void RefreshCertificates(DateTimeOffset now)
+    {
+        if (!IsSecret)
+        {
+            return;
+        }
+
+        JsonObject? root;
+        try
+        {
+            root = YamlJson.ParseYamlToJson(YamlText) as JsonObject;
+        }
+        catch (Exception)
+        {
+            // Mid-edit text is routinely not valid YAML; keep what was last read.
+            return;
+        }
+
+        var type = root?["type"] is JsonValue typeValue && typeValue.TryGetValue<string>(out var t) ? t : null;
+        var entries = new List<(string Key, string Encoded)>();
+        if (root?["data"] is JsonObject data)
+        {
+            foreach (var (key, node) in data)
+            {
+                if (TlsCertificates.IsCertificateKey(key, type) && Stringify(node) is { Length: > 0 } encoded)
+                {
+                    entries.Add((key, encoded));
+                }
+            }
+        }
+
+        // The wording is relative to now, so the instant (to the minute) is part of what
+        // the card was built from: an unrelated edit an hour later still re-words it.
+        var hash = new HashCode();
+        hash.Add(now.ToUnixTimeSeconds() / 60);
+        var length = 0;
+        foreach (var (key, encoded) in entries)
+        {
+            hash.Add(key);
+            hash.Add(encoded);
+            length += encoded.Length;
+        }
+
+        var signature = (hash.ToHashCode(), length);
+        if (_certificateSignature == signature && Certificates.Count > 0)
+        {
+            return;
+        }
+
+        _certificateSignature = signature;
+        Certificates.Clear();
+        string? problem = null;
+        foreach (var (key, encoded) in entries)
+        {
+            IReadOnlyList<CertificateSummary> read;
+            try
+            {
+                read = TlsCertificates.Read(Convert.FromBase64String(encoded));
+            }
+            catch (FormatException)
+            {
+                read = [];
+            }
+
+            // Only a TLS Secret's tls.crt is expected to hold a certificate; a *.crt key
+            // elsewhere that does not is just not one this card is about.
+            if (read.Count == 0 && key == "tls.crt" && type == TlsCertificates.TlsSecretType)
+            {
+                problem = "tls.crt holds no certificate this can read";
+            }
+
+            for (var i = 0; i < read.Count; i++)
+            {
+                Certificates.Add(new CertificateViewModel(key, i, read.Count, read[i], now));
+            }
+        }
+
+        if (Certificates.FirstOrDefault() is { } first)
+        {
+            CertificateSummary = $"{first.Name} · {first.ExpiryText}";
+            CertificateHealth = first.Health;
+        }
+        else
+        {
+            CertificateSummary = problem;
+            CertificateHealth = problem is null ? ResourceHealth.Idle : ResourceHealth.Warn;
+        }
     }
 
     partial void OnIsSecretValuesRevealedChanged(bool value)

@@ -34,6 +34,18 @@ public partial class WorkloadLogsView : UserControl
             Unbind();
             Bind();
         };
+
+        LogSearchGestures.Attach(
+            LogSearchBox,
+            next: () => _vm?.FindNextLogMatchCommand,
+            previous: () => _vm?.FindPreviousLogMatchCommand,
+            clear: () =>
+            {
+                if (_vm is not null)
+                {
+                    _vm.LogSearchText = "";
+                }
+            });
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -54,6 +66,8 @@ public partial class WorkloadLogsView : UserControl
         {
             _vm = vm;
             _vm.LogLines.CollectionChanged += OnLogLinesChanged;
+            _vm.PropertyChanged += OnViewModelChanged;
+            LogSearchGestures.BringIntoView(LogItems, _vm.CurrentLogMatch);
         }
     }
 
@@ -62,7 +76,16 @@ public partial class WorkloadLogsView : UserControl
         if (_vm is not null)
         {
             _vm.LogLines.CollectionChanged -= OnLogLinesChanged;
+            _vm.PropertyChanged -= OnViewModelChanged;
             _vm = null;
+        }
+    }
+
+    private void OnViewModelChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(WorkloadLogsTabViewModel.CurrentLogMatch))
+        {
+            LogSearchGestures.BringIntoView(LogItems, _vm?.CurrentLogMatch);
         }
     }
 

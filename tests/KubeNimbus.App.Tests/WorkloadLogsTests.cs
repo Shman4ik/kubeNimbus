@@ -226,6 +226,8 @@ public class WorkloadLogsTests
         pane.Enqueue("2026-08-17T10:00:03.000Z ERROR upstream reset", b);
         pane.Flush(force: true);
 
+        // Filtering is the search's second mode since FEAT-33; finding is the default.
+        pane.IsLogFilterMode = true;
         pane.LogSearchText = "upstream";
         await Assert.That(Rendered(pane)).IsEqualTo("a:ERROR upstream reset | b:ERROR upstream reset");
 
@@ -286,6 +288,7 @@ public class WorkloadLogsTests
         pane.Flush(force: true);
         await Assert.That(pane.LogPlaceholder).IsNull();
 
+        pane.IsLogFilterMode = true;
         pane.LogSearchText = "nothing matches this";
         await Assert.That(pane.LogPlaceholder!).Contains("No lines match");
 

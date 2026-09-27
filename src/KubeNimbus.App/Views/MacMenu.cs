@@ -97,6 +97,7 @@ internal static class MacMenu
             cluster.Add(Item(CommandId.OpenDemoCluster, () => vm.OpenDemoClusterCommand.Execute(null)));
             cluster.Add(new NativeMenuItemSeparator());
             cluster.Add(Item(CommandId.OpenKubeconfigFile, () => vm.OpenKubeconfigFileCommand.Execute(null)));
+            cluster.Add(Item(CommandId.AddKubeconfigFolder, () => vm.AddKubeconfigFolderCommand.Execute(null)));
             cluster.Add(Item(CommandId.RescanKubeconfig, () => vm.ReloadContextsCommand.Execute(null)));
             cluster.Add(new NativeMenuItemSeparator());
 
@@ -105,6 +106,7 @@ internal static class MacMenu
             // changes far more often than that — a captured command would act on the
             // wrong cluster, or on a closed one.
             cluster.Add(Item(CommandId.OpenTerminal, () => Run(vm.SelectedTab?.OpenInTerminalCommand)));
+            cluster.Add(Item(CommandId.ReconnectCluster, () => Run(vm.SelectedTab?.ReconnectCommand)));
             cluster.Add(Item(CommandId.CloseClusterTab, () =>
             {
                 if (vm.SelectedTab is { } tab && vm.CloseTabCommand.CanExecute(tab))

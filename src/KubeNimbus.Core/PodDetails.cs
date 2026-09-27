@@ -291,6 +291,67 @@ public static class PodDetails
         return null;
     }
 
+    /// <summary>
+    /// The annotation a pod names its default container with. kubectl has honoured it
+    /// since 1.21 for <c>logs</c>, <c>exec</c>, <c>attach</c> and <c>cp</c>, and stern
+    /// honours it too; a service-mesh or log-shipper sidecar injected ahead of the app is
+    /// exactly why it exists.
+    /// </summary>
+    public const string DefaultContainerAnnotation = "kubectl.kubernetes.io/default-container";
+
+    /// <summary>
+    /// The container a pod's logs and shell open on when nobody picked one — what
+    /// <c>kubectl logs</c> and <c>kubectl exec</c> choose with no <c>-c</c>: the container
+    /// named by <see cref="DefaultContainerAnnotation"/> when the pod declares one that
+    /// exists, otherwise the first entry of <c>spec.containers</c>. Null when the pod
+    /// declares no container at all.
+    /// </summary>
+    /// <remarks>
+    /// Like kubectl, an annotation naming a container the pod does not have is ignored
+    /// rather than obeyed — a stream opened on a container that does not exist fails with
+    /// a 400 and shows nothing, which is worse than the first container. And like kubectl,
+    /// the annotation may name an init or ephemeral container: it is looked up across all
+    /// three arrays. Every pane that picks a container on its own goes through this — pod
+    /// detail, the multi-pod log pane, and the shells opened from a list — so the choice
+    /// cannot differ by route.
+    /// </remarks>
+    public static string? DefaultContainer(JsonElement pod)
+    {
+        if (pod.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var spec = Object(pod, "spec");
+        if (Object(pod, "metadata") is { ValueKind: JsonValueKind.Object } metadata
+            && Object(metadata, "annotations") is { ValueKind: JsonValueKind.Object } annotations
+            && annotations.TryGetProperty(DefaultContainerAnnotation, out var named)
+            && named.ValueKind == JsonValueKind.String
+            && named.GetString() is { Length: > 0 } name
+            && ContainerSpec(spec, name) is not null)
+        {
+            return name;
+        }
+
+        if (spec.ValueKind == JsonValueKind.Object
+            && spec.TryGetProperty("containers", out var containers)
+            && containers.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var container in containers.EnumerateArray())
+            {
+                if (container.ValueKind == JsonValueKind.Object
+                    && container.TryGetProperty("name", out var first)
+                    && first.ValueKind == JsonValueKind.String
+                    && first.GetString() is { Length: > 0 } firstName)
+                {
+                    return firstName;
+                }
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>One container's spec, across all three of a pod's container arrays.</summary>
     public static JsonElement? ContainerSpec(JsonElement podSpec, string containerName)
     {

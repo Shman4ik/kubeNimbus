@@ -28,8 +28,7 @@ public sealed class AppSettingsStore
 
     /// <summary>The default file location, honouring <see cref="DirectoryOverride"/>.</summary>
     public static string DefaultPath => Path.Combine(
-        DirectoryOverride ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "kubeNimbus"),
+        DirectoryOverride ?? AppDataDirectory.Roaming,
         "settings.json");
 
     public AppSettingsStore(string? filePath = null)

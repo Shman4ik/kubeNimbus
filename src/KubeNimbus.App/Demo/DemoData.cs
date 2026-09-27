@@ -48,6 +48,7 @@ public static class DemoData
     private static readonly JsonDocument NodesDoc = Load("nodes.json");
     private static readonly JsonDocument ArgoApplicationsDoc = Load("argo-applications.json");
     private static readonly JsonDocument WorkloadsDoc = Load("workloads.json");
+    private static readonly JsonDocument NetworkingDoc = Load("networking.json");
 
     private static JsonDocument Load(string fileName)
     {
@@ -85,13 +86,27 @@ public static class DemoData
     public static IReadOnlyList<DynamicResource> Workloads { get; } =
         [.. WorkloadsDoc.RootElement.EnumerateArray().Select(e => new DynamicResource(e))];
 
+    /// <summary>
+    /// The networking half of the dataset, one object per state the Service, Ingress and
+    /// NetworkPolicy panes have to render: EndpointSlices behind the three existing
+    /// Services (one pod serving and one crash-looping behind <c>checkout</c>, nothing
+    /// scheduled behind <c>fraud-detector</c>, both pods serving behind <c>ledger-api</c>),
+    /// then the three degenerate Service shapes — an ExternalName (<c>payments-db</c>), a
+    /// selector-less service with hand-written endpoints (<c>legacy-billing</c>) and a
+    /// selector that matches nothing (<c>checkout-canary</c>) — plus the legacy Endpoints
+    /// objects, an Ingress with TLS, a regex path and a wildcard host, and three
+    /// NetworkPolicies including a default deny.
+    /// </summary>
+    public static IReadOnlyList<DynamicResource> Networking { get; } =
+        [.. NetworkingDoc.RootElement.EnumerateArray().Select(e => new DynamicResource(e))];
+
     /// <summary>Every object of one kind, from any demo file.</summary>
     public static IReadOnlyList<DynamicResource> OfKind(string kind) => kind switch
     {
         "Pod" => Pods,
         "Deployment" => Deployments,
         "Event" => Events,
-        _ => [.. Workloads.Where(w => w.Kind == kind)],
+        _ => [.. Workloads.Concat(Networking).Where(w => w.Kind == kind)],
     };
 
     public static IReadOnlyList<DynamicResource> Events { get; } =
@@ -122,7 +137,13 @@ public static class DemoData
         new("demo-worker-2", 640_000_000L, 3_221_225_472L),
     ];
 
-    /// <summary>metrics.k8s.io PodMetrics — obviously-fake usage numbers, one entry per running pod in <see cref="Pods"/>.</summary>
+    /// <summary>
+    /// metrics.k8s.io PodMetrics — obviously-fake usage numbers, one entry per running pod in
+    /// <see cref="Pods"/>. "Every running pod" is the rule, and <c>DemoRowsTests</c> holds it:
+    /// pods added later for multi-pod logs, the node surface and the Applications mode had
+    /// arrived without an entry, so ten of the demo list's running pods drew a usage column
+    /// of dashes, which reads as a broken metrics-server rather than as a demo.
+    /// </summary>
     public static IReadOnlyList<DynamicResource> PodMetrics { get; } =
         [.. PodMetricsDoc.RootElement.EnumerateArray().Select(e => new DynamicResource(e))];
 
@@ -133,6 +154,15 @@ public static class DemoData
     /// object instead of an API server.
     /// </summary>
     public static DynamicResource Secret { get; } = new(SecretDoc.RootElement[0]);
+
+    /// <summary>
+    /// Every demo Secret: <see cref="Secret"/>, and a <c>kubernetes.io/tls</c> Secret
+    /// carrying a real certificate chain generated for the demo — the one the
+    /// <c>checkout-tls</c> Certificate names — so the YAML editor's certificate card
+    /// (FEAT-30) has a certificate to read. Its <c>tls.key</c> is a placeholder string.
+    /// </summary>
+    public static IReadOnlyList<DynamicResource> Secrets { get; } =
+        [.. SecretDoc.RootElement.EnumerateArray().Select(e => new DynamicResource(e))];
 
     /// <summary>
     /// The ConfigMaps the demo pods reference. Pod detail resolves
@@ -226,7 +256,7 @@ public static class DemoData
     {
         var candidates = kind switch
         {
-            "Secret" => (IReadOnlyList<DynamicResource>)[Secret],
+            "Secret" => Secrets,
             "ConfigMap" => ConfigMaps,
             "Application" => ArgoApplicationObjects,
             "Node" => Nodes,
@@ -480,13 +510,17 @@ public static class DemoData
             { Group: "", Kind: "Pod" } => Pods,
             { Group: "apps", Kind: "Deployment" } => Deployments,
             { Group: "", Kind: "Event" } => Events,
-            { Group: "", Kind: "Secret" } => [Secret],
+            { Group: "", Kind: "Secret" } => Secrets,
             { Group: "", Kind: "ConfigMap" } => ConfigMaps,
             { Group: "", Kind: "Node" } => Nodes,
             { Group: "cert-manager.io", Kind: "Certificate" } => Certificates,
             { Group: "argoproj.io", Kind: "Application" } => ArgoApplicationObjects,
             { Group: "apps" or "batch" or "autoscaling" or "policy" or "networking.k8s.io", Kind: var kind } => OfKind(kind),
-            { Group: "", Kind: "Service" } => OfKind("Service"),
+            { Group: "", Kind: "Service" or "Endpoints" } => OfKind(descriptor.Kind),
+            { Group: "discovery.k8s.io", Kind: "EndpointSlice" } => OfKind("EndpointSlice"),
+            // A bound claim and its volume, plus a volume nothing has claimed — the two
+            // ends FEAT-47's links join, and the one that has nothing to link to.
+            { Group: "", Kind: "PersistentVolumeClaim" or "PersistentVolume" } => OfKind(descriptor.Kind),
             _ => [],
         };
 

@@ -35,12 +35,25 @@
         <TextBlock Classes="statusText" Text="{Binding DrainPlan.Summary}"
                    IsVisible="{Binding HasDrainPlan}" TextWrapping="Wrap" />
 
-        <StackPanel Orientation="Horizontal" Spacing="16" IsVisible="{Binding IsEditable}">
-          <CheckBox IsChecked="{Binding DrainForce}" Content="Evict unmanaged pods"
+        <!-- The options row doubles as the running drain's control row: while it runs the
+             two options are read-only (they are what the loop was started with; ticking one
+             mid-drain changes nothing) and Stop draining takes the right-hand end of the
+             same row, rather than a 40px row of its own below it (ENG-28). -->
+        <Grid ColumnDefinitions="Auto,Auto,*,Auto" IsVisible="{Binding IsEditable}">
+          <CheckBox Grid.Column="0" IsChecked="{Binding DrainForce}" Content="Evict unmanaged pods"
+                    IsEnabled="{Binding !IsDraining}"
                     ToolTip.Tip="kubectl --force. A pod no controller owns is destroyed, not moved: nothing recreates it." />
-          <CheckBox IsChecked="{Binding DrainDeleteEmptyDirData}" Content="Delete emptyDir data"
+          <CheckBox Grid.Column="1" IsChecked="{Binding DrainDeleteEmptyDirData}" Content="Delete emptyDir data"
+                    Margin="16,0,0,0" IsEnabled="{Binding !IsDraining}"
                     ToolTip.Tip="kubectl --delete-emptydir-data. An emptyDir lives on this node's disk and goes with the pod." />
-        </StackPanel>
+          <!-- A running drain replaces Cancel outright. "Cancel" over a loop that is
+               already evicting would read as undo, and there is no undo: Stop leaves the
+               node cordoned with some pods moved, which is what the final message then
+               says. The confirm/cancel row below is hidden for as long as this shows. -->
+          <Button Grid.Column="3" Margin="8,0,0,0" VerticalAlignment="Center"
+                  Classes="danger" Content="Stop draining"
+                  Command="{Binding StopDrainCommand}" IsVisible="{Binding IsDraining}" />
+        </Grid>
 
         <!-- Refusals, by name. The single most important thing on this strip:
              a drain that quietly took these pods is the silent data loss this
@@ -68,7 +81,7 @@
                 IsVisible="{Binding IsArgoSync}" IsEnabled="{Binding IsEditable}"
                 ToolTip.Tip="Argo's --prune. Objects the Application no longer declares are deleted from the cluster." />
 
-      <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
+      <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" IsVisible="{Binding !IsDraining}">
         <!-- Label above the input, never beside it: an Auto column has no gap of
              its own, which is how "Local port" ended up touching its own text box
              in the port-forward pane (UI rule 11). -->
@@ -85,6 +98,12 @@
         <Button Grid.Column="3" Content="{Binding ConfirmLabel}" Classes="accent" Margin="8,0,0,0"
                 VerticalAlignment="Bottom" Command="{Binding ConfirmCommand}"
                 IsVisible="{Binding IsPromptVisible}" />
+        <!-- The confirm's slot after a CronJob's run-now: the one action with a natural
+             next step, which is watching the run it just started. Present only once the
+             server has named the Job. -->
+        <Button Grid.Column="3" Content="Open Job" Classes="accent" Margin="8,0,0,0"
+                VerticalAlignment="Bottom" Command="{Binding OpenCreatedJobCommand}"
+                IsVisible="{Binding HasFollowUp}" />
         <!-- Cancel before, Close after: one slot, swapped on the state, rather
              than a live button beside a dead one (UI rule 11 again). Cancel goes
              dead while the request is in flight, and that is the honest state:
@@ -96,13 +115,6 @@
                 IsVisible="{Binding IsPromptVisible}" IsEnabled="{Binding IsEditable}" />
         <Button Grid.Column="4" Margin="6,0,0,0" VerticalAlignment="Bottom" Content="Close"
                 Command="{Binding DismissCommand}" IsVisible="{Binding IsDone}" />
-        <!-- A running drain replaces Cancel outright. "Cancel" over a loop
-             that is already evicting would read as undo, and there is no
-             undo: Stop leaves the node cordoned with some pods moved, which
-             is what the final message then says. -->
-        <Button Grid.Column="3" Grid.ColumnSpan="2" Margin="8,0,0,0" VerticalAlignment="Bottom"
-                HorizontalAlignment="Right" Classes="danger" Content="Stop draining"
-                Command="{Binding StopDrainCommand}" IsVisible="{Binding IsDraining}" />
       </Grid>
 
       <TextBlock Classes="statusText warn" TextWrapping="Wrap" IsVisible="{Binding IsScalingToZero}"

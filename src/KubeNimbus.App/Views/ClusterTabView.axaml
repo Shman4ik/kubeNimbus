@@ -196,7 +196,10 @@
           </DockPanel>
         </Border>
 
-      <Grid Name="ContentRows">
+      <!-- A Panel so the connection-failure view below can take ContentRows' place; the
+           grid itself is unchanged, and its row indices are what ApplyDockState uses. -->
+      <Panel>
+      <Grid Name="ContentRows" IsVisible="{Binding !HasConnectionFailure}">
         <Grid.RowDefinitions>
           <RowDefinition Height="Auto" />
           <RowDefinition Height="*" MinHeight="90" />
@@ -244,34 +247,58 @@
                 <TextBlock Text="All clusters" VerticalAlignment="Center" />
               </StackPanel>
             </ToggleButton>
-            <TextBlock Text="{Binding FleetSummary}" FontSize="11" Opacity="0.55" VerticalAlignment="Center"
+          </StackPanel>
+          <!-- The one column that shrinks (ENG-32). Every caption in the header row lives
+               here — the fleet summary, the "n of m" beside the search box, the connection
+               warning — because each is prose that can trim, while the controls either side
+               of it cannot. They used to sit in the Auto columns next to their controls,
+               and an Auto column never gives width back: at 1024px in fleet mode with a
+               warning the row needed ~840px of ~750 and pushed the search box, the
+               unhealthy chip and Refresh off the right edge. Priority is document order:
+               the "n of m" first (it says the list is short on purpose, UI rule 13), then
+               the fleet summary, and the warning — which the status bar also carries —
+               takes what is left. ClipToBounds, because a warning squeezed to nothing
+               would otherwise still draw its icon over its neighbour. -->
+          <DockPanel Grid.Column="3" Margin="12,0,0,0" ClipToBounds="True" VerticalAlignment="Center">
+            <TextBlock DockPanel.Dock="Right" Text="{Binding RowFilterSummary}" FontSize="11" Opacity="0.55"
+                       VerticalAlignment="Center" Margin="8,0,0,0"
+                       TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding RowFilterSummary}"
+                       IsVisible="{Binding RowFilterSummary, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}" />
+            <TextBlock DockPanel.Dock="Left" Text="{Binding FleetSummary}" FontSize="11" Opacity="0.55"
+                       VerticalAlignment="Center" Margin="0,0,12,0"
                        TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding FleetSummary}"
                        IsVisible="{Binding IsFleetView}" />
-          </StackPanel>
-          <Border Grid.Column="3" Classes="inlineWarning" Margin="12,0,0,0" HorizontalAlignment="Left"
-                  IsVisible="{Binding ConnectionWarning, Converter={x:Static aconv:ObjectConverters.IsNotNull}}"
-                  ToolTip.Tip="{Binding ConnectionWarning}">
-            <!-- A DockPanel, not a horizontal StackPanel: a StackPanel measures its
-                 children at infinite width, so the TextTrimming below never fired and a
-                 long warning ("staging-eu: connection refused (127.0.0.1:6550)") drew
-                 straight over the search box beside it in the fleet-partial state. Docked,
-                 the text gets the column's width and ellipsises; the tooltip has the rest. -->
-            <DockPanel>
-              <PathIcon DockPanel.Dock="Left" Data="{StaticResource AlertCircleIconGeometry}" Width="12" Height="12"
-                        Margin="0,0,6,0" />
-              <TextBlock Text="{Binding ConnectionWarning}" FontSize="12" TextTrimming="CharacterEllipsis" />
-            </DockPanel>
-          </Border>
+            <Border Classes="inlineWarning" HorizontalAlignment="Left" ClipToBounds="True"
+                    IsVisible="{Binding ConnectionWarning, Converter={x:Static aconv:ObjectConverters.IsNotNull}}"
+                    ToolTip.Tip="{Binding ConnectionWarning}">
+              <!-- A DockPanel, not a horizontal StackPanel: a StackPanel measures its
+                   children at infinite width, so the TextTrimming below never fired and a
+                   long warning ("staging-eu: connection refused (127.0.0.1:6550)") drew
+                   straight over the search box beside it in the fleet-partial state. Docked,
+                   the text gets the column's width and ellipsises; the tooltip has the rest. -->
+              <DockPanel>
+                <PathIcon DockPanel.Dock="Left" Data="{StaticResource AlertCircleIconGeometry}" Width="12" Height="12"
+                          Margin="0,0,6,0" />
+                <!-- Only for a lost or refused watch, the one warning a reconnect can fix:
+                     after `aws sso login` in a terminal, this is the way back without
+                     closing the tab. -->
+                <Button DockPanel.Dock="Right" Classes="chip" Padding="6,1" Margin="8,0,0,0" FontSize="11.5"
+                        Content="Reconnect" Command="{Binding ReconnectCommand}"
+                        IsVisible="{Binding ConnectionWarningOffersReconnect}"
+                        ToolTip.Tip="Read the kubeconfig again, run its credential plugin again and restart the list" />
+                <TextBlock Text="{Binding ConnectionWarning}" FontSize="12" TextTrimming="CharacterEllipsis" />
+              </DockPanel>
+            </Border>
+          </DockPanel>
           <!-- Search the list by name. The sidebar's filter box narrows *kinds*; this
                one narrows the objects, which is the thing `kubectl get | grep` has
                always been for and the one gesture the list had no answer to. Same
                shape as the sidebar's box (UI rule: people should find it where they
-               left it), and the "12 of 87" beside it states that the list is short on
-               purpose. Hidden in the Helm browser, which is a different list. -->
-          <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="8" Margin="12,0,0,0"
+               left it), and the "12 of 87" just left of it (in the shrinking column above)
+               states that the list is short on purpose. Hidden in the Helm browser, which
+               is a different list. -->
+          <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="8" Margin="8,0,0,0"
                       VerticalAlignment="Center" IsVisible="{Binding IsResourceListVisible}">
-            <TextBlock Text="{Binding RowFilterSummary}" FontSize="11" Opacity="0.55" VerticalAlignment="Center"
-                       IsVisible="{Binding RowFilterSummary, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}" />
             <TextBox Name="RowFilterBox" Classes="filterbox" Width="230"
                      Text="{Binding RowFilter}" PlaceholderText="{Binding RowFilterPlaceholder}"
                      KeyDown="OnRowFilterKeyDown">
@@ -301,7 +328,7 @@
               <PathIcon Data="{StaticResource AlertCircleIconGeometry}" Width="14" Height="14" />
             </ToggleButton>
           </StackPanel>
-          <Button Grid.Column="5" Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="Refresh" Padding="6"
+          <Button Grid.Column="5" Name="RefreshButton" Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="Refresh" Padding="6"
                   Margin="8,0,0,0">
             <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="14" Height="14" />
           </Button>
@@ -407,6 +434,30 @@
                     <PathIcon Data="{StaticResource DrainIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
+                <!-- CronJob actions (FEAT-8), present only on an object with a Job template,
+                     for the reason cordon is present only on a node. Suspend and resume are
+                     one slot, like cordon and uncordon: exactly one is ever shown. -->
+                <MenuItem Header="Run now…" Command="{Binding TriggerSelectedCommand}"
+                          IsVisible="{Binding CanTriggerSelectedRow}"
+                          ToolTip.Tip="Create a Job from this CronJob's template now — kubectl create job --from=cronjob">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource PlayIconGeometry}" Width="13" Height="13" />
+                  </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="Suspend…" Command="{Binding SuspendSelectedCommand}"
+                          IsVisible="{Binding CanSuspendSelectedRow}"
+                          ToolTip.Tip="Stop scheduling new Jobs. Jobs already running carry on.">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource PauseIconGeometry}" Width="13" Height="13" />
+                  </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="Resume…" Command="{Binding ResumeSelectedCommand}"
+                          IsVisible="{Binding CanResumeSelectedRow}"
+                          ToolTip.Tip="Put this CronJob back on its schedule">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource ClockOutlineIconGeometry}" Width="13" Height="13" />
+                  </MenuItem.Icon>
+                </MenuItem>
                 <!-- Argo CD, on an ordinary Applications list. Present only for that kind,
                      for the same reason cordon is present only on a node: "sync this
                      ConfigMap" is not a question anyone has. The dashboard's own rows carry
@@ -423,6 +474,14 @@
                           ToolTip.Tip="Ask Argo to re-compare this Application against Git. Changes nothing on the cluster.">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="13" Height="13" />
+                  </MenuItem.Icon>
+                </MenuItem>
+                <!-- FEAT-47: the other end of a PV/PVC binding, named in the header so the
+                     item says what it opens. Present only on a bound claim or volume. -->
+                <MenuItem Header="{Binding BoundObjectLabel}" Command="{Binding OpenBoundObjectCommand}"
+                          IsVisible="{Binding CanOpenBoundObject}">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource LinkIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
                 <Separator />
@@ -464,12 +523,17 @@
               </DataGridTemplateColumn>
               <!-- Cluster: only meaningful in the aggregated fleet view, so
                    ClusterTabView.ApplyFleetColumn shows and hides it (same reason as
-                   the usage columns — a DataGridColumn can't bind to the DataContext). -->
-              <DataGridTemplateColumn Header="Cluster" Tag="cluster" CanUserSort="True" Width="150" MinWidth="120" IsVisible="False">
+                   the usage columns — a DataGridColumn can't bind to the DataContext).
+                   120px and regular weight (ENG-6): at 150 and semibold it was the widest
+                   fixed column and the heaviest text on screen for a value repeated on every
+                   row of a group. With Restarts at 104 and Age holding its 72 (see there),
+                   the ten fleet columns fit 1280px again; narrower, the grid scrolls sideways,
+                   which the harness asserts (LayoutChecks.GridReachesLastColumn). -->
+              <DataGridTemplateColumn Header="Cluster" Tag="cluster" CanUserSort="True" Width="120" MinWidth="96" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding ClusterName}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ClusterName}"
-                               FontWeight="SemiBold" Opacity="0.85" VerticalAlignment="Center" />
+                               Opacity="0.85" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
@@ -489,9 +553,12 @@
                    a JSONPath text cell can carry. No Width="Auto" (the ratchet): bounded
                    cells are fixed, the three that carry prose are stars. The MinWidths are
                    what a narrow window squeezes the fixed columns down to, so each one still
-                   fits its header and, for Type, the whole word "Warning" — the pill's tint
+                   fits its header with its sort arrow (ENG-41: measured per column, sorted
+                   by each in turn, at 1024px with the sidebar open — Namespace's own floor
+                   is raised for this list in ApplySummaryColumns) and, for Type, the whole
+                   word "Warning" — the pill's tint
                    is not allowed to be the only thing left of it (checked at 1024px). -->
-              <DataGridTemplateColumn Header="Last seen" Tag="event-lastseen" CanUserSort="True" Width="108" MinWidth="100" IsVisible="False">
+              <DataGridTemplateColumn Header="Last seen" Tag="event-lastseen" CanUserSort="True" Width="116" MinWidth="110" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding LastSeenText}" VerticalAlignment="Center" ToolTip.Tip="{Binding LastSeenTooltip}"
@@ -512,7 +579,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Reason" Tag="event-reason" CanUserSort="True" Width="1.3*" MinWidth="100" IsVisible="False">
+              <DataGridTemplateColumn Header="Reason" Tag="event-reason" CanUserSort="True" Width="1.3*" MinWidth="104" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding EventReason}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding EventReason}"
@@ -525,7 +592,7 @@
                    every other kind carries it. Same Panel/Button.rowAction pair and the same
                    click handler as the Name cell below (L3); HasLogs is true on an event
                    only when its involved object is a core pod (LogTarget.InvolvedPod). -->
-              <DataGridTemplateColumn Header="Object" Tag="event-object" CanUserSort="True" Width="1.3*" MinWidth="110" IsVisible="False">
+              <DataGridTemplateColumn Header="Object" Tag="event-object" CanUserSort="True" Width="1.3*" MinWidth="96" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <Grid ColumnDefinitions="*,Auto">
@@ -542,7 +609,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Count" Tag="event-count" CanUserSort="True" Width="84" MinWidth="80" IsVisible="False">
+              <DataGridTemplateColumn Header="Count" Tag="event-count" CanUserSort="True" Width="96" MinWidth="92" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding EventCount}" VerticalAlignment="Center"
@@ -550,7 +617,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Message" Tag="event-message" CanUserSort="True" Width="2.4*" MinWidth="160" IsVisible="False">
+              <DataGridTemplateColumn Header="Message" Tag="event-message" CanUserSort="True" Width="2.4*" MinWidth="110" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding EventMessage}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
@@ -624,7 +691,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Restarts" Tag="restarts" CanUserSort="True" Width="112" MinWidth="78" IsVisible="False">
+              <DataGridTemplateColumn Header="Restarts" Tag="restarts" CanUserSort="True" Width="104" MinWidth="78" IsVisible="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <!-- The count carries "(43m ago)": 200 restarts that stopped yesterday
@@ -767,8 +834,13 @@
               </DataGridTemplateColumn>
               <!-- Age, last, exactly where kubectl puts it. The text is a function of
                    wall-clock, not of the object, so it is recomputed by the one shared
-                   timer in ClusterTabView — a watch event is not what makes it change. -->
-              <DataGridTemplateColumn Header="Age" Tag="age" CanUserSort="True" Width="72" MinWidth="60">
+                   timer in ClusterTabView — a watch event is not what makes it change.
+                   MinWidth equals Width (ENG-6): when the columns overflow, the grid squeezes
+                   from the right, and at 60px it cut its own header to "Ag" in the fleet
+                   list. At 72 the squeeze falls on CPU and Memory, whose floors still hold
+                   their numbers, and past that the grid scrolls sideways. -->
+
+              <DataGridTemplateColumn Header="Age" Tag="age" CanUserSort="True" Width="72" MinWidth="72">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding AgeText}" VerticalAlignment="Center" ToolTip.Tip="{Binding AgeTooltip}"
@@ -1162,6 +1234,17 @@
           </Grid>
         </Border>
       </Grid>
+
+        <!-- A failed connect, in place of the list (UI rule 9), which is hidden while it
+             shows. Inline template for the same reason as the row action strip above. -->
+        <ContentControl Content="{Binding ConnectionFailure}" IsVisible="{Binding HasConnectionFailure}">
+          <ContentControl.ContentTemplate>
+            <DataTemplate x:DataType="vm:ConnectionFailureViewModel">
+              <views:ConnectionFailureView />
+            </DataTemplate>
+          </ContentControl.ContentTemplate>
+        </ContentControl>
+      </Panel>
       </DockPanel>
     </Border>
   </Grid>

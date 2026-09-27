@@ -21,11 +21,38 @@ internal static class TestObjects
         new("test-cluster", "test-cluster", "default", "tester", "/nonexistent/kubeconfig.yaml");
 
     /// <summary>
-    /// Redirects settings and workspace reads at process start. The App layer reads
-    /// <c>settings.json</c> on paths these tests touch (sidebar section expansion, the
-    /// metrics poll interval), and a test run must not read — still less write — the
-    /// files belonging to whoever is running it. Same reason the screenshot harness
-    /// sets these.
+    /// Runs <see cref="RedirectStores"/> once when the test assembly loads, before any test
+    /// can touch a store. What this buys is a guarantee rather than a convention: a test
+    /// that builds a view model without calling <see cref="RedirectStores"/> first — easy
+    /// to write, and nothing would notice — still cannot reach the real
+    /// <c>settings.json</c> or <c>workspace.json</c> of whoever is running the suite.
+    /// </summary>
+    [System.Runtime.CompilerServices.ModuleInitializer]
+    internal static void RedirectStoresAtLoad() => RedirectStores();
+
+    /// <summary>
+    /// Points <c>settings.json</c> and <c>workspace.json</c> at a fresh, empty temp
+    /// directory. The App layer reads settings on paths these tests touch (sidebar section
+    /// expansion, the metrics poll interval, "open logs maximized"), and a test run must
+    /// not read — still less write — the files belonging to whoever is running it. Same
+    /// reason the screenshot harness sets these.
+    ///
+    /// <para>
+    /// What it guarantees, exactly (ENG-37), because the old comment promised more:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><b>Never the developer's files.</b> Also true of a test that never calls this,
+    /// through <see cref="RedirectStoresAtLoad"/>.</item>
+    /// <item><b>A fresh file for the calling test</b> — every read and write after this call
+    /// lands in the new directory, <c>App</c>'s settings included, since <c>App</c> no
+    /// longer fixes its path on first use.</item>
+    /// <item><b>Not isolation from a test running in parallel.</b> Both overrides are
+    /// process-wide statics, so another test calling this between your write and your read
+    /// moves you to <em>its</em> directory. A test that writes a setting or the workspace
+    /// and then relies on it is <c>[NotInParallel]</c> — <c>RowLogsTests</c>,
+    /// <c>ClusterTabSortTests</c> and <c>ClusterTabNamespacePickerTests</c> are the
+    /// pattern.</item>
+    /// </list>
     /// </summary>
     public static void RedirectStores()
     {

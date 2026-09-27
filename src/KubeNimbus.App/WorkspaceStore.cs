@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using KubeNimbus.Core;
 
 namespace KubeNimbus.App;
 
@@ -84,7 +85,17 @@ public sealed record WorkspaceSettings(
     /// looked like. Null in an older file, and then the window opens on Applications, the
     /// mode built for the "something is broken, where do I look" moment a launch usually is.
     /// </summary>
-    string? ShellMode = null);
+    string? ShellMode = null,
+    /// <summary>
+    /// The sidebar's Recent section, per cluster, keyed exactly as
+    /// <see cref="RecentNamespaces"/> is (kubeconfig path and context name): each value is
+    /// up to five <c>&lt;group&gt;/&lt;Kind&gt;</c> keys (<see cref="GridLayoutStore.KeyFor"/>),
+    /// newest first. Kind names only — resolved against the catalog discovery returns on the
+    /// next connect, and a kind that has since gone is dropped rather than shown. It is what
+    /// the reader was browsing, not anything read from the cluster, so it is session state
+    /// on the same test as the open tabs (ENG-5).
+    /// </summary>
+    Dictionary<string, List<string>>? RecentKinds = null);
 
 [JsonSerializable(typeof(WorkspaceSettings))]
 internal sealed partial class WorkspaceJsonContext : JsonSerializerContext;
@@ -110,8 +121,7 @@ public static class WorkspaceStore
     public static string? DirectoryOverride { get; set; }
 
     private static string FilePath => Path.Combine(
-        DirectoryOverride ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "kubeNimbus"),
+        DirectoryOverride ?? AppDataDirectory.Roaming,
         "workspace.json");
 
     public static WorkspaceSettings Load()
@@ -150,6 +160,7 @@ public static class WorkspaceStore
         KubeconfigPaths = settings.KubeconfigPaths ?? [],
         GridLayouts = settings.GridLayouts ?? [],
         RecentNamespaces = settings.RecentNamespaces ?? [],
+        RecentKinds = settings.RecentKinds ?? [],
     };
 
     public static void Save(WorkspaceSettings settings)

@@ -193,10 +193,24 @@ public static class PrinterColumns
     /// wonder which of them is guessing.
     ///
     /// <para>
-    /// An absent field, an unresolvable path and a non-scalar value all render as an
-    /// empty cell. The API server emits a null cell for all three and kubectl prints
-    /// nothing for a null; an empty cell in a grid says the same thing without
-    /// inventing a word for it.
+    /// An absent field and an unresolvable path render as an empty cell. The API server
+    /// emits a null cell for both and kubectl prints nothing for a null; an empty cell in
+    /// a grid says the same thing without inventing a word for it.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>A non-scalar value depends on the column's type, because it does upstream.</b>
+    /// For <c>type: string</c> the API server does not go through
+    /// <c>cellForJSONValue</c> at all: it runs client-go's JSONPath printer
+    /// (<c>JSONPath.PrintResults</c>), which writes a map or a slice as compact JSON. So
+    /// Gateway API's HTTPRoute, whose only non-Age column is HOSTNAMES over
+    /// <c>.spec.hostnames</c>, prints <c>["a.example.com","b.example.com"]</c> in
+    /// <c>kubectl get httproute</c> — confirmed against the sandbox's k3s 1.33 — and this
+    /// renders the same string. For every other type the value goes through
+    /// <c>cellForJSONValue</c>, which has no case for a map or a slice and returns a null
+    /// cell, so those stay empty here. The JSON rather than a friendlier comma list is a
+    /// decision, not an accident: a reader comparing the two screens should see the same
+    /// characters, and the brackets are what tell a one-element list from a scalar.
     /// </para>
     ///
     /// <para>
@@ -211,12 +225,12 @@ public static class PrinterColumns
             return "";
         }
 
-        // The API server skips object/array values outright rather than dumping JSON
-        // into a table cell, and so does this.
         var text = SimpleJsonPath.ScalarText(value);
         if (text is null)
         {
-            return "";
+            return column.Type == "string" && value.ValueKind is JsonValueKind.Array or JsonValueKind.Object
+                ? GoJson.Marshal(value)
+                : "";
         }
 
         // integer / number / boolean / string all render as the scalar's own text —

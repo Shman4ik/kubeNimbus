@@ -34,10 +34,11 @@
                  VerticalAlignment="Center" Margin="10,0,0,0"
                  TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Roles}" />
 
-      <!-- Each tab's own tools ride its slot on the shared row (UI rule 10): a caption
-           and a Refresh for the two one-shot reads (Pods, Events), the window caption
-           for Usage. The Overview follows the node's own watch and has nothing to
-           refresh. Exactly one of each column's children is ever visible. -->
+      <!-- Each tab's own tools ride its slot on the shared row (UI rule 10): the Pods
+           caption (the list is a live watch now, so it has nothing to refresh), a caption
+           and a Refresh for the one-shot Events read, the window caption for Usage. The
+           Overview follows the node's own watch. Exactly one of each column's children is
+           ever visible. -->
       <TextBlock Grid.Column="4" Text="{Binding PodsCaption}" Opacity="0.6" FontSize="12"
                  VerticalAlignment="Center" Margin="0,0,8,0"
                  IsVisible="{Binding SelectedTabIndex, Converter={x:Static conv:IndexEqualsConverter.Instance}, ConverterParameter=1}" />
@@ -47,11 +48,6 @@
       <TextBlock Grid.Column="4" Text="{Binding UsageWindowCaption}" Classes="sectionHeader"
                  VerticalAlignment="Center" Margin="0,0,4,0"
                  IsVisible="{Binding SelectedTabIndex, Converter={x:Static conv:IndexEqualsConverter.Instance}, ConverterParameter=3}" />
-      <Button Grid.Column="5" Classes="toolbar" Padding="6" Command="{Binding RefreshPodsCommand}"
-              ToolTip.Tip="Re-read the pods scheduled on this node"
-              IsVisible="{Binding SelectedTabIndex, Converter={x:Static conv:IndexEqualsConverter.Instance}, ConverterParameter=1}">
-        <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="14" Height="14" />
-      </Button>
       <Button Grid.Column="5" Classes="toolbar" Padding="6" Command="{Binding RefreshEventsCommand}"
               ToolTip.Tip="Re-read the events about this node"
               IsVisible="{Binding SelectedTabIndex, Converter={x:Static conv:IndexEqualsConverter.Instance}, ConverterParameter=2}">
@@ -226,8 +222,8 @@
                     IsVisible="{Binding HasPodsError}">
               <TextBlock Text="{Binding PodsError}" TextWrapping="Wrap" FontSize="12" />
             </Border>
-            <!-- A logs open that found nothing to open says why here. The list is one read,
-                 not a watch, so "rescheduled since it was listed" is the expected case. -->
+            <!-- A logs open that found nothing to open says why here. The list is a watch,
+                 but a pod can still go between its last frame and the click. -->
             <Border Classes="infoBar warn" Margin="0,0,0,8"
                     IsVisible="{Binding HasLogsNotice}">
               <TextBlock Text="{Binding LogsNotice}" TextWrapping="Wrap" FontSize="12" />
@@ -235,18 +231,29 @@
           </StackPanel>
 
           <!-- L / Shift+L from the resource list's own catalog rows (RowLogsGesture, Tunnel,
-               in code-behind); the menu captions are display-only and kept in step by hand. -->
-          <DataGrid Grid.Row="1" Name="PodsGrid" ItemsSource="{Binding Pods}" SelectedItem="{Binding SelectedPod}"
-                    IsReadOnly="True" GridLinesVisibility="Horizontal" CanUserResizeColumns="True">
+               in code-behind), and Enter and double-click open the pod — the default action
+               every other list has (UI rule 2), which this one used to keep on a chevron
+               column alone. The menu captions are display-only and kept in step by hand.
+               The selection is synced from code-behind (GridSelectionSync), not bound: a
+               two-way SelectedItem lost it whenever the inspector switched tabs.
+
+               Every column but Name is a fixed width (see datagrid-auto-columns.md): with
+               Auto columns the grid took whatever its widest realized cell asked for and
+               scrolled sideways inside an 860px window. The widths are sized for the dock
+               at that window width, headers included. -->
+          <DataGrid Grid.Row="1" Name="PodsGrid" ItemsSource="{Binding Pods}"
+                    IsReadOnly="True" GridLinesVisibility="Horizontal" CanUserResizeColumns="True"
+                    DoubleTapped="OnPodDoubleTapped">
             <DataGrid.ContextMenu>
               <ContextMenu>
                 <MenuItem Header="Logs" Command="{Binding PodLogsCommand}" InputGesture="L" />
                 <MenuItem Header="Logs, maximized" Command="{Binding PodLogsMaximizedCommand}" InputGesture="Shift+L" />
-                <MenuItem Header="Open pod" Command="{Binding OpenPodCommand}" CommandParameter="{Binding SelectedPod}" />
+                <MenuItem Header="Open pod" Command="{Binding OpenPodCommand}" CommandParameter="{Binding SelectedPod}"
+                          InputGesture="Enter" />
               </ContextMenu>
             </DataGrid.ContextMenu>
             <DataGrid.Columns>
-              <DataGridTemplateColumn Header="" Width="28">
+              <DataGridTemplateColumn Header="" Width="20" CanUserResize="False">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:NodePodViewModel">
                     <Ellipse Classes="statusDot" Width="8" Height="8" VerticalAlignment="Center"
@@ -254,7 +261,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Namespace" Width="Auto" MinWidth="120">
+              <DataGridTemplateColumn Header="Namespace" Width="116">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:NodePodViewModel">
                     <TextBlock Text="{Binding Namespace}" VerticalAlignment="Center"
@@ -264,7 +271,7 @@
               </DataGridTemplateColumn>
               <!-- The row's logs icon, the resource list's own (L2): drawn on the hovered and
                    the selected row by Button.rowAction, Shift+click for full-size. -->
-              <DataGridTemplateColumn Header="Name" Width="*" MinWidth="160">
+              <DataGridTemplateColumn Header="Name" Width="*" MinWidth="100">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:NodePodViewModel">
                     <Grid ColumnDefinitions="*,Auto">
@@ -278,14 +285,15 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Status" Width="Auto" MinWidth="120">
+              <DataGridTemplateColumn Header="Status" Width="112">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:NodePodViewModel">
-                    <TextBlock Text="{Binding Status}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Status}" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Status}" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="CPU req" Width="Auto" MinWidth="80">
+              <DataGridTemplateColumn Header="CPU req" Width="92">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:NodePodViewModel">
                     <TextBlock Text="{Binding CpuRequestText}" VerticalAlignment="Center"
@@ -293,7 +301,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Mem req" Width="Auto" MinWidth="92">
+              <DataGridTemplateColumn Header="Mem req" Width="100">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:NodePodViewModel">
                     <TextBlock Text="{Binding MemoryRequestText}" VerticalAlignment="Center"
@@ -301,24 +309,10 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Age" Width="Auto" MinWidth="56">
+              <DataGridTemplateColumn Header="Age" Width="64">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:NodePodViewModel">
                     <TextBlock Text="{Binding AgeText}" VerticalAlignment="Center" />
-                  </DataTemplate>
-                </DataGridTemplateColumn.CellTemplate>
-              </DataGridTemplateColumn>
-              <!-- Same affordance the events feed uses to reach the object it is about,
-                   rather than a double-click nothing announces. -->
-              <DataGridTemplateColumn Header="" Width="34">
-                <DataGridTemplateColumn.CellTemplate>
-                  <DataTemplate x:DataType="vm:NodePodViewModel">
-                    <Button Classes="chip" Padding="0" MinWidth="20" MinHeight="20" VerticalAlignment="Center"
-                            ToolTip.Tip="Open this pod"
-                            Command="{Binding $parent[UserControl].((vm:NodeDetailTabViewModel)DataContext).OpenPodCommand}"
-                            CommandParameter="{Binding}">
-                      <PathIcon Data="{StaticResource ChevronRightIconGeometry}" Width="10" Height="10" />
-                    </Button>
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>

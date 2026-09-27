@@ -25,7 +25,14 @@ Directory.CreateDirectory(outDir);
 // construction and save it whenever a cluster is pinned. Point that at a scratch
 // directory so rendering fixtures can't read — or clobber — the developer's own
 // open tabs, pins and theme.
-WorkspaceStore.DirectoryOverride = Path.Combine(Path.GetTempPath(), "kubenimbus-screenshot-workspace");
+//
+// One directory per run, not one shared name under %TEMP%: two harness runs at once —
+// two worktrees, two agents, a CI matrix — used to read and write each other's
+// workspace.json and settings.json mid-render, so a sidebar section one run expanded
+// showed up collapsed or expanded in the other's PNGs at random (ENG-10). Removed again
+// when the run ends.
+var scratch = Path.Combine(Path.GetTempPath(), "kubenimbus-screenshot-workspace", Guid.NewGuid().ToString("n"));
+WorkspaceStore.DirectoryOverride = scratch;
 Directory.CreateDirectory(WorkspaceStore.DirectoryOverride);
 File.Delete(Path.Combine(WorkspaceStore.DirectoryOverride, "workspace.json"));
 
@@ -37,6 +44,16 @@ File.Delete(Path.Combine(WorkspaceStore.DirectoryOverride, "workspace.json"));
 // the previous run.
 KubeNimbus.Core.Settings.AppSettingsStore.DirectoryOverride = WorkspaceStore.DirectoryOverride;
 File.Delete(Path.Combine(WorkspaceStore.DirectoryOverride, "settings.json"));
+
+// And the kubeconfig chain. Every scenario builds a real MainWindowViewModel, whose
+// constructor reads $KUBECONFIG and ~/.kube/config and, with no saved tabs, opens one on
+// the current context — i.e. connects to whatever cluster the developer running the
+// harness has. That made main-window-no-kubeconfig render the developer's own pods on a
+// machine with a live sandbox and the empty state everywhere else, differing between two
+// runs of the same commit by whether the connect had landed before the capture (ENG-10).
+// CI has no kubeconfig, which is why it never showed there. Scenarios that want contexts
+// seed them by hand (SeedContexts).
+Kubeconfig.EnvironmentSearchOverride = [];
 
 BuildAvaloniaApp().SetupWithoutStarting();
 
@@ -96,6 +113,8 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-yaml-conflict", () => HostInMainWindow(ClusterTabScenarios.YamlEditorConflict())),
     ("cluster-tab-yaml-secret-masked", () => HostInMainWindow(ClusterTabScenarios.YamlEditorSecretMasked())),
     ("cluster-tab-yaml-secret-revealed", () => HostInMainWindow(ClusterTabScenarios.YamlEditorSecretRevealed())),
+    // FEAT-30 — a TLS Secret's certificate chain, decoded without a Reveal.
+    ("cluster-tab-yaml-tls-secret", () => HostInMainWindow(ClusterTabScenarios.YamlEditorTlsSecret())),
     ("cluster-tab-exec", () => HostInMainWindow(ClusterTabScenarios.Exec())),
     ("cluster-tab-exec-fullscreen", () => HostInMainWindow(ClusterTabScenarios.ExecFullScreen())),
     ("cluster-tab-exec-fullscreen-maximized", () => HostInMainWindow(ClusterTabScenarios.ExecFullScreenMaximized())),
@@ -125,6 +144,11 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // box are the two things this item added to the header row, and 1024px is where
     // that row runs out first.
     ("cluster-tab-list-unhealthy-narrow", () => HostInMainWindow(ClusterTabScenarios.UnhealthyList(), width: 1024)),
+    // ENG-32: the fullest header row there is — the fleet chip and its summary, a
+    // connection warning, the "n of m" caption and the unhealthy chip — at the width it
+    // runs out first. Search, the chip and Refresh have to stay on screen.
+    ("cluster-tab-list-unhealthy-fleet-partial-narrow",
+        () => HostInMainWindow(ClusterTabScenarios.UnhealthyFleetPartial(), height: 1000, width: 1024)),
     ("cluster-tab-list-unhealthy-unavailable", () => HostInMainWindow(ClusterTabScenarios.UnhealthyUnavailable())),
     ("cluster-tab-list-unhealthy-demo", () => HostInMainWindow(ClusterTabScenarios.DemoUnhealthy())),
     // The mutating workload actions and their armed confirm strip.
@@ -137,6 +161,14 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-empty-namespace", () => HostInMainWindow(ClusterTabScenarios.EmptyNamespace())),
     ("cluster-tab-loading", () => HostInMainWindow(ClusterTabScenarios.Loading())),
     ("cluster-tab-disconnected", () => HostInMainWindow(ClusterTabScenarios.Disconnected())),
+    // FEAT-51 / FEAT-53: a connect that failed, stated in the content area in both modes
+    // (a plugin that is not installed, and credentials that expired), and a running
+    // watch whose credential was refused, with Reconnect beside the warning.
+    ("cluster-tab-connection-failed-plugin", () => HostInMainWindow(ClusterTabScenarios.ConnectionFailed("plugin"), height: 900)),
+    ("cluster-tab-connection-failed-expired", () => HostInMainWindow(ClusterTabScenarios.ConnectionFailed("expired"))),
+    ("applications-connection-failed",
+        () => HostInMainWindow(ClusterTabScenarios.ConnectionFailed("plugin"), height: 900, mode: ShellMode.Applications)),
+    ("cluster-tab-credentials-expired", () => HostInMainWindow(ClusterTabScenarios.CredentialsExpired())),
     // The demo cluster, built by running the real ConnectCommand — see ClusterTabScenarios.
     ("cluster-tab-demo-list", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
     ("cluster-tab-demo-pod-detail", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetail(), height: 1000)),
@@ -147,10 +179,24 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-workload-logs", () => HostInMainWindow(ClusterTabScenarios.DemoWorkloadLogs(), height: 1000)),
     ("cluster-tab-workload-logs-filtered-empty",
         () => HostInMainWindow(ClusterTabScenarios.DemoWorkloadLogs("checkout"))),
+    // The log panes' reading tools (FEAT-33/36/39) and ENG-45's never-started pods.
+    ("cluster-tab-workload-logs-find", () => HostInMainWindow(ClusterTabScenarios.DemoWorkloadLogsFind(), height: 1000)),
+    ("cluster-tab-workload-logs-not-started", () => HostInMainWindow(ClusterTabScenarios.DemoWorkloadLogsNotStarted())),
+    ("cluster-tab-demo-pod-detail-find", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetailSearch(), height: 1000)),
+    ("cluster-tab-demo-pod-detail-levels",
+        () => HostInMainWindow(ClusterTabScenarios.DemoPodDetailSearch(query: "", hideInfo: true), height: 1000)),
     // The CRD printer-column pair: the same Certificate list without and with the
     // advanced view, which is where the CRD's own `priority: 1` columns live.
     ("cluster-tab-crd-printer-columns", () => HostInMainWindow(ClusterTabScenarios.DemoCrdPrinterColumns())),
     ("cluster-tab-demo-scale-unavailable", () => HostInMainWindow(ClusterTabScenarios.DemoScaleUnavailable())),
+    // FEAT-8 — a CronJob's run-now and resume on the shared strip, the created-Job state
+    // with its "Open Job" follow-up, and a Job opened in the workload pane.
+    ("cluster-tab-cronjob-run-now", () => HostInMainWindow(ClusterTabScenarios.CronJobRunNow())),
+    ("cluster-tab-cronjob-run-now-done", () => HostInMainWindow(ClusterTabScenarios.CronJobRunNowDone())),
+    ("cluster-tab-cronjob-resume", () => HostInMainWindow(ClusterTabScenarios.CronJobResume())),
+    ("cluster-tab-job-detail", () => HostInMainWindow(ClusterTabScenarios.JobDetail(), height: 1000)),
+    // FEAT-47 — a bound PersistentVolume naming its claim, beside one nothing has claimed.
+    ("cluster-tab-persistent-volumes", () => HostInMainWindow(ClusterTabScenarios.PersistentVolumes())),
 
     // FEAT-4 — the node surface. All on the demo cluster, which is where the node
     // dataset lives; the drain's progress states are the two the harness cannot produce
@@ -167,6 +213,23 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-node-drain-stopped", () => HostInMainWindow(ClusterTabScenarios.NodeDrainStopped(), height: 1000)),
     ("cluster-tab-demo-terminal-unavailable",
         () => HostInMainWindow(ClusterTabScenarios.DemoTerminalUnavailable())),
+
+    // Bundle A — networking. "Why is traffic not reaching my pods": the Service pane's five
+    // states (partial, no match, nothing serving, no selector, ExternalName), the Ingress
+    // and NetworkPolicy panes, and the four kinds' kubectl list columns.
+    ("net-service-list", () => HostInMainWindow(NetworkingScenarios.ServiceList())),
+    ("net-service-detail", () => HostInMainWindow(NetworkingScenarios.ServiceDetail(), height: 1000)),
+    ("net-service-overview", () => HostInMainWindow(NetworkingScenarios.ServiceOverview(), height: 1000)),
+    ("net-service-no-match", () => HostInMainWindow(NetworkingScenarios.ServiceNoMatch(), height: 1000)),
+    ("net-service-nothing-serving", () => HostInMainWindow(NetworkingScenarios.ServiceNothingServing(), height: 1000)),
+    ("net-service-no-selector", () => HostInMainWindow(NetworkingScenarios.ServiceNoSelector(), height: 1000)),
+    ("net-service-external-name", () => HostInMainWindow(NetworkingScenarios.ServiceExternalName(), height: 1000)),
+    ("net-ingress-list", () => HostInMainWindow(NetworkingScenarios.IngressList())),
+    ("net-ingress-detail", () => HostInMainWindow(NetworkingScenarios.IngressDetail(), height: 1000)),
+    ("net-netpol-list", () => HostInMainWindow(NetworkingScenarios.NetworkPolicyList())),
+    ("net-netpol-detail", () => HostInMainWindow(NetworkingScenarios.NetworkPolicyDetail(), height: 1000)),
+    ("net-netpol-default-deny-pods", () => HostInMainWindow(NetworkingScenarios.NetworkPolicyDefaultDenyPods(), height: 1000)),
+    ("net-endpointslice-list", () => HostInMainWindow(NetworkingScenarios.EndpointSliceList())),
 
     // Argo CD. The dashboard is the headline shot: two independent pills per row, the
     // seven counts, and the attention ordering that puts a Synced-but-Degraded
@@ -209,7 +272,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-logs-maximized", () => HostInMainWindow(ClusterTabScenarios.DemoLogsMaximized())),
     ("palette-logs", () => LogsPalette(ClusterTabScenarios.DemoList(), "")),
     ("palette-logs-search", () => LogsPalette(ClusterTabScenarios.DemoList(), "report")),
-    ("palette-logs-narrow", () => LogsPalette(ClusterTabScenarios.DemoList(), "", width: 800)),
+    ("palette-logs-narrow", () => LogsPalette(ClusterTabScenarios.DemoList(), "", width: 560)),
     // Without the prefix: a plain Ctrl/Cmd+K search for a name finds the log rows too,
     // after whatever commands match — which here is none.
     ("palette-logs-unprefixed", () => LogsPalette(ClusterTabScenarios.DemoList(), "checkout", prefix: false)),
@@ -243,6 +306,9 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("applications-page-selfheal", () => HostInMainWindow(ApplicationsScenarios.Page("checkout", editYaml: true), mode: ShellMode.Applications)),
     ("applications-page-restart", () => HostInMainWindow(ApplicationsScenarios.Page("checkout", restart: true), mode: ShellMode.Applications)),
     ("ux-applications-keys", () => HostInMainWindow(ApplicationsScenarios.List(), mode: ShellMode.Applications)),
+    // VER-19 and ENG-20: keyboard contracts that need a real window (KeyboardChecks).
+    ("ux-hotkey-scheme", () => BuildMainWindowContent()),
+    ("ux-exec-keys", () => HostInMainWindow(ClusterTabScenarios.Exec())),
     ("main-window", () => BuildMainWindowContent()),
     ("main-window-no-kubeconfig", () => BuildNoKubeconfigContent()),
     ("main-window-shortcuts", () => BuildMainWindowContent(openShortcuts: true)),
@@ -277,6 +343,14 @@ foreach (var (name, build) in scenarios)
 }
 
 Console.WriteLine($"Wrote screenshots to {Path.GetFullPath(outDir)}");
+try
+{
+    Directory.Delete(scratch, recursive: true);
+}
+catch (IOException)
+{
+    // Best effort: a file still held open leaves a few KB in %TEMP%, not a failed run.
+}
 return;
 
 void Capture(string name, ThemeVariant theme, Func<Control> build)
@@ -287,8 +361,11 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     // (see SortedList) would otherwise leave it in the shared scratch workspace for
     // every later scenario that lists the same kind. Cleared here rather than in the
     // scenario, because the view reads the layout while the window is laid out — which
-    // is after the builder has returned.
-    WorkspaceStore.Save(WorkspaceStore.Load() with { GridLayouts = [] });
+    // is after the builder has returned. The sidebar's Recent kinds are persisted per
+    // cluster too, and every demo scenario is the same cluster: without the reset, a
+    // scenario that selects Deployments would put a Recent section into every demo shot
+    // rendered after it, and each PNG would depend on the order the scenarios ran in.
+    WorkspaceStore.Save(WorkspaceStore.Load() with { GridLayouts = [], RecentKinds = [] });
 
     var content = build();
     var window = content as Window ?? new Window
@@ -305,17 +382,30 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
 
     if (name == "ux-namespace-picker") UxInteractionChecks.NamespacePicker(window);
     if (name == "ux-applications-keys") ApplicationsChecks.Keys(window);
+    if (name == "ux-hotkey-scheme") KeyboardChecks.HotkeyScheme(window);
+    if (name is "cluster-tab-list-unhealthy-fleet-partial-narrow" or "cluster-tab-list-unhealthy-narrow")
+        LayoutChecks.ListHeaderFits(window);
+    if (name == "palette-logs-narrow") LayoutChecks.PaletteFollowsWindow(window);
+    if (name.StartsWith("cluster-tab-fleet-list", StringComparison.Ordinal)
+        || name == "cluster-tab-list-unhealthy-fleet-partial-narrow")
+        LayoutChecks.GridReachesLastColumn(window);
+    if (name == "ux-exec-keys") KeyboardChecks.ExecKeys(window);
     if (name.StartsWith("applications-page", StringComparison.Ordinal)) ApplicationsChecks.SettlePage(window);
     if (name == "ux-unhealthy-toggle") UxInteractionChecks.UnhealthyToggle(window);
     if (name == "ux-logs-palette") UxInteractionChecks.LogsPalette(window);
     if (name == "ux-row-logs") UxInteractionChecks.RowLogs(window);
     if (name == "ux-pane-logs-workload") PaneLogsChecks.WorkloadDetail(window);
     if (name == "ux-pane-logs-node") PaneLogsChecks.NodeDetail(window);
+    if (name == "cluster-tab-pane-logs-narrow-node") PaneLogsChecks.NodePodsFit(window);
     if (name == "ux-pane-logs-events") PaneLogsChecks.Events(window);
     if (name == "ux-pane-logs-argo") PaneLogsChecks.Argo(window);
     if (name == "cluster-tab-argo-resource-logs-hover") PaneLogsChecks.HoverArgoRow(window, "Deployment");
     if (name == "main-window-preferences-logs") UxInteractionChecks.ScrollPreferencesTo(window, "Open logs maximized");
     if (name.StartsWith("cluster-tab-row-logs", StringComparison.Ordinal)) UxInteractionChecks.HoverRow(window, 3);
+
+    // Last, so a pane a check just opened settles too: capture when the log streams have
+    // stopped moving, not whenever the builder happened to return (ENG-10).
+    LogSettle.Run(window);
     using var frame = window.CaptureRenderedFrame();
     var themeLabel = theme == ThemeVariant.Dark ? "dark" : "light";
     var path = Path.Combine(outDir, $"{name}.{themeLabel}.png");
@@ -362,6 +452,11 @@ static Control LogsPalette(
     ClusterTabViewModel tab, string query, Action<ClusterTabViewModel>? fixture = null, int width = 1280, bool prefix = true)
 {
     var window = (Window)HostInMainWindow(tab, width: width);
+
+    // Below the shell's 960px minimum only on purpose: palette-logs-narrow asks for 560 to show
+    // the palette following the window (ENG-35), which the minimum would otherwise hide by
+    // quietly rendering at 960 — what happened to this scenario when it asked for 800.
+    window.MinWidth = Math.Min(window.MinWidth, width);
     var vm = (MainWindowViewModel)window.DataContext!;
     vm.Palette.Open((prefix ? CommandPaletteViewModel.LogsPrefix : "") + query);
     fixture?.Invoke(tab);
@@ -418,11 +513,11 @@ static Control BuildNoKubeconfigContent()
     vm.Tabs.Clear();
     vm.AvailableContexts.Clear();
     vm.HasContexts = false;
-    // What LoadContextsAsync sets for this state. It is also what the empty-state card
-    // renders as its heading — the card and the status bar bind the same property — so
-    // this one string is deliberately doing both jobs.
+    // What LoadContextsAsync sets for this state: the card's heading and the status bar
+    // are two properties now (ENG-29), and this shot is where they are seen together.
     vm.KubeconfigSearchPathCount = 1;
-    vm.Status = "No kubeconfig contexts found.";
+    vm.KubeconfigDiagnosis = "No kubeconfig contexts found.";
+    vm.Status = "No clusters: the kubeconfig location searched does not exist.";
     vm.KubeconfigSearchPaths = string.Join(
         System.Environment.NewLine,
         "missing  C:\\Users\\reviewer\\.kube\\config   (default location)");

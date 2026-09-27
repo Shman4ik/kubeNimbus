@@ -4,6 +4,7 @@ using KubeNimbus.App;
 using KubeNimbus.App.Demo;
 using KubeNimbus.App.ViewModels;
 using KubeNimbus.Core;
+using KubeNimbus.Core.Settings;
 
 namespace KubeNimbus.Screenshot;
 
@@ -64,7 +65,10 @@ internal static class ClusterTabScenarios
         var podKind = tab.SidebarSections
             .First(s => s.Title == "Workloads").Kinds
             .First(k => k.Descriptor.Kind == "Pod");
-        podKind.IsSelected = true;
+
+        // No IsSelected here or anywhere below: the highlight follows SelectedKind
+        // (ClusterTabViewModel.MarkSelectedKind). Setting it by hand is how
+        // cluster-tab-row-action-scale came to draw Pods and Deployments both selected.
         tab.SelectedKind = podKind;
 
         if (populateRows)
@@ -334,7 +338,8 @@ internal static class ClusterTabScenarios
     /// <see cref="LabelSelector.Matches"/>, and the lines go through the same merge,
     /// buffer and filter a live cluster's would.
     /// </remarks>
-    public static ClusterTabViewModel DemoWorkloadLogs(string filter = "")
+    public static ClusterTabViewModel DemoWorkloadLogs(
+        string filter = "", bool filterMode = true, string workload = "payment-service-report-generator")
     {
         var tab = DemoTab();
         var kind = tab.SidebarSections
@@ -342,14 +347,82 @@ internal static class ClusterTabScenarios
             .First(k => k.Descriptor is { Group: "apps", Kind: "Deployment" });
         tab.SelectKindCommand.Execute(kind);
 
-        tab.SelectedRow = tab.Rows.FirstOrDefault(r => r.Name == "payment-service-report-generator")
+        tab.SelectedRow = tab.Rows.FirstOrDefault(r => r.Name == workload)
             ?? tab.Rows.FirstOrDefault();
         tab.OpenWorkloadLogsCommand.Execute(null);
 
         DrainWorkloadLogs(tab);
         if (tab.SelectedInspectorTab is WorkloadLogsTabViewModel logs)
         {
+            // Filtering is the search's second mode since FEAT-33; the filtered-empty shot
+            // is about that mode's own empty state, so it asks for it.
+            logs.IsLogFilterMode = filterMode && filter.Length > 0;
             logs.LogSearchText = filter;
+        }
+
+        return tab;
+    }
+
+    /// <summary>
+    /// ENG-45: the demo's fraud detector, whose two pods are unschedulable. The chips read
+    /// "not started" and the body says why, in the sentence a live cluster's pane reads
+    /// from the pod (LogStreamEnd) — they used to read "ended" over "waiting for output".
+    /// </summary>
+    public static ClusterTabViewModel DemoWorkloadLogsNotStarted()
+    {
+        var tab = DemoWorkloadLogs(workload: "fraud-detector");
+        if (tab.SelectedInspectorTab is WorkloadLogsTabViewModel logs)
+        {
+            for (var i = 0; i < 300 && logs.Sources.Any(s => s.State is LogSourceState.Starting or LogSourceState.Streaming); i++)
+            {
+                Dispatcher.UIThread.RunJobs();
+                Thread.Sleep(10);
+            }
+
+            Dispatcher.UIThread.RunJobs();
+        }
+
+        return tab;
+    }
+
+    /// <summary>
+    /// FEAT-33 in the multi-pod pane: finding keeps every pod's lines on screen with the
+    /// matches highlighted and the current one marked, the counter in the box.
+    /// </summary>
+    public static ClusterTabViewModel DemoWorkloadLogsFind() => DemoWorkloadLogs("report", filterMode: false);
+
+    /// <summary>
+    /// FEAT-33, FEAT-36 and FEAT-39 in pod detail's pane, on the demo pod's whole canned
+    /// stream: a search in find mode (every line kept, matches highlighted, "n of m" and
+    /// the arrows in the box), timestamps shown in local time with the UTC chip beside the
+    /// clock, and optionally the Info level hidden — the Levels button then names what is
+    /// left and turns accent.
+    /// </summary>
+    public static ClusterTabViewModel DemoPodDetailSearch(string query = "report", bool hideInfo = false)
+    {
+        var tab = DemoTab();
+        tab.SelectedRow = tab.Rows.FirstOrDefault(r => r.Name.StartsWith("payment-service-report-generator", StringComparison.Ordinal))
+            ?? tab.Rows.FirstOrDefault();
+        tab.OpenSelectedCommand.Execute(null);
+
+        if (tab.SelectedInspectorTab is PodDetailTabViewModel detail)
+        {
+            for (var i = 0; i < 600 && detail.LogStatus is null; i++)
+            {
+                Dispatcher.UIThread.RunJobs();
+                Thread.Sleep(10);
+            }
+
+            detail.ShowLogTimestamps = true;
+            detail.Levels.ShowInfo = !hideInfo;
+            detail.LogSearchText = query;
+            detail.FindPreviousLogMatchCommand.Execute(null);
+
+            // The toggle is a preference and writes settings.json (FEAT-37) — redirected
+            // here, but shared by every scenario after this one, which would all open with
+            // timestamps on. Put the file back; this pane keeps its own state.
+            var store = new AppSettingsStore();
+            store.Save(store.Load() with { LogShowTimestamps = false });
         }
 
         return tab;
@@ -505,7 +578,6 @@ internal static class ClusterTabScenarios
 
         tab.SelectedNamespace = @namespace;
         var eventsKind = config.Kinds.First(k => k.Descriptor.Kind == "Event");
-        eventsKind.IsSelected = true;
         tab.SelectedKind = eventsKind;
         return tab;
     }
@@ -649,7 +721,6 @@ internal static class ClusterTabScenarios
         var kind = tab.SidebarSections
             .First(s => s.Title == "Workloads").Kinds
             .First(k => k.Descriptor.Kind == "Deployment");
-        kind.IsSelected = true;
         tab.SelectedKind = kind;
 
         foreach (var deployment in FixtureData.Deployments)
@@ -843,6 +914,94 @@ internal static class ClusterTabScenarios
         var tab = ArgoTab();
         tab.SelectedArgoApplication = tab.ArgoApplications.First(a => a.Name == "ledger-api");
         tab.SyncArgoApplicationCommand.Execute(null);
+        return tab;
+    }
+
+    // --------------------------------------------------------------- CronJobs
+    //
+    // FEAT-8 on the demo cluster, which ships one CronJob on its schedule and one
+    // suspended. The capability checks, the confirm sentences and the demo refusal run
+    // through the real commands; the created-Job state is written in, as the drain's
+    // progress is, because creating a Job needs an API server.
+
+    private static ClusterTabViewModel CronJobTab(string name)
+    {
+        var tab = DemoTab();
+        tab.SelectKindCommand.Execute(tab.SidebarSections
+            .SelectMany(s => s.Kinds)
+            .First(k => k.Descriptor is { Group: "batch", Kind: "CronJob" }));
+        tab.SelectedRow = tab.Rows.First(r => r.Name == name);
+        return tab;
+    }
+
+    /// <summary>Run now, armed on the demo cluster: the sentence, and the in-place refusal.</summary>
+    public static ClusterTabViewModel CronJobRunNow()
+    {
+        var tab = CronJobTab("nightly-reconcile");
+        tab.TriggerSelectedCommand.Execute(null);
+        return tab;
+    }
+
+    /// <summary>
+    /// After a run-now went through: the server's name for the Job, and "Open Job" in the
+    /// confirm's slot — the one follow-up any of the strip's actions has.
+    /// </summary>
+    public static ClusterTabViewModel CronJobRunNowDone()
+    {
+        var tab = CronJobRunNow();
+        var action = tab.PendingRowAction!;
+        using var document = JsonDocument.Parse("""
+            {"apiVersion":"batch/v1","kind":"Job","metadata":{"name":"nightly-reconcile-manual-x7k2m","namespace":"payments"}}
+            """);
+        action.OpenJob = _ => Task.CompletedTask;
+        action.CreatedJob = new DynamicResource(document.RootElement.Clone());
+        action.IsDone = true;
+        action.IsSuccess = true;
+        action.Message = "Created Job/nightly-reconcile-manual-x7k2m. Its pods appear as the Job controller starts them.";
+        return tab;
+    }
+
+    /// <summary>Resume, armed on the suspended CronJob: the missed-run clause is the thing to read.</summary>
+    public static ClusterTabViewModel CronJobResume()
+    {
+        var tab = CronJobTab("quarterly-report");
+        tab.ResumeSelectedCommand.Execute(null);
+        return tab;
+    }
+
+    /// <summary>
+    /// A Job in the workload pane: its run progress against the backoff limit and, on the
+    /// Conditions tab, why it failed. The demo run's pods are gone, which is the ordinary
+    /// state of a failed Job an hour later and reads as such.
+    /// </summary>
+    public static ClusterTabViewModel JobDetail()
+    {
+        var tab = DemoTab();
+        tab.SelectKindCommand.Execute(tab.SidebarSections
+            .SelectMany(s => s.Kinds)
+            .First(k => k.Descriptor is { Group: "batch", Kind: "Job" }));
+        tab.SelectedRow = tab.Rows.First(r => r.Name == "nightly-reconcile-29230920");
+        tab.OpenSelectedCommand.Execute(null);
+        if (tab.SelectedInspectorTab is WorkloadDetailTabViewModel detail)
+        {
+            detail.SelectedTabIndex = 1;
+        }
+
+        return tab;
+    }
+
+    /// <summary>
+    /// FEAT-47: the demo's PersistentVolumes, a bound one and one nothing has claimed. The
+    /// Details column names the bound volume's claim, as kubectl's CLAIM column does; the
+    /// row's menu then carries "Open claim payments/data-redis-cache-0".
+    /// </summary>
+    public static ClusterTabViewModel PersistentVolumes()
+    {
+        var tab = DemoTab();
+        var storage = tab.SidebarSections.First(s => s.Kinds.Any(k => k.Descriptor is { Group: "", Kind: "PersistentVolume" }));
+        storage.IsExpanded = true;
+        tab.SelectKindCommand.Execute(storage.Kinds.First(k => k.Descriptor is { Group: "", Kind: "PersistentVolume" }));
+        tab.SelectedRow = tab.Rows.FirstOrDefault(r => r.Name.StartsWith("pvc-", StringComparison.Ordinal));
         return tab;
     }
 
@@ -1164,11 +1323,6 @@ internal static class ClusterTabScenarios
         tab.IsUnhealthyOnly = true;
         var configMaps = tab.SidebarSections.SelectMany(s => s.Kinds)
             .First(k => k.Descriptor is { Group: "", Kind: "ConfigMap" });
-        foreach (var kind in tab.SidebarSections.SelectMany(s => s.Kinds))
-        {
-            kind.IsSelected = kind == configMaps;
-        }
-
         tab.SelectedKind = configMaps;
         foreach (var configMap in DemoData.ConfigMaps.Where(c => c.Namespace == "payments"))
         {
@@ -1210,6 +1364,72 @@ internal static class ClusterTabScenarios
     {
         var tab = BaseTab();
         tab.ConnectionWarning = "Watch connection lost (SocketException); retrying in 4s.";
+        tab.ConnectionWarningOffersReconnect = true;
+        return tab;
+    }
+
+    /// <summary>
+    /// A watch whose credential was refused mid-session (an SSO session ending) — the
+    /// warning the informer raises for a 401, with the Reconnect button beside it.
+    /// </summary>
+    public static ClusterTabViewModel CredentialsExpired()
+    {
+        var tab = BaseTab();
+        tab.ConnectionWarning =
+            "The cluster rejected the credentials (401) — they have probably expired. kubeNimbus re-read the kubeconfig; retrying in 4s. Sign in again and the retry picks it up.";
+        tab.ConnectionWarningOffersReconnect = true;
+        return tab;
+    }
+
+    /// <summary>
+    /// A connect that failed, as the content area states it. The report is written in
+    /// rather than produced by a failing connect so the shot is the same on every machine
+    /// (no temp paths, no developer home directory); its sentences are the ones
+    /// <see cref="ConnectionReport"/> produces for the same cause, which
+    /// <c>ConnectionReportTests</c> pins.
+    /// </summary>
+    public static ClusterTabViewModel ConnectionFailed(string kind = "plugin")
+    {
+        var context = new ClusterContext("prod-eks-eu", "arn:aws:eks:eu-west-1:1234:cluster/prod", null, "prod-sso", "fixture");
+        var tab = new ClusterTabViewModel(context);
+        var server = "https://4F2A9C.gr7.eu-west-1.eks.amazonaws.com";
+        IReadOnlyList<ConnectionFact> facts = kind == "plugin"
+            ?
+            [
+                new("Kubeconfig", "/Users/reviewer/.kube/config"),
+                new("Context", context.Name),
+                new("Cluster", context.ClusterName),
+                new("Server", server),
+                new("User", "prod-sso"),
+                new("Signs in with", "credential plugin aws (not found on PATH or in the usual install folders)"),
+                new("Plugin install hint", "Install the AWS CLI: https://aws.amazon.com/cli/"),
+            ]
+            :
+            [
+                new("Kubeconfig", "/Users/reviewer/.kube/config"),
+                new("Context", context.Name),
+                new("Cluster", context.ClusterName),
+                new("Server", server),
+                new("User", "prod-sso"),
+                new("Signs in with", "credential plugin aws (runs /opt/homebrew/bin/aws)"),
+            ];
+
+        var report = kind == "plugin"
+            ? new ConnectionFailureReport(
+                ConnectionReport.RunningPlugin,
+                "The kubeconfig's credential plugin could not be started.",
+                "Could not run the kubeconfig's credential plugin: An error occurred trying to start process 'aws' with working directory '/'. No such file or directory",
+                "Install it, or put its full path in the kubeconfig's exec command. kubeNimbus looked on this app's PATH and in /usr/local/bin, /opt/homebrew/bin, /opt/local/bin, /Users/reviewer/.local/bin, /Users/reviewer/bin.",
+                facts)
+            : new ConnectionFailureReport(
+                ConnectionReport.SigningIn,
+                "The API server rejected the credentials (401 Unauthorized).",
+                "Unauthorized (401 Unauthorized)",
+                "They have most likely expired. Sign in again the way you normally do — aws sso login, az login, gcloud auth login — then Retry. kubeNimbus re-reads the kubeconfig on every attempt and keeps no copy of any credential.",
+                facts);
+
+        tab.ConnectionFailure = new ConnectionFailureViewModel(report, tab);
+        tab.Status = $"Connection failed ({report.StepPhrase}).";
         return tab;
     }
 
@@ -1472,12 +1692,6 @@ internal static class ClusterTabScenarios
             SidebarGrouping.HelmReleaseDescriptor, SidebarGrouping.IconKeyFor(SidebarGrouping.HelmSection));
         helmSection.Kinds.Add(helmKind);
         tab.SidebarSections.Add(helmSection);
-
-        foreach (var kind in tab.SidebarSections.SelectMany(s => s.Kinds))
-        {
-            kind.IsSelected = ReferenceEquals(kind, helmKind);
-        }
-
         tab.SelectedKind = helmKind;
         tab.IsHelmView = true;
         tab.AreMetricsVisible = false;
@@ -1838,6 +2052,31 @@ internal static class ClusterTabScenarios
 
     /// <summary>Same Secret with "Reveal values" toggled on — exercises the real decode path (YamlJson parse + base64), not a stand-in.</summary>
     public static ClusterTabViewModel YamlEditorSecretRevealed() => BuildYamlEditorSecret(reveal: true);
+
+    /// <summary>
+    /// FEAT-30: the demo's <c>kubernetes.io/tls</c> Secret, opened through the real list on
+    /// the demo cluster. The header's chip names the leaf and how long it has left (a real
+    /// certificate generated for the demo, so the wording follows the wall clock the way
+    /// every Age does), and the card is open on the chain — the leaf, and the CA that signed
+    /// it, twice (once in the tls.crt bundle, once as ca.crt). Values stay masked: the card
+    /// needs no Reveal, and the key is never read.
+    /// </summary>
+    public static ClusterTabViewModel YamlEditorTlsSecret()
+    {
+        var tab = DemoTab();
+        var config = tab.SidebarSections.First(s => s.Kinds.Any(k => k.Descriptor is { Group: "", Kind: "Secret" }));
+        config.IsExpanded = true;
+        tab.SelectKindCommand.Execute(config.Kinds.First(k => k.Descriptor is { Group: "", Kind: "Secret" }));
+        tab.SelectedRow = tab.Rows.First(r => r.Name == "checkout-tls");
+        tab.OpenSelectedCommand.Execute(null);
+        if (tab.SelectedInspectorTab is YamlEditorTabViewModel editor)
+        {
+            editor.IsCertificateDetailOpen = true;
+        }
+
+        tab.IsInspectorMaximized = true;
+        return tab;
+    }
 
     private static ClusterTabViewModel BuildYamlEditorSecret(bool reveal)
     {

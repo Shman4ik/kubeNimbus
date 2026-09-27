@@ -1,3 +1,4 @@
+using System.Net;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Threading.Channels;
@@ -29,15 +30,156 @@ public sealed partial class ClusterClient : IDisposable
     private static readonly TimeSpan InitialBackoff = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan MaxBackoff = TimeSpan.FromSeconds(30);
 
-    private readonly Kubernetes _client;
+    /// <summary>
+    /// The generated client every request goes through. Replaced, never mutated, by
+    /// <see cref="RefreshCredentialsAsync"/> — which is how a tab re-resolves its
+    /// credentials without a new <see cref="ClusterClient"/>: every inspector pane, fleet
+    /// member and palette source holds <em>this</em> object, so swapping what is inside it
+    /// reaches all of them at once, and none of them has to learn that a reconnect exists.
+    /// </summary>
+    private volatile Kubernetes _client;
+
+    /// <summary>Clients replaced by a refresh, kept alive so streams already open on them are not cut.</summary>
+    private readonly List<Kubernetes> _retired = [];
+
+    private readonly Lock _gate = new();
+    private Task? _refreshing;
+    private DateTimeOffset _lastRefresh = DateTimeOffset.MinValue;
+    private bool _disposed;
+
+    /// <summary>
+    /// How many replaced clients are kept for the streams still open on them. A credential
+    /// that stays broken is refreshed on every retry of every watch; past this the oldest
+    /// is disposed, which ends whatever was still reading from it.
+    /// </summary>
+    private const int MaxRetiredClients = 4;
+
+    /// <summary>
+    /// Watches that hit a 401 at the same moment (the list, the metrics poll, the
+    /// Applications mode's reads) share one plugin run rather than each starting their own.
+    /// </summary>
+    private static readonly TimeSpan RefreshCoalesceWindow = TimeSpan.FromSeconds(5);
 
     public ClusterContext Context { get; }
 
-    private ClusterClient(ClusterContext context, Kubernetes client)
+    /// <summary>The proxy from the cluster's <c>proxy-url</c>, or null when requests go direct. Tests read it.</summary>
+    internal IWebProxy? Proxy { get; private set; }
+
+    private ClusterClient(ClusterContext context, ClientSetup setup)
     {
         Context = context;
-        _client = client;
+        _client = Create(setup);
+        Proxy = setup.Proxy;
     }
+
+    /// <summary>
+    /// A generated client for <paramref name="setup"/>, with the proxy applied to the
+    /// WebSocket transport as well: exec and port-forward open a <c>ClientWebSocket</c> of
+    /// their own, which the HTTP handler's proxy never reaches.
+    /// </summary>
+    private static Kubernetes Create(ClientSetup setup)
+    {
+        var client = new Kubernetes(setup.Configuration);
+        if (setup.Proxy is { } proxy)
+        {
+            client.CreateWebSocketBuilder = () =>
+            {
+                var builder = new WebSocketBuilder();
+                builder.Options.Proxy = proxy;
+                return builder;
+            };
+        }
+
+        return client;
+    }
+
+    /// <summary>
+    /// Re-reads the kubeconfig and re-runs its credential plugin, then routes every later
+    /// request through a client built from the result. The answer to an expired session:
+    /// after <c>aws sso login</c> in a terminal, this is what picks the new credential up
+    /// without closing the tab.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Hard rule 4 is why this re-runs rather than remembers. Nothing the plugin returned
+    /// is kept anywhere but inside the configuration it was built into — the same as the
+    /// first connect.
+    /// </para>
+    /// <para>
+    /// It also covers what the library does not: a plugin that returns a client
+    /// <em>certificate</em> gets no refresh provider upstream (only token-returning plugins
+    /// do), so before this such a connection went stale for the life of the tab.
+    /// </para>
+    /// <para>
+    /// Single-flight, and without <paramref name="force"/> a refresh that finished within
+    /// the last few seconds counts: several watches failing together must not start one
+    /// SSO prompt each. Streams already open on the old client are left to finish; it is
+    /// disposed with this object.
+    /// </para>
+    /// </remarks>
+    public Task RefreshCredentialsAsync(bool force = false, CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_refreshing is { IsCompleted: false } running)
+            {
+                return running.WaitAsync(cancellationToken);
+            }
+
+            if (!force && DateTimeOffset.UtcNow - _lastRefresh < RefreshCoalesceWindow)
+            {
+                return _refreshing ?? Task.CompletedTask;
+            }
+
+            _refreshing = RefreshCoreAsync();
+            return _refreshing.WaitAsync(cancellationToken);
+        }
+    }
+
+    private async Task RefreshCoreAsync()
+    {
+        try
+        {
+            var setup = await Kubeconfig.BuildClientSetupAsync(Context).ConfigureAwait(false);
+            var fresh = Create(setup);
+            lock (_gate)
+            {
+                if (_disposed)
+                {
+                    fresh.Dispose();
+                    return;
+                }
+
+                _retired.Add(_client);
+                _client = fresh;
+                Proxy = setup.Proxy;
+                while (_retired.Count > MaxRetiredClients)
+                {
+                    _retired[0].Dispose();
+                    _retired.RemoveAt(0);
+                }
+            }
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                _lastRefresh = DateTimeOffset.UtcNow;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Whether <paramref name="exception"/> is the API server refusing the credentials —
+    /// a 401 from either the hand-rolled requests or the generated client.
+    /// </summary>
+    public static bool IsUnauthorized(Exception exception) => exception switch
+    {
+        HttpRequestException { StatusCode: HttpStatusCode.Unauthorized } => true,
+        k8s.Autorest.HttpOperationException { Response.StatusCode: HttpStatusCode.Unauthorized } => true,
+        _ => false,
+    };
 
     /// <summary>
     /// Builds a client for the given context. Credentials (including exec
@@ -51,11 +193,8 @@ public sealed partial class ClusterClient : IDisposable
     /// <see cref="Kubeconfig.BuildClientConfigAsync"/>. The app uses
     /// <see cref="ConnectAsync"/>.
     /// </remarks>
-    public static ClusterClient Connect(ClusterContext context)
-    {
-        var config = Kubeconfig.BuildClientConfig(context);
-        return new ClusterClient(context, new Kubernetes(config));
-    }
+    public static ClusterClient Connect(ClusterContext context) =>
+        new(context, Kubeconfig.BuildClientSetup(context));
 
     /// <summary>
     /// <see cref="Connect"/> without blocking the caller: the kubeconfig read,
@@ -65,8 +204,8 @@ public sealed partial class ClusterClient : IDisposable
         ClusterContext context,
         CancellationToken cancellationToken = default)
     {
-        var config = await Kubeconfig.BuildClientConfigAsync(context, cancellationToken).ConfigureAwait(false);
-        return new ClusterClient(context, new Kubernetes(config));
+        var setup = await Kubeconfig.BuildClientSetupAsync(context, cancellationToken).ConfigureAwait(false);
+        return new ClusterClient(context, setup);
     }
 
     /// <summary>Raw generated client, for tests only. App code goes through typed methods.</summary>
@@ -264,6 +403,38 @@ public sealed partial class ClusterClient : IDisposable
                 {
                     needRelist = true;
                 }
+                catch (Exception ex) when (IsUnauthorized(ex))
+                {
+                    // A 401 is not a transient fault: retrying with the same credential
+                    // fails the same way for ever, which is what this loop used to do. It
+                    // means the credential has expired or been revoked, so the kubeconfig is
+                    // read again and its plugin re-run before the retry — and a sign-in done
+                    // in a terminal meanwhile is picked up by the next attempt, with no
+                    // reconnect and no closed tab. Relisting afterwards, because whatever
+                    // happened while the watch was refused was not seen.
+                    string outcome;
+                    try
+                    {
+                        await RefreshCredentialsAsync(force: false, ct).ConfigureAwait(false);
+                        outcome = "re-read the kubeconfig";
+                    }
+                    catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch (Exception refresh)
+                    {
+                        outcome = $"re-reading the kubeconfig failed: {Describe(refresh)}";
+                    }
+
+                    connectionLost?.Invoke(new WatchConnectionException(
+                        $"The cluster rejected the credentials (401) — they have probably expired. kubeNimbus {outcome}; retrying in {backoff.TotalSeconds:0}s. Sign in again and the retry picks it up.",
+                        ex,
+                        credentialsRejected: true));
+                    needRelist = true;
+                    await Task.Delay(backoff, ct).ConfigureAwait(false);
+                    backoff = backoff * 2 > MaxBackoff ? MaxBackoff : backoff * 2;
+                }
                 catch (Exception ex)
                 {
                     connectionLost?.Invoke(new WatchConnectionException(
@@ -291,8 +462,16 @@ public sealed partial class ClusterClient : IDisposable
     /// when we have one ("pods is forbidden: …"); a bare exception type name
     /// otherwise, which is all a transport failure can honestly offer.
     /// </summary>
-    private static string Describe(Exception ex) =>
-        ex is KubernetesApiException { ServerMessage: { } serverMessage } ? serverMessage : ex.GetType().Name;
+    private static string Describe(Exception ex) => ex switch
+    {
+        KubernetesApiException { ServerMessage: { } serverMessage } => serverMessage,
+
+        // A token refresh that ran the plugin mid-session and failed: its own sentence
+        // ("could not reach login.example.com") is the diagnosis, and the bare type name
+        // this used to print was the one thing in the banner nobody could act on.
+        ExecCredentialException or KubeconfigSetupException => ex.Message,
+        _ => ex.GetType().Name,
+    };
 
     private static async Task<string?> ListAndEmitAsync<T>(
         Func<string?, CancellationToken, Task<(IList<T> Items, string? Continue, string? ResourceVersion)>> listPage,
@@ -497,9 +676,13 @@ public sealed partial class ClusterClient : IDisposable
         HttpMethod method, string relativePath, HttpContent? content, HttpCompletionOption completion, CancellationToken ct,
         string? accept = null)
     {
-        var request = new HttpRequestMessage(method, new Uri(_client.BaseUri, relativePath)) { Content = content };
+        // Read once: RefreshCredentialsAsync can replace the generated client between any
+        // two reads, and one request should carry one client's credentials to that same
+        // client's handler.
+        var client = _client;
+        var request = new HttpRequestMessage(method, new Uri(client.BaseUri, relativePath)) { Content = content };
         if (accept is not null) request.Headers.TryAddWithoutValidation("Accept", accept);
-        if (_client.Credentials is { } credentials)
+        if (client.Credentials is { } credentials)
         {
             // An expired exec token is refreshed here, by running the plugin again —
             // so a plugin failing mid-session (VPN dropped) is translated the same way
@@ -507,7 +690,7 @@ public sealed partial class ClusterClient : IDisposable
             await ExecCredentialCapture.RunAsync(() => credentials.ProcessHttpRequestAsync(request, ct)).ConfigureAwait(false);
         }
 
-        return await _client.HttpClient.SendAsync(request, completion, ct).ConfigureAwait(false);
+        return await client.HttpClient.SendAsync(request, completion, ct).ConfigureAwait(false);
     }
 
     /// <summary>Buffered GET returning a parsed JSON document — caller disposes.</summary>
@@ -558,7 +741,25 @@ public sealed partial class ClusterClient : IDisposable
         throw KubernetesApiException.From(response.StatusCode, response.ReasonPhrase, body);
     }
 
-    public void Dispose() => _client.Dispose();
+    public void Dispose()
+    {
+        lock (_gate)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            foreach (var retired in _retired)
+            {
+                retired.Dispose();
+            }
+
+            _retired.Clear();
+            _client.Dispose();
+        }
+    }
 }
 
 /// <summary>

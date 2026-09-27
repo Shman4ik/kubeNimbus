@@ -1095,5 +1095,97 @@
         }
       }
     }
+  },
+  {
+    "kind": "PersistentVolumeClaim",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "data-redis-cache-0",
+      "namespace": "payments",
+      "uid": "f1111111-1111-1111-1111-111111111111",
+      "creationTimestamp": "2026-03-04T10:15:00Z",
+      "labels": {
+        "app": "redis-cache"
+      }
+    },
+    "spec": {
+      "accessModes": [
+        "ReadWriteOnce"
+      ],
+      "storageClassName": "local-path",
+      "volumeName": "pvc-f1111111-1111-1111-1111-111111111111",
+      "resources": {
+        "requests": {
+          "storage": "8Gi"
+        }
+      }
+    },
+    "status": {
+      "phase": "Bound",
+      "accessModes": [
+        "ReadWriteOnce"
+      ],
+      "capacity": {
+        "storage": "8Gi"
+      }
+    }
+  },
+  {
+    "kind": "PersistentVolume",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "pvc-f1111111-1111-1111-1111-111111111111",
+      "uid": "f2222222-2222-2222-2222-222222222222",
+      "creationTimestamp": "2026-03-04T10:15:02Z"
+    },
+    "spec": {
+      "capacity": {
+        "storage": "8Gi"
+      },
+      "accessModes": [
+        "ReadWriteOnce"
+      ],
+      "persistentVolumeReclaimPolicy": "Delete",
+      "storageClassName": "local-path",
+      "claimRef": {
+        "kind": "PersistentVolumeClaim",
+        "apiVersion": "v1",
+        "namespace": "payments",
+        "name": "data-redis-cache-0",
+        "uid": "f1111111-1111-1111-1111-111111111111"
+      },
+      "hostPath": {
+        "path": "/var/lib/rancher/k3s/storage/pvc-f1111111_payments_data-redis-cache-0"
+      }
+    },
+    "status": {
+      "phase": "Bound"
+    }
+  },
+  {
+    "kind": "PersistentVolume",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "nfs-archive-01",
+      "uid": "f3333333-3333-3333-3333-333333333333",
+      "creationTimestamp": "2026-02-10T09:00:00Z"
+    },
+    "spec": {
+      "capacity": {
+        "storage": "500Gi"
+      },
+      "accessModes": [
+        "ReadWriteMany"
+      ],
+      "persistentVolumeReclaimPolicy": "Retain",
+      "storageClassName": "nfs",
+      "nfs": {
+        "server": "10.20.0.5",
+        "path": "/exports/archive"
+      }
+    },
+    "status": {
+      "phase": "Available"
+    }
   }
 ]

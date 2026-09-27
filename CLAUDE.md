@@ -222,7 +222,8 @@ Three rules about it:
 1. **Minimalist.** Every always-visible control must be justified; default answer
    is no. Secondary actions live in a command palette (Ctrl+K) or context menus.
 2. **Double-click = default action** everywhere (pod → logs/describe, deployment
-   → details, context → connect); Space = quick-peek.
+   → details, service → its pods and endpoints, ingress → its routes, network policy →
+   its rules, context → connect); Space = quick-peek.
 3. **Multi-cluster via tabs** (like pgNimbus query tabs): each tab bound to a
    kubeconfig context; drag-reorder; workspace snapshot restores tabs. Reaching
    a cluster that isn't already a tab goes through the **cluster switcher**, never
@@ -252,12 +253,27 @@ Three rules about it:
    core group (Kind still decides inside `""`, the one group that holds
    workloads, networking, storage and machinery at once), which has no such
    residue — and stops a CRD that happens to be called `Deployment` from being
-   classified as a built-in workload, which the old rule did.
+   classified as a built-in workload, which the old rule did. One CRD-installed
+   group is filed with the built-ins on purpose: `gateway.networking.k8s.io`
+   (Gateway API, the Kubernetes project's own successor to Ingress) is in
+   Network, still by group, so its route kinds stop being more rows of CRDs —
+   see [networking-detail](docs/engineering/networking-detail.md).
    The filter matches display name, **API group and short names**
    (`SidebarKindViewModel.Matches`), because the group is the only thing
    telling two same-named CRD kinds apart and "svc"/"po" is how people think.
-   A pinned **Recent** section (top, max 5, session-scoped) holds the kinds
-   most recently selected. Two sections carry a **synthetic** row on top of the
+   A pinned **Recent** section (top, max 5) holds the kinds most recently
+   selected, persisted per cluster in `workspace.json` as `<group>/<Kind>` keys and
+   resolved against the next connect's catalog (ENG-5 — usage is open, look, close,
+   so a session-scoped Recent was empty exactly when it would have helped; a kind the
+   cluster no longer serves is dropped, and nothing is saved before the saved list has
+   been read, which on a real cluster is after the early Pods list has already started).
+   **Exactly one kind is drawn selected** — its own row and its Recent copy — and the
+   highlight is derived from `SelectedKind` in `MarkSelectedKind`, never set by
+   whoever selects (ENG-26): the palette, a restore, discovery's Pods swap and the
+   screenshot harness all assign the kind directly, and a highlight only the sidebar
+   command maintained is how two rows came to be lit at once. A Recent entry selects
+   its canonical row, so clicking the Recent copy of the kind on screen is the same
+   no-op as clicking the row. `SidebarRecentKindsTests` pins both. Two sections carry a **synthetic** row on top of the
    discovered kinds — Helm's release browser and Argo's GitOps dashboard — and
    both are gated on evidence the cluster actually has that thing (a release
    Secret; the Application kind in discovery), because a row that opens on
@@ -320,7 +336,11 @@ Three rules about it:
    because `$KUBECONFIG` is not inherited by a GUI launched from Explorer/VS,
    and "empty dropdown, dead + button" is the most likely first-run
    experience there. Any command that cannot run must be disabled
-   (`AddNewTabCommand`'s `CanExecute`), never silently no-op.
+   (`AddNewTabCommand`'s `CanExecute`), never silently no-op. The same goes for a
+   **failed connect**: it used to leave the content area blank with the reason in a
+   status bar that does not wrap, and is now `ClusterTabViewModel.ConnectionFailure`,
+   rendered in both modes by one `ConnectionFailureView` — see
+   [connecting](docs/engineering/connecting.md).
 10. **An inspector panel gets two rows of chrome above its content, and the tab
    strip is one of them.** The dock is ~300px by default and every stacked row
    comes straight out of the thing you opened the panel to read. Pod detail
@@ -410,6 +430,12 @@ Three rules about it:
      experimental "used mostly for testing" — the compiler refuses it without an
      explicit suppression. We ship linux-x64/arm64; ~36px isn't worth any of that.
      `ConfigureWindowChrome` returns early and the Linux window is unchanged.
+   - **The window's `MinWidth="960"` is a stated number** (ENG-35, reasoned in a comment
+     on `MainWindow.axaml`): the narrowest window whose list header still holds every fixed
+     control beside the 224px sidebar and whose bar still holds the caption strip. Below
+     it something always-visible has to go, which is a design call, not a minimum to lower.
+     The palette does not depend on it — `MaxWidth` 560 with a 16px gutter, so it follows a
+     narrower window, and `palette-logs-narrow` renders it at 560px with the minimum lifted.
    - **Nothing here is testable in the screenshot harness**, which is the usual
      safety net: `HeadlessWindowImpl.NeedsManagedDecorations` is `false`, so the
      decorations are never built and every scenario renders the bar with no
@@ -471,9 +497,18 @@ Three rules about it:
    `10,0,10,0` in Theme.axaml. The gutter is not free — nine columns × 10px comes out
    of a fixed width, and the first cut pushed Age off the right edge at 1280px — so
    the column `MinWidth`s were re-cut to match (Name 136, Status 140, Ready 56,
-   Restarts 78, CPU 98, Memory 106, sparklines 34). Check `cluster-tab-workloads-list`
+   Restarts 78, CPU 98, Memory 106, Age 72, sparklines 34). Check `cluster-tab-workloads-list`
    at its rendered 1280px, which is narrower than most real windows and is where this
-   fails first. A CRD's own printer columns are a *variable* number of columns on that
+   fails first. When the columns do not fit, the grid squeezes fixed columns **from the
+   right** to their minimums and only then scrolls sideways — so a minimum below what a
+   header needs is a clipped header, not a scrollbar. That is why Age's minimum is its
+   width (at 60 it read "Ag" in the fleet list, ENG-6) and why the fleet list's Cluster
+   column is 120px regular weight, not 150 semibold; the Events list's minimums were
+   re-cut the same way so each header keeps its sort arrow at 1024px (ENG-41, Namespace's
+   floor raised for that list only, in `ApplySummaryColumns`). The harness asserts the
+   narrow cases rather than leaving them to someone looking at a PNG
+   (`tools/Screenshot/LayoutChecks.cs`: the list header's controls stay inside the window,
+   the grid reaches its last column, the palette follows a narrow window). A CRD's own printer columns are a *variable* number of columns on that
    same fixed width, and their answer to this is kubectl's own `priority` field rather
    than another re-cut — see "CRD printer columns". The minimums below are the layout a
    list *opens* with; since FEAT-66 they are no longer the last word, because the reader
@@ -600,13 +635,15 @@ Three rules about it:
 
 Each feature's design rules, and the incidents behind them, live in a page of their own under [`docs/engineering/`](docs/engineering/), so a session loads only the ones it touches. **Read the page for any feature you change before changing it**, and keep it current in the same PR — the same discipline as this file.
 
+- [Connecting: credential plugins, proxies, failures and reconnect](docs/engineering/connecting.md) — BuildClientSetupAsync as the one entry→client path, bare plugin commands found like a login shell would, proxy-url on both transports, the failure view (step, cause, facts, no credential ever a fact), RefreshCredentialsAsync's in-place swap and 401-as-expiry, kubeconfig folders with rescan-on-focus, AppDataDirectory.
 - [The Applications mode](docs/engineering/applications-mode.md) — The first screen: apps (Argo or bare workloads) with health and a reason from Core's deterministic rules, per-namespace fallback under narrow RBAC, the application page (findings with quoted evidence, pods, linked resources, timeline, what changed, embedded logs), the kubelet's one-run-per-container log rule, DemoData.Now.
 - [Multi-pod logs (one workload, one stream)](docs/engineering/multi-pod-logs.md) — WorkloadLogsTabViewModel: selector-resolved pods, per-pod tail budget, 50-stream cap, two-stage timestamp merge; and what both log panes say when a follow ends (LogStreamEnd reads the pod).
 - [One click to logs from the row, and logs opened full-size](docs/engineering/row-logs-and-maximized.md) — The row's logs icon (hover/selected, IsVisible style, Shift+click), Shift+L, the "Open logs maximized" preference read by OpenLogsForAsync, Esc restore; L3's logs from every list that names a pod (OpenNamedLogs, RowLogsGesture, stated "gone").
+- [Reading a log: find, levels, clear, local time, remembered display](docs/engineering/log-pane-reading.md) — Both log panes: search that finds (highlight, n of m, Enter/Shift+Enter) or filters, Levels with unleveled lines always shown, Clear that keeps the stream, local time with UTC one click away, display toggles in settings.json (never Previous), the default-container annotation, "not started" pods, one logs glyph.
 - [Log severity is three classes, not a brush binding](docs/engineering/log-severity-classes.md) — Why severity is style classes and never a Foreground binding (the invisible-plain-line bug, twice).
 - [Pod detail's Overview tab (conditions, tolerations, QoS, priority, probes)](docs/engineering/pod-overview-tab.md) — Conditions/tolerations/QoS/probes tab: index 4, condition polarity, API-server probe defaults, signature-guarded rebuild.
 - [Requests and limits are text on the Usage tab](docs/engineering/requests-and-limits.md) — Usage tab's declared requests/limits: words not blanks, not gated on metrics.
-- [ConfigMaps are shown, Secrets are masked](docs/engineering/configmaps-and-secrets.md) — Env tab: ConfigMap refs resolve on open, Secret refs stay masked behind an eye.
+- [ConfigMaps are shown, Secrets are masked](docs/engineering/configmaps-and-secrets.md) — Env tab: ConfigMap refs resolve on open, Secret refs stay masked behind an eye, every key ref opens its object; a Secret's certificates (subject, SANs, expiry) are read without a Reveal, the key never.
 - [The sidebar is 224px and the reader can drag it](docs/engineering/sidebar-width.md) — Absolute sidebar width, GridSplitter bounds, the SidebarWidthChanged write-back.
 - [macOS has a real menu bar, and the app is called kubeNimbus](docs/engineering/macos-menu-bar.md) — Application.Name, MacMenu.cs, platform-gated native menu built from CommandCatalog.
 - [The theme toggle wrote a string nothing could read](docs/engineering/theme-toggle-string.md) — Stringly-typed settings must write through the same helper that reads them.
@@ -616,8 +653,9 @@ Each feature's design rules, and the incidents behind them, live in a page of th
 - [The Events list reads like `kubectl get events`](docs/engineering/events-list.md) — Last seen (fallback chain, series before eventTime) / Type / Reason / Object / Count / Message, newest-first default with a remembered clear, both Event groups, why not printer slots.
 - [Unhealthy only: the list's second narrowing](docs/engineering/unhealthy-only.md) — Warn/error predicate over StatusHealth, per-Modified re-evaluation, kind gate, third empty state, list-scoped Ctrl+Z.
 - [An Auto DataGrid column ratchets, and only one grid can afford it](docs/engineering/datagrid-auto-columns.md) — Why the resource list has no Width=Auto columns (measured ratchet) and why Helm/Argo keep them.
-- [Mutating workload actions (scale, rollout restart, delete)](docs/engineering/workload-actions.md) — Scale / rollout restart / delete: merge patches, scale subresource, capability from discovery.
-- [Node operations (detail, cordon / uncordon, drain)](docs/engineering/node-operations.md) — Node detail (System card, Events by kind+name, measured Usage vs allocatable), cordon/uncordon, drain: allocatable math, eviction plan table, partial-drain lifetime.
+- [Mutating workload actions (scale, rollout restart, delete, CronJob run/suspend)](docs/engineering/workload-actions.md) — Scale / rollout restart / delete: merge patches, scale subresource, capability from discovery; a CronJob's run-now (kubectl's Job, server-named), suspend/resume, Open Job.
+- [Networking: Service, Ingress and NetworkPolicy panes, and the list columns](docs/engineering/networking-detail.md) — Service pane joins selector-matched pods to EndpointSlice endpoints (slices by the `kubernetes.io/service-name` label, not owner refs; no verdict before both watches sync; the three degenerate shapes as three sentences); Ingress routes with a URL built from a validated host, never copied; NetworkPolicy rules in words with the empty selector meaning every pod; kubectl's list columns for Ingress/Endpoints/EndpointSlice/NetworkPolicy; Gateway API filed under Network by group.
+- [Node operations (detail, cordon / uncordon, drain)](docs/engineering/node-operations.md) — Node detail (System card, Events by kind+name, measured Usage vs allocatable), cordon/uncordon, drain: allocatable math, eviction plan table, partial-drain lifetime; pods-on-node and the drain are one field-selected watch, not a poll.
 - [The exec terminal](docs/engineering/exec-terminal.md) — SvcSystems.UI.Terminal over XTerm.NET: bytes in/out, stateful UTF-8 decoder, keyboard ownership, reverse-video defect.
 - [The machine's own terminal ("open a terminal on this cluster")](docs/engineering/machine-terminal.md) — TerminalLauncher: one-key overlay kubeconfig, env-inheritance trap on wt.exe/open, per-platform launch.
 - [The apply preview (server-side dry run)](docs/engineering/apply-preview.md) — Server-side dry-run diff, TextDiff/LCS bounds, view modes, strict fieldValidation with pre-1.27 fallback.
@@ -669,7 +707,9 @@ Six rules:
 3. **One dataset, not two.** `src/KubeNimbus.App/Demo/` owns it — `DemoData` (objects,
    catalog, sidebar, Helm, and the one CRD whose `additionalPrinterColumns` the demo
    list draws — `crds.json` is a real-shaped `CustomResourceDefinition`, read through
-   the same `PrinterColumns.Parse` a live cluster's GET goes through), `DemoLogs`
+   the same `PrinterColumns.Parse` a live cluster's GET goes through, and
+   `networking.json`, one object per state the Service, Ingress and NetworkPolicy panes
+   render), `DemoLogs`
    (canned streams), `DemoUsage` (replayed metric polls) — and `tools/Screenshot/FixtureData.cs` is now a passthrough to it. What a
    screenshot shows and what a user clicking "Explore demo cluster" sees cannot drift
    apart. The JSON is an `EmbeddedResource` with an explicit `LogicalName`
@@ -686,6 +726,12 @@ Six rules:
    Secret/ConfigMap refs through the same cache and the same base64 decode, against
    `DemoData.ReadObject` instead of a GET. A kind the dataset has nothing for lands on
    the real "No &lt;kind&gt; found" empty state, which is most of a 100-kind catalog.
+   `DemoRowsTests` pins what the dataset shows through `PopulateDemoRows` (ENG-14): every
+   payments pod, a crash loop among them, usage on **every** running pod, three nodes of
+   which one is cordoned, a CRD in its own columns, and an empty kind landing on the
+   empty state. Writing it found drift: pods added for later features had arrived with
+   no `pod-metrics.json` entry, so ten running pods drew a usage column of dashes — the
+   rule is one metrics entry per running pod, and that test is what holds it.
    `DemoLogs` deliberately carries **lines with no severity keyword** (nginx access
    logs, JSON, plain prints): every fixture line having one is precisely what hid the
    log pane's invisible-plain-line bug, twice — see "Log severity is three classes,
@@ -722,10 +768,13 @@ There are **two** persisted files and the split is not arbitrary:
   is *preferences* — what you chose once and expect to still be true next launch:
   theme, hotkey scheme, advanced view, sidebar visibility and expanded sections,
   picked kubeconfig paths, log scrollback, metrics poll interval, delete confirmation,
-  apply preview, open logs maximized.
+  apply preview, open logs maximized, and the log panes' display toggles (timestamps,
+  UTC, wrap). Those three are written by the panes themselves, not the preferences page,
+  and nothing that changes *which* log lines are read — Previous, the search, the levels —
+  is persisted at all; see [log-pane-reading](docs/engineering/log-pane-reading.md).
 - **`workspace.json`** (`KubeNimbus.App/WorkspaceStore.cs`) is *session* — what the
-  window looked like: open tabs, pinned and recent contexts, environment overrides, and
-  which mode (Applications or Resources) the window was showing.
+  window looked like: open tabs, pinned and recent contexts, environment overrides, the
+  recent namespaces and sidebar Recent kinds per cluster, and which mode (Applications or Resources) the window was showing.
 
 Each tab snapshot also carries the **kind and namespace** it was showing, and the
 workspace the index of the tab in front, so a restart lands where you left off instead
@@ -763,13 +812,17 @@ Five rules:
    who turns it back on after a near-miss expects the *next* delete to ask), while the
    log cap is read per tab (re-trimming a live buffer would discard lines someone was
    reading).
-4. **Nothing here may become a credential** (rule 4). `KubeconfigPaths` is the closest
+4. **Nothing here may become a credential** (rule 4). `KubeconfigPaths` (files *or
+   folders* — a folder contributes every kubeconfig in it on each search) is the closest
    it comes and is paths only, re-resolved through the chain at connect time. The
    preferences page says so in the panel, which is where someone would worry about it.
 5. **`AppSettingsStore.DirectoryOverride`** exists for the screenshot harness, same as
    `WorkspaceStore.DirectoryOverride` and for a stronger reason: the preferences a
    scenario touches are exactly the ones the developer running it has chosen for
-   themselves.
+   themselves. Without an override, both files — and the discovery cache and the terminal
+   overlays — live under `AppDataDirectory`, which never resolves to a relative path:
+   `GetFolderPath` returns `""` for a folder that does not exist yet, and on a fresh Linux
+   `HOME` that used to put the discovery cache in the current directory (ENG-39).
 
 The page itself (`PreferencesWindow` + `PreferencesViewModel`) is deliberately the same
 shape as pgNimbus's — section header, one card per setting, label and explanation left,
@@ -780,11 +833,16 @@ the page and the command bar's own toggles cannot disagree while both are on scr
 
 ## Workload detail and namespace navigation
 
-Double-click opens Deployments, StatefulSets and DaemonSets in
-`WorkloadDetailTabViewModel`. The pane shows replica counts, controller progress,
+Double-click opens Deployments, StatefulSets, DaemonSets and batch Jobs in
+`WorkloadDetailTabViewModel`. The pane shows replica counts (a Job's completions,
+running and failed against its backoff limit), controller progress,
 conditions, events and a live pod list. The pod watch uses the workload selector,
 including match expressions. Closing the pane cancels its requests and watch.
-The workload status follows its list row; Refresh also reads the object directly.
+The workload status follows its list row; Refresh also reads the object directly,
+and tells the list so a row it heals or breaks is re-filtered (ENG-33). The pod
+grids of this pane and node detail sync their selection from code-behind
+(`Views/GridSelectionSync`), never a two-way `SelectedItem`: DataGrid writes a null
+back as the inspector switches tabs, which lost the selection (ENG-43).
 
 Double-click and Enter open a selected pod. L opens its logs and Shift+L opens
 them maximized, through the resource list's own open-logs path (see
@@ -841,6 +899,14 @@ Seven things worth keeping:
    surfaces that have to follow the scheme are pinned by `HotkeySchemeTests`
    (`tests/KubeNimbus.App.Tests`) and were driven against the running app — see the
    VER-3 pass in Current status for what that showed and what it still cannot cover.
+   That something *asks* for the rebuild is pinned too (VER-19): the shell view model's
+   subscription by `ShellHotkeySchemeTests`, the window's by the harness's
+   `ux-hotkey-scheme` check, which presses Cmd+K after a scheme change on a real window.
+   Deleting either subscription turns its check red; both were confirmed that way. The
+   shell's handler is removed again when its window unloads (`MainWindowViewModel.Dispose`,
+   ENG-16), since a static event roots every subscriber and the harness builds a shell per
+   scenario; the switcher tooltip is raised from the same handler rather than surviving a
+   scheme change by the accident of its popup re-binding (ENG-17).
 3. **The palette is a *partial* projection, deliberately.** Most of this app's rows are
    conditional — logs/exec/port-forward only while a pod row is selected, the fleet
    toggle only with more than one cluster connected — so they stay closures over the
@@ -1095,6 +1161,18 @@ with `HttpCompletionOption.ResponseHeadersRead`:
   paginated initial list (Reset + Added per item) → resumable watch →
   relist on `ERROR` frame / 410 Gone → exponential backoff with
   `connectionLost` callback on transient failures.
+- **A 401 is not a transient failure.** It means the credential expired or was revoked,
+  and retrying with it fails the same way for ever — which the loop used to do. On a 401
+  it calls `ClusterClient.RefreshCredentialsAsync` (re-read the kubeconfig, re-run the
+  plugin, swap the generated client inside the same `ClusterClient`), reports a
+  `WatchConnectionException` with `CredentialsRejected`, relists and retries. The swap is
+  why a reconnect reaches every pane without any of them holding a new object; the
+  replaced client is retired rather than disposed so open streams survive it. Never cache
+  what the plugin returned instead — hard rule 4. See
+  [connecting](docs/engineering/connecting.md).
+- **`_client` is replaced, so read it once per operation** when an operation touches it
+  more than once. Mixing two generated clients for the same server within one request is
+  harmless; a new file that holds on to `_client` across awaits for its own lifetime is not.
 
 If you add a new **typed** watched resource, reuse the generic `WatchAsync<T>`
 core; only supply the list path, a paged lister, and a
@@ -1113,6 +1191,10 @@ the App layer.
   Current aggregated responses supply the catalog in two requests. Legacy or stale
   responses use the bounded per-group fallback (16 requests at once).
   Descriptors preserve verbs, subresources, short names and namespace scope.
+  A kind is listed when its `verbs` name `list` or are absent; present without `list`
+  — `"verbs": []` included — is the server saying no. Both parses share
+  `ClusterClient.IsListable`, and `DiscoveryVerbsTests` pins it (ENG-8): an absent
+  array means "did not say", which every capability check already reads as "offer it".
   The first advertised version is the preferred version. Raw `JsonDocument`
   parsing keeps this path compatible with NativeAOT.
   `DiscoveryCache` stores only descriptors in the local app-data directory.
@@ -1178,6 +1260,37 @@ Two things about that gate, both learned the hard way (`SandboxCluster.cs`):
   `SandboxCluster.TryGetContextAsync` calls TUnit's `Skip.Test(reason)` instead, so the
   summary reads `succeeded: 370, skipped: 16` and names why.
 
+**The live-verification tests (`tests/KubeNimbus.Core.Tests/Live/`, the `*LiveTests`
+classes) are the place a "needs a live cluster" backlog row gets paid.** They drive the
+same Core methods the app does against the sandbox and assert what the *cluster* did next,
+not that the request was accepted — a restart patch with the wrong key is a 200 that rolls
+nothing, and only watching the pods roll catches it. Four rules, because the sandbox is
+shared with other sessions running at the same time:
+
+- **Every mutation happens in the one namespace they create and delete themselves**
+  (`LiveCluster.Namespace`, removed by an `[After(Assembly)]` hook), with per-run object
+  names so a namespace a killed run left behind is reused rather than collided with.
+  Reading the rest of the cluster — the demo namespaces, every CRD, the node — is fine.
+- **The reference for "matches kubectl" is the API server's own `Table`** (`Accept:
+  application/json;as=Table;v=v1;g=meta.k8s.io`, `LiveCluster.GetTableAsync`). It is what
+  kubectl asks for and prints, so parity is checked with no kubectl binary on the machine.
+- **A narrow-RBAC user is a real ServiceAccount token** (`LiveCluster.CreateNarrowUserAsync`,
+  a TokenRequest and a temp kubeconfig), because the app has no impersonation to exercise
+  and a real identity is where the 403s it surfaces come from.
+- **The single node is cordoned only for about a second, and never drained.** A drain that
+  evicts would take CoreDNS, Traefik and every other session's pods down with it; the
+  drain's refusal path, the plan over the real node and evictions of the tests' own pods
+  (PodDisruptionBudget 429 included) are what is run instead. The cordon tests are
+  `[NotInParallel]`, skip if the node is already cordoned, and uncordon in a `finally`.
+
+They found real disagreements on their first run, each now fixed with a no-cluster test
+beside it: a strict-validation refusal arrives as HTTP **500**, not 400/422
+([apply-preview](docs/engineering/apply-preview.md)); a CRD `string` column prints an
+object or array as JSON, and `\.` is how kubectl's JSONPath reaches a dotted key
+([crd-printer-columns](docs/engineering/crd-printer-columns.md)); and a follow opened
+between a container's creation and its start ends at once with no lines
+([multi-pod-logs](docs/engineering/multi-pod-logs.md)).
+
 **Use the script** (`scripts/sandbox-up.ps1`, or `scripts/sandbox-up.sh` on
 Linux/macOS — Docker required). It starts single-node k3s in Docker, writes
 `.sandbox/kubeconfig.yaml` pointed at the published host port with the context
@@ -1220,7 +1333,9 @@ container picker), env vars of every ref kind (Environment tab + Reveal), a
 StatefulSet with PVCs (Storage), a CronJob firing every minute (a visibly live
 watch), a whole `demo-broken` namespace of CrashLoopBackOff/ImagePullBackOff/
 unschedulable/never-Ready pods (the status pills and empty/error states of UI
-rule 9), three CRDs **two of which share the Kind `Widget` in different API
+rule 9) — with the Service pane's states beside them (a not-ready endpoint, a typo'd
+selector, an ExternalName, a selector-less service with a hand-written EndpointSlice)
+and two NetworkPolicies, one of them a default deny —, three CRDs **two of which share the Kind `Widget` in different API
 groups** (the sidebar's group-aware filter) whose `additionalPrinterColumns` between
 them produce every column state the list can render — mixed scalar types, a
 `priority: 1` column, a condition filter, a `type: date` that is not the creation
@@ -1316,6 +1431,21 @@ Four things about it:
   current context — a real connect, credential plugin included, from inside a unit
   test. Its async restore also wrote the workspace after the test had moved on,
   which made the shell-mode tests fail or pass depending on which class ran first.
+  A `[ModuleInitializer]` runs the redirect once when the assembly loads, so a test
+  that forgets to call it still cannot reach real files. What the helper does **not**
+  give is isolation from a parallel test — both overrides are process-wide statics —
+  so a test that writes a setting or the workspace and reads it back is
+  `[NotInParallel]` and redirects in a `[Before(Test)]` hook, before the body writes
+  (ENG-37). `App`'s settings store used to be a static field that fixed its path on
+  first use, which quietly shared one `settings.json` across every test after the
+  first; it resolves the path per call now, and `TestStoreRedirectTests` pins that.
+- **Its limit is a running Avalonia application, and the harness is where that lives.**
+  Contracts that need a real window — the window's key bindings following the
+  Ctrl/Cmd scheme (VER-19), the exec terminal's bytes for ^C/^D/Tab (ENG-20) — are
+  `ux-` checks in `tools/Screenshot/KeyboardChecks.cs`, which throw and fail CI's
+  render step like the other `ux-` checks. One Avalonia.Headless host rather than a
+  second one bolted onto this project; the shell view model's own half of VER-19 is a
+  plain test here (`ShellHotkeySchemeTests`).
 - **The screenshot harness cannot replace it, and that is the whole argument.**
   `Rows` and `VisibleRows` agree with each other in every state a PNG can capture;
   the difference between a correct mirror and one that filters `Rows` in place only
@@ -1340,6 +1470,12 @@ empty, check the invocation before the code. This is the second distinct way
 `dotnet test` has silently run nothing in this repo; the first (a positional
 csproj, exit 0) is documented under Verification workflow.
 
+**`scripts/test.ps1` / `scripts/test.sh` make the working invocation the easy one**
+(ENG-2): build, then run both test executables directly, and fail a run in which a
+suite reports zero tests (the runner's exit code 8) — unless a filter was passed, when
+only "every suite ran nothing" fails. Runner arguments pass through
+(`-RunnerArgs '--treenode-filter','/*/*/DemoRowsTests/*'`, or after `--` in bash).
+
 ### The launch check (`--smoke-test`)
 
 **A publish that emits no warnings is not a binary that starts, and this repo has
@@ -1357,7 +1493,8 @@ ordinary way and exits **0 only after the main window has opened and composited 
 frame**. Anything else is a distinct non-zero code: 64 no MainWindow, 65 a frame
 rendered but the window is hidden or 0×0, 66 startup threw, 67 the watchdog expired, 68 the
 unreachable-cluster scenario's kubeconfig could not be built into a client
-configuration (see below).
+configuration (see below), 69 that scenario's failed connect left no failure view in the
+content area.
 Five things about it are deliberate:
 
 - **It lives in the app, not beside it.** A GUI process never exits on its own, so an
@@ -1430,6 +1567,13 @@ all — and the window-only check passed it; what caught it was the test suite. 
 way the icon check was: with `BuildClientConfigAsync` made to throw, the tab reported
 `Connection failed: simulated…`, which the old condition accepted, and the check now
 exits 68.
+
+**And the failure has to be stated on the page, not only in the status bar.** Before
+the socket check, the scenario requires the tab's `ConnectionFailure` — the view that
+takes the list's place and says which step failed, why, and with what (see
+[connecting](docs/engineering/connecting.md)). Missing, it exits **69**. Proved with a build
+whose connect path computed the report and dropped it: `SMOKE-FAIL (69) the restored tab's
+connect failed but the content area has no failure view to show`.
 
 **The check is only worth having if a broken binary fails it, so prove that, don't
 assume it.** Restore `Icon="/Assets/app.ico"` on `MainWindow`, publish, and run the
@@ -1522,10 +1666,12 @@ placeholder instead of the real view. See `HostInMainWindow` in `Program.cs`, wh
 also puts the window in the Resources mode unless a scenario asks for Applications — every
 cluster-tab scenario is about the explorer, and the shipped default is the other mode.
 
-Fixture data (`tools/Screenshot/Fixtures/*.json` — pods, deployments, events,
-a 72-kind CRD catalog spanning cert-manager/argoproj/istio/velero/keda/flux/etc
-to stress-test sidebar scaling realistically) is loaded by `FixtureData.cs`
-into real `DynamicResource`/`ResourceDescriptor` instances. `ClusterTabScenarios.cs`
+Fixture data is the demo cluster's own dataset (`src/KubeNimbus.App/Demo/Fixtures/*.json`
+— pods, deployments, events, a 72-kind CRD catalog spanning
+cert-manager/argoproj/istio/velero/keda/flux/etc to stress-test sidebar scaling
+realistically), which `FixtureData.cs` passes through as real
+`DynamicResource`/`ResourceDescriptor` instances; `tools/Screenshot/Fixtures` now holds
+only the offline kubeconfig. `ClusterTabScenarios.cs`
 builds fully-populated `ClusterTabViewModel`s by setting the same public
 properties `ConnectAsync`/`RestartWatch`/`Apply` would, using an **offline
 `ClusterClient`** (`FixtureData.CreateOfflineClient()`, pointed at
@@ -1543,7 +1689,35 @@ empty-state flag latches `true` and never gets recomputed (production code
 never hits this ordering — there, `RestartWatch`'s background pump is what
 populates `Rows`). `ClusterTabScenarios.BaseTab()` recomputes `IsListEmpty`
 after populating rows for exactly this reason; follow the same pattern for
-new scenarios that set view-model properties directly.
+new scenarios that set view-model properties directly. The sidebar highlight is the
+other thing never to set by hand: assign `SelectedKind` and `MarkSelectedKind` lights
+the row (ENG-26 — two scenarios had drawn two kinds selected at once).
+
+**Two runs of one commit must produce the same PNGs, and the harness now makes sure of
+the four things that stopped that (ENG-10).** Measured before the fix: 9 of 266 PNGs
+differed between two runs of the same build. (1) Every scenario builds a real
+`MainWindowViewModel`, which read the machine's kubeconfig chain and connected to its
+current context — `main-window-no-kubeconfig` rendered the developer's own sandbox pods
+whenever the connect landed before the capture, and never in CI, which has no kubeconfig.
+`Program.cs` sets `Kubeconfig.EnvironmentSearchOverride = []`. (2) Log streams run on
+real timers — the demo replay and the offline client's failing follows — so a capture
+took whatever line count and Follow state the clock had reached. `LogSettle` waits,
+before every capture, until each pod-detail stream has stopped following and each
+aggregated pane's sources have ended. (3) Per-cluster state persisted in the scratch
+workspace (grid layouts, and now Recent kinds) is reset before each scenario, or a demo
+scenario would inherit the Recent section of the one before it. (4) The scratch
+directory itself was one fixed name under `%TEMP%`, so two harness runs at once — two
+worktrees, two agents — wrote each other's `settings.json` mid-render; measured, that
+alone made 189 of 272 PNGs differ between two runs (sidebar sections expanded in one and
+collapsed in the other). Each run now gets its own directory and removes it at the end.
+**What remains:** panes
+that merge several replayed streams (`cluster-tab-workload-logs*`,
+`applications-page-crashloop-merged`, `applications-page-rollout`, and `ux-logs-palette`, which ends
+on a workload's logs) still order lines by
+which flush tick they arrived in — the log panes' documented design for a live tail — so
+those PNGs can differ between runs; a byte diff that flags only them is not a regression.
+Measured after the fix: two sequential runs of one build differ in 4 of 272 PNGs, all of
+them that class.
 
 When Docker is available (unlike this session — `docker version` succeeds but
 `dockerd` isn't running here), prefer driving the harness against a real
@@ -1557,7 +1731,12 @@ the only check that catches that without a display. `SeedContexts` in
 `Program.cs` fills `MainWindowViewModel.AvailableContexts` so the command bar
 reads a real context name rather than "No kubeconfig contexts"; that is a real
 state, but it is not what these scenarios are about and it makes every shot
-look like a failed connection.
+look like a failed connection. The harness sets `Kubeconfig.EnvironmentSearchOverride`
+to empty for the same reason the stores are redirected: every `MainWindowViewModel`
+reads the kubeconfig chain and opens a tab on the current context, and on a developer's
+machine that was a live connect landing on top of the scenario — the no-kubeconfig shot
+rendered "Connecting to kubenimbus-sandbox…" over its own empty state. CI has no
+kubeconfig, which is why it never showed there.
 
 Its PNGs upload as a CI artifact **only when the render step went red**
 (`if: failure()`, `if-no-files-found: ignore`, `retention-days: 3`). That is

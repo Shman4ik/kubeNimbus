@@ -108,6 +108,18 @@ public sealed record TerminalLaunchPlan(
 /// the first terminal at the second cluster on its next command, which is precisely the
 /// wrong-context incident the environment colours exist to prevent.
 /// </para>
+///
+/// <para>
+/// <b>Never pruned, deliberately (ENG-15).</b> Nothing removes an overlay, including one
+/// for a context no kubeconfig has any more. The directory is bounded by the distinct
+/// context names ever opened — about 60 bytes each, plus a short launcher script on macOS
+/// — because re-opening a context rewrites its own files. The app cannot tell whether a
+/// terminal it opened is still running, and deleting an overlay a live terminal names in
+/// its <c>KUBECONFIG</c> is the one failure worse than a stale file: kubectl skips the
+/// missing path and takes <c>current-context</c> from the real file instead, so that
+/// terminal's next command runs against whichever cluster the user last switched to,
+/// with nothing on screen to say so.
+/// </para>
 /// </summary>
 public static class TerminalLauncher
 {
@@ -133,8 +145,7 @@ public static class TerminalLauncher
 
     /// <summary>Where the overlay (and the macOS launcher script) live.</summary>
     public static string StateDirectory => Path.Combine(
-        DirectoryOverride ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "kubeNimbus"),
+        DirectoryOverride ?? AppDataDirectory.Roaming,
         "terminal");
 
     /// <summary>

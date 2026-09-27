@@ -37,7 +37,12 @@ plus per-source failure isolation and teardown-on-abandon.
 UI-wise this is a **toggle on the existing list**, not a new view: the sidebar,
 namespace picker, filter and inspector are all unchanged, the list gains a
 Cluster column (shown/hidden from code-behind, same DataGridColumn reason as the
-usage columns), and the toggle only appears with more than one cluster connected
+usage columns — 120px and regular weight since ENG-6: at 150 semibold it was the widest
+fixed column and the heaviest text on screen for a value repeated down every row, and the
+ten columns overflowed 1280px until Age's header read "Ag"; with Age's minimum raised to
+its width the squeeze falls on CPU and Memory and the list fits 1280px, and narrower than
+that the grid scrolls sideways, which `LayoutChecks.GridReachesLastColumn` asserts), and
+the toggle only appears with more than one cluster connected
 — a fleet of one is the tab you are already looking at (UI rule 1). The command
 palette carries the same toggle. `MainWindowViewModel` owns the member list and
 makes cluster names unique (two tabs on one context would otherwise merge into

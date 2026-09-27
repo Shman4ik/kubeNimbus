@@ -19,12 +19,19 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
     private readonly Func<OwnerRef, string?, Task> _openOwner;
     private readonly Func<string, bool>? _activateTab;
     private readonly OpenNamedLogs? _openLogs;
+    private readonly Action<ResourceRowViewModel>? _rowRefreshed;
     private readonly CancellationTokenSource _cts = new();
     private readonly Task _watch;
     private readonly Task _initialRefresh;
 
-    public static bool Supports(ResourceDescriptor descriptor) => descriptor.Group == "apps"
-        && descriptor.Kind is "Deployment" or "StatefulSet" or "DaemonSet";
+    /// <summary>
+    /// The kinds a double-click opens here rather than in the YAML editor: the three
+    /// controllers that roll pods, and a batch Job — whose pods are the whole of what there
+    /// is to see about a run, and which is where a CronJob's "Open Job" lands (FEAT-8).
+    /// </summary>
+    public static bool Supports(ResourceDescriptor descriptor) =>
+        (descriptor.Group == "apps" && descriptor.Kind is "Deployment" or "StatefulSet" or "DaemonSet")
+        || descriptor is { Group: "batch", Kind: "Job" };
     public static string KeyFor(string cluster, ResourceDescriptor descriptor, string? ns, string name) =>
         $"workload:{cluster}/{descriptor.Group}/{descriptor.Kind}/{ns}/{name}";
     public override string Key { get; }
@@ -58,7 +65,8 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
 
     public WorkloadDetailTabViewModel(ClusterClient? client, ResourceDescriptor descriptor,
         ResourceRowViewModel row, Action<InspectorTabViewModelBase> openTab, Func<RowActionKind, Task> armAction,
-        Func<OwnerRef, string?, Task> openOwner, Func<string, bool>? activateTab = null, OpenNamedLogs? openLogs = null)
+        Func<OwnerRef, string?, Task> openOwner, Func<string, bool>? activateTab = null, OpenNamedLogs? openLogs = null,
+        Action<ResourceRowViewModel>? rowRefreshed = null)
         : base($"{descriptor.Kind}/{row.Name}" + (row.ClusterName.Length > 0 ? $" · {row.ClusterName}" : ""), client is null)
     {
         _client = client;
@@ -69,6 +77,7 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
         _openOwner = openOwner;
         _activateTab = activateTab;
         _openLogs = openLogs;
+        _rowRefreshed = rowRefreshed;
         Key = KeyFor(row.ClusterName, descriptor, row.Namespace, row.Name);
         row.PropertyChanged += RowChanged;
         ReadStatus();
@@ -90,6 +99,15 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
             if (status.TryGetProperty("conditions", out var conditions) && conditions.ValueKind == JsonValueKind.Array)
                 foreach (var c in conditions.EnumerateArray())
                     Conditions.Add(new(Text(c, "type"), Text(c, "status"), Text(c, "reason"), Text(c, "message")));
+            if (_descriptor is { Group: "batch", Kind: "Job" })
+            {
+                Rollout = JobProgress(raw, status);
+                OnPropertyChanged(nameof(HasNoConditions));
+                OnPropertyChanged(nameof(CanRestart));
+                RestartCommand.NotifyCanExecuteChanged();
+                return;
+            }
+
             var daemon = _descriptor.Kind == "DaemonSet";
             var desired = daemon ? Number(status, "desiredNumberScheduled")
                 : raw.TryGetProperty("spec", out var spec) ? Number(spec, "replicas", 1) : 1;
@@ -104,6 +122,23 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
         OnPropertyChanged(nameof(HasNoConditions));
         OnPropertyChanged(nameof(CanRestart));
         RestartCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>
+    /// A Job's line: kubectl's COMPLETIONS figure (succeeded of <c>spec.completions</c>,
+    /// which defaults to one), then how many pods are running and how many have failed —
+    /// the failed count against <c>backoffLimit</c> is what a crash-looping run is read by.
+    /// </summary>
+    internal static string JobProgress(JsonElement raw, JsonElement status)
+    {
+        var spec = raw.TryGetProperty("spec", out var s) ? s : default;
+        var completions = spec.ValueKind == JsonValueKind.Object ? Number(spec, "completions", 1) : 1;
+        var backoff = spec.ValueKind == JsonValueKind.Object && spec.TryGetProperty("backoffLimit", out var b)
+            && b.TryGetInt64(out var limit) ? $" (backoff limit {limit})" : "";
+        var suspended = spec.ValueKind == JsonValueKind.Object && spec.TryGetProperty("suspend", out var sus)
+            && sus.ValueKind == JsonValueKind.True ? " · suspended" : "";
+        return $"{Number(status, "succeeded")}/{completions} succeeded · {Number(status, "active")} running · "
+            + $"{Number(status, "failed")} failed{backoff}{suspended}";
     }
 
     private static string Text(JsonElement el, string key) => el.TryGetProperty(key, out var v) ? v.ToString() : "";
@@ -165,7 +200,7 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
             {
                 var current = await _client.ReadResourceAsync(_descriptor, _row.Namespace, _row.Name, token);
                 if (current is null) { Error = "This workload no longer exists."; }
-                else _row.Update(current);
+                else ApplyRefreshed(current);
             }
         }
         catch (OperationCanceledException) { return; }
@@ -181,6 +216,18 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { EventsStatus = ex.Message; }
+    }
+
+    /// <summary>
+    /// A Refresh's read of the workload, written into the row the list holds. The row is
+    /// updated in place, which no <c>CollectionChanged</c> reports, so the owning list is
+    /// told — otherwise a Refresh that heals or breaks a workload leaves the unhealthy-only
+    /// view (and a sort by Status) wrong until the watch's own Modified arrives (ENG-33).
+    /// </summary>
+    internal void ApplyRefreshed(DynamicResource current)
+    {
+        _row.Update(current);
+        _rowRefreshed?.Invoke(_row);
     }
 
     [RelayCommand]
@@ -230,9 +277,8 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
     private void Shell()
     {
         if (SelectedPod is not { } pod) return;
-        var container = pod.Resource.Raw.TryGetProperty("spec", out var spec)
-            && spec.TryGetProperty("containers", out var containers) && containers.GetArrayLength() > 0
-            ? Text(containers[0], "name") : "";
+        // kubectl exec's default: the pod's default-container annotation, else the first (FEAT-38).
+        var container = PodDetails.DefaultContainer(pod.Resource.Raw) ?? "";
         var shell = new ExecTabViewModel(_client, pod.Namespace, pod.Name, container);
         if (_row.ClusterName.Length > 0) shell.Title += $" · {_row.ClusterName}";
         _openTab(shell);

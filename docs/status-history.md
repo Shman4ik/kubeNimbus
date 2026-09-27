@@ -2227,3 +2227,197 @@ the multi-pod pane. No reconnect, deliberately. `LogStreamEndTests` (7) pin the 
 and `ContainerRunOf`; against the sandbox, `ContainerRunOf` read a running `redis`, a
 `CrashLoopBackOff` `app` and a 404 correctly. Not observed: a real idle-timeout drop, and
 the two-second settle against a real container exit. App tests 313 passed.
+
+### Bundle F: live-cluster verification (2026-09-27)
+
+Paid the "needs a live cluster" verification debt on the local k3s sandbox (v1.33.4,
+single node, pods run). Added 35 sandbox-gated tests in `tests/KubeNimbus.Core.Tests/Live/`,
+driving the same Core methods the app drives and asserting what the cluster did next
+rather than that a request was merely accepted. Every mutation stayed in a namespace
+deleted at the end of the run, and the narrow-RBAC checks used a real ServiceAccount
+token rather than impersonation, which the app does not support.
+
+Found and fixed four real-server disagreements: k3s v1.33 refuses a server-side apply's
+unknown field with HTTP 500 rather than the 400/422 the classifier was gated on — and
+refuses it in `Ignore`/`Warn` mode too, since the typed-patch conversion runs before the
+mode is consulted, so the editor's note that Warn prunes a typo does not hold on this
+server; a `type: string` printer column over an array or object should print compact
+JSON the way the API server does (Gateway API's HOSTNAMES), not an empty cell; kubectl's
+JSONPath reaches a dotted key through a backslash escape (Crossplane's own
+`crossplane\.io/external-name`), which the app's JSONPath parser did not honour; and the
+multi-pod log pane could leave a freshly started pod without lines when its stream opened
+in the gap between a container's creation and its start, because the kubelet answers such
+a follow with an empty 200 that looks like a dropped connection.
+
+Verified: build; Core tests via the test executable against the live sandbox, 559/559
+across three stable runs, and 506 passed / 53 skipped against an unreachable kubeconfig;
+App tests 316/316; four mutation checks, each confirmed red and restored. Not verified:
+the NativeAOT publish (drive X: ran out of space during the session, shared with the
+other bundles) and the GUI/mouse/OS/cluster-shape halves recorded per row in
+`docs/BACKLOG.md` — a real drain that evicts, a Windows/macOS pass, and a cert-manager or
+Flux-carrying cluster among them.
+
+### Bundle C: connection & credentials (2026-09-27)
+
+Bundle C — connection & credentials: everything between a kubeconfig entry and a working
+client, and what the app says when that does not work. Built VER-31 (exec-plugin auth
+end to end, against a scripted plugin and a loopback API-server stand-in, because
+`HttpListener` needs an elevated URL reservation on Windows); FEAT-49 (resolve a bare
+`command:` on `PATH`, then in `TerminalLauncher.LoginShellDirectories`, entirely in memory
+against the parsed kubeconfig object, so nothing is persisted); FEAT-51 (a
+`ConnectionFailureView` naming the failed step, its cause taken from the exception's type,
+the exception's own text, advice, and the facts of the attempt, with Retry and a terminal
+on the cluster); FEAT-53 (`RefreshCredentialsAsync` swaps the generated client inside the
+same `ClusterClient`, so every pane sees the swap; a 401 during a watch is now treated as
+expiry and triggers a single-flight refresh, relist and retry); FEAT-54 (the kubeconfig
+cluster's `proxy-url`, applied to both the HTTP handler and the exec/port-forward
+WebSocket); FEAT-57 (a picked kubeconfig path can be a folder, top level only, rescanned
+when the window regains focus and only when a file's metadata changed); ENG-39
+(`AppDataDirectory` never resolves to a relative path on Linux); and ENG-29 (the
+no-kubeconfig card and the status bar no longer print the same sentence).
+
+Verified: build; Core tests 549/549 against the live sandbox, including a new
+sandbox-gated client-cert reconnect test; App tests 320/320; five mutation checks; win-x64
+NativeAOT publish with only the known DataGrid warnings; both smoke scenarios (plain exit
+0, `unreachable-cluster` exit 0 with the failure view's own message); exit 69 proved
+against a Debug build with the failure view dropped; four new screenshot scenarios in both
+themes. Unverified: a real cloud SSO/token expiry (AWS, Azure, GCP) — only a revoking
+stand-in was exercised; SOCKS5 end to end, and the proxy on the exec/port-forward
+WebSocket — only an HTTP proxy stand-in was exercised; FEAT-49 on a real macOS/Linux
+machine; rescan-on-focus and the folder picker in the running window; the linux-x64 AOT
+publish.
+
+### Bundle A: networking (2026-09-27)
+
+Bundle A — networking, the question "why is traffic not reaching my pods". Until this
+pass every networking kind rendered through the generic list and the YAML editor and
+nothing else. Built a Service detail pane joining the selector's matched pods to the
+EndpointSlice endpoints that actually carry them (ready/serving/terminating, each linking
+to its pod), with the three degenerate shapes — no match, no selector, ExternalName —
+each stated as its own sentence (FEAT-59, with FEAT-46 merged into it); kubectl's own list
+columns for Ingress, Endpoints, EndpointSlice and NetworkPolicy (FEAT-60); compact-JSON
+rendering for a `type: string` printer column over an array or object, checked against
+`kubectl get httproute` on the sandbox's k3s 1.33 (FEAT-61); Gateway API kinds moved from
+CRDs into the sidebar's Network section, still grouped by API group (FEAT-62); an Ingress
+detail pane with host/path → backend rows, TLS per host and a validated, openable and
+copyable URL (FEAT-63); and a NetworkPolicy detail pane with its rules in words and the
+pods it currently selects, where an empty selector reads "all pods" rather than kubectl's
+`<none>` (FEAT-64).
+
+EndpointSlices are matched by the `kubernetes.io/service-name` label, the way kube-proxy
+reads them, not by owner reference — a hand-written selector-less service's slice carries
+the label and no owner. Found and left for bundle B's area: `LabelSelector.Parse` drops a
+`matchExpressions` entry it cannot read instead of refusing the selector, which widens
+rather than narrows it.
+
+Verified: build; Core tests 568/569 against the live sandbox (the one failure is a
+repo-root lookup broken only by the off-drive `--artifacts-path` build, unrelated to this
+change), including a sandbox-gated service-backend join test; App tests 335/335; three
+mutation checks; win-x64 NativeAOT publish with both smoke tests passing; the full
+screenshot harness (146 scenarios × 2 themes, 13 new `net-*` scenarios); FEAT-60/61
+output compared against `kubectl get` on k3s 1.33. Unverified: the Service pane's live
+watch, reconnect and error path against a real cluster and a real display; Ingress
+Open/Copy (`Process.Start` and the clipboard need a display session); NetworkPolicy's
+capped pod read against a real namespace; the new sandbox manifest additions
+(server-dry-run validated only, not applied to the shared cluster).
+
+### Bundle B: logs (2026-09-27)
+
+Bundle B — logs: fewer clicks to the right log line, in pod detail's Logs tab and the
+multi-pod pane. Built: the log search finds as well as filters, highlighting matches in
+place with "n of m" and Enter/Shift+Enter stepping between them, while the funnel chip
+switches to the old filter mode (FEAT-33); a Levels filter (Error/Warn/Info) that always
+shows unclassified lines (FEAT-36); persisted display toggles — timestamps, UTC, wrap —
+deliberately excluding Previous and the search, per freelens#2095/#2096 (FEAT-37); opening
+on `kubectl.kubernetes.io/default-container` (FEAT-38); local-time timestamps with a
+one-click UTC chip (FEAT-39); Clear without restarting the stream (FEAT-40);
+`LabelSelector.ForPodsOf` refusing a PersistentVolumeClaim or ServiceMonitor selector, so
+Logs is no longer offered on them (ENG-36); one logs glyph everywhere (ENG-38); and a
+stated "not started" verdict, with an automatic re-open once a never-started pod is
+scheduled, for a container whose follow request lands in the gap before it starts, which
+a real kubelet answers with an immediate 204 No Content (ENG-45).
+
+Dropped after the skeptic check: FEAT-35 (tail every container of a pod in one pane). Its
+own row claimed it was "strictly smaller than FEAT-3", but the multi-pod pane's own state
+(`_sourcesByPod`, `_streamsByPod`, `_respondedPods`, `_latestPods`) is keyed by pod name
+alone, so shipping it would mean re-keying the whole pane rather than adding sources —
+sent back to the Inbox at P3.
+
+Verified: build; Core tests 516/516 against the live sandbox; App tests 329/329, including
+16 new `LogPaneTests`; three mutation checks; the full screenshot harness (137 scenarios in
+both themes, four new scenarios); an unscheduled pod's real 204-No-Content follow response
+and its object's shape (no node, no container statuses, `PodScheduled=False/Unschedulable`)
+read from the sandbox. Unverified: the win-x64 NativeAOT publish and smoke test (drive X:
+ran out of space partway through ILC); the log panes themselves against a live unscheduled
+pod, end to end; the Levels flyout and the search box's Enter/Shift+Enter/Esc keys (the
+headless harness cannot open a flyout or drive a code-behind key handler); scroll-to-match
+in a real window; the toolbar below about 1150px window width, which is now about 90px
+worse.
+
+### Bundle D: workloads, nodes, jobs (2026-09-27)
+
+Bundle D — workloads, nodes, jobs; ten items, none dropped. The pods on a node are now a
+field-selected watch instead of a one-shot list with Refresh, and the drain loop observes
+deletions through that same watch instead of a 2-second re-list, with the Eviction API's
+own 429 retry as the one timer left (ENG-24); node detail's pods open on double-click and
+Enter (ENG-44); the pod grid's columns are fixed and fit an 860px dock (ENG-46); "Stop
+draining" moved onto the options row instead of spending a 40px row alone (ENG-28); a
+workload Refresh now re-evaluates the row's visibility for "Unhealthy only" (ENG-33); the
+workload and node pane grids sync their selection from code-behind instead of a two-way
+`SelectedItem`, which was losing the selection on an inspector tab switch (ENG-43); a
+CronJob gets *Run now…* and *Suspend…*/*Resume…* on the shared confirm strip, and a Job
+now opens in the workload pane with its run progress and no rollout-restart option, since
+its template is immutable (FEAT-8); a bound PVC and PV each name and open the other
+(FEAT-47); a `configMapKeyRef`/`secretKeyRef` env row opens its source object, the same
+affordance `envFrom` rows already had (FEAT-45); and a Secret carrying a TLS certificate
+shows its subject, SANs, issuer and expiry, coloured as expiry nears, without ever reading
+the key (FEAT-30).
+
+Verified: build; App tests 343/343; Core tests 537/538 against the live sandbox (the one
+failure is a repo-root lookup broken only by the off-drive `--artifacts-path` build);
+seven mutation checks; win-x64 NativeAOT publish with both smoke tests passing; the full
+screenshot harness (278 PNGs); and engine-level checks against the k3s sandbox in a
+throwaway namespace — the pods-on-node watch synced 24 pods and a Job's pod arrived as an
+Added, *Run now* created a real Job with the right owner reference and template labels,
+suspend and resume round-tripped, a `kubectl create secret tls` certificate read back its
+CN/SANs/notAfter correctly, and a local-path PVC and its PV each named the other. The
+sandbox run corrected the *Run now* confirm's claim about `concurrencyPolicy` — the
+controller does not track a manual Job against it, so the sentence now only says the
+schedule is unchanged. Unverified: a real multi-node drain (the sandbox is single-node
+and draining it would evict everything); the panes themselves against a live cluster, as
+opposed to the demo path and the harness; the linux-x64 NativeAOT publish.
+
+### Bundle E: engineering hygiene (2026-09-27)
+
+Bundle E, engineering hygiene: seventeen backlog rows done, one (ENG-18) found already
+shipped and pinned by a new test, one (ENG-42) left for bundle A's area, and ENG-13 left
+out as instructed. Fixed the discovery listability predicate's disagreement between the
+aggregated and per-group parses over an empty `verbs` array (ENG-8); found and fixed four
+separate causes of the screenshot harness rendering differently across runs of identical
+code — a live kubeconfig connection on a developer machine, log streams running on real
+timers, persisted per-cluster state leaking between scenarios, and a shared
+scratch-directory name letting concurrent runs overwrite each other's settings — taking
+two sequential runs from 189 of 272 PNGs differing to 4 of 272 (ENG-10); corrected the
+Windows-only-fonts claim in `design/screenshots/README.md` instead of bundling a font
+(ENG-11); added `ResourceRowMatchesTests` and `DemoRowsTests`, the latter finding ten
+running demo pods with no metrics entry (ENG-12, ENG-14); wrote down the decision not to
+prune terminal context overlays, because pruning is the dangerous direction (ENG-15);
+fixed two missing `Hotkeys.Changed` unsubscriptions and one tooltip that re-rendered by
+accident rather than by design (ENG-16, ENG-17); added headless harness checks for the
+hotkey scheme and the exec terminal's key mapping (ENG-20, VER-19); made the sidebar
+highlight exactly one row at a time, including a kind's Recent copy (ENG-26); persisted
+the sidebar's Recent kinds per cluster in `workspace.json` (ENG-5); re-cut the list
+header, the fleet list and the Events list so nothing clips at 1024px/1280px (ENG-32,
+ENG-6, ENG-41); gave the 960px window minimum and the palette's 560px width stated,
+deliberate numbers (ENG-35); stopped `App`'s settings store from fixing its path on first
+use, which was breaking test isolation (ENG-37); and added `scripts/test.ps1`/`test.sh`,
+which fail the run if a suite reports zero tests (ENG-2).
+
+Verified: build; App tests 337/337, repeated five times with no flakes; Core tests 517/517
+against the live sandbox (in-tree; the off-drive `--artifacts-path` build again cannot
+find the repo root for `ShortcutDocsTests`); eight mutation checks; win-x64 NativeAOT
+publish with both smoke tests passing; the full screenshot harness run twice, 4 of 272
+PNGs differing between runs — all four are log panes that merge several replayed streams
+ordered by flush tick, the log panes' own design decision and the remaining half of
+ENG-10. Unverified: real-window behaviour on Windows beyond `Avalonia.Headless`; ENG-5's
+early-save guard against a genuinely slow cluster; `test.sh` on Linux or macOS.

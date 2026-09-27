@@ -19,10 +19,11 @@ namespace KubeNimbus.App.ViewModels;
 /// <para>
 /// It tracks the same <see cref="ResourceRowViewModel"/> the live list holds, exactly as
 /// <see cref="PodDetailTabViewModel"/> does, so the cordon state, the conditions and the
-/// taints follow the node's own watch with no second stream. The pods are a one-shot
-/// list with an explicit Refresh — the same shape pod detail's Events tab has, and for
-/// the same reason: it is a snapshot you read, not a stream you watch, and the alternative
-/// is a second watch keyed on a <c>fieldSelector</c> the watch engine does not take today.
+/// taints follow the node's own watch with no second stream. The pods on the node are a
+/// watch of their own, field-selected on <c>spec.nodeName</c> (ENG-24): a pod scheduled
+/// here or evicted from here appears or leaves as it happens — which is the whole point
+/// of having the pane open during a drain — and the allocatable-vs-requested arithmetic
+/// follows it.
 /// </para>
 /// <para>
 /// The mutating half (cordon / uncordon / drain) is deliberately <em>not</em> here: it
@@ -37,7 +38,6 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
     /// <summary>Null on the demo cluster — see <see cref="InspectorTabViewModelBase.IsDemo"/>.</summary>
     private readonly ClusterClient? _client;
     private readonly ResourceRowViewModel _row;
-    private readonly ResourceDescriptor? _podDescriptor;
     private readonly Func<OwnerRef, string?, Task>? _openPod;
     private readonly OpenNamedLogs? _openLogs;
     private readonly CancellationTokenSource _cts = new();
@@ -68,7 +68,6 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
 
         _client = client;
         _row = row;
-        _podDescriptor = podDescriptor;
         _openPod = openPod;
         _openLogs = openLogs;
         NodeName = row.Name;
@@ -78,7 +77,18 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
         _row.PropertyChanged += OnRowChanged;
         RefreshFromRow();
         SeedUsageFromRow();
-        _ = RefreshPodsAsync();
+        if (client is null)
+        {
+            LoadDemoPods();
+        }
+        else
+        {
+            // The catalog's own Pod descriptor when it has been read, the well-known one
+            // otherwise: pods are core/v1 on every server, and the old fallback here was
+            // the demo dataset, which on a real cluster is a list of pods that do not exist.
+            _podsWatch = Task.Run(() => WatchPodsAsync(client, podDescriptor ?? ResourceDescriptor.Pods, _cts.Token));
+        }
+
         _ = RefreshEventsAsync();
 
         if (client is null)
@@ -169,9 +179,13 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
 
     public ObservableCollection<NodePodViewModel> Pods { get; } = [];
 
+    /// <summary>
+    /// True from the moment the pane opens until the watch's initial list has landed —
+    /// "no pods here" is a verdict, and it is not one this pane has until then (UI rule 18).
+    /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PodsCaption))]
-    private bool _isLoadingPods;
+    private bool _isLoadingPods = true;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasPodsError))]
@@ -560,67 +574,170 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
     }
 
     /// <summary>
-    /// Lists the pods scheduled here. Server-side <c>fieldSelector</c>, so this is one
-    /// small response rather than every pod in the cluster filtered locally.
+    /// Watches the pods scheduled here: server-side <c>fieldSelector</c> on both the list
+    /// and the watch, so this is one small stream rather than every pod in the cluster
+    /// filtered locally. Frames are applied on the UI thread through
+    /// <see cref="ApplyPodEvent"/>, the entry point the tests and the demo share.
     /// </summary>
-    [RelayCommand]
-    private async Task RefreshPodsAsync()
+    private async Task WatchPodsAsync(ClusterClient client, ResourceDescriptor podDescriptor, CancellationToken token)
     {
-        IsLoadingPods = true;
-        PodsError = null;
-        LogsNotice = null;
         try
         {
-            var pods = _client is { } client && _podDescriptor is { } descriptor
-                ? await client.ListPodsOnNodeAsync(descriptor, NodeName, _cts.Token)
-                : DemoPods();
-
-            Pods.Clear();
-            SelectedPod = null;
-            foreach (var pod in pods.OrderBy(p => p.Namespace, StringComparer.Ordinal)
-                         .ThenBy(p => p.Name, StringComparer.Ordinal))
+            await foreach (var evt in client.WatchPodsOnNodeAsync(
+                podDescriptor,
+                NodeName,
+                connectionLost: ex => Dispatcher.UIThread.Post(() =>
+                {
+                    // An RBAC 403 on listing pods is the common one, and its sentence names
+                    // the subject and the verb; the pane says so rather than showing an
+                    // empty node. The watch keeps retrying, and the next frame clears it.
+                    if (!token.IsCancellationRequested)
+                    {
+                        PodsError = (ex.InnerException as KubernetesApiException)?.ServerMessage ?? ex.Message;
+                        IsLoadingPods = false;
+                        OnPropertyChanged(nameof(PodsCaption));
+                    }
+                }),
+                cancellationToken: token).ConfigureAwait(false))
             {
-                Pods.Add(new NodePodViewModel(pod));
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    if (!token.IsCancellationRequested)
+                    {
+                        ApplyPodEvent(evt);
+                    }
+                });
             }
-
-            _podsOnNode = pods;
-            HasCountedPods = true;
-            RecomputeResources();
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
-            // Tab closed while the list was in flight.
+            // Tab closed.
         }
         catch (Exception ex)
         {
-            // An RBAC 403 on pods is the common one and its sentence names the subject
-            // and the verb; the pane says so rather than showing an empty node.
-            PodsError = ex.Message;
-        }
-        finally
-        {
-            IsLoadingPods = false;
-            OnPropertyChanged(nameof(PodsCaption));
+            // Every wait ends, including the ones that end badly (UI rule 18).
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (!token.IsCancellationRequested)
+                {
+                    PodsError = ex.Message;
+                    IsLoadingPods = false;
+                    OnPropertyChanged(nameof(PodsCaption));
+                }
+            });
         }
     }
 
-    private IReadOnlyList<DynamicResource> _podsOnNode = [];
+    private readonly Task _podsWatch = Task.CompletedTask;
 
     /// <summary>
-    /// The demo cluster's stand-in for the field-selected list: the same
-    /// <c>spec.nodeName</c> match the API server would make, over the shipped dataset.
-    /// Everything downstream of it — the arithmetic, the bars, the pod rows — is the
-    /// production code path (demo rule 4).
+    /// One frame of the pods-on-node watch. Rows are updated in place and kept in
+    /// namespace/name order, so a Modified never costs the reader their selection; the
+    /// requested figures follow every change once the initial list is complete, and are
+    /// withheld while a list (the first, or a relist after a 410) is still arriving —
+    /// a half-read node would print as a half-empty one.
     /// </summary>
-    private IReadOnlyList<DynamicResource> DemoPods() =>
-        [.. DemoData.Pods.Where(p =>
-            string.Equals(NodeActions.NodeNameOf(p), NodeName, StringComparison.Ordinal))];
+    internal void ApplyPodEvent(ResourceEvent<DynamicResource> evt)
+    {
+        switch (evt.Type)
+        {
+            case ResourceEventType.Reset:
+                _podsByKey.Clear();
+                Pods.Clear();
+                SelectedPod = null;
+                LogsNotice = null;
+                IsLoadingPods = true;
+                HasCountedPods = false;
+                break;
+
+            case ResourceEventType.Synced:
+                PodsError = null;
+                IsLoadingPods = false;
+                HasCountedPods = true;
+                RecomputeResources();
+                break;
+
+            case ResourceEventType.Deleted when evt.Resource is { } gone:
+                var goneKey = PodKey(gone);
+                if (_podsByKey.Remove(goneKey) && Pods.FirstOrDefault(p => p.Key == goneKey) is { } row)
+                {
+                    if (ReferenceEquals(SelectedPod, row))
+                    {
+                        SelectedPod = null;
+                    }
+
+                    Pods.Remove(row);
+                }
+
+                PodsChanged();
+                break;
+
+            case ResourceEventType.Added or ResourceEventType.Modified when evt.Resource is { } pod:
+                var key = PodKey(pod);
+                _podsByKey[key] = pod;
+                if (Pods.FirstOrDefault(p => p.Key == key) is { } existing)
+                {
+                    existing.Update(pod);
+                }
+                else
+                {
+                    Pods.Insert(SortedIndexFor(key), new NodePodViewModel(pod));
+                }
+
+                PodsError = null;
+                PodsChanged();
+                break;
+        }
+
+        OnPropertyChanged(nameof(PodsCaption));
+    }
+
+    private void PodsChanged()
+    {
+        if (!IsLoadingPods)
+        {
+            RecomputeResources();
+        }
+    }
+
+    private int SortedIndexFor(string key)
+    {
+        var index = 0;
+        while (index < Pods.Count && string.CompareOrdinal(Pods[index].Key, key) < 0)
+        {
+            index++;
+        }
+
+        return index;
+    }
+
+    private static string PodKey(DynamicResource pod) => $"{pod.Namespace}/{pod.Name}";
+
+    private readonly Dictionary<string, DynamicResource> _podsByKey = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The demo cluster's stand-in for the field-selected watch: the same
+    /// <c>spec.nodeName</c> match the API server would make, over the shipped dataset,
+    /// replayed as the frames a real initial list produces. Everything downstream of it —
+    /// the arithmetic, the bars, the pod rows — is the production code path (demo rule 4).
+    /// </summary>
+    private void LoadDemoPods()
+    {
+        ApplyPodEvent(ResourceEvent<DynamicResource>.Reset);
+        foreach (var pod in DemoData.Pods.Where(p =>
+                     string.Equals(NodeActions.NodeNameOf(p), NodeName, StringComparison.Ordinal)))
+        {
+            ApplyPodEvent(new ResourceEvent<DynamicResource>(ResourceEventType.Added, pod));
+        }
+
+        ApplyPodEvent(ResourceEvent<DynamicResource>.Synced);
+    }
 
     private NodeResourceSummary? _summary;
 
     private void RecomputeResources()
     {
-        var summary = NodeResources.Summarize(_row.Resource, _podsOnNode);
+        var summary = NodeResources.Summarize(_row.Resource, [.. _podsByKey.Values]);
         _summary = summary;
         var lines = new[]
         {
@@ -649,7 +766,11 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
 
     internal static string FormatBytes(double bytes) => Quantity.FormatMemory((long)Math.Round(bytes));
 
-    /// <summary>Opens one of the pods on this node, through the same resolver owner chips use.</summary>
+    /// <summary>
+    /// Opens one of the pods on this node — double-click, Enter and the menu's "Open pod",
+    /// the default action every other list has (UI rule 2) — through the same resolver
+    /// owner chips use.
+    /// </summary>
     [RelayCommand]
     private async Task OpenPodAsync(NodePodViewModel? pod)
     {
@@ -658,7 +779,7 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
             return;
         }
 
-        await _openPod(new OwnerRef("v1", "Pod", pod.Name, null, false), pod.Namespace);
+        await _openPod(new OwnerRef("v1", "Pod", pod.Name, pod.Uid, false), pod.Namespace);
     }
 
     /// <summary>The pod row the Pods tab has selected — what L and the context menu act on.</summary>
@@ -710,6 +831,15 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
     {
         _row.PropertyChanged -= OnRowChanged;
         await _cts.CancelAsync();
+        try
+        {
+            await _podsWatch;
+        }
+        catch (OperationCanceledException)
+        {
+            // Closed while the watch was starting.
+        }
+
         _cts.Dispose();
     }
 }
@@ -814,8 +944,11 @@ public sealed class NodeResourceLineViewModel
 /// <summary>One line of node detail's System card.</summary>
 public sealed record NodeSystemRow(string Label, string Value);
 
-/// <summary>One pod on the node, as the Pods tab lists it.</summary>
-public sealed class NodePodViewModel
+/// <summary>
+/// One pod on the node, as the Pods tab lists it. Updated in place by the pods-on-node
+/// watch rather than replaced, so a status change never costs the reader their selection.
+/// </summary>
+public sealed partial class NodePodViewModel : ObservableObject
 {
     public NodePodViewModel(DynamicResource pod)
     {
@@ -823,6 +956,41 @@ public sealed class NodePodViewModel
 
         Namespace = pod.Namespace ?? "";
         Name = pod.Name;
+        Update(pod);
+    }
+
+    public string Namespace { get; }
+
+    public string Name { get; }
+
+    /// <summary>namespace/name — the watch's key for this row.</summary>
+    public string Key => $"{Namespace}/{Name}";
+
+    /// <summary>
+    /// The pod's UID as last seen. By the time L is pressed the name may belong to a pod
+    /// recreated in its place (a StatefulSet does exactly that, and the watch may not have
+    /// said so yet); the logs opener compares this against the pod it reads back.
+    /// </summary>
+    [ObservableProperty]
+    private string? _uid;
+
+    [ObservableProperty]
+    private string _status = "";
+
+    [ObservableProperty]
+    private string _statusHealth = ResourceHealth.Idle;
+
+    [ObservableProperty]
+    private string _cpuRequestText = "";
+
+    [ObservableProperty]
+    private string _memoryRequestText = "";
+
+    [ObservableProperty]
+    private string _ageText = "";
+
+    internal void Update(DynamicResource pod)
+    {
         Uid = pod.Uid;
 
         var summary = ResourceStatusSummary.Summarize(pod);
@@ -837,27 +1005,6 @@ public sealed class NodePodViewModel
             ? RelativeTime.Compact(DateTimeOffset.UtcNow - created)
             : "";
     }
-
-    public string Namespace { get; }
-
-    public string Name { get; }
-
-    /// <summary>
-    /// The pod's UID as listed. The Pods tab is one read, not a watch, so by the time L is
-    /// pressed the name may belong to a pod recreated in its place (a StatefulSet does
-    /// exactly that); the logs opener compares this against the pod it reads back.
-    /// </summary>
-    public string? Uid { get; }
-
-    public string Status { get; }
-
-    public string StatusHealth { get; }
-
-    public string CpuRequestText { get; }
-
-    public string MemoryRequestText { get; }
-
-    public string AgeText { get; }
 }
 
 /// <summary>

@@ -73,6 +73,21 @@ Six things are load-bearing:
    the gesture completable by hand. Two entry points and no new always-visible control
    (UI rules 1 and 15): the ☰ menu and a Ctrl/Cmd+K entry.
 
+**The `terminal/` directory is never pruned, and that is a decision, not an
+oversight (ENG-15).** One `context-<hash>.kubeconfig` (and on macOS one
+`open-<hash>.command`) is written per context ever opened, including contexts that have
+since left every kubeconfig, and nothing removes them. Two facts make that the right
+call. The size is bounded by the distinct context names ever opened, never by the
+number of launches — re-opening a context rewrites its own files in place
+(`TerminalLauncherTests.RelaunchingAContextWritesTheSameFilesNotNewOnes`) — and each
+overlay is about 60 bytes. And pruning is the dangerous direction: the app cannot tell
+whether a terminal it opened is still running, and a terminal whose overlay has been
+deleted does not fail — kubectl skips a missing `KUBECONFIG` entry and takes
+`current-context` from the real file, so that terminal's next command runs against
+whatever cluster was last switched to, silently. That is the wrong-context incident
+rule 3 exists to prevent, reached by tidying up. Revisit only with a way to know which
+overlays a live terminal still names.
+
 **The demo cluster refuses in place**, rather than being palette-gated the way the
 access review is. The difference is that this one has an honest sentence to say — its
 objects ship inside the binary, so there is no kubeconfig to point anything at — where

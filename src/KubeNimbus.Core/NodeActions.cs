@@ -80,6 +80,14 @@ public static class NodeActions
         return Str(Object(pod.Raw, "spec"), "nodeName");
     }
 
+    /// <summary>
+    /// The <c>fieldSelector</c> for the pods scheduled on one node. One place for the
+    /// string, because the node pane's watch, the drain's watch and the one-shot list the
+    /// drain plan is read from must all select the same population — the API server
+    /// indexes <c>spec.nodeName</c> precisely for this query.
+    /// </summary>
+    public static string PodsOnNodeSelector(string nodeName) => $"spec.nodeName={nodeName}";
+
     /// <summary>True for core/v1 Node.</summary>
     public static bool IsNodeKind(ResourceDescriptor descriptor) =>
         descriptor is { Group: "", Kind: "Node" };
@@ -101,12 +109,13 @@ public static class NodeActions
     /// </summary>
     /// <remarks>
     /// Uncordon writes an explicit <c>false</c> rather than a JSON <c>null</c>, which in
-    /// an RFC 7386 merge patch would <em>remove</em> the field. Removing it happens to
-    /// mean the same thing to the scheduler, but it also means the object no longer
-    /// records that anything ever set it, and `kubectl uncordon` writes false — a
-    /// cordon from kubeNimbus and one from kubectl must be the same event to whoever
-    /// reads the object afterwards, which is the same argument
-    /// <see cref="WorkloadActions.RestartedAtAnnotation"/> is under.
+    /// an RFC 7386 merge patch would <em>remove</em> the field — the same body
+    /// <c>kubectl uncordon</c> sends, so a cordon from kubeNimbus and one from kubectl are
+    /// the same request, the argument <see cref="WorkloadActions.RestartedAtAnnotation"/>
+    /// is under. What the server <em>stores</em> is the same either way: the field is
+    /// <c>omitempty</c>, so after an uncordon a real node reads with no
+    /// <c>spec.unschedulable</c> at all (observed on k3s v1.33, <c>NodeOperationsLiveTests</c>)
+    /// — which is why <see cref="IsCordoned"/> reads absence as schedulable.
     /// </remarks>
     public static string CordonPatch(bool unschedulable)
     {

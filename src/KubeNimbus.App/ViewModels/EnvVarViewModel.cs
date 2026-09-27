@@ -59,6 +59,13 @@ public sealed partial class EnvVarViewModel(
 
     public bool CanReveal => SecretOrConfigMapKind is not null && SecretOrConfigMapName is not null;
 
+    /// <summary>
+    /// A key reference names an object that can be opened (FEAT-45) — the per-row form of
+    /// the way through the <c>envFrom</c> lines have. Literals and Downward-API refs name
+    /// nothing to open.
+    /// </summary>
+    public bool CanOpenSource => SecretOrConfigMapKind is not null && !string.IsNullOrEmpty(SecretOrConfigMapName);
+
     /// <summary>A Secret key: masked until asked for, and the only row with an eye toggle.</summary>
     public bool IsSecretReference => SecretOrConfigMapKind == "Secret";
 

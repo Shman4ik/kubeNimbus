@@ -39,5 +39,148 @@
     "containers": [
       { "name": "dispatcher", "usage": { "cpu": "20m", "memory": "100663296" } }
     ]
+  },
+  {
+    "kind": "PodMetrics",
+    "apiVersion": "metrics.k8s.io/v1beta1",
+    "metadata": { "name": "payment-service-report-generator-7f9c8d6bcd-m4v8s", "namespace": "payments" },
+    "timestamp": "2026-07-20T08:45:00Z",
+    "window": "20s",
+    "containers": [
+      { "name": "app", "usage": { "cpu": "38m", "memory": "125829120" } },
+      { "name": "envoy-sidecar", "usage": { "cpu": "7m", "memory": "33554432" } }
+    ]
+  },
+  {
+    "kind": "PodMetrics",
+    "apiVersion": "metrics.k8s.io/v1beta1",
+    "metadata": { "name": "payment-service-report-generator-8c1a4f2e91-tq6rn", "namespace": "payments" },
+    "timestamp": "2026-07-20T08:45:00Z",
+    "window": "20s",
+    "containers": [
+      { "name": "app", "usage": { "cpu": "52m", "memory": "146800640" } },
+      { "name": "envoy-sidecar", "usage": { "cpu": "9m", "memory": "33554432" } }
+    ]
+  },
+  {
+    "kind": "PodMetrics",
+    "apiVersion": "metrics.k8s.io/v1beta1",
+    "metadata": { "name": "checkout-worker-7b4c6d8f5-h2x7d", "namespace": "payments" },
+    "timestamp": "2026-07-20T08:45:00Z",
+    "window": "20s",
+    "containers": [
+      { "name": "worker", "usage": { "cpu": "41m", "memory": "92274688" } }
+    ]
+  },
+  {
+    "kind": "PodMetrics",
+    "apiVersion": "metrics.k8s.io/v1beta1",
+    "metadata": { "name": "notification-dispatcher-8b6f5d7c9-p4t6w", "namespace": "payments" },
+    "timestamp": "2026-07-20T08:45:00Z",
+    "window": "20s",
+    "containers": [
+      { "name": "dispatcher", "usage": { "cpu": "18m", "memory": "96468992" } }
+    ]
+  },
+  {
+    "kind": "PodMetrics",
+    "apiVersion": "metrics.k8s.io/v1beta1",
+    "metadata": { "name": "notification-dispatcher-5c9d7f6b8-r2m8x", "namespace": "payments" },
+    "timestamp": "2026-07-20T08:45:00Z",
+    "window": "20s",
+    "containers": [
+      { "name": "dispatcher", "usage": { "cpu": "22m", "memory": "109051904" } }
+    ]
+  },
+  {
+    "kind": "PodMetrics",
+    "apiVersion": "metrics.k8s.io/v1beta1",
+    "metadata": { "name": "ledger-api-6d5c8b7f9-x4k9p", "namespace": "payments" },
+    "timestamp": "2026-07-20T08:45:00Z",
+    "window": "20s",
+    "containers": [
+      { "name": "api", "usage": { "cpu": "64m", "memory": "220200960" } }
+    ]
+  },
+  {
+    "kind": "PodMetrics",
+    "apiVersion": "metrics.k8s.io/v1beta1",
+    "metadata": { "name": "ledger-api-6d5c8b7f9-m2v7q", "namespace": "payments" },
+    "timestamp": "2026-07-20T08:45:00Z",
+    "window": "20s",
+    "containers": [
+      { "name": "api", "usage": { "cpu": "58m", "memory": "207618048" } }
+    ]
+  },
+  {
+    "kind": "PodMetrics",
+    "apiVersion": "metrics.k8s.io/v1beta1",
+    "metadata": { "name": "kube-prometheus-stack-operator-5f7d9c8b6-w8n2c", "namespace": "monitoring" },
+    "timestamp": "2026-07-20T08:45:00Z",
+    "window": "20s",
+    "containers": [
+      { "name": "kube-prometheus-stack", "usage": { "cpu": "15m", "memory": "50331648" } }
+    ]
+  },
+  {
+    "kind": "PodMetrics",
+    "apiVersion": "metrics.k8s.io/v1beta1",
+    "metadata": { "name": "prometheus-kube-prometheus-stack-prometheus-0", "namespace": "monitoring" },
+    "timestamp": "2026-07-20T08:45:00Z",
+    "window": "20s",
+    "containers": [
+      { "name": "prometheus", "usage": { "cpu": "180m", "memory": "1181116006" } },
+      { "name": "config-reloader", "usage": { "cpu": "1m", "memory": "12582912" } }
+    ]
+  },
+  {
+    "kind": "PodMetrics",
+    "apiVersion": "metrics.k8s.io/v1beta1",
+    "metadata": { "name": "kube-proxy-demo-worker-1", "namespace": "kube-system" },
+    "timestamp": "2026-07-20T08:45:00Z",
+    "window": "20s",
+    "containers": [
+      { "name": "app", "usage": { "cpu": "4m", "memory": "23068672" } }
+    ]
+  },
+  {
+    "kind": "PodMetrics",
+    "apiVersion": "metrics.k8s.io/v1beta1",
+    "metadata": { "name": "kube-proxy-demo-worker-2", "namespace": "kube-system" },
+    "timestamp": "2026-07-20T08:45:00Z",
+    "window": "20s",
+    "containers": [
+      { "name": "app", "usage": { "cpu": "3m", "memory": "22020096" } }
+    ]
+  },
+  {
+    "kind": "PodMetrics",
+    "apiVersion": "metrics.k8s.io/v1beta1",
+    "metadata": { "name": "kube-apiserver-demo-cp-1", "namespace": "kube-system" },
+    "timestamp": "2026-07-20T08:45:00Z",
+    "window": "20s",
+    "containers": [
+      { "name": "app", "usage": { "cpu": "210m", "memory": "650117120" } }
+    ]
+  },
+  {
+    "kind": "PodMetrics",
+    "apiVersion": "metrics.k8s.io/v1beta1",
+    "metadata": { "name": "legacy-batch-runner", "namespace": "kube-system" },
+    "timestamp": "2026-07-20T08:45:00Z",
+    "window": "20s",
+    "containers": [
+      { "name": "app", "usage": { "cpu": "2m", "memory": "16777216" } }
+    ]
+  },
+  {
+    "kind": "PodMetrics",
+    "apiVersion": "metrics.k8s.io/v1beta1",
+    "metadata": { "name": "metrics-scratch-cache-64d8f9b7c-lp4rz", "namespace": "kube-system" },
+    "timestamp": "2026-07-20T08:45:00Z",
+    "window": "20s",
+    "containers": [
+      { "name": "app", "usage": { "cpu": "6m", "memory": "41943040" } }
+    ]
   }
 ]

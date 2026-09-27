@@ -119,7 +119,34 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsIdle))]
+    [NotifyCanExecuteChangedFor(nameof(ReconnectCommand))]
     private bool _isConnecting;
+
+    /// <summary>
+    /// The last connect's failure, stated where the list would be; null while connecting
+    /// and once connected. See <see cref="ConnectionFailureViewModel"/>.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasConnectionFailure))]
+    private ConnectionFailureViewModel? _connectionFailure;
+
+    public bool HasConnectionFailure => ConnectionFailure is not null;
+
+    partial void OnConnectionFailureChanging(ConnectionFailureViewModel? value) => ConnectionFailure?.Detach();
+
+    partial void OnConnectionFailureChanged(ConnectionFailureViewModel? value) => Applications.OnTabConnectionChanged();
+
+    /// <summary>
+    /// Whether the warning beside the list carries a Reconnect button: true for a watch
+    /// that lost its connection or had its credentials refused, false for the other things
+    /// that warning reports (a refused namespace list, a missing owner), where
+    /// re-resolving credentials would change nothing. Reset whenever the warning changes,
+    /// so a later warning of the other kind cannot inherit the button.
+    /// </summary>
+    [ObservableProperty]
+    private bool _connectionWarningOffersReconnect;
+
+    partial void OnConnectionWarningChanged(string? value) => ConnectionWarningOffersReconnect = false;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsIdle))]
@@ -180,7 +207,9 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// </summary>
     partial void OnSelectedKindChanged(SidebarKindViewModel? value)
     {
-        var layout = value is { IsHelmReleases: false, IsArgoDashboard: false, Descriptor: { } descriptor }
+        MarkSelectedKind();
+
+        var layout =value is { IsHelmReleases: false, IsArgoDashboard: false, Descriptor: { } descriptor }
             ? GridLayoutStore.Load(GridLayoutStore.KeyFor(descriptor))
             : GridLayout.Empty;
 
@@ -642,6 +671,22 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         else if (index >= 0)
         {
             RepositionRow(row);
+        }
+    }
+
+    /// <summary>
+    /// A pane updated one of this list's rows in place from its own read — workload
+    /// detail's Refresh — which, like a watch Modified, reaches no <c>CollectionChanged</c>.
+    /// Only a row the watch still holds is re-evaluated: a pane opened by owner navigation,
+    /// or left open after the list moved to another kind, holds a row that is not in
+    /// <see cref="Rows"/>, and inserting that into <see cref="VisibleRows"/> would put an
+    /// object on screen that the list does not have.
+    /// </summary>
+    internal void RowRefreshedInPlace(ResourceRowViewModel row)
+    {
+        if (Rows.Any(r => ReferenceEquals(r, row)))
+        {
+            RefreshRowVisibility(row);
         }
     }
 
@@ -1379,19 +1424,35 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         IsConnecting = true;
         ConnectionWarning = null;
+        ConnectionFailure = null;
         Status = $"Connecting to {Context.Name}…";
+        ClusterClient? created = null;
         try
         {
             // Awaited, never the synchronous Connect: blocking this (UI) thread on the
             // kubeconfig read hung the NativeAOT build at startup whenever a restored tab
             // connected — see Kubeconfig.BuildClientConfigAsync.
-            var client = await ClusterClient.ConnectAsync(Context);
+            //
+            // A tab that already has a client (a connect that got past /version and failed
+            // later) keeps it and re-resolves its credentials in place, so whatever holds
+            // that object sees the retry too.
+            ClusterClient client;
+            if (Client is { } existing)
+            {
+                await existing.RefreshCredentialsAsync(force: true);
+                client = existing;
+            }
+            else
+            {
+                client = created = await ClusterClient.ConnectAsync(Context);
+            }
 
             // First and alone: it is the reachability check, and it is the request that
             // runs an exec credential plugin. Everything after it reuses that token, so
             // the fan-out below cannot start a dozen `aws eks get-token`s at once.
             var version = await client.GetServerVersionAsync();
             Client = client;
+            created = null;
             IsConnected = true;
             Status = $"Connected — Kubernetes {version.GitVersion}.";
 
@@ -1414,8 +1475,77 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
         catch (Exception ex)
         {
-            Status = $"Connection failed: {ex.Message}";
+            // A client that never answered /version was never handed to anything.
+            created?.Dispose();
+
+            // The report reads the kubeconfig again for the facts, off this thread, and is
+            // set before the status and the flags so that anything waiting for
+            // "Connection failed" (the smoke test's unreachable-cluster scenario, for one)
+            // finds the explanation already in place.
+            ConnectionFailure = new ConnectionFailureViewModel(await ConnectionReport.CreateAsync(Context, ex), this);
+
+            // The status bar gets the step; the content area has the rest. The two used to
+            // be the same sentence twice on one screen.
+            Status = $"Connection failed ({ConnectionFailure.Report.StepPhrase}).";
             IsConnected = false;
+        }
+        finally
+        {
+            IsConnecting = false;
+        }
+    }
+
+    private bool CanReconnect => !IsConnecting && !IsDemo;
+
+    /// <summary>
+    /// Retry after a failed connect; on a connected tab, re-read the kubeconfig, re-run
+    /// its credential plugin and restart the list — without closing the tab.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The case it exists for is an expired session: <c>aws sso login</c> (or
+    /// <c>az login</c>, or a new Teleport certificate) in a terminal, then back to the app.
+    /// The only way back used to be closing the tab and opening it again, which also threw
+    /// away its kind, namespace, filters and inspector panes.
+    /// </para>
+    /// <para>
+    /// The credential is re-resolved inside the tab's existing <see cref="ClusterClient"/>
+    /// (<see cref="ClusterClient.RefreshCredentialsAsync"/>), so every pane that holds it —
+    /// pod detail, logs, workload detail, a fleet merge — uses the new credential on its
+    /// next request without being told. Re-running rather than remembering is hard rule 4:
+    /// nothing the plugin printed is kept anywhere but inside that client.
+    /// </para>
+    /// </remarks>
+    [RelayCommand(CanExecute = nameof(CanReconnect))]
+    private async Task ReconnectAsync()
+    {
+        if (IsDemo)
+        {
+            return;
+        }
+
+        if (Client is not { } client || !IsConnected)
+        {
+            await ConnectAsync();
+            return;
+        }
+
+        IsConnecting = true;
+        ConnectionWarning = null;
+        Status = $"Re-reading the kubeconfig for {Context.Name}…";
+        try
+        {
+            await client.RefreshCredentialsAsync(force: true);
+            var version = await client.GetServerVersionAsync();
+            Status = $"Connected — Kubernetes {version.GitVersion}. Credentials re-read from the kubeconfig.";
+            Refresh();
+        }
+        catch (Exception ex)
+        {
+            var report = await ConnectionReport.CreateAsync(Context, ex);
+            Status = $"Reconnect failed ({report.StepPhrase}).";
+            ConnectionWarning = $"Reconnect failed: {report.Headline} {report.Detail}";
+            ConnectionWarningOffersReconnect = true;
         }
         finally
         {
@@ -1440,7 +1570,6 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         var catalog = Demo.DemoData.BuildCatalog();
         RecordPodDescriptor("", catalog);
         SidebarSections.Clear();
-        _recentKinds.Clear();
         foreach (var section in Demo.DemoData.BuildSidebarSections(catalog))
         {
             SidebarSections.Add(section);
@@ -1455,6 +1584,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         SidebarGrouping.LabelAmbiguousKinds(SidebarSections);
         ApplySidebarChrome();
+        RestoreRecentKinds();
 
         NamespaceOptions.Clear();
         NamespaceOptions.Add(AllNamespaces);
@@ -1540,8 +1670,6 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             && k.Descriptor.Group == selected.Descriptor.Group && k.Descriptor.Kind == selected.Descriptor.Kind);
         if (replacement is not null)
         {
-            selected.IsSelected = false;
-            replacement.IsSelected = true;
             SelectedKind = replacement;
         }
         if (!IsFleetView && !AreMetricsVisible && _metricsApiAvailable && Client is { } client
@@ -1588,10 +1716,6 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         SidebarSections.Clear();
 
-        // The Recent entries hold descriptor instances from the catalog being replaced,
-        // so a reconnect starts the history over rather than pointing at stale ones.
-        _recentKinds.Clear();
-
         foreach (var title in SidebarGrouping.SectionOrder)
         {
             if (sections[title].Kinds.Count > 0)
@@ -1604,6 +1728,10 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         SidebarGrouping.AddArgoDashboard(SidebarSections, catalog);
         await AddHelmSectionIfPresentAsync();
         ApplySidebarChrome();
+
+        // Last, so the Helm row is there to be matched. The entries are rebuilt against
+        // this catalog's descriptor instances, never the ones being replaced.
+        RestoreRecentKinds();
     }
 
     /// <summary>
@@ -1695,8 +1823,63 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// </summary>
     private const int MaxRecentKinds = 5;
 
-    /// <summary>Most-recent-first, deduplicated by (group, kind). Session-scoped — not persisted.</summary>
+    /// <summary>
+    /// Most-recent-first, deduplicated by (group, kind). Persisted per cluster in
+    /// <c>workspace.json</c> (<see cref="WorkspaceSettings.RecentKinds"/>) and restored on
+    /// connect (ENG-5): usage is open, look, close, so a Recent section that started empty
+    /// on every launch was empty exactly when it would have saved a scroll.
+    /// </summary>
     private readonly List<ResourceDescriptor> _recentKinds = [];
+
+    /// <summary>True once <see cref="RestoreRecentKinds"/> has read the saved list.</summary>
+    private bool _recentKindsRestored;
+
+    /// <summary>
+    /// Rebuilds Recent from the saved keys against the catalog just built. Keys, not
+    /// descriptors, are what is saved, so every entry is this catalog's own instance —
+    /// the thing a reconnect used to clear the history over — and a kind the cluster no
+    /// longer serves (a CRD uninstalled since) is simply not restored.
+    /// </summary>
+    private void RestoreRecentKinds()
+    {
+        _recentKindsRestored = true;
+        _recentKinds.Clear();
+        var saved = WorkspaceStore.Load().RecentKinds?.GetValueOrDefault(NamespaceHistoryKey) ?? [];
+        var catalog = SidebarSections
+            .Where(s => s.Title != SidebarGrouping.RecentSection)
+            .SelectMany(s => s.Kinds)
+            .Where(k => !k.IsRecentEntry)
+            .ToList();
+
+        foreach (var key in saved)
+        {
+            if (catalog.FirstOrDefault(k => GridLayoutStore.KeyFor(k.Descriptor) == key)?.Descriptor is { } descriptor
+                && !_recentKinds.Contains(descriptor))
+            {
+                _recentKinds.Add(descriptor);
+            }
+
+            if (_recentKinds.Count == MaxRecentKinds)
+            {
+                break;
+            }
+        }
+
+        if (_recentKinds.Count > 0)
+        {
+            RebuildRecentSection();
+        }
+    }
+
+    private void SaveRecentKinds()
+    {
+        var settings = WorkspaceStore.Load();
+        var recent = new Dictionary<string, List<string>>(settings.RecentKinds ?? [], StringComparer.Ordinal)
+        {
+            [NamespaceHistoryKey] = [.. _recentKinds.Select(GridLayoutStore.KeyFor)],
+        };
+        WorkspaceStore.Save(settings with { RecentKinds = recent });
+    }
 
     /// <summary>
     /// Pushes a kind to the top of the Recent section. Selecting a recent entry itself
@@ -1720,6 +1903,14 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
 
         RebuildRecentSection();
+
+        // Not before the saved list has been read: on a real cluster the first Pods list
+        // starts before discovery has finished (StartInitialPods), and saving then would
+        // overwrite the whole history with that one entry.
+        if (_recentKindsRestored)
+        {
+            SaveRecentKinds();
+        }
     }
 
     /// <summary>
@@ -1757,7 +1948,41 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         // the first time round, inserts a section that has never seen the tab's
         // display state.
         ApplySidebarChrome();
+
+        // …and the highlight: the new Recent copy of the kind on screen has to light up
+        // with its row.
+        MarkSelectedKind();
     }
+
+    /// <summary>
+    /// Draws exactly one kind as selected (ENG-26): every sidebar row whose descriptor is
+    /// the selected kind's, which is its own row plus its copy in Recent, and no other.
+    /// Derived from <see cref="SelectedKind"/> rather than set by whoever selects, because
+    /// several things select — the sidebar, the Recent section, a restore, discovery
+    /// replacing the early Pods entry, the screenshot harness — and a highlight set by
+    /// only some of them is how two rows came to be lit at once while the Recent copy of
+    /// the kind being shown was not. By descriptor reference: a Recent entry holds the
+    /// catalog's own instance, and two same-named kinds from different groups are
+    /// different instances.
+    /// </summary>
+    private void MarkSelectedKind()
+    {
+        var selected = SelectedKind?.Descriptor;
+        foreach (var section in SidebarSections)
+        {
+            foreach (var kind in section.Kinds)
+            {
+                kind.IsSelected = selected is not null && ReferenceEquals(kind.Descriptor, selected);
+            }
+        }
+    }
+
+    /// <summary>The sidebar's own row for a Recent entry's kind, if it still has one.</summary>
+    private SidebarKindViewModel? CanonicalKind(SidebarKindViewModel recent) =>
+        SidebarSections
+            .Where(s => s.Title != SidebarGrouping.RecentSection)
+            .SelectMany(s => s.Kinds)
+            .FirstOrDefault(k => !k.IsRecentEntry && ReferenceEquals(k.Descriptor, recent.Descriptor));
 
     partial void OnSidebarFilterChanged(string value) => ApplySidebarFilter();
 
@@ -1837,26 +2062,34 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [RelayCommand]
     private void SelectKind(SidebarKindViewModel kind)
     {
+        // A Recent entry is a shortcut to a row the sidebar already has, so it selects that
+        // row. SelectedKind is then always the canonical instance, which is what makes a
+        // click on the Recent copy of the kind already showing the no-op that a click on
+        // the row itself is, rather than a reload of the same list.
+        var fromRecent = kind.IsRecentEntry;
+        if (fromRecent && CanonicalKind(kind) is { } canonical)
+        {
+            kind = canonical;
+        }
+
         if (SelectedKind == kind)
         {
             return;
         }
 
-        RecordRecentKind(kind);
+        // Not from a Recent click: reordering the section under the pointer that just
+        // clicked it makes the section unusable.
+        if (!fromRecent)
+        {
+            RecordRecentKind(kind);
+        }
 
         // A name filter is a question about the list it was typed into: carrying
         // "nginx" from Pods over to ConfigMaps lands on an empty list that looks
         // like a broken watch.
         RowFilter = "";
 
-        foreach (var section in SidebarSections)
-        {
-            foreach (var k in section.Kinds)
-            {
-                k.IsSelected = k == kind;
-            }
-        }
-
+        // The selected-row highlight follows from this, in OnSelectedKindChanged.
         SelectedKind = kind;
 
         if (kind.IsHelmReleases)
@@ -2291,7 +2524,14 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             {
                 await foreach (var evt in client.WatchResourceAsync(
                     descriptor, @namespace,
-                    connectionLost: ex => Dispatcher.UIThread.Post(() => ConnectionWarning = ex.Message),
+                    connectionLost: ex => Dispatcher.UIThread.Post(() =>
+                    {
+                        ConnectionWarning = ex.Message;
+
+                        // After the warning, which resets it: a lost or refused watch is
+                        // the one warning a reconnect can actually do something about.
+                        ConnectionWarningOffersReconnect = true;
+                    }),
                     cancellationToken: token))
                 {
                     await Dispatcher.UIThread.InvokeAsync(() => Apply(evt));
@@ -2455,6 +2695,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         {
             _podDescriptors[clusterName] = pods;
         }
+
+        RecordJobDescriptor(clusterName, catalog);
     }
 
     /// <summary>
@@ -3191,7 +3433,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         var action = new RowActionViewModel(
             kind, client, descriptor, row.Namespace, row.Name, row.ClusterName,
             kind == RowActionKind.Scale ? WorkloadActions.DeclaredReplicas(row.Resource) : null,
-            PodDescriptorFor(row));
+            PodDescriptorFor(row), JobDescriptorFor(row));
+        ConfigureCronJobAction(action, row, client);
 
         action.Dismissed = () =>
         {
@@ -3206,26 +3449,14 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     }
 
     /// <summary>
-    /// The pod's first container, which is what <c>kubectl exec</c> defaults to. The
-    /// pane's own picker is where a different one gets chosen.
+    /// The container <c>kubectl exec</c> defaults to: the pod's
+    /// <c>kubectl.kubernetes.io/default-container</c>, else its first container
+    /// (<see cref="PodDetails.DefaultContainer"/>, FEAT-38) — a shell opened into an
+    /// injected mesh proxy is not the shell anyone pressed S for. The pane's own picker is
+    /// where a different one gets chosen.
     /// </summary>
-    private static string FirstContainerOf(ResourceRowViewModel row)
-    {
-        if (row.Resource.Raw.TryGetProperty("spec", out var spec)
-            && spec.TryGetProperty("containers", out var containers)
-            && containers.ValueKind == System.Text.Json.JsonValueKind.Array)
-        {
-            foreach (var container in containers.EnumerateArray())
-            {
-                if (container.TryGetProperty("name", out var name) && name.GetString() is { Length: > 0 } text)
-                {
-                    return text;
-                }
-            }
-        }
-
-        return "";
-    }
+    private static string FirstContainerOf(ResourceRowViewModel row) =>
+        PodDetails.DefaultContainer(row.Resource.Raw) ?? "";
 
     /// <summary>Every TCP port every container declares, so the forward pane can offer them.</summary>
     private static IReadOnlyList<ContainerPort> DeclaredPortsOf(ResourceRowViewModel row)
@@ -3313,8 +3544,25 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 existingTab.IsPreview = false;
                 SelectedInspectorTab = existingTab;
                 return true;
-            }, NamedLogsOpener(row.ClusterName, client)) { IsPreview = preview };
+            }, NamedLogsOpener(row.ClusterName, client), RowRefreshedInPlace) { IsPreview = preview };
             AddInspectorTab(detail, replacePreview: preview);
+            return;
+        }
+
+        // Services, Ingresses and NetworkPolicies open their own panes for the same reason:
+        // "why is traffic not reaching my pods" is answered by what they select and route to,
+        // not by their manifest. See docs/engineering/networking-detail.md.
+        if (NetworkingDetailFor(descriptor, row, client) is { } networking)
+        {
+            if (InspectorTabs.FirstOrDefault(t => t.Key == networking.Key) is { } openedNetworking)
+            {
+                if (!preview) openedNetworking.IsPreview = false;
+                SelectedInspectorTab = openedNetworking;
+                return;
+            }
+
+            networking.Tab.Value.IsPreview = preview;
+            AddInspectorTab(networking.Tab.Value, replacePreview: preview);
             return;
         }
 

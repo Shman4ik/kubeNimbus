@@ -45,8 +45,18 @@ public partial class MainWindow : Window
         // has to be rebuilt when it changes — a KeyGesture built once holds the
         // modifier it was created with, and the window would answer the other
         // platform's chords until restart.
+        // Pinned by the screenshot harness's ux-hotkey-scheme check (VER-19): delete this
+        // subscription and the new scheme's palette chord stops opening the palette.
         Hotkeys.Changed += BuildKeyBindings;
-        Unloaded += (_, _) => Hotkeys.Changed -= BuildKeyBindings;
+
+        // The window owns its view model's lifetime — App builds one for it and nothing
+        // else holds it — so the shell's own Hotkeys.Changed handler goes with the window
+        // rather than staying rooted by the static event (ENG-16).
+        Unloaded += (_, _) =>
+        {
+            Hotkeys.Changed -= BuildKeyBindings;
+            Vm?.Dispose();
+        };
 
         Opened += (_, _) =>
         {
@@ -69,7 +79,15 @@ public partial class MainWindow : Window
             UpdateThemeIcon();
             ApplyBackdrop();
         };
-        Activated += (_, _) => ApplyBackdrop();
+        Activated += (_, _) =>
+        {
+            ApplyBackdrop();
+
+            // Coming back to the window is when a kubeconfig written elsewhere — by
+            // `aws eks update-kubeconfig`, or into a picked folder — should show up. The
+            // view model reads file metadata only, and reloads only if something changed.
+            _ = Vm?.RescanIfChangedAsync();
+        };
         Deactivated += (_, _) => ApplyBackdrop();
     }
 
