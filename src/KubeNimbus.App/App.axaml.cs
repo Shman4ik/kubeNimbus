@@ -43,8 +43,21 @@ public partial class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
+    // One lock around every read and every read-modify-write of settings.json. The app
+    // calls these from the UI thread, so it never raced there — but nothing enforces
+    // that, and the view-model tests call them from parallel test threads against one
+    // file, where two unlocked updates lost each other's change (a persisted log toggle
+    // read back as its default in about one run in two).
+    private static readonly Lock SettingsLock = new();
+
     /// <summary>The saved settings, for view-models to initialize from.</summary>
-    internal static AppSettings LoadSettings() => SettingsStore.Load();
+    internal static AppSettings LoadSettings()
+    {
+        lock (SettingsLock)
+        {
+            return SettingsStore.Load();
+        }
+    }
 
     /// <summary>
     /// Read-modify-write of one setting. Every setter below goes through this rather
@@ -55,7 +68,10 @@ public partial class App : Application
     internal static void Update(Func<AppSettings, AppSettings> change)
     {
         ArgumentNullException.ThrowIfNull(change);
-        SettingsStore.Save(change(SettingsStore.Load()));
+        lock (SettingsLock)
+        {
+            SettingsStore.Save(change(SettingsStore.Load()));
+        }
     }
 
     /// <summary>Applies and persists a theme chosen on the preferences page ("system"/"light"/"dark").</summary>
