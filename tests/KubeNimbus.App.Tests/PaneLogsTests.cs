@@ -29,9 +29,12 @@ namespace KubeNimbus.App.Tests;
 [NotInParallel]
 public class PaneLogsTests
 {
+    /// <summary>Per test, before the body — <see cref="RowLogsTests.RedirectStores"/> says why.</summary>
+    [Before(Test)]
+    public void RedirectStores() => TestObjects.RedirectStores();
+
     private static ClusterTabViewModel DemoTab()
     {
-        TestObjects.RedirectStores();
         var tab = new ClusterTabViewModel(ClusterContext.Demo);
         tab.ConnectCommand.Execute(null);
         return tab;

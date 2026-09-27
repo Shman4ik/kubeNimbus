@@ -137,7 +137,13 @@ public static class DemoData
         new("demo-worker-2", 640_000_000L, 3_221_225_472L),
     ];
 
-    /// <summary>metrics.k8s.io PodMetrics — obviously-fake usage numbers, one entry per running pod in <see cref="Pods"/>.</summary>
+    /// <summary>
+    /// metrics.k8s.io PodMetrics — obviously-fake usage numbers, one entry per running pod in
+    /// <see cref="Pods"/>. "Every running pod" is the rule, and <c>DemoRowsTests</c> holds it:
+    /// pods added later for multi-pod logs, the node surface and the Applications mode had
+    /// arrived without an entry, so ten of the demo list's running pods drew a usage column
+    /// of dashes, which reads as a broken metrics-server rather than as a demo.
+    /// </summary>
     public static IReadOnlyList<DynamicResource> PodMetrics { get; } =
         [.. PodMetricsDoc.RootElement.EnumerateArray().Select(e => new DynamicResource(e))];
 

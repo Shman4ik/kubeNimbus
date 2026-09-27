@@ -73,14 +73,23 @@ Nine things are load-bearing.
    `crd:` ids in the stored layout) would all have needed an Events exception. Six fixed
    XAML columns, hidden for every other kind, cost nothing at runtime and are compiled
    bindings like the rest (AOT).
-7. **Widths: no `Auto`, and minimums that keep the words.** Bounded cells are fixed (Last
-   seen 108, Type 90, Count 84), prose is star (Reason 1.3\*, Object 1.3\*, Message 2.4\*),
-   per [datagrid-auto-columns](datagrid-auto-columns.md). The minimums matter more than the
-   widths: a narrow window squeezes fixed columns down to them, and the first cut let Type
-   shrink until the pill read `Warni…` at 1024px — which turns the text-not-colour-only rule
-   back into colour-only. Type's minimum is its width for that reason, and Last seen's and
-   Count's fit their headers. At 1280px with the sidebar open the Message column gets ~270px;
-   that is the trade, the full text is the tooltip, and every column is draggable.
+7. **Widths: no `Auto`, and minimums that keep the words — and the sort arrow.** Bounded
+   cells are fixed (Last seen 116, Type 90, Count 96), prose is star (Reason 1.3\*, Object
+   1.3\*, Message 2.4\*), per [datagrid-auto-columns](datagrid-auto-columns.md). The
+   minimums matter more than the widths: a narrow window squeezes fixed columns down to
+   them, and the first cut let Type shrink until the pill read `Warni…` at 1024px — which
+   turns the text-not-colour-only rule back into colour-only. Type's minimum is its width
+   for that reason. The others were re-cut by ENG-41, which found Last seen's header losing
+   its sort arrow at 1024px — on the one column the list is sorted by when it opens — and
+   Namespace's header reading "Namespa": a header needs its text plus about 50px (padding
+   and the space the arrow is drawn in), and the arrow is simply not drawn when that space
+   is short. Rendered sorted by each column in turn at 1024px with the sidebar open, every
+   header and its arrow now fit: Namespace 122 (this list only, set in
+   `ApplySummaryColumns` — the pod list at that width already scrolls sideways, and a
+   higher floor there would only push Age out), Last seen 110, Type 90, Reason 104, Object
+   96, Count 92, Message 110, which is the whole ~734px the grid gets there. At 1280px the
+   Message column gets ~270px; that is the trade, the full text is the tooltip, and every
+   column is draggable.
 8. **The search box matches Reason, Object and Message for Events** — UI rule 13's
    "identity, not status" argument applied to what identifies an event. Nobody types an
    Event's generated name; they type "BackOff", "checkout-worker" or "Insufficient cpu".

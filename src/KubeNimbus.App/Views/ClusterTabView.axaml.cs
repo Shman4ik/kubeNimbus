@@ -438,6 +438,12 @@ public partial class ClusterTabView : UserControl
     /// running <c>kubectl get pods</c> is actually looking at.
     /// Same code-behind reason as the usage columns above.
     /// </summary>
+    /// <summary>"Namespace" plus a sort arrow, measured at 1024px in the Events list.</summary>
+    private const double EventsNamespaceMinWidth = 122;
+
+    /// <summary>The XAML's own minimum, read once before the first override.</summary>
+    private double? _declaredNamespaceMinWidth;
+
     private void ApplySummaryColumns()
     {
         var descriptor = Vm?.SelectedKind?.Descriptor;
@@ -458,6 +464,16 @@ public partial class ClusterTabView : UserControl
 
         foreach (var column in FixedColumns)
         {
+            // In the Events list the Namespace header has to hold its sort arrow at 1024px
+            // (ENG-41), because there it sits in a row of columns sized to fit exactly that.
+            // Everywhere else it keeps the declared minimum: the pod list at that width
+            // already scrolls sideways, and a wider floor there would only push Age out.
+            if (column.Tag is ResourceColumn.Namespace)
+            {
+                _declaredNamespaceMinWidth ??= column.MinWidth;
+                column.MinWidth = isEvents ? EventsNamespaceMinWidth : _declaredNamespaceMinWidth.Value;
+            }
+
             column.IsVisible = column.Tag switch
             {
                 ResourceColumn.EventLastSeen or ResourceColumn.EventType or ResourceColumn.EventReason

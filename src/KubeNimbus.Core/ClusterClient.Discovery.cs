@@ -144,8 +144,7 @@ public sealed partial class ClusterClient
             foreach (var resource in resources.EnumerateArray())
             {
                 var plural = resource.GetProperty("resource").GetString() ?? "";
-                var verbs = Strings(resource, "verbs");
-                if (plural.Length == 0 || plural.Contains('/') || !verbs.Contains("list")) continue;
+                if (plural.Length == 0 || plural.Contains('/') || !IsListable(resource, out var verbs)) continue;
                 if (!resource.TryGetProperty("responseKind", out var responseKind)
                     || !responseKind.TryGetProperty("kind", out var kind) || string.IsNullOrEmpty(kind.GetString())) continue;
                 result.Add(new ResourceDescriptor(name, version.GetProperty("version").GetString()!,
@@ -161,6 +160,40 @@ public sealed partial class ClusterClient
             }
         }
         return result;
+    }
+
+    /// <summary>
+    /// Whether discovery says a resource can be listed — the test for being a row in the
+    /// sidebar at all. Shared by the aggregated and the per-group parse so the two cannot
+    /// drift apart again: they had, one dropping a resource with no <c>verbs</c> and the
+    /// other keeping it. Three shapes, and they mean different things:
+    /// <list type="bullet">
+    /// <item><c>verbs</c> names <c>list</c>: listable.</item>
+    /// <item><c>verbs</c> is present and does not name it — <c>"verbs": []</c> included — is
+    /// the server stating what the resource supports, and "nothing" is an answer: not
+    /// listable. client-go's own <c>SupportsAllVerbs{"list"}</c> filter (what
+    /// <c>kubectl api-resources --verbs=list</c> runs) excludes it too, and keeping it would
+    /// put a row in the sidebar whose watch the server refuses on the first request.</item>
+    /// <item><c>verbs</c> is absent, or not an array: the server did not say, and this app
+    /// never reads "did not say" as "no". The descriptor's <c>Verbs</c> stays empty, which
+    /// every capability check (cordon, sync, scale) reads as "unknown — offer it and let the
+    /// server answer"; dropping the kind here would hide it outright on a server that simply
+    /// omits the field.</item>
+    /// </list>
+    /// An empty array and a missing one are therefore opposite answers. Once parsed, both
+    /// become an empty <c>Verbs</c>, so this is the last place the difference is visible.
+    /// Pinned by <c>DiscoveryVerbsTests</c>.
+    /// </summary>
+    internal static bool IsListable(JsonElement resource, out string[] verbs)
+    {
+        if (!resource.TryGetProperty("verbs", out var element) || element.ValueKind != JsonValueKind.Array)
+        {
+            verbs = [];
+            return true;
+        }
+
+        verbs = [.. element.EnumerateArray().Select(v => v.GetString() ?? "").Where(v => v.Length > 0)];
+        return verbs.Contains("list", StringComparer.Ordinal);
     }
 
     private static string[] Strings(JsonElement element, string name) =>
@@ -237,11 +270,7 @@ public sealed partial class ClusterClient
                 continue; // subresource (status, scale, log, exec, ...) — not independently browsable
             }
 
-            var verbs = res.TryGetProperty("verbs", out var verbsEl) && verbsEl.ValueKind == JsonValueKind.Array
-                ? verbsEl.EnumerateArray().Select(v => v.GetString() ?? "").Where(v => v.Length > 0).ToArray()
-                : [];
-
-            if (verbs.Length > 0 && !verbs.Contains("list", StringComparer.Ordinal))
+            if (!IsListable(res, out var verbs))
             {
                 continue; // not listable — nothing to show in a table
             }

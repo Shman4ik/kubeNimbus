@@ -48,9 +48,9 @@ public class RowLogsTests
 
     /// <summary>
     /// Turns the preference on for one test and off again after it. Not left to
-    /// <see cref="TestObjects.RedirectStores"/>: <c>App</c>'s settings store resolves its
-    /// path once, on first use, so every test in the process shares one settings.json and
-    /// a preference left on would leak into the next test that opens logs.
+    /// <see cref="TestObjects.RedirectStores"/> alone: the redirect is a process-wide
+    /// static, so a later test that does not redirect again reads whatever directory is
+    /// current, and a preference left on would leak into the next test that opens logs.
     /// </summary>
     private static async Task WithOpenLogsMaximized(Func<Task> body)
     {
@@ -65,9 +65,16 @@ public class RowLogsTests
         }
     }
 
+    /// <summary>
+    /// A fresh settings and workspace directory per test, taken before the test body rather
+    /// than inside <see cref="DemoTab"/>: a redirect after <see cref="WithOpenLogsMaximized"/>
+    /// has written the preference would move the test away from the file it just wrote.
+    /// </summary>
+    [Before(Test)]
+    public void RedirectStores() => TestObjects.RedirectStores();
+
     private static ClusterTabViewModel DemoTab()
     {
-        TestObjects.RedirectStores();
         var tab = new ClusterTabViewModel(ClusterContext.Demo);
         tab.ConnectCommand.Execute(null);
         return tab;

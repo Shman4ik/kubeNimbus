@@ -91,6 +91,12 @@ of that rule is shared with pgNimbus, and the sidebar's Advanced switch and the 
 `TextTrimming` never fired, because it sat in a horizontal `StackPanel`, which measures
 children at infinite width; in the fleet-partial state a long warning drew straight over
 the search box. It is a `DockPanel` now and ellipsises, with the full text in a tooltip
-and the status bar. At 1024px with fleet mode on and a warning showing, the row still
-does not fit (the fleet toggle, its summary, the search box and this chip are all fixed
-widths); that is the header half of `ENG-6`, not something this change fixes.
+and the status bar. At 1024px with fleet mode on and a warning showing the row still did
+not fit, and ENG-32 fixed that by giving the row one column that shrinks: every caption
+in it — the "n of m", the fleet summary, the warning — moved into the star column, in
+that priority, and trims there, while the controls (the fleet chip, the search box, this
+chip, Refresh) keep their widths. `cluster-tab-list-unhealthy-fleet-partial-narrow` is the
+fullest header state at the width it runs out first, and the harness asserts the three
+controls end inside the window (`LayoutChecks.ListHeaderFits`) rather than leaving it to
+a look at the PNG. At 1024px the warning and the fleet summary get no room at all; the
+status bar still carries the warning.

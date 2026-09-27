@@ -15,7 +15,7 @@ namespace KubeNimbus.App.ViewModels;
 /// with its own connection/sidebar/list/inspector state), the command palette,
 /// and workspace persistence (tabs + theme, no credentials — CLAUDE.md rule #4).
 /// </summary>
-public sealed partial class MainWindowViewModel : ObservableObject
+public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 {
     public ObservableCollection<ClusterContext> AvailableContexts { get; } = [];
 
@@ -64,9 +64,41 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// </summary>
     public string SwitcherLabel => SelectedTab?.Header ?? (HasContexts ? "Select a cluster" : "No clusters");
 
+    /// <summary>
+    /// The switcher button's tooltip. It names a Ctrl/Cmd chord, so it depends on the
+    /// hotkey scheme as well as on <see cref="HasContexts"/>, and
+    /// <see cref="OnHotkeySchemeChanged"/> raises it for that reason. It used to survive a
+    /// scheme change only by accident — the <c>ToolTip.Tip</c> holds a <c>TextBlock</c>
+    /// whose binding re-reads this each time the popup attaches — which a tooltip that
+    /// cached its text would not (ENG-17). Not routed through <c>CommandTip</c> because its
+    /// sentence changes with the kubeconfig state, which an attached text cannot follow.
+    /// </summary>
     public string SwitcherTooltip => HasContexts
         ? $"Switch or open a cluster  ({Hotkeys.Describe(Hotkeys.ClusterSwitcher)})"
         : $"No kubeconfig contexts — the demo cluster is still in here  ({Hotkeys.Describe(Hotkeys.ClusterSwitcher)})";
+
+    /// <summary>
+    /// Everything the shell renders that spells out Ctrl or Cmd: the F1 sheet, rebuilt
+    /// rather than showing the other platform's chords until restart, and the switcher
+    /// tooltip. The window rebuilds its key bindings off the same event, in
+    /// <c>MainWindow</c>. Pinned by <c>ShellHotkeySchemeTests</c>, which fails if this
+    /// subscription is removed (VER-19).
+    /// </summary>
+    private void OnHotkeySchemeChanged()
+    {
+        Shortcuts = new ShortcutsViewModel();
+        OnPropertyChanged(nameof(SwitcherTooltip));
+    }
+
+    /// <summary>
+    /// Removes this shell's handler from the static <c>Hotkeys.Changed</c> (ENG-16). The
+    /// app has one shell for its whole life, so there it changes nothing; but a static
+    /// event roots every subscriber, and the screenshot harness and the tests build a shell
+    /// per scenario — each used to stay reachable, and keep rebuilding its cheat sheet on
+    /// every scheme change, until the process ended. <c>MainWindow</c> disposes its view
+    /// model when it unloads, the same moment it drops its own subscription.
+    /// </summary>
+    public void Dispose() => Hotkeys.Changed -= OnHotkeySchemeChanged;
 
     [ObservableProperty]
     private string _status = "Loading kubeconfig…";
@@ -359,10 +391,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         LoadPreferences();
 
-        // The sheet spells out Ctrl or Cmd on every cap, so it has to be rebuilt when
-        // the preference changes rather than showing the other platform's chords until
-        // restart. The window rebuilds its key bindings off the same event.
-        Hotkeys.Changed += () => Shortcuts = new ShortcutsViewModel();
+        // Removed again in Dispose — see OnHotkeySchemeChanged.
+        Hotkeys.Changed += OnHotkeySchemeChanged;
 
         // Stamp the environment on every tab that enters the strip, wherever it came
         // from. Doing it here rather than in AddTabAsync means a tab built outside the
