@@ -120,10 +120,22 @@ public class ConnectionStateTests
 [NotInParallel]
 public class KubeconfigShellTests
 {
+    /// <summary>
+    /// Redirected stores with no picked kubeconfig paths. The redirect alone is not enough
+    /// while App's settings store fixes its path on first use (ENG-37): every test would
+    /// share one settings.json, and a folder picked by one test would surface as contexts
+    /// in the next — which is what failed these tests on CI in some orders.
+    /// </summary>
+    private static void FreshStores()
+    {
+        TestObjects.RedirectStores();
+        App.Update(s => s with { KubeconfigPaths = [] });
+    }
+
     [Test]
     public async Task The_card_keeps_the_diagnosis_and_the_status_bar_says_something_else()
     {
-        TestObjects.RedirectStores();
+        FreshStores();
         var shell = new MainWindowViewModel();
 
         await shell.ReloadContextsCommand.ExecuteAsync(null);
@@ -137,7 +149,7 @@ public class KubeconfigShellTests
     [Test]
     public async Task A_file_that_will_not_parse_puts_the_parser_in_the_card_and_not_in_the_status_bar()
     {
-        TestObjects.RedirectStores();
+        FreshStores();
         var folder = Folder();
         await File.WriteAllTextAsync(Path.Combine(folder, "broken.yaml"), "apiVersion: v1\nkind: Config\nclusters: [ this is : not yaml\n");
         var shell = new MainWindowViewModel();
@@ -154,7 +166,7 @@ public class KubeconfigShellTests
     [Test]
     public async Task A_kubeconfig_dropped_into_a_picked_folder_is_found_on_the_next_focus()
     {
-        TestObjects.RedirectStores();
+        FreshStores();
         var folder = Folder();
         var shell = new MainWindowViewModel();
         await shell.AddKubeconfigFolderPathAsync(folder);
