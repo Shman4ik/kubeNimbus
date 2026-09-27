@@ -19,8 +19,8 @@ public partial class HelmReleaseView : UserControl
     public HelmReleaseView()
     {
         InitializeComponent();
-        ValuesEditor.SyntaxHighlighting = YamlSyntaxHighlighting.Instance;
-        ManifestEditor.SyntaxHighlighting = YamlSyntaxHighlighting.Instance;
+        YamlSyntaxHighlighting.Attach(ValuesEditor);
+        YamlSyntaxHighlighting.Attach(ManifestEditor);
         DataContextChanged += (_, _) => Bind();
         Bind();
     }

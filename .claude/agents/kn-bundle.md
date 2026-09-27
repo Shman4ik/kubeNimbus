@@ -44,6 +44,8 @@ nothing. Run the test executables directly:
 - `tests/KubeNimbus.App.Tests/bin/Debug/net10.0/KubeNimbus.App.Tests.exe`
 - Any UI change: `dotnet run --project tools/Screenshot -- <scratch dir> <scenario filter>`,
   look at the PNG, and add a scenario if the new state has none.
+- A UI change also re-renders the published screenshots it affects (`design/screenshots/`,
+  `design/store/screenshots/`) and commits them in the bundle — CLAUDE.md UI rule 21.
 - The sandbox cluster (`X:\source\kubeNimbus\.sandbox\kubeconfig.yaml`) is shared with
   the other bundles running at the same time. Read freely; mutate only inside a namespace
   named after your bundle (`bundle-<letter>`), and delete it when done.

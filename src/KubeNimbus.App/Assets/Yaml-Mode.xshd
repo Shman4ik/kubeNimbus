@@ -2,7 +2,10 @@
 <!-- Hand-written: AvaloniaEdit bundles highlighting for C#/JSON/XML/etc but not YAML,
      and every Kubernetes resource in kubeNimbus is edited as YAML. Covers comments,
      mapping keys, quoted strings, numbers, bool/null keywords, anchors/aliases, and
-     document markers — enough to read a manifest at a glance, not a full YAML 1.2 grammar. -->
+     document markers — enough to read a manifest at a glance, not a full YAML 1.2 grammar.
+     These colours are the dark theme's. The light theme rewrites each one by name before
+     loading (Editing/YamlSyntaxHighlighting.cs, LightPalette), so a Color added here needs a
+     light entry there too; YamlHighlightingTests checks that every colour reads on white. -->
 <SyntaxDefinition name="YAML" extensions=".yaml;.yml" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
   <Color name="Comment" foreground="#6A9955" exampleText="# comment" />
   <Color name="Key" foreground="#4FC1FF" exampleText="key: value" />

@@ -30,6 +30,10 @@ it as the GitHub Release body, so headings must match tags exactly
   the revision in Last deploy is monospace.
 - Pods in workload and node detail show their status as the same coloured pill as the main
   list. The workload pane's Refresh and Actions are real buttons instead of bare words.
+- The YAML editor has a light-theme palette. It used the dark one on both themes, so numbers,
+  keys and anchors were pale on white; every colour now reads at 4.5:1 or better.
+- The access review's "Loading…" no longer shows on the "Who can…" tab, where it read as that
+  query still running.
 - The YAML editor's Delete button is drawn as a destructive button and no longer sits right
   beside Apply.
 - The README opens on the Applications list, and every README screenshot was re-rendered;

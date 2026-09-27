@@ -91,8 +91,9 @@ The history becomes permanently public the moment the switch flips.
       proves the binary starts on a runner; it does not prove the zip you
       published extracts into something that starts on a real desktop.
 - [ ] **Confirm the README screenshots still match the UI.** They are generated
-      (`design/screenshots/`) and drift on their own, because the Age column is
-      computed from the clock — regenerate only if the layout itself has moved.
+      (`design/screenshots/`) and should already be current — every UI change
+      re-renders them (CLAUDE.md UI rule 21); the Age column drifting with the
+      clock is not a reason to regenerate.
       Screenshots are the first thing every visitor judges.
 - [ ] **Code signing — decide, don't necessarily block.** The Store channel below
       buys the SmartScreen trust for $0; a purchased Authenticode certificate

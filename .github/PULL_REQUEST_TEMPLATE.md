@@ -42,6 +42,9 @@ Anything left unverified:
       behaviour) went into `shared/nimbusUi` rather than this app's
       `Styles/Theme.axaml`
 - [ ] `CHANGELOG.md` `[Unreleased]` updated for a user-visible change
+- [ ] **Changes the UI?** Then the README (`design/screenshots/`) and Microsoft Store
+      (`design/store/screenshots/`) screenshots that show it are re-rendered on Windows
+      and committed here — CLAUDE.md UI rule 21. Say so if you could not.
 - [ ] No new UI state that renders as a blank rectangle (loading / empty /
       disconnected / partial / error each have an explicit visual)
 - [ ] `KubeNimbus.Core` still has zero UI dependencies

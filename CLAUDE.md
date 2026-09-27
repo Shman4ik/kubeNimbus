@@ -662,6 +662,18 @@ Three rules about it:
    - The log panes' bar keeps what is read (Range, Follow, Previous, Levels, Copy); the
      remembered display toggles, Clear and Save are in a `⋯` menu
      ([log-pane-reading](docs/engineering/log-pane-reading.md)).
+21. **A change to the UI updates the published screenshots in the same PR.** The README's
+   gallery (`design/screenshots/`) and the Microsoft Store listing's set
+   (`design/store/screenshots/`) are the first thing anyone judges the app by, and they
+   drift silently: nothing fails when a screen they show changes. So a PR that changes
+   what any of them shows — a surface, a control, a colour, a column, a label — re-renders
+   the affected ones from the harness and commits them with the change, not in a follow-up.
+   Each directory's README maps every file to its scenario and theme. Render them **on
+   Windows** (the monospace panes need Cascadia Mono or Consolas), and keep the balance each
+   set states: the README hero in both themes, everything else half light and half dark.
+   The Age column moving with the clock is not a UI change and is no reason to re-render.
+   If a PR cannot render them (no Windows machine), it says so in its description and
+   leaves an Inbox row, like any other verification debt.
 
 [fluent-basics]: https://learn.microsoft.com/en-us/windows/apps/design/basics/
 

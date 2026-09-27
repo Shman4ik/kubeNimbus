@@ -56,6 +56,9 @@ routine for a report to say "verified" about something that was never run.
 4. **Are the screenshots actually right?** Read the PNGs the harness wrote for
    the scenarios the item touches, in **both** themes. Look for clipped columns,
    collided cells, wrapped tab headers, invisible text, and chrome rows that grew.
+   And if the item changed what a **published** screenshot shows (`design/screenshots/`,
+   `design/store/screenshots/`), check those files were re-rendered in the same change —
+   CLAUDE.md UI rule 21. Stale ones are a FAIL, unless the report says why they could not be.
 
 5. **Are the docs current?** `CLAUDE.md` or the feature's `docs/engineering/` page updated if a rule changed,
    `docs/keyboard-shortcuts.md` regenerated if the command catalog moved, and a
