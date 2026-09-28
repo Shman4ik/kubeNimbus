@@ -151,7 +151,7 @@ ordinary `ProjectReference`:
 
 - `Theme/Tokens.axaml` — the palette, radii, scrollbars, Fluent resource overrides.
 - `Theme/Icons.axaml` — the MDI glyphs both apps draw.
-- `Theme/Theme.axaml` — the shared style classes (`card`, `layer`, `chip`,
+- `Theme/Theme.axaml` — the shared style classes (`card`, `layer`, `overlayCard`, `scrim`, `chip`,
   `toolbar`, `searchpill`, `statusBar`, …).
 - `Theme/Controls.axaml` — the Fluent **control** retheming: `TextBox`/`ComboBox`/
   `NumericUpDown` radius and brand text selection, `ListBox`/`ListBoxItem`/`TreeView`
@@ -631,7 +631,9 @@ Three rules about it:
 
 19. **Both modes sit on the same surface and use the same table type.** The content area is
    the shell's own tone with each list, and the inspector dock, in a `card`; `layer`
-   (Fluent's AltHigh, pure black in the dark theme) is for overlays only. The Resources
+   is for overlays only, which now draw on `overlayCard` over a `scrim` (it was
+   Fluent's AltHigh, pure black in the dark theme, until nimbusUi's DESIGN.md rule 15
+   gave every raised surface a grey that is lighter than its base). The Resources
    mode used to sit on a `layer`, so flipping the mode switch swapped the whole content
    area between a black panel and a grey one, and the owner preferred the Applications
    side. Its table type is now every grid's, in both apps: column headers small, semibold

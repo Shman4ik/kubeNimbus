@@ -34,7 +34,7 @@ internal static class LayoutChecks
     {
         var box = window.FindControl<TextBox>("PaletteQueryBox")
             ?? throw new InvalidOperationException("No palette query box.");
-        var panel = box.GetVisualAncestors().OfType<Border>().First(b => b.Classes.Contains("layer"));
+        var panel = box.GetVisualAncestors().OfType<Border>().First(b => b.Classes.Contains("overlayCard"));
         var left = panel.TranslatePoint(default, window)?.X ?? double.NaN;
         var right = RightEdge(panel, window);
         if (left < 16 - 0.5 || right > window.Bounds.Width - 16 + 0.5)

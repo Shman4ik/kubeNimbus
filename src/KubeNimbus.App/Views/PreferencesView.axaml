@@ -85,7 +85,7 @@
                          it explained rendered as an 88px empty rectangle with the
                          explanation outside it — which is the blank rectangle rule 9
                          forbids, with the right words sitting next to it. -->
-                    <Border Classes="layer" Padding="2" MinHeight="88">
+                    <Border Classes="card" Padding="2" MinHeight="88">
                         <Panel>
                             <ListBox ItemsSource="{Binding KubeconfigPaths}"
                                      SelectedItem="{Binding SelectedKubeconfigPath}"

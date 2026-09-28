@@ -12,6 +12,11 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+- The command palette and the cluster switcher are no longer black in the dark theme. Their
+  card is a grey a step lighter than the window, with a softer shadow, over the same dim
+  backdrop as every other overlay; the light theme dims less. The Preferences, About and
+  keyboard-shortcut panels get the same card. Lists that had no style of their own now
+  highlight the selected row in the app's blue wash instead of the Windows accent colour.
 - Log panes no longer print terminal colour codes. Applications that colour their console
   output (ASP.NET, zap, Rails and most CLI tools) used to show a box glyph and
   `[40m[32minfo[39m…` at the start of every line; the codes are now removed from what is
