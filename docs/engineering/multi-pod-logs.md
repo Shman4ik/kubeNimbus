@@ -128,6 +128,13 @@ The pod chip labels explicitly use Fluent's theme foreground: inherited foregrou
 was nearly white on the light theme's pale blue checked chip, leaving the pod names
 barely readable in the 1280 px screenshot despite their essential legend role.
 
+**The pod column is drawn only while more than one pod is shown**
+(`WorkloadLogsTabViewModel.ShowSourceColumn`, recomputed with the summary whenever a pod is
+added or its chip toggled). With one pod every line carried the same name — the application
+page's "All pods, merged · 1 pod" printed it down the whole left edge, 160px of every line
+spent on nothing. Copy and Save keep the prefix either way, since a pasted log has no strip
+above it to say which pod it came from.
+
 **The demo cluster runs this for real** (demo rule 4): its three
 `payment-service-report-generator` replicas exist precisely for this — two on the old
 ReplicaSet and one on the new — and their canned streams interleave by timestamp so that

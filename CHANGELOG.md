@@ -12,6 +12,12 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+- Log panes no longer print terminal colour codes. Applications that colour their console
+  output (ASP.NET, zap, Rails and most CLI tools) used to show a box glyph and
+  `[40m[32minfo[39m…` at the start of every line; the codes are now removed from what is
+  shown, searched, copied and saved. .NET's `fail:` and `crit:` lines are coloured as errors.
+- A merged log with a single pod no longer repeats the pod's name at the start of every line.
+  The column comes back as soon as a second pod is shown, and Copy and Save keep it either way.
 - The Resources mode now looks like the Applications mode. The resource list sits in a card
   on the window's own tone instead of on a black panel, its title is the same size as
   "Applications", and every table uses the Applications list's type: small semibold column
