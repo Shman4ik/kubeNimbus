@@ -12,6 +12,10 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+- Primary buttons (Apply, Connect and the like), checked boxes and switched-on toggles are the
+  app's own blue on every machine. They used to take the Windows accent colour, so on a PC
+  with a grey or orange accent they came out grey or orange. Red buttons also stay red under
+  the pointer instead of turning grey.
 - The command palette and the cluster switcher are no longer black in the dark theme. Their
   card is a grey a step lighter than the window, with a softer shadow, over the same dim
   backdrop as every other overlay; the light theme dims less. The Preferences, About and
