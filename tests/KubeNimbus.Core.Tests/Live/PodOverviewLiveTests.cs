@@ -90,12 +90,12 @@ public class PodOverviewLiveTests
             await Assert.That(condition.Message).IsEqualTo("containers with unready status: [app]");
             await Assert.That(condition.LastTransition).IsNotNull();
             await Assert.That(condition.Polarity).IsEqualTo(PodConditionPolarity.Positive);
-            await Assert.That(condition.IsProblem).IsEqualTo(true);
+            await Assert.That(condition.IsProblem).IsTrue();
         }
 
         foreach (var type in new[] { "PodScheduled", "Initialized" })
         {
-            await Assert.That(conditions.Single(c => c.Type == type).IsProblem).IsEqualTo(false);
+            await Assert.That(conditions.Single(c => c.Type == type).IsProblem).IsFalse();
         }
 
         // Every condition a real pod reports is one the tab can judge; none comes back

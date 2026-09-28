@@ -2462,3 +2462,44 @@ README's `pod-detail.dark.png` and `application-page.light.png` and the Store's
 The win-x64 NativeAOT publish emits only the two known DataGrid warnings, and both
 `--smoke-test` and `--smoke-test=unreachable-cluster` exit 0 on it. Not run: a live cluster's log,
 and real mouse input for the double-click and the ruler click.
+
+### Dependencies current again, and the reason they were not (2026-09-28)
+
+The owner asked for every package at its latest version and for the causes of the earlier
+pins to be fixed rather than kept. Three causes were found.
+
+- **YamlDotNet was frozen by KubernetesClient.Aot.** The client's kubeconfig loader runs a
+  YamlDotNet `StaticContext` it ships precompiled against 16.3.0; YamlDotNet 18 added
+  `ITypeInspector.HasParseMethod`, so with 18.x every kubeconfig read threw `TypeLoadException`.
+  That is why #15 and the bump inside #77 were reverted and Dependabot ignored YamlDotNet. The
+  fix upstream exists (tag v20.0.84 is built on YamlDotNet 18) but was never published: the
+  NuGet push failed on an expired API key (kubernetes-client/csharp#1872). So the app now reads
+  kubeconfig itself: `KubeconfigReader` (YamlDotNet's event parser, into the library's own
+  `K8SConfiguration`, plus `proxy-url` in the same pass), and `BannedSymbols.txt` +
+  `Microsoft.CodeAnalysis.BannedApiAnalyzers` make every library loader a build error (RS0030,
+  proved by a probe file calling three of them). YamlDotNet is 18.1.0 and the Dependabot ignore
+  is gone. See [connecting](engineering/connecting.md).
+- **Dependabot split a version-locked family.** SvcSystems.UI.Terminal 1.1.4 needed Avalonia
+  12.1.2, so its PR (#80) bumped `Avalonia` alone and left Desktop and Fluent behind. It is in
+  the `avalonia` group now.
+- **Dependabot edited the shared subtree.** #83 bumped `shared/nimbusUi`'s Avalonia floor in
+  this repository only, and the three copies of `Nimbus.Ui.csproj` had drifted to 12.1.0
+  (nimbusUi), 12.1.1 (here) and 12.1.3 (pgNimbus). The subtree is `exclude-paths` for
+  Dependabot here, and this copy is byte-identical to nimbusUi main again. pgNimbus's copy
+  still says 12.1.3 and its Dependabot needs the same exclusion.
+
+Also in this change: Avalonia 12.1.3, SvcSystems.UI.Terminal 2.0.0 (XTerm.NET 2), TUnit 1.70.1
+(whose new analyzer flagged five `IsEqualTo(true/false)` assertions), and nimbusUi's checked
+chip foreground fix (nimbusUi #5), which changes the sidebar toggle and the Advanced view chip
+in every screenshot.
+
+Checks: Core tests 651 passed, 55 skipped (no sandbox — k3s does not start under `wslc`,
+which has no `--privileged`); App tests 444/444; `KubeconfigReaderTests` new (21 tests). The
+whole harness rendered with every `ux-` check passing, the exec terminal's render unchanged
+under Terminal 2.0. The README and Store screenshots were re-rendered on Windows one scenario
+at a time: a full harness run renders the sidebar's Config section expanded in scenarios that
+render it collapsed alone, and that happens on unmodified main too. The win-x64 NativeAOT
+publish emits only the two known DataGrid warnings, and `--smoke-test` and
+`--smoke-test=unreachable-cluster` (which builds a client from a kubeconfig in the AOT binary)
+both exit 0. Not run: the live-cluster tests, so no real exec plugin, client-certificate or
+proxy connect went through the new reader against an API server.

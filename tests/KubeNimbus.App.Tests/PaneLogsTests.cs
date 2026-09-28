@@ -590,9 +590,9 @@ public class PaneLogsTests
         // RowLogsGesture.MatchLogsKey is what workload detail's and node detail's grids
         // (and the resource list) ask; true is full-size, false is the split, null leaves
         // the key alone.
-        await Assert.That(RowLogsGesture.MatchLogsKey(new KeyEventArgs { Key = Key.L })).IsEqualTo(false);
+        await Assert.That(RowLogsGesture.MatchLogsKey(new KeyEventArgs { Key = Key.L })).IsFalse();
         await Assert.That(RowLogsGesture.MatchLogsKey(new KeyEventArgs { Key = Key.L, KeyModifiers = KeyModifiers.Shift }))
-            .IsEqualTo(true);
+            .IsTrue();
         await Assert.That(RowLogsGesture.MatchLogsKey(new KeyEventArgs { Key = Key.S })).IsNull();
         await Assert.That(RowLogsGesture.MatchLogsKey(new KeyEventArgs { Key = Key.L, KeyModifiers = KeyModifiers.Control }))
             .IsNull();
