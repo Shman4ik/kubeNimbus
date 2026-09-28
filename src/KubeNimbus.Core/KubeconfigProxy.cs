@@ -1,6 +1,4 @@
 using System.Net;
-using YamlDotNet.Core;
-using YamlDotNet.RepresentationModel;
 
 namespace KubeNimbus.Core;
 
@@ -13,9 +11,9 @@ namespace KubeNimbus.Core;
 /// <c>ClusterEndpoint</c> model has no such property, so its YAML reader drops the field
 /// and every request went direct. That is the whole of a private EKS cluster behind an SSH
 /// bastion (<c>proxy-url: socks5://localhost:1080</c>) and of a corporate proxy that a GUI
-/// app never inherits through <c>HTTPS_PROXY</c>. So the field is read here, from the same
-/// file, through YamlDotNet's structural model (the AOT-safe half, as in
-/// <see cref="YamlJson"/>), and applied to both transports the client has: the
+/// app never inherits through <c>HTTPS_PROXY</c>. So <see cref="KubeconfigReader"/> reads
+/// the field in the same pass as the rest of the file (<see cref="KubeconfigDocument.ProxyUrl"/>),
+/// and this class turns it into a proxy for both transports the client has: the
 /// <c>SocketsHttpHandler</c> every request goes through, and the <c>ClientWebSocket</c> the
 /// exec pane and port-forward open.
 /// </para>
@@ -31,45 +29,6 @@ namespace KubeNimbus.Core;
 internal static class KubeconfigProxy
 {
     private static readonly string[] SupportedSchemes = ["http", "https", "socks4", "socks4a", "socks5"];
-
-    /// <summary>The <c>proxy-url</c> of cluster <paramref name="clusterName"/> in <paramref name="kubeconfigText"/>, or null.</summary>
-    internal static string? Read(string kubeconfigText, string clusterName)
-    {
-        YamlStream stream;
-        try
-        {
-            stream = new YamlStream();
-            stream.Load(new StringReader(kubeconfigText));
-        }
-        catch (YamlException)
-        {
-            // The library parsed this file successfully a moment ago; a second parser
-            // disagreeing about it is not a reason to fail a connect over a field it may
-            // not even carry.
-            return null;
-        }
-
-        if (stream.Documents.Count == 0
-            || stream.Documents[0].RootNode is not YamlMappingNode root
-            || Child(root, "clusters") is not YamlSequenceNode clusters)
-        {
-            return null;
-        }
-
-        foreach (var item in clusters)
-        {
-            if (item is YamlMappingNode entry
-                && Child(entry, "name") is YamlScalarNode { Value: var name }
-                && string.Equals(name, clusterName, StringComparison.Ordinal)
-                && Child(entry, "cluster") is YamlMappingNode cluster
-                && Child(cluster, "proxy-url") is YamlScalarNode { Value: { Length: > 0 } url })
-            {
-                return url.Trim();
-            }
-        }
-
-        return null;
-    }
 
     /// <summary>
     /// A proxy for <paramref name="proxyUrl"/>, or null when there is none. Throws
@@ -126,9 +85,6 @@ internal static class KubeconfigProxy
         var scheme = proxyUrl.IndexOf("://", StringComparison.Ordinal);
         return at > 0 && scheme >= 0 && at > scheme ? proxyUrl[..(scheme + 3)] + proxyUrl[(at + 1)..] : proxyUrl;
     }
-
-    private static YamlNode? Child(YamlMappingNode node, string key) =>
-        node.Children.TryGetValue(new YamlScalarNode(key), out var value) ? value : null;
 }
 
 /// <summary>

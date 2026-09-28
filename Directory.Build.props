@@ -10,7 +10,17 @@
     <NuGetAuditMode>all</NuGetAuditMode>
     <InvariantGlobalization>true</InvariantGlobalization>
     <AccelerateBuildsInVisualStudio>true</AccelerateBuildsInVisualStudio>
+    <!-- RS0030 is a call to something in BannedSymbols.txt. An error, because every entry
+         there is a call that builds and publishes cleanly and then fails at run time. -->
+    <WarningsAsErrors>$(WarningsAsErrors);RS0030</WarningsAsErrors>
   </PropertyGroup>
+
+  <!-- Build-time only: an analyzer, never a runtime dependency, so it cannot reach the
+       NativeAOT binary. See BannedSymbols.txt for what it forbids and why. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" />
+  </ItemGroup>
 
   <!-- Release identity. VersionPrefix is the one place the version is written;
        the release workflow passes -p:Version=<tag> to override it for a tagged

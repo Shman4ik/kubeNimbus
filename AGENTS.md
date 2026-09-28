@@ -122,7 +122,12 @@ must be AOT/trimming-compatible from day one.
 - **KubeNimbus.Core** — references ONLY the official Kubernetes client, via the
   **`KubernetesClient.Aot`** package (source-generated serialization). NEVER swap
   it for the reflection-based `KubernetesClient` — that one does not survive
-  NativeAOT.
+  NativeAOT. Kubeconfig files are read by `KubeconfigReader`, **never** by the
+  library's loaders (`LoadKubeConfig*`, `BuildConfigFromConfigFile*`,
+  `BuildDefaultConfig`): those only work with the exact YamlDotNet the client was
+  compiled against, which pinned ours to 16.3.0 for two months. `BannedSymbols.txt`
+  makes calling one a build error — see
+  [connecting](docs/engineering/connecting.md).
 - **KubeNimbus.App** — Avalonia 12 (Fluent theme, Inter font, DataGrid,
   AvaloniaEdit for YAML, `SvcSystems.UI.Terminal` over `XTerm.NET` for the exec
   pane — see "The exec terminal"), `CommunityToolkit.Mvvm` source generators

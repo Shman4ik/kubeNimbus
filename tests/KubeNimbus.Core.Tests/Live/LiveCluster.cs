@@ -400,7 +400,7 @@ internal static class LiveCluster
         using var tokenDoc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
         var token = tokenDoc.RootElement.GetProperty("status").GetProperty("token").GetString()!;
 
-        var sandbox = await KubernetesClientConfiguration.LoadKubeConfigAsync(admin.Context.KubeconfigPath);
+        var sandbox = (await KubeconfigReader.LoadAsync(admin.Context.KubeconfigPath, ct)).Configuration;
         var contextEntry = sandbox.Contexts.First(c => c.Name == admin.Context.Name);
         var cluster = sandbox.Clusters.First(c => c.Name == contextEntry.ContextDetails.Cluster).ClusterEndpoint;
 

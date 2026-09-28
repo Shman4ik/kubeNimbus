@@ -16,8 +16,8 @@ connect, retry and refresh re-reads the file and re-runs the plugin.
 `Kubeconfig.BuildClientSetupAsync` (`BuildClientConfigAsync` is the same call, minus the
 proxy) does, on the thread pool, in this order:
 
-1. reads the file through the library's own loader, so relative certificate paths still
-   resolve against the file;
+1. reads the file once, through `KubeconfigReader` (below) rather than the library's loader,
+   and sets `FileName` so relative certificate paths still resolve against the file;
 2. resolves an exec plugin's command (`ExecPluginPath`, below) on the parsed object;
 3. reads and validates the cluster's `proxy-url` (`KubeconfigProxy`, below) — *before* any
    plugin runs, so a typo in the proxy does not cost an SSO prompt;
@@ -58,11 +58,45 @@ in `TerminalLauncher.LoginShellDirectories` (`/usr/local/bin`, `/opt/homebrew/bi
 `ExecPluginPath.OverrideDirectories` is an `AsyncLocal` test seam — tests run in parallel and
 the value must reach the pool continuation that builds the configuration.
 
+## The kubeconfig is parsed by kubeNimbus, not by the client library
+
+`KubeconfigReader` reads every kubeconfig the app loads — the context list, the connect, the
+failure report — into the library's own `K8SConfiguration` model, which then goes to
+`BuildConfigFromConfigObject` exactly as before. The library's loaders
+(`LoadKubeConfig*`, `BuildConfigFromConfigFile*`, `BuildDefaultConfig`) are listed in
+`BannedSymbols.txt`, and calling one is a build error (RS0030).
+
+The reason is a version coupling that was invisible until it broke. `KubernetesClient.Aot`
+deserializes kubeconfig through a YamlDotNet `StaticContext` that it ships *precompiled*,
+against one exact YamlDotNet (16.3.0 for 19.0.2). YamlDotNet 18 added `HasParseMethod` to
+`ITypeInspector`, so with 18.x in the graph that precompiled inspector no longer implements its
+interface, and the first kubeconfig read throws `TypeLoadException` — no cluster reachable at
+all, while the build, the NativeAOT publish and the plain launch check stay green. The bump was
+merged and reverted twice (#15, then again inside #77), Dependabot was told to ignore
+YamlDotNet, and our YamlDotNet was stuck wherever the client was last built. Upstream moved to
+YamlDotNet 18 in its v20.0.84 tag, but that release never reached NuGet (an expired publishing
+key, kubernetes-client/csharp#1872), and the next release will pin a newer version again.
+Owning the ~200 lines of reading takes the client's YAML layer off every path the app runs, so
+the two packages are upgraded independently.
+
+What it reads is exactly the model's fields, with the library's semantics: unknown keys are
+ignored, a plain `null`/`~`/empty value is null (so kubectl's own `clusters: null` is an empty
+list) and a quoted one is text, booleans take YAML 1.1's spellings, only the first document is
+read, and aliases resolve. It is built on
+YamlDotNet's *event parser*, not its representation model, for one reason: the representation
+model throws on a key given twice, where the old loader kept the last value — a hand-edited
+kubeconfig that worked yesterday must not stop loading because the parser changed. Three
+deliberate differences, all towards kubectl: an empty file is an empty configuration (the old
+loader threw a `NullReferenceException`), an `as-user-extra` value written as a list (its
+client-go shape, which the model cannot hold) is skipped instead of failing the file, and the
+parse error names its line and column (YamlDotNet 18 no longer puts them in the message).
+`KubeconfigReaderTests` pins each of these.
+
 ## `proxy-url` is read by kubeNimbus, because the library drops it (FEAT-54)
 
 `KubernetesClient.Aot`'s cluster model has no `proxy-url`, so its YAML reader discards the
-field and every request went direct. `KubeconfigProxy.Read` reads it from the same file with
-YamlDotNet's structural model (the AOT-safe half), and the proxy is applied to **both**
+field and every request went direct. `KubeconfigReader` reads it in the same pass as the rest of
+the file (`KubeconfigDocument.ProxyUrl`), `KubeconfigProxy` validates it, and the proxy is applied to **both**
 transports: the `SocketsHttpHandler` (`FirstMessageHandlerSetup`) every request goes through,
 and the `ClientWebSocket` exec and port-forward open (`Kubernetes.CreateWebSocketBuilder`),
 which the handler's proxy never reaches.
