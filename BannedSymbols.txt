@@ -1,0 +1,22 @@
+# APIs this repository must not call, enforced at build time by
+# Microsoft.CodeAnalysis.BannedApiAnalyzers (RS0030, an error — see Directory.Build.props).
+# Each line is a documentation-comment ID, then the reason the build prints.
+#
+# The client library's kubeconfig loaders all deserialize through a YamlDotNet
+# StaticContext that KubernetesClient.Aot ships precompiled against one exact YamlDotNet
+# version. With any other YamlDotNet in the graph they throw TypeLoadException at the
+# first kubeconfig read, while the build and the NativeAOT publish stay green. Reading
+# kubeconfig through KubeNimbus.Core.KubeconfigReader is what lets YamlDotNet and
+# KubernetesClient.Aot be upgraded independently; one call to these puts the coupling back.
+M:k8s.KubernetesClientConfiguration.LoadKubeConfig(System.String,System.Boolean); Use KubeconfigReader.LoadAsync — the library's loader ties YamlDotNet to its precompiled version
+M:k8s.KubernetesClientConfiguration.LoadKubeConfig(System.IO.FileInfo,System.Boolean); Use KubeconfigReader.LoadAsync — the library's loader ties YamlDotNet to its precompiled version
+M:k8s.KubernetesClientConfiguration.LoadKubeConfig(System.IO.Stream); Use KubeconfigReader.Parse — the library's loader ties YamlDotNet to its precompiled version
+M:k8s.KubernetesClientConfiguration.LoadKubeConfigAsync(System.String,System.Boolean); Use KubeconfigReader.LoadAsync — the library's loader ties YamlDotNet to its precompiled version
+M:k8s.KubernetesClientConfiguration.LoadKubeConfigAsync(System.IO.FileInfo,System.Boolean); Use KubeconfigReader.LoadAsync — the library's loader ties YamlDotNet to its precompiled version
+M:k8s.KubernetesClientConfiguration.LoadKubeConfigAsync(System.IO.Stream); Use KubeconfigReader.Parse — the library's loader ties YamlDotNet to its precompiled version
+M:k8s.KubernetesClientConfiguration.BuildConfigFromConfigFile(System.String,System.String,System.String,System.Boolean); Use Kubeconfig.BuildClientConfigAsync — the library's loader ties YamlDotNet to its precompiled version
+M:k8s.KubernetesClientConfiguration.BuildConfigFromConfigFile(System.IO.FileInfo,System.String,System.String,System.Boolean); Use Kubeconfig.BuildClientConfigAsync — the library's loader ties YamlDotNet to its precompiled version
+M:k8s.KubernetesClientConfiguration.BuildConfigFromConfigFile(System.IO.Stream,System.String,System.String); Use Kubeconfig.BuildClientConfigAsync — the library's loader ties YamlDotNet to its precompiled version
+M:k8s.KubernetesClientConfiguration.BuildConfigFromConfigFileAsync(System.IO.FileInfo,System.String,System.String,System.Boolean); Use Kubeconfig.BuildClientConfigAsync — the library's loader ties YamlDotNet to its precompiled version
+M:k8s.KubernetesClientConfiguration.BuildConfigFromConfigFileAsync(System.IO.Stream,System.String,System.String); Use Kubeconfig.BuildClientConfigAsync — the library's loader ties YamlDotNet to its precompiled version
+M:k8s.KubernetesClientConfiguration.BuildDefaultConfig; Use Kubeconfig.BuildClientConfigAsync — the library's loader ties YamlDotNet to its precompiled version

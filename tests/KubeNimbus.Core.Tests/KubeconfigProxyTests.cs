@@ -45,9 +45,11 @@ public class KubeconfigProxyTests
                 proxy-url: socks5://localhost:1080
             """;
 
-        await Assert.That(KubeconfigProxy.Read(text, "bastion")).IsEqualTo("socks5://localhost:1080");
-        await Assert.That(KubeconfigProxy.Read(text, "direct")).IsNull();
-        await Assert.That(KubeconfigProxy.Read(text, "missing")).IsNull();
+        var document = KubeconfigReader.Parse(text);
+
+        await Assert.That(document.ProxyUrl("bastion")).IsEqualTo("socks5://localhost:1080");
+        await Assert.That(document.ProxyUrl("direct")).IsNull();
+        await Assert.That(document.ProxyUrl("missing")).IsNull();
     }
 
     [Test]

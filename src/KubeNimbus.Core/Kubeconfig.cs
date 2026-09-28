@@ -303,7 +303,7 @@ public static partial class Kubeconfig
             K8SConfiguration config;
             try
             {
-                config = await KubernetesClientConfiguration.LoadKubeConfigAsync(path).ConfigureAwait(false);
+                config = (await KubeconfigReader.LoadAsync(path, cancellationToken).ConfigureAwait(false)).Configuration;
             }
             catch (Exception ex) when (failures is not null && ex is not OperationCanceledException)
             {
@@ -343,9 +343,8 @@ public static partial class Kubeconfig
     /// every call (exec plugins, rotated certs and tokens are picked up fresh).
     /// </summary>
     /// <remarks>
-    /// Blocks the calling thread: the library's synchronous overload is sync-over-async
-    /// (<c>BuildConfigFromConfigFileAsync(…).GetAwaiter().GetResult()</c>), and an exec
-    /// credential plugin runs inside it as a blocking <c>WaitForExit</c>. Tests and
+    /// Blocks the calling thread: it waits on <see cref="BuildClientSetupAsync"/>'s work, and
+    /// an exec credential plugin runs inside that as a blocking <c>WaitForExit</c>. Tests and
     /// tooling only — the app goes through <see cref="BuildClientConfigAsync"/>, and why
     /// is written there.
     /// </remarks>
@@ -396,12 +395,13 @@ public static partial class Kubeconfig
     /// <see cref="KubeconfigProxy"/>). Everything that happens to the kubeconfig entry
     /// between the file and the client is here, in one place:
     /// <list type="number">
-    /// <item>the file is read through the library's own loader (relative certificate
-    /// paths resolve against the file, as before);</item>
+    /// <item>the file is read once, by <see cref="KubeconfigReader"/> rather than the
+    /// library's loader (relative certificate paths resolve against the file, as before);</item>
     /// <item>an exec plugin's command is resolved the way a login shell would
     /// (<see cref="ExecPluginPath"/>) — on the parsed object, in memory;</item>
-    /// <item>the cluster's <c>proxy-url</c>, which the library drops, is read and
-    /// validated before any plugin runs, so a typo in it does not cost an SSO prompt;</item>
+    /// <item>the cluster's <c>proxy-url</c>, which the library's model drops, is taken from
+    /// the same parse and validated before any plugin runs, so a typo in it does not cost an
+    /// SSO prompt;</item>
     /// <item>the configuration is built, which is where the plugin runs.</item>
     /// </list>
     /// Nothing read here is kept after the call beyond the configuration itself, and the
@@ -416,7 +416,8 @@ public static partial class Kubeconfig
         ExecCredentialCapture.RunAsync(async () =>
         {
             var file = new FileInfo(context.KubeconfigPath);
-            var config = await KubernetesClientConfiguration.LoadKubeConfigAsync(file).ConfigureAwait(false);
+            var document = await KubeconfigReader.LoadAsync(file.FullName).ConfigureAwait(false);
+            var config = document.Configuration;
             var (clusterName, user) = Entry(config, context.Name);
 
             if (user?.UserCredentials?.ExternalExecution is { } exec)
@@ -424,10 +425,7 @@ public static partial class Kubeconfig
                 ExecPluginPath.Apply(exec, file.DirectoryName);
             }
 
-            var proxy = clusterName is null
-                ? null
-                : KubeconfigProxy.Create(KubeconfigProxy.Read(
-                    await File.ReadAllTextAsync(file.FullName).ConfigureAwait(false), clusterName));
+            var proxy = clusterName is null ? null : KubeconfigProxy.Create(document.ProxyUrl(clusterName));
 
             var configuration = KubernetesClientConfiguration.BuildConfigFromConfigObject(config, context.Name);
             if (proxy is not null)

@@ -252,7 +252,7 @@ public class NodeOperationsLiveTests
         await Assert.That(target.Status).IsEqualTo("True");
         await Assert.That(target.Reason).IsEqualTo("EvictionByEvictionAPI");
         await Assert.That(target.Polarity).IsEqualTo(PodConditionPolarity.Negative);
-        await Assert.That(target.IsProblem).IsEqualTo(true);
+        await Assert.That(target.IsProblem).IsTrue();
         await Assert.That(target.LastTransition).IsNotNull();
 
         // Replaced, and the evicted one is gone.

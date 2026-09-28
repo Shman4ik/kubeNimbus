@@ -84,13 +84,10 @@ public static class ConnectionReport
             };
             var directories = ExecPluginPath.ExtraDirectories;
 
-            k8s.KubeConfigModels.K8SConfiguration config;
-            string text;
+            KubeconfigDocument document;
             try
             {
-                var file = new FileInfo(context.KubeconfigPath);
-                config = await KubernetesClientConfiguration.LoadKubeConfigAsync(file).ConfigureAwait(false);
-                text = await File.ReadAllTextAsync(file.FullName, cancellationToken).ConfigureAwait(false);
+                document = await KubeconfigReader.LoadAsync(context.KubeconfigPath, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception e) when (e is not OperationCanceledException)
             {
@@ -98,6 +95,7 @@ public static class ConnectionReport
                 return ((IReadOnlyList<ConnectionFact>)facts, (string?)null, directories);
             }
 
+            var config = document.Configuration;
             var (clusterName, user) = Kubeconfig.Entry(config, context.Name);
             var cluster = clusterName is null ? null : config.Clusters?.FirstOrDefault(c => c.Name == clusterName);
             var server = cluster?.ClusterEndpoint?.Server;
@@ -112,7 +110,7 @@ public static class ConnectionReport
                 facts.Add(new ConnectionFact("Plugin install hint", hint.Trim()));
             }
 
-            if (clusterName is not null && KubeconfigProxy.Read(text, clusterName) is { } proxy)
+            if (clusterName is not null && document.ProxyUrl(clusterName) is { } proxy)
             {
                 facts.Add(new ConnectionFact("Proxy", KubeconfigProxy.Redact(proxy)));
             }

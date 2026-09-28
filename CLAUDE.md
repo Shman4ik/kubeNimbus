@@ -130,7 +130,12 @@ must be AOT/trimming-compatible from day one.
 - **KubeNimbus.Core** — references ONLY the official Kubernetes client, via the
   **`KubernetesClient.Aot`** package (source-generated serialization). NEVER swap
   it for the reflection-based `KubernetesClient` — that one does not survive
-  NativeAOT.
+  NativeAOT. Kubeconfig files are read by `KubeconfigReader`, **never** by the
+  library's loaders (`LoadKubeConfig*`, `BuildConfigFromConfigFile*`,
+  `BuildDefaultConfig`): those only work with the exact YamlDotNet the client was
+  compiled against, which pinned ours to 16.3.0 for two months. `BannedSymbols.txt`
+  makes calling one a build error — see
+  [connecting](docs/engineering/connecting.md).
 - **KubeNimbus.App** — Avalonia 12 (Fluent theme, Inter font, DataGrid,
   AvaloniaEdit for YAML, `SvcSystems.UI.Terminal` over `XTerm.NET` for the exec
   pane — see "The exec terminal"), `CommunityToolkit.Mvvm` source generators
@@ -683,7 +688,7 @@ Three rules about it:
 
 Each feature's design rules, and the incidents behind them, live in a page of their own under [`docs/engineering/`](docs/engineering/), so a session loads only the ones it touches. **Read the page for any feature you change before changing it**, and keep it current in the same PR — the same discipline as this file.
 
-- [Connecting: credential plugins, proxies, failures and reconnect](docs/engineering/connecting.md) — BuildClientSetupAsync as the one entry→client path, bare plugin commands found like a login shell would, proxy-url on both transports, the failure view (step, cause, facts, no credential ever a fact), RefreshCredentialsAsync's in-place swap and 401-as-expiry, kubeconfig folders with rescan-on-focus, AppDataDirectory.
+- [Connecting: credential plugins, proxies, failures and reconnect](docs/engineering/connecting.md) — BuildClientSetupAsync as the one entry→client path, KubeconfigReader instead of the library's YAML loader (banned; it froze YamlDotNet), bare plugin commands found like a login shell would, proxy-url on both transports, the failure view (step, cause, facts, no credential ever a fact), RefreshCredentialsAsync's in-place swap and 401-as-expiry, kubeconfig folders with rescan-on-focus, AppDataDirectory.
 - [The Applications mode](docs/engineering/applications-mode.md) — The first screen: apps (Argo or bare workloads) with health and a reason from Core's deterministic rules, per-namespace fallback under narrow RBAC, the application page (findings with quoted evidence, pods, linked resources, timeline, what changed, embedded logs), the kubelet's one-run-per-container log rule, DemoData.Now.
 - [Multi-pod logs (one workload, one stream)](docs/engineering/multi-pod-logs.md) — WorkloadLogsTabViewModel: selector-resolved pods, per-pod tail budget, 50-stream cap, two-stage timestamp merge; and what both log panes say when a follow ends (LogStreamEnd reads the pod).
 - [One click to logs from the row, and logs opened full-size](docs/engineering/row-logs-and-maximized.md) — The row's logs icon (hover/selected, IsVisible style, Shift+click), Shift+L, the "Open logs maximized" preference read by OpenLogsForAsync, Esc restore; L3's logs from every list that names a pod (OpenNamedLogs, RowLogsGesture, stated "gone").

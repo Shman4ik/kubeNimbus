@@ -134,7 +134,7 @@ public class KubeconfigTests
     {
         var good = WriteKubeconfig("good-ctx");
         var broken = Path.Combine(Path.GetTempPath(), $"kubenimbus-broken-{Guid.NewGuid():N}.yaml");
-        File.WriteAllText(broken, "apiVersion: v1\nkind: Config\ncontexts: [ this is: not: yaml\n");
+        await File.WriteAllTextAsync(broken, "apiVersion: v1\nkind: Config\ncontexts: [ this is: not: yaml\n");
         try
         {
             var failures = new List<KubeconfigReadFailure>();
@@ -157,7 +157,7 @@ public class KubeconfigTests
     public async Task LoadContexts_still_throws_on_an_unparseable_file_when_no_failure_list_is_given()
     {
         var broken = Path.Combine(Path.GetTempPath(), $"kubenimbus-broken-{Guid.NewGuid():N}.yaml");
-        File.WriteAllText(broken, "apiVersion: v1\nkind: Config\ncontexts: [ this is: not: yaml\n");
+        await File.WriteAllTextAsync(broken, "apiVersion: v1\nkind: Config\ncontexts: [ this is: not: yaml\n");
         try
         {
             await Assert.That(async () => await Kubeconfig.LoadContextsAsync([broken])).Throws<Exception>();

@@ -12,6 +12,17 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+- A switched-on chip toggle (Wrap, the filter pin and the like) keeps its text readable. The
+  text used to turn white on the chip's light blue wash, so the one chip you had turned on
+  was the one you could not read.
+- kubeNimbus reads kubeconfig files itself rather than through the Kubernetes client
+  library's loader. An empty kubeconfig is now read as one with no contexts instead of an
+  error, a key written twice keeps its last value as kubectl does, and a file that does not
+  parse is reported with the line and column of the problem.
+- Updated dependencies: Avalonia 12.1.3, SvcSystems.UI.Terminal 2.0.0 (XTerm.NET 2) for the
+  exec terminal, and YamlDotNet 18.1.0. YamlDotNet had been held at 16.3.0 because the
+  client library's own kubeconfig reader broke with any newer version; see the item above.
+
 - Primary buttons (Apply, Connect and the like), checked boxes and switched-on toggles are the
   app's own blue on every machine. They used to take the Windows accent colour, so on a PC
   with a grey or orange accent they came out grey or orange. Red buttons also stay red under

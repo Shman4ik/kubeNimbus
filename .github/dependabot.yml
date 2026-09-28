@@ -11,31 +11,33 @@ updates:
       day: monday
     open-pull-requests-limit: 5
     labels: ["dependencies"]
+    # shared/nimbusUi is a subtree of the nimbusUi repository, which owns it. Its
+    # Avalonia references are a deliberate floor (the lowest version either app is
+    # on), not a version to keep current, and a bump made here is an edit to a
+    # shared file that nimbusUi and pgNimbus never see — #83 did exactly that, and
+    # the three copies of Nimbus.Ui.csproj ended up on three different versions.
+    exclude-paths:
+      - "shared/nimbusUi/**"
     groups:
+      # SvcSystems.UI.Terminal is an Avalonia control that moves with the Avalonia
+      # monorepo. Outside this group, a terminal release that needed a newer
+      # Avalonia arrived as its own PR that bumped `Avalonia` alone (#80), leaving
+      # Desktop and Fluent a version behind it.
       avalonia:
         patterns:
           - "Avalonia*"
+          - "SvcSystems.UI.Terminal"
       kubernetes-client:
         patterns:
           - "KubernetesClient*"
       test-tooling:
         patterns:
           - "TUnit*"
-    ignore:
-      # YamlDotNet is NOT ours to bump independently. KubernetesClient.Aot ships
-      # a precompiled StaticTypeInspector generated against YamlDotNet 16.3.0,
-      # and 18.0.0 added HasParseMethod to that interface — so a newer YamlDotNet
-      # throws TypeLoadException from k8s.KubernetesYaml's static constructor,
-      # which means EVERY kubeconfig read fails and the app reaches no cluster.
-      # It builds clean and the launch check still passes, so nothing but the
-      # tests and tools/Screenshot catches it. Tried in #15, reverted; proposed
-      # again in #21, refused for the same reason.
-      #
-      # Grouping it under kubernetes-client would not help: the group only
-      # batches PRs, it does not stop one being opened. Only an ignore does.
-      # Remove this the moment KubernetesClient.Aot ships a release built
-      # against YamlDotNet 18 — see the pin's comment in KubeNimbus.Core.csproj.
-      - dependency-name: "YamlDotNet"
+    # No ignores. YamlDotNet used to be ignored here, because KubernetesClient.Aot's
+    # own kubeconfig reader only works with the YamlDotNet it was compiled against
+    # (#15, #21, #77). KubeconfigReader reads kubeconfig without it and
+    # BannedSymbols.txt keeps it that way, so YamlDotNet is bumped like any other
+    # package, and the Core tests are what check a bump.
 
   - package-ecosystem: github-actions
     directory: "/"
