@@ -149,7 +149,62 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
     public ObservableCollection<LogSourceViewModel> Sources { get; } = [];
 
     /// <summary>Filtered view over the buffer — this is what is rendered.</summary>
-    public ObservableCollection<LogLineViewModel> LogLines { get; } = [];
+    public ObservableCollection<LogLineViewModel> LogLines => Projection.Shown;
+
+    private LogProjection? _projection;
+
+    /// <summary>Each pod's latest line, which the next one may continue (a stack trace frame).</summary>
+    private readonly Dictionary<LogSourceViewModel, LogLineViewModel> _lastLineBySource = [];
+
+    /// <summary>Which buffered lines are shown; pods, levels and Errors only are this pane's own narrowing.</summary>
+    private LogProjection Projection => _projection ??= new LogProjection(Admits);
+
+    /// <summary>The search is a regular expression (Alt+R) — see pod detail's twin.</summary>
+    [ObservableProperty]
+    private bool _isLogRegex;
+
+    /// <summary>The search matches case (Alt+C).</summary>
+    [ObservableProperty]
+    private bool _isLogMatchCase;
+
+    /// <summary>Lines kept around each match while filtering — <c>grep -C</c>.</summary>
+    [ObservableProperty]
+    private int _logContextLines;
+
+    public IReadOnlyList<int> LogContextChoices => LogSearch.ContextChoices;
+
+    /// <summary>The compiled search the lines, the highlight and the ruler read; null when there is none.</summary>
+    [ObservableProperty]
+    private LogQuery? _logQuery;
+
+    /// <summary>Why the pattern does not parse; null when it does.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasLogSearchError))]
+    private string? _logSearchError;
+
+    public bool HasLogSearchError => LogSearchError is not null;
+
+    /// <summary>Errors and warnings among the shown lines, and which one the problem arrows are on.</summary>
+    public LogProblems Problems { get; } = new();
+
+    /// <summary>Searches pinned as coloured highlights (Notepad++'s Mark); see <see cref="LogPin"/>.</summary>
+    public LogPins Pins { get; } = new();
+
+    /// <summary>Pins what the box searches for and empties it for the next search — the pin button, or Alt+P in the box.</summary>
+    [RelayCommand(CanExecute = nameof(CanPinSearch))]
+    private void PinSearch()
+    {
+        if (LogQuery?.IncludeText is { } text && Pins.Add(text, IsLogRegex, IsLogMatchCase))
+        {
+            LogSearchText = "";
+        }
+
+        PinSearchCommand.NotifyCanExecuteChanged();
+    }
+
+    private bool CanPinSearch => LogQuery is { HasInclude: true } && !Pins.IsFull;
+
+    partial void OnLogQueryChanged(LogQuery? value) => PinSearchCommand.NotifyCanExecuteChanged();
 
     /// <summary>
     /// The log search: finds (highlights, next/previous) by default, filters while
@@ -293,6 +348,7 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
 
         Sources.CollectionChanged += (_, _) => UpdateSummary();
         Levels.Changed += (_, _) => ApplyFilter();
+        Pins.PropertyChanged += (_, _) => PinSearchCommand.NotifyCanExecuteChanged();
         RestoreDisplayPreferences();
         UpdateSummary();
         Start();
@@ -799,11 +855,16 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
 
         foreach (var line in OrderBatch(built))
         {
-            _allLogLines.Add(line);
-            if (MatchesFilter(line))
+            // A stack trace continues the line above it from the same pod, not whatever
+            // another pod logged in between.
+            if (line.Source is { } from)
             {
-                LogLines.Add(line);
+                line.InheritFrom(_lastLineBySource.GetValueOrDefault(from));
+                _lastLineBySource[from] = line;
             }
+
+            _allLogLines.Add(line);
+            Projection.Append(line);
 
             if (line.Source is { State: LogSourceState.Starting } starting)
             {
@@ -875,20 +936,7 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
 
         var dropped = _allLogLines.GetRange(0, excess);
         _allLogLines.RemoveRange(0, excess);
-
-        var visible = 0;
-        foreach (var line in dropped)
-        {
-            if (MatchesFilter(line))
-            {
-                visible++;
-            }
-        }
-
-        for (var i = 0; i < visible && LogLines.Count > 0; i++)
-        {
-            LogLines.RemoveAt(0);
-        }
+        Projection.TrimFront(dropped);
     }
 
     /// <summary>
@@ -898,11 +946,10 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
     /// over the whole buffer rather than applied as lines arrive, so re-including a pod
     /// brings its earlier lines back in place instead of only its future ones.
     /// </summary>
-    private bool MatchesFilter(LogLineViewModel line) =>
+    private bool Admits(LogLineViewModel line) =>
         (line.Source?.IsIncluded ?? true)
         && (!ShowErrorsOnly || line.IsErrorLine)
-        && Levels.Admits(line)
-        && (!IsLogFilterMode || LogSearchText.Length == 0 || line.Contains(LogSearchText));
+        && Levels.Admits(line);
 
     /// <summary>
     /// The application page's "Errors only": the same class-based severity the lines are
@@ -964,22 +1011,35 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
 
     private void ApplyFilter()
     {
-        LogLines.Clear();
-        foreach (var line in _allLogLines)
-        {
-            if (MatchesFilter(line))
-            {
-                LogLines.Add(line);
-            }
-        }
+        Projection.Query = LogQuery;
+        Projection.FilterMode = IsLogFilterMode;
+        Projection.Context = LogContextLines;
+        Projection.Rebuild(_allLogLines);
 
         UpdateFind(newQuery: false);
         RaisePlaceholder();
     }
 
-    partial void OnLogSearchTextChanged(string value)
+    partial void OnLogSearchTextChanged(string value) => RecompileQuery();
+
+    partial void OnIsLogRegexChanged(bool value) => RecompileQuery();
+
+    partial void OnIsLogMatchCaseChanged(bool value) => RecompileQuery();
+
+    partial void OnLogContextLinesChanged(int value)
     {
-        if (IsLogFilterMode)
+        if (IsLogFilterMode && LogQuery is not null)
+        {
+            ApplyFilter();
+        }
+    }
+
+    private void RecompileQuery()
+    {
+        var before = LogQuery;
+        LogQuery = LogQuery.Create(LogSearchText, IsLogRegex, IsLogMatchCase, out var error);
+        LogSearchError = error;
+        if (LogSearch.ChangesShownLines(IsLogFilterMode, before, LogQuery))
         {
             ApplyFilter();
         }
@@ -997,25 +1057,50 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
     /// <summary>Re-reads the search's matches after the shown lines changed — pod detail's <c>UpdateLogFind</c>, line for line.</summary>
     private void UpdateFind(bool newQuery)
     {
-        if (IsLogFilterMode || LogSearchText.Length == 0)
+        string summary;
+        if (IsLogFilterMode || LogQuery is not { HasInclude: true })
         {
             _find.Clear();
-            LogSearchSummary = LogSearchText.Length == 0
-                ? ""
-                : $"{LogLines.Count:N0} line{(LogLines.Count == 1 ? "" : "s")}";
+            summary = LogSearch.FilterSummary(LogSearchText, LogSearchError, LogQuery, LogLines);
         }
         else
         {
-            _find.Update(LogLines, LogSearchText, newQuery);
-            LogSearchSummary = _find.Summary(LogSearchText);
+            _find.Update(LogLines, LogQuery, newQuery);
+            summary = _find.Summary(LogSearchText);
         }
+
+        LogSearchSummary = LogSearch.WithHidden(summary, Projection.Excluded);
 
         CurrentLogMatch = _find.Current;
         FindNextLogMatchCommand.NotifyCanExecuteChanged();
         FindPreviousLogMatchCommand.NotifyCanExecuteChanged();
+        Problems.Update(LogLines);
     }
 
     private bool HasLogMatches => _find.Count > 0;
+
+    /// <summary>
+    /// A filtered line, double-clicked: the filter comes off and the pane lands on that line
+    /// in the full log, as the current match when it is one, with the cursor on it either
+    /// way — klogg's two panes and Kibana's "surrounding documents" in one gesture. The
+    /// query stays, so every other match is still highlighted around it.
+    /// </summary>
+    public void RevealLine(LogLineViewModel line)
+    {
+        if (!IsLogFilterMode)
+        {
+            return;
+        }
+
+        IsLogFilterMode = false;
+        if (_find.Select(line))
+        {
+            CurrentLogMatch = _find.Current;
+            LogSearchSummary = LogSearch.WithHidden(_find.Summary(LogSearchText), Projection.Excluded);
+        }
+
+        Problems.Point(line);
+    }
 
     /// <summary>The next (later) match — Enter in the search box.</summary>
     [RelayCommand(CanExecute = nameof(HasLogMatches))]
@@ -1023,7 +1108,7 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
     {
         _find.Next();
         CurrentLogMatch = _find.Current;
-        LogSearchSummary = _find.Summary(LogSearchText);
+        LogSearchSummary = LogSearch.WithHidden(_find.Summary(LogSearchText), Projection.Excluded);
     }
 
     /// <summary>The previous (earlier) match — Shift+Enter in the search box.</summary>
@@ -1032,7 +1117,7 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
     {
         _find.Previous();
         CurrentLogMatch = _find.Current;
-        LogSearchSummary = _find.Summary(LogSearchText);
+        LogSearchSummary = LogSearch.WithHidden(_find.Summary(LogSearchText), Projection.Excluded);
     }
 
     /// <summary>
@@ -1178,7 +1263,7 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
         }
 
         _allLogLines.Clear();
-        LogLines.Clear();
+        Projection.Rebuild(_allLogLines);
         TrimNotice = null;
         _clearedLines = null;
         foreach (var source in Sources)

@@ -180,15 +180,17 @@ public class LogPaneTests
     {
         var line = new LogLineViewModel("2026-08-17T10:00:01.000Z 08:41 Timeout; timeout", showTimestamp: true, utcTimestamp: true);
 
-        var ranges = LogLineText.Matches(line.DisplayText, "timeout", line.MessageOffset);
+        static LogQuery Plain(string text) => LogQuery.Create(text, regex: false, matchCase: false, out _)!;
+
+        var ranges = Plain("timeout").Matches(line.DisplayText, line.MessageOffset);
         await Assert.That(ranges.Count).IsEqualTo(2);
         await Assert.That(line.DisplayText.Substring(ranges[0].Start, ranges[0].Length)).IsEqualTo("Timeout");
 
         // "08:41" is in the message here too, but the timestamp's own "10:00" is not
         // searched: only matches at or after the message offset count.
-        await Assert.That(LogLineText.Matches(line.DisplayText, "10:00", line.MessageOffset)).IsEmpty();
-        await Assert.That(LogLineText.Matches(line.DisplayText, "aa", 0)).IsEmpty();
-        await Assert.That(LogLineText.Matches("aaaa", "aa", 0).Count).IsEqualTo(2);
+        await Assert.That(Plain("10:00").Matches(line.DisplayText, line.MessageOffset)).IsEmpty();
+        await Assert.That(Plain("aa").Matches(line.DisplayText, 0)).IsEmpty();
+        await Assert.That(Plain("aa").Matches("aaaa", 0).Count).IsEqualTo(2);
     }
 
     // -------------------------------------------------------------- levels (FEAT-36)

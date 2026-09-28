@@ -54,6 +54,8 @@ way in Preferences → Shortcut modifier.
 | Paste into the terminal | Ctrl+Shift+V | Ctrl+Shift+V |
 | Follow the log stream | The Follow toggle, above the log pane | The Follow toggle, above the log pane |
 | Step through a log search's matches (the funnel filters instead) | Enter / Shift+Enter in a log pane's search box | Enter / Shift+Enter in a log pane's search box |
+| Search a log with a regular expression or matching case, or pin the search as a highlight (!word hides lines) | Alt+R / Alt+C / Alt+P in a log pane's search box | Alt+R / Alt+C / Alt+P in a log pane's search box |
+| Jump to the latest error in a log, then the ones before it | Alt+↑ / Alt+↓ in a log pane, or click its error count | Alt+↑ / Alt+↓ in a log pane, or click its error count |
 
 ## View & app
 

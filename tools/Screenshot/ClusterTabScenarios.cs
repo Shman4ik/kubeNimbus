@@ -426,6 +426,45 @@ internal static class ClusterTabScenarios
     }
 
     /// <summary>
+    /// The log viewer's grep: a regular expression filtering with two lines of context
+    /// around each match, a pinned highlight in its own colour, and the error jump on the
+    /// error line. Everything the pane does that used to send a log to an editor, on one
+    /// screen.
+    /// </summary>
+    public static ClusterTabViewModel DemoPodDetailGrep()
+    {
+        var tab = DemoPodDetailSearch(query: "");
+        if (tab.SelectedInspectorTab is PodDetailTabViewModel detail)
+        {
+            detail.Pins.Add("merchant", regex: false, matchCase: false);
+            detail.IsLogRegex = true;
+            detail.LogContextLines = 2;
+            detail.IsLogFilterMode = true;
+            detail.LogSearchText = "slow|upload";
+            detail.Problems.PreviousErrorCommand.Execute(null);
+        }
+
+        return tab;
+    }
+
+    /// <summary>A JSON line opened under itself, and the error jump's cursor on the error line.</summary>
+    public static ClusterTabViewModel DemoPodDetailJson()
+    {
+        var tab = DemoPodDetailSearch(query: "");
+        if (tab.SelectedInspectorTab is PodDetailTabViewModel detail)
+        {
+            if (detail.LogLines.FirstOrDefault(l => l.IsJson) is { } json)
+            {
+                json.IsExpanded = true;
+            }
+
+            detail.Problems.PreviousErrorCommand.Execute(null);
+        }
+
+        return tab;
+    }
+
+    /// <summary>
     /// Pumps the dispatcher until enough of the three replayed streams has landed to show
     /// the merge doing its job. Deeper than <see cref="DrainDemoLogs"/>'s six lines on
     /// purpose: the first lines of each pod are its own startup, and the interleaving only
@@ -1450,8 +1489,12 @@ internal static class ClusterTabScenarios
             "2026-07-20T08:45:01.220Z INFO  generated chargeback-summary report for merchant=north-store (391ms)",
         })
         {
-            detail.LogLines.Add(new LogLineViewModel(raw, detail.ShowLogTimestamps));
+            detail.Enqueue(raw);
         }
+
+        // Through the pane's own flush, so the projection, the problem counts and the ruler
+        // see these lines the way they see a stream's.
+        detail.FlushLogLines();
 
         detail.IsFollowingLogs = true;
 

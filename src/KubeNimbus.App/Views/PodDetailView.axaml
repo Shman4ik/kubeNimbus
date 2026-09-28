@@ -112,7 +112,7 @@
            switches it to filtering, which hides what does not match. The controls ride
            inside the box so the mode costs the row nothing (UI rule 10). -->
       <TextBox Name="LogSearchBox" Grid.Column="1" Classes="filterbox" Margin="10,0,0,0" MaxWidth="400" HorizontalAlignment="Left"
-               MinWidth="160" Text="{Binding LogSearchText}" PlaceholderText="Search logs…"
+               MinWidth="230" Text="{Binding LogSearchText}" PlaceholderText="Search logs…"
                IsVisible="{Binding SelectedDetailTabIndex, Converter={x:Static conv:IndexEqualsConverter.Instance}, ConverterParameter=0}">
         <TextBox.InnerLeftContent>
           <PathIcon Data="{StaticResource MagnifyIconGeometry}" Width="11" Height="11" Opacity="0.5" Margin="8,0,0,0" />
@@ -129,6 +129,14 @@
                     Focusable="False" ToolTip.Tip="Next (later) match — Enter">
               <PathIcon Data="{StaticResource ChevronDownIconGeometry}" Width="11" Height="11" />
             </Button>
+            <Button Classes="toolbar" Padding="3" Command="{Binding PinSearchCommand}" IsVisible="{Binding HasLogSearch}"
+                    Focusable="False" ToolTip.Tip="Pin this search as a coloured highlight and search for something else — Alt+P">
+              <PathIcon Data="{StaticResource PinOutlineIconGeometry}" Width="11" Height="11" />
+            </Button>
+            <ToggleButton Classes="chip checkedAccent logSearchOption" Focusable="False" IsChecked="{Binding IsLogMatchCase}"
+                          ToolTip.Tip="Match case — Alt+C" Content="Aa" />
+            <ToggleButton Classes="chip checkedAccent logSearchOption" Focusable="False" IsChecked="{Binding IsLogRegex}"
+                          ToolTip.Tip="Regular expression — Alt+R" Content=".*" />
             <ToggleButton Classes="chip checkedAccent" Padding="4" Focusable="False" IsChecked="{Binding IsLogFilterMode}"
                           ToolTip.Tip="Filter: hide the lines that don't match, instead of highlighting the matches among them">
               <PathIcon Data="{StaticResource FilterVariantIconGeometry}" Width="11" Height="11" />
@@ -147,6 +155,46 @@
              The work happens in the view model's On<Property>Changed hooks. -->
         <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center"
                     IsVisible="{Binding SelectedDetailTabIndex, Converter={x:Static conv:IndexEqualsConverter.Instance}, ConverterParameter=0}">
+          <!-- Context around each match (grep -C), only while the search filters. -->
+          <!-- A chip rather than a combo box: the row already holds the search box and the
+               problem counts, and a caption of "±2" says as much as "±2 lines" did. -->
+          <Button Classes="chip" Padding="7,3" FontSize="11" Margin="0,0,4,0" IsVisible="{Binding IsLogFilterMode}"
+                  Classes.accentText="{Binding LogContextLines, Converter={x:Static conv:CountToBoolConverter.Instance}}"
+                  ToolTip.Tip="Lines to keep around each match while filtering, like grep -C">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <TextBlock Text="{Binding LogContextLines, Converter={x:Static conv:LogContextLabelConverter.Instance}, ConverterParameter=short}" VerticalAlignment="Center" />
+              <PathIcon Data="{StaticResource ChevronDownIconGeometry}" Width="8" Height="8" VerticalAlignment="Center" />
+            </StackPanel>
+            <Button.Flyout>
+              <Flyout Placement="BottomEdgeAlignedRight">
+                <StackPanel Spacing="4" MinWidth="160">
+                  <TextBlock Text="Context around each match" FontSize="11" Opacity="0.6" />
+                  <ListBox ItemsSource="{Binding LogContextChoices}" SelectedItem="{Binding LogContextLines}">
+                    <ListBox.ItemTemplate>
+                      <DataTemplate x:DataType="sys:Int32">
+                        <TextBlock Text="{Binding Converter={x:Static conv:LogContextLabelConverter.Instance}}" />
+                      </DataTemplate>
+                    </ListBox.ItemTemplate>
+                  </ListBox>
+                </StackPanel>
+              </Flyout>
+            </Button.Flyout>
+          </Button>
+          <!-- The problems among the shown lines and the jump between them (LogProblems). -->
+          <Button Classes="chip logProblem error" Command="{Binding Problems.PreviousErrorCommand}"
+                  IsVisible="{Binding Problems.HasErrors}" ToolTip.Tip="{Binding Problems.ErrorTip}">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <PathIcon Data="{StaticResource AlertCircleIconGeometry}" Width="11" Height="11" />
+              <TextBlock Text="{Binding Problems.ErrorCount, StringFormat='{}{0:N0}'}" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+          <Button Classes="chip logProblem warn" Command="{Binding Problems.PreviousWarningCommand}" Margin="0,0,4,0"
+                  IsVisible="{Binding Problems.HasWarnings}" ToolTip.Tip="{Binding Problems.WarningTip}">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <PathIcon Data="{StaticResource AlertIconGeometry}" Width="11" Height="11" />
+              <TextBlock Text="{Binding Problems.WarningCount, StringFormat='{}{0:N0}'}" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
           <ComboBox Width="122" MinHeight="27" FontSize="11" Margin="0,0,4,0"
                     ItemsSource="{Binding LogRanges}" SelectedItem="{Binding SelectedLogRange}"
                     IsEnabled="{Binding !IsDemo}"
@@ -241,16 +289,52 @@
     <TabControl Grid.Row="2" Classes="headerless" SelectedIndex="{Binding SelectedDetailTabIndex}">
       <TabItem Header="Logs">
         <Grid RowDefinitions="Auto,*">
-          <Border Grid.Row="0" Classes="infoBar warn" Margin="0,0,0,4"
-                  IsVisible="{Binding TrimNotice, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}">
-            <TextBlock Text="{Binding TrimNotice}" FontSize="11.5" />
-          </Border>
-          <Border Grid.Row="1" Classes="card" Padding="8">
-            <Grid>
+          <StackPanel Grid.Row="0">
+            <Border Classes="infoBar warn" Margin="0,0,0,4"
+                    IsVisible="{Binding TrimNotice, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}">
+              <TextBlock Text="{Binding TrimNotice}" FontSize="11.5" />
+            </Border>
+            <!-- A regular expression that does not parse filters nothing and says why. -->
+            <Border Classes="infoBar error" Margin="0,0,0,4" IsVisible="{Binding HasLogSearchError}">
+              <TextBlock Text="{Binding LogSearchError}" TextWrapping="Wrap" FontSize="11.5" />
+            </Border>
+            <!-- Pinned highlights, only while there are any: each chip is its colour's key
+                 and its own remove button. -->
+            <ItemsControl ItemsSource="{Binding Pins.Items}" Margin="0,0,0,4" IsVisible="{Binding Pins.HasAny}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:LogPin">
+                  <Button Classes="chip logPinChip" Margin="0,0,4,0"
+                          Command="{Binding $parent[UserControl].((vm:PodDetailTabViewModel)DataContext).Pins.RemoveCommand}"
+                          CommandParameter="{Binding}" ToolTip.Tip="Pinned highlight — click to remove">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                      <Ellipse Width="8" Height="8" Fill="{Binding SolidBrush}" VerticalAlignment="Center" />
+                      <TextBlock Text="{Binding Text}" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11" VerticalAlignment="Center" />
+                      <PathIcon Data="{StaticResource CloseIconGeometry}" Width="8" Height="8" Opacity="0.6" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </Button>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+          <Border Grid.Row="1" Classes="card" Padding="8,8,2,8">
+            <Grid ColumnDefinitions="*,10">
+              <!-- Every error, warning, match and pin as a tick beside the scrollbar; a click
+                   goes there (Controls/LogOverviewRuler). -->
+              <controls:LogOverviewRuler Name="LogRuler" Grid.Column="1" Margin="2,0,0,0"
+                                         Lines="{Binding LogLines}" Query="{Binding LogQuery}"
+                                         Pins="{Binding Pins.Items}" CursorLine="{Binding Problems.Current}"
+                                         ErrorBrush="IndianRed" WarnBrush="{StaticResource AppWarningBrush}"
+                                         MatchBrush="{DynamicResource LogCurrentMatchBrush}"
+                                         CursorBrush="{DynamicResource SystemAccentColor}" />
               <!-- HorizontalScrollBarVisibility defaults to Disabled, which with wrapping
                    off hard-clipped every long line — a stack trace or a JSON log entry
                    simply ran off the edge with no way to reach the rest of it. -->
-              <ScrollViewer Name="LogScroll" HorizontalScrollBarVisibility="Auto">
+              <ScrollViewer Name="LogScroll" Grid.Column="0" HorizontalScrollBarVisibility="Auto">
                 <ItemsControl Name="LogItems" ItemsSource="{Binding LogLines}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:LogLineViewModel">
@@ -263,16 +347,34 @@
                            default (opaque black), not to the inherited foreground, so every
                            keyword-free line was invisible on the dark theme's card. See the
                            `.logError`/`.logWarn`/`.logInfo` styles in Theme.axaml. -->
-                      <controls:LogLineText Text="{Binding DisplayText}" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11"
+                      <StackPanel>
+                      <Rectangle Classes="logGap" IsVisible="{Binding IsGapBefore}" />
+                      <Border Classes="logRow" Classes.error="{Binding IsErrorLine}" Classes.warn="{Binding IsWarnLine}"
+                              Classes.context="{Binding IsContextLine}" Classes.cursor="{Binding IsProblemCursor}">
+                      <!-- Column 0 is the JSON chevron's, kept on every row so the text of
+                           a JSON line and of a plain one start at the same x. -->
+                      <Grid ColumnDefinitions="14,*" RowDefinitions="Auto,Auto">
+                      <ToggleButton Grid.Column="0" Classes="logExpand" IsChecked="{Binding IsExpanded}" IsVisible="{Binding IsJson}"
+                                    ToolTip.Tip="Show this JSON line's fields, one per row">
+                        <PathIcon Data="{StaticResource ChevronRightIconGeometry}" Width="8" Height="8" />
+                      </ToggleButton>
+                      <controls:LogLineText Grid.Column="1" Classes="logLine" Text="{Binding DisplayText}" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11"
                                             MatchStart="{Binding MessageOffset}"
+                                            LevelStart="{Binding DisplayLevelStart}" LevelLength="{Binding LevelLength}"
                                             IsCurrentMatch="{Binding IsCurrentMatch}"
-                                            Query="{Binding $parent[UserControl].((vm:PodDetailTabViewModel)DataContext).LogSearchText}"
+                                            Query="{Binding $parent[UserControl].((vm:PodDetailTabViewModel)DataContext).LogQuery}"
+                                            Pins="{Binding $parent[UserControl].((vm:PodDetailTabViewModel)DataContext).Pins.Items}"
                                             MatchBrush="{DynamicResource LogMatchBrush}"
                                             CurrentMatchBrush="{DynamicResource LogCurrentMatchBrush}"
                                             Classes.logError="{Binding IsErrorLine}"
                                             Classes.logWarn="{Binding IsWarnLine}"
                                             Classes.logInfo="{Binding IsInfoLine}"
                                             TextWrapping="{Binding $parent[UserControl].((vm:PodDetailTabViewModel)DataContext).WrapLogLines, Converter={x:Static conv:BoolToTextWrappingConverter.Instance}}" />
+                      <SelectableTextBlock Grid.Column="1" Grid.Row="1" Classes="logJson" Text="{Binding PrettyJson}"
+                                           IsVisible="{Binding IsExpanded}" />
+                      </Grid>
+                      </Border>
+                      </StackPanel>
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>

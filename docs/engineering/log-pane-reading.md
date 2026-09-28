@@ -29,10 +29,11 @@ Six things are load-bearing.
    back in time. After that the current match is kept across new lines, trims and
    level/pod changes for as long as it is still shown — a following stream must never drag
    the reader off the line they are on (`LogPaneTests`, "A_new_matching_line_does_not_move").
-3. **The search matches the message, never the timestamp prefix.** `LogLineViewModel
-   .Contains` is the one rule both modes and the highlight use, and `LogLineText` skips the
-   first `MessageOffset` characters of the displayed text — otherwise a search for "08:41"
-   would light up text the counter does not count.
+3. **The search matches the message, never the timestamp prefix.** `LogQuery` (through
+   `LogLineViewModel.Matches`, which remembers the answer per query) is the one rule both
+   modes, the highlight and the overview ruler use, and `LogLineText` skips the first
+   `MessageOffset` characters of the displayed text — otherwise a search for "08:41" would
+   light up text the counter does not count.
 4. **The highlight is painted, not built from `Inlines`.** `Controls/LogLineText` is a
    `SelectableTextBlock` that fills the match rectangles from its own `TextLayout
    .HitTestTextRange` in `RenderTextLayout` (the hook `TextBlock`'s sealed `Render` calls
@@ -52,9 +53,65 @@ Six things are load-bearing.
    match moved. Moving to an older match takes the view off the bottom, which is what stops
    the follow yanking it back — the existing scroll lock, unchanged.
 
-Not built: regex. A user-typed pattern would need `RegexOptions.NonBacktracking` over a
-buffer of thousands of lines on the UI thread, and nobody on the owner's side has asked for
-it; the substring search is the whole of the demand that was found.
+## A log viewer good enough not to leave (the log-viewer pass)
+
+The owner's brief: nobody should copy a log into Notepad++ to find something in it. The
+research behind what was built, with sources, is
+[`docs/research/2026-09-28-log-viewers.md`](../research/2026-09-28-log-viewers.md). Everything
+here is deterministic, works on the lines already in the pane, and needs no server change.
+The shared half lives in `LogQuery`, `LogProjection`, `LogProblems`, `LogPins`, `LogSearch`,
+`Controls/LogLineText` and `Controls/LogOverviewRuler`, so the two panes cannot drift; each
+pane keeps only its own narrowing (pods, levels, Errors only) as `LogProjection`'s predicate.
+`LogViewerTests` pins the behaviour.
+
+- **Only the level keyword is coloured; errors and warnings mark the row.** See
+  [log-severity-classes](log-severity-classes.md). Warnings get the bar without the wash:
+  Dozzle took its amber wash away because a routine retry line was the noisiest thing in the
+  stream. The timestamp prefix is dimmed (`LogLineText.PrefixBrush`).
+- **Severity is read from what the logger printed.** The *earliest* level keyword wins, so
+  `info: retrying after error` is an info line (it used to be red: the rule was "ERROR
+  anywhere"); a structured level field (`"level":`, `level=`, `"LogLevel":`, `"@l":`) beats
+  words in the message, and an explicit debug level is not an error; klog's `E0928 …` header
+  is read; `fail:`/`crit:` and zerolog's `ERR`/`WRN`/`INF` count.
+- **A stack trace takes the level of the line that threw it.** An unlevelled line that
+  continues the one above it from the same pod (indented, `at `, `Caused by:`, `... N more`,
+  Python's traceback header, a flush-left `x.y.SomeException:`) inherits an error or warning
+  (`LogLineViewModel.InheritFrom`). The bar runs down the trace and Errors only keeps it
+  whole; the error jump and the counts skip inherited lines, so a trace is one stop.
+- **Regular expressions and match case,** as VS Code's find widget: `.*` and `Aa` in the box,
+  Alt+R and Alt+C. The engine is `RegexOptions.NonBacktracking`, linear whatever is typed —
+  the search runs on the UI thread over thousands of lines per keystroke, and a per-line
+  timeout only bounds each line. Backreferences and lookarounds are refused in words; a
+  pattern that does not parse filters nothing and says why in an error bar.
+- **`!word` hides lines, in either mode** — k9s's `/!`, VS Code's output filter. Only when the
+  box holds such a word is it split on spaces; otherwise the text is one phrase, as before.
+  The counter adds "N hidden", so a pane that lost lines to an exclusion never looks quiet.
+- **Filtering keeps context** — `grep -C`, the one thing a filter alone could not do, via the
+  `Context` chip (0/2/5/10/25) that appears in filter mode. It is kept incrementally as lines
+  stream in (`LogProjection`), context lines are dimmed, a gap between groups is a rule, and
+  the counter counts matches, not the context around them.
+- **A filtered line, double-clicked, is shown in the full log**: the filter comes off, the line
+  becomes the current match with the cursor on it, and the query stays highlighted around it.
+- **Errors and warnings are counted and jumped between, hiding nothing** (`LogProblems`): the
+  `⊗ 3` / `▲ 12` chips in the bar, each only when not zero. A click lands on the latest, the
+  next walks back (the find's order, for the find's reason); Alt+↑ / Alt+↓ anywhere in the
+  pane. This is the counterpart of Levels and Errors only, which narrow the pane and so take
+  away the lines that explain the error.
+- **An overview ruler** beside the scrollbar (`LogOverviewRuler`) ticks every error, warning,
+  match, pin and the cursor at the height its row sits — read from the rendered rows, so it is
+  exact with wrapping on and a short log's ticks stay beside its lines. Rows are bucketed into
+  pixel rows first, so four thousand lines cost as many rectangles as the strip is tall. A
+  click scrolls to the nearest tick.
+- **Pinned highlights** (Notepad++'s Mark, klogg's colour labels): the pin button or Alt+P
+  keeps the current search as one of five colours, painted under the text and on the ruler,
+  and empties the box for the next question. Chips above the log remove them. Not persisted.
+- **A JSON line opens under itself**: a chevron on lines whose message is a JSON object shows
+  it indented. A view, never a rewrite — the line, the search, Copy and Save keep the server's
+  bytes (Headlamp's prettify rewrote its buffer and lost lines).
+
+Not built, on the research's evidence: a histogram (only hosted tools with a stored log have
+one), collapsing repeated lines (nobody asked), bookmarks (thin demand), and rendering the
+application's own ANSI colours (they would compete with the level colour; see below).
 
 ## Levels: Error, Warn, Info — and the unleveled always shown (FEAT-36)
 
@@ -91,7 +148,8 @@ guessed: the palette has no notion of the focused inspector tab.
 
 ## The toolbar keeps what is read, and the `⋯` menu keeps the rest
 
-The bar carries Range, Follow, Previous, Levels and Copy. Everything else — Timestamps, UTC,
+The bar carries Range, Follow, Previous, Levels and Copy, plus the error and warning counts
+when there are any and the Context chip while filtering. Everything else — Timestamps, UTC,
 Wrap, Clear and Save — is in the `⋯` menu beside Copy, in both panes. The bar used to hold all
 ten in one row of mixed icons and words, which read as noise at the moment someone is scanning
 it for Previous. Copy stays out because it is the one gesture that gets a log into a bug report;

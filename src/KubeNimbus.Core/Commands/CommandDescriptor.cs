@@ -45,6 +45,8 @@ public enum CommandId
     PreviousLogs,
     FollowLogs,
     LogSearchStep,
+    LogSearchOptions,
+    LogProblemStep,
     Exec,
     PortForward,
     ExecInterrupt,

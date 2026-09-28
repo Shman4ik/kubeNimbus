@@ -18,6 +18,20 @@ it as the GitHub Release body, so headings must match tags exactly
   shown, searched, copied and saved. .NET's `fail:` and `crit:` lines are coloured as errors.
 - A merged log with a single pod no longer repeats the pod's name at the start of every line.
   The column comes back as soon as a second pod is shown, and Copy and Save keep it either way.
+- Log panes colour the level word instead of the whole line, so a log where every line is
+  `info:` no longer turns blue. Error rows carry a red bar and a faint wash, warning rows an
+  amber bar, and timestamps are dimmed. The level is read from the first level word the logger
+  printed, from a JSON or `level=` field when there is one, and from klog's `E0928` header; an
+  indented stack trace takes the level of the line that threw it.
+- Log search takes regular expressions (Alt+R) and matching case (Alt+C). `!word` hides the
+  lines that contain it, in either mode, and the box says how many it hid. While filtering, the
+  new Context chip keeps 2 to 25 lines around each match, like `grep -C`, and double-clicking a
+  filtered line shows it in the full log.
+- Log panes count their error and warning lines; a click on the count, or Alt+↑ / Alt+↓, jumps
+  to the latest error and then the ones before it, without hiding anything. A strip beside the
+  scrollbar marks every error, warning and match, and a click on it scrolls there.
+- A search can be pinned as a coloured highlight (Alt+P, up to five), which stays marked while
+  you search for something else. A JSON log line opens into its fields with the chevron beside it.
 - The Resources mode now looks like the Applications mode. The resource list sits in a card
   on the window's own tone instead of on a black panel, its title is the same size as
   "Applications", and every table uses the Applications list's type: small semibold column

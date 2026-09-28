@@ -614,6 +614,29 @@ public static class CommandCatalog
         },
         new()
         {
+            Id = CommandId.LogSearchOptions,
+            Title = "Log search: regular expression / match case / pin",
+            CheatTitle = "Search a log with a regular expression or matching case, or pin the search as a highlight (!word hides lines)",
+            Category = CommandCategory.Pods,
+            IconKey = "MagnifyIconGeometry",
+            // VS Code's find-widget keys, and like Enter above they belong to the box.
+            GestureNote = "Alt+R / Alt+C / Alt+P in a log pane's search box",
+            Surfaces = SheetOnly,
+        },
+        new()
+        {
+            Id = CommandId.LogProblemStep,
+            Title = "Previous / next error in a log",
+            CheatTitle = "Jump to the latest error in a log, then the ones before it",
+            Category = CommandCategory.Pods,
+            IconKey = "AlertCircleIconGeometry",
+            // A pane key, not a window chord: Alt+arrows mean nothing to the rest of the window
+            // and belong to whichever log pane has focus.
+            GestureNote = "Alt+↑ / Alt+↓ in a log pane, or click its error count",
+            Surfaces = SheetOnly,
+        },
+        new()
+        {
             Id = CommandId.ReorderTabs,
             Title = "Reorder cluster tabs",
             Category = CommandCategory.Clusters,
