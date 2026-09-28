@@ -41,6 +41,10 @@ blue from top to bottom, which the owner dislikes.*
   the timestamp, marks error and warning rows with a bar and a wash, adds regex and match-case
   toggles, error and warning counts with previous/next jumps, and grep-style context in filter
   mode. What is left is ranked in [Recommendations](#recommendations-ranked-by-value-to-effort).
+- **Outcome.** The change this note was written for built recommendations 1 to 7 (the warning
+  wash dropped as Dozzle did; JSON lines opened in place rather than rendered as `key=value`)
+  and left 8, bookmarks, for later. What it built is described in
+  [`docs/engineering/log-pane-reading.md`](../engineering/log-pane-reading.md).
 
 Everything recommended below runs over lines the pane has already buffered. None of it needs a
 server change, an in-cluster agent, or a stored log, and all of it is deterministic.
