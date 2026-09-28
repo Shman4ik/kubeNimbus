@@ -444,8 +444,8 @@
          different questions ("where do I want to be" vs "what do I want to do") but
          behave identically — type, arrow, Enter — so neither needs to be learned
          twice. Rows are wider than the palette's because context names run long. -->
-    <Border Background="#80000000" IsVisible="{Binding Switcher.IsOpen}" PointerPressed="OnSwitcherBackdropPressed">
-      <Border Classes="layer" Width="640" MaxHeight="480" VerticalAlignment="Top" Margin="0,80,0,0"
+    <Border Classes="scrim" IsVisible="{Binding Switcher.IsOpen}" PointerPressed="OnSwitcherBackdropPressed">
+      <Border Classes="overlayCard" Width="640" MaxHeight="480" VerticalAlignment="Top" Margin="0,80,0,0"
               HorizontalAlignment="Center" Padding="0">
         <Grid RowDefinitions="Auto,*,Auto">
           <TextBox Grid.Row="0" Name="SwitcherQueryBox" Text="{Binding Switcher.Query}"
@@ -526,8 +526,8 @@
          560px wherever the window allows it and the window's width less a 16px gutter
          each side where it does not (ENG-35). A stretched element held back by MaxWidth is
          centred, so nothing changes at any width the app can be today. -->
-    <Border Background="#80000000" IsVisible="{Binding Palette.IsOpen}" PointerPressed="OnPaletteBackdropPressed">
-      <Border Classes="layer" MaxWidth="560" MaxHeight="440" VerticalAlignment="Top" Margin="16,90,16,0" HorizontalAlignment="Stretch" Padding="0">
+    <Border Classes="scrim" IsVisible="{Binding Palette.IsOpen}" PointerPressed="OnPaletteBackdropPressed">
+      <Border Classes="overlayCard" MaxWidth="560" MaxHeight="440" VerticalAlignment="Top" Margin="16,90,16,0" HorizontalAlignment="Stretch" Padding="0">
         <Grid RowDefinitions="Auto,*">
           <TextBox Grid.Row="0" Name="PaletteQueryBox" Text="{Binding Palette.Query}"
                     PlaceholderText="Type a command…" Margin="10" FontSize="14" KeyDown="OnPaletteKeyDown" />
