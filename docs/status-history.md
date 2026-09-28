@@ -2437,3 +2437,28 @@ harness's log and Applications-page scenarios rendered, `ux-` checks included. N
 tests (no Core change), the NativeAOT publish (plain string code and a compiled
 `MultiBinding`), a live pod with coloured output — the fix was checked against the reported
 line's bytes, not the pod itself.
+
+### The log viewer pass: level word not the line, grep -C, error jump, ruler, pins (2026-09-28)
+
+The owner saw an ASP.NET pod's log turn entirely blue once the colour codes were gone (every
+line is `info:`) and asked for a log view good enough that nobody copies a log to an editor to
+search it. A research note compares sixteen viewers
+(`docs/research/2026-09-28-log-viewers.md`). Built from it: only the level word coloured, with a
+bar on error and warning rows and a wash on errors only; severity read from the earliest level
+word, a structured level field or klog's header, with stack traces inheriting; regex
+(NonBacktracking) and match case; `!word` exclusions with a hidden count; grep -C context while
+filtering, incrementally (`LogProjection`); double-click a filtered line to see it in place;
+error/warning counts with a jump (`LogProblems`); an overview ruler positioned from the rendered
+rows; five pinned highlights; JSON lines opened in place. The two panes' duplicated filter code
+now lives once in `LogProjection`. The harness's pod-detail fixture fed lines straight into
+`LogLines`, bypassing the projection, which is why its counts first rendered as none; it now
+goes through `Enqueue`/`FlushLogLines`.
+
+Checks: App tests 444/444 (`LogViewerTests` new, 15 tests); Core tests 630 passed, 55 skipped
+(no sandbox); `docs/keyboard-shortcuts.md` regenerated; the whole harness rendered, `ux-`
+checks included, and two scenarios added (`cluster-tab-demo-pod-detail-grep`, `-json`). The
+README's `pod-detail.dark.png` and `application-page.light.png` and the Store's
+`02-applications-page.light.png` and `03-pod-detail.dark.png` were re-rendered on Windows.
+The win-x64 NativeAOT publish emits only the two known DataGrid warnings, and both
+`--smoke-test` and `--smoke-test=unreachable-cluster` exit 0 on it. Not run: a live cluster's log,
+and real mouse input for the double-click and the ruler click.

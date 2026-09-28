@@ -40,7 +40,25 @@ public partial class PodDetailView : UserControl
                 {
                     _vm.LogSearchText = "";
                 }
-            });
+            },
+            toggleRegex: () =>
+            {
+                if (_vm is not null)
+                {
+                    _vm.IsLogRegex = !_vm.IsLogRegex;
+                }
+            },
+            toggleMatchCase: () =>
+            {
+                if (_vm is not null)
+                {
+                    _vm.IsLogMatchCase = !_vm.IsLogMatchCase;
+                }
+            },
+            pin: () => _vm?.PinSearchCommand);
+        LogSearchGestures.AttachRuler(LogRuler, LogItems, LogScroll);
+        LogSearchGestures.AttachProblemKeys(this, () => _vm?.Problems);
+        LogSearchGestures.AttachReveal(LogItems, () => _vm?.IsLogFilterMode == true, line => _vm?.RevealLine(line));
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -62,6 +80,7 @@ public partial class PodDetailView : UserControl
             _vm = vm;
             _vm.LogLines.CollectionChanged += OnLogLinesChanged;
             _vm.PropertyChanged += OnViewModelChanged;
+            _vm.Problems.PropertyChanged += OnProblemsChanged;
 
             // A search can already be on a match when the view is (re)attached — the dock
             // tab was switched away and back — and the reader expects to be put back on it.
@@ -75,7 +94,17 @@ public partial class PodDetailView : UserControl
         {
             _vm.LogLines.CollectionChanged -= OnLogLinesChanged;
             _vm.PropertyChanged -= OnViewModelChanged;
+            _vm.Problems.PropertyChanged -= OnProblemsChanged;
             _vm = null;
+        }
+    }
+
+    /// <summary>The error/warning jump moved: bring its line into sight, as the search's does.</summary>
+    private void OnProblemsChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(LogProblems.Current))
+        {
+            LogSearchGestures.BringIntoView(LogItems, _vm?.Problems.Current);
         }
     }
 

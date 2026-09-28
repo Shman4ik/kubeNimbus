@@ -76,7 +76,12 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     /// and by <see cref="LogSearchText"/> only while <see cref="IsLogFilterMode"/> is on.
     /// This is what's rendered.
     /// </summary>
-    public ObservableCollection<LogLineViewModel> LogLines { get; } = [];
+    public ObservableCollection<LogLineViewModel> LogLines => Projection.Shown;
+
+    private LogProjection? _projection;
+
+    /// <summary>Which buffered lines are shown; the level filter is this pane's own narrowing.</summary>
+    private LogProjection Projection => _projection ??= new LogProjection(line => Levels.Admits(line));
 
     [ObservableProperty]
     private bool _isFollowingLogs;
@@ -104,6 +109,53 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
 
     /// <summary>A search is running in find mode — the box shows its previous/next arrows.</summary>
     public bool IsFinding => HasLogSearch && !IsLogFilterMode;
+
+    /// <summary>The search is a regular expression (Alt+R). Not persisted, like the rest of the search.</summary>
+    [ObservableProperty]
+    private bool _isLogRegex;
+
+    /// <summary>The search matches case (Alt+C).</summary>
+    [ObservableProperty]
+    private bool _isLogMatchCase;
+
+    /// <summary>Lines kept around each match while filtering — <c>grep -C</c>; see <see cref="LogContextChoices"/>.</summary>
+    [ObservableProperty]
+    private int _logContextLines;
+
+    public IReadOnlyList<int> LogContextChoices => LogSearch.ContextChoices;
+
+    /// <summary>The compiled search the lines, the highlight and the ruler read; null when there is none.</summary>
+    [ObservableProperty]
+    private LogQuery? _logQuery;
+
+    /// <summary>Why the pattern does not parse, shown under the box; null when it does.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasLogSearchError))]
+    private string? _logSearchError;
+
+    public bool HasLogSearchError => LogSearchError is not null;
+
+    /// <summary>Errors and warnings among the shown lines, and which one the problem arrows are on.</summary>
+    public LogProblems Problems { get; } = new();
+
+    /// <summary>Searches pinned as coloured highlights (Notepad++'s Mark); see <see cref="LogPin"/>.</summary>
+    public LogPins Pins { get; } = new();
+
+    /// <summary>Pins what the box searches for and empties it for the next search — the pin button, or Alt+P in the box.</summary>
+    [RelayCommand(CanExecute = nameof(CanPinSearch))]
+    private void PinSearch()
+    {
+        if (LogQuery?.IncludeText is { } text && Pins.Add(text, IsLogRegex, IsLogMatchCase))
+        {
+            LogSearchText = "";
+        }
+
+        PinSearchCommand.NotifyCanExecuteChanged();
+    }
+
+    private bool CanPinSearch => LogQuery is { HasInclude: true } && !Pins.IsFull;
+
+    partial void OnLogQueryChanged(LogQuery? value) => PinSearchCommand.NotifyCanExecuteChanged();
 
     /// <summary>The search box's counter: "3 of 17" while finding, "12 lines" while filtering.</summary>
     [ObservableProperty]
@@ -319,6 +371,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
 
         _row.PropertyChanged += OnRowChanged;
         Levels.Changed += (_, _) => ApplyLogFilter();
+        Pins.PropertyChanged += (_, _) => PinSearchCommand.NotifyCanExecuteChanged();
         RestoreDisplayPreferences();
         RefreshFromRow();
 
@@ -1560,7 +1613,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         }
 
         _allLogLines.Clear();
-        LogLines.Clear();
+        Projection.Rebuild(_allLogLines);
         TrimNotice = null;
         UpdateLogFind(newQuery: false);
         ClearLogsCommand.NotifyCanExecuteChanged();
@@ -1650,11 +1703,9 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         foreach (var rawLine in raw)
         {
             var line = new LogLineViewModel(rawLine, ShowLogTimestamps, utcTimestamp: UseUtcTimestamps);
+            line.InheritFrom(_allLogLines.Count > 0 ? _allLogLines[^1] : null);
             _allLogLines.Add(line);
-            if (MatchesLogFilter(line))
-            {
-                LogLines.Add(line);
-            }
+            Projection.Append(line);
         }
 
         _loadingLogRange = false;
@@ -1684,20 +1735,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
 
         var dropped = _allLogLines.GetRange(0, excess);
         _allLogLines.RemoveRange(0, excess);
-
-        var visible = 0;
-        foreach (var line in dropped)
-        {
-            if (MatchesLogFilter(line))
-            {
-                visible++;
-            }
-        }
-
-        for (var i = 0; i < visible && LogLines.Count > 0; i++)
-        {
-            LogLines.RemoveAt(0);
-        }
+        Projection.TrimFront(dropped);
     }
 
     private void RaiseLogPlaceholder()
@@ -1706,23 +1744,35 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         OnPropertyChanged(nameof(HasLogPlaceholder));
     }
 
-    /// <summary>
-    /// Whether a buffered line is shown. The level filter always applies; the search text
-    /// narrows only in filter mode — in find mode every line stays and matches are
-    /// highlighted instead.
-    /// </summary>
-    private bool MatchesLogFilter(LogLineViewModel line) =>
-        Levels.Admits(line)
-        && (!IsLogFilterMode || LogSearchText.Length == 0 || line.Contains(LogSearchText));
+    // The level filter always applies; the search narrows only in filter mode, where each
+    // match keeps LogContextLines of context — in find mode every line stays and the
+    // matches are highlighted instead. See LogProjection.
+    partial void OnLogSearchTextChanged(string value) => RecompileLogQuery();
 
-    partial void OnLogSearchTextChanged(string value)
+    partial void OnIsLogRegexChanged(bool value) => RecompileLogQuery();
+
+    partial void OnIsLogMatchCaseChanged(bool value) => RecompileLogQuery();
+
+    partial void OnLogContextLinesChanged(int value)
     {
-        if (IsLogFilterMode)
+        if (IsLogFilterMode && LogQuery is not null)
+        {
+            ApplyLogFilter();
+        }
+    }
+
+    private void RecompileLogQuery()
+    {
+        var before = LogQuery;
+        LogQuery = LogQuery.Create(LogSearchText, IsLogRegex, IsLogMatchCase, out var error);
+        LogSearchError = error;
+        if (LogSearch.ChangesShownLines(IsLogFilterMode, before, LogQuery))
         {
             ApplyLogFilter();
         }
 
         UpdateLogFind(newQuery: true);
+        RaiseLogPlaceholder();
     }
 
     partial void OnIsLogFilterModeChanged(bool value)
@@ -1733,14 +1783,10 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
 
     private void ApplyLogFilter()
     {
-        LogLines.Clear();
-        foreach (var line in _allLogLines)
-        {
-            if (MatchesLogFilter(line))
-            {
-                LogLines.Add(line);
-            }
-        }
+        Projection.Query = LogQuery;
+        Projection.FilterMode = IsLogFilterMode;
+        Projection.Context = LogContextLines;
+        Projection.Rebuild(_allLogLines);
 
         UpdateLogFind(newQuery: false);
         RaiseLogPlaceholder();
@@ -1753,25 +1799,50 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     /// </summary>
     private void UpdateLogFind(bool newQuery)
     {
-        if (IsLogFilterMode || LogSearchText.Length == 0)
+        string summary;
+        if (IsLogFilterMode || LogQuery is not { HasInclude: true })
         {
             _find.Clear();
-            LogSearchSummary = LogSearchText.Length == 0
-                ? ""
-                : $"{LogLines.Count:N0} line{(LogLines.Count == 1 ? "" : "s")}";
+            summary = LogSearch.FilterSummary(LogSearchText, LogSearchError, LogQuery, LogLines);
         }
         else
         {
-            _find.Update(LogLines, LogSearchText, newQuery);
-            LogSearchSummary = _find.Summary(LogSearchText);
+            _find.Update(LogLines, LogQuery, newQuery);
+            summary = _find.Summary(LogSearchText);
         }
+
+        LogSearchSummary = LogSearch.WithHidden(summary, Projection.Excluded);
 
         CurrentLogMatch = _find.Current;
         FindNextLogMatchCommand.NotifyCanExecuteChanged();
         FindPreviousLogMatchCommand.NotifyCanExecuteChanged();
+        Problems.Update(LogLines);
     }
 
     private bool HasLogMatches => _find.Count > 0;
+
+    /// <summary>
+    /// A filtered line, double-clicked: the filter comes off and the pane lands on that line
+    /// in the full log, as the current match when it is one, with the cursor on it either
+    /// way — klogg's two panes and Kibana's "surrounding documents" in one gesture. The
+    /// query stays, so every other match is still highlighted around it.
+    /// </summary>
+    public void RevealLine(LogLineViewModel line)
+    {
+        if (!IsLogFilterMode)
+        {
+            return;
+        }
+
+        IsLogFilterMode = false;
+        if (_find.Select(line))
+        {
+            CurrentLogMatch = _find.Current;
+            LogSearchSummary = LogSearch.WithHidden(_find.Summary(LogSearchText), Projection.Excluded);
+        }
+
+        Problems.Point(line);
+    }
 
     /// <summary>The next (later) match — Enter in the search box.</summary>
     [RelayCommand(CanExecute = nameof(HasLogMatches))]
@@ -1779,7 +1850,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     {
         _find.Next();
         CurrentLogMatch = _find.Current;
-        LogSearchSummary = _find.Summary(LogSearchText);
+        LogSearchSummary = LogSearch.WithHidden(_find.Summary(LogSearchText), Projection.Excluded);
     }
 
     /// <summary>The previous (earlier) match — Shift+Enter in the search box.</summary>
@@ -1788,7 +1859,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     {
         _find.Previous();
         CurrentLogMatch = _find.Current;
-        LogSearchSummary = _find.Summary(LogSearchText);
+        LogSearchSummary = LogSearch.WithHidden(_find.Summary(LogSearchText), Projection.Excluded);
     }
 
     /// <summary>Applies the saved display toggles without writing them straight back.</summary>

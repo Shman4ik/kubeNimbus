@@ -185,6 +185,9 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-demo-pod-detail-find", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetailSearch(), height: 1000)),
     ("cluster-tab-demo-pod-detail-levels",
         () => HostInMainWindow(ClusterTabScenarios.DemoPodDetailSearch(query: "", hideInfo: true), height: 1000)),
+    // The log viewer pass: regex filter with context, a pin, the error jump; a JSON line opened.
+    ("cluster-tab-demo-pod-detail-grep", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetailGrep(), height: 1000)),
+    ("cluster-tab-demo-pod-detail-json", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetailJson(), height: 1000)),
     // The CRD printer-column pair: the same Certificate list without and with the
     // advanced view, which is where the CRD's own `priority: 1` columns live.
     ("cluster-tab-crd-printer-columns", () => HostInMainWindow(ClusterTabScenarios.DemoCrdPrinterColumns())),

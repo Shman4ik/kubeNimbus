@@ -3,6 +3,18 @@
 > Part of the kubeNimbus engineering contract, moved out of `CLAUDE.md` so it loads only when relevant. Same discipline applies: keep it current in the PR that changes what it describes.
 
 
+**Since the log-viewer pass the classes colour the level keyword, not the line.** On an
+ASP.NET pod every line is `info:`, and a pane that coloured whole lines turned blue from top
+to bottom — colour on every line says nothing about any of them, and it was the first thing
+the owner asked to change. No viewer surveyed colours an info line's text (Grafana, VS Code's
+log grammar and stern colour the level word; Dozzle and Chrome mark the row;
+`docs/research/2026-09-28-log-viewers.md`). So the classes now set
+`LogLineText.LevelBrush`, which `LogLineText.CreateTextLayout` applies as a style override on
+the keyword's span only (`LogLineViewModel.DisplayLevelStart`/`LevelLength`), and the row is
+marked by `Border.logRow`: a 2px bar for an error or a warning, a faint wash for an error
+only. The rest of this page still holds, and for the same reason: a null `LevelBrush` adds no
+override at all, so an unclassified line's text inherits exactly as before.
+
 The log pane's severity colouring is `SelectableTextBlock.logError` / `.logWarn` /
 `.logInfo`, set from three bools on `LogLineViewModel` and styled in `Styles/Theme.axaml`.
 `LogSeverityToBrushConverter` is **gone**, and the reason is worth the paragraph because

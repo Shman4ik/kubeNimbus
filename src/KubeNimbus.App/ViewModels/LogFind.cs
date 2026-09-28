@@ -38,14 +38,14 @@ public sealed class LogFind
     /// the newest match; otherwise the current one is kept if it is still shown, and the
     /// newest is taken if it is not (it was trimmed, or a level or pod was hidden).
     /// </summary>
-    public void Update(IEnumerable<LogLineViewModel> shown, string query, bool newQuery)
+    public void Update(IEnumerable<LogLineViewModel> shown, LogQuery? query, bool newQuery)
     {
         _matches.Clear();
-        if (query.Length > 0)
+        if (query is not null)
         {
             foreach (var line in shown)
             {
-                if (line.Contains(query))
+                if (line.Matches(query))
                 {
                     _matches.Add(line);
                 }
@@ -54,6 +54,21 @@ public sealed class LogFind
 
         var keep = !newQuery && _current is not null && _matches.Contains(_current);
         MoveTo(keep ? _current : _matches.Count > 0 ? _matches[^1] : null);
+    }
+
+    /// <summary>
+    /// Puts the current match on <paramref name="line"/> when it is one of the matches —
+    /// a filtered line double-clicked to be seen in place. False when it is not a match.
+    /// </summary>
+    public bool Select(LogLineViewModel line)
+    {
+        if (!_matches.Contains(line))
+        {
+            return false;
+        }
+
+        MoveTo(line);
+        return true;
     }
 
     /// <summary>Forgets every match — the search box was emptied or the pane switched to filtering.</summary>
