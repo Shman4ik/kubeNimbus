@@ -2421,3 +2421,19 @@ PNGs differing between runs — all four are log panes that merge several replay
 ordered by flush tick, the log panes' own design decision and the remaining half of
 ENG-10. Unverified: real-window behaviour on Windows beyond `Avalonia.Headless`; ENG-5's
 early-save guard against a genuinely slow cluster; `test.sh` on Linux or macOS.
+
+### Log lines: terminal colour codes, .NET levels, one-pod column (2026-09-28)
+
+Reported from a real ASP.NET pod on the Applications page: every line began with a box glyph
+and `[40m[32minfo[39m[22m[49m`, and the merged pane with one pod printed its name down the
+whole left edge. `TerminalEscapes.Strip` now removes ECMA-48 escapes and other control
+characters in `LogLineViewModel`'s constructor, so display, search, severity and Copy/Save
+all see clean text; .NET's `fail:`/`crit:` read as Error; the pod column shows only while
+more than one pod is shown (`ShowSourceColumn`). The README's `application-page.light.png`
+and the Store's `02-applications-page.light.png` were re-rendered on Windows.
+
+Checks: build clean; App tests 425/425, four of them new (`LogLineCleanupTests`); the
+harness's log and Applications-page scenarios rendered, `ux-` checks included. Not run: Core
+tests (no Core change), the NativeAOT publish (plain string code and a compiled
+`MultiBinding`), a live pod with coloured output — the fix was checked against the reported
+line's bytes, not the pod itself.

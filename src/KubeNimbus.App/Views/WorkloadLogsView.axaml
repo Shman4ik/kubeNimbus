@@ -189,13 +189,22 @@
               <DataTemplate x:DataType="vm:LogLineViewModel">
                 <!-- The pod name is a fixed-width column so the messages line up down
                      the pane; without it every line's text starts at a different x and
-                     a merged stream is harder to read than the separate ones were. -->
+                     a merged stream is harder to read than the separate ones were. Only
+                     while more than one pod is shown (ShowSourceColumn): with one, it is
+                     the same name on every line. -->
                 <Grid ColumnDefinitions="Auto,*">
                   <TextBlock Grid.Column="0" Text="{Binding Source.ShortName}" Width="150" Margin="0,0,10,0"
                              FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11"
                              TextTrimming="CharacterEllipsis" VerticalAlignment="Top"
-                             Foreground="{Binding Source.Brush}" IsVisible="{Binding HasSource}"
-                             ToolTip.Tip="{Binding Source.PodName}" />
+                             Foreground="{Binding Source.Brush}"
+                             ToolTip.Tip="{Binding Source.PodName}">
+                    <TextBlock.IsVisible>
+                      <MultiBinding Converter="{x:Static BoolConverters.And}">
+                        <Binding Path="HasSource" />
+                        <Binding Path="$parent[UserControl].((vm:WorkloadLogsTabViewModel)DataContext).ShowSourceColumn" />
+                      </MultiBinding>
+                    </TextBlock.IsVisible>
+                  </TextBlock>
                   <!-- Severity as classes rather than a Foreground binding — see the
                        `.logError`/`.logWarn`/`.logInfo` styles in Theme.axaml for why a
                        binding that produces UnsetValue is not safe on this property. -->

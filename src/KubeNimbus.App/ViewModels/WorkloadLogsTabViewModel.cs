@@ -243,6 +243,15 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
     [ObservableProperty]
     private string _summary = "";
 
+    /// <summary>
+    /// Whether each line is prefixed with its pod. Only while more than one pod is shown:
+    /// with one, every line carries the same name — the application page's "All pods,
+    /// merged, 1 pod" printed it down the whole left edge, 160px of every line spent on
+    /// nothing. Copy and Save keep the prefix either way.
+    /// </summary>
+    [ObservableProperty]
+    private bool _showSourceColumn;
+
     private bool _applyingFollowState;
 
     /// <summary>
@@ -1203,6 +1212,7 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
             ? $"{Sources.Count} pod{(Sources.Count == 1 ? "" : "s")}"
             : $"{included} of {Sources.Count} pods";
         Summary = $"{pods} · {_allLogLines.Count:N0} line{(_allLogLines.Count == 1 ? "" : "s")}";
+        ShowSourceColumn = included > 1;
     }
 
     /// <summary>

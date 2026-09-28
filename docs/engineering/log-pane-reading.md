@@ -112,6 +112,31 @@ tooltip names the local offset. Local conversion is `DateTimeOffset.ToLocalTime(
 display says; a converted timestamp pasted into an incident ticket is a second clock for the
 next reader to reconcile.
 
+## Terminal colour codes are removed, not drawn
+
+A container's stdout is often written for a terminal that is not attached: .NET's console
+logger, zap, Rails and most CLI tools colour their output with ANSI SGR sequences, and the
+kubelet stores those bytes verbatim. The panes drew them as text — a box glyph for ESC, then
+`[40m[32minfo[39m[22m[49m` — at the start of every line of a real ASP.NET pod, ahead of the
+words and in the way of the search. `TerminalEscapes.Strip` removes every ECMA-48 escape
+(CSI, OSC and the other string sequences, two-byte escapes) and every other control
+character except tab, once, in `LogLineViewModel`'s constructor, so `RawLine` is already
+clean: the display, the search, the severity keywords and Copy/Download all see the same
+text. A line with no control character is returned as the same string, so an application
+that does not colour its output costs nothing.
+
+They are removed rather than rendered as colour, on purpose. The pane's own colour is the
+severity, and it means the same on every line; an application's colours would compete with
+it line by line. And a line drawn as one bound string is what keeps selection, Copy and the
+search highlight simple (`Controls/LogLineText`) — rendering colour means `Inlines` of runs
+and giving all three up. If that trade is ever wanted, this is the decision to revisit.
+
+**.NET's console-logger levels are severities.** `Microsoft.Extensions.Logging` prints
+`info:`, `warn:`, `fail:`, `crit:`. The first two already matched the INFO/WARN keywords once
+the escapes were gone; `fail:` and `crit:` are read as Error, and only with the colon, the
+shape that logger prints, so "tests fail" in a sentence is not an error line.
+`LogLineCleanupTests` pins all of this.
+
 ## What is remembered, and what deliberately is not (FEAT-37)
 
 Timestamps, UTC and Wrap are preferences: `AppSettings.LogShowTimestamps` / `LogTimestampsUtc`

@@ -28,7 +28,11 @@ public sealed partial class LogLineViewModel : ObservableObject
     /// </summary>
     internal static Func<DateTimeOffset, DateTimeOffset> ToLocal { get; set; } = at => at.ToLocalTime();
 
-    /// <summary>The server's own line, timestamp included — what Copy and Download write.</summary>
+    /// <summary>
+    /// The server's own line, timestamp included, with terminal escape sequences removed
+    /// (<see cref="TerminalEscapes"/>) — what Copy and Download write. Removed here rather
+    /// than only on screen, so a copied line pasted into a ticket is the line that was read.
+    /// </summary>
     public string RawLine { get; }
 
     public string? Timestamp { get; }
@@ -118,8 +122,8 @@ public sealed partial class LogLineViewModel : ObservableObject
 
     public LogLineViewModel(string rawLine, bool showTimestamp, LogSourceViewModel? source = null, bool utcTimestamp = false)
     {
-        RawLine = rawLine;
-        (Timestamp, _at, Message) = SplitTimestamp(rawLine);
+        RawLine = TerminalEscapes.Strip(rawLine);
+        (Timestamp, _at, Message) = SplitTimestamp(RawLine);
         Severity = DetectSeverity(Message);
         Source = source;
         _showTimestamp = showTimestamp;
@@ -170,7 +174,11 @@ public sealed partial class LogLineViewModel : ObservableObject
 
     private static LogSeverity DetectSeverity(string message)
     {
-        if (ContainsToken(message, "FATAL") || ContainsToken(message, "PANIC") || ContainsToken(message, "ERROR"))
+        // fail: and crit: are .NET's console logger (Microsoft.Extensions.Logging's four-letter
+        // level names; warn: and info: already match below). Only with the colon, the shape
+        // that logger prints, so "tests fail" in a sentence is not an error line.
+        if (ContainsToken(message, "FATAL") || ContainsToken(message, "PANIC") || ContainsToken(message, "ERROR")
+            || ContainsToken(message, "FAIL", followedBy: ':') || ContainsToken(message, "CRIT", followedBy: ':'))
         {
             return LogSeverity.Error;
         }
@@ -194,9 +202,10 @@ public sealed partial class LogLineViewModel : ObservableObject
     /// <c>infofmt</c> blue — a severity heuristic that fires on the request path is
     /// worse than none, because it teaches you to stop trusting the colour.
     /// The boundary is "not a letter or digit", so <c>[ERROR]</c>, <c>level=error</c>,
-    /// <c>ERROR:</c> and <c>"level":"warn"</c> all still match.
+    /// <c>ERROR:</c> and <c>"level":"warn"</c> all still match. With
+    /// <paramref name="followedBy"/>, the token must be immediately followed by that character.
     /// </summary>
-    private static bool ContainsToken(string text, string token)
+    private static bool ContainsToken(string text, string token, char? followedBy = null)
     {
         var start = 0;
         while (start <= text.Length - token.Length)
@@ -209,7 +218,9 @@ public sealed partial class LogLineViewModel : ObservableObject
 
             var before = index == 0 || !char.IsLetterOrDigit(text[index - 1]);
             var afterIndex = index + token.Length;
-            var after = afterIndex == text.Length || !char.IsLetterOrDigit(text[afterIndex]);
+            var after = followedBy is { } required
+                ? afterIndex < text.Length && text[afterIndex] == required
+                : afterIndex == text.Length || !char.IsLetterOrDigit(text[afterIndex]);
             if (before && after)
             {
                 return true;
