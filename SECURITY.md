@@ -61,7 +61,8 @@ no auto-apply, and no "fix it for you" behaviour.
 the Kubernetes API servers of the contexts you connect to (through the proxy a
 cluster's `proxy-url` names, when it names one). No analytics, no
 crash reporting, no update pings. This is a permanent non-goal, not a default
-that might change.
+that might change. What the app stores on your computer, and everything it does
+send, is listed in the [privacy policy](PRIVACY.md).
 
 **RBAC answers come from the API server where one exists.** "My permissions"
 is a real `SelfSubjectRulesReview` and per-subject verification is a real
