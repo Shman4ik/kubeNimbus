@@ -103,8 +103,9 @@ forget rule 1.
 ## Releasing
 
 Tag-driven, `.github/workflows/release.yml`. The procedure is written for
-humans in [CONTRIBUTING.md](../../../CONTRIBUTING.md#cutting-a-release-maintainers); the
-design decisions behind it are here.
+humans in [CONTRIBUTING.md](../../../CONTRIBUTING.md#cutting-a-release-maintainers), what
+to walk before tagging is [`docs/RELEASE-CHECKLIST.md`](../../../docs/RELEASE-CHECKLIST.md)
+(add a log row for every release), and the design decisions behind the pipeline are here.
 
 - **The version lives in exactly one place**, `<VersionPrefix>` in
   `Directory.Build.props`, and a tagged build overrides it with

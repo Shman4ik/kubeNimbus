@@ -134,8 +134,11 @@ and reasoning are in CLAUDE.md, "Microsoft Store (MSIX)".
       larger: `design/store/screenshots/`, 1920×1080 — the README's
       `design/screenshots/` are 1280 wide and do not qualify), search terms
       (`kubernetes`, `k8s`, `kubectl`, `cluster`, `devops`), and the support and
-      privacy links (this repo's Issues, and `SECURITY.md` for the "no telemetry,
-      no persisted credentials" claim).
+      privacy links (this repo's Issues, and **`PRIVACY.md`** for the privacy
+      policy URL). The first submission pointed the privacy field at `SECURITY.md`
+      and failed certification on 10.5.1 ("resolves to a webpage that doesn't
+      display a privacy policy"); a security policy is not a privacy policy.
+      The text to paste is in `design/store/listing/store-listing.md`.
 - [ ] **Properties and age rating** — category Developer tools; declare **no data
       collection**, which is true and is what makes the questionnaire short.
 - [ ] **The reviewer needs a working app with no cluster.** This is what the demo

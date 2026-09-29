@@ -12,190 +12,152 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
-- Settings, About and the shortcuts sheet now take keyboard focus when they open and hand it
-  back when they close. Opened from a menu, they used to leave focus in the field behind them,
-  so Escape did not close the page and anything you typed went into that field.
-- A switched-on chip toggle (Wrap, the filter pin and the like) keeps its text readable. The
-  text used to turn white on the chip's light blue wash, so the one chip you had turned on
-  was the one you could not read.
-- kubeNimbus reads kubeconfig files itself rather than through the Kubernetes client
-  library's loader. An empty kubeconfig is now read as one with no contexts instead of an
-  error, a key written twice keeps its last value as kubectl does, and a file that does not
-  parse is reported with the line and column of the problem.
-- Updated dependencies: Avalonia 12.1.3, SvcSystems.UI.Terminal 2.0.0 (XTerm.NET 2) for the
-  exec terminal, and YamlDotNet 18.1.0. YamlDotNet had been held at 16.3.0 because the
-  client library's own kubeconfig reader broke with any newer version; see the item above.
+## [0.5.0] - 2026-09-29
 
-- Primary buttons (Apply, Connect and the like), checked boxes and switched-on toggles are the
-  app's own blue on every machine. They used to take the Windows accent colour, so on a PC
-  with a grey or orange accent they came out grey or orange. Red buttons also stay red under
-  the pointer instead of turning grey.
-- The command palette and the cluster switcher are no longer black in the dark theme. Their
-  card is a grey a step lighter than the window, with a softer shadow, over the same dim
-  backdrop as every other overlay; the light theme dims less. The Preferences, About and
-  keyboard-shortcut panels get the same card. Lists that had no style of their own now
-  highlight the selected row in the app's blue wash instead of the Windows accent colour.
-- Log panes no longer print terminal colour codes. Applications that colour their console
-  output (ASP.NET, zap, Rails and most CLI tools) used to show a box glyph and
-  `[40m[32minfo[39m…` at the start of every line; the codes are now removed from what is
-  shown, searched, copied and saved. .NET's `fail:` and `crit:` lines are coloured as errors.
-- A merged log with a single pod no longer repeats the pod's name at the start of every line.
-  The column comes back as soon as a second pod is shown, and Copy and Save keep it either way.
-- Log panes colour the level word instead of the whole line, so a log where every line is
-  `info:` no longer turns blue. Error rows carry a red bar and a faint wash, warning rows an
-  amber bar, and timestamps are dimmed. The level is read from the first level word the logger
-  printed, from a JSON or `level=` field when there is one, and from klog's `E0928` header; an
-  indented stack trace takes the level of the line that threw it.
-- Log search takes regular expressions (Alt+R) and matching case (Alt+C). `!word` hides the
-  lines that contain it, in either mode, and the box says how many it hid. While filtering, the
-  new Context chip keeps 2 to 25 lines around each match, like `grep -C`, and double-clicking a
-  filtered line shows it in the full log.
-- Log panes count their error and warning lines; a click on the count, or Alt+↑ / Alt+↓, jumps
-  to the latest error and then the ones before it, without hiding anything. A strip beside the
-  scrollbar marks every error, warning and match, and a click on it scrolls there.
-- A search can be pinned as a coloured highlight (Alt+P, up to five), which stays marked while
-  you search for something else. A JSON log line opens into its fields with the chevron beside it.
-- The Resources mode now looks like the Applications mode. The resource list sits in a card
-  on the window's own tone instead of on a black panel, its title is the same size as
-  "Applications", and every table uses the Applications list's type: small semibold column
-  headers, 12px rows with the name in semibold, and fainter row rules. Before, switching
-  modes swapped the whole content area between two different-looking surfaces. The same
-  table style now applies to pgNimbus through the shared nimbusUi library.
-- The cluster switcher is a `+` after the last cluster tab. The cluster in front is no longer
-  named twice in the top bar.
-- The status bar appears only when there is something to report. A healthy connected tab no
-  longer spends a row on "Connected — Kubernetes v…"; the version is in the tab's tooltip.
-- Nodes, PersistentVolumes and other cluster-scoped kinds say "Cluster-wide" in place of a
-  greyed-out namespace picker that still showed the previous namespace.
-- The Applications search box is at the right of the title row, where the Resources list
-  keeps its own. The Sync column and the "Not in Argo CD" chip only appear on a cluster with
-  an Argo CD application, a group heading only appears when there are two groups, and only
-  the revision in Last deploy is monospace.
-- Pods in workload and node detail show their status as the same coloured pill as the main
-  list. The workload pane's Refresh and Actions are real buttons instead of bare words.
-- The YAML editor has a light-theme palette. It used the dark one on both themes, so numbers,
-  keys and anchors were pale on white; every colour now reads at 4.5:1 or better.
-- The access review's "Loading…" no longer shows on the "Who can…" tab, where it read as that
-  query still running.
-- The YAML editor's Delete button is drawn as a destructive button and no longer sits right
-  beside Apply.
-- The README opens on the Applications list, and every README screenshot was re-rendered;
-  the gallery is now half light theme and half dark. The Microsoft Store listing has its own
-  1920×1080 set of eight, also half and half, in `design/store/screenshots/`; the README's
-  1280-wide images were below the Store's minimum.
-- The log panes' toolbar is shorter: Timestamps, UTC, Wrap, Clear and Save moved into a `⋯`
-  menu. Copy stays on the toolbar.
-- A crash-looping application no longer flickers between Degraded and Healthy. Between two
-  back-offs a crash-looping container is briefly running and then terminated, and only the
-  waiting phase was being read, so the same app read Healthy, then "0 of 1 pods Ready", then
-  crash-looping within half a minute. Every phase of the loop now gives the same verdict.
-- Esc now returns from an application page to the list when the page was opened by
-  double-click. Before, focus stayed on the hidden list row and Esc did nothing.
-- Where RBAC does not allow listing namespaces, the namespace picker now opens a namespace
-  by name: type it and press Enter. Before, a user granted one namespace and no context
-  namespace had no way to narrow the list to it.
-- One kubeconfig file that cannot be parsed no longer hides every context. The other
-  files in `$KUBECONFIG` still load, and the status bar names the file that failed and
-  what the parser said.
-- Nodes, PersistentVolumes, ClusterRoles and other cluster-scoped kinds no longer show an
-  empty Namespace column.
-- When a followed log stream ends, the log pane now says why: the connection closed while
-  the container is still running, the container restarted, it exited (with its exit
-  code), or it has not started yet. It used to say the container had exited in every case,
-  including when a load balancer had only dropped an idle connection.
-- A misspelled field in a YAML apply now shows as a refused field on real clusters, which
-  answer it with HTTP 500 rather than 400.
-- CRD list columns now show an array or object value as kubectl does (for example Gateway
-  API HTTPRoute hostnames), and resolve backslash-escaped dotted keys such as Crossplane's
-  `crossplane\.io/external-name`.
-- The multi-pod log pane no longer leaves a freshly started pod without lines when its
-  stream was opened just before the container started.
-- Kubeconfig folders: pick a folder and every kubeconfig in it is read, including files
-  added later. The kubeconfig is rescanned when the window regains focus.
-- The cluster's `proxy-url` is honoured (HTTP, HTTPS, SOCKS5), including for exec and
-  port-forward.
-- A connect that fails now says, in place of the list, which step failed, why, and with
-  what (kubeconfig, context, server, user, sign-in method), with Retry and a terminal on
-  the cluster.
-- Reconnect: re-read the kubeconfig and re-run its credential plugin without closing the
-  tab. A 401 is treated as expired credentials and re-resolved automatically.
-- A credential plugin named bare in the kubeconfig (`command: aws`) is found where a login
-  shell would find it, so it works from an app launched from Finder, the Dock or a desktop
-  launcher.
-- On Linux with a fresh home directory, the discovery cache and settings could be written
-  into the current directory.
-- The no-kubeconfig screen no longer prints the same sentence in its card and in the
-  status bar.
-- Service detail: double-click a Service to see the pods its selector matches next to the
-  endpoints actually serving, with one sentence saying whether traffic can reach them.
-  "The selector matches no pod", a selector-less service and an ExternalName are each
+### Added
+
+- **Applications mode.** A cluster now opens on Applications: every Argo CD Application, and
+  every workload no Application tracks, with its health and a one-line reason such as
+  "Crash-looping (exit 1) · 2 pods not created: namespace quota", sorted so what needs
+  attention comes first. Chips narrow it to what needs attention, what was deployed in the
+  last hour, or what is not in Argo CD, and the search box finds an app by name or
+  namespace. The explorer is still there as **Resources**, one click (or Ctrl/Cmd+Shift+R)
+  away, and the choice is remembered.
+- **The application page.** Enter on an application shows what the cluster reports is
+  wrong, each fact with the field it was read from; its pods; the Services, Ingresses,
+  ConfigMaps, Secrets, HPA and PDB it is wired to; a timeline of deploys, container exits
+  and warning events over the last hour; what the last deploy changed in the pod template,
+  with a link to compare the two commits on GitHub, GitLab, Azure DevOps or Bitbucket; and
+  the logs, opened on a crash-looping pod's last run and ending with its exit code. Restart,
+  Sync and Edit YAML are on the page, and Edit YAML warns first when Argo CD would revert a
+  manual edit.
+- Works with narrow permissions: when listing across the cluster is refused, Applications
+  reads the namespaces it knows and says which it covers and which were refused. The
+  namespace picker opens a namespace by name (type it, press Enter) where listing
+  namespaces is not allowed.
+- **Service detail.** Double-click a Service to see the pods its selector matches next to
+  the endpoints actually serving, with one sentence saying whether traffic can reach them.
+  A selector that matches no pod, a selector-less Service and an ExternalName are each
   stated plainly.
-- Ingress detail: every route as host/path → backend, TLS per host, and a URL you can open
-  or copy. The backend opens its Service.
-- NetworkPolicy detail: the rules in words (who may reach the selected pods, on which
+- **Ingress detail.** Every route as host/path to backend, TLS per host, and a URL you can
+  open or copy. The backend opens its Service.
+- **NetworkPolicy detail.** The rules in words (who may reach the selected pods, on which
   ports) and the pods the policy selects. An empty selector means all pods, and the pane
   says so.
 - Ingress, Endpoints, EndpointSlice and NetworkPolicy lists show kubectl's own columns.
-- Gateway API kinds (Gateway, HTTPRoute, GRPCRoute…) are listed under Network instead of
-  CRDs.
-- The log search finds as well as filters. Matches are highlighted in place with
-  "n of m", and Enter / Shift+Enter step between them; the funnel switches to filtering.
-- A Levels filter (Error / Warn / Info) in the log panes. Lines with no level are always
-  shown.
-- Clear in the log panes, without restarting the stream.
-- Log timestamps in local time, with UTC one click away.
-- The log panes remember timestamps, UTC and wrap across panes and restarts. They do not
-  remember Previous or the search.
-- Logs and shells open on the container named by `kubectl.kubernetes.io/default-container`,
-  as kubectl does.
-- Logs have one icon everywhere.
-- A PersistentVolumeClaim or ServiceMonitor no longer offers "Logs (all pods)".
-- Pods that never started read "not started" in the multi-pod log pane, and are picked up
-  once they run.
-- Run a CronJob now, suspend it or resume it from the list's menu or the palette, with a
-  confirm naming what happens. After a run, "Open Job" shows the Job's pods.
-- Jobs open in the workload pane, which shows their pods, completions and failures against
-  the backoff limit.
+- **CronJobs:** run one now, suspend it or resume it from the list's menu or the palette,
+  with a confirm naming what happens. After a run, "Open Job" shows the Job's pods.
+- Jobs open in the workload pane, with their pods, completions and failures against the
+  backoff limit.
 - A Secret carrying a certificate shows whose it is and when it expires, coloured as expiry
   nears, plus the whole chain (subject, SANs, issuer, validity). This works without
   revealing values, and the key is never read.
-- PersistentVolumeClaims and PersistentVolumes name the other end of their binding and
-  open it.
-- An environment variable taken from a ConfigMap or Secret key opens that object.
-- Node detail's pod list is live — pods appear and disappear as they are scheduled and
-  evicted — and a drain now watches for evictions instead of re-listing every two seconds.
-- Node detail's pods open on double-click and Enter; the list fits a narrow window.
-- Workload and node detail kept losing the selected pod when you switched inspector tabs
-  and back.
-- Refreshing a workload's detail now updates the "Unhealthy only" list immediately.
-- A Job was offered a rollout restart, which its immutable template can only refuse.
+- PersistentVolumeClaims and PersistentVolumes name the other end of their binding and open
+  it. An environment variable taken from a ConfigMap or Secret key opens that object.
+- **Log search, rebuilt.** Matches are highlighted in place with "n of m", and Enter /
+  Shift+Enter step between them; the funnel switches to filtering. Regular expressions
+  (Alt+R) and match case (Alt+C) are supported, `!word` hides the lines that contain it,
+  and while filtering the Context chip keeps 2 to 25 lines around each match, like
+  `grep -C`. Double-click a filtered line to see it in the full log.
+- A search can be pinned as a coloured highlight (Alt+P, up to five), which stays marked
+  while you search for something else.
+- A Levels filter (Error / Warn / Info) in the log panes. Lines with no level are always
+  shown.
+- Log panes count their error and warning lines. A click on the count, or Alt+↑ / Alt+↓,
+  jumps between errors without hiding anything, and a strip beside the scrollbar marks
+  every error, warning and match.
+- A JSON log line opens into its fields with the chevron beside it.
+- Clear in the log panes, without restarting the stream. Timestamps show in local time,
+  with UTC one click away, and the panes remember timestamps, UTC and wrap across restarts.
+- When a followed log stream ends, the pane says why: the connection closed while the
+  container is still running, the container restarted, it exited (with its exit code), or
+  it has not started yet.
+- **Connection failures are explained.** A connect that fails says, in place of the list,
+  which step failed, why, and with what (kubeconfig, context, server, user, sign-in method),
+  with Retry and a terminal on the cluster.
+- Reconnect re-reads the kubeconfig and re-runs its credential plugin without closing the
+  tab, and an expired credential (HTTP 401) is re-resolved automatically.
+- The cluster's `proxy-url` is honoured (HTTP, HTTPS, SOCKS5), including for exec and
+  port-forward.
+- Kubeconfig folders: pick a folder and every kubeconfig in it is read, including files
+  added later. The kubeconfig is rescanned when the window regains focus.
 - The sidebar's Recent kinds are remembered per cluster across restarts.
-- Only one sidebar row is highlighted at a time, including its copy in Recent.
-- The list header keeps search, the unhealthy-only chip and Refresh on screen at 1024px in
-  fleet mode with a connection warning.
-- The fleet list fits 1280px; the Events list's headers keep their sort arrow at 1024px.
-- The command palette fits windows narrower than itself.
+- A privacy policy, linked from About.
+
+### Changed
+
+- The Resources mode now looks like the Applications mode: the list sits in a card on the
+  window's own tone instead of a black panel, and every table uses the same type, with
+  small semibold headers, 12px rows with the name in semibold, and fainter row rules.
+- Log panes colour the level word instead of the whole line, so a log where every line is
+  `info:` no longer turns blue. Error rows carry a red bar and a faint wash, warning rows an
+  amber bar, and timestamps are dimmed. The level is read from the first level word, from a
+  JSON or `level=` field, or from klog's `E0928` header, and an indented stack trace takes
+  the level of the line that threw it.
+- Log panes no longer print terminal colour codes. Applications that colour their console
+  output (ASP.NET, zap, Rails and most CLI tools) used to show `[40m[32minfo[39m` at the
+  start of every line. .NET's `fail:` and `crit:` lines are coloured as errors.
+- The log toolbar is shorter: Timestamps, UTC, Wrap, Clear and Save are in a `⋯` menu. A
+  merged log with a single pod no longer repeats the pod's name on every line.
+- Logs and shells open on the container named by
+  `kubectl.kubernetes.io/default-container`, as kubectl does. Logs have one icon
+  everywhere.
+- Primary buttons, checked boxes and switched-on toggles are the app's own blue on every
+  machine instead of the Windows accent colour, and red buttons stay red under the pointer.
+- The command palette, the cluster switcher and the Preferences, About and shortcut panels
+  sit on a grey card in the dark theme instead of black.
+- The cluster switcher is a `+` after the last cluster tab, so the cluster in front is no
+  longer named twice in the top bar.
+- The status bar appears only when there is something to report; the server version moved
+  to the tab's tooltip.
+- Cluster-scoped kinds (Nodes, PersistentVolumes, ClusterRoles) say "Cluster-wide" in place
+  of a greyed-out namespace picker, and no longer show an empty Namespace column.
+- Gateway API kinds (Gateway, HTTPRoute, GRPCRoute and the rest) are listed under Network
+  instead of CRDs.
+- Pods in workload and node detail show their status as the same pill as the main list.
+  Node detail's pod list is live, opens pods on double-click and Enter, and a drain watches
+  for evictions instead of re-listing every two seconds.
+- On Applications, the search box sits at the right of the title row, and the Sync column,
+  the "Not in Argo CD" chip and group headings appear only when they have something to say.
+- The YAML editor has a light-theme palette, and its Delete button is drawn as a
+  destructive button, away from Apply.
+- A credential plugin named bare in the kubeconfig (`command: aws`) is found where a login
+  shell would find it, so it works when the app is launched from Finder, the Dock or a
+  desktop launcher.
+- kubeNimbus reads kubeconfig files itself. An empty kubeconfig is read as one with no
+  contexts instead of an error, a key written twice keeps its last value as kubectl does,
+  and a file that does not parse is reported with its line and column. One such file no
+  longer hides the contexts in the other files.
+- Updated Avalonia to 12.1.3, the exec terminal to SvcSystems.UI.Terminal 2.0.0, and
+  YamlDotNet to 18.1.0.
+
+### Fixed
+
+- A crash-looping application no longer flickers between Degraded and Healthy between two
+  back-offs.
+- Esc returns from an application page to the list when the page was opened by
+  double-click.
+- A switched-on chip toggle (Wrap and the like) keeps its text readable.
+- A misspelled field in a YAML apply shows as a refused field on real clusters, which
+  answer it with HTTP 500 rather than 400.
+- CRD list columns show an array or object value as kubectl does (for example Gateway API
+  HTTPRoute hostnames), and resolve backslash-escaped dotted keys such as Crossplane's
+  `crossplane\.io/external-name`.
+- The multi-pod log pane no longer leaves a freshly started pod without lines, picks up
+  pods that had not started yet, and marks them "not started" until they do.
+- Workload and node detail no longer lose the selected pod when you switch inspector tabs.
+- Refreshing a workload's detail updates the "Unhealthy only" list immediately.
+- A Job is no longer offered a rollout restart, and a PersistentVolumeClaim or
+  ServiceMonitor no longer offers "Logs (all pods)".
+- Only one sidebar row is highlighted at a time.
+- The list header, the fleet list, the Events list and the command palette fit narrow
+  windows.
+- The access review's "Loading…" no longer shows on the "Who can…" tab.
+- On Linux with a fresh home directory, the discovery cache and settings are no longer
+  written into the current directory.
+- The no-kubeconfig screen no longer prints the same sentence twice.
 - The demo cluster shows usage for every running pod.
 - Discovery no longer lists a resource whose server reports `"verbs": []`.
-
-## [0.5.0] - 2026-09-26
-
-- A cluster now opens on **Applications**: every Argo CD Application, and every workload no
-  Application tracks, with its health and a one-line reason — "Crash-looping (exit 1) · 2 pods
-  not created: namespace quota" — sorted so what needs attention comes first. Chips narrow it
-  to what needs attention, what was deployed in the last hour, or what is not in Argo CD, and
-  the search box finds an app by name or namespace. The explorer is still there as
-  **Resources**, one click (or Ctrl/Cmd+Shift+R) away, and the choice is remembered.
-- Enter on an application opens its page: what the cluster reports is wrong, each fact with
-  the field it was read from; its pods; the Services, Ingresses, ConfigMaps, Secrets, HPA and
-  PDB it is wired to (click one to see it in Resources); a timeline of deploys, container
-  exits and warning events over the last hour; what the last deploy changed in the pod
-  template, with a link to compare the two commits on GitHub, GitLab, Azure DevOps or
-  Bitbucket; and the logs, opened on a crash-looping pod's last run and ending with its exit
-  code. Restart, Sync and Edit YAML are on the page, and Edit YAML warns first when Argo CD
-  would revert a manual edit.
-- Works with narrow permissions: when listing across the cluster is refused, the list reads
-  the namespaces it knows and says which it covers and which were refused.
 
 ## [0.4.0] - 2026-09-24
 

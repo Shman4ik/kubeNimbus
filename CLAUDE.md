@@ -820,6 +820,30 @@ cluster button and Ctrl/Cmd+P dead on exactly the machine where the demo cluster
 the only cluster there is. `AddNewTabCommand.CanExecute` is now unconditionally true
 for the same reason: the switcher always has at least the demo row in it.
 
+## The privacy policy and the Store listing text
+
+[`PRIVACY.md`](PRIVACY.md) is a contract like this file, and a Store certification has
+already failed on it once: the 2026-09-28 submission (0.4.0) was rejected under policy 10.5.1
+because the listing's privacy URL pointed at `SECURITY.md`, which says what the app does not
+do but not what it collects, stores or shares. Four rules keep that from happening again:
+
+1. **The address is a fixed point.** `https://github.com/Shman4ik/kubeNimbus/blob/main/PRIVACY.md`
+   is in Partner Center (Properties → Privacy policy URL) and in `AboutView`. Renaming or moving
+   the file is a change to both plus the README and `SECURITY.md`, and a listing that points at a
+   page that stops resolving fails the same check. Never point the field at another document.
+2. **A change to what the app stores or sends changes the page in the same PR.** A new file under
+   `AppDataDirectory`, a new setting persisted, a new network destination or a new button that
+   opens a URL is a line in `PRIVACY.md` and a new "Effective" date. Hard rule 4 and the
+   "No telemetry" paragraph of `SECURITY.md` are the same claims from the security side.
+3. **The policy says only what the code does.** Its file list is checked against
+   `AppSettings`, `WorkspaceSettings`, `DiscoveryCache` and `TerminalLauncher`, and its network
+   list against a grep for `HttpClient` and `Process.Start` in `src/`. A policy that over-claims is
+   as wrong as one that omits.
+4. **The listing text lives in [`design/store/listing/store-listing.md`](design/store/listing/store-listing.md)**
+   — What's new, short description, description, features, keywords, certification notes and the
+   privacy URL — so it is reviewed like code. Nothing uploads it; pasting it into Partner Center is a
+   manual step, like the screenshots.
+
 ## Settings, and what belongs in which file
 
 There are **two** persisted files and the split is not arbitrary:
@@ -1133,12 +1157,14 @@ Public-facing docs, each with one job — don't duplicate content between them:
 | `README.md` | Someone deciding whether to download it. Screenshots, download/install, what it does, limitations. |
 | `CONTRIBUTING.md` | Someone opening a PR. Setup, verification, PR expectations, the release procedure. |
 | `SECURITY.md` | Reporting a vulnerability, plus the **security model** the app claims to hold (no persisted credentials, no telemetry, exec plugins run external programs). |
+| `PRIVACY.md` | The privacy policy: every file the app writes, every connection it makes, what a cluster sees. The Microsoft Store listing's privacy URL and the About box's "Privacy policy" button both point at it — see "The privacy policy" below. |
 | `CHANGELOG.md` | Release history — and machine-read: the release workflow lifts the section matching a tag out of it verbatim. |
 | `CODE_OF_CONDUCT.md` | Contributor Covenant 2.1, unmodified apart from the contact address. |
 | `CLAUDE.md` (this file) | Whoever is changing the code. The engineering contract and the *why* behind every rule. |
 | `docs/product-loop/` | The release train's live state (`TRAIN.md`), product assessment, competitor matrix and per-release history. |
 | `docs/BACKLOG.md` | The long-lived evidence pool: owner-pinned Ready rows and the Inbox the release train mines — see below. |
 | `docs/PRE-LAUNCH-CHECKLIST.md` | One-time: making the repo public, cutting the first release, and the Microsoft Store submission. Delete it once the launch is behind us. |
+| `docs/RELEASE-CHECKLIST.md` | Whoever cuts a release. What to walk before tagging (gates, the manual pass on the AOT build against the sandbox, media, ship), and a log of what each release's pass found. Same shape as pgNimbus's. |
 
 ## The release train
 
