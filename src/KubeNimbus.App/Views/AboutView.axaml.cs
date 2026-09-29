@@ -32,11 +32,19 @@ public partial class AboutView : UserControl
         CopyrightText.Text = string.IsNullOrEmpty(copyright) ? "MIT License" : $"{copyright} · MIT License";
     }
 
-    private void OnGitHubClick(object? sender, RoutedEventArgs e)
+    private void OnGitHubClick(object? sender, RoutedEventArgs e) =>
+        OpenInBrowser("https://github.com/Shman4ik/kubeNimbus");
+
+    // The address the Microsoft Store listing's privacy policy field holds. Store policy
+    // 10.5.1 wants the policy reachable from inside the app as well as from the listing.
+    private void OnPrivacyClick(object? sender, RoutedEventArgs e) =>
+        OpenInBrowser("https://github.com/Shman4ik/kubeNimbus/blob/main/PRIVACY.md");
+
+    private static void OpenInBrowser(string url)
     {
         try
         {
-            Process.Start(new ProcessStartInfo("https://github.com/Shman4ik/kubeNimbus") { UseShellExecute = true });
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
