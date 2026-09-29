@@ -142,7 +142,10 @@ AKS, OpenShift…) and whether it reproduces against the sandbox cluster from
 
 ## Cutting a release (maintainers)
 
-Releases are tag-driven; `.github/workflows/release.yml` does the rest.
+Releases are tag-driven; `.github/workflows/release.yml` does the rest. Walk
+[`docs/RELEASE-CHECKLIST.md`](docs/RELEASE-CHECKLIST.md) first: it holds the gates,
+the manual pass on the shipping build, and a log of what earlier passes found. The
+steps below are the mechanics it ends with.
 
 1. Update `CHANGELOG.md`: rename `## [Unreleased]` to
    `## [X.Y.Z] - YYYY-MM-DD` and open a fresh `Unreleased` section. The release
