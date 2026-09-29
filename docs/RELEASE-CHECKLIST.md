@@ -266,3 +266,4 @@ gets asked in a launch thread.
 
 | Version | Date | Pass by | What the pass found |
 |---------|------|---------|---------------------|
+| 0.5.0 | 2026-09-29 | Claude Code (Opus 5.5) + `kn-qa` | Folded the untagged 0.5.0 section and everything since into one release. Live suites green on the sandbox (Core 706, App 444; one Events test skips on a fresh cluster until the scheduler has written a series event). win-x64 first frame 357 ms median against 0.4.0's 374 ms, exe 61.6 MB against 59.0 MB. The unreachable-cluster launch check fails with exit 67 when the isolated-profile variables are set, now noted in section 3. A full harness run leaks the Config section's expansion into later scenarios; single-scenario renders match the published images. Store resubmission waits on `PRIVACY.md` reaching `main` (0.4.0 failed 10.5.1). Manual pass: the scripted flows on the AOT build by `kn-qa`; fleet (20) and the visual-judgement flows not walked. |
