@@ -311,6 +311,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("ux-applications-keys", () => HostInMainWindow(ApplicationsScenarios.List(), mode: ShellMode.Applications)),
     // VER-19 and ENG-20: keyboard contracts that need a real window (KeyboardChecks).
     ("ux-hotkey-scheme", () => BuildMainWindowContent()),
+    ("ux-overlay-focus", () => BuildMainWindowContent()),
     ("ux-exec-keys", () => HostInMainWindow(ClusterTabScenarios.Exec())),
     ("main-window", () => BuildMainWindowContent()),
     ("main-window-no-kubeconfig", () => BuildNoKubeconfigContent()),
@@ -399,6 +400,7 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     if (name == "ux-namespace-picker") UxInteractionChecks.NamespacePicker(window);
     if (name == "ux-applications-keys") ApplicationsChecks.Keys(window);
     if (name == "ux-hotkey-scheme") KeyboardChecks.HotkeyScheme(window);
+    if (name == "ux-overlay-focus") UxInteractionChecks.OverlayTakesFocus(window);
     if (name is "cluster-tab-list-unhealthy-fleet-partial-narrow" or "cluster-tab-list-unhealthy-narrow")
         LayoutChecks.ListHeaderFits(window);
     if (name == "palette-logs-narrow") LayoutChecks.PaletteFollowsWindow(window);

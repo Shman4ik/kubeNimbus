@@ -562,6 +562,13 @@ Three rules about it:
    what makes that affordable — the change is already made and persisted when you
    dismiss — but if a setting ever needs watching *while* it is changed, that argument
    comes back and this is the decision to revisit.
+   **Opening an overlay takes focus, closing gives it back** (2026-09-29, from pgNimbus,
+   where a Mac's app-menu Settings left focus in the SQL editor under the scrim: Escape,
+   which the panel handles at the `TopLevel` in the bubble phase, was answered by the
+   editor first, and typed text landed in the document behind it). Same shared
+   `OverlayPanel`, so the same fix; `UxInteractionChecks.OverlayTakesFocus`
+   (scenario `ux-overlay-focus`) opens Preferences from a focused text box, types, and
+   presses Escape. DESIGN.md rule 13 has the contract.
    The palette and the cluster switcher are deliberately **not** OverlayPanels: both put
    focus in a search box and drive a selection from the arrow keys, which is a different
    control, not a differently-styled one.

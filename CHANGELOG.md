@@ -12,6 +12,9 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+- Settings, About and the shortcuts sheet now take keyboard focus when they open and hand it
+  back when they close. Opened from a menu, they used to leave focus in the field behind them,
+  so Escape did not close the page and anything you typed went into that field.
 - A switched-on chip toggle (Wrap, the filter pin and the like) keeps its text readable. The
   text used to turn white on the chip's light blue wash, so the one chip you had turned on
   was the one you could not read.
