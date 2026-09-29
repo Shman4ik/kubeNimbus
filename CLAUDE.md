@@ -1142,9 +1142,18 @@ delta) → SELECT (fresh scored candidates, 5–10 picked, a spec each) → BUIL
 item per step) → HARDEN (regression sweep, performance gate, polish pass, product
 review) → RELEASE → RECORD — and is driven by `/loop /release-train`, normally in a
 Claude Code cloud session. Three agents do the heavy lifting: `kn-implementer`
-(Opus, builds one item), `kn-verifier` (Sonnet, re-runs the checks and reviews
-against the rules above, with no Edit tool so it cannot quietly fix what it should
-be reporting), and `kn-researcher` (the competitor delta and matrix). Outside the train,
+(Opus, medium effort, builds one item), `kn-verifier` (Sonnet, high effort, re-runs
+the checks and reviews against the rules above, with no Edit tool so it cannot
+quietly fix what it should be reporting), and `kn-researcher` (Opus, medium effort,
+the competitor delta and matrix). Effort is set in each agent's front matter
+(2026-09-29, from Anthropic's Opus 5.5 / Sonnet 5.5 prompting guides): Opus 5.5 at
+medium does what Opus 5 did at high, while Sonnet at low can report a change done
+without running the check and at medium can stop to check in on a long task, and
+running the checks to the end is the verifier's whole job. Every
+agent prompt also says what ends its run — a message with no tool call is the
+agent's final report, so a mid-task status note that announces the next step
+stops the work there — and forbids self-started review rounds and extra scope.
+Outside the train,
 `kn-bundle` (Opus, high effort) builds a *bundle* of related backlog rows as one PR, for
 parallel runs where the owner wants fewer, larger PRs; bundles never edit `BACKLOG.md`,
 `CHANGELOG.md` or `status-history.md`, which the orchestrating session applies afterwards. Its files live

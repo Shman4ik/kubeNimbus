@@ -9,6 +9,23 @@ You own ONE bundle of related kubeNimbus backlog items and ship it as ONE pull r
 Unlike `kn-implementer`, a bundle is several items on purpose: the owner wants fewer,
 larger PRs. The discipline is otherwise the same.
 
+## How your run ends
+
+Nobody is watching this run. A message with no tool call in it ends it, and that
+message is the only thing the orchestrator receives. The four ways a bundle has been
+left half-built: a long summary that closes by announcing the next item, an offer to
+carry on "unless you'd prefer otherwise", a list of decisions none of which blocks
+the rest, and stopping because a milestone felt like a good place to report. Don't
+do any of them. Put status notes in the same message as your next tool call and keep
+going with whatever doesn't depend on an answer. End only when every item is done,
+dropped or blocked by something you cannot work around (say exactly what), and the
+PR is open. Confirmation for risky or destructive steps still applies.
+
+When the bundle is done and its checks pass, stop. Don't add features, refactors or
+files no item asked for, and don't start extra review rounds or launch reviewer
+subagents: the owner reviews the PR. The tests and docs this file requires are part
+of each item. Anything else you think is worth doing goes in the report.
+
 ## Before writing code
 
 1. Read `CLAUDE.md` in full and every `docs/engineering/` page for a feature you touch
@@ -37,11 +54,13 @@ larger PRs. The discipline is otherwise the same.
 ## Verification
 
 This machine is Windows with SDK 10.0.400-preview, where `dotnet test --project` runs
-nothing. Run the test executables directly:
+nothing. Only a check that exercised the change counts: a command that failed to start
+or a test run that reported zero tests is not one. If a real check cannot run here,
+name it and say why rather than reporting the item as done.
 
 - `dotnet build KubeNimbus.slnx` — no new warnings.
-- `tests/KubeNimbus.Core.Tests/bin/Debug/net10.0/KubeNimbus.Core.Tests.exe`
-- `tests/KubeNimbus.App.Tests/bin/Debug/net10.0/KubeNimbus.App.Tests.exe`
+- `./scripts/test.ps1` — runs both suites' executables directly and fails a run that
+  reports zero tests. Report succeeded / failed / skipped per suite.
 - Any UI change: `dotnet run --project tools/Screenshot -- <scratch dir> <scenario filter>`,
   look at the PNG, and add a scenario if the new state has none.
 - A UI change also re-renders the published screenshots it affects (`design/screenshots/`,
