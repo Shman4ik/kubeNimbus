@@ -374,15 +374,22 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
 {
     Application.Current!.RequestedThemeVariant = theme;
 
-    // Per-kind column widths and sort orders are persisted, so a scenario that seeds one
-    // (see SortedList) would otherwise leave it in the shared scratch workspace for
-    // every later scenario that lists the same kind. Cleared here rather than in the
-    // scenario, because the view reads the layout while the window is laid out — which
-    // is after the builder has returned. The sidebar's Recent kinds are persisted per
-    // cluster too, and every demo scenario is the same cluster: without the reset, a
-    // scenario that selects Deployments would put a Recent section into every demo shot
-    // rendered after it, and each PNG would depend on the order the scenarios ran in.
-    WorkspaceStore.Save(WorkspaceStore.Load() with { GridLayouts = [], RecentKinds = [] });
+    // Every capture starts from the shipped defaults: no settings.json, no workspace.json.
+    // Anything a scenario persists would otherwise reach every scenario rendered after it,
+    // so a PNG depended on which scenarios ran before it — and a full run disagreed with a
+    // run of that one scenario. It happened three times before the reset covered both whole
+    // files: per-kind column widths and sort orders (a scenario that seeds one, see
+    // SortedList, reached every later list of the same kind), the sidebar's Recent kinds
+    // (every demo scenario is the same cluster, so selecting Deployments put a Recent
+    // section into every demo shot after it), and the expanded sidebar sections
+    // (cluster-tab-events-list expands Config on a demo tab, whose sections persist their
+    // expansion, and every later scenario — the published store-* set among them —
+    // rendered Config open, where the default is collapsed). Deleting the files rather
+    // than clearing named fields means the next persisted preference cannot leak the same
+    // way. Here rather than in the scenario, because the view reads some of this state
+    // while the window is laid out, which is after the builder has returned.
+    File.Delete(Path.Combine(scratch, "settings.json"));
+    File.Delete(Path.Combine(scratch, "workspace.json"));
 
     var content = build();
     var window = content as Window ?? new Window
