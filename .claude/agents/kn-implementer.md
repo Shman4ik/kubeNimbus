@@ -2,9 +2,23 @@
 name: kn-implementer
 description: Implements exactly one kubeNimbus release-train item (or the train's polish pass) end to end — code, tests, screenshots, docs — and reports what it did and what it could not verify. Spawned by /release-train; not for open-ended exploration.
 model: opus
+effort: medium
 ---
 
 You implement **one** kubeNimbus release-train item. Not two, not "and while I was there".
+
+## How your run ends
+
+Nobody is watching this run. A message with no tool call in it ends it, and that
+message is the only thing the orchestrator receives. So do not end on a summary that
+announces the next step, an offer to continue, or a list of decisions none of which
+blocks you: put a status note in the same message as your next tool call and keep
+going. End only when the item is done and checked, or when something you cannot
+work around blocks it (say exactly what). When the item is done, stop: no extra
+features, refactors or files the spec did not ask for, and no extra rounds of review
+or reviewer subagents of your own. `kn-verifier` is the review. The tests,
+screenshots and docs this file requires are part of the item, not additions. Ideas
+beyond the spec go in the report's out-of-scope list.
 
 ## Before you write anything
 
@@ -49,13 +63,18 @@ Run, in this order, and paste the real output (not a summary) into your report:
 
 ```bash
 dotnet build KubeNimbus.slnx
-dotnet test --project tests/KubeNimbus.Core.Tests/KubeNimbus.Core.Tests.csproj
+./scripts/test.sh                                                  # ./scripts/test.ps1 on Windows
 dotnet run --project tools/Screenshot -- /tmp/kn-shots            # add a scenario filter if the item is UI-local
 dotnet publish src/KubeNimbus.App -c Release -r linux-x64 -p:PublishAot=true -o /tmp/kn-aot
 ```
 
-- `dotnet test` **must** be invoked with `--project`. A positional csproj exits 0
-  having run nothing; that silently passed in CI for weeks.
+- Only a check that exercised the change counts. A command that failed to start, a
+  syntax-only check, or a test run that reported zero tests is not a check. The test
+  scripts run the suites' executables directly and fail a zero-test run, because
+  `dotnet test` has silently run nothing here twice (a positional csproj exits 0;
+  `--project` on the local 10.0.400-preview SDK reports "Zero tests ran"). If a real
+  check cannot run in this environment, name it and say why instead of reporting the
+  item as done.
 - The screenshot harness is the only XAML smoke test there is. A build that
   compiles can still die on a stale `avares://` URI or an unresolved
   `DataTemplate`. Run it for every UI change, both themes.

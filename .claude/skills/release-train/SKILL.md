@@ -147,6 +147,10 @@ comes first). Mark it `building`, commit that line.
    spec copied verbatim from `TRAIN.md`, the train branch name, and what you already
    know about where the code lives. It follows UNDERSTAND → DESIGN → IMPLEMENT → TEST
    → SCREENSHOT → POLISH itself and commits, prefixing the message with the item id.
+   A report is a claim, not proof the item is done: if it leaves spec lines open and
+   names no blocker, `SendMessage` the same implementer naming those lines ("Acceptance
+   lines 3 and 4 are still open. Continue with them; if one is blocked, say what blocks
+   it."). At most two such continuations per round, then treat the item as failing.
 2. **Verify** — spawn `kn-verifier` (`run_in_background: false`) with the same spec
    text, the implementer's report **verbatim**, and `git show --stat` of the item's
    commits. Never your opinion of the work.
