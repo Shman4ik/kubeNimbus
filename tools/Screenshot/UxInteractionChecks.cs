@@ -13,6 +13,39 @@ namespace KubeNimbus.Screenshot;
 
 internal static class UxInteractionChecks
 {
+    /// <summary>
+    /// An overlay opened from a menu (a Mac's app-menu Settings, its key equivalent) used
+    /// to leave focus in whatever held it, under the scrim. That control answered Escape
+    /// before it could bubble to the top level where <c>OverlayPanel</c> listens, so the
+    /// page could not be dismissed from the keyboard, and typed text landed in the field
+    /// behind it. Found in pgNimbus on a Mac; the panel is shared, so the check is too.
+    /// It opens Preferences while a text box has focus, then types, then presses Escape.
+    /// </summary>
+    internal static void OverlayTakesFocus(Window window)
+    {
+        var shell = (MainWindowViewModel)window.DataContext!;
+        var box = window.GetVisualDescendants().OfType<TextBox>()
+            .First(t => t.IsEffectivelyVisible && t.Focusable && !t.IsReadOnly);
+        box.Focus();
+        Dispatcher.UIThread.RunJobs();
+        if (!box.IsFocused) throw new InvalidOperationException("Could not focus a text box to start from.");
+        var before = box.Text;
+
+        shell.IsPreferencesOpen = true;
+        Dispatcher.UIThread.RunJobs();
+        if (box.IsFocused) throw new InvalidOperationException("Opening the overlay left focus in the control under it.");
+
+        window.KeyTextInput("QQQ");
+        Dispatcher.UIThread.RunJobs();
+        if (box.Text != before) throw new InvalidOperationException("Text typed with the overlay open reached the control behind it.");
+
+        window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        Dispatcher.UIThread.RunJobs();
+        if (shell.IsPreferencesOpen) throw new InvalidOperationException("Escape did not close the overlay.");
+        if (!box.IsFocused) throw new InvalidOperationException("Closing the overlay did not give focus back.");
+        Console.WriteLine("Overlay focus contract passed.");
+    }
+
     internal static void NamespacePicker(Window window)
     {
         var view = window.GetVisualDescendants().OfType<ClusterTabView>().First();
