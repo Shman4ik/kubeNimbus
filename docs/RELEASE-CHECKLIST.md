@@ -94,6 +94,11 @@ window for everything that needs visual judgement.
       finds only comments and `KubeconfigProxy.cs`; any new hit is read before it
       ships. (The build itself sends Avalonia's build-time telemetry, see
       [known caveats](#known-caveats); that is not the app.)
+- [ ] `PRIVACY.md` is still true of this build, because it is the page the Store
+      listing links to. `grep -rn "Process.Start" --include=*.cs src` lists every
+      address the app hands to a browser, and each one is named in the policy. The
+      policy's table of stored files matches what `AppSettings`, `WorkspaceSettings`,
+      `DiscoveryCache` and `TerminalLauncher` actually write.
 - [ ] Performance: time to first frame and executable size against the last
       release's figures. `--smoke-test` 3×, median; more than 10% worse on either is
       explained in the release notes or fixed. The README says "opens in ~150 ms"
@@ -113,7 +118,11 @@ NativeAOT's STA wait turns into a hang, an `avares://` resource).
       publish/app/kubeNimbus.exe --smoke-test=unreachable-cluster
       ```
       If `link.exe` is not found either, run it from a VC dev prompt as CLAUDE.md
-      describes. Check `$LASTEXITCODE` through `Start-Process -Wait -PassThru`, not
+      describes. Run both launch checks in a shell where `KUBENIMBUS_PROFILE_DIR` and
+      `KUBECONFIG` are **not** set: the profile override narrows the kubeconfig search
+      to `$KUBECONFIG`, which hides the kubeconfig the unreachable-cluster scenario
+      seeds, and the check then fails with exit 67 on a binary that is fine (0.5.0's
+      pass hit exactly this). Check `$LASTEXITCODE` through `Start-Process -Wait -PassThru`, not
       the call operator: the exe is a GUI-subsystem program and PowerShell does not
       wait for it.
 - [ ] Run it on an **isolated profile**, never on your own:
@@ -194,8 +203,11 @@ in the log. Escape sent by computer-use does not reach the app either; the harne
       themes. Anything that drifted is re-rendered and committed in the release PR.
 - [ ] README: the screenshots it shows, the install instructions for each channel,
       and the limitations it states are still true of this release.
-- [ ] Microsoft Store listing text, if a headline feature changed. The listing's
-      description is edited in Partner Center, not in the repo.
+- [ ] Microsoft Store listing text. The source is
+      `design/store/listing/store-listing.md`; update its "What's new in this version"
+      for this release and paste the changed fields into Partner Center, which is where
+      the listing actually lives. Check that the privacy policy URL in the listing
+      opens the policy.
 
 ## 5. Ship
 
@@ -214,7 +226,9 @@ in the log. Escape sent by computer-use does not reach the app either; the harne
       a pre-release).
 - [ ] Microsoft Store: download the `windows-msix` artifact from the release run (kept
       14 days), upload it in Partner Center → kubeNimbus → Packages, and submit.
-      The package identity is never edited to make an upload pass.
+      The package identity is never edited to make an upload pass. Submit only once
+      `PRIVACY.md` is on `main`: the listing's privacy URL points at it there, and 0.4.0's
+      submission failed certification (policy 10.5.1) for want of a real policy.
 
 ## 6. After
 

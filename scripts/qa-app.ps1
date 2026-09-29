@@ -19,12 +19,16 @@
 .EXAMPLE
     ./scripts/qa-app.ps1              # build, then start against the sandbox
     ./scripts/qa-app.ps1 -NoBuild     # start the existing Debug build
+    ./scripts/qa-app.ps1 -Exe publish/app/kubeNimbus.exe   # the NativeAOT publish instead
     ./scripts/qa-app.ps1 -Stop        # stop it and delete the profile
 #>
 [CmdletBinding()]
 param(
     [string]$Kubeconfig,
     [switch]$NoBuild,
+    # Drive another build, normally the NativeAOT publish the release checklist tests.
+    # Isolation and the local-cluster check apply to it unchanged; nothing is built.
+    [string]$Exe,
     [switch]$Stop
 )
 
@@ -79,13 +83,13 @@ foreach ($server in $servers) {
     }
 }
 
-if (-not $NoBuild) {
+if (-not $NoBuild -and -not $Exe) {
     dotnet build (Join-Path $repo 'src/KubeNimbus.App/KubeNimbus.App.csproj') -c Debug -v q --nologo | Out-Host
     if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
 }
 
-$exe = Join-Path $repo 'src/KubeNimbus.App/bin/Debug/net10.0/kubeNimbus.exe'
-if (-not (Test-Path $exe)) { throw "No Debug build at $exe." }
+$exe = if ($Exe) { (Resolve-Path $Exe).Path } else { Join-Path $repo 'src/KubeNimbus.App/bin/Debug/net10.0/kubeNimbus.exe' }
+if (-not (Test-Path $exe)) { throw "No build at $exe." }
 
 $profileDir = Join-Path $stateDir ("profile-" + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 $env:KUBENIMBUS_PROFILE_DIR = $profileDir
