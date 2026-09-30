@@ -303,7 +303,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// removed from it for display reasons: a row filtered out of sight has to stay
     /// here, or the next watch event for that object would look like a fresh add.
     /// </summary>
-    public ObservableCollection<ResourceRowViewModel> Rows { get; } = [];
+    public RangeObservableCollection<ResourceRowViewModel> Rows { get; } = [];
 
     /// <summary>
     /// What the list actually renders: <see cref="Rows"/> minus whatever
@@ -312,7 +312,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// demo dataset, the screenshot fixtures — keeps writing to <c>Rows</c> and
     /// exactly one place in the app knows the filter exists.
     /// </summary>
-    public ObservableCollection<ResourceRowViewModel> VisibleRows { get; } = [];
+    public RangeObservableCollection<ResourceRowViewModel> VisibleRows { get; } = [];
 
     /// <summary>
     /// Free-text filter over the list, matched against the columns that identify an
@@ -540,28 +540,15 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         // disproportionate cost: the row actions and the inspector all hang off it.
         var selected = SelectedRow;
 
-        VisibleRows.Clear();
+        // One Reset rather than a Clear and an Add per row: this runs on every keystroke in
+        // the search box, and on 5,000 pods that was 5,000 notifications into the grid each.
+        var visible = Rows.Where(MatchesRowFilter).ToList();
+        if (RowComparer is { } comparer)
+        {
+            visible.Sort(comparer);
+        }
 
-        var comparer = RowComparer;
-        if (comparer is null)
-        {
-            foreach (var row in Rows)
-            {
-                if (MatchesRowFilter(row))
-                {
-                    VisibleRows.Add(row);
-                }
-            }
-        }
-        else
-        {
-            var sorted = Rows.Where(MatchesRowFilter).ToList();
-            sorted.Sort(comparer);
-            foreach (var row in sorted)
-            {
-                VisibleRows.Add(row);
-            }
-        }
+        VisibleRows.ReplaceAll(visible);
 
         if (selected is not null && VisibleRows.Contains(selected))
         {
@@ -596,23 +583,52 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     }
 
     /// <summary>
-    /// Re-orders the rendered list in place, without clearing it. An insertion pass
-    /// rather than a sort: each out-of-order row is moved to where it belongs among the
-    /// rows above it, so a nearly-sorted list costs one comparison per row and a list
-    /// that has not moved at all costs nothing but the comparisons.
+    /// Re-orders the rendered list after its sort keys changed under it — the metrics
+    /// poll, on a CPU- or memory-sorted list.
     ///
     /// <para>
-    /// The point is what it does <em>not</em> raise. Rebuilding raises a Reset, and a
-    /// DataGrid answers a Reset by dropping the selection and the scroll position — which
-    /// is fine for a header click (the reader just asked for a new order) and unusable
-    /// for the metrics poll, which would otherwise throw a CPU-sorted list back to the
-    /// top every fifteen seconds.
+    /// A few rows out of place are moved one by one, an insertion pass: each out-of-order
+    /// row goes to where it belongs among the rows above it, so a list that has barely
+    /// moved costs a comparison per row and a notification per moved row. Past
+    /// <see cref="InPlaceResortLimit"/> the list is sorted off to the side and replaced
+    /// with one Reset instead, because a poll rewrites every row's usage at once and on a
+    /// 5,000-pod list the insertion pass was about 10,000 notifications into the grid and
+    /// two seconds of frozen window every fifteen seconds (measured by the harness's
+    /// stress mode). The Reset costs nothing the reader can see: the DataGrid keeps its
+    /// scroll offset across one (checked against Avalonia 12's), and the selection is put
+    /// back here.
     /// </para>
     /// </summary>
+    /// <summary>Out-of-order rows past which <see cref="ResortVisibleRows"/> replaces the list rather than moving rows.</summary>
+    internal const int InPlaceResortLimit = 32;
+
     internal void ResortVisibleRows()
     {
         if (RowComparer is not { } comparer)
         {
+            return;
+        }
+
+        var outOfOrder = 0;
+        for (var i = 1; i < VisibleRows.Count && outOfOrder <= InPlaceResortLimit; i++)
+        {
+            if (comparer.Compare(VisibleRows[i - 1], VisibleRows[i]) > 0)
+            {
+                outOfOrder++;
+            }
+        }
+
+        if (outOfOrder > InPlaceResortLimit)
+        {
+            var selected = SelectedRow;
+            // Stable, like the insertion pass: rows with equal usage keep their order
+            // rather than trading places on every poll.
+            VisibleRows.ReplaceAll(VisibleRows.OrderBy(row => row, comparer).ToList());
+            if (selected is not null)
+            {
+                SelectedRow = selected;
+            }
+
             return;
         }
 
@@ -758,21 +774,25 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             case NotifyCollectionChangedAction.Add
                 when e.NewItems is { } added && e.NewStartingIndex + added.Count == Rows.Count:
                 var comparer = RowComparer;
-                foreach (var row in added.OfType<ResourceRowViewModel>())
-                {
-                    if (!MatchesRowFilter(row))
-                    {
-                        continue;
-                    }
+                var matching = added.OfType<ResourceRowViewModel>().Where(MatchesRowFilter).ToList();
 
-                    // Appended in arrival order, or inserted where the sort puts it —
-                    // a sorted list that appends new objects at the bottom is a list
-                    // that stops being sorted the moment anything is created.
-                    if (comparer is null)
-                    {
-                        VisibleRows.Add(row);
-                    }
-                    else
+                // Appended in arrival order, in one notification however many a batch of
+                // watch events added — or inserted where the sort puts it, since a sorted
+                // list that appends new objects at the bottom is a list that stops being
+                // sorted the moment anything is created. Past a few dozen, one re-sort and
+                // Reset is cheaper than an insert and a notification per row.
+                if (comparer is null)
+                {
+                    VisibleRows.AddRange(matching);
+                }
+                else if (matching.Count > InPlaceResortLimit)
+                {
+                    RebuildVisibleRows();
+                    return; // already recomputed the counters
+                }
+                else
+                {
+                    foreach (var row in matching)
                     {
                         VisibleRows.Insert(SortedIndexFor(row, comparer), row);
                     }
@@ -781,6 +801,12 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 break;
 
             case NotifyCollectionChangedAction.Remove when e.OldItems is { } removed:
+                if (removed.Count > InPlaceResortLimit)
+                {
+                    RebuildVisibleRows();
+                    return;
+                }
+
                 foreach (var row in removed.OfType<ResourceRowViewModel>())
                 {
                     VisibleRows.Remove(row);
@@ -2552,7 +2578,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         {
             try
             {
-                await foreach (var evt in client.WatchResourceAsync(
+                await foreach (var batch in client.WatchResourceAsync(
                     descriptor, @namespace,
                     connectionLost: ex => Dispatcher.UIThread.Post(() =>
                     {
@@ -2562,9 +2588,9 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                         // the one warning a reconnect can actually do something about.
                         ConnectionWarningOffersReconnect = true;
                     }),
-                    cancellationToken: token))
+                    cancellationToken: token).InBatches(cancellationToken: token))
                 {
-                    await Dispatcher.UIThread.InvokeAsync(() => Apply(evt));
+                    await Dispatcher.UIThread.InvokeAsync(() => ApplyBatch(batch));
                 }
             }
             catch (OperationCanceledException)
@@ -2681,13 +2707,13 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                     @namespace,
                     token);
 
-                await foreach (var evt in ClusterFleet.WatchAsync(
+                await foreach (var batch in ClusterFleet.WatchAsync(
                     targets, @namespace,
                     connectionLost: (member, ex) => Dispatcher.UIThread.Post(
                         () => ConnectionWarning = $"{member.ClusterName}: {ex.Message}"),
-                    cancellationToken: token))
+                    cancellationToken: token).InBatches(cancellationToken: token))
                 {
-                    await Dispatcher.UIThread.InvokeAsync(() => ApplyFleet(evt));
+                    await Dispatcher.UIThread.InvokeAsync(() => ApplyFleetBatch(batch));
                 }
             }
             catch (OperationCanceledException)
@@ -2853,9 +2879,9 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         // A poll rewrites the very values a CPU- or memory-sorted list is ordered by, and
         // it rewrites every row at once — so unlike a watch tick, which changes one row,
-        // this re-orders the whole list. In place, though (see ResortVisibleRows): a
-        // rebuild would raise a Reset, and a list that jumped back to the top every 15
-        // seconds would be unusable for the one job a CPU sort exists for.
+        // this re-orders the whole list — keeping the selection and the scroll offset, so a
+        // CPU-sorted list does not jump under the reader every 15 seconds (see
+        // ResortVisibleRows).
         if (SortColumnId is ResourceColumn.Cpu or ResourceColumn.Memory)
         {
             ResortVisibleRows();
@@ -2875,6 +2901,83 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// </summary>
     internal void Apply(ResourceEvent<DynamicResource> evt)
     {
+        ApplyOne(evt);
+        RecomputeListEmpty();
+    }
+
+    /// <summary>
+    /// A batch of watch events, as <see cref="AsyncBatching.InBatches"/> delivers them: one
+    /// hop onto the UI thread for everything that had arrived. New rows are appended to
+    /// <see cref="Rows"/> together, so an initial list of 5,000 objects reaches the grid in a
+    /// few notifications rather than 5,000.
+    /// </summary>
+    internal void ApplyBatch(IReadOnlyList<ResourceEvent<DynamicResource>> events)
+    {
+        _stagedRows = [];
+        try
+        {
+            foreach (var evt in events)
+            {
+                ApplyOne(evt);
+            }
+        }
+        finally
+        {
+            FlushStagedRows();
+            _stagedRows = null;
+        }
+
+        RecomputeListEmpty();
+    }
+
+    /// <summary>The fleet counterpart of <see cref="ApplyBatch"/>.</summary>
+    internal void ApplyFleetBatch(IReadOnlyList<FleetResourceEvent> events)
+    {
+        _stagedRows = [];
+        try
+        {
+            foreach (var evt in events)
+            {
+                ApplyFleetOne(evt);
+            }
+        }
+        finally
+        {
+            FlushStagedRows();
+            _stagedRows = null;
+        }
+
+        RecomputeListEmpty();
+    }
+
+    // New rows of the batch being applied, not yet in Rows. Null outside a batch. Anything
+    // that reads Rows or a row's visibility flushes them first, so a batch has exactly the
+    // effect its events would have had one at a time.
+    private List<ResourceRowViewModel>? _stagedRows;
+
+    private void AddRow(ResourceRowViewModel row)
+    {
+        if (_stagedRows is { } staged)
+        {
+            staged.Add(row);
+        }
+        else
+        {
+            Rows.Add(row);
+        }
+    }
+
+    private void FlushStagedRows()
+    {
+        if (_stagedRows is { Count: > 0 } staged)
+        {
+            Rows.AddRange(staged.ToList());
+            staged.Clear();
+        }
+    }
+
+    private void ApplyOne(ResourceEvent<DynamicResource> evt)
+    {
         switch (evt.Type)
         {
             case ResourceEventType.Reset:
@@ -2885,6 +2988,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 // which is the exact failure UI rule 18 exists to prevent. Synced below
                 // is the honest end; the first row arriving is the other one.
                 IsListLoading = true;
+                _stagedRows?.Clear();
                 Rows.Clear();
                 _rowsByKey.Clear();
                 ConnectionWarning = null;
@@ -2904,6 +3008,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 IsListLoading = false;
                 if (_rowsByKey.TryGetValue(resource.Key, out var existing))
                 {
+                    FlushStagedRows();
                     existing.Update(resource);
                     RefreshRowVisibility(existing);
                 }
@@ -2912,13 +3017,14 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                     var row = new ResourceRowViewModel(resource);
                     row.SetPrinterColumns(VisiblePrinterColumns);
                     _rowsByKey[resource.Key] = row;
-                    Rows.Add(row);
+                    AddRow(row);
                 }
 
                 break;
 
             case ResourceEventType.Deleted when evt.Resource is { } resource:
                 IsListLoading = false;
+                FlushStagedRows();
                 if (_rowsByKey.Remove(resource.Key, out var removed))
                 {
                     Rows.Remove(removed);
@@ -2926,8 +3032,6 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
                 break;
         }
-
-        RecomputeListEmpty();
     }
 
     /// <summary>
@@ -2940,6 +3044,12 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// make this a second way to get the filter/informer split wrong.
     /// </summary>
     internal void ApplyFleet(FleetResourceEvent tagged)
+    {
+        ApplyFleetOne(tagged);
+        RecomputeListEmpty();
+    }
+
+    private void ApplyFleetOne(FleetResourceEvent tagged)
     {
         var cluster = tagged.ClusterName;
 
@@ -2954,25 +3064,38 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 break;
 
             case ResourceEventType.Reset:
+            {
+                // One pass and one notification, not a Rows.Remove per row: a member
+                // relisting 5,000 pods after a 410 Gone was a linear search and two
+                // notifications (Rows and VisibleRows) per row.
+                FlushStagedRows();
+                var stale = new HashSet<ResourceRowViewModel>();
                 foreach (var key in _rowsByKey
                     .Where(entry => string.Equals(entry.Value.ClusterName, cluster, StringComparison.Ordinal))
                     .Select(entry => entry.Key)
                     .ToArray())
                 {
-                    if (_rowsByKey.Remove(key, out var stale))
+                    if (_rowsByKey.Remove(key, out var row))
                     {
-                        Rows.Remove(stale);
+                        stale.Add(row);
                     }
+                }
+
+                if (stale.Count > 0)
+                {
+                    Rows.ReplaceAll(Rows.Where(row => !stale.Contains(row)).ToList());
                 }
 
                 ConnectionWarning = null;
                 break;
+            }
 
             case ResourceEventType.Added or ResourceEventType.Modified when tagged.Event.Resource is { } added:
                 IsListLoading = false;
                 var addedKey = ResourceRowViewModel.KeyFor(cluster, added.Key);
                 if (_rowsByKey.TryGetValue(addedKey, out var existing))
                 {
+                    FlushStagedRows();
                     existing.Update(added);
                     RefreshRowVisibility(existing);
                 }
@@ -2981,13 +3104,14 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                     var row = new ResourceRowViewModel(added, cluster);
                     row.SetPrinterColumns(VisiblePrinterColumns);
                     _rowsByKey[addedKey] = row;
-                    Rows.Add(row);
+                    AddRow(row);
                 }
 
                 break;
 
             case ResourceEventType.Deleted when tagged.Event.Resource is { } deleted:
                 IsListLoading = false;
+                FlushStagedRows();
                 if (_rowsByKey.Remove(ResourceRowViewModel.KeyFor(cluster, deleted.Key), out var gone))
                 {
                     Rows.Remove(gone);
@@ -2995,8 +3119,6 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
                 break;
         }
-
-        RecomputeListEmpty();
     }
 
     /// <summary>Double-click / Enter: promotes (or opens) a permanent tab. Pod → detail; anything else → YAML.</summary>

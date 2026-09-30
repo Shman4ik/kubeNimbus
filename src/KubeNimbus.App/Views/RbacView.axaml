@@ -183,6 +183,13 @@
 
           <ScrollViewer Grid.Row="3" IsVisible="{Binding WhoCanResults.Count, Converter={x:Static conv:CountToBoolConverter.Instance}}">
             <ItemsControl ItemsSource="{Binding WhoCanResults}">
+              <!-- Virtualized: "who can list pods" on a big cluster names hundreds of
+                   subjects, each a card of nested rows. -->
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <VirtualizingStackPanel />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:WhoCanRowViewModel">
                   <Border Classes="card" Margin="0,0,0,8" Padding="10">

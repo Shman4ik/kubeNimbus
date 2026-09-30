@@ -12,6 +12,21 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+### Fixed
+
+- **Logs no longer freeze the window on "Everything".** A pod with a long history used to
+  hang the app while its log loaded, and switching the theme with a full log open took a
+  second. The log panes now draw only the lines in sight and drop what the scrollback would
+  trim before reading it.
+- **Large clusters stay responsive** in the Argo CD Resources tab (thousands of managed
+  resources), the YAML apply preview (large ConfigMaps), the Service pane (hundreds of
+  backing pods), the list search, and a list sorted by CPU or memory, which used to stall
+  for about two seconds on every metrics poll with 5,000 pods.
+- **Big lists load faster and keep the window responsive while they do.** A namespace with
+  thousands of pods used to fill in visibly row by row; the list, the fleet view, workload
+  details, the Service pane, multi-pod logs and the Applications list now take a watch's
+  updates in batches. Searching a long Applications list and a fleet member reconnecting
+  are single updates too.
 - Web and e-mail addresses in the YAML editor and in a Helm release's values and manifest are
   now plain text in the YAML colours. They used to be drawn in bright blue over the
   highlighting, like links, and a Ctrl+click opened them in the browser or the mail client.

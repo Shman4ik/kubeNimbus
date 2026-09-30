@@ -61,11 +61,16 @@ Twelve things are load-bearing.
    ordinary status refresh moves nothing under the pointer. A list that quietly stops
    being sorted seconds after it was sorted is worse than one that never was;
    that break was written and confirmed red too. The **metrics poll** is the one event
-   that rewrites every row's sort key at once, and it re-orders the list *in place*
-   (`ResortVisibleRows`, an insertion pass) rather than rebuilding it: a rebuild raises a
-   Reset, a DataGrid answers a Reset by dropping the scroll position, and a CPU-sorted
-   list that jumped back to the top every fifteen seconds would be useless for the one
-   job a CPU sort has. That break was written and confirmed red as well.
+   that rewrites every row's sort key at once. `ResortVisibleRows` moves rows one by one
+   (an insertion pass) while at most `InPlaceResortLimit` (32) are out of place, and past
+   that sorts the list off to the side — stably, so rows with equal usage do not trade
+   places every poll — and replaces it with one Reset. The move-per-row pass was the
+   original design, on the belief that a DataGrid drops its scroll position on a Reset;
+   Avalonia 12's does not (checked in the harness: the offset is unchanged across one),
+   and the pass cost about 10,000 notifications and two seconds of frozen window per poll
+   on 5,000 pods (the stress mode's `resource-list-metrics-poll` check). The selection is
+   put back after the Reset. `ClusterTabSortTests` pins both halves: a small change stays
+   in place with no Reset, a reshuffle is exactly one Reset and keeps the selection.
 8. **A CRD column is identified by the CRD author's name for it, never by slot.** The
    grid's printer columns are ten fixed positional slots, and which column a slot draws
    is a property of the kind in front of the reader — two kinds declaring different

@@ -56,7 +56,12 @@ Eight things are load-bearing:
    forbids. A `Reset` of either watch puts the pane back to "Reading…" with an indeterminate
    bar; only `Synced` ends it; a watch that throws ends it too, with the server's sentence as
    the error. `NetworkingDetailTests.No_verdict_is_given_between_a_reset_and_its_sync` pins
-   the order, and was confirmed red with the gate removed.
+   the order, and was confirmed red with the gate removed. The same gate keeps the initial
+   list linear: objects that arrive before both lists have synced go into the stores without
+   re-joining, and the join runs on `Reset` and on `Synced`. Re-joining per object had made
+   every new pod change the grid's key sequence and clear and refill it — about 45,000
+   notifications for a 300-pod service — and the stress mode's `service-backends` check
+   (1,000 pods) is what holds it now.
 4. **Endpoint conditions take the API's defaults.** `ready` unset is true, `serving` unset
    defers to `ready`, `terminating` unset is false — a hand-written slice often sets none.
    Terminating splits on serving: *Draining* (still taking its existing connections) is not

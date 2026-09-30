@@ -50,7 +50,13 @@ Eight things are load-bearing.
    combining a tail limit with them would silently cut off the interval the user chose.
    Those wider requests can fill the pane's `LogBufferLines` cap, so the pane states
    when it trims older lines. `LogBufferLines` remains a **per-pane** cap, not a per-pod
-   one. The request is cancelled and reopened when the range changes, while Follow's
+   one. A flush drops what the cap would trim before it parses anything — per pod, since a
+   pod's lines older than its own newest `LogBufferLines` cannot survive the merge — and
+   appends and trims with one collection notification each (`RangeObservableCollection`).
+   Both panes' line lists virtualize. Without those, "Everything" on a pod with a long
+   history froze the window: a notification per line on a flush that trimmed 196,000 of
+   200,000, and 37,000 live controls for a full 4,000-line buffer, which every theme switch
+   restyled. `LogBurstTests` and the stress mode's `logs-*` checks hold it. The request is cancelled and reopened when the range changes, while Follow's
    state stays as it was. The demo control is disabled because its fixed July 2026
    timestamps cannot answer a relative-time query honestly. A finite snapshot that
    completes with no lines can state that the range is empty. An open follow with no

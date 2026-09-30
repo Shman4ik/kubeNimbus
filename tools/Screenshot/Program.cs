@@ -17,9 +17,16 @@ using KubeNimbus.Screenshot;
 // screenshot loop when developing in an environment with no display — see
 // CLAUDE.md "Headless screenshot harness".
 
-var outDir = args.Length > 0 ? args[0] : "screenshots";
+// `-- --stress` runs StressChecks instead of rendering: every data surface fed a large
+// cluster's worth of objects, with its visuals, collection notifications and time checked
+// against a budget. Exits non-zero when anything is over.
+var stress = args.Length > 0 && args[0] == "--stress";
+var outDir = !stress && args.Length > 0 ? args[0] : "screenshots";
 var filter = args.Length > 1 ? args[1] : null;
-Directory.CreateDirectory(outDir);
+if (!stress)
+{
+    Directory.CreateDirectory(outDir);
+}
 
 // Scenarios construct real MainWindowViewModels, which read the workspace on
 // construction and save it whenever a cluster is pinned. Point that at a scratch
@@ -56,6 +63,21 @@ File.Delete(Path.Combine(WorkspaceStore.DirectoryOverride, "settings.json"));
 Kubeconfig.EnvironmentSearchOverride = [];
 
 BuildAvaloniaApp().SetupWithoutStarting();
+
+if (stress)
+{
+    var code = StressChecks.Run(
+        (tab, applications) => HostInMainWindow(tab, mode: applications ? ShellMode.Applications : ShellMode.Resources), filter);
+    try
+    {
+        Directory.Delete(scratch, recursive: true);
+    }
+    catch (IOException)
+    {
+    }
+
+    Environment.Exit(code);
+}
 
 
 var scenarios = new (string Name, Func<Control> Build)[]

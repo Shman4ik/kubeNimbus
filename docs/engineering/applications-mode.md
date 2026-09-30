@@ -146,9 +146,15 @@ and Argo's own Degraded/Unknown when nothing read from the workloads explains it
    spinner over rows that are already useful.
 5. **Rebuilds are coalesced and off the UI thread.** Watch events mark the store dirty; a
    200 ms timer takes one snapshot and assesses it on the pool (`SnapshotIndex` keeps it
-   linear in pods rather than apps × pods); a 30 s tick re-reads *now*. Rows are updated in
-   place by key, and the visible collection is synced by moves, never a Clear, so the
-   selection and the scroll position survive every event.
+   linear in pods rather than apps × pods); a 30 s tick re-reads *now*. The snapshot is
+   taken on the UI thread, so it only copies references: each Argo Application is parsed
+   once per object version (a `ConditionalWeakTable` keyed on the `DynamicResource` a watch
+   update replaces), not once per rebuild. Rows are updated in place by key, and the visible
+   collection is synced by moves while a few rows change; past 32 rows coming or going (a
+   search that narrows 2,000 rows to 20) it is replaced in one Reset and the selection put
+   back, which the list's own scroll offset survives. The watch events arrive in batches
+   (`AsyncBatching`), one awaited hop each, where they used to be posted unawaited one by
+   one.
 6. **Search matches name and namespace, never status** (UI rule 13's reason: "Degraded" would
    match whatever is broken, and that question has a chip). The chips are one-of: a
    `RadioChip` is a ToggleButton a click turns on and never off, because a plain one over a

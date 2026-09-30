@@ -157,6 +157,13 @@
                 <ScrollViewer HorizontalScrollBarVisibility="Auto"
                               IsVisible="{Binding $parent[UserControl].((vm:YamlEditorTabViewModel)DataContext).PreviewViewMode, Converter={x:Static kconv:IndexEqualsConverter.Instance}, ConverterParameter=0}">
                   <ItemsControl ItemsSource="{Binding Lines}">
+                    <!-- Virtualized, like the two other diff views below: a create or a big change is not
+                         collapsed, so a 5,000-line ConfigMap is 5,000 rows of about eight controls. -->
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <VirtualizingStackPanel />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:DiffLineViewModel">
                         <Panel>
@@ -189,6 +196,11 @@
                      mode exists to keep. -->
                 <ScrollViewer IsVisible="{Binding $parent[UserControl].((vm:YamlEditorTabViewModel)DataContext).PreviewViewMode, Converter={x:Static kconv:IndexEqualsConverter.Instance}, ConverterParameter=1}">
                   <ItemsControl ItemsSource="{Binding SplitLines}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <VirtualizingStackPanel />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:DiffPairViewModel">
                         <Panel>
@@ -232,6 +244,11 @@
                 <ScrollViewer HorizontalScrollBarVisibility="Auto"
                               IsVisible="{Binding $parent[UserControl].((vm:YamlEditorTabViewModel)DataContext).PreviewViewMode, Converter={x:Static kconv:IndexEqualsConverter.Instance}, ConverterParameter=2}">
                   <ItemsControl ItemsSource="{Binding Rows}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <VirtualizingStackPanel />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:DiffRowViewModel">
                         <Grid ColumnDefinitions="14,*" Margin="0,2">

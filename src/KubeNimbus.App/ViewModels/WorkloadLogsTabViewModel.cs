@@ -149,7 +149,7 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
     public ObservableCollection<LogSourceViewModel> Sources { get; } = [];
 
     /// <summary>Filtered view over the buffer — this is what is rendered.</summary>
-    public ObservableCollection<LogLineViewModel> LogLines => Projection.Shown;
+    public LogLineCollection LogLines => Projection.Shown;
 
     private LogProjection? _projection;
 
@@ -392,14 +392,21 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
         {
             try
             {
-                await foreach (var evt in client.WatchResourceAsync(
+                // One hop onto the UI thread per batch of events (AsyncBatching), not per pod.
+                await foreach (var batch in client.WatchResourceAsync(
                     ResourceDescriptor.Pods,
                     _namespace,
                     connectionLost: ex => Dispatcher.UIThread.Post(() => SetStatus(ex.Message, problem: true)),
                     cancellationToken: token,
-                    labelSelector: selector))
+                    labelSelector: selector).InBatches(cancellationToken: token))
                 {
-                    await Dispatcher.UIThread.InvokeAsync(() => ApplyPodEvent(evt));
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        foreach (var evt in batch)
+                        {
+                            ApplyPodEvent(evt);
+                        }
+                    });
                 }
             }
             catch (OperationCanceledException)
@@ -844,16 +851,28 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
             _primeUntil = null;
         }
 
-        var built = new List<LogLineViewModel>(pending.Length);
+        // "Everything" against a pod with a long history delivers far more in one tick than
+        // the buffer keeps. Nothing a pod logged before its own last _maxLogLines lines can
+        // survive the trim (those lines alone fill the buffer), so it is counted and dropped
+        // here instead of parsed, sorted, shown and then trimmed straight back out.
+        var skipBySource = SkipBeyondCap(pending, _maxLogLines);
+        var built = new List<LogLineViewModel>(Math.Min(pending.Length, _maxLogLines));
         foreach (var (raw, source) in pending)
         {
-            built.Add(new LogLineViewModel(raw, ShowLogTimestamps, source, UseUtcTimestamps));
             source.LineCount++;
+            if (skipBySource is not null && skipBySource.TryGetValue(source, out var skip) && skip > 0)
+            {
+                skipBySource[source] = skip - 1;
+                continue;
+            }
+
+            built.Add(new LogLineViewModel(raw, ShowLogTimestamps, source, UseUtcTimestamps));
         }
 
         _clearedLines = null;
 
-        foreach (var line in OrderBatch(built))
+        var ordered = OrderBatch(built);
+        foreach (var line in ordered)
         {
             // A stack trace continues the line above it from the same pod, not whatever
             // another pod logged in between.
@@ -863,16 +882,20 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
                 _lastLineBySource[from] = line;
             }
 
-            _allLogLines.Add(line);
-            Projection.Append(line);
-
             if (line.Source is { State: LogSourceState.Starting } starting)
             {
                 starting.State = LogSourceState.Streaming;
             }
         }
 
-        TrimBuffer();
+        // Trim before appending, so neither the buffer nor the rendered list ever holds more
+        // than the cap, and the new lines reach the view as one notification.
+        var kept = ordered.Count > _maxLogLines
+            ? ordered.Skip(ordered.Count - _maxLogLines).ToList()
+            : ordered;
+        TrimBuffer(incoming: kept.Count, batchTrimmed: skipBySource is not null || kept.Count < ordered.Count);
+        _allLogLines.AddRange(kept);
+        Projection.AppendRange(kept);
         _loadingLogRange = _streamsByPod.Keys.Any(pod => !_respondedPods.Contains(pod));
         UpdateFind(newQuery: false);
         ClearLogsCommand.NotifyCanExecuteChanged();
@@ -924,15 +947,54 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
         return ordered;
     }
 
-    private void TrimBuffer()
+    /// <summary>
+    /// For each source with more than <paramref name="cap"/> lines in <paramref name="pending"/>,
+    /// how many of its oldest to drop; null when no source is over.
+    /// </summary>
+    internal static Dictionary<LogSourceViewModel, int>? SkipBeyondCap(
+        IReadOnlyList<(string Raw, LogSourceViewModel Source)> pending, int cap)
     {
-        var excess = _allLogLines.Count - _maxLogLines;
-        if (excess <= 0)
+        if (pending.Count <= cap)
+        {
+            return null;
+        }
+
+        var counts = new Dictionary<LogSourceViewModel, int>();
+        foreach (var (_, source) in pending)
+        {
+            counts[source] = counts.GetValueOrDefault(source) + 1;
+        }
+
+        Dictionary<LogSourceViewModel, int>? skip = null;
+        foreach (var (source, count) in counts)
+        {
+            if (count > cap)
+            {
+                (skip ??= [])[source] = count - cap;
+            }
+        }
+
+        return skip;
+    }
+
+    /// <summary>
+    /// Makes room for <paramref name="incoming"/> lines by dropping the oldest buffered ones.
+    /// <paramref name="batchTrimmed"/> says the flush itself already dropped lines for the
+    /// cap, which is the same trim and gets the same notice.
+    /// </summary>
+    private void TrimBuffer(int incoming, bool batchTrimmed)
+    {
+        var excess = Math.Min(_allLogLines.Count, _allLogLines.Count + incoming - _maxLogLines);
+        if (excess <= 0 && !batchTrimmed)
         {
             return;
         }
 
         TrimNotice = $"Older lines were trimmed at the {_maxLogLines:N0}-line scrollback limit.";
+        if (excess <= 0)
+        {
+            return;
+        }
 
         var dropped = _allLogLines.GetRange(0, excess);
         _allLogLines.RemoveRange(0, excess);

@@ -240,7 +240,7 @@ public sealed partial class ServiceDetailTabViewModel : InspectorTabViewModelBas
 
     // ------------------------------------------------------------- the backends
 
-    public ObservableCollection<ServiceBackendViewModel> Backends { get; } = [];
+    public RangeObservableCollection<ServiceBackendViewModel> Backends { get; } = [];
 
     /// <summary>
     /// False when there is no row to show — the grid is then hidden and the verdict above it
@@ -382,7 +382,7 @@ public sealed partial class ServiceDetailTabViewModel : InspectorTabViewModelBas
     {
         try
         {
-            await foreach (var evt in client.WatchResourceAsync(
+            await foreach (var batch in client.WatchResourceAsync(
                                descriptor, Namespace,
                                connectionLost: ex => Dispatcher.UIThread.Post(() =>
                                {
@@ -393,14 +393,18 @@ public sealed partial class ServiceDetailTabViewModel : InspectorTabViewModelBas
                                    }
                                }),
                                cancellationToken: token,
-                               labelSelector: selector).ConfigureAwait(false))
+                               labelSelector: selector).InBatches(cancellationToken: token).ConfigureAwait(false))
             {
+                // One hop onto the UI thread per batch of events (AsyncBatching), not per event.
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
                     if (!token.IsCancellationRequested)
                     {
                         reportError(null);
-                        apply(evt);
+                        foreach (var evt in batch)
+                        {
+                            apply(evt);
+                        }
                     }
                 });
             }
@@ -449,10 +453,24 @@ public sealed partial class ServiceDetailTabViewModel : InspectorTabViewModelBas
                 break;
         }
 
+        // While either initial list is still arriving there is no verdict to restate, and
+        // re-joining on every object made the initial list quadratic: each new pod changed
+        // the key sequence, so every Added cleared and refilled the grid — about 45,000
+        // notifications for a 300-pod service. The Reset above and the Synced that ends the
+        // list both rebuild, so the pane still says it is reading, and then shows everything.
+        if (evt.Type is ResourceEventType.Added or ResourceEventType.Modified or ResourceEventType.Deleted
+            && !(_podsSynced && _slicesSynced))
+        {
+            return;
+        }
+
         Rebuild();
     }
 
-    /// <summary>Re-joins the two stores and restates the verdict. Cheap: a service has tens of backends, not thousands.</summary>
+    /// <summary>
+    /// Re-joins the two stores and restates the verdict. Runs once per watch event after both
+    /// initial lists have synced, and never per object while they are arriving (see Apply).
+    /// </summary>
     private void Rebuild()
     {
         var shape = Shape;
@@ -518,11 +536,7 @@ public sealed partial class ServiceDetailTabViewModel : InspectorTabViewModelBas
         }
         else
         {
-            Backends.Clear();
-            foreach (var backend in fresh)
-            {
-                Backends.Add(backend);
-            }
+            Backends.ReplaceAll(fresh);
         }
 
         if (selectedKey is not null && !ReferenceEquals(SelectedBackend, Backends.FirstOrDefault(b => b.Key == selectedKey)))

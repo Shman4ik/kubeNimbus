@@ -2503,3 +2503,81 @@ publish emits only the two known DataGrid warnings, and `--smoke-test` and
 `--smoke-test=unreachable-cluster` (which builds a client from a kubeconfig in the AOT binary)
 both exit 0. Not run: the live-cluster tests, so no real exec plugin, client-certificate or
 proxy connect went through the new reader against an API server.
+### Freezes on large data, and the stress mode that holds them (2026-09-30)
+
+Reported from a real cluster: "Everything" in the application page's log pane hung the app,
+and so did switching the theme. Both had one cause and a second behind it. The log panes'
+line lists did not virtualize (a full 4,000-line buffer was about 37,000 live controls, seven
+seconds of layout, and a theme switch restyled every one), and a flush appended each received
+line and then trimmed back to the cap with `RemoveAt(0)` per line — 396,000 collection
+notifications for one 200,000-line flush. Fixed with a `VirtualizingStackPanel` in both panes,
+`RangeObservableCollection` (one notification per range operation), and dropping what the cap
+would trim before parsing it, per pod so a chatty pod cannot push out a quiet pod's newer lines.
+
+A read-only audit then found the same class elsewhere, and five of its findings are fixed
+here: the Argo Resources tab and the three apply-preview diff views virtualize; the Service
+pane no longer re-joins per object during its initial list; the list search and header sort
+rebuild `VisibleRows` in one Reset; and the metrics poll on a CPU-sorted list replaces the list
+in one Reset past 32 out-of-order rows. That last one reverses a documented decision, which
+rested on a DataGrid dropping its scroll offset on a Reset; Avalonia 12's does not (probed in
+the harness: offset 65,382 before and after), and the insertion pass it protected cost two
+seconds per poll on 5,000 pods. Not fixed, and still open from the audit: one awaited UI hop
+per watch event in the list, workload detail, Service and multi-pod log watches; the fleet
+Reset's `Rows.Remove` per row; the Applications list's snapshot parsing every Argo Application
+on the UI thread; the application page's per-rebuild rule evaluation and `FirstOrDefault` per
+pod; its `Sync` removing and inserting per item; and the low ones (RBAC who-can cards, an
+expanded 300-CRD sidebar, the age timer).
+
+`tools/Screenshot -- --stress` is new: eight surfaces fed a large cluster's worth of objects,
+with visuals, collection notifications and time checked against a budget, in CI after the
+render. It was proved against the code before the fix, check by check: the log check did not
+finish in eleven minutes (1.9 GB); Argo 7.9 s and 59,841 visuals; the diff 12 s and 102,985
+visuals with a 1.4 s theme switch; the Service pane 503,503 notifications; the metrics poll
+10,012; the header sort 5,015; a search keystroke 1,112. After: every check within budget, the
+slowest action 0.8 s (a 200,000-line flush), every theme switch under 100 ms.
+
+Checks: Core tests 651 passed, 55 skipped (no sandbox); App tests 449/449, with
+`LogBurstTests` (4, three of them red on the old code) and a reshuffle test in
+`ClusterTabSortTests`. The whole harness rendered (348 PNGs) with every `ux-` check passing;
+the diff and Argo shots are unchanged apart from a scrollbar thumb's length. The win-x64
+NativeAOT publish emits only the two known DataGrid warnings, and `--smoke-test` and
+`--smoke-test=unreachable-cluster` both exit 0. Not run: the live-cluster tests, and nothing
+was driven with a real mouse against a real cluster — the freeze was reported on one, and the
+fix is verified only headless.
+
+### Watch batching and the rest of the audit (2026-09-30)
+
+The second half of the large-data audit, stacked on the first. Every live list read its
+watch one event per UI-thread hop: the resource list, the fleet view, workload detail's pods,
+the Service pane and the multi-pod log pane awaited `InvokeAsync` per event, and the
+Applications list posted each one unawaited. `AsyncBatching.InBatches` (Core) now hands each
+consumer whatever has already arrived, through a bounded buffer so a slow UI thread still
+slows the reader, and with the source's error after every item before it; the consumers
+apply a batch per hop, and `ClusterTabViewModel.ApplyBatch` appends its new rows in one
+notification. Also: the fleet Reset clears a member's rows in one pass; the Applications
+list parses each Argo Application once per object version instead of once per rebuild on
+the UI thread, and its `Sync` replaces the list in one Reset past 32 rows coming or going
+(selection restored); the application page finds its pods by name through a dictionary; the
+RBAC who-can results virtualize.
+
+Stress mode, four new checks, run against the first PR's code with `ApplyBatch` replaced by
+per-event `Apply` (which is what that code did): the initial list of 5,000 pods raised 5,001
+notifications (now 2), a fleet member's relist 2,500 (now 1), an Applications search over
+2,010 apps 899 (now 1). The application page on a 1,000-pod DaemonSet did **not** fail
+before: 179 ms against 136 ms after — the quadratic pod lookup was real but tens of
+milliseconds, not the freeze the audit estimated, and the check stays as a budget. What the
+harness cannot measure is the per-event dispatcher hop itself, since it applies events
+synchronously; `AsyncBatchingTests` pins the batching and `ClusterTabBatchApplyTests` that a
+batch equals its events one at a time.
+
+Still open from the audit: an expanded CRDs section in the sidebar is not virtualized (about
+300 rows, collapsed by default), the age timer walks every row every five seconds, and
+`DescribeHealthFilterEmpty` scans all rows per event while Unhealthy-only shows nothing. All
+three measured as Low and none was touched.
+
+Checks: Core tests 656 passed, 55 skipped (no sandbox), with `AsyncBatchingTests` (5); App
+tests 452/452 with `ClusterTabBatchApplyTests` (3); the whole harness rendered with every
+`ux-` check passing; `--stress` 24 of 24 within budget; the win-x64 NativeAOT publish emits only
+the two known DataGrid warnings and both `--smoke-test` modes exit 0. Not run: live-cluster tests, and no
+real watch against a real API server went through `InBatches` — the path a reconnect or a
+410 relist takes through it is covered only by the unit tests.

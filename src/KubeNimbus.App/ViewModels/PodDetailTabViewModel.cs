@@ -76,7 +76,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     /// and by <see cref="LogSearchText"/> only while <see cref="IsLogFilterMode"/> is on.
     /// This is what's rendered.
     /// </summary>
-    public ObservableCollection<LogLineViewModel> LogLines => Projection.Shown;
+    public LogLineCollection LogLines => Projection.Shown;
 
     private LogProjection? _projection;
 
@@ -1700,18 +1700,28 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
             _pendingLogLines.Clear();
         }
 
-        foreach (var rawLine in raw)
+        // "Everything" against a container with a long history delivers far more in one tick
+        // than the buffer keeps. Only the last _maxLogLines of it can survive the trim, so the
+        // rest is dropped here instead of parsed, shown and trimmed straight back out.
+        var skip = Math.Max(0, raw.Length - _maxLogLines);
+        var previous = skip == 0 && _allLogLines.Count > 0 ? _allLogLines[^1] : null;
+        var built = new List<LogLineViewModel>(raw.Length - skip);
+        for (var i = skip; i < raw.Length; i++)
         {
-            var line = new LogLineViewModel(rawLine, ShowLogTimestamps, utcTimestamp: UseUtcTimestamps);
-            line.InheritFrom(_allLogLines.Count > 0 ? _allLogLines[^1] : null);
-            _allLogLines.Add(line);
-            Projection.Append(line);
+            var line = new LogLineViewModel(raw[i], ShowLogTimestamps, utcTimestamp: UseUtcTimestamps);
+            line.InheritFrom(previous);
+            built.Add(line);
+            previous = line;
         }
 
         _loadingLogRange = false;
         _clearedLines = null;
 
-        TrimLogBuffer();
+        // Trim before appending, so neither the buffer nor the rendered list ever holds more
+        // than the cap, and the new lines reach the view as one notification.
+        TrimLogBuffer(incoming: built.Count, batchTrimmed: skip > 0);
+        _allLogLines.AddRange(built);
+        Projection.AppendRange(built);
         UpdateLogFind(newQuery: false);
         ClearLogsCommand.NotifyCanExecuteChanged();
         RaiseLogPlaceholder();
@@ -1723,15 +1733,19 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     /// index for the same reason — the dropped lines are always the oldest, so their
     /// position is known and there is nothing to search for.
     /// </summary>
-    private void TrimLogBuffer()
+    private void TrimLogBuffer(int incoming, bool batchTrimmed)
     {
-        var excess = _allLogLines.Count - _maxLogLines;
-        if (excess <= 0)
+        var excess = Math.Min(_allLogLines.Count, _allLogLines.Count + incoming - _maxLogLines);
+        if (excess <= 0 && !batchTrimmed)
         {
             return;
         }
 
         TrimNotice = $"Older lines were trimmed at the { _maxLogLines:N0}-line scrollback limit.";
+        if (excess <= 0)
+        {
+            return;
+        }
 
         var dropped = _allLogLines.GetRange(0, excess);
         _allLogLines.RemoveRange(0, excess);

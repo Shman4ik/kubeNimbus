@@ -119,7 +119,7 @@ public sealed partial class ApplicationPageViewModel : ObservableObject
 
     // ------------------------------------------------------------------ pods
 
-    public ObservableCollection<PagePodViewModel> Pods { get; } = [];
+    public RangeObservableCollection<PagePodViewModel> Pods { get; } = [];
 
     [ObservableProperty]
     private PagePodViewModel? _selectedPod;
@@ -607,9 +607,21 @@ public sealed partial class ApplicationPageViewModel : ObservableObject
             .ThenBy(p => p.Name, StringComparer.Ordinal)
             .ToList();
         var target = new List<PagePodViewModel> { Pods[0] };
+
+        // By name through a dictionary: a FirstOrDefault per pod made a 1,000-node DaemonSet
+        // a million string compares on every list rebuild.
+        var byName = new Dictionary<string, PagePodViewModel>(StringComparer.Ordinal);
+        foreach (var pod in Pods)
+        {
+            if (!pod.IsMerged)
+            {
+                byName.TryAdd(pod.Name, pod);
+            }
+        }
+
         foreach (var pod in facts)
         {
-            var existing = Pods.FirstOrDefault(p => !p.IsMerged && p.Name == pod.Name);
+            var existing = byName.GetValueOrDefault(pod.Name);
             if (existing is null)
             {
                 existing = new PagePodViewModel(pod, selected: false);
@@ -622,12 +634,12 @@ public sealed partial class ApplicationPageViewModel : ObservableObject
             target.Add(existing);
         }
 
+        // A big change is one Reset (see ApplicationsViewModel.Sync), which the list answers
+        // by clearing its selection: remember it first, and put it back if it is still here.
+        var before = SelectedPod;
         ApplicationsViewModel.Sync(Pods, target);
         Pods[0].SetMergedCount(facts.Count);
-        if (SelectedPod is { IsMerged: false } selected && !Pods.Contains(selected))
-        {
-            SelectedPod = Pods[0];
-        }
+        SelectedPod = before is not null && Pods.Contains(before) ? before : Pods[0];
     }
 
     private void BuildTimeline(ApplicationInput input)

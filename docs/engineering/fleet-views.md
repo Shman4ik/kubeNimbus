@@ -14,7 +14,9 @@ connected cluster and interleave the results. Four things are load-bearing:
 - **A `Reset` is scoped to the cluster that sent it.** Watches relist on 410
   Gone, and `ClusterTabViewModel.ApplyFleet` therefore clears only that
   cluster's rows. Treating a fleet Reset like a single-cluster one would wipe
-  four healthy clusters because the fifth reconnected.
+  four healthy clusters because the fifth reconnected. The clearing is one pass and one
+  notification (`Rows.ReplaceAll`), not a `Rows.Remove` per row: a member relisting 5,000
+  pods was a linear search and two notifications per row (the stress mode's `fleet-relist`).
 - **Partial is normal, and is always stated.** A kind missing from a cluster, or
   a cluster that can't be reached, never fails the view: the header shows
   "n of m clusters serve X" and unreachable members surface in the inline

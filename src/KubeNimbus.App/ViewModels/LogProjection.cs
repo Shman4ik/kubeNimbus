@@ -1,5 +1,3 @@
-using System.Collections.ObjectModel;
-
 namespace KubeNimbus.App.ViewModels;
 
 /// <summary>
@@ -33,10 +31,20 @@ public sealed class LogProjection
     private int _afterRemaining;
     private bool _gap;
 
+    // Lines shown by the current AppendRange/Rebuild, added to Shown in one notification at
+    // its end. Null outside a batch, when Show adds straight to Shown.
+    private List<LogLineViewModel>? _batch;
+
+    // How many shown lines precede the batch: Shown's count for AppendRange, zero for
+    // Rebuild, whose batch replaces everything Shown still holds.
+    private int _batchBase;
+
     public LogProjection(Func<LogLineViewModel, bool> admits) => _admits = admits;
 
     /// <summary>What is rendered.</summary>
-    public ObservableCollection<LogLineViewModel> Shown { get; } = [];
+    public LogLineCollection Shown { get; } = [];
+
+    private int ShownCount => _batch is { } batch ? _batchBase + batch.Count : Shown.Count;
 
     /// <summary>The search; null when the box is empty or its pattern does not parse.</summary>
     public LogQuery? Query { get; set; }
@@ -58,14 +66,47 @@ public sealed class LogProjection
     /// <summary>Re-reads the whole buffer — a filter, a query or a level changed.</summary>
     public void Rebuild(IReadOnlyList<LogLineViewModel> buffer)
     {
-        Shown.Clear();
         Excluded = 0;
         _before.Clear();
         _afterRemaining = 0;
         _gap = false;
-        foreach (var line in buffer)
+        _batch = [];
+        _batchBase = 0;
+        try
         {
-            Append(line);
+            foreach (var line in buffer)
+            {
+                Append(line);
+            }
+        }
+        finally
+        {
+            var shown = _batch;
+            _batch = null;
+            Shown.ReplaceAll(shown);
+        }
+    }
+
+    /// <summary>
+    /// Takes a flush's worth of new lines at the end of the buffer, with one notification
+    /// for everything it shows rather than one per line.
+    /// </summary>
+    public void AppendRange(IReadOnlyList<LogLineViewModel> lines)
+    {
+        _batch = [];
+        _batchBase = Shown.Count;
+        try
+        {
+            foreach (var line in lines)
+            {
+                Append(line);
+            }
+        }
+        finally
+        {
+            var shown = _batch;
+            _batch = null;
+            Shown.AddRange(shown);
         }
     }
 
@@ -111,7 +152,7 @@ public sealed class LogProjection
 
         if (Context == 0)
         {
-            _gap = Shown.Count > 0;
+            _gap = ShownCount > 0;
             return;
         }
 
@@ -119,7 +160,7 @@ public sealed class LogProjection
         if (_before.Count > Context)
         {
             _before.Dequeue();
-            _gap = Shown.Count > 0;
+            _gap = ShownCount > 0;
         }
     }
 
@@ -138,10 +179,7 @@ public sealed class LogProjection
             }
         }
 
-        for (var i = 0; i < index; i++)
-        {
-            Shown.RemoveAt(0);
-        }
+        Shown.RemoveFromFront(index);
 
         if (Query is { HasExcludes: true } query)
         {
@@ -171,6 +209,13 @@ public sealed class LogProjection
         line.IsContextLine = context && Filtering;
         line.IsGapBefore = _gap && Filtering;
         _gap = false;
-        Shown.Add(line);
+        if (_batch is { } batch)
+        {
+            batch.Add(line);
+        }
+        else
+        {
+            Shown.Add(line);
+        }
     }
 }
