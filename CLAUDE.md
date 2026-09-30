@@ -1914,6 +1914,8 @@ Three rules:
 
 The release workflow, installers, Microsoft Store (MSIX) identity, the assembly-name coupling and the 0.5 GB Actions storage budget are in the `release` skill ([`.claude/skills/release/SKILL.md`](.claude/skills/release/SKILL.md)). Load it before cutting a release or touching `.github/workflows`, `installer/` or the packaging scripts. Two rules that must not wait for it: **every `upload-artifact` sets `retention-days`**, and **the MSIX identity in `installer/msix/Package.appxmanifest` and the MSI `UpgradeCode` are never edited**.
 
+**Repository settings are kept the same in kubeNimbus and pgNimbus** (2026-09-30; nimbusUi carries the security half). On `main`: the required checks (`Build & test` and `dependency-review`), resolved threads, no force push or deletion, and **no required approval** (CODEOWNERS only names who is asked). `v*` tags sit under a `Release tags` ruleset (create, never move or delete), releases are immutable, every `uses:` is pinned to a commit SHA (`sha_pinning_required`), Dependabot alerts and security updates, secret scanning with push protection and private vulnerability reporting are on, and merged branches are deleted. A change to one repo's settings is made to the other in the same session.
+
 ## History
 
 The MVP scope and the per-pass verification log (what each pass shipped, verified and left unverified) are in [`docs/status-history.md`](docs/status-history.md). Record a new pass there, not here.
