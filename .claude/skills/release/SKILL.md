@@ -85,14 +85,24 @@ unconditionally. So:
    `ci.yml` and `release.yml` use `actions/cache/restore` and never save. Cache
    storage is separate from the 0.5 GB artifact budget above (10 GB per repo).
 
-**Only `Build & test` is a required check.** The branch ruleset on `main`
-requires a PR and that one job; `XAML smoke test` and `NativeAOT publish
+**Only `Build & test` and `dependency-review` are required checks.** The
+branch ruleset on `main` requires a PR, resolved review threads and those two
+jobs, and no approval (2026-09, the same as pgNimbus); `dependency-review`
+refuses a PR that adds a package with a known advisory. `XAML smoke test` and `NativeAOT publish
 (linux-x64)` still run on every PR that can affect them and are still worth
 reading, but they do not hold the merge. The smoke test is a candidate for the
 required list (it catches a view that no longer loads, which nothing else in CI
 does); the AOT job is not, because it
 is the slow half of the wait and an AOT regression cannot reach anybody without
 going through `release.yml`, which publishes *and launches* every RID.
+
+**A tag and a release are final (2026-09).** The `Release tags` ruleset lets a
+`v*` tag be created but never moved or deleted, and immutable releases lock a
+published release's tag and assets. A bad release is fixed by the next tag, as
+before; there is no longer any other way. Every `uses:` is pinned to a commit
+SHA with a `# vX.Y.Z` comment, which the repository setting
+`sha_pinning_required` enforces, and Dependabot's `github-actions` entry moves
+SHA and comment together.
 
 Retention is **not retroactive**. Lowering it leaves already-uploaded
 artifacts on their original clock, so a change like this has to be paired with

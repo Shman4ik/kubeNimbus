@@ -1,12 +1,8 @@
-# Every pull request needs a review from the repo owner. This is enforced by
-# the `main` ruleset (one approval, code-owner review required); the file is
-# what tells GitHub who that owner is, and without it the ruleset's code-owner
-# clause has nobody to ask.
+# Names the owner, so GitHub asks @Shman4ik to review every pull request.
 #
-# Deliberate while the project is young and the contributor list is one person
-# plus agents: every change gets a human pass from @Shman4ik before it lands.
-# The repository-admin role is a bypass actor on the same ruleset, so the owner
-# is not locked out of merging their own work — nobody can approve their own
-# pull request, and a solo maintainer with no bypass would be unable to merge
-# anything at all.
+# The request is not enforced (2026-09): the `main` ruleset requires the checks
+# and resolved threads but no approval, the same as pgNimbus. The contributor
+# list is one person plus agents, nobody can approve their own pull request,
+# and a required code-owner review only made every merge an admin bypass. The
+# owner still reads every change before merging it; that is a habit, not a rule.
 * @Shman4ik
