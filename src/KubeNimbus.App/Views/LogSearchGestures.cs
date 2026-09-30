@@ -41,7 +41,9 @@ internal static class LogSearchGestures
     {
         ruler.LineRequested += (_, line) => BringIntoView(items, line);
         // A row's own top, over whichever is taller of the content and the pane: exact with
-        // wrapping on, and a short log's ticks stay beside its lines at the top.
+        // wrapping on, and a short log's ticks stay beside its lines at the top. The list is
+        // virtualized, so only the rows in sight have a container; the rest are placed by
+        // index (null here), which is what the ruler does without this function at all.
         ruler.PositionOf = index =>
         {
             var total = Math.Max(scroll.Extent.Height, scroll.Viewport.Height);
@@ -165,8 +167,15 @@ internal static class LogSearchGestures
             return;
         }
 
+        // The list is virtualized, so a line far from the viewport has no container to
+        // bring into view: ScrollIntoView realizes it first, then its own BringIntoView
+        // settles it fully in sight.
         Dispatcher.UIThread.Post(
-            () => items.ContainerFromItem(line)?.BringIntoView(),
+            () =>
+            {
+                items.ScrollIntoView(line);
+                items.ContainerFromItem(line)?.BringIntoView();
+            },
             DispatcherPriority.Background);
     }
 }

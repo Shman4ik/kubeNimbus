@@ -336,6 +336,16 @@
                    simply ran off the edge with no way to reach the rest of it. -->
               <ScrollViewer Name="LogScroll" Grid.Column="0" HorizontalScrollBarVisibility="Auto">
                 <ItemsControl Name="LogItems" ItemsSource="{Binding LogLines}">
+                  <!-- Virtualized: only the rows in sight exist. With the default StackPanel every
+                       buffered line was a live row of about ten controls, so a full 4,000-line
+                       buffer took seconds to lay out and made every theme switch restyle ~37,000
+                       controls. Rows are found by item, not by container, for the same reason
+                       (LogSearchGestures.BringIntoView). -->
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <VirtualizingStackPanel />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:LogLineViewModel">
                       <!-- Selectable: reading a log usually ends in copying part of it into a
