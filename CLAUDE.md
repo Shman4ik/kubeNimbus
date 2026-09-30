@@ -1828,9 +1828,18 @@ whenever the connect landed before the capture, and never in CI, which has no ku
 real timers — the demo replay and the offline client's failing follows — so a capture
 took whatever line count and Follow state the clock had reached. `LogSettle` waits,
 before every capture, until each pod-detail stream has stopped following and each
-aggregated pane's sources have ended. (3) Per-cluster state persisted in the scratch
-workspace (grid layouts, and now Recent kinds) is reset before each scenario, or a demo
-scenario would inherit the Recent section of the one before it. (4) The scratch
+aggregated pane's sources have ended. (3) **Every capture starts with no `settings.json`
+and no `workspace.json`** in the scratch directory, because anything a scenario persists
+otherwise reaches every scenario rendered after it, and a full run then disagrees with a
+run of the one scenario. The reset used to clear named workspace fields (grid layouts,
+Recent kinds) and missed a preference: `cluster-tab-events-list` expands Config on a demo
+tab, the demo tab's sections persist their expansion to `settings.json`, and the 281 PNGs
+rendered after it — the published `store-*` set among them — showed Config open where the
+default is collapsed, while a single-scenario run showed it closed. Deleting both whole
+files means the next persisted preference cannot leak the same way. The check for this
+class is a full run against single-scenario runs (`… -- <dir> <scenario>`), byte for
+byte: after the fix, 50 of 50 PNGs across the affected scenarios matched, and 46 of them
+had differed before. (4) The scratch
 directory itself was one fixed name under `%TEMP%`, so two harness runs at once — two
 worktrees, two agents — wrote each other's `settings.json` mid-render; measured, that
 alone made 189 of 272 PNGs differ between two runs (sidebar sections expanded in one and
