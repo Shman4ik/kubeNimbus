@@ -141,6 +141,19 @@ must be AOT/trimming-compatible from day one.
   pane — see "The exec terminal"), `CommunityToolkit.Mvvm` source generators
   (`[ObservableProperty]`/`[RelayCommand]`, no hand-written INPC).
   `AvaloniaUseCompiledBindingsByDefault=true`; no reflection bindings.
+- **Every AvaloniaEdit `TextEditor` goes through `Editing/EditorDefaults`** (2026-09-30,
+  taken from pgNimbus, which found it first): `Apply` for the YAML editor, `ApplyViewer`
+  for a read-only viewer (the Helm release's values and manifest). AvaloniaEdit's link
+  rendering is on by default: it draws every URL and e-mail address in pure Blue over the
+  YAML highlighter's colours, and a Ctrl+click opens it. An Argo `repoURL`, an annotation
+  link and a maintainer's address are values, not links, so both options are off.
+  `ApplyViewer` also turns off `AllowScrollBelowDocument`, whose room below the last line
+  put a scroll bar beside a values file that fits. The YAML editor keeps that room even
+  while it is read-only (a deleted object, the demo cluster), because it is the working
+  editor. A new `TextEditor` calls one of the two next to `YamlSyntaxHighlighting.Attach`.
+  `EditorChecks` (scenarios `ux-yaml-editor-links` and `ux-helm-editor-links`) reads each
+  editor's visual lines for a `VisualLineLinkText`, checks the scroll rule, and fails for
+  any editor in those two views that skipped the helper.
 - **KubeNimbus.Core.Tests** — TUnit on Microsoft.Testing.Platform. **NEVER add
   `Microsoft.NET.Test.Sdk` to a TUnit project — it breaks discovery.** The
   runner is pinned in `global.json` (`test.runner = Microsoft.Testing.Platform`).
@@ -1541,8 +1554,10 @@ Four things about it:
 - **Its limit is a running Avalonia application, and the harness is where that lives.**
   Contracts that need a real window — the window's key bindings following the
   Ctrl/Cmd scheme (VER-19), the exec terminal's bytes for ^C/^D/Tab (ENG-20) — are
-  `ux-` checks in `tools/Screenshot/KeyboardChecks.cs`, which throw and fail CI's
-  render step like the other `ux-` checks. One Avalonia.Headless host rather than a
+  `ux-` checks in `tools/Screenshot/KeyboardChecks.cs`, and what an AvaloniaEdit
+  editor draws (no links; only a laid-out editor has visual lines) is checked in
+  `EditorChecks.cs`. They throw and fail CI's render step like the other `ux-`
+  checks. One Avalonia.Headless host rather than a
   second one bolted onto this project; the shell view model's own half of VER-19 is a
   plain test here (`ShellHotkeySchemeTests`).
 - **The screenshot harness cannot replace it, and that is the whole argument.**

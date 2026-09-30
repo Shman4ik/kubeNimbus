@@ -22,6 +22,11 @@ it as the GitHub Release body, so headings must match tags exactly
   resources), the YAML apply preview (large ConfigMaps), the Service pane (hundreds of
   backing pods), the list search, and a list sorted by CPU or memory, which used to stall
   for about two seconds on every metrics poll with 5,000 pods.
+- Web and e-mail addresses in the YAML editor and in a Helm release's values and manifest are
+  now plain text in the YAML colours. They used to be drawn in bright blue over the
+  highlighting, like links, and a Ctrl+click opened them in the browser or the mail client.
+  The values and the manifest also stop scrolling at their last line, so text that fits no
+  longer gets a scroll bar.
 
 ## [0.5.0] - 2026-09-29
 
