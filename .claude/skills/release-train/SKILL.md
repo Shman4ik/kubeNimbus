@@ -215,14 +215,15 @@ Record results in `docs/product-loop/history/<train>/verification.md`, then
    `Build & test` (background `gh pr checks --watch`, not a polling loop).
 3. By `RELEASE_MODE`:
    - `auto` — merge with a merge commit (keeps one commit per item for bisecting):
-     `gh pr merge --merge --admin`, then `git tag -a vX.Y.Z -m "kubeNimbus vX.Y.Z"` on
+     `gh pr merge --merge`, then `git tag -a vX.Y.Z -m "kubeNimbus vX.Y.Z"` on
      the merge commit and push the tag. Watch `release.yml` in the background; a red
      leg is fixed forward as a patch release, never by moving the tag.
    - `pr` — stop at a green, ready PR and tell the owner the exact merge + tag commands.
    - `none` — leave the branch release-ready.
 
-   `auto` needs an admin identity: `main`'s ruleset requires a code-owner review that
-   only the admin bypass skips, and a tag push must be allowed. A cloud session's
+   `auto` needs an identity that may merge and push a tag: `main`'s ruleset requires
+   no approval (2026-09), only the required checks and resolved threads, and the
+   `Release tags` ruleset allows creating a `v*` tag, never moving it. A cloud session's
    GitHub App token usually has neither (it already lacks `actions: write` — see
    VER-1 in the backlog). If the merge or the tag push is refused, that is not a
    failure of the train: fall back to `pr` for this release, record the refusal in
