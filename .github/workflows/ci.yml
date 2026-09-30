@@ -200,9 +200,22 @@ jobs:
         run: dotnet build tools/Screenshot -c Release
 
       - name: Render screenshots
+        id: render
         run: dotnet run --project tools/Screenshot -c Release --no-build -- "${{ runner.temp }}/screenshots"
 
-      # Only when the render step went red. The images are a smoke-test
+      # Every surface that shows cluster data, fed a large cluster's worth of it (5,000
+      # pods, 200,000 log lines, 3,000 Argo resources, a 5,000-key diff), with the
+      # visuals left in the window, the collection notifications raised and the time
+      # taken checked against a budget (tools/Screenshot/StressChecks.cs). A fixture of a
+      # dozen rows is fast whatever the code does, which is how a log pane that realized
+      # 37,000 controls shipped. Runs even when the render went red: the two find
+      # different things, and one red step should not hide the other's verdict.
+      - name: Stress check
+        if: ${{ !cancelled() }}
+        run: dotnet run --project tools/Screenshot -c Release --no-build -- --stress
+
+      # Only when the render step itself went red (not the stress check, whose table
+      # in the log is its own diagnostic). The images are a smoke-test
       # by-product, not a deliverable: on a green run nobody opens them, and at
       # ~14 MB a run this single artifact was holding over a gigabyte against a
       # 0.5 GB Actions storage allowance. if-no-files-found is "ignore" for the
@@ -210,7 +223,7 @@ jobs:
       # itself throwing, which leaves the directory empty, and a missing
       # diagnostic must not turn one red step into two.
       - name: Upload screenshots
-        if: failure()
+        if: ${{ failure() && steps.render.outcome == 'failure' }}
         uses: actions/upload-artifact@v7
         with:
           name: screenshots

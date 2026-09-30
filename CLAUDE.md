@@ -1476,6 +1476,10 @@ dotnet run --project src/KubeNimbus.App
 # Headless visual check (no display, e.g. Claude Code Cloud) — see below.
 dotnet run --project tools/Screenshot -- /tmp/kubenimbus-screenshots
 
+# Stress mode: every data surface fed a large cluster's worth of objects, against a
+# budget of visuals, collection notifications and time — see "The stress mode" below.
+dotnet run --project tools/Screenshot -- --stress
+
 # NativeAOT publish — THE shipping build. Verify it end-to-end on every change
 # that could affect trimming/AOT (new package, new reflection, new binding).
 dotnet publish src/KubeNimbus.App -c Release -r win-x64 -p:PublishAot=true -o publish/app
@@ -1841,6 +1845,33 @@ has ever downloaded 58 PNGs to confirm it. `if-no-files-found` has to be
 `ignore` rather than `error` precisely because the common failure is the
 render throwing, which leaves the directory empty; a missing diagnostic must
 not turn one red step into two.
+
+### The stress mode (`tools/Screenshot -- --stress`)
+
+**A fixture of a dozen rows is fast whatever the code does**, which is how two freezes
+shipped past every screenshot. The log panes' line lists did not virtualize, so a full
+4,000-line buffer was about 37,000 live controls — seven seconds of layout, and every theme
+switch restyled all of them — and their scrollback trim was a `RemoveAt(0)` per line, 396,000
+collection notifications for one "Everything" flush. A read-only audit then found the same
+class in the Argo Resources tab, the apply-preview diff, the Service pane's initial list,
+the list search and the CPU-sorted metrics poll. `StressChecks` feeds each of those surfaces
+what a large cluster produces (5,000 pods, 200,000 log lines, 3,000 Argo resources, a
+5,000-key diff, a 1,000-pod Service) through the same entry points the watch and the flush
+timer use, then switches the theme with it all on screen.
+
+Three rules:
+
+- **The budgets rest on counts, not on time.** Visuals left in the window (a list that does
+  not virtualize holds a row of controls per item) and notifications the watched collection
+  raised (a list rebuilt item by item raises one per item) are the same on every machine.
+  Time has a budget too, loose enough for a slow runner, to catch seconds where there should
+  be milliseconds.
+- **A list bound to cluster data virtualizes, and is rebuilt with one notification.** An
+  `ItemsControl` gets a `VirtualizingStackPanel`; a wholesale change goes through
+  `RangeObservableCollection` (`AddRange`, `RemoveFromFront`, `ReplaceAll`) rather than a
+  `Clear()` and an `Add` per item. A new surface of that kind gets a check here.
+- **It runs in CI** after the render in the XAML smoke test job, and was proved against the
+  code before the fix: see the pass log in `docs/status-history.md`.
 
 ## Release, CI and packaging
 

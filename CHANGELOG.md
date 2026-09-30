@@ -12,6 +12,17 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+### Fixed
+
+- **Logs no longer freeze the window on "Everything".** A pod with a long history used to
+  hang the app while its log loaded, and switching the theme with a full log open took a
+  second. The log panes now draw only the lines in sight and drop what the scrollback would
+  trim before reading it.
+- **Large clusters stay responsive** in the Argo CD Resources tab (thousands of managed
+  resources), the YAML apply preview (large ConfigMaps), the Service pane (hundreds of
+  backing pods), the list search, and a list sorted by CPU or memory, which used to stall
+  for about two seconds on every metrics poll with 5,000 pods.
+
 ## [0.5.0] - 2026-09-29
 
 ### Added

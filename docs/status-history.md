@@ -2503,3 +2503,44 @@ publish emits only the two known DataGrid warnings, and `--smoke-test` and
 `--smoke-test=unreachable-cluster` (which builds a client from a kubeconfig in the AOT binary)
 both exit 0. Not run: the live-cluster tests, so no real exec plugin, client-certificate or
 proxy connect went through the new reader against an API server.
+### Freezes on large data, and the stress mode that holds them (2026-09-30)
+
+Reported from a real cluster: "Everything" in the application page's log pane hung the app,
+and so did switching the theme. Both had one cause and a second behind it. The log panes'
+line lists did not virtualize (a full 4,000-line buffer was about 37,000 live controls, seven
+seconds of layout, and a theme switch restyled every one), and a flush appended each received
+line and then trimmed back to the cap with `RemoveAt(0)` per line — 396,000 collection
+notifications for one 200,000-line flush. Fixed with a `VirtualizingStackPanel` in both panes,
+`RangeObservableCollection` (one notification per range operation), and dropping what the cap
+would trim before parsing it, per pod so a chatty pod cannot push out a quiet pod's newer lines.
+
+A read-only audit then found the same class elsewhere, and five of its findings are fixed
+here: the Argo Resources tab and the three apply-preview diff views virtualize; the Service
+pane no longer re-joins per object during its initial list; the list search and header sort
+rebuild `VisibleRows` in one Reset; and the metrics poll on a CPU-sorted list replaces the list
+in one Reset past 32 out-of-order rows. That last one reverses a documented decision, which
+rested on a DataGrid dropping its scroll offset on a Reset; Avalonia 12's does not (probed in
+the harness: offset 65,382 before and after), and the insertion pass it protected cost two
+seconds per poll on 5,000 pods. Not fixed, and still open from the audit: one awaited UI hop
+per watch event in the list, workload detail, Service and multi-pod log watches; the fleet
+Reset's `Rows.Remove` per row; the Applications list's snapshot parsing every Argo Application
+on the UI thread; the application page's per-rebuild rule evaluation and `FirstOrDefault` per
+pod; its `Sync` removing and inserting per item; and the low ones (RBAC who-can cards, an
+expanded 300-CRD sidebar, the age timer).
+
+`tools/Screenshot -- --stress` is new: eight surfaces fed a large cluster's worth of objects,
+with visuals, collection notifications and time checked against a budget, in CI after the
+render. It was proved against the code before the fix, check by check: the log check did not
+finish in eleven minutes (1.9 GB); Argo 7.9 s and 59,841 visuals; the diff 12 s and 102,985
+visuals with a 1.4 s theme switch; the Service pane 503,503 notifications; the metrics poll
+10,012; the header sort 5,015; a search keystroke 1,112. After: every check within budget, the
+slowest action 0.8 s (a 200,000-line flush), every theme switch under 100 ms.
+
+Checks: Core tests 651 passed, 55 skipped (no sandbox); App tests 449/449, with
+`LogBurstTests` (4, three of them red on the old code) and a reshuffle test in
+`ClusterTabSortTests`. The whole harness rendered (348 PNGs) with every `ux-` check passing;
+the diff and Argo shots are unchanged apart from a scrollbar thumb's length. The win-x64
+NativeAOT publish emits only the two known DataGrid warnings, and `--smoke-test` and
+`--smoke-test=unreachable-cluster` both exit 0. Not run: the live-cluster tests, and nothing
+was driven with a real mouse against a real cluster — the freeze was reported on one, and the
+fix is verified only headless.
