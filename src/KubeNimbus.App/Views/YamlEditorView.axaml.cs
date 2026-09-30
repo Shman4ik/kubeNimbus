@@ -18,6 +18,7 @@ public partial class YamlEditorView : UserControl
     public YamlEditorView()
     {
         InitializeComponent();
+        EditorDefaults.Apply(Editor);
         YamlSyntaxHighlighting.Attach(Editor);
         Editor.TextChanged += OnEditorTextChanged;
         DataContextChanged += (_, _) => Bind();

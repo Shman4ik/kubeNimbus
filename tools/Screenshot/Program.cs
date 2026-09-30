@@ -313,6 +313,9 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("ux-hotkey-scheme", () => BuildMainWindowContent()),
     ("ux-overlay-focus", () => BuildMainWindowContent()),
     ("ux-exec-keys", () => HostInMainWindow(ClusterTabScenarios.Exec())),
+    // URLs and e-mail addresses in YAML are drawn as text, not AvaloniaEdit's blue links (EditorChecks).
+    ("ux-yaml-editor-links", () => HostInMainWindow(ClusterTabScenarios.YamlEditor())),
+    ("ux-helm-editor-links", () => HostInMainWindow(ClusterTabScenarios.HelmReleaseDetail())),
     ("main-window", () => BuildMainWindowContent()),
     ("main-window-no-kubeconfig", () => BuildNoKubeconfigContent()),
     ("main-window-shortcuts", () => BuildMainWindowContent(openShortcuts: true)),
@@ -408,6 +411,8 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
         || name == "cluster-tab-list-unhealthy-fleet-partial-narrow")
         LayoutChecks.GridReachesLastColumn(window);
     if (name == "ux-exec-keys") KeyboardChecks.ExecKeys(window);
+    if (name == "ux-yaml-editor-links") EditorChecks.YamlEditorLinks(window);
+    if (name == "ux-helm-editor-links") EditorChecks.HelmReleaseLinks(window);
     if (name.StartsWith("applications-page", StringComparison.Ordinal) || name == "store-applications-page") ApplicationsChecks.SettlePage(window);
     if (name == "ux-unhealthy-toggle") UxInteractionChecks.UnhealthyToggle(window);
     if (name == "ux-logs-palette") UxInteractionChecks.LogsPalette(window);
