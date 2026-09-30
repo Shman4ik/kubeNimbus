@@ -60,7 +60,7 @@ public sealed partial class ArgoApplicationTabViewModel : InspectorTabViewModelB
     private ArgoApplication? _application;
 
     /// <summary>The objects Argo manages for this Application, each with its own sync and health.</summary>
-    public ObservableCollection<ArgoResourceRowViewModel> Resources { get; } = [];
+    public RangeObservableCollection<ArgoResourceRowViewModel> Resources { get; } = [];
 
     public ObservableCollection<ArgoCondition> Conditions { get; } = [];
 
@@ -138,14 +138,14 @@ public sealed partial class ArgoApplicationTabViewModel : InspectorTabViewModelB
     {
         Application = application;
 
-        Resources.Clear();
-        foreach (var resource in application.Resources
+        // One Reset, not a Clear and an Add per resource: an app-of-apps root manages
+        // thousands, and every Reload runs this.
+        Resources.ReplaceAll(application.Resources
             .OrderBy(ArgoResourceRowViewModel.Rank)
             .ThenBy(r => r.Kind, StringComparer.Ordinal)
-            .ThenBy(r => r.Name, StringComparer.Ordinal))
-        {
-            Resources.Add(new ArgoResourceRowViewModel(resource, OpenResourceAsync, _openLogs is null ? null : OpenResourceLogsAsync));
-        }
+            .ThenBy(r => r.Name, StringComparer.Ordinal)
+            .Select(resource => new ArgoResourceRowViewModel(
+                resource, OpenResourceAsync, _openLogs is null ? null : OpenResourceLogsAsync)));
 
         Conditions.Clear();
         foreach (var condition in application.Conditions)

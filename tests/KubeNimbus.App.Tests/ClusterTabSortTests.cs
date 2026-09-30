@@ -254,10 +254,9 @@ public class ClusterTabSortTests
     }
 
     /// <summary>
-    /// The metrics poll re-orders a usage-sorted list <b>in place</b>. What is being
-    /// pinned is the absence of a Reset: a DataGrid answers one by dropping the scroll
-    /// position and the selection, and a list that jumped to the top every fifteen
-    /// seconds would be useless for the one job a CPU sort has.
+    /// A poll that moves a few rows re-orders a usage-sorted list <b>in place</b>, one
+    /// moved row at a time, with no Reset: the grid animates nothing and loses nothing, and
+    /// a quiet list costs only comparisons.
     /// </summary>
     [Test]
     public async Task A_usage_re_sort_reorders_without_resetting_the_collection()
@@ -279,6 +278,49 @@ public class ClusterTabSortTests
 
         await Assert.That(tab.VisibleNames()).IsEqualTo("api-7f9, web-1, cache-0");
         await Assert.That(reset).IsFalse();
+    }
+
+    /// <summary>
+    /// A poll that reshuffles most of a big usage-sorted list replaces it in one Reset
+    /// rather than moving each row: on 5,000 pods the move-per-row pass was about 10,000
+    /// notifications and two seconds of frozen window every fifteen seconds. The selection
+    /// survives it (the grid keeps its scroll offset across a Reset on its own), and rows
+    /// with equal usage keep their order.
+    /// </summary>
+    [Test]
+    public async Task A_usage_re_sort_that_reshuffles_the_list_is_one_reset_and_keeps_the_selection()
+    {
+        var tab = TestObjects.Tab();
+        for (var i = 0; i < 500; i++)
+        {
+            tab.Apply(TestObjects.Added(TestObjects.Pod("payments", $"pod-{i:D3}", restarts: 0)));
+            tab.Rows[^1].ApplyUsage(1_000_000L * (i + 1), 1);
+        }
+
+        tab.ToggleSort(ResourceColumn.Cpu);
+        var selected = tab.VisibleRows[123];
+        tab.SelectedRow = selected;
+
+        var notifications = new List<System.Collections.Specialized.NotifyCollectionChangedAction>();
+        tab.VisibleRows.CollectionChanged += (_, e) => notifications.Add(e.Action);
+
+        // Usage reverses: every row is out of place. The two busiest end up equal.
+        foreach (var row in tab.Rows)
+        {
+            var i = int.Parse(row.Name[4..]);
+            row.ApplyUsage(1_000_000L * Math.Max(2, 500 - i), 1);
+        }
+
+        tab.ResortVisibleRows();
+
+        await Assert.That(notifications).IsEquivalentTo([System.Collections.Specialized.NotifyCollectionChangedAction.Reset]);
+        // Ascending, so the two tied quietest rows lead, in the order they already had.
+        await Assert.That(tab.VisibleRows[0].Name).IsEqualTo("pod-498");
+        await Assert.That(tab.VisibleRows[1].Name).IsEqualTo("pod-499");
+        await Assert.That(tab.VisibleRows[^1].Name).IsEqualTo("pod-000");
+        await Assert.That(tab.VisibleRows[^2].Name).IsEqualTo("pod-001");
+        await Assert.That(tab.SelectedRow).IsSameReferenceAs(selected);
+        await Assert.That(tab.Rows.Select(r => r.Name).First()).IsEqualTo("pod-000");
     }
 
     // ----------------------------------------------------------------- per-kind memory
