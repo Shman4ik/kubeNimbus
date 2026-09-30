@@ -12,6 +12,12 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+- Web and e-mail addresses in the YAML editor and in a Helm release's values and manifest are
+  now plain text in the YAML colours. They used to be drawn in bright blue over the
+  highlighting, like links, and a Ctrl+click opened them in the browser or the mail client.
+  The values and the manifest also stop scrolling at their last line, so text that fits no
+  longer gets a scroll bar.
+
 ## [0.5.0] - 2026-09-29
 
 ### Added
