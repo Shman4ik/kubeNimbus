@@ -66,7 +66,8 @@ BuildAvaloniaApp().SetupWithoutStarting();
 
 if (stress)
 {
-    var code = StressChecks.Run(tab => HostInMainWindow(tab), filter);
+    var code = StressChecks.Run(
+        (tab, applications) => HostInMainWindow(tab, mode: applications ? ShellMode.Applications : ShellMode.Resources), filter);
     try
     {
         Directory.Delete(scratch, recursive: true);

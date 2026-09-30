@@ -382,7 +382,7 @@ public sealed partial class ServiceDetailTabViewModel : InspectorTabViewModelBas
     {
         try
         {
-            await foreach (var evt in client.WatchResourceAsync(
+            await foreach (var batch in client.WatchResourceAsync(
                                descriptor, Namespace,
                                connectionLost: ex => Dispatcher.UIThread.Post(() =>
                                {
@@ -393,14 +393,18 @@ public sealed partial class ServiceDetailTabViewModel : InspectorTabViewModelBas
                                    }
                                }),
                                cancellationToken: token,
-                               labelSelector: selector).ConfigureAwait(false))
+                               labelSelector: selector).InBatches(cancellationToken: token).ConfigureAwait(false))
             {
+                // One hop onto the UI thread per batch of events (AsyncBatching), not per event.
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
                     if (!token.IsCancellationRequested)
                     {
                         reportError(null);
-                        apply(evt);
+                        foreach (var evt in batch)
+                        {
+                            apply(evt);
+                        }
                     }
                 });
             }

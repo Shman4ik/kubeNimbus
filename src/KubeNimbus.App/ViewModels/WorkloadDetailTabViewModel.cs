@@ -158,10 +158,16 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
         }
         try
         {
-            await foreach (var evt in _client.WatchResourceAsync(ResourceDescriptor.Pods, _row.Namespace,
+            // In batches (AsyncBatching): one hop onto the UI thread for every event that
+            // has arrived, not one per pod of the initial list.
+            await foreach (var batch in _client.WatchResourceAsync(ResourceDescriptor.Pods, _row.Namespace,
                 connectionLost: ex => Dispatcher.UIThread.Post(() => { if (!token.IsCancellationRequested) PodsStatus = ex.Message; }),
-                cancellationToken: token, labelSelector: selector).ConfigureAwait(false))
-                await Dispatcher.UIThread.InvokeAsync(() => { if (!token.IsCancellationRequested) ApplyPod(evt); });
+                cancellationToken: token, labelSelector: selector).InBatches(cancellationToken: token).ConfigureAwait(false))
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    if (token.IsCancellationRequested) return;
+                    foreach (var evt in batch) ApplyPod(evt);
+                });
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception ex)
@@ -175,7 +181,7 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
         if (evt.Type == ResourceEventType.Reset) { Pods.Clear(); SelectedPod = null; PodsStatus = "Loading pods…"; return; }
         if (evt.Resource is { } resource)
         {
-            var previous = Pods.FirstOrDefault(p => p.Name == resource.Name);
+            var previous = Pods.FirstOrDefault(p => string.Equals(p.Name, resource.Name, StringComparison.Ordinal));
             if (evt.Type == ResourceEventType.Deleted)
             {
                 if (previous is not null) Pods.Remove(previous);

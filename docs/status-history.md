@@ -2544,3 +2544,40 @@ NativeAOT publish emits only the two known DataGrid warnings, and `--smoke-test`
 `--smoke-test=unreachable-cluster` both exit 0. Not run: the live-cluster tests, and nothing
 was driven with a real mouse against a real cluster — the freeze was reported on one, and the
 fix is verified only headless.
+
+### Watch batching and the rest of the audit (2026-09-30)
+
+The second half of the large-data audit, stacked on the first. Every live list read its
+watch one event per UI-thread hop: the resource list, the fleet view, workload detail's pods,
+the Service pane and the multi-pod log pane awaited `InvokeAsync` per event, and the
+Applications list posted each one unawaited. `AsyncBatching.InBatches` (Core) now hands each
+consumer whatever has already arrived, through a bounded buffer so a slow UI thread still
+slows the reader, and with the source's error after every item before it; the consumers
+apply a batch per hop, and `ClusterTabViewModel.ApplyBatch` appends its new rows in one
+notification. Also: the fleet Reset clears a member's rows in one pass; the Applications
+list parses each Argo Application once per object version instead of once per rebuild on
+the UI thread, and its `Sync` replaces the list in one Reset past 32 rows coming or going
+(selection restored); the application page finds its pods by name through a dictionary; the
+RBAC who-can results virtualize.
+
+Stress mode, four new checks, run against the first PR's code with `ApplyBatch` replaced by
+per-event `Apply` (which is what that code did): the initial list of 5,000 pods raised 5,001
+notifications (now 2), a fleet member's relist 2,500 (now 1), an Applications search over
+2,010 apps 899 (now 1). The application page on a 1,000-pod DaemonSet did **not** fail
+before: 179 ms against 136 ms after — the quadratic pod lookup was real but tens of
+milliseconds, not the freeze the audit estimated, and the check stays as a budget. What the
+harness cannot measure is the per-event dispatcher hop itself, since it applies events
+synchronously; `AsyncBatchingTests` pins the batching and `ClusterTabBatchApplyTests` that a
+batch equals its events one at a time.
+
+Still open from the audit: an expanded CRDs section in the sidebar is not virtualized (about
+300 rows, collapsed by default), the age timer walks every row every five seconds, and
+`DescribeHealthFilterEmpty` scans all rows per event while Unhealthy-only shows nothing. All
+three measured as Low and none was touched.
+
+Checks: Core tests 656 passed, 55 skipped (no sandbox), with `AsyncBatchingTests` (5); App
+tests 452/452 with `ClusterTabBatchApplyTests` (3); the whole harness rendered with every
+`ux-` check passing; `--stress` 24 of 24 within budget; the win-x64 NativeAOT publish emits only
+the two known DataGrid warnings and both `--smoke-test` modes exit 0. Not run: live-cluster tests, and no
+real watch against a real API server went through `InBatches` — the path a reconnect or a
+410 relist takes through it is covered only by the unit tests.

@@ -42,6 +42,8 @@ internal static class StressChecks
     private const int ArgoResources = 3_000;
     private const int ConfigMapKeys = 5_000;
     private const int ServicePods = 1_000;
+    private const int Apps = 2_000;
+    private const int DaemonSetPods = 1_000;
 
     // A window with every list virtualized holds on the order of a thousand visuals.
     private const int VisualBudget = 6_000;
@@ -56,8 +58,11 @@ internal static class StressChecks
             || Ms > MsBudget;
     }
 
-    internal static int Run(Func<ClusterTabViewModel, Control> host, string? filter = null)
+    internal static int Run(Func<ClusterTabViewModel, bool, Control> hostIn, string? filter = null)
     {
+        Control host(ClusterTabViewModel tab) => hostIn(tab, false);
+        Control hostApplications(ClusterTabViewModel tab) => hostIn(tab, true);
+
         var results = new List<Result>();
 
         // `-- --stress <substring>` runs only the checks whose name contains it.
@@ -103,6 +108,62 @@ internal static class StressChecks
             }
 
             return (tab.VisibleRows, () => tab.RowFilter = "stress-pod-1", "search keystroke", 2);
+        }));
+
+        results.AddRange(Check("resource-list-initial", host, () => ClusterTabScenarios.WorkloadsList(), tab =>
+        {
+            // The watch's initial list as AsyncBatching delivers it: a Reset, every object,
+            // and the Synced frame, in one batch.
+            var events = new List<ResourceEvent<DynamicResource>> { ResourceEvent<DynamicResource>.Reset };
+            events.AddRange(Enumerable.Range(0, Pods).Select(i => new ResourceEvent<DynamicResource>(ResourceEventType.Added, StressPod(i))));
+            events.Add(ResourceEvent<DynamicResource>.Synced);
+            return (tab.VisibleRows, () => tab.ApplyBatch(events), $"initial list of {Pods:N0} pods", 4);
+        }));
+
+        results.AddRange(Check("fleet-relist", host, () => ClusterTabScenarios.WorkloadsList(), tab =>
+        {
+            tab.ApplyFleetBatch(Enumerable.Range(0, Pods)
+                .Select(i => new FleetResourceEvent(i % 2 == 0 ? "east" : "west",
+                    new ResourceEvent<DynamicResource>(ResourceEventType.Added, StressPod(i))))
+                .ToList());
+            return (tab.Rows, () => tab.ApplyFleet(new FleetResourceEvent("east", ResourceEvent<DynamicResource>.Reset)),
+                $"one member of two relists ({Pods / 2:N0} rows)", 2);
+        }));
+
+        results.AddRange(Check("applications-list", hostApplications, ApplicationsTab, tab =>
+        {
+            var apps = tab.Applications;
+            apps.Apply("Deployment", ResourceEvent<DynamicResource>.Reset);
+            for (var i = 0; i < Apps; i++)
+            {
+                apps.Apply("Deployment", new ResourceEvent<DynamicResource>(ResourceEventType.Added, StressDeployment(i)));
+            }
+
+            apps.Apply("Deployment", ResourceEvent<DynamicResource>.Synced);
+            apps.RebuildNow();
+            return (apps.VisibleRows, () => apps.Filter = "stress-app-1", $"search keystroke over {apps.VisibleRows.Count:N0} apps", 2);
+        }));
+
+        results.AddRange(Check("applications-page", hostApplications, ApplicationsTab, tab =>
+        {
+            var apps = tab.Applications;
+            apps.Apply("DaemonSet", new ResourceEvent<DynamicResource>(ResourceEventType.Added, StressDaemonSet()));
+            apps.Apply("Pod", ResourceEvent<DynamicResource>.Reset);
+            for (var i = 0; i < DaemonSetPods; i++)
+            {
+                apps.Apply("Pod", new ResourceEvent<DynamicResource>(ResourceEventType.Added, StressAgentPod(i)));
+            }
+
+            apps.Apply("Pod", ResourceEvent<DynamicResource>.Synced);
+            apps.RebuildNow();
+            apps.Open(apps.Rows.First(r => r.Name == "node-agent"));
+            var page = apps.Page!;
+            return (page.Pods, () =>
+            {
+                // A pod of the DaemonSet restarts: the list rebuilds and the open page with it.
+                apps.Apply("Pod", new ResourceEvent<DynamicResource>(ResourceEventType.Modified, StressAgentPod(7, restarts: 1)));
+                apps.RebuildNow();
+            }, $"list rebuild, page open on {page.Pods.Count - 1:N0} pods", 4);
         }));
 
         results.AddRange(Check("resource-list-sort", host, () => ClusterTabScenarios.WorkloadsList(), tab =>
@@ -275,6 +336,52 @@ internal static class StressChecks
           "spec": { "nodeName": "worker-{{i % 40}}", "containers": [ { "name": "app", "image": "registry.example.com/app:1.0" } ] },
           "status": { "phase": "Running", "podIP": "10.{{i / 65536 % 256}}.{{i / 256 % 256}}.{{i % 256}}",
                       "containerStatuses": [ { "name": "app", "ready": true, "restartCount": {{i % 3}}, "state": { "running": {} } } ] }
+        }
+        """);
+
+    private static ClusterTabViewModel ApplicationsTab()
+    {
+        var tab = new ClusterTabViewModel(ClusterContext.Demo);
+        tab.ConnectCommand.Execute(null);
+        tab.Applications.Activate();
+        return tab;
+    }
+
+    private static DynamicResource StressDeployment(int i) => Parse($$"""
+        {
+          "apiVersion": "apps/v1", "kind": "Deployment",
+          "metadata": { "name": "stress-app-{{i}}", "namespace": "team-{{i % 20}}", "uid": "d0000000-0000-0000-0000-{{i:D12}}",
+                        "creationTimestamp": "2026-07-01T08:00:00Z", "generation": 1 },
+          "spec": { "replicas": 2, "selector": { "matchLabels": { "app": "stress-app-{{i}}" } },
+                    "template": { "metadata": { "labels": { "app": "stress-app-{{i}}" } },
+                                  "spec": { "containers": [ { "name": "app", "image": "registry.example.com/app:1.0" } ] } } },
+          "status": { "observedGeneration": 1, "replicas": 2, "readyReplicas": 2, "updatedReplicas": 2, "availableReplicas": 2 }
+        }
+        """);
+
+    private static DynamicResource StressDaemonSet() => Parse("""
+        {
+          "apiVersion": "apps/v1", "kind": "DaemonSet",
+          "metadata": { "name": "node-agent", "namespace": "monitoring", "uid": "da000000-0000-0000-0000-000000000001",
+                        "creationTimestamp": "2026-07-01T08:00:00Z", "generation": 1 },
+          "spec": { "selector": { "matchLabels": { "app": "node-agent" } },
+                    "template": { "metadata": { "labels": { "app": "node-agent" } },
+                                  "spec": { "containers": [ { "name": "agent", "image": "registry.example.com/agent:2.0" } ] } } },
+          "status": { "observedGeneration": 1, "desiredNumberScheduled": 1000, "currentNumberScheduled": 1000,
+                      "numberReady": 1000, "updatedNumberScheduled": 1000, "numberAvailable": 1000 }
+        }
+        """);
+
+    private static DynamicResource StressAgentPod(int i, int restarts = 0) => Parse($$"""
+        {
+          "apiVersion": "v1", "kind": "Pod",
+          "metadata": { "name": "node-agent-{{i:D4}}", "namespace": "monitoring", "uid": "a0000000-0000-0000-0000-{{i:D12}}",
+                        "creationTimestamp": "2026-07-01T08:00:00Z", "labels": { "app": "node-agent" },
+                        "ownerReferences": [ { "apiVersion": "apps/v1", "kind": "DaemonSet", "name": "node-agent",
+                                               "uid": "da000000-0000-0000-0000-000000000001", "controller": true } ] },
+          "spec": { "nodeName": "node-{{i}}", "containers": [ { "name": "agent", "image": "registry.example.com/agent:2.0" } ] },
+          "status": { "phase": "Running", "podIP": "10.1.{{i / 256 % 256}}.{{i % 256}}",
+                      "containerStatuses": [ { "name": "agent", "ready": true, "restartCount": {{restarts}}, "state": { "running": {} } } ] }
         }
         """);
 

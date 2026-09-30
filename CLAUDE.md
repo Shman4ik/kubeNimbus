@@ -1292,6 +1292,17 @@ the same engine with `DynamicResource` (a JsonElement-backed wrapper, see
 generic path — pods included — so there's exactly one live-list code path in
 the App layer.
 
+**A watch reaches the UI thread in batches, never one hop per event.** Every live list
+reads its watch through `AsyncBatching.InBatches` (Core) and applies each batch inside one
+`Dispatcher.UIThread.InvokeAsync`. An initial list is one event per object, back to back,
+and the per-event hop made 5,000 pods 5,000 serial dispatcher jobs, each followed by a
+layout of the grid it had just changed; the Applications list posted its events unawaited
+and queued 15,000 jobs ahead of input and rendering. The batch is whatever has already
+arrived, so a lone Modified is still delivered at once, and the source's error comes after
+every event before it. `ClusterTabViewModel.ApplyBatch` appends a batch's new rows in one
+notification and has exactly the effect of the same events applied one at a time
+(`ClusterTabBatchApplyTests` pins that, through a filter and a sort).
+
 ## Discovery, server-side apply, events, exec, port-forward
 
 - **Discovery** (`ClusterClient.Discovery.cs`) negotiates aggregated discovery at
@@ -1886,7 +1897,9 @@ Three rules:
   `RangeObservableCollection` (`AddRange`, `RemoveFromFront`, `ReplaceAll`) rather than a
   `Clear()` and an `Add` per item. A new surface of that kind gets a check here.
 - **It runs in CI** after the render in the XAML smoke test job, and was proved against the
-  code before the fix: see the pass log in `docs/status-history.md`.
+  code before each fix: see the pass logs in `docs/status-history.md`. A check's label
+  states what it actually loaded ("search keystroke over 2,010 apps"), because a check
+  that quietly measured an empty list would pass every budget.
 
 ## Release, CI and packaging
 

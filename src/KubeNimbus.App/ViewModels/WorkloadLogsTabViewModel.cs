@@ -392,14 +392,21 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
         {
             try
             {
-                await foreach (var evt in client.WatchResourceAsync(
+                // One hop onto the UI thread per batch of events (AsyncBatching), not per pod.
+                await foreach (var batch in client.WatchResourceAsync(
                     ResourceDescriptor.Pods,
                     _namespace,
                     connectionLost: ex => Dispatcher.UIThread.Post(() => SetStatus(ex.Message, problem: true)),
                     cancellationToken: token,
-                    labelSelector: selector))
+                    labelSelector: selector).InBatches(cancellationToken: token))
                 {
-                    await Dispatcher.UIThread.InvokeAsync(() => ApplyPodEvent(evt));
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        foreach (var evt in batch)
+                        {
+                            ApplyPodEvent(evt);
+                        }
+                    });
                 }
             }
             catch (OperationCanceledException)

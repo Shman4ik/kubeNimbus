@@ -22,6 +22,11 @@ it as the GitHub Release body, so headings must match tags exactly
   resources), the YAML apply preview (large ConfigMaps), the Service pane (hundreds of
   backing pods), the list search, and a list sorted by CPU or memory, which used to stall
   for about two seconds on every metrics poll with 5,000 pods.
+- **Big lists load faster and keep the window responsive while they do.** A namespace with
+  thousands of pods used to fill in visibly row by row; the list, the fleet view, workload
+  details, the Service pane, multi-pod logs and the Applications list now take a watch's
+  updates in batches. Searching a long Applications list and a fleet member reconnecting
+  are single updates too.
 - Web and e-mail addresses in the YAML editor and in a Helm release's values and manifest are
   now plain text in the YAML colours. They used to be drawn in bright blue over the
   highlighting, like links, and a Ctrl+click opened them in the browser or the mail client.

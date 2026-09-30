@@ -96,7 +96,7 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
     /// </summary>
     internal bool DeferRebuilds { get; set; } = true;
 
-    public ObservableCollection<ApplicationRowViewModel> VisibleRows { get; } = [];
+    public RangeObservableCollection<ApplicationRowViewModel> VisibleRows { get; } = [];
 
     /// <summary>Every row, sorted, before the chips and the search box narrow it.</summary>
     public IReadOnlyList<ApplicationRowViewModel> Rows => _ordered;
@@ -263,15 +263,23 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
         {
             try
             {
-                await foreach (var evt in client.WatchResourceAsync(
+                // One awaited hop per batch of events (AsyncBatching), where this used to post
+                // one unawaited job per event: a cluster-wide initial list (5,000 pods and
+                // 10,000 ReplicaSets) queued 15,000 jobs ahead of input and rendering.
+                await foreach (var batch in client.WatchResourceAsync(
                     descriptor,
                     @namespace,
                     connectionLost: ex => OnConnectionLost(client, kind, @namespace, ex, cts),
-                    cancellationToken: token))
+                    cancellationToken: token).InBatches(cancellationToken: token))
                 {
-                    Dispatcher.UIThread.Post(() =>
+                    await Dispatcher.UIThread.InvokeAsync(() =>
                     {
-                        if (!token.IsCancellationRequested)
+                        if (token.IsCancellationRequested)
+                        {
+                            return;
+                        }
+
+                        foreach (var evt in batch)
                         {
                             Apply(kind, evt, @namespace);
                         }
@@ -510,13 +518,19 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
         }
     }
 
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<DynamicResource, ArgoApplication> _parsedArgo = [];
+
     private ClusterSnapshot TakeSnapshot()
     {
         IReadOnlyList<DynamicResource> Of(string kind) => _objects.TryGetValue(kind, out var s) ? [.. s.Values] : [];
 
+        // Parsed once per object version, not once per rebuild: this runs on the UI thread
+        // every time the list rebuilds (up to five times a second under churn), and reading
+        // an Application walks its whole status.resources. A watch update replaces the
+        // DynamicResource, so a changed Application is a new key and is parsed again.
         var argo = Of(ArgoKind);
         return new ClusterSnapshot(
-            [.. argo.Select(ArgoCd.ReadApplication)],
+            [.. argo.Select(resource => _parsedArgo.GetValue(resource, ArgoCd.ReadApplication))],
             [.. Of("Deployment"), .. Of("StatefulSet"), .. Of("DaemonSet"), .. Of("CronJob"), .. Of("Job")],
             Of("ReplicaSet"),
             Of("Job"),
@@ -875,23 +889,38 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
             }
         }
 
+        var before = SelectedRow;
         Sync(VisibleRows, target);
-        if (SelectedRow is { } selected && !target.Contains(selected))
-        {
-            SelectedRow = null;
-        }
+
+        // A wholesale change is one Reset (see Sync), and a list answers a Reset by clearing
+        // its selection; put it back while the row is still in the list.
+        SelectedRow = before is not null && target.Contains(before) ? before : null;
 
         RefreshStates();
     }
 
     /// <summary>
     /// Brings <paramref name="target"/>'s order into <paramref name="collection"/> by moves,
-    /// inserts and removes — never a Clear, which would drop the list's selection and scroll
-    /// position on every watch event.
+    /// inserts and removes, so a watch event that changes one row moves one row. When more
+    /// than <see cref="ClusterTabViewModel.InPlaceResortLimit"/> rows come or go — a search
+    /// keystroke that narrows 2,000 rows to 20 — a <see cref="RangeObservableCollection{T}"/>
+    /// is replaced in one Reset instead of a notification per row; the caller restores the
+    /// selection.
     /// </summary>
     internal static void Sync<T>(ObservableCollection<T> collection, IReadOnlyList<T> target) where T : class
     {
         var wanted = new HashSet<T>(target, ReferenceEqualityComparer.Instance);
+        if (collection is RangeObservableCollection<T> range)
+        {
+            var present = new HashSet<T>(collection, ReferenceEqualityComparer.Instance);
+            var churn = collection.Count(item => !wanted.Contains(item)) + target.Count(item => !present.Contains(item));
+            if (churn > ClusterTabViewModel.InPlaceResortLimit)
+            {
+                range.ReplaceAll(target);
+                return;
+            }
+        }
+
         for (var i = collection.Count - 1; i >= 0; i--)
         {
             if (!wanted.Contains(collection[i]))
