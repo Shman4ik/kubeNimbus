@@ -449,6 +449,7 @@
                                stayed there until the tab was closed. Secrets only; a ConfigMap
                                has nothing to hide and gets no control at all. -->
                           <Button Classes="chip" Padding="4,2" VerticalAlignment="Center"
+                                  AutomationProperties.Name="Show or hide this Secret value"
                                   IsVisible="{Binding IsSecretReference}" IsEnabled="{Binding !IsRevealing}"
                                   Command="{Binding $parent[UserControl].((vm:PodDetailTabViewModel)DataContext).ToggleEnvVarCommand}"
                                   CommandParameter="{Binding}">

@@ -75,7 +75,10 @@ Status and scanning, once per kind; the search box deliberately does not match s
    — so there is always a way out. The key is list-scoped literal Ctrl+Z
    (`CommandId.ToggleUnhealthyOnly`): a window binding on it would steal Undo from every
    text box, the YAML editor included, and on macOS Cmd+Z is Undo everywhere while Ctrl+Z
-   is exactly k9s's key. `ux-unhealthy-toggle` in the screenshot harness drives the key, a
+   is exactly k9s's key. The consequence is stated on the shortcut sheet and the docs page rather than left to be
+   discovered: with focus in the list's search box (Ctrl+F) Ctrl+Z is the text box's own Undo and does not
+   toggle the chip, which the 0.5.1 release pass reported as a defect and is the intended behaviour. Enter or ↓
+   in the box returns focus to the rows, and then the key works. `ux-unhealthy-toggle` in the screenshot harness drives the key, a
    real pointer click on the chip and the palette against the rendered view, because a
    ToggleButton wired with both halves of rule 8b renders perfectly and does nothing.
 

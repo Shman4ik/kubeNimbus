@@ -14,6 +14,22 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Fixed
 
+- **Apply works on an object opened in the YAML editor.** Opening a ConfigMap, Deployment or
+  custom resource, changing a value and pressing Apply was refused with "metadata.managedFields
+  must be nil", both in the preview and in the apply itself. The server's own bookkeeping field
+  is no longer sent back, and the preview, Apply and Force apply all take the edited object.
+- **Ctrl+S applies in the YAML editor.** The shortcut sheet listed it, and pressing it did nothing. It now
+  starts the same apply as the Apply button (Cmd+S on macOS).
+- **The preferences page follows the theme toggle.** With Preferences open, switching the theme
+  from the command bar, the palette or the View menu left the Theme drop-down naming the old
+  choice.
+- **Screen readers and UI Automation can read the application page.** The first application page
+  opened in a session made Windows UI Automation fail for as long as it stayed open.
+- **Controls have accessible names.** The command bar's icon buttons, the sidebar's kinds, the
+  Applications rows, the preferences switches and the port and replica boxes were announced as
+  type names or nothing; they now read what they do.
+- **The shortcut sheet says where Ctrl+Z works.** "Show only what is unhealthy" is Ctrl+Z with
+  the rows focused; in the list's search box Ctrl+Z is that text box's Undo.
 - **Tooltips open.** Hovering a resource name, an age, a CPU or memory sparkline, a status
   pill or most other text that carries a tooltip showed nothing: the pointer passed through
   the text to the row behind it. Every tooltip now opens wherever its text is.

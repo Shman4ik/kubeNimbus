@@ -33,11 +33,11 @@
          — beside them, "Local port" ran straight into its own box. -->
     <StackPanel Orientation="Horizontal" Spacing="10">
       <StackPanel Spacing="4">
-        <TextBlock Classes="fieldLabel" Text="Local port" />
+        <TextBlock Name="LocalPortLabel" Classes="fieldLabel" Text="Local port" />
         <!-- Empty = the OS picks one. The wire value is 0, but a box reading "0" only
              says so to someone who has hovered the tooltip; the watermark says it in
              place (see LocalPortInput). -->
-        <NumericUpDown Width="104" Value="{Binding LocalPortInput}" PlaceholderText="auto"
+        <NumericUpDown Width="104" Value="{Binding LocalPortInput}" AutomationProperties.LabeledBy="{Binding #LocalPortLabel}" PlaceholderText="auto"
                        Minimum="0" Maximum="65535" ShowButtonSpinner="False" FormatString="0"
                        IsEnabled="{Binding CanEditPorts}"
                        ToolTip.Tip="Leave empty to let the OS pick a free local port." />
@@ -46,11 +46,11 @@
       <TextBlock Text="&#x2192;" FontSize="15" Opacity="0.4" VerticalAlignment="Bottom" Margin="0,0,0,6" />
 
       <StackPanel Spacing="4">
-        <TextBlock Classes="fieldLabel" Text="Pod port" />
+        <TextBlock Name="PodPortLabel" Classes="fieldLabel" Text="Pod port" />
         <StackPanel Orientation="Horizontal" Spacing="6">
           <!-- Read-only while running: the ports the forward was started with are what
                it is doing, and an editable box that changes nothing lies about that. -->
-          <NumericUpDown Width="92" Value="{Binding PodPort}" Minimum="1" Maximum="65535"
+          <NumericUpDown Width="92" Value="{Binding PodPort}" AutomationProperties.LabeledBy="{Binding #PodPortLabel}" Minimum="1" Maximum="65535"
                          ShowButtonSpinner="False" FormatString="0" IsEnabled="{Binding CanEditPorts}" />
           <!-- The pod's own declared ports, with their names — they were read off the
                spec and then thrown away for a hardcoded 8080, so forwarding to a pod

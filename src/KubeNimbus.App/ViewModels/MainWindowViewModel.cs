@@ -1184,9 +1184,15 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     /// Persists a theme chosen from the top bar's light/dark toggle. Goes through
     /// <see cref="App.SetTheme"/> so the toggle and the preferences page write the
     /// same setting in the same spelling — they used to disagree, because the toggle
-    /// wrote ThemeVariant names into the workspace.
+    /// wrote ThemeVariant names into the workspace. The preferences page, when it is
+    /// open, is told so its dropdown shows the theme the app now has.
     /// </summary>
-    public void PersistTheme(string? theme) => App.SetTheme(theme ?? "system");
+    public void PersistTheme(string? theme)
+    {
+        theme ??= "system";
+        App.SetTheme(theme);
+        Preferences?.SyncTheme(theme);
+    }
 
     /// <summary>
     /// Read-modify-write through <see cref="App.Update"/>, never a cached snapshot:

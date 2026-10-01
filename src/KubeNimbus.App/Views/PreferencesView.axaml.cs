@@ -18,5 +18,9 @@ namespace KubeNimbus.App.Views;
 /// </summary>
 public partial class PreferencesView : UserControl
 {
-    public PreferencesView() => InitializeComponent();
+    public PreferencesView()
+    {
+        InitializeComponent();
+        Loaded += (_, _) => AutomationNames.NameCardControls(this);
+    }
 }

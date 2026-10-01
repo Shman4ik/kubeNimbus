@@ -295,6 +295,8 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-row-logs-deployments", () => HostInMainWindow(ClusterTabScenarios.DemoRowLogsDeployments())),
     ("cluster-tab-row-logs-none", () => HostInMainWindow(ClusterTabScenarios.DemoRowLogsNone())),
     ("cluster-tab-logs-maximized", () => HostInMainWindow(ClusterTabScenarios.DemoLogsMaximized())),
+    ("ux-log-search-keys", () => HostInMainWindow(ClusterTabScenarios.DemoLogsMaximized())),
+    ("ux-yaml-apply-key", () => HostInMainWindow(ClusterTabScenarios.YamlEditor())),
     ("palette-logs", () => LogsPalette(ClusterTabScenarios.DemoList(), "")),
     ("palette-logs-search", () => LogsPalette(ClusterTabScenarios.DemoList(), "report")),
     ("palette-logs-narrow", () => LogsPalette(ClusterTabScenarios.DemoList(), "", width: 560)),
@@ -385,6 +387,7 @@ foreach (var (name, build) in scenarios)
 }
 
 TooltipChecks.ThrowIfAnyDead(filtered: filter is not null);
+AutomationChecks.ThrowIfAnyFailed(filtered: filter is not null);
 Console.WriteLine($"Wrote screenshots to {Path.GetFullPath(outDir)}");
 try
 {
@@ -441,6 +444,8 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
         || name == "cluster-tab-list-unhealthy-fleet-partial-narrow")
         LayoutChecks.GridReachesLastColumn(window);
     if (name == "ux-exec-keys") KeyboardChecks.ExecKeys(window);
+    if (name == "ux-log-search-keys") KeyboardChecks.LogSearchKeys(window);
+    if (name == "ux-yaml-apply-key") KeyboardChecks.YamlApplyKey(window);
     if (name == "ux-yaml-editor-links") EditorChecks.YamlEditorLinks(window);
     if (name == "ux-helm-editor-links") EditorChecks.HelmReleaseLinks(window);
     if (name.StartsWith("applications-page", StringComparison.Ordinal) || name == "store-applications-page") ApplicationsChecks.SettlePage(window);
@@ -463,6 +468,7 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     // Every scenario, once: the pointer over each tooltip has to reach its element
     // (DESIGN.md rule 21). Reported together after the last scenario.
     if (theme == ThemeVariant.Light) TooltipChecks.Reach(window, name);
+    if (theme == ThemeVariant.Light) AutomationChecks.Walk(window, name);
     using var frame = window.CaptureRenderedFrame();
     var themeLabel = theme == ThemeVariant.Dark ? "dark" : "light";
     var path = Path.Combine(outDir, $"{name}.{themeLabel}.png");

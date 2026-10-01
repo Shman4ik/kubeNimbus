@@ -55,6 +55,76 @@ public class ApplyPreviewHttpTests
           replicas: 5
         """;
 
+    /// <summary>
+    /// The editor opens an object as the server returned it, so its text carries
+    /// <c>metadata.managedFields</c>, and a real API server refuses an apply patch that does
+    /// (<c>metadata.managedFields must be nil</c>, HTTP 400). Found by the 0.5.1 release pass;
+    /// the live half is in <c>ApplyLiveTests</c>. This pins what is sent on every path: the
+    /// dry run, the real apply and a force-apply carry no <c>managedFields</c>, and keep the
+    /// <c>resourceVersion</c> that makes the apply an optimistic lock.
+    /// </summary>
+    [Test]
+    [Arguments("preview", false)]
+    [Arguments("apply", false)]
+    [Arguments("force", true)]
+    public async Task An_apply_never_sends_managed_fields_but_keeps_the_resource_version(string path, bool force)
+    {
+        const string opened = """
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: web
+              namespace: shop
+              resourceVersion: "41"
+              uid: 0b6c1c2e-5d0a-4f43-9b1d-2f7a1c8c9a10
+              managedFields:
+                - manager: kubectl
+                  operation: Apply
+                  fieldsV1:
+                    f:spec:
+                      f:replicas: {}
+            spec:
+              replicas: 5
+            status:
+              replicas: 2
+            """;
+
+        using var server = new StubApiServer();
+        server.Respond("GET", "/apis/apps/v1/namespaces/shop/deployments/web", HttpStatusCode.OK, LiveDeployment);
+        server.Respond("PATCH", "/apis/apps/v1/namespaces/shop/deployments/web", HttpStatusCode.OK, PreviewedDeployment);
+
+        using var client = server.Connect();
+        if (path == "apply")
+        {
+            await client.ApplyYamlAsync(Deployments, "shop", "web", opened, "kubenimbus", force);
+        }
+        else
+        {
+            await client.PreviewApplyAsync(Deployments, "shop", "web", opened, "kubenimbus", force);
+        }
+
+        var patch = server.Requests.Single(r => r.Method == "PATCH");
+        await Assert.That(patch.Body).DoesNotContain("managedFields");
+        using var sent = JsonDocument.Parse(patch.Body);
+        var metadata = sent.RootElement.GetProperty("metadata");
+        await Assert.That(metadata.GetProperty("resourceVersion").GetString()).IsEqualTo("41");
+        await Assert.That(metadata.GetProperty("uid").GetString()).IsEqualTo("0b6c1c2e-5d0a-4f43-9b1d-2f7a1c8c9a10");
+        await Assert.That(sent.RootElement.GetProperty("spec").GetProperty("replicas").GetInt32()).IsEqualTo(5);
+        await Assert.That(patch.Query).Contains(force ? "force=true" : "force=false");
+    }
+
+    [Test]
+    [Arguments("")]
+    [Arguments("# nothing but a comment")]
+    [Arguments("kind: ConfigMap")]
+    [Arguments("metadata: not-a-map")]
+    public async Task A_document_without_a_metadata_map_is_sent_as_it_is(string yaml)
+    {
+        // The body is the server's to judge; the strip must not throw on a shape it did not expect.
+        var json = ClusterClient.ApplyBody(yaml);
+        await Assert.That(json).DoesNotContain("managedFields");
+    }
+
     [Test]
     public async Task A_preview_reads_the_object_then_applies_with_dry_run()
     {

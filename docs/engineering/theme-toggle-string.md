@@ -27,3 +27,12 @@ Three things came out of it, and the third is the general one:
    setting spelled as a string wants its writer to go through the same helper its reader
    does — `AppSettingsTests` pins the theme and hotkey pair, including the miscased
    spellings, precisely because the failure mode is a control that appears to do nothing.
+
+**A page that is open must follow the toggle.** The preferences page is built when it opens and
+read the theme once, so with it open the command bar's toggle (also reachable from the palette
+and the macOS View menu) changed the app while the dropdown went on naming the theme the page
+opened on; the 0.5.1 release pass saw "Light" over a dark window. `MainWindowViewModel.PersistTheme`
+now tells the open page (`PreferencesViewModel.SyncTheme`), which moves the selection without
+writing the setting back, since the other writer has just stored it. `PreferencesThemeTests` pins
+that and the two paths around it. The general version of rule 3 above: a view model that reads a
+setting at construction and can outlive a write to it by someone else needs to be told.

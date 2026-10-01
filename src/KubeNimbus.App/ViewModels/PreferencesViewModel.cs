@@ -16,6 +16,7 @@ namespace KubeNimbus.App.ViewModels;
 public sealed partial class PreferencesViewModel : ObservableObject
 {
     private readonly MainWindowViewModel _main;
+    private bool _syncingTheme;
 
     /// <summary>0 = system (follow the OS), 1 = light, 2 = dark.</summary>
     [ObservableProperty]
@@ -75,7 +76,7 @@ public sealed partial class PreferencesViewModel : ObservableObject
         _main = main ?? throw new ArgumentNullException(nameof(main));
 
         var settings = App.LoadSettings();
-        _themeIndex = settings.Theme switch { "light" => 1, "dark" => 2, _ => 0 };
+        _themeIndex = ThemeIndexOf(settings.Theme);
         _hotkeySchemeIndex = settings.HotkeyScheme switch { "windows" => 1, "mac" => 2, _ => 0 };
         _logBufferLines = settings.LogBufferLines;
         _metricsPollSeconds = settings.MetricsPollSeconds;
@@ -186,8 +187,35 @@ public sealed partial class PreferencesViewModel : ObservableObject
         }
     }
 
-    partial void OnThemeIndexChanged(int value) =>
-        App.SetTheme(value switch { 1 => "light", 2 => "dark", _ => "system" });
+    partial void OnThemeIndexChanged(int value)
+    {
+        if (!_syncingTheme)
+        {
+            App.SetTheme(value switch { 1 => "light", 2 => "dark", _ => "system" });
+        }
+    }
+
+    private static int ThemeIndexOf(string? theme) => theme switch { "light" => 1, "dark" => 2, _ => 0 };
+
+    /// <summary>
+    /// Follows a theme chosen somewhere else while this page is open: the command bar's
+    /// toggle, the palette's entry or the macOS View menu. The page is built once when it
+    /// opens and read the setting then, so without this the dropdown kept naming the theme
+    /// the page opened on while the app showed another one. Moves the selection without
+    /// writing the setting back, because the other writer has just stored it.
+    /// </summary>
+    internal void SyncTheme(string? theme)
+    {
+        _syncingTheme = true;
+        try
+        {
+            ThemeIndex = ThemeIndexOf(theme);
+        }
+        finally
+        {
+            _syncingTheme = false;
+        }
+    }
 
     partial void OnHotkeySchemeIndexChanged(int value) =>
         App.SetHotkeyScheme(value switch { 1 => "windows", 2 => "mac", _ => "auto" });

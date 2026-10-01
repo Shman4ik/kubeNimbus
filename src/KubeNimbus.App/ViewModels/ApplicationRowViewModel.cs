@@ -98,6 +98,14 @@ public sealed partial class ApplicationRowViewModel : ObservableObject
 
     public bool IsOk => Status == AppStatus.Healthy;
 
+    /// <summary>
+    /// What a screen reader reads for the row. The list item's accessible name is its
+    /// content's <c>ToString()</c>, which for a view model is the type's name, so the row
+    /// says what a sighted reader takes from it: the application, its health and why.
+    /// </summary>
+    public override string ToString() =>
+        Reason.Length == 0 ? $"{Name}, {StatusText}, {NamespaceText}" : $"{Name}, {StatusText}, {NamespaceText}. {Reason}";
+
     public bool IsIdle => Status == AppStatus.Suspended;
 
     public IReadOnlyList<string> Namespaces => Entry.Namespaces;

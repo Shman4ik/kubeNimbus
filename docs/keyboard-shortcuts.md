@@ -33,7 +33,7 @@ way in Preferences → Shortcut modifier.
 | Delete the selected resource (asks to confirm) | Delete | Delete |
 | Rollout restart the selected workload (asks to confirm) | R | R |
 | Search the list from the rows | / | / |
-| Show only what is unhealthy (warnings and errors) | Ctrl+Z | Ctrl+Z |
+| Show only what is unhealthy (warnings and errors), with the rows focused; in a text box Ctrl+Z is Undo | Ctrl+Z | Ctrl+Z |
 | Refresh the list | Ctrl+R | Cmd+R |
 | Apply the edited YAML | Ctrl+S | Cmd+S |
 

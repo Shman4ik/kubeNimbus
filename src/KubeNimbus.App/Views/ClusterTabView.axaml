@@ -83,6 +83,7 @@
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:SidebarKindViewModel">
                       <ListBoxItem Classes="navRow" IsSelected="{Binding IsSelected}" IsVisible="{Binding IsVisible}"
+                                   AutomationProperties.Name="{Binding AutomationName}"
                                    Tapped="OnSidebarKindTapped">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                           <PathIcon Data="{Binding IconKey, Converter={x:Static conv:IconKeyToGeometryConverter.Instance}}"
@@ -1236,6 +1237,7 @@
                                    MaxWidth="240" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}"
                                    Opacity="{Binding IsPreview, Converter={x:Static conv:PreviewToOpacityConverter.Instance}}" />
                         <Button Classes="chip" Padding="0" MinWidth="14" MinHeight="14"
+                                ToolTip.Tip="Close tab" AutomationProperties.Name="{Binding Title, StringFormat='Close {0}'}"
                                 Command="{Binding $parent[UserControl].((vm:ClusterTabViewModel)DataContext).CloseInspectorTabCommand}"
                                 CommandParameter="{Binding}">
                           <PathIcon Data="{StaticResource CloseIconGeometry}" Width="9" Height="9" />

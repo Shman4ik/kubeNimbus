@@ -294,7 +294,7 @@ public static class CommandCatalog
         {
             Id = CommandId.ToggleUnhealthyOnly,
             Title = "Show only unhealthy rows",
-            CheatTitle = "Show only what is unhealthy (warnings and errors)",
+            CheatTitle = "Show only what is unhealthy (warnings and errors), with the rows focused; in a text box Ctrl+Z is Undo",
             Category = CommandCategory.Resources,
             Scope = CommandScope.List,
             IconKey = "AlertCircleIconGeometry",
