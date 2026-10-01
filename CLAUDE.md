@@ -225,9 +225,9 @@ Three rules about it:
 
 ## UI design rules
 
-> Rules **1, 2, 5, 8, 8b, 9, 11, 12 and 14 are shared with pgNimbus**, and their
+> Rules **1, 2, 5, 8, 8b, 9, 11, 12, 14 and 22 are shared with pgNimbus**, and their
 > canonical statement is in [`shared/nimbusUi/DESIGN.md`](shared/nimbusUi/DESIGN.md)
-> (as its rules 1, 2, 3, 5, 6, 7, 8, 9 and 12). What is kept below is the
+> (as its rules 1, 2, 3, 5, 6, 7, 8, 9, 12 and 21). What is kept below is the
 > kubeNimbus incident behind each one — the concrete failure is the reason the
 > rule is believed, and it is worth more here than a second copy of the rule.
 > Change a shared rule in DESIGN.md, not here. Rules 3, 4, 6, 7, 10 and 13 are
@@ -701,6 +701,23 @@ Three rules about it:
    The Age column moving with the clock is not a UI change and is no reason to re-render.
    If a PR cannot render them (no Windows machine), it says so in its description and
    leaves an Inbox row, like any other verification debt.
+22. **Every tooltip answers the pointer, and the status line keeps its whole text in one**
+   (DESIGN.md rule 21, 2026-10). A `TextBlock` or panel with no `Background` is not
+   hit-testable, glyphs included, so a tooltip on one never opens: the pointer lands on
+   the row, card or header behind it. pgNimbus found it on its status line; the walk
+   below then found 189 dead ones here on the day it was added (1,499 probes, most of
+   them resource-grid cells: names, ages, the CPU and memory sparklines), in 130 of 186
+   scenarios. `Nimbus.Ui.Controls.ToolTipHitTesting.Install()` in `App.Initialize` (not
+   `OnFrameworkInitializationCompleted`, which the harness never reaches) is the fix, for
+   every element at once: anything that gets a tooltip and has no background gets a
+   transparent one as a current value, so a background set in markup or a style still
+   wins. Don't write `Background="Transparent"` beside a `ToolTip.Tip`. A disabled
+   control still shows none (Avalonia's choice; `ToolTip.ShowOnDisabled` opts in). The
+   shell's status bar texts are `TextBlock.statusMessage`: one line, an ellipsis, and the
+   whole text in a tooltip only while it is cut. They used to be clipped at the window's
+   edge with no way to read the rest. `TooltipChecks` in the harness hit-tests the middle
+   of every visible tooltip-bearing element in every scenario (light theme) and fails the
+   run on any the pointer passes through.
 
 [fluent-basics]: https://learn.microsoft.com/en-us/windows/apps/design/basics/
 

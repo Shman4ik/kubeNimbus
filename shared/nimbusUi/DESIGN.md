@@ -39,6 +39,20 @@ derive from it. This includes gestures built in a loop — Ctrl/Cmd+1…9 for ta
 jumps are registered from `Hotkeys.Primary` in code-behind, not as nine XAML
 `KeyBinding`s.
 
+The scheme decides the **spelling** as well as the key. On the Ctrl scheme a chord
+is words joined by "+" (`Ctrl+Shift+F`). On the Cmd scheme it is what every Mac app
+prints: Apple's glyphs, modifiers in the order ⌃ ⌥ ⇧ ⌘, then the key, run together
+(`⇧⌘F`, `⌘↩`, `⌥⇧F`, `⎋`, `⇥`, `⌫`, `⌦`, `⇞`/`⇟`; `⌘?` for ⇧⌘/). "Alt", "Cmd",
+"Shift", "Enter" never appear as words there. That covers every place a gesture is
+written: palette rows, cheat-sheet keycaps, tooltips, the search pill, hints. The
+glyphs need a font that carries them at text size (Inter doesn't, and macOS's
+fallback draws them at half height), so text spelling a gesture names one
+explicitly. And where the Mac has its own convention for a command the other
+platforms don't share (⇧⌘] / ⇧⌘[ for the next and previous tab, ⌘. to stop, ⌘? for
+help), the Cmd scheme answers it too and names it first; the cross-platform chord
+stays a synonym. pgNimbus implements this in its command catalog; kubeNimbus's
+`Hotkeys.Label`/`Describe` callers still spell words and are the open half.
+
 ### 5. A click target hit-tests across its whole area, and says it is one
 
 In Avalonia a `Panel` or `Border` with a **null** `Background` does not hit-test
@@ -110,6 +124,13 @@ things are easy to get wrong and three of them fail silently:
   78px on macOS) hole in the bar.
 - **Linux keeps its system decorations.** Extending there hands the app the whole
   frame, and CSD that matches GNOME is wrong on KDE and every tiling WM.
+- **The macOS traffic lights are ours to centre.** AppKit places them for its own
+  ~28pt title bar, about 5pt above the centre of a 40px command bar. Avalonia 12 has
+  no option for it (its title-bar height hint only sizes the backdrop, and its native
+  side always clears the `NSToolbar` that would make AppKit centre them), so
+  `Chrome/MacTrafficLights` moves the three buttons through the Objective-C runtime,
+  the way Electron's `trafficLightPosition` does, and again after every resize, state
+  change and activation, since AppKit puts them back. Full screen is left alone.
 
 The wordmark goes with it: the window title and the taskbar icon already carry the
 identity, and a bar under the title bar printing the title again is a row spent on
@@ -232,15 +253,32 @@ to the resting well), and it paints a selected `ListBoxItem` with the OS accent 
 Never paint a surface with `SystemControlPageBackgroundAltHighBrush` or a hand-set hex;
 pick the row of the table it is.
 
-### 16. A dialog's button row: primary first, Cancel last, on the right
+A zebra grid's alternate row (`AppAltRowBrush`, rule 20) is the one tint below a card:
+4% black on a light surface, 4% white on a dark one.
 
-`[Primary] [secondary…] [Cancel/Close]`, right-aligned, 8px apart, 16px below the
-content — the Windows order, and the one kubeNimbus's inline confirm strips already
-used. The primary is `accent` (`danger` when it destroys), everything else `soft`.
-pgNimbus's dialogs had drifted to both orders (Import and the role dialogs put Cancel
-first, nine others put it last), so the same button moved from one corner to the other
-between two dialogs of one app. Pair it with `IsDefault` on the primary and `IsCancel`
-on Cancel.
+### 16. A dialog's button row: primary last, Cancel just before it, on the right
+
+`[secondary…] [Cancel/Close] [Primary]`, right-aligned, 8px apart, 16px below the
+content — the macOS order, on every platform. The primary is `accent` (`danger` when
+it destroys), everything else `soft`; a secondary that destroys (`soft danger`: Discard
+all, Drop column) goes furthest left, away from the primary. A dialog with no primary
+ends on Close.
+
+It used to be the Windows order, `[Primary] [secondary…] [Cancel]`, and that is the
+one a Mac user noticed first (2026-09): "Save | Cancel" and "Connect | Test" put the
+affirmative where every native Mac dialog puts Cancel, so the hand went to the wrong
+corner in every dialog. One order everywhere rather than one per platform, because
+the rule before this one was already a fix for the same button moving corners between
+two dialogs of one app (pgNimbus had drifted to both orders), and a per-OS flip is
+that drift again, made deliberate. Windows users meet primary-rightmost in wizards
+and the Store's own dialogs; macOS users meet the other order nowhere. Pair it with
+`IsDefault` on the primary and `IsCancel` on Cancel, so Enter and Esc never depend on
+where either sits.
+
+The same pass made **modal dialogs non-minimizable and non-maximizable** on every
+platform, and on macOS hid their caption text (the client area extends under the
+title bar, the window keeps its `Title` for VoiceOver and Mission Control), because
+the body already opens with `dialogTitle` and AppKit printed the same words above it.
 
 ### 17. Secondary text is dimmed to 0.6, not below
 
@@ -253,6 +291,129 @@ faint they were; the light theme is where they failed. Lower opacities stay for 
 is not read: a separator glyph, a decorative icon, a disabled control (which Fluent
 dims on purpose), or a state the dimming itself announces (an excluded schema).
 
+Inside a list or tree row, give such text the `TextBlock.secondary` class (0.6) rather
+than a local `Opacity`: on a focused list's accent row (rule 20) it has to come up to
+0.85, since white at 0.6 over the brand blue is under 2.5:1, and a local value
+outranks every style that could raise it.
+
+### 18. Menu items are in Title Case, and a row's menu starts with its default action
+
+Every menu label — the macOS menu bar, the ☰ menu, every context menu and every
+`MenuFlyout` — uses Apple's title-style capitalization, on all platforms: capitalize
+every word except articles, coordinating conjunctions and prepositions of four
+letters or fewer, unless the word comes first or last ("Copy Name", "Close to the
+Right", "Exclude from Autocomplete", "Save As…", "Copy As ▸"). A label that opens
+something needing more input ends in `…` (the character, not three dots). Identifiers
+and SQL keywords keep their own case ("Set Cell to NULL", "CREATE ROLE Script"), and
+a label built from data (a column name, a filter expression) is data, not a label.
+
+pgNimbus had both conventions at once: the native menu bar said "Alter Table…" while
+the context menu one row below it said "Copy name" and "Drop schema...", so the same
+app read as two. Microsoft's guidance leans to sentence case and Apple's HIG requires
+title case; the choice (2026-09) was one convention on every platform rather than a
+per-OS switch, and the Mac's, since it is the one platform where the other looks wrong.
+
+A row's context menu opens with the action a double-click performs (rule 2), by
+name: a table's menu used to offer only its DDL and Alter Table, so the one thing
+most people right-click a table for was reachable only by knowing to double-click.
+
+### 19. On macOS the menu bar is the app's, and the Edit menu goes to what has focus
+
+A window that is key on macOS brings a full menu bar: the window's own menus plus
+**Edit** (Undo, Redo, Cut, Copy, Paste, Select All, and Find where there is something
+to search) and **Window** (Minimize, Zoom, Bring All to Front, the open windows). A
+window with no menu of its own leaves AppKit showing the app menu alone, which reads
+as a broken app and takes Cmd+W and Cmd+M with it.
+
+The Edit items are not decoration. AppKit matches a menu item's key equivalent
+*before* the key reaches the window, so the moment Edit carries Cmd+C, the text box,
+editor or grid that used to receive Cmd+C as a key press receives a menu click
+instead. Each verb therefore has to be routed to the focused control — walk up from
+focus, let a view that means something else by the verb (a grid's copy of its rows)
+answer first, then a text box or code editor — or adding the menu breaks copy and
+paste everywhere. Don't add a Help menu (AppKit inserts a search field into one) or
+an Enter Full Screen item (AppKit adds its own to View).
+
+Avalonia 12.1's standard app-menu block has two defects, fixed in place after
+setup: Hide Others is bound to ⌥⌘Q (one key from Quit) instead of ⌥⌘H, and Quit
+does not name the app.
+
+### 20. Native density, and one look for focus and selection
+
+A macOS audit of pgNimbus (2026-09-28) found both apps reading a size larger and a
+shade heavier than every native app beside them, with Windows-95 focus boxes. Fluent's
+defaults were the cause each time; `Theme/Tokens.axaml`, `Theme/Controls.axaml` and
+`Theme/ToggleSwitch.axaml` replace them, on every platform:
+
+- **13px body text.** `ControlContentThemeFontSize` is 13, the macOS system size, so
+  every window and every control that does not set its own size draws at 13 (Fluent:
+  14). List and tree rows are ~24px (`ListBoxItem` padding 8,3; `TreeViewItem`
+  `MinHeight` 24; Fluent: 38 and 32). A tree's node names are regular weight;
+  semibold at most for a root group row.
+- **Selection has two faces.** The selected row of the list or tree that holds
+  keyboard focus is the solid accent with white text and icons; the selected row of
+  any other list is neutral grey (`AppSelectionInactiveBrush`) with ordinary text.
+  So the one list the keyboard is driving is the one that looks it, as in Finder or
+  Mail. Two classes adjust it: `ListBox.emphasized` for a list driven from a search
+  box beside it that never takes focus itself (a command palette), which is always
+  accent; and `ListBox.strip` for choices laid out as a list (a tab strip, a row of
+  result sections), where "selected" means "the one showing" and keeps the light
+  `AppSelectionBrush` wash. Rows draw no focus ring (below); the accent fill is the
+  focus indication.
+- **One focus ring.** `Controls/FocusRing` is every adorner layer's default focus
+  adorner: a 2px ring of semi-transparent brand accent (`AppFocusRingBrush`), 2px
+  outside the control and rounded to its own corner radius. Fluent drew a square 2px
+  black (white in dark) box with a 1px inner rule around everything, rows and round
+  chips included. The ring opts out of the adorner layer's clipping, which otherwise
+  cuts a ring drawn outside the control down to nothing.
+- **The switch is Apple's small one**: a 32x18 filled track with no outline and a
+  14px white knob, grey off and accent on, in both themes. It is a whole
+  `ControlTheme`, because the sizes in Fluent's template are set at Template priority
+  and no style can restyle them.
+- **Menus**: 13px items in ~24px rows, 6px-rounded menu, the highlighted item a
+  4px-rounded accent pill with white text, inset 4px from the edge.
+- **Flat icon buttons answer the pointer.** `chip` and `toolbar` pin a hover and a
+  press wash on the template part (`AppToolbarHoverBrush` / `AppToolbarPressedBrush`)
+  rather than leaving it to Fluent: the command bar's icon buttons read as having
+  no hover at all on macOS.
+- **Zebra tables, opt-in**: `DataGrid.zebra` draws every row the owner marks `odd`
+  in `AppAltRowBrush` and drops the horizontal rules. The DataGrid has no
+  alternating-row property or odd/even pseudo-class, and it recycles rows, so the
+  owner sets the class from the row's index in `LoadingRow`, and again after a row
+  is inserted or removed mid-list. The cell text size and row height stay per app
+  (rules 12 and 14).
+
+### 21. A tooltip opens anywhere over what carries it, and a cut line keeps its text in one
+
+A tooltip opens on the element the pointer is over, and Avalonia's hit test finds
+an element only where it draws something. A `TextBlock` or a `Panel` with no
+`Background` draws nothing of its own, glyphs included, so the pointer over its
+text reaches the list row, card or header behind it and the tooltip never opens.
+pgNimbus measured it headlessly: none of 4,536 points over its status line reached
+the text block, and a walk of every window then found about 50 more dead tooltips
+(history rows, connection endpoints, cut query text, grid column headers). It is
+rule 5's failure seen from the other side: there the click fell through, here the
+hover does.
+
+- **`Controls/ToolTipHitTesting` fixes it once for every element**, so no view
+  writes `Background="Transparent"` beside a `ToolTip.Tip`. Each app calls
+  `ToolTipHitTesting.Install()` from `Application.Initialize`. Any `Panel`,
+  `TextBlock`, `Border`, `ContentPresenter` or templated control that gets a
+  tooltip and has no background gets a transparent one as a *current* value: a
+  background the markup or a style sets still wins, one that goes back to null is
+  filled again, and nothing changes on screen. A disabled control still shows no
+  tooltip (Avalonia's choice; `ToolTip.ShowOnDisabled` opts in).
+- **A status line is `TextBlock.statusMessage`**: one line even for a message that
+  has two (a server error's detail often comes after a newline, which grew the bar
+  a line), cut with an ellipsis, and its whole text in a tooltip only while it is
+  cut (`Converters/CutTextTip`, which reads the block's text layout). A tooltip
+  that repeats what is already on screen is noise, so a line that fits has none. It
+  combines with `statusText` and its `dim`/`warn`/`error` variants.
+
+Each app checks the first half in a headless test that walks its windows,
+hit-tests the middle of every tooltip-bearing element and fails on any the pointer
+passes through.
+
 ---
 
 ## What is deliberately *not* shared
@@ -262,7 +423,7 @@ reasons:
 
 | Thing | Why it stays per-app |
 |---|---|
-| `TabItem` styling | pgNimbus styles it for the query tab strip (12,9 padding, a margin, a corner radius), kubeNimbus for the compact inspector strip (12,6, `MinHeight` 0). Same selector, genuinely different jobs. |
+| `TabItem` styling | pgNimbus styles only its sidebar's Schemas/Queries switch, under its own `TabControl.sidebar` class (a full-width capsule of equal segments); kubeNimbus styles the bare selector for the compact inspector strip (12,6, `MinHeight` 0). Genuinely different jobs. |
 | `TabControl.segmented` | pgNimbus's segmented strip. kubeNimbus does the same job with `ListBox.segmented` + `TabControl.headerless` on purpose — a `TabControl` cannot host a panel's own tools on its header row, and its inspector dock needs exactly that (its rule 10). Sharing a mechanism the sibling has explicitly rejected buys nothing. |
 | Domain icons | A Kubernetes cube and a Postgres elephant are not shared vocabulary. `Theme/Icons.axaml` holds only glyphs both apps actually use. |
 | Everything in `*.Core` | Both engines are UI-free by their own hard rule and share nothing but coincidence. This is why each app has its own copy of the command catalog and chord types: they are UI-free by design, so they cannot live in a library that references Avalonia. |
@@ -283,8 +444,22 @@ mechanism — a rule nobody tracks is a rule that decays.
 - [x] **Surfaces off Fluent's page black → both** (rule 15). `layer`, `OverlayPanel` and
       the list-selection rule changed here; pgNimbus's dialogs, popups and palette and
       kubeNimbus's command palettes moved onto `overlayCard`/`scrim`/`AppPopupBrush`.
-- [ ] Secondary text at 0.6 (rule 17) → kubeNimbus: audit its `hint` class and inline opacities.
+- [ ] Secondary text at 0.6 (rule 17) → kubeNimbus: audit its `hint` class and inline opacities,
+      and move the ones inside list rows to `TextBlock.secondary` so a focused list's accent
+      row can bring them up (rule 20).
+- [ ] Title Case menus and default-action-first context menus (rule 18) → kubeNimbus.
+- [ ] The macOS Edit and Window menus, their focus routing, and the app-menu fix
+      (rule 19) → kubeNimbus. pgNimbus's `EditCommands`, `MacMenus` and `MacAppMenu`
+      name no Postgres and are the candidates to lift into this library.
+- [ ] Rule 20 → kubeNimbus: its lists pick up the two selection faces from the shared rule;
+      check which of them are really strips (`ListBox.strip`) or palette-style lists
+      (`ListBox.emphasized`), and whether its resource grids want `DataGrid.zebra`. Its own
+      `ListBox.segmented` and switcher styles override the shared row rules and are unaffected.
+      Its window chrome gets the centred traffic lights for free through `NimbusWindowChrome`.
 - [ ] `AppSuccessBrush` → pgNimbus. The status trio was two-thirds defined there.
+- [x] **Tooltips that answer the pointer, and the cut status line → both** (rule 21).
+      `ToolTipHitTesting` and `TextBlock.statusMessage` came up from pgNimbus;
+      kubeNimbus installs the handler and its status bar uses `statusMessage`.
 - [x] **The Fluent control layer → `Theme/Controls.axaml`.** Inputs, lists, trees,
       grids and the `.soft`/`.danger` button families were defined in pgNimbus only,
       so kubeNimbus rendered every `TextBox`, `ComboBox`, `ListBox`, `TreeView` and

@@ -22,7 +22,15 @@ public partial class App : Application
     /// </summary>
     private static AppSettingsStore SettingsStore => new();
 
-    public override void Initialize() => AvaloniaXamlLoader.Load(this);
+    public override void Initialize()
+    {
+        AvaloniaXamlLoader.Load(this);
+
+        // A class handler, so every element that carries a tooltip answers the pointer
+        // (DESIGN.md rule 21). Here rather than in OnFrameworkInitializationCompleted so
+        // the screenshot harness, which never gets a lifetime, runs the same wiring.
+        Nimbus.Ui.Controls.ToolTipHitTesting.Install();
+    }
 
     public override void OnFrameworkInitializationCompleted()
     {
