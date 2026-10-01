@@ -384,6 +384,7 @@ foreach (var (name, build) in scenarios)
     }
 }
 
+TooltipChecks.ThrowIfAnyDead(filtered: filter is not null);
 Console.WriteLine($"Wrote screenshots to {Path.GetFullPath(outDir)}");
 try
 {
@@ -458,6 +459,10 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     // Last, so a pane a check just opened settles too: capture when the log streams have
     // stopped moving, not whenever the builder happened to return (ENG-10).
     LogSettle.Run(window);
+
+    // Every scenario, once: the pointer over each tooltip has to reach its element
+    // (DESIGN.md rule 21). Reported together after the last scenario.
+    if (theme == ThemeVariant.Light) TooltipChecks.Reach(window, name);
     using var frame = window.CaptureRenderedFrame();
     var themeLabel = theme == ThemeVariant.Dark ? "dark" : "light";
     var path = Path.Combine(outDir, $"{name}.{themeLabel}.png");

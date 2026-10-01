@@ -358,11 +358,11 @@
         <Grid ColumnDefinitions="*,Auto">
           <!-- With no tab open there is no SelectedTab.Status to show, and that is
                exactly when the shell's own status (kubeconfig load result) matters. -->
-          <TextBlock Grid.Column="0" Classes="statusText" Text="{Binding SelectedTab.Status}"
+          <TextBlock Grid.Column="0" Classes="statusText statusMessage" Text="{Binding SelectedTab.Status}"
                      IsVisible="{Binding SelectedTab, Converter={x:Static aconv:ObjectConverters.IsNotNull}}" />
-          <TextBlock Grid.Column="0" Classes="statusText" Text="{Binding Status}"
+          <TextBlock Grid.Column="0" Classes="statusText statusMessage" Text="{Binding Status}"
                      IsVisible="{Binding SelectedTab, Converter={x:Static aconv:ObjectConverters.IsNull}}" />
-          <TextBlock Grid.Column="1" Classes="statusText warn" Text="{Binding SelectedTab.ConnectionWarning}"
+          <TextBlock Grid.Column="1" Classes="statusText warn statusMessage" Text="{Binding SelectedTab.ConnectionWarning}"
                      IsVisible="{Binding SelectedTab.ConnectionWarning, Converter={x:Static aconv:ObjectConverters.IsNotNull}}" />
         </Grid>
       </Border>
