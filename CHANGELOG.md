@@ -14,6 +14,11 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Fixed
 
+- **Tooltips open.** Hovering a resource name, an age, a CPU or memory sparkline, a status
+  pill or most other text that carries a tooltip showed nothing: the pointer passed through
+  the text to the row behind it. Every tooltip now opens wherever its text is.
+- **The status bar keeps a long message readable.** A message wider than the window was cut
+  off at the edge; it now ends in an ellipsis, and hovering it shows the whole text.
 - **Logs no longer freeze the window on "Everything".** A pod with a long history used to
   hang the app while its log loaded, and switching the theme with a full log open took a
   second. The log panes now draw only the lines in sight and drop what the scrollback would
@@ -32,6 +37,14 @@ it as the GitHub Release body, so headings must match tags exactly
   highlighting, like links, and a Ctrl+click opened them in the browser or the mail client.
   The values and the manifest also stop scrolling at their last line, so text that fits no
   longer gets a scroll bar.
+
+### Changed
+
+- **A denser, quieter look, shared with pgNimbus.** Body text is 13px and list rows about
+  24px, as in native apps. The list or tree the keyboard is in shows its selected row in the
+  accent colour, and other lists in grey. Keyboard focus is a soft rounded accent ring
+  instead of a black box. Switches are the small macOS kind, and the icon buttons in the
+  title bar now light up on hover.
 
 ## [0.5.0] - 2026-09-29
 
