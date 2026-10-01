@@ -98,4 +98,8 @@ public sealed partial class ClusterTabViewModel
 /// The name in the search box, offered because the cluster's namespaces could not be
 /// listed — the picker says so rather than presenting it as a known namespace.
 /// </param>
-public sealed record NamespaceChoice(string Name, bool IsRecent, bool IsTyped = false);
+public sealed record NamespaceChoice(string Name, bool IsRecent, bool IsTyped = false)
+{
+    /// <summary>The row's accessible name: a record's own <c>ToString()</c> is a dump of its properties.</summary>
+    public override string ToString() => IsTyped ? $"Open {Name} by name" : IsRecent ? $"{Name}, recent" : Name;
+}

@@ -30,6 +30,7 @@ public partial class App : Application
         // (DESIGN.md rule 21). Here rather than in OnFrameworkInitializationCompleted so
         // the screenshot harness, which never gets a lifetime, runs the same wiring.
         Nimbus.Ui.Controls.ToolTipHitTesting.Install();
+        AutomationNames.Install();
     }
 
     public override void OnFrameworkInitializationCompleted()

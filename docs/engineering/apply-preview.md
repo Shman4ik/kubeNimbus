@@ -17,7 +17,7 @@ precise, compact, and not how anyone reads a manifest change; the field list is 
 there as the third view mode, because it is the only one of the three that knows a
 container was *inserted* rather than every container rewritten.
 
-Twelve things are load-bearing.
+Thirteen things are load-bearing.
 
 1. **Both sides of the diff come from the server.** The live object is a GET; the other
    side is the `dryRun=All` response. That is the entire difference between this and
@@ -115,6 +115,31 @@ Twelve things are load-bearing.
    feature; monospace plus a tinted line background is what VS Code's own inline diff
    leans on anyway, and the marker glyph carries the direction for anyone who cannot
    separate the two tints.
+
+13. **What is sent is the editor's text minus `metadata.managedFields`, and nothing else is
+   removed.** The editor opens an object exactly as the server returned it, so its text carries
+   every server-written field, and a real API server refuses an apply patch that carries
+   `managedFields`: `metadata.managedFields must be nil` (HTTP 400, on the dry run and on the real
+   apply alike). Apply on an opened ConfigMap was therefore broken outright, and none of the
+   suite noticed, because every live test applied a manifest it had written itself, which never
+   carries the field; the 0.5.1 release pass found it by pressing Apply. `ClusterClient.ApplyBody`
+   removes the field once, for the preview, the apply, the force-apply and the retry without
+   strict validation, since all four go through `SendApplyAsync`; kubectl does the same before
+   it sends anything. Everything else stays, and each was checked against a real server rather
+   than assumed: `resourceVersion` is an optimistic lock and is kept on purpose, so an object
+   that changed while the editor was open is a Conflict and not a silent overwrite; `uid`,
+   `creationTimestamp`, `generation`, `selfLink` and `status` are accepted in an apply body and
+   are left alone. `ApplyLiveTests.An_object_read_back_from_the_server_can_be_previewed_applied_and_force_applied`
+   drives open, edit, preview, apply and force-apply for a Deployment, a ConfigMap and a custom
+   resource, and `ApplyPreviewHttpTests` pins the body on all three paths. Both were confirmed
+   red with the removal commented out.
+   **A Conflict from `resourceVersion` is not a field conflict, and a force-apply does not
+   override it.** A Deployment's controller writes its status for a few seconds after almost
+   any change, which moves `resourceVersion`; an Apply from a text opened before that is refused
+   with "the object has been modified" whatever `force` says. The live test waits for the object to settle
+   for this reason. Reload, then apply again, is the way through.
+
+**Ctrl/Cmd+S is the Apply button.** `CommandId.ApplyYaml` was in the catalog, and so on the F1 sheet and the docs page, with no handler anywhere: the 0.5.1 pass pressed it and nothing happened. `YamlEditorView` handles it in the tunnel phase (the editor would otherwise get the key first) through `CommandBindings.Matches`, so it follows the Ctrl/Cmd preference, and it runs `ApplyCommand`, which keeps every rule above (the preview when the preference is on, disabled in the demo cluster). `ux-yaml-apply-key` in the screenshot harness presses it against a real window and was confirmed red with the handler removed.
 
 **The demo cluster is unchanged and needs no new refusal:** there is no `ClusterClient`,
 so Apply, force-apply and the preview are all already disabled by `CanExecute` under the

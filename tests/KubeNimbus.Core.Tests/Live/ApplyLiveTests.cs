@@ -148,6 +148,113 @@ public class ApplyLiveTests
     }
 
     /// <summary>
+    /// The editor's own round trip: open an object (its YAML is the live object as the server
+    /// returns it, <c>managedFields</c>, <c>uid</c>, <c>status</c> and all), change one value,
+    /// then preview, apply and force-apply it. Found by the 0.5.1 release pass, where Apply on
+    /// a ConfigMap was refused with <c>metadata.managedFields must be nil</c>: every other live
+    /// test here applies a manifest it wrote itself, which never carries the field, so nothing
+    /// had ever sent the server its own bookkeeping back. One test over a built-in with a
+    /// <c>status</c>, a core kind and a custom resource, because the three go through different
+    /// handlers and each carries a different set of server-written fields.
+    /// </summary>
+    [Test]
+    [Arguments("deployment")]
+    [Arguments("configmap")]
+    [Arguments("widget")]
+    [Timeout(120_000)]
+    public async Task An_object_read_back_from_the_server_can_be_previewed_applied_and_force_applied(
+        string kind, CancellationToken ct)
+    {
+        using var client = await LiveCluster.ConnectAsync(ct);
+        var name = LiveCluster.Named($"roundtrip-{kind}");
+        var (descriptor, original, firstEdit, secondEdit, changedPath) = kind switch
+        {
+            // An annotation rather than the replica count: a scale makes the controller write
+            // the object's status for a few seconds, which moves its resourceVersion under the
+            // opened text and is a Conflict that has nothing to do with what is being tested.
+            "deployment" => (LiveCluster.Deployments,
+                LiveCluster.DeploymentYaml(name, 1, "sleep 3600").ReplaceLineEndings("\n")
+                    .Replace($"  namespace: {LiveCluster.Namespace}{'\n'}spec:",
+                        $"  namespace: {LiveCluster.Namespace}{'\n'}  annotations:{'\n'}    note: first{'\n'}spec:"),
+                ("note: first", "note: second"), ("note: second", "note: third"), "metadata.annotations.note"),
+            "configmap" => (ResourceDescriptor.ConfigMaps, $$"""
+                apiVersion: v1
+                kind: ConfigMap
+                metadata:
+                  name: {{name}}
+                  namespace: {{LiveCluster.Namespace}}
+                data:
+                  LOG_LEVEL: info
+                """, ("LOG_LEVEL: info", "LOG_LEVEL: debug"), ("LOG_LEVEL: debug", "LOG_LEVEL: warn"), "data.LOG_LEVEL"),
+            _ => (LiveCluster.Widgets, $$"""
+                apiVersion: shop.kubenimbus.io/v1
+                kind: Widget
+                metadata:
+                  name: {{name}}
+                  namespace: {{LiveCluster.Namespace}}
+                spec:
+                  sku: WDG-LIVE
+                """, ("sku: WDG-LIVE", "sku: WDG-EDIT"), ("sku: WDG-EDIT", "sku: WDG-AGAIN"), "spec.sku"),
+        };
+        await LiveCluster.ApplyAsync(client, descriptor, name, original, ct);
+        if (kind == "deployment")
+        {
+            await LiveCluster.WaitForReadyPodsAsync(client, name, 1, ct);
+        }
+
+        // What the editor shows: the object as the server returns it. The server-written
+        // fields are in the text, which is the premise of the whole test.
+        var live = await client.ReadResourceAsync(descriptor, LiveCluster.Namespace, name, ct);
+        var opened = live!.ToYaml();
+        await Assert.That(opened).Contains("managedFields");
+        await Assert.That(opened).Contains("uid:");
+        await Assert.That(opened).Contains("creationTimestamp:");
+        await Assert.That(opened).Contains("resourceVersion:");
+
+        var edited = ReplaceFirst(opened, firstEdit.Item1, firstEdit.Item2);
+
+        // The preview is a dry run: it names the change and writes nothing.
+        var preview = await client.PreviewApplyAsync(
+            descriptor, LiveCluster.Namespace, name, edited, LiveCluster.FieldManager, cancellationToken: ct);
+        await Assert.That(preview.Diff.Changes.Any(c => c.Path == changedPath)).IsTrue();
+        var untouched = await client.ReadResourceAsync(descriptor, LiveCluster.Namespace, name, ct);
+        await Assert.That(untouched!.ToYaml()).Contains(firstEdit.Item1);
+
+        // The apply writes it.
+        var applied = await client.ApplyYamlAsync(
+            descriptor, LiveCluster.Namespace, name, edited, LiveCluster.FieldManager, cancellationToken: ct);
+        await Assert.That(applied.ToYaml()).Contains(firstEdit.Item2);
+
+        // And so does a force-apply of the next edit, read back again like the editor's reload.
+        // A controller writes a Deployment's status after any change to it, which moves the
+        // resourceVersion; wait for that to stop so the Conflict below cannot be one of its.
+        string? seen = null;
+        await LiveCluster.WaitUntilAsync(async () =>
+        {
+            var current = (await client.ReadResourceAsync(descriptor, LiveCluster.Namespace, name, ct))!.ResourceVersion;
+            var stable = current == seen;
+            seen = current;
+            await Task.Delay(1000, ct);
+            return stable;
+        }, TimeSpan.FromSeconds(30), "the object's resourceVersion to stop moving", ct);
+        var reopened = (await client.ReadResourceAsync(descriptor, LiveCluster.Namespace, name, ct))!.ToYaml();
+        var forced = ReplaceFirst(reopened, secondEdit.Item1, secondEdit.Item2);
+        var forcePreview = await client.PreviewApplyAsync(
+            descriptor, LiveCluster.Namespace, name, forced, LiveCluster.FieldManager, force: true, cancellationToken: ct);
+        await Assert.That(forcePreview.Diff.Changes.Any(c => c.Path == changedPath)).IsTrue();
+        var forceApplied = await client.ApplyYamlAsync(
+            descriptor, LiveCluster.Namespace, name, forced, LiveCluster.FieldManager, force: true, cancellationToken: ct);
+        await Assert.That(forceApplied.ToYaml()).Contains(secondEdit.Item2);
+    }
+
+    private static string ReplaceFirst(string text, string from, string to)
+    {
+        var at = text.IndexOf(from, StringComparison.Ordinal);
+        return at < 0 ? throw new InvalidOperationException($"'{from}' is not in the opened object.")
+            : string.Concat(text.AsSpan(0, at), to, text.AsSpan(at + from.Length));
+    }
+
+    /// <summary>
     /// A mutating admission plugin's effect in the preview of a create: the ServiceAccount
     /// admission plugin injects the service account and its projected token volume into a
     /// Pod, and the API server defaults a dozen scheduling fields — none of which the

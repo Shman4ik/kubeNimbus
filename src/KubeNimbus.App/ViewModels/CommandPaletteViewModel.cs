@@ -20,6 +20,12 @@ public enum PaletteScope
 public sealed record PaletteItem(string Title, string Subtitle, string IconKey, Action? Execute)
 {
     /// <summary>
+    /// A row's accessible name is its content's <c>ToString()</c>, which for a record is a dump of
+    /// its properties. A screen reader reads the title and what it does.
+    /// </summary>
+    public override string ToString() => Subtitle.Length == 0 ? Title : $"{Title}, {Subtitle}";
+
+    /// <summary>
     /// What the query is matched against, when that should not be the title and subtitle.
     /// The log rows use it to match on what identifies an object (name, namespace,
     /// cluster) and not on its status — the list search's own rule (UI rule 13), for the

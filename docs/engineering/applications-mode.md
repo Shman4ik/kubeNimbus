@@ -272,6 +272,22 @@ window.
 Not verified here: a real cluster (Argo CD, SSO, narrow RBAC — the 403 fallback is pinned
 against the fixture seam, not an API server), the win-x64 publish, macOS.
 
+## Windows UI Automation and the page host
+
+The page lives in a `ContentControl` named `PageHost`, and that control has no `IsVisible`
+binding on purpose. While it was hidden until the first page opened, Windows UI Automation
+failed (`Unexpected HRESULT has been returned from a call to a COM component`, `E_FAIL`) on the
+first page opened in a session, for as long as that page stayed open, and recovered after Esc and
+a second open. It reproduced with a Debug and a NativeAOT build, for every application and not only
+the crash-looping one, and only when a UIA client had already enumerated the window before the
+page opened, which `scripts/qa-ui.ps1` always has. No managed exception is raised during the
+failing call (a first-chance handler logged none) and the peer tree walks cleanly in the headless
+harness, so the fault is in how Avalonia's Win32 provider handles a hidden host that gains content
+later, not in a peer of ours. An empty `ContentControl` draws and hit-tests nothing, so leaving it
+visible costs nothing and the list still hides itself through `IsListVisible`. Do not put the
+binding back. `AutomationChecks` in the screenshot harness walks every scenario's peer tree for
+exceptions, but cannot see this one, because it needs the real provider.
+
 ## Follow-ups
 
 The Argo-style resource tree (layout B); an optional Argo CD API connection for a live-vs-Git

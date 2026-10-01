@@ -1,5 +1,8 @@
 using System.ComponentModel;
 using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
+using KubeNimbus.Core.Commands;
 using KubeNimbus.App.Editing;
 using KubeNimbus.App.ViewModels;
 
@@ -23,6 +26,26 @@ public partial class YamlEditorView : UserControl
         Editor.TextChanged += OnEditorTextChanged;
         DataContextChanged += (_, _) => Bind();
         Bind();
+
+        // Ctrl/Cmd+S applies, as the cheat sheet says. Tunnel, because the editor is entitled to
+        // the key first and would otherwise never pass it on. The shortcut sheet and the docs
+        // page listed it for a long time with nothing bound to it (found by the 0.5.1 pass).
+        AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
+    }
+
+    private void OnKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Handled || _vm is null || !CommandBindings.Matches(CommandId.ApplyYaml, e))
+        {
+            return;
+        }
+
+        if (_vm.ApplyCommand.CanExecute(null))
+        {
+            _vm.ApplyCommand.Execute(null);
+        }
+
+        e.Handled = true;
     }
 
     /// <summary>

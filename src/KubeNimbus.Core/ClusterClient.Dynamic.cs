@@ -259,7 +259,7 @@ public sealed partial class ClusterClient
         bool dryRun,
         CancellationToken cancellationToken)
     {
-        var json = YamlJson.ParseYamlToJson(yaml)?.ToJsonString() ?? "{}";
+        var json = ApplyBody(yaml);
         var path = descriptor.ItemPath(@namespace, name);
 
         var strict = _supportsFieldValidation;
@@ -314,6 +314,33 @@ public sealed partial class ClusterClient
         }
 
         return body;
+    }
+
+    /// <summary>
+    /// The JSON an apply sends for the editor's text. The editor opens an object exactly as the
+    /// server returned it, so its text carries <c>metadata.managedFields</c>, and the API server
+    /// refuses an apply patch that does: <c>metadata.managedFields must be nil</c> (HTTP 400, on
+    /// the dry run and on the real apply). kubectl removes the field for the same reason before
+    /// it sends anything. It is the server's own record of who owns which field, so dropping it
+    /// from what is sent loses nothing the apply could use.
+    /// </summary>
+    /// <remarks>
+    /// Only that one field is removed. <c>resourceVersion</c> stays, because a server-side apply
+    /// that carries one is an optimistic lock and the editor is exactly the place that wants it:
+    /// a Conflict is the answer when the object changed while it was open. <c>uid</c>,
+    /// <c>creationTimestamp</c>, <c>generation</c>, <c>selfLink</c> and <c>status</c> are accepted
+    /// by a real server in an apply body (ApplyLiveTests sends them), so none of them is touched.
+    /// </remarks>
+    internal static string ApplyBody(string yaml)
+    {
+        var node = YamlJson.ParseYamlToJson(yaml);
+        if (node is System.Text.Json.Nodes.JsonObject { } root
+            && root["metadata"] is System.Text.Json.Nodes.JsonObject metadata)
+        {
+            metadata.Remove("managedFields");
+        }
+
+        return node?.ToJsonString() ?? "{}";
     }
 
     private async Task<(System.Net.HttpStatusCode Status, string? Reason, string Body)> SendApplyOnceAsync(

@@ -276,6 +276,7 @@
                         <TextBlock Text="{Binding Header}" FontSize="12" VerticalAlignment="Center"
                                    MaxWidth="170" TextTrimming="CharacterEllipsis" />
                         <Button Classes="chip" Padding="0" MinWidth="14" MinHeight="14"
+                                ToolTip.Tip="Close tab" AutomationProperties.Name="{Binding Header, StringFormat='Close {0}'}"
                                 Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).CloseTabCommand}"
                                 CommandParameter="{Binding}">
                           <PathIcon Data="{StaticResource CloseIconGeometry}" Width="9" Height="9" />
@@ -299,6 +300,7 @@
                    no tab open it says what it does, since a bare "+" in an empty bar is a
                    guess. -->
               <Button Name="SwitcherButton" Classes="chip" Padding="6,5" Click="OnSwitcherButtonClick"
+                      AutomationProperties.Name="Open a cluster"
                       VerticalAlignment="Center" Margin="3,0,0,0"
                       chrome:WindowDecorationProperties.ElementRole="User">
                 <ToolTip.Tip>
@@ -320,6 +322,7 @@
             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Spacing="2"
                         chrome:WindowDecorationProperties.ElementRole="User">
               <Button Name="PaletteButton" Classes="searchpill" Width="190" VerticalAlignment="Center" Margin="0,0,6,0"
+                      AutomationProperties.Name="Search actions"
                       Click="OnPaletteButtonClick">
                 <Grid ColumnDefinitions="Auto,*,Auto">
                   <PathIcon Grid.Column="0" Data="{StaticResource MagnifyIconGeometry}" Width="11" Height="11" Opacity="0.55" VerticalAlignment="Center" />

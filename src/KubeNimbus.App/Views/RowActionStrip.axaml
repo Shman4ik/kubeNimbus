@@ -86,8 +86,8 @@
              its own, which is how "Local port" ended up touching its own text box
              in the port-forward pane (UI rule 11). -->
         <StackPanel Grid.Column="0" IsVisible="{Binding IsScale}" Spacing="2">
-          <TextBlock Classes="fieldLabel" Text="Replicas" />
-          <NumericUpDown Name="ReplicaInput" Value="{Binding Replicas}" Minimum="0"
+          <TextBlock Name="ReplicasLabel" Classes="fieldLabel" Text="Replicas" />
+          <NumericUpDown Name="ReplicaInput" Value="{Binding Replicas}" AutomationProperties.LabeledBy="{Binding #ReplicasLabel}" Minimum="0"
                          Maximum="{x:Static vm:RowActionViewModel.MaxReplicas}"
                          Increment="1" FormatString="0" MinWidth="120"
                          IsEnabled="{Binding IsEditable}" />

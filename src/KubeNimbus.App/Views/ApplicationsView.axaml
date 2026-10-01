@@ -66,7 +66,7 @@
            two-way IsChecked and nothing else (UI rule 8b), on a RadioChip, which a click
            turns on and never off — see that control for why. -->
       <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,10">
-        <controls:RadioChip Name="AllChip" Classes="chip checkedAccent" Padding="10,4" Margin="0,0,6,0" IsChecked="{Binding IsAllChip}">
+        <controls:RadioChip Name="AllChip" AutomationProperties.Name="All applications" Classes="chip checkedAccent" Padding="10,4" Margin="0,0,6,0" IsChecked="{Binding IsAllChip}">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <TextBlock Text="All" FontSize="12" />
             <TextBlock Text="{Binding AllCount}" FontSize="11" Opacity="0.6" />
@@ -260,7 +260,11 @@
       </Border>
     </DockPanel>
 
-    <ContentControl Name="PageHost" Content="{Binding Page}" IsVisible="{Binding IsPageOpen}">
+    <!-- No IsVisible here, on purpose: an empty ContentControl draws and hit-tests nothing, and
+         one that is hidden until the first page opens makes Windows UI Automation fail
+         ("Unexpected HRESULT") on the first page opened in a session, for as long as it stays
+         open. See docs/engineering/applications-mode.md. -->
+    <ContentControl Name="PageHost" Content="{Binding Page}">
       <ContentControl.ContentTemplate>
         <DataTemplate x:DataType="vm:ApplicationPageViewModel">
           <views:ApplicationPageView />

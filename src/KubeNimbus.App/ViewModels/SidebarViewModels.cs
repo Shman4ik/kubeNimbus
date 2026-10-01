@@ -154,8 +154,11 @@ public sealed partial class SidebarKindViewModel(ResourceDescriptor descriptor, 
     /// case stays clean.
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasGroupLabel))]
+    [NotifyPropertyChangedFor(nameof(HasGroupLabel), nameof(AutomationName))]
     private string _groupLabel = "";
+
+    /// <summary>The row's accessible name: the kind, and its API group when another kind shares the name.</summary>
+    public string AutomationName => HasGroupLabel ? $"{DisplayName}, {GroupLabel}" : DisplayName;
 
     public bool HasGroupLabel => GroupLabel.Length > 0;
 
