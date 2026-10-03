@@ -428,9 +428,15 @@ dynamically. No view writes a font name.
 `Nimbus.Ui.Fonts.NimbusFonts.Apply` sets all three, plus `InterfaceLetterSpacing`,
 in the application's resources from the app's settings, and open windows follow.
 Each app offers the interface face (System or Inter) and the code face (the bundled
-one or any installed monospace family) in its preferences, and registers the bundled
-face with `WithNimbusFonts()` beside `WithInterFont()` in every app builder, tests
-and tools included.
+one or any installed monospace family, which `Nimbus.Ui.Fonts.MonospaceFonts` lists)
+in its preferences, and registers the bundled face with `WithNimbusFonts()` beside
+`WithInterFont()` in every app builder, tests and tools included. Where a class
+cannot go, the use site still names the token, never a face: a `Run` takes
+`FontFamily="{DynamicResource MonoFont}"`, an app style that is all code sets
+`FontFamily` to `{DynamicResource MonoFont}` and `LetterSpacing` to 0, as the
+class does, and so does a control whose `FontFamily` is its own property rather than
+the inherited `TextElement` one, which the class cannot reach (kubeNimbus's exec
+terminal, a `Grid`).
 
 - **Code is drawn in a face we ship.** Before this both apps wrote
   `Cascadia Code,Consolas,Menlo,monospace` at each use site (pgNimbus ~30 times, in
@@ -499,17 +505,20 @@ mechanism — a rule nobody tracks is a rule that decays.
       `ListBox.segmented` and switcher styles override the shared row rules and are unaffected.
       Its window chrome gets the centred traffic lights for free through `NimbusWindowChrome`.
 - [ ] `AppSuccessBrush` → pgNimbus. The status trio was two-thirds defined there.
-- [ ] **Typography as settings → kubeNimbus** (rule 22). pgNimbus moved first. kubeNimbus
-      still writes `Cascadia Mono,Consolas,monospace` at about 80 use sites (one with
-      `DejaVu Sans Mono` too) and has no font settings. Its main window's
-      `{StaticResource InterFontFamily}` names a resource nothing defines; on a control
-      that is deferred and resolves to nothing, so kubeNimbus is drawn in Fluent's Inter,
-      on a Mac too. Moving it to System changes how it looks on every platform, which
-      pgNimbus's switch did not (see the rule), so that default is its own decision. Replace the stacks with `Classes="mono"` (its `Run`s with
-      `FontFamily="{DynamicResource MonoFont}"`), add `WithNimbusFonts()` to its app
-      builders, call `NimbusFonts.Apply` from its settings, and add the two choices to its
-      preferences page. pgNimbus's `Platform/MonospaceFonts` (the installed list, through
-      Skia) is the candidate to lift here when it does.
+- [x] **Typography as settings → kubeNimbus** (rule 22). pgNimbus moved first. kubeNimbus
+      wrote `Cascadia Mono,Consolas,monospace` at 78 use sites (the terminal's with
+      `DejaVu Sans Mono` too) and had no font settings; 70 are now the `mono` class and the
+      rest name the token (a `Run`, six all-code styles, and the exec terminal, whose own
+      `FontFamily` the class does not reach), both app builders call `WithNimbusFonts()`,
+      and `NimbusFonts.Apply` runs from its settings and its preferences page's two new
+      cards. Its main window's
+      `{StaticResource InterFontFamily}` named a resource nothing defined, so it had been in
+      Fluent's Inter on every platform; its "auto" is System now, like pgNimbus's, which
+      changed its look everywhere and was the owner's decision, so both apps share one face
+      on one desktop. `MonospaceFonts` came up here from pgNimbus for it.
+- [ ] `Nimbus.Ui.Fonts.MonospaceFonts` → pgNimbus: drop its own `Platform/MonospaceFonts`
+      (the copy this one was lifted from, unchanged apart from its namespace) and read the
+      shared one, once pgNimbus has taken a nimbusUi with it.
 - [x] **Tooltips that answer the pointer, and the cut status line → both** (rule 21).
       `ToolTipHitTesting` and `TextBlock.statusMessage` came up from pgNimbus;
       kubeNimbus installs the handler and its status bar uses `statusMessage`.

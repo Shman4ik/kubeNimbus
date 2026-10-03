@@ -109,6 +109,9 @@ src/Nimbus.Ui/
   Fonts/                  The bundled JetBrains Mono NL (Regular, Bold, OFL.txt) and
                           NimbusFonts: the typography tokens' values per platform,
                           Apply, and WithNimbusFonts() for the app builders (rule 22).
+                          MonospaceFonts: the installed monospace families for the
+                          preferences pages' code font list, read through SkiaSharp
+                          (the one reason the csproj references Avalonia.Skia).
                           The .ttf files are listed as AvaloniaResource in the csproj;
                           unlike .axaml they are not globbed.
   Hotkeys.cs              Ctrl/Cmd resolution, gesture labels.
