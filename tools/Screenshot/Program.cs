@@ -142,6 +142,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-exec-fullscreen", () => HostInMainWindow(ClusterTabScenarios.ExecFullScreen())),
     ("cluster-tab-exec-fullscreen-maximized", () => HostInMainWindow(ClusterTabScenarios.ExecFullScreenMaximized())),
     ("cluster-tab-exec-no-shell", () => HostInMainWindow(ClusterTabScenarios.ExecNoShell())),
+    ("cluster-tab-exec-debug-container", () => HostInMainWindow(ClusterTabScenarios.ExecDebugContainer())),
     ("cluster-tab-port-forward", () => HostInMainWindow(ClusterTabScenarios.PortForward())),
     ("cluster-tab-port-forward-idle", () => HostInMainWindow(ClusterTabScenarios.PortForwardIdle())),
     ("cluster-tab-helm-releases", () => HostInMainWindow(ClusterTabScenarios.HelmReleases())),

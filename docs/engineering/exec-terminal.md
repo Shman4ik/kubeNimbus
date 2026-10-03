@@ -11,7 +11,7 @@ for `ls` and useless for everything people actually exec in for: `vi`, `top`, `m
 so a full-screen tool did not draw at all; it unspooled.
 
 **The transport did not change and must not.** `ClusterClient.ExecAsync`'s WebSocket,
-the channel-3 error read, the bash→sh→ash probe and its `Task.WhenAny` timeout are all
+the channel-3 error read, the shell probe and its `Task.WhenAny` timeout are all
 exactly as they were — see the exec bullets above and `ExecTabViewModel.ProbeAsync`'s
 remarks, which are the record of two failures that cost a live debugging session each.
 What changed is only what happens to the bytes at either end.
@@ -75,10 +75,71 @@ Seven things are load-bearing:
    colour. One dark terminal in both themes beats a half-swapped one.
 7. **A blank terminal is a state, not a pane** (UI rule 9). Until the first byte lands,
    `IsStatusOverlayVisible` covers the black rectangle with the status — "Connecting…",
-   "No usable shell in app — tried /bin/bash, /bin/sh, /bin/ash", "Session ended" —
+   "app has no shell — tried /bin/bash, /bin/sh, /bin/ash", "Session ended" —
    and then gets out of the way, because after that the scrollback is worth more and the
    chrome row carries the state anyway. The demo cluster is unchanged: no `ClusterClient`,
    so `Border.demoUnavailable` and nothing else.
+
+## Which shells, and what "no shell" means
+
+The shells tried depend on the pod's OS (`Core/ExecShells`): `/bin/bash`, `/bin/sh`,
+`/bin/ash` on Linux, `powershell` then `cmd` on a Windows node, both lists (Linux first) when
+the OS cannot be told. The OS is what the scheduler goes by: the pod's `spec.os.name`, its
+`kubernetes.io/os` node selector, then the node's label — read once per pane, and a node the
+user may not `get` (the usual case under namespace-scoped RBAC) is "unknown", not an error.
+Lens and FreeLens send `powershell` to a Windows node too; before this, the pane sent three
+paths no Windows image has.
+
+"No shell" is a verdict, not the last failure. The pane used to print whatever the last
+shell tried said, so a 403 on `pods/exec` read as `stat /bin/ash: no such file or directory`
+— ash being last. `ExecShells.IsMissingExecutable` matches the runtime's own sentences (runc
+and containerd's `no such file or directory` / `executable file not found`, hcsshim's `The
+system cannot find the file specified`), and only when **every** attempt says that is the
+image declared shell-less. Otherwise the first failure that is about something else is the
+one shown.
+
+## The debug container (`kubectl debug`, in place)
+
+A distroless or .NET chiseled image has no shell, and neither Lens nor FreeLens has an answer
+(FreeLens runs `kubectl exec -- sh -c "bash || ash || sh"`, which needs `sh` itself). This
+pane's answer is the one kubectl has: an ephemeral container from another image, sharing the
+target's process namespace (`targetContainerName`) and network, with the target's files
+reachable as `/proc/1/root`. The rules are `Core/DebugContainers` (pure, `DebugContainersTests`
+byte for byte) and the HTTP is `ClusterClient.Debug.cs`; `DebugContainerLiveTests` runs the
+whole thing against the sandbox with the pause image, which has no shell at all.
+
+1. **The offer appears only after a verdict of "no shell"**, in the overlay that states it, on
+   an opaque `overlayCard` (the terminal is black in both themes, and a translucent `card` put
+   light-theme text on it). Not on a Windows node: ephemeral containers do not exist there.
+2. **The click is the confirmation.** Adding an ephemeral container is a real and permanent
+   change to the pod (it cannot be removed; it goes when the pod is recreated), which is UI
+   rule 17's territory. The offer is already the armed state that rule asks for: it appears
+   only after a failure, names what it adds and says that it stays, so a strip asking again
+   would be a second question about the same thing.
+3. **The patch is kubectl's**: a strategic merge patch of `pods/{name}/ephemeralcontainers`
+   adding one container named `debugger-xxxxx` (kubectl's prefix and alphabet), with
+   `stdin: true` and `tty: true`. Those two are not cosmetic: without them BusyBox's default
+   `sh` reads EOF and exits at once, and there is nothing left to exec into. The pane execs
+   into the running container rather than attaching to it, so a reconnect is an ordinary
+   reconnect.
+4. **`SYS_PTRACE` first, without it when Pod Security refuses.** The target usually runs as
+   its own user and the debug image as root, and without the capability the kernel refuses
+   root a look at another user's `/proc/1/root`. Pod Security's `baseline` level refuses the
+   capability, admission refuses the patch whole, so the retry without it is still the only
+   container added (`DebugContainerAdded.CanTrace`). The connected line then says the files
+   are readable only if both run as one user. A namespace enforcing `restricted` refuses a
+   root image either way, and its sentence is what the pane shows; RBAC's 403 is not retried.
+5. **The wait is a watch, not a poll.** `WaitForDebugContainerAsync` is a field-selected watch
+   of the one pod through the informer loop, reporting each waiting reason as it changes (the
+   pull is the slow part), and failing on `ErrImagePull`/`ImagePullBackOff`/`InvalidImageName`
+   and the create errors rather than sitting out the back-off. Three minutes in all.
+6. **A running one is reused.** Ephemeral containers cannot be removed, so a second click
+   adding a second container would leave the pod carrying both. `FindReusable` opens a running
+   debug container that targets the same container from the same image instead.
+7. **The image is not a preference.** `busybox:1.37` (4 MB, a shell, `wget`, `nc`, `ps`) is
+   right wherever Docker Hub is reachable; an air-gapped cluster types its mirror into the
+   box, once per pane. If people end up retyping it, a setting is the next step, with a line
+   in `PRIVACY.md`.
 
 **A defect in the dependency, found here and not fixed here.** Reverse video with
 *default* colours does not invert. `TerminalControlModel.CreateStyleKey` swaps the

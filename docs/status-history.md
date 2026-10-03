@@ -2581,3 +2581,33 @@ tests 452/452 with `ClusterTabBatchApplyTests` (3); the whole harness rendered w
 the two known DataGrid warnings and both `--smoke-test` modes exit 0. Not run: live-cluster tests, and no
 real watch against a real API server went through `InBatches` — the path a reconnect or a
 410 relist takes through it is covered only by the unit tests.
+
+### Exec: shells by OS, "no shell" as a verdict, and the debug container (2026-10-03)
+
+Prompted by a real cluster: exec into a .NET chiseled image ended on "No usable shell in web —
+tried /bin/bash, /bin/sh, /bin/ash", with nothing to do next. Three changes. The shells tried
+now depend on the pod's OS (`Core/ExecShells`): `powershell` then `cmd` on a Windows node,
+read from `spec.os`, the `kubernetes.io/os` node selector or the node's label, and both lists
+when that cannot be told. "No shell" is said only when every attempt was refused as a missing
+executable; any other failure (a 403, a stopped container) is shown instead of whatever the
+last shell said. And the pane offers `kubectl debug`'s answer in place: an ephemeral container
+(`Core/DebugContainers`, `ClusterClient.Debug.cs`) targeting the container, `SYS_PTRACE` first
+with a retry without it when Pod Security refuses it, a field-selected watch until it runs,
+and reuse of a running one rather than adding a second. Lens and FreeLens have neither.
+
+Checks: Core tests 755 passed, 1 skipped, 1 failed against a freshly created sandbox — the
+failure is `EventFieldsTests.Both_event_groups_read_the_same_against_a_real_server`, an event
+count that ticked from 8 to 9 between its two reads, and it passed on a rerun; it is unrelated
+to this change and is a flaky live test. The new `ExecShellsTests` (15) and
+`DebugContainersTests` (20) pass, and `DebugContainerLiveTests` passed against the real k3s
+sandbox with the pause image: every shell refused as missing, the patch accepted, the
+container running, `/proc/1/cmdline` reading `/pause` and `/proc/1/root` listable from inside
+it, and the reuse check finding it. App tests 464/464. The harness renders the two new
+scenarios (`cluster-tab-exec-no-shell` with the offer, `cluster-tab-exec-debug-container`),
+and `exec-terminal.dark.png` was re-rendered because the shell box is wider. Driven by real
+input in a Debug build against the sandbox: the no-shell sentence and the offer on a
+pause-image pod, Start debug container pulling `busybox:1.37` from Docker Hub and connecting,
+a typed `ls /proc/1/root/` answering, and a second start reusing the same container. Not
+verified: the Pod Security fallback against a real admission controller (the UI pass was
+stopped before it ran; covered by a stub-server test only), a Windows node, and the NativeAOT
+publish.
