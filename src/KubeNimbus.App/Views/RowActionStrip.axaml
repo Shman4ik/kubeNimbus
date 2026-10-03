@@ -81,7 +81,9 @@
                 IsVisible="{Binding IsArgoSync}" IsEnabled="{Binding IsEditable}"
                 ToolTip.Tip="Argo's --prune. Objects the Application no longer declares are deleted from the cluster." />
 
-      <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" IsVisible="{Binding !IsDraining}">
+      <!-- The prompt row: present only while the action is a question. Once it has an
+           answer the result line below is the whole strip, and Close sits on it. -->
+      <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" IsVisible="{Binding IsPromptVisible}">
         <!-- Label above the input, never beside it: an Auto column has no gap of
              its own, which is how "Local port" ended up touching its own text box
              in the port-forward pane (UI rule 11). -->
@@ -98,23 +100,12 @@
         <Button Grid.Column="3" Content="{Binding ConfirmLabel}" Classes="accent" Margin="8,0,0,0"
                 VerticalAlignment="Bottom" Command="{Binding ConfirmCommand}"
                 IsVisible="{Binding IsPromptVisible}" />
-        <!-- The confirm's slot after a CronJob's run-now: the one action with a natural
-             next step, which is watching the run it just started. Present only once the
-             server has named the Job. -->
-        <Button Grid.Column="3" Content="Open Job" Classes="accent" Margin="8,0,0,0"
-                VerticalAlignment="Bottom" Command="{Binding OpenCreatedJobCommand}"
-                IsVisible="{Binding HasFollowUp}" />
-        <!-- Cancel before, Close after: one slot, swapped on the state, rather
-             than a live button beside a dead one (UI rule 11 again). Cancel goes
-             dead while the request is in flight, and that is the honest state:
-             the patch or delete is already with the API server, so a button that
-             dismissed the strip there would read as "cancelled" over an action
-             that went through. -->
+        <!-- Cancel goes dead while the request is in flight, and that is the honest
+             state: the patch or delete is already with the API server, so a button that
+             dismissed the strip there would read as "cancelled" over an action that went
+             through. Its after-the-fact twin, Close, is on the result line below. -->
         <Button Grid.Column="4" Margin="6,0,0,0" VerticalAlignment="Bottom" Content="Cancel"
-                Command="{Binding DismissCommand}"
-                IsVisible="{Binding IsPromptVisible}" IsEnabled="{Binding IsEditable}" />
-        <Button Grid.Column="4" Margin="6,0,0,0" VerticalAlignment="Bottom" Content="Close"
-                Command="{Binding DismissCommand}" IsVisible="{Binding IsDone}" />
+                Command="{Binding DismissCommand}" IsEnabled="{Binding IsEditable}" />
       </Grid>
 
       <TextBlock Classes="statusText warn" TextWrapping="Wrap" IsVisible="{Binding IsScalingToZero}"
@@ -125,7 +116,21 @@
            resource), and the result. -->
       <Border Classes="infoBar" IsVisible="{Binding HasMessage}"
               Classes.success="{Binding IsSuccess}" Classes.error="{Binding IsError}">
-        <TextBlock Text="{Binding Message}" TextWrapping="Wrap" FontSize="12" />
+        <!-- Once the action is done its result is the strip's last word, so the way out
+             sits on that line rather than on a row of its own under a disabled form: Close,
+             and before it a CronJob run-now's one natural next step, Open Job (present
+             only once the server has named the Job). The negative margins keep the bar's
+             height that of its text. -->
+        <Grid ColumnDefinitions="*,Auto,Auto">
+          <TextBlock Grid.Column="0" Text="{Binding Message}" TextWrapping="Wrap" FontSize="12"
+                     VerticalAlignment="Center" />
+          <Button Grid.Column="1" Content="Open Job" Classes="accent" Margin="12,-4,0,-4"
+                  Padding="10,3" VerticalAlignment="Center"
+                  Command="{Binding OpenCreatedJobCommand}" IsVisible="{Binding HasFollowUp}" />
+          <Button Grid.Column="2" Content="Close" Classes="soft" Margin="8,-4,-4,-4"
+                  Padding="10,3" VerticalAlignment="Center"
+                  Command="{Binding DismissCommand}" IsVisible="{Binding IsDone}" />
+        </Grid>
       </Border>
 
       <!-- The drain's own progress, one row per pod. Height-capped and
