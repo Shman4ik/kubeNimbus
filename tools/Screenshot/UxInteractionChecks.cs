@@ -310,16 +310,65 @@ internal static class UxInteractionChecks
         Dispatcher.UIThread.RunJobs();
     }
 
-    /// <summary>Scrolls the preferences overlay so the card whose label reads <paramref name="label"/> is in view.</summary>
-    internal static void ScrollPreferencesTo(Window window, string label)
+    /// <summary>
+    /// The preferences page is four tabs (2026-10, after pgNimbus). The overlay's card is
+    /// centred and sized to its content, so a page whose height followed its tab moved the
+    /// strip under the pointer on every switch; it keeps <see cref="PreferencesView.PageHeight"/>
+    /// on every tab instead. The strip is nimbusUi's <c>TabControl.capsule</c>, which an app
+    /// style on bare <c>TabItem</c> would silently re-pad (it loads later and wins), so the
+    /// segment padding is checked too. The page reopens on the tab it was left on, and the
+    /// switches on a tab that was not on screen when the page loaded still have names.
+    /// </summary>
+    internal static void PreferencesTabs(Window window)
     {
-        var view = window.GetVisualDescendants().OfType<PreferencesView>().First();
-        var text = view.GetVisualDescendants().OfType<TextBlock>().First(t => t.Text == label);
-        var card = text.FindAncestorOfType<Border>() ?? (Control)text;
-        card.BringIntoView(new Rect(0, 0, card.Bounds.Width, card.Bounds.Height + 80));
-        Dispatcher.UIThread.RunJobs();
-        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
-        Dispatcher.UIThread.RunJobs();
+        var shell = (MainWindowViewModel)window.DataContext!;
+        shell.IsPreferencesOpen = true;
+        Settle();
+
+        var page = window.GetVisualDescendants().OfType<PreferencesView>().Single();
+        var tabs = page.GetVisualDescendants().OfType<TabControl>().Single();
+        if (tabs.ItemCount != 4) throw new InvalidOperationException($"Preferences has {tabs.ItemCount} tabs, expected 4.");
+        if (tabs.SelectedIndex != 0) throw new InvalidOperationException($"Preferences opened on tab {tabs.SelectedIndex}, expected 0.");
+
+        var segment = tabs.GetVisualDescendants().OfType<TabItem>().First();
+        if (segment.Padding != new Thickness(8, 4)) throw new InvalidOperationException($"A tab segment's padding is {segment.Padding}, not the capsule's 8,4: a bare TabItem style is overriding it.");
+
+        var strip = tabs.GetVisualDescendants().OfType<Border>().First(b => b.Name == "PART_StripBorder");
+        double? stripTop = null;
+        for (var i = 0; i < tabs.ItemCount; i++)
+        {
+            tabs.SelectedIndex = i;
+            Settle();
+            if (page.Bounds.Height != PreferencesView.PageHeight)
+                throw new InvalidOperationException($"Preferences tab {i} is {page.Bounds.Height}px tall, expected {PreferencesView.PageHeight}.");
+            var top = strip.TranslatePoint(default, window)!.Value.Y;
+            if (stripTop is { } first && top != first)
+                throw new InvalidOperationException($"The tab strip moved from y={first} to y={top} on tab {i}.");
+            stripTop = top;
+        }
+
+        tabs.SelectedIndex = 2;
+        Settle();
+        var scrollback = page.GetVisualDescendants().OfType<NumericUpDown>().First();
+        if (Avalonia.Automation.AutomationProperties.GetName(scrollback) != "Log scrollback")
+            throw new InvalidOperationException("A control on a tab that was not shown at load has no accessible name.");
+
+        shell.IsPreferencesOpen = false;
+        Settle();
+        shell.IsPreferencesOpen = true;
+        Settle();
+        page = window.GetVisualDescendants().OfType<PreferencesView>().Single();
+        tabs = page.GetVisualDescendants().OfType<TabControl>().Single();
+        if (shell.Preferences!.SelectedTab != 2 || tabs.SelectedIndex != 2)
+            throw new InvalidOperationException($"Preferences reopened on tab {tabs.SelectedIndex}, expected the last one shown (2).");
+        Console.WriteLine("Preferences tabs contract passed.");
+
+        static void Settle()
+        {
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Dispatcher.UIThread.RunJobs();
+        }
     }
 
     private static Button RowLogsButton(DataGrid grid, ResourceRowViewModel row) =>

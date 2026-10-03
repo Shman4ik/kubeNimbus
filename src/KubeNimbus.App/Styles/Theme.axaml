@@ -229,16 +229,12 @@
         <Setter Property="FontSize" Value="12" />
     </Style>
 
-    <!-- Compact TabItem headers. FluentTheme sizes these at 24px, which dwarfs the
-         dock (see the pod detail Logs/Events strip); pull them down to body scale. -->
-    <Style Selector="TabItem">
-        <Setter Property="FontSize" Value="13" />
-        <Setter Property="MinHeight" Value="0" />
-        <Setter Property="Padding" Value="12,6" />
-    </Style>
-    <Style Selector="TabItem /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
-    </Style>
+    <!-- No bare `TabItem` style. There used to be one, compacting Fluent's 24px
+         headers for the inspector's tab strip, but every inspector strip is now a
+         `ListBox.segmented` over a `TabControl.headerless`, whose headers are never
+         drawn. The one TabItem strip this app shows, the preferences page's, is
+         nimbusUi's `TabControl.capsule`, and a bare style here would load after it and
+         override its padding (nimbusUi's CLAUDE.md, rule 7). -->
 
     <!-- Headerless TabControl: the tab strip is drawn by a `ListBox.segmented`
          alongside the panel's own tools instead, so the two share one row.

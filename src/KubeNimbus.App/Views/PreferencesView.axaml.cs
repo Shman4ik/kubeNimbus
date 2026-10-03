@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 
 namespace KubeNimbus.App.Views;
@@ -18,9 +19,25 @@ namespace KubeNimbus.App.Views;
 /// </summary>
 public partial class PreferencesView : UserControl
 {
+    /// <summary>
+    /// The page's height whichever tab is showing. The overlay's card sizes to its
+    /// content and is centred, so a page sized by its tab would grow and shrink on
+    /// every switch and move the tab strip under the pointer. A window too short for
+    /// it gets what there is, and each tab scrolls. Sized for the Appearance tab, the
+    /// tallest; the overlay's own 640 cap, less its title row, is just above it.
+    /// </summary>
+    public const double PageHeight = 580;
+
     public PreferencesView()
     {
         InitializeComponent();
         Loaded += (_, _) => AutomationNames.NameCardControls(this);
+    }
+
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        var height = Math.Min(PageHeight, availableSize.Height);
+        var desired = base.MeasureOverride(availableSize.WithHeight(height));
+        return desired.WithHeight(height);
     }
 }

@@ -7,7 +7,7 @@ cheat sheet, or <kbd>Ctrl</kbd>+<kbd>K</kbd> to search commands by name.
 
 The **Windows / Linux** and **macOS** columns differ only in the primary
 modifier. That choice follows the platform by default and can be forced either
-way in Preferences → Shortcut modifier.
+way in Preferences → General → Shortcut modifier.
 
 ## Clusters
 

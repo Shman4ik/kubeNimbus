@@ -992,12 +992,41 @@ Five rules:
    `GetFolderPath` returns `""` for a folder that does not exist yet, and on a fresh Linux
    `HOME` that used to put the discovery cache in the current directory (ENG-39).
 
-The page itself (`PreferencesWindow` + `PreferencesViewModel`) is deliberately the same
-shape as pgNimbus's — section header, one card per setting, label and explanation left,
-control right, **immediate apply and no OK/Cancel** — because someone who uses both
-should not learn it twice. Settings the shell already owns (`IsAdvancedView`,
+The page itself (`PreferencesView` + `PreferencesViewModel`) is deliberately the same
+shape as pgNimbus's — tabs, then a section header, one card per setting, label and
+explanation left, control right, **immediate apply and no OK/Cancel** — because someone
+who uses both should not learn it twice. Settings the shell already owns (`IsAdvancedView`,
 `IsSidebarVisible`) are *proxied* through `MainWindowViewModel`, never duplicated, so
 the page and the command bar's own toggles cannot disagree while both are on screen.
+
+**It is four tabs** (2026-10, following pgNimbus PR #347): General (kubeconfig files and
+folders, shortcut modifier), Appearance (theme, interface and code fonts, Advanced view, sidebar), Logs and metrics,
+and Changes (confirm before deleting, preview before applying). General and Appearance
+come first in both apps so that the two settings both apps have, the shortcut modifier and
+the theme, sit under the same tab names. A tab carries section headers only when it holds
+more than one group. A new setting goes on one of the four tabs, never a fifth tab for a
+single card. Three things are load-bearing:
+
+- **The strip is nimbusUi's `TabControl.capsule`**, the full-width capsule pgNimbus's
+  sidebar switch uses, moved into `shared/nimbusUi` for this (it was pgNimbus's
+  `TabControl.sidebar`). Not a segmented strip with a fade, which a screenshot can catch
+  half-way. This app no longer has a bare `TabItem` style: an app style loads after the
+  library and would re-pad the capsule's segments, and the one it had styled only headers
+  `TabControl.headerless` never draws.
+- **The page is one height on every tab** (`PreferencesView.PageHeight`, applied in
+  `MeasureOverride` as `min(PageHeight, available height)`). The overlay's card is centred
+  and sized to its content, so a page sized by its tab moved the strip under the pointer
+  on every switch. 580 fits Appearance, the tallest tab (five cards since the font
+  settings); the overlay's 640 cap less its title row is just above it, so a sixth card
+  there would scroll. A long kubeconfig list scrolls inside General.
+- **It opens on the tab it was left on**, for the session only: `PreferencesViewModel
+  .SelectedTab` is seeded from and written back to `MainWindowViewModel.PreferencesTab`,
+  because the page's view model is rebuilt on every open.
+
+`SettingsTabsTests` pins the remembered tab; the harness's `ux-preferences-tabs` check pins
+the rendered half (four tabs, one height, a strip that does not move, the capsule's own
+segment padding, and accessible names on a tab that was not on screen when the page loaded,
+which is why `AutomationNames.NameCardControls` walks the logical tree).
 
 ## Workload detail and namespace navigation
 
