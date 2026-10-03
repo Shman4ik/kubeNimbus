@@ -5,10 +5,13 @@
              x:DataType="vm:PreferencesViewModel">
 
 
-    <!-- Deliberately the same page as pgNimbus's: section header, one card per
-         setting, label and explanation on the left, the control on the right, no
-         OK/Cancel because every change applies and persists as it is made. Someone who
-         uses both apps should not have to learn this twice. -->
+    <!-- Deliberately the same page as pgNimbus's: tabs on nimbusUi's capsule strip,
+         one height whichever tab shows, then a section header, one card per setting,
+         label and explanation on the left, the control on the right, no OK/Cancel
+         because every change applies and persists as it is made. Someone who uses both
+         apps should not have to learn this twice, which is also why General and
+         Appearance come first in both: the shortcut modifier and the theme, the two
+         settings both apps have, are under the same tab names. -->
 
     <UserControl.Styles>
         <Style Selector="TextBlock.label">
@@ -20,223 +23,255 @@
             <Setter Property="Opacity" Value="0.55" />
             <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
+        <!-- The strip lines up with the cards under it. -->
+        <Style Selector="TabControl.settings /template/ Border#PART_StripBorder">
+            <Setter Property="Margin" Value="20,2,20,0" />
+        </Style>
     </UserControl.Styles>
 
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Margin="20" Spacing="6">
+    <!-- Four tabs rather than one long page (2026-10), following pgNimbus, whose page
+         went to tabs first: a single page meant scrolling past the kubeconfig list to
+         reach the log settings. The strip is TabControl.capsule, not a segmented strip
+         with a fade, which a screenshot could catch half-way. A tab holds section
+         headers only when it has more than one group. The page keeps one height
+         whichever tab shows (PreferencesView.axaml.cs), so the strip never moves under
+         the pointer. -->
+    <TabControl Classes="capsule settings" SelectedIndex="{Binding SelectedTab}">
+        <TabItem Header="General">
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="20,14,20,20" Spacing="6">
+                    <TextBlock Classes="sectionHeader" Text="CLUSTERS" Margin="4,0,4,4" />
+                    <Border Classes="card" Padding="14,12">
+                        <StackPanel Spacing="8">
+                            <StackPanel Spacing="2">
+                                <TextBlock Classes="label" Text="Kubeconfig files and folders" />
+                                <!-- Says what is stored, in the place someone is most likely to
+                                     worry about it. The claim in SECURITY.md is that the app
+                                     never persists a credential; this is where that is visible. -->
+                                <TextBlock Classes="hint" Text="Files and folders you have opened here, searched before $KUBECONFIG and the default location; a folder contributes every kubeconfig in it, including ones added later. kubeNimbus remembers the path only — never the contents — and re-reads the file each time it connects. Removing one here does not delete anything." />
+                            </StackPanel>
 
-            <TextBlock Classes="sectionHeader" Text="APPEARANCE" Margin="4,0,4,4" />
-            <Border Classes="card" Padding="14,12">
-                <Grid ColumnDefinitions="*,Auto">
-                    <StackPanel Spacing="2" Margin="0,0,16,0">
-                        <TextBlock Classes="label" Text="Theme" />
-                        <TextBlock Classes="hint" Text="System follows the OS light/dark setting" />
-                    </StackPanel>
-                    <ComboBox Grid.Column="1" MinWidth="130" VerticalAlignment="Center"
-                              SelectedIndex="{Binding ThemeIndex}">
-                        <ComboBoxItem Content="System" />
-                        <ComboBoxItem Content="Light" />
-                        <ComboBoxItem Content="Dark" />
-                    </ComboBox>
-                </Grid>
-            </Border>
+                            <!-- Empty is a state, not a blank box (rule 7): with no picked file
+                                 the app is still reading $KUBECONFIG and ~/.kube/config, and
+                                 someone looking at an empty list needs to know that.
 
-            <!-- The two faces (DESIGN.md rule 22), in the same words as pgNimbus's page. -->
-            <Border Classes="card" Padding="14,12" Margin="0,6,0,0">
-                <Grid ColumnDefinitions="*,Auto">
-                    <StackPanel Spacing="2" Margin="0,0,16,0">
-                        <TextBlock Classes="label" Text="Interface font" />
-                        <TextBlock Classes="hint" Text="System is San Francisco on macOS, Segoe UI on Windows and your desktop's font on Linux. Inter looks the same everywhere." />
-                    </StackPanel>
-                    <ComboBox Name="InterfaceFontBox" Grid.Column="1" MinWidth="130" VerticalAlignment="Center"
-                              SelectedIndex="{Binding InterfaceFontIndex}">
-                        <ComboBoxItem Content="System" />
-                        <ComboBoxItem Content="Inter" />
-                    </ComboBox>
-                </Grid>
-            </Border>
+                                 The sentence lives *inside* the border, which is the whole point
+                                 and is what this got wrong before: it sat underneath, so the box
+                                 it explained rendered as an 88px empty rectangle with the
+                                 explanation outside it — which is the blank rectangle rule 9
+                                 forbids, with the right words sitting next to it. -->
+                            <Border Classes="card" Padding="2" MinHeight="88">
+                                <Panel>
+                                    <ListBox ItemsSource="{Binding KubeconfigPaths}"
+                                             SelectedItem="{Binding SelectedKubeconfigPath}"
+                                             FontSize="12"
+                                             IsVisible="{Binding KubeconfigPaths.Count}" />
+                                    <TextBlock Classes="hint" Margin="12" TextWrapping="Wrap"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               TextAlignment="Center"
+                                               Text="No files or folders added. kubeNimbus is still reading $KUBECONFIG and the default location."
+                                               IsVisible="{Binding !KubeconfigPaths.Count}" />
+                                </Panel>
+                            </Border>
 
-            <Border Classes="card" Padding="14,12" Margin="0,6,0,0">
-                <Grid ColumnDefinitions="*,Auto">
-                    <StackPanel Spacing="2" Margin="0,0,16,0">
-                        <TextBlock Classes="label" Text="Code font" />
-                        <TextBlock Classes="hint" Text="For YAML, logs, the terminal, values and every other place that shows code. Lists the monospace fonts installed on this computer." />
-                    </StackPanel>
-                    <ComboBox Name="CodeFontBox" Grid.Column="1" MinWidth="200" MaxWidth="260" VerticalAlignment="Center"
-                              ItemsSource="{Binding CodeFonts}"
-                              SelectedItem="{Binding SelectedCodeFont}">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate x:DataType="vm:CodeFontOption">
-                                <TextBlock Text="{Binding Label}" FontFamily="{Binding Family}"
-                                           LetterSpacing="0" TextTrimming="CharacterEllipsis" />
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
-                </Grid>
-            </Border>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Classes="soft" Content="Add file…" Command="{Binding AddKubeconfigCommand}" />
+                                <Button Classes="soft" Content="Add folder…" Command="{Binding AddKubeconfigFolderCommand}"
+                                        ToolTip.Tip="Every kubeconfig in the folder, including files added to it later" />
+                                <Button Classes="soft" Content="Remove" Command="{Binding RemoveKubeconfigCommand}" />
+                                <Button Classes="soft" Content="Rescan" Command="{Binding RescanCommand}" />
+                            </StackPanel>
 
-            <Border Classes="card" Padding="14,12" Margin="0,6,0,0">
-                <Grid ColumnDefinitions="*,Auto">
-                    <StackPanel Spacing="2" Margin="0,0,16,0">
-                        <TextBlock Classes="label" Text="Advanced view" />
-                        <TextBlock Classes="hint" Text="Lists every resource kind in the sidebar, including the API machinery (APIServices, CSRs, ClusterRoles, admission, flow control, CSI plumbing) and CRDs. On by default; turn it off for the kinds you actually browse — Pods, Deployments, Services, ConfigMaps, Nodes and the like. Nothing becomes unreachable: the sidebar's own filter and the command palette still find every kind." />
-                    </StackPanel>
-                    <ToggleSwitch Grid.Column="1" VerticalAlignment="Center"
-                                  OnContent="" OffContent=""
-                                  IsChecked="{Binding IsAdvancedView}" />
-                </Grid>
-            </Border>
-
-            <Border Classes="card" Padding="14,12" Margin="0,6,0,0">
-                <Grid ColumnDefinitions="*,Auto">
-                    <StackPanel Spacing="2" Margin="0,0,16,0">
-                        <TextBlock Classes="label" Text="Show the resource sidebar" />
-                        <TextBlock Classes="hint" Text="The kind catalog down the left of each cluster tab. Hiding it gives the resource list the full content width; the command bar's toggle does the same thing." />
-                    </StackPanel>
-                    <ToggleSwitch Grid.Column="1" VerticalAlignment="Center"
-                                  OnContent="" OffContent=""
-                                  IsChecked="{Binding IsSidebarVisible}" />
-                </Grid>
-            </Border>
-
-            <TextBlock Classes="sectionHeader" Text="CLUSTERS" Margin="4,10,4,4" />
-            <Border Classes="card" Padding="14,12">
-                <StackPanel Spacing="8">
-                    <StackPanel Spacing="2">
-                        <TextBlock Classes="label" Text="Kubeconfig files and folders" />
-                        <!-- Says what is stored, in the place someone is most likely to
-                             worry about it. The claim in SECURITY.md is that the app
-                             never persists a credential; this is where that is visible. -->
-                        <TextBlock Classes="hint" Text="Files and folders you have opened here, searched before $KUBECONFIG and the default location; a folder contributes every kubeconfig in it, including ones added later. kubeNimbus remembers the path only — never the contents — and re-reads the file each time it connects. Removing one here does not delete anything." />
-                    </StackPanel>
-
-                    <!-- Empty is a state, not a blank box (rule 7): with no picked file
-                         the app is still reading $KUBECONFIG and ~/.kube/config, and
-                         someone looking at an empty list needs to know that.
-
-                         The sentence lives *inside* the border, which is the whole point
-                         and is what this got wrong before: it sat underneath, so the box
-                         it explained rendered as an 88px empty rectangle with the
-                         explanation outside it — which is the blank rectangle rule 9
-                         forbids, with the right words sitting next to it. -->
-                    <Border Classes="card" Padding="2" MinHeight="88">
-                        <Panel>
-                            <ListBox ItemsSource="{Binding KubeconfigPaths}"
-                                     SelectedItem="{Binding SelectedKubeconfigPath}"
-                                     FontSize="12"
-                                     IsVisible="{Binding KubeconfigPaths.Count}" />
-                            <TextBlock Classes="hint" Margin="12" TextWrapping="Wrap"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"
-                                       TextAlignment="Center"
-                                       Text="No files or folders added. kubeNimbus is still reading $KUBECONFIG and the default location."
-                                       IsVisible="{Binding !KubeconfigPaths.Count}" />
-                        </Panel>
+                            <TextBlock Classes="hint" Text="{Binding KubeconfigStatus}" />
+                        </StackPanel>
                     </Border>
 
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Classes="soft" Content="Add file…" Command="{Binding AddKubeconfigCommand}" />
-                        <Button Classes="soft" Content="Add folder…" Command="{Binding AddKubeconfigFolderCommand}"
-                                ToolTip.Tip="Every kubeconfig in the folder, including files added to it later" />
-                        <Button Classes="soft" Content="Remove" Command="{Binding RemoveKubeconfigCommand}" />
-                        <Button Classes="soft" Content="Rescan" Command="{Binding RescanCommand}" />
-                    </StackPanel>
+                    <TextBlock Classes="sectionHeader" Text="APPLICATIONS" Margin="4,10,4,4" />
+                    <Border Classes="card" Padding="14,12">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="2" Margin="0,0,16,0">
+                                <TextBlock Classes="label" Text="Open applications with one click" />
+                                <TextBlock Classes="hint" Text="A click on a row of the Applications list opens its page. Off, it takes a double-click, as in the resource list, which always does: there a click selects the row the keys and the menu act on." />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" VerticalAlignment="Center"
+                                          OnContent="" OffContent=""
+                                          IsChecked="{Binding OpenApplicationsOnSingleClick}" />
+                        </Grid>
+                    </Border>
 
-                    <TextBlock Classes="hint" Text="{Binding KubeconfigStatus}" />
+                    <TextBlock Classes="sectionHeader" Text="KEYBOARD" Margin="4,10,4,4" />
+                    <Border Classes="card" Padding="14,12">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="2" Margin="0,0,16,0">
+                                <TextBlock Classes="label" Text="Shortcut modifier" />
+                                <TextBlock Classes="hint" Text="Auto uses Cmd on macOS and Ctrl elsewhere. Applies immediately to shortcuts, the command palette, and the cheat sheet." />
+                            </StackPanel>
+                            <ComboBox Grid.Column="1" MinWidth="130" VerticalAlignment="Center"
+                                      SelectedIndex="{Binding HotkeySchemeIndex}">
+                                <ComboBoxItem Content="Auto" />
+                                <ComboBoxItem Content="Ctrl" />
+                                <ComboBoxItem Content="Cmd" />
+                            </ComboBox>
+                        </Grid>
+                    </Border>
                 </StackPanel>
-            </Border>
+            </ScrollViewer>
+        </TabItem>
 
-            <Border Classes="card" Padding="14,12" Margin="0,6,0,0">
-                <Grid ColumnDefinitions="*,Auto">
-                    <StackPanel Spacing="2" Margin="0,0,16,0">
-                        <TextBlock Classes="label" Text="Open applications with one click" />
-                        <TextBlock Classes="hint" Text="A click on a row of the Applications list opens its page. Off, it takes a double-click, as in the resource list, which always does: there a click selects the row the keys and the menu act on." />
-                    </StackPanel>
-                    <ToggleSwitch Grid.Column="1" VerticalAlignment="Center"
-                                  OnContent="" OffContent=""
-                                  IsChecked="{Binding OpenApplicationsOnSingleClick}" />
-                </Grid>
-            </Border>
+        <TabItem Header="Appearance">
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="20,14,20,20" Spacing="6">
+                    <Border Classes="card" Padding="14,12">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="2" Margin="0,0,16,0">
+                                <TextBlock Classes="label" Text="Theme" />
+                                <TextBlock Classes="hint" Text="System follows the OS light/dark setting" />
+                            </StackPanel>
+                            <ComboBox Grid.Column="1" MinWidth="130" VerticalAlignment="Center"
+                                      SelectedIndex="{Binding ThemeIndex}">
+                                <ComboBoxItem Content="System" />
+                                <ComboBoxItem Content="Light" />
+                                <ComboBoxItem Content="Dark" />
+                            </ComboBox>
+                        </Grid>
+                    </Border>
 
-            <Border Classes="card" Padding="14,12" Margin="0,6,0,0">
-                <Grid ColumnDefinitions="*,Auto">
-                    <StackPanel Spacing="2" Margin="0,0,16,0">
-                        <TextBlock Classes="label" Text="Confirm before deleting" />
-                        <TextBlock Classes="hint" Text="Deleting a resource takes a second click. Off is a deliberate choice: this deletes objects in a live cluster, and nothing here can undo it." />
-                    </StackPanel>
-                    <ToggleSwitch Grid.Column="1" VerticalAlignment="Center"
-                                  OnContent="" OffContent=""
-                                  IsChecked="{Binding ConfirmDeletes}" />
-                </Grid>
-            </Border>
+                    <!-- The two faces (DESIGN.md rule 22), in the same words as pgNimbus's page. -->
+                    <Border Classes="card" Padding="14,12" Margin="0,6,0,0">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="2" Margin="0,0,16,0">
+                                <TextBlock Classes="label" Text="Interface font" />
+                                <TextBlock Classes="hint" Text="System is San Francisco on macOS, Segoe UI on Windows and your desktop's font on Linux. Inter looks the same everywhere." />
+                            </StackPanel>
+                            <ComboBox Name="InterfaceFontBox" Grid.Column="1" MinWidth="130" VerticalAlignment="Center"
+                                      SelectedIndex="{Binding InterfaceFontIndex}">
+                                <ComboBoxItem Content="System" />
+                                <ComboBoxItem Content="Inter" />
+                            </ComboBox>
+                        </Grid>
+                    </Border>
 
-            <Border Classes="card" Padding="14,12" Margin="0,6,0,0">
-                <Grid ColumnDefinitions="*,Auto">
-                    <StackPanel Spacing="2" Margin="0,0,16,0">
-                        <TextBlock Classes="label" Text="Preview before applying" />
-                        <TextBlock Classes="hint" Text="Apply asks the server what it would do first, and shows the difference — including defaulting, admission webhooks and another field manager's conflicts — before the object changes. Costs one round trip and one click." />
-                    </StackPanel>
-                    <ToggleSwitch Grid.Column="1" VerticalAlignment="Center"
-                                  OnContent="" OffContent=""
-                                  IsChecked="{Binding PreviewApplies}" />
-                </Grid>
-            </Border>
+                    <Border Classes="card" Padding="14,12" Margin="0,6,0,0">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="2" Margin="0,0,16,0">
+                                <TextBlock Classes="label" Text="Code font" />
+                                <TextBlock Classes="hint" Text="For YAML, logs, the terminal, values and every other place that shows code. Lists the monospace fonts installed on this computer." />
+                            </StackPanel>
+                            <ComboBox Name="CodeFontBox" Grid.Column="1" MinWidth="200" MaxWidth="260" VerticalAlignment="Center"
+                                      ItemsSource="{Binding CodeFonts}"
+                                      SelectedItem="{Binding SelectedCodeFont}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:CodeFontOption">
+                                        <TextBlock Text="{Binding Label}" FontFamily="{Binding Family}"
+                                                   LetterSpacing="0" TextTrimming="CharacterEllipsis" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                        </Grid>
+                    </Border>
 
-            <TextBlock Classes="sectionHeader" Text="LOGS AND METRICS" Margin="4,10,4,4" />
-            <Border Classes="card" Padding="14,12">
-                <Grid ColumnDefinitions="*,Auto">
-                    <StackPanel Spacing="2" Margin="0,0,16,0">
-                        <TextBlock Classes="label" Text="Log scrollback" />
-                        <TextBlock Classes="hint" Text="Lines a pod's log pane keeps before the oldest are dropped. Higher costs memory on a chatty container; lower loses the start of a crash loop." />
-                    </StackPanel>
-                    <NumericUpDown Grid.Column="1" MinWidth="130" VerticalAlignment="Center"
-                                   Minimum="200" Maximum="200000" Increment="500"
-                                   FormatString="0"
-                                   Value="{Binding LogBufferLines}" />
-                </Grid>
-            </Border>
+                    <Border Classes="card" Padding="14,12" Margin="0,6,0,0">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="2" Margin="0,0,16,0">
+                                <TextBlock Classes="label" Text="Advanced view" />
+                                <TextBlock Classes="hint" Text="Lists every resource kind in the sidebar, including the API machinery (APIServices, CSRs, ClusterRoles, admission, flow control, CSI plumbing) and CRDs. On by default; turn it off for the kinds you actually browse — Pods, Deployments, Services, ConfigMaps, Nodes and the like. Nothing becomes unreachable: the sidebar's own filter and the command palette still find every kind." />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" VerticalAlignment="Center"
+                                          OnContent="" OffContent=""
+                                          IsChecked="{Binding IsAdvancedView}" />
+                        </Grid>
+                    </Border>
 
-            <Border Classes="card" Padding="14,12" Margin="0,6,0,0">
-                <Grid ColumnDefinitions="*,Auto">
-                    <StackPanel Spacing="2" Margin="0,0,16,0">
-                        <TextBlock Classes="label" Text="Open logs maximized" />
-                        <TextBlock Classes="hint" Text="Logs open full-size over the list instead of in the bottom dock — from L, a row's logs icon, the menu and the palette alike. Shift+L does this for one open whatever this says; Esc or the dock's restore icon goes back to the split." />
-                    </StackPanel>
-                    <ToggleSwitch Grid.Column="1" VerticalAlignment="Center"
-                                  OnContent="" OffContent=""
-                                  IsChecked="{Binding OpenLogsMaximized}" />
-                </Grid>
-            </Border>
+                    <Border Classes="card" Padding="14,12" Margin="0,6,0,0">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="2" Margin="0,0,16,0">
+                                <TextBlock Classes="label" Text="Show the resource sidebar" />
+                                <TextBlock Classes="hint" Text="The kind catalog down the left of each cluster tab. Hiding it gives the resource list the full content width; the command bar's toggle does the same thing." />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" VerticalAlignment="Center"
+                                          OnContent="" OffContent=""
+                                          IsChecked="{Binding IsSidebarVisible}" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </TabItem>
 
-            <Border Classes="card" Padding="14,12" Margin="0,6,0,0">
-                <Grid ColumnDefinitions="*,Auto">
-                    <StackPanel Spacing="2" Margin="0,0,16,0">
-                        <TextBlock Classes="label" Text="Metrics refresh (seconds)" />
-                        <TextBlock Classes="hint" Text="How often CPU and memory are re-read. This is the only thing kubeNimbus polls — the metrics API has no watch endpoint — so raising it is the way to go quieter on a large cluster. Below metrics-server's own scrape interval there is no new data to fetch." />
-                    </StackPanel>
-                    <NumericUpDown Grid.Column="1" MinWidth="130" VerticalAlignment="Center"
-                                   Minimum="5" Maximum="600" Increment="5"
-                                   FormatString="0"
-                                   Value="{Binding MetricsPollSeconds}" />
-                </Grid>
-            </Border>
+        <TabItem Header="Logs and metrics">
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="20,14,20,20" Spacing="6">
+                    <TextBlock Classes="sectionHeader" Text="LOGS" Margin="4,0,4,4" />
+                    <Border Classes="card" Padding="14,12">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="2" Margin="0,0,16,0">
+                                <TextBlock Classes="label" Text="Log scrollback" />
+                                <TextBlock Classes="hint" Text="Lines a pod's log pane keeps before the oldest are dropped. Higher costs memory on a chatty container; lower loses the start of a crash loop." />
+                            </StackPanel>
+                            <NumericUpDown Grid.Column="1" MinWidth="130" VerticalAlignment="Center"
+                                           Minimum="200" Maximum="200000" Increment="500"
+                                           FormatString="0"
+                                           Value="{Binding LogBufferLines}" />
+                        </Grid>
+                    </Border>
 
-            <TextBlock Classes="sectionHeader" Text="KEYBOARD" Margin="4,10,4,4" />
-            <Border Classes="card" Padding="14,12">
-                <Grid ColumnDefinitions="*,Auto">
-                    <StackPanel Spacing="2" Margin="0,0,16,0">
-                        <TextBlock Classes="label" Text="Shortcut modifier" />
-                        <TextBlock Classes="hint" Text="Auto uses Cmd on macOS and Ctrl elsewhere. Applies immediately to shortcuts, the command palette, and the cheat sheet." />
-                    </StackPanel>
-                    <ComboBox Grid.Column="1" MinWidth="130" VerticalAlignment="Center"
-                              SelectedIndex="{Binding HotkeySchemeIndex}">
-                        <ComboBoxItem Content="Auto" />
-                        <ComboBoxItem Content="Ctrl" />
-                        <ComboBoxItem Content="Cmd" />
-                    </ComboBox>
-                </Grid>
-            </Border>
+                    <Border Classes="card" Padding="14,12" Margin="0,6,0,0">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="2" Margin="0,0,16,0">
+                                <TextBlock Classes="label" Text="Open logs maximized" />
+                                <TextBlock Classes="hint" Text="Logs open full-size over the list instead of in the bottom dock — from L, a row's logs icon, the menu and the palette alike. Shift+L does this for one open whatever this says; Esc or the dock's restore icon goes back to the split." />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" VerticalAlignment="Center"
+                                          OnContent="" OffContent=""
+                                          IsChecked="{Binding OpenLogsMaximized}" />
+                        </Grid>
+                    </Border>
 
-        </StackPanel>
-    </ScrollViewer>
+                    <TextBlock Classes="sectionHeader" Text="METRICS" Margin="4,10,4,4" />
+                    <Border Classes="card" Padding="14,12">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="2" Margin="0,0,16,0">
+                                <TextBlock Classes="label" Text="Metrics refresh (seconds)" />
+                                <TextBlock Classes="hint" Text="How often CPU and memory are re-read. This is the only thing kubeNimbus polls — the metrics API has no watch endpoint — so raising it is the way to go quieter on a large cluster. Below metrics-server's own scrape interval there is no new data to fetch." />
+                            </StackPanel>
+                            <NumericUpDown Grid.Column="1" MinWidth="130" VerticalAlignment="Center"
+                                           Minimum="5" Maximum="600" Increment="5"
+                                           FormatString="0"
+                                           Value="{Binding MetricsPollSeconds}" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </TabItem>
+
+        <TabItem Header="Changes">
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="20,14,20,20" Spacing="6">
+                    <Border Classes="card" Padding="14,12">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="2" Margin="0,0,16,0">
+                                <TextBlock Classes="label" Text="Confirm before deleting" />
+                                <TextBlock Classes="hint" Text="Deleting a resource takes a second click. Off is a deliberate choice: this deletes objects in a live cluster, and nothing here can undo it." />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" VerticalAlignment="Center"
+                                          OnContent="" OffContent=""
+                                          IsChecked="{Binding ConfirmDeletes}" />
+                        </Grid>
+                    </Border>
+
+                    <Border Classes="card" Padding="14,12" Margin="0,6,0,0">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="2" Margin="0,0,16,0">
+                                <TextBlock Classes="label" Text="Preview before applying" />
+                                <TextBlock Classes="hint" Text="Apply asks the server what it would do first, and shows the difference — including defaulting, admission webhooks and another field manager's conflicts — before the object changes. Costs one round trip and one click." />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" VerticalAlignment="Center"
+                                          OnContent="" OffContent=""
+                                          IsChecked="{Binding PreviewApplies}" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </TabItem>
+    </TabControl>
 
 </UserControl>

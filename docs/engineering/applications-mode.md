@@ -235,7 +235,7 @@ and Argo's own Degraded/Unknown when nothing read from the workloads explains it
    double-click. The list is navigation, not selection: no row action, context menu or row
    key needs a row selected without opening it, so the first click of a double-click did
    nothing anyone could see. `AppSettings.OpenApplicationsOnSingleClick` (on by default, a
-   card on the preferences page) turns it back into a double-click; it is read at the click.
+   card on the preferences page's General tab) turns it back into a double-click; it is read at the click.
    A click with a modifier only selects. The row opened is the item under the pointer, and a
    click that arrives while a page is already open does nothing, so the second press of a
    habitual double-click cannot rebuild the page it just opened. The Resources grid keeps

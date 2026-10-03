@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.LogicalTree;
 using Avalonia.VisualTree;
 
 namespace KubeNimbus.App;
@@ -95,11 +96,12 @@ internal static partial class AutomationNames
     /// the page's switches, drop-downs and number boxes are read as "Advanced view" and not
     /// as an unnamed control. A card is a two-column grid with the label first in a stack
     /// panel, the shape every row of that page shares; the label stays the one place the
-    /// words are written.
+    /// words are written. It walks the logical tree, not the visual one: the page is tabs,
+    /// and only the tab on screen has visuals when the page loads.
     /// </summary>
     internal static void NameCardControls(Control page)
     {
-        foreach (var card in page.GetVisualDescendants().OfType<Grid>())
+        foreach (var card in page.GetLogicalDescendants().OfType<Grid>())
         {
             if (card.ColumnDefinitions.Count != 2)
             {

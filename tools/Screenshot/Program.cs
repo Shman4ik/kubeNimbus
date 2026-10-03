@@ -338,6 +338,9 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // VER-19 and ENG-20: keyboard contracts that need a real window (KeyboardChecks).
     ("ux-hotkey-scheme", () => BuildMainWindowContent()),
     ("ux-overlay-focus", () => BuildMainWindowContent()),
+    // The preferences page's tabs: one height on every tab, the capsule strip unstyled
+    // by the app, reopened on the last tab (UxInteractionChecks.PreferencesTabs).
+    ("ux-preferences-tabs", () => BuildMainWindowContent()),
     ("ux-exec-keys", () => HostInMainWindow(ClusterTabScenarios.Exec())),
     // URLs and e-mail addresses in YAML are drawn as text, not AvaloniaEdit's blue links (EditorChecks).
     ("ux-yaml-editor-links", () => HostInMainWindow(ClusterTabScenarios.YamlEditor())),
@@ -356,9 +359,11 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // URI or a DataTemplate that stopped resolving compiles perfectly), and these
     // two views are loaded from nowhere else.
     ("main-window-preferences", () => BuildMainWindowContent(openPreferences: true)),
-    // The same page scrolled to its Logs and metrics cards, where L2's "Open logs
-    // maximized" switch sits below the fold of the shot above.
-    ("main-window-preferences-logs", () => BuildMainWindowContent(openPreferences: true)),
+    // The page opens on its General tab; these are its other three tabs. The Logs and
+    // metrics tab is where L2's "Open logs maximized" switch sits.
+    ("main-window-preferences-appearance", () => BuildMainWindowContent(openPreferences: true, preferencesTab: 1)),
+    ("main-window-preferences-logs", () => BuildMainWindowContent(openPreferences: true, preferencesTab: 2)),
+    ("main-window-preferences-changes", () => BuildMainWindowContent(openPreferences: true, preferencesTab: 3)),
     ("main-window-about", () => BuildMainWindowContent(openAbout: true)),
     // The interface and code faces change open text from the page (FontChecks, rule 22).
     ("ux-font-settings", () => BuildMainWindowContent(openPreferences: true)),
@@ -446,6 +451,7 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     if (name == "ux-applications-keys") ApplicationsChecks.Keys(window);
     if (name == "ux-hotkey-scheme") KeyboardChecks.HotkeyScheme(window);
     if (name == "ux-overlay-focus") UxInteractionChecks.OverlayTakesFocus(window);
+    if (name == "ux-preferences-tabs") UxInteractionChecks.PreferencesTabs(window);
     if (name is "cluster-tab-list-unhealthy-fleet-partial-narrow" or "cluster-tab-list-unhealthy-narrow")
         LayoutChecks.ListHeaderFits(window);
     if (name == "palette-logs-narrow") LayoutChecks.PaletteFollowsWindow(window);
@@ -467,7 +473,6 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     if (name == "ux-pane-logs-events") PaneLogsChecks.Events(window);
     if (name == "ux-pane-logs-argo") PaneLogsChecks.Argo(window);
     if (name == "cluster-tab-argo-resource-logs-hover") PaneLogsChecks.HoverArgoRow(window, "Deployment");
-    if (name == "main-window-preferences-logs") UxInteractionChecks.ScrollPreferencesTo(window, "Open logs maximized");
     if (name.StartsWith("cluster-tab-row-logs", StringComparison.Ordinal)) UxInteractionChecks.HoverRow(window, 3);
     if (name == "ux-font-settings") FontChecks.SettingsReachOpenText(window);
 
@@ -599,7 +604,7 @@ static Control BuildNoKubeconfigContent()
     return window;
 }
 
-static Control BuildMainWindowContent(bool openShortcuts = false, bool openPreferences = false, bool openAbout = false)
+static Control BuildMainWindowContent(bool openShortcuts = false, bool openPreferences = false, bool openAbout = false, int preferencesTab = 0)
 {
     var window = new MainWindow();
     var vm = new MainWindowViewModel();
@@ -620,6 +625,7 @@ static Control BuildMainWindowContent(bool openShortcuts = false, bool openPrefe
     // The preferences page proxies the shell's own state, and the settings it writes
     // land in the harness's redirected directory (AppSettingsStore.DirectoryOverride
     // at the top of this file) rather than the developer's own.
+    vm.PreferencesTab = preferencesTab;
     vm.IsPreferencesOpen = openPreferences;
     vm.IsAboutOpen = openAbout;
 

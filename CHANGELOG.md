@@ -29,8 +29,12 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Changed
 
+- **Preferences is four tabs.** General (kubeconfig files and folders, opening applications with one click, shortcut modifier),
+  Appearance, Logs and metrics, and Changes (confirm before deleting, preview before applying),
+  the same strip pgNimbus's settings page uses. The page keeps one height on every tab and opens
+  on the tab it was last left on.
 - **One click opens an application.** A click on a row of the Applications list opens its page;
-  it used to take a double-click. "Open applications with one click" on the preferences page
+  it used to take a double-click. "Open applications with one click" on the General tab of the preferences page
   turns the double-click back on. The resource list still opens on double-click.
 - **Applications in the command bar goes back to the list.** On an application page, clicking
   the already selected Applications mode (or Ctrl+Shift+A, Cmd+Shift+A on macOS) returns to

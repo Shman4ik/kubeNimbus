@@ -262,6 +262,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private bool _isPreferencesOpen;
 
     /// <summary>
+    /// The preferences tab last shown, so the page opens where it was left. For the
+    /// session only: the page's view model is rebuilt on every open, this outlives it.
+    /// </summary>
+    public int PreferencesTab { get; set; }
+
+    /// <summary>
     /// The page subscribes to this view model's <c>PropertyChanged</c> to mirror the
     /// settings the shell owns, so an open page is a live listener. Closing it has to
     /// <see cref="PreferencesViewModel.Detach"/>, or every dismissed page stays
