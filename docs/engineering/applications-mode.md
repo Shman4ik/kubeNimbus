@@ -231,6 +231,25 @@ and Argo's own Degraded/Unknown when nothing read from the workloads explains it
    because nothing there is focusable and focus would otherwise stay wherever it was. The
    harness opened pages with Enter only, which is why it passed; `ux-applications-keys` now
    double-clicks a row and presses Esc, and that step fails without the fix.
+8. **One click opens a row** (2026-10, the owner's call), an exception to UI rule 2's
+   double-click. The list is navigation, not selection: no row action, context menu or row
+   key needs a row selected without opening it, so the first click of a double-click did
+   nothing anyone could see. `AppSettings.OpenApplicationsOnSingleClick` (on by default, a
+   card on the preferences page) turns it back into a double-click; it is read at the click.
+   A click with a modifier only selects. The row opened is the item under the pointer, and a
+   click that arrives while a page is already open does nothing, so the second press of a
+   habitual double-click cannot rebuild the page it just opened. The Resources grid keeps
+   double-click whatever the setting says: there a click selects the row the keys, the menu
+   and the confirm strip act on, and opening an inspector on every such click would be noise.
+9. **Both controls named Applications go back to the list from a page** (2026-10). The page
+   shows two: its "‹ Applications" link and the command bar's mode segment, which is selected.
+   The link went back; the segment did nothing, because pressing a selected `ListBoxItem`
+   changes no selection. Now a press on the selected segment, and `ShowApplications`
+   (Ctrl/Cmd+Shift+A) while the mode is already showing, close the page — what a second press
+   on the active tab does in a tab bar. From Resources the segment only switches mode and the
+   open page is kept, because switching mode never loses state. `MainWindow` reads the mode in
+   a tunnelling `PointerPressed` on `ApplicationsModeItem`, before the `ListBox` selects on the
+   same press. `ux-applications-keys` checks both directions.
 
 ## The mode switch
 

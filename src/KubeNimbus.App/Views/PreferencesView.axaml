@@ -148,6 +148,18 @@
             <Border Classes="card" Padding="14,12" Margin="0,6,0,0">
                 <Grid ColumnDefinitions="*,Auto">
                     <StackPanel Spacing="2" Margin="0,0,16,0">
+                        <TextBlock Classes="label" Text="Open applications with one click" />
+                        <TextBlock Classes="hint" Text="A click on a row of the Applications list opens its page. Off, it takes a double-click, as in the resource list, which always does: there a click selects the row the keys and the menu act on." />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="1" VerticalAlignment="Center"
+                                  OnContent="" OffContent=""
+                                  IsChecked="{Binding OpenApplicationsOnSingleClick}" />
+                </Grid>
+            </Border>
+
+            <Border Classes="card" Padding="14,12" Margin="0,6,0,0">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Spacing="2" Margin="0,0,16,0">
                         <TextBlock Classes="label" Text="Confirm before deleting" />
                         <TextBlock Classes="hint" Text="Deleting a resource takes a second click. Off is a deliberate choice: this deletes objects in a live cluster, and nothing here can undo it." />
                     </StackPanel>

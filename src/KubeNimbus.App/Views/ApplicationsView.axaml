@@ -127,6 +127,7 @@
                    ItemsSource="{Binding VisibleRows}"
                    SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
                    Background="Transparent" BorderThickness="0"
+                   Tapped="OnListTapped"
                    DoubleTapped="OnListDoubleTapped">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:ApplicationRowViewModel">

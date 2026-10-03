@@ -351,9 +351,29 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         SaveWorkspace();
     }
 
-    /// <summary>Explicit targets rather than a toggle, so no control can race its own state (UI rule 8b).</summary>
+    /// <summary>
+    /// Explicit targets rather than a toggle, so no control can race its own state (UI rule 8b).
+    /// Asked for while the Applications mode is already showing, it goes back to the list from
+    /// an open application page — what a second press on the active tab does in a tab bar,
+    /// and what the page's own "‹ Applications" link does, so the two controls named
+    /// Applications on that screen agree. From Resources it only switches mode and keeps
+    /// the page, because switching mode never loses state.
+    /// </summary>
     [RelayCommand]
-    private void ShowApplications() => Mode = ShellMode.Applications;
+    private void ShowApplications()
+    {
+        if (IsApplicationsMode)
+        {
+            if (SelectedTab?.Applications is { IsPageOpen: true } applications)
+            {
+                applications.ClosePageCommand.Execute(null);
+            }
+
+            return;
+        }
+
+        Mode = ShellMode.Applications;
+    }
 
     [RelayCommand]
     private void ShowResources() => Mode = ShellMode.Resources;

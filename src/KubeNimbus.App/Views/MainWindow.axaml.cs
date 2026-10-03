@@ -41,6 +41,13 @@ public partial class MainWindow : Window
 
         BuildKeyBindings();
 
+        // A press on the Applications segment while it is already selected changes no
+        // selection, so the ListBox raises nothing; this is what makes it go back to the
+        // list from an application page, like the page's own "‹ Applications" link.
+        // Tunnel, so the mode is read before the ListBox selects on the same press: from
+        // Resources the press only switches mode and the open page is kept.
+        ApplicationsModeItem.AddHandler(PointerPressedEvent, OnApplicationsModePressed, RoutingStrategies.Tunnel);
+
         // The Ctrl/Cmd scheme is a user preference now, so every gesture in the window
         // has to be rebuilt when it changes — a KeyGesture built once holds the
         // modifier it was created with, and the window would answer the other
@@ -92,6 +99,14 @@ public partial class MainWindow : Window
     }
 
     private MainWindowViewModel? Vm => DataContext as MainWindowViewModel;
+
+    private void OnApplicationsModePressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (Vm is { IsApplicationsMode: true } vm && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            vm.ShowApplicationsCommand.Execute(null);
+        }
+    }
 
     /// <summary>
     /// Builds every window-level gesture from <see cref="Core.Commands.CommandCatalog"/>,

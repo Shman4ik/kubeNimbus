@@ -164,4 +164,22 @@ public class AppSettingsTests
         await Assert.That(store.Load().OpenLogsMaximized).IsFalse();
         await Assert.That(store.Load().Theme).IsEqualTo("dark");
     }
+
+    /// <summary>
+    /// On by default, and a file written before the setting existed reads as on: the update
+    /// that introduced it changes how the list opens for everyone, which is the point.
+    /// </summary>
+    [Test]
+    public async Task Open_applications_on_single_click_is_on_by_default_and_round_trips()
+    {
+        await Assert.That(new AppSettings().OpenApplicationsOnSingleClick).IsTrue();
+
+        var path = Path.Combine(Path.GetTempPath(), "kubenimbus-settings-tests", Guid.NewGuid().ToString("n"), "settings.json");
+        var store = new AppSettingsStore(path);
+        store.Save(new AppSettings { OpenApplicationsOnSingleClick = false });
+        await Assert.That(store.Load().OpenApplicationsOnSingleClick).IsFalse();
+
+        await File.WriteAllTextAsync(path, """{ "Theme": "dark" }""");
+        await Assert.That(store.Load().OpenApplicationsOnSingleClick).IsTrue();
+    }
 }

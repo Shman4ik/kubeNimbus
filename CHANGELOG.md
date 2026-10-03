@@ -12,6 +12,15 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+### Changed
+
+- **One click opens an application.** A click on a row of the Applications list opens its page;
+  it used to take a double-click. "Open applications with one click" on the preferences page
+  turns the double-click back on. The resource list still opens on double-click.
+- **Applications in the command bar goes back to the list.** On an application page, clicking
+  the already selected Applications mode (or Ctrl+Shift+A, Cmd+Shift+A on macOS) returns to
+  the list, as the page's "‹ Applications" link does. It used to do nothing.
+
 ### Fixed
 
 - **Apply works on an object opened in the YAML editor.** Opening a ConfigMap, Deployment or
