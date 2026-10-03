@@ -99,7 +99,7 @@
         <TextBlock Grid.Row="0" Grid.Column="1" Text="Forwarding" FontSize="12" Opacity="0.7"
                    VerticalAlignment="Center" Margin="0,0,8,0" />
         <SelectableTextBlock Grid.Row="0" Grid.Column="2" Text="{Binding LocalUrl}" VerticalAlignment="Center"
-                             FontFamily="Cascadia Mono,Consolas,monospace" FontSize="12.5"
+                             Classes="mono" FontSize="12.5"
                              TextTrimming="CharacterEllipsis" />
         <Button Grid.Row="0" Grid.Column="3" Classes="toolbar" Padding="6" Command="{Binding CopyUrlCommand}"
                 ToolTip.Tip="Copy the local URL">

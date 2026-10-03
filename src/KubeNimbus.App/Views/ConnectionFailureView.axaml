@@ -41,7 +41,7 @@
                 <Grid ColumnDefinitions="120,*" Margin="0,1">
                   <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="12" Opacity="0.6" />
                   <SelectableTextBlock Grid.Column="1" Text="{Binding Value}" FontSize="12" TextWrapping="Wrap"
-                                       FontFamily="Cascadia Mono,Consolas,monospace" />
+                                       Classes="mono" />
                 </Grid>
               </DataTemplate>
             </ItemsControl.ItemTemplate>

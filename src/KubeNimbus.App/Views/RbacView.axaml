@@ -108,10 +108,10 @@
                         <DataTemplate x:DataType="core:PolicyRule">
                           <Grid ColumnDefinitions="200,*" Margin="0,2">
                             <TextBlock Grid.Column="0" Text="{Binding VerbsText}" FontSize="11.5"
-                                       FontFamily="Cascadia Mono,Consolas,monospace" TextTrimming="CharacterEllipsis"
+                                       Classes="mono" TextTrimming="CharacterEllipsis"
                                        ToolTip.Tip="{Binding VerbsText}" />
                             <TextBlock Grid.Column="1" Text="{Binding ResourcesText}" FontSize="11.5" Opacity="0.8"
-                                       FontFamily="Cascadia Mono,Consolas,monospace" TextTrimming="CharacterEllipsis"
+                                       Classes="mono" TextTrimming="CharacterEllipsis"
                                        ToolTip.Tip="{Binding ResourcesText}" />
                           </Grid>
                         </DataTemplate>
@@ -243,10 +243,10 @@
                                   <DataTemplate x:DataType="core:PolicyRule">
                                     <Grid ColumnDefinitions="180,*,Auto" Margin="0,1">
                                       <TextBlock Grid.Column="0" Text="{Binding VerbsText}" FontSize="11"
-                                                 FontFamily="Cascadia Mono,Consolas,monospace" TextTrimming="CharacterEllipsis"
+                                                 Classes="mono" TextTrimming="CharacterEllipsis"
                                                  ToolTip.Tip="{Binding VerbsText}" />
                                       <TextBlock Grid.Column="1" Text="{Binding ResourcesText}" FontSize="11" Opacity="0.8"
-                                                 FontFamily="Cascadia Mono,Consolas,monospace" TextTrimming="CharacterEllipsis"
+                                                 Classes="mono" TextTrimming="CharacterEllipsis"
                                                  ToolTip.Tip="{Binding ResourcesText}" />
                                       <!-- A rule narrowed to named objects grants far less than it looks:
                                            show which names, or the row overstates the access. -->

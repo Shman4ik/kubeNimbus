@@ -5,6 +5,7 @@ using Avalonia.Styling;
 using KubeNimbus.App.ViewModels;
 using KubeNimbus.App.Views;
 using KubeNimbus.Core.Settings;
+using Nimbus.Ui.Fonts;
 
 namespace KubeNimbus.App;
 
@@ -25,6 +26,12 @@ public partial class App : Application
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
+
+        // The chosen faces (DESIGN.md rule 22), before any window lays its text out, so
+        // none lays it out twice. Here rather than in OnFrameworkInitializationCompleted
+        // for the same reason as the handler below: the screenshot harness renders what
+        // the app shows by default, not Fluent's Inter.
+        ApplyFonts(LoadSettings());
 
         // A class handler, so every element that carries a tooltip answers the pointer
         // (DESIGN.md rule 21). Here rather than in OnFrameworkInitializationCompleted so
@@ -114,6 +121,43 @@ public partial class App : Application
     {
         Update(s => s with { HotkeyScheme = scheme });
         Nimbus.Ui.Hotkeys.Initialize(scheme);
+    }
+
+    /// <summary>
+    /// Writes the typography resources from <paramref name="settings"/> into the
+    /// application's own resources (DESIGN.md rule 22). Every use site reads them as
+    /// <c>DynamicResource</c> (the <c>mono</c> class, Fluent's window font), so open
+    /// windows follow a change with nothing to reopen. A no-op with no application,
+    /// which is how the view-model tests run.
+    /// </summary>
+    internal static void ApplyFonts(AppSettings settings)
+    {
+        if (Current is { } app)
+        {
+            NimbusFonts.Apply(app.Resources, InterfaceFontFromString(settings.InterfaceFont), settings.CodeFont);
+        }
+    }
+
+    /// <summary>The face a stored <see cref="AppSettings.InterfaceFont"/> means on this platform ("auto" is the platform's default).</summary>
+    internal static InterfaceFont InterfaceFontFromString(string? value) => value?.ToLowerInvariant() switch
+    {
+        "system" => InterfaceFont.System,
+        "inter" => InterfaceFont.Inter,
+        _ => NimbusFonts.PlatformDefault,
+    };
+
+    /// <summary>Applies and persists the interface face chosen on the preferences page ("system"/"inter").</summary>
+    internal static void SetInterfaceFont(string value)
+    {
+        Update(s => s with { InterfaceFont = value });
+        ApplyFonts(LoadSettings());
+    }
+
+    /// <summary>Applies and persists the code face chosen on the preferences page (null: the bundled one).</summary>
+    internal static void SetCodeFont(string? value)
+    {
+        Update(s => s with { CodeFont = value });
+        ApplyFonts(LoadSettings());
     }
 
     /// <summary>

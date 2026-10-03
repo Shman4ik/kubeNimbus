@@ -127,7 +127,7 @@
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ServiceBackendViewModel">
                     <TextBlock Text="{Binding AddressText}" VerticalAlignment="Center"
-                               FontFamily="Cascadia Mono,Consolas,monospace" FontSize="12"
+                               Classes="mono" FontSize="12"
                                TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding AddressTooltip}" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
@@ -187,7 +187,7 @@
                       <Grid ColumnDefinitions="130,*" Margin="0,1">
                         <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="12" Opacity="0.6" />
                         <SelectableTextBlock Grid.Column="1" FontSize="12" Text="{Binding Display}"
-                                             FontFamily="Cascadia Mono,Consolas,monospace" />
+                                             Classes="mono" />
                       </Grid>
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>

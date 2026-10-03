@@ -136,7 +136,8 @@ must be AOT/trimming-compatible from day one.
   compiled against, which pinned ours to 16.3.0 for two months. `BannedSymbols.txt`
   makes calling one a build error — see
   [connecting](docs/engineering/connecting.md).
-- **KubeNimbus.App** — Avalonia 12 (Fluent theme, Inter font, DataGrid,
+- **KubeNimbus.App** — Avalonia 12 (Fluent theme, the platform's own UI face or Inter
+  and the bundled JetBrains Mono NL for code — see UI rule 23 — DataGrid,
   AvaloniaEdit for YAML, `SvcSystems.UI.Terminal` over `XTerm.NET` for the exec
   pane — see "The exec terminal"), `CommunityToolkit.Mvvm` source generators
   (`[ObservableProperty]`/`[RelayCommand]`, no hand-written INPC).
@@ -696,7 +697,9 @@ Three rules about it:
    what any of them shows — a surface, a control, a colour, a column, a label — re-renders
    the affected ones from the harness and commits them with the change, not in a follow-up.
    Each directory's README maps every file to its scenario and theme. Render them **on
-   Windows** (the monospace panes need Cascadia Mono or Consolas), and keep the balance each
+   Windows**, where the interface is drawn in Segoe UI as Windows users see it (UI rule 23;
+   the monospace panes used to be the reason, when they asked for Cascadia Mono or Consolas,
+   and code is the bundled face everywhere now), and keep the balance each
    set states: the README hero in both themes, everything else half light and half dark.
    The Age column moving with the clock is not a UI change and is no reason to re-render.
    If a PR cannot render them (no Windows machine), it says so in its description and
@@ -718,6 +721,56 @@ Three rules about it:
    edge with no way to read the rest. `TooltipChecks` in the harness hit-tests the middle
    of every visible tooltip-bearing element in every scenario (light theme) and fails the
    run on any the pointer passes through.
+23. **Fonts are settings, and no view writes a font name** (DESIGN.md rule 22, 2026-10;
+   pgNimbus moved first). Three findings shaped the port:
+   - **kubeNimbus was in Inter by accident.** `MainWindow.axaml` carried
+     `FontFamily="{StaticResource InterFontFamily}"`, a resource nothing defines. On a
+     control that reference is deferred and resolves to nothing, so it set nothing, and
+     every window drew in Fluent's own `ContentControlThemeFontFamily`, which is Inter. (The
+     same mistake in a *style* setter is not harmless, which is how pgNimbus ended up in the
+     platform default instead; see the rule.) The reference is gone. The interface face is
+     Fluent's key, set by `NimbusFonts.Apply` from `AppSettings.InterfaceFont`, and `"auto"`
+     is the **system face**, as in pgNimbus: Segoe UI on Windows, San Francisco on macOS,
+     the desktop's default on Linux. That changed how kubeNimbus looks everywhere, which
+     pgNimbus's switch did not, and it was the owner's call: the two apps sit side by side on
+     one desktop, and one family in two faces there is the drift the shared design system
+     exists to stop. Inter is one choice away on the preferences page.
+   - **Code had one spelling at 78 sites** (`Cascadia Mono,Consolas,monospace`, the
+     terminal's with `DejaVu Sans Mono` too), and only Windows has either named face: a Mac
+     got Menlo and a CI container DejaVu Sans Mono, which is why the published screenshots
+     had to be rendered on Windows. 70 sites are the shared `mono` class now (appended to
+     an existing `Classes`); the rest name the token where the class cannot go: the revision
+     `Run` in the Applications list (`{DynamicResource MonoFont}`, spacing 0), the six app
+     styles that are all code (`logSearchOption`, `logJson`, the diff gutter and text,
+     `evidence`: `MonoFont` and `LetterSpacing` 0, as the class does), and **the exec
+     terminal**. `TerminalControl` is a `Grid` with a `FontFamily` property of its own, not
+     the inherited `TextElement` one, so neither the class's selectors (`TextBlock`,
+     `TemplatedControl`) nor inheritance reach it: given the class, it drew in the interface
+     face and `top`'s columns stopped lining up, which `FontChecks` caught in all seven exec
+     scenarios on the first full run. `MonoFont` is the bundled JetBrains Mono NL
+     unless `AppSettings.CodeFont` names an installed family. **Load order matters for the
+     class**: a local `FontFamily` outranks every style, the inline stacks were local values,
+     and the class is a style, so an app style that set `FontFamily` on one of those elements
+     and loaded after the shared `Theme.axaml` would now win. None does; `FontChecks` fails
+     the run if one starts to.
+   - **The faces are applied from `App.Initialize`**, not `OnFrameworkInitializationCompleted`,
+     for the reason rule 22 gives for the tooltip handler: the harness never gets a lifetime,
+     and it should render what the app shows by default rather than the token file's
+     fallback. Each capture re-applies them after deleting `settings.json`, since they are
+     application resources and a scenario that changes one would otherwise reach every later
+     capture. So the harness draws the interface in the machine's system face: DejaVu Sans in
+     the Linux container, Segoe UI on Windows.
+   The page lists the installed monospace families through `Nimbus.Ui.Fonts.MonospaceFonts`
+   (lifted into nimbusUi from pgNimbus for this port: read through Skia, not Avalonia's
+   `FontManager`, which would keep every face it opened for the life of the process), each
+   row drawn in its own face; a saved family that is no longer installed stays listed and
+   falls back to the bundled face. `FontChecks` in the harness reads every scenario (light
+   theme): each `mono` element and the terminal draw in `MonoFont` (the class at spacing 0),
+   every other text element in the interface face, `MonoFont` or `KeyCapFont`, and
+   `ux-font-settings` changes both faces from the page with the window open and reads them
+   back off the text. A face planted on one `TextBlock` fails the run, which was tried.
+   `PreferencesFontTests` and `AppSettingsTests` hold what the page opens on and stores. Not
+   checkable here: how San Francisco looks at 13px, which is release checklist row 28.
 
 [fluent-basics]: https://learn.microsoft.com/en-us/windows/apps/design/basics/
 
@@ -881,7 +934,7 @@ There are **two** persisted files and the split is not arbitrary:
 
 - **`settings.json`** (`KubeNimbus.Core/Settings/`, `AppSettings` + `AppSettingsStore`)
   is *preferences* — what you chose once and expect to still be true next launch:
-  theme, hotkey scheme, advanced view, sidebar visibility and expanded sections,
+  theme, hotkey scheme, interface and code fonts, advanced view, sidebar visibility and expanded sections,
   picked kubeconfig paths, log scrollback, metrics poll interval, delete confirmation,
   apply preview, open logs maximized, and the log panes' display toggles (timestamps,
   UTC, wrap). Those three are written by the panes themselves, not the preferences page,

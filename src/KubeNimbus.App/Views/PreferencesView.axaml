@@ -41,6 +41,40 @@
                 </Grid>
             </Border>
 
+            <!-- The two faces (DESIGN.md rule 22), in the same words as pgNimbus's page. -->
+            <Border Classes="card" Padding="14,12" Margin="0,6,0,0">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Spacing="2" Margin="0,0,16,0">
+                        <TextBlock Classes="label" Text="Interface font" />
+                        <TextBlock Classes="hint" Text="System is San Francisco on macOS, Segoe UI on Windows and your desktop's font on Linux. Inter looks the same everywhere." />
+                    </StackPanel>
+                    <ComboBox Name="InterfaceFontBox" Grid.Column="1" MinWidth="130" VerticalAlignment="Center"
+                              SelectedIndex="{Binding InterfaceFontIndex}">
+                        <ComboBoxItem Content="System" />
+                        <ComboBoxItem Content="Inter" />
+                    </ComboBox>
+                </Grid>
+            </Border>
+
+            <Border Classes="card" Padding="14,12" Margin="0,6,0,0">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Spacing="2" Margin="0,0,16,0">
+                        <TextBlock Classes="label" Text="Code font" />
+                        <TextBlock Classes="hint" Text="For YAML, logs, the terminal, values and every other place that shows code. Lists the monospace fonts installed on this computer." />
+                    </StackPanel>
+                    <ComboBox Name="CodeFontBox" Grid.Column="1" MinWidth="200" MaxWidth="260" VerticalAlignment="Center"
+                              ItemsSource="{Binding CodeFonts}"
+                              SelectedItem="{Binding SelectedCodeFont}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:CodeFontOption">
+                                <TextBlock Text="{Binding Label}" FontFamily="{Binding Family}"
+                                           LetterSpacing="0" TextTrimming="CharacterEllipsis" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </Grid>
+            </Border>
+
             <Border Classes="card" Padding="14,12" Margin="0,6,0,0">
                 <Grid ColumnDefinitions="*,Auto">
                     <StackPanel Spacing="2" Margin="0,0,16,0">

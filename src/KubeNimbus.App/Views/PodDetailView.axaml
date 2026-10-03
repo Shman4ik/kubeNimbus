@@ -313,7 +313,7 @@
                           CommandParameter="{Binding}" ToolTip.Tip="Pinned highlight — click to remove">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                       <Ellipse Width="8" Height="8" Fill="{Binding SolidBrush}" VerticalAlignment="Center" />
-                      <TextBlock Text="{Binding Text}" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11" VerticalAlignment="Center" />
+                      <TextBlock Text="{Binding Text}" Classes="mono" FontSize="11" VerticalAlignment="Center" />
                       <PathIcon Data="{StaticResource CloseIconGeometry}" Width="8" Height="8" Opacity="0.6" VerticalAlignment="Center" />
                     </StackPanel>
                   </Button>
@@ -368,7 +368,7 @@
                                     ToolTip.Tip="Show this JSON line's fields, one per row">
                         <PathIcon Data="{StaticResource ChevronRightIconGeometry}" Width="8" Height="8" />
                       </ToggleButton>
-                      <controls:LogLineText Grid.Column="1" Classes="logLine" Text="{Binding DisplayText}" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11"
+                      <controls:LogLineText Grid.Column="1" Classes="logLine mono" Text="{Binding DisplayText}" FontSize="11"
                                             MatchStart="{Binding MessageOffset}"
                                             LevelStart="{Binding DisplayLevelStart}" LevelLength="{Binding LevelLength}"
                                             IsCurrentMatch="{Binding IsCurrentMatch}"
@@ -422,7 +422,7 @@
                   <DataTemplate x:DataType="vm:EnvVarViewModel">
                     <Grid ColumnDefinitions="200,*,Auto" Margin="0,3">
                       <TextBlock Grid.Column="0" Text="{Binding Name}" Margin="0,0,12,0"
-                                 FontFamily="Cascadia Mono,Consolas,monospace" FontWeight="SemiBold" FontSize="11.5"
+                                 Classes="mono" FontWeight="SemiBold" FontSize="11.5"
                                  TextWrapping="Wrap" VerticalAlignment="Top" />
                       <StackPanel Grid.Column="1" Spacing="2">
                         <!-- Selectable: an env var is read in order to be pasted somewhere. -->
@@ -441,7 +441,7 @@
                           <SelectableTextBlock Text="{Binding RevealedValue}" FontSize="11.5" Opacity="0.85" TextWrapping="Wrap"
                                                IsVisible="{Binding HasResolvedValue}" />
                           <TextBlock Text="{Binding MaskedValue}" FontSize="11.5" Opacity="0.55" VerticalAlignment="Center"
-                                     FontFamily="Cascadia Mono,Consolas,monospace" IsVisible="{Binding IsMasked}" />
+                                     Classes="mono" IsVisible="{Binding IsMasked}" />
                           <TextBlock Text="resolving…" FontSize="11" Opacity="0.45" VerticalAlignment="Center"
                                      IsVisible="{Binding IsResolving}" />
                           <!-- Eye, not a "Reveal" chip: it is a show/hide toggle, and it can hide
@@ -608,7 +608,7 @@
                 <Grid RowDefinitions="Auto,Auto">
                   <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
                     <TextBlock Grid.Column="0" Text="CPU — pod total" FontSize="12" FontWeight="SemiBold" Opacity="0.8" />
-                    <TextBlock Grid.Column="1" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" Opacity="0.8">
+                    <TextBlock Grid.Column="1" Classes="mono" FontSize="11.5" Opacity="0.8">
                       <Run Text="{Binding PodCpuText}" />
                       <Run Text="  · peak " />
                       <Run Text="{Binding PodPeakCpuText}" />
@@ -627,7 +627,7 @@
                 <Grid RowDefinitions="Auto,Auto">
                   <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
                     <TextBlock Grid.Column="0" Text="Memory — pod total" FontSize="12" FontWeight="SemiBold" Opacity="0.8" />
-                    <TextBlock Grid.Column="1" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" Opacity="0.8">
+                    <TextBlock Grid.Column="1" Classes="mono" FontSize="11.5" Opacity="0.8">
                       <Run Text="{Binding PodMemoryText}" />
                       <Run Text="  · peak " />
                       <Run Text="{Binding PodPeakMemoryText}" />
@@ -660,9 +660,9 @@
                         <StackPanel Grid.Row="1" Grid.Column="0" Spacing="4" Margin="0,0,6,0"
                                     ToolTip.Tip="{Binding CpuChartTooltip}">
                           <TextBlock Text="{Binding CpuMeasuredText}" FontSize="11" Opacity="0.6"
-                                     FontFamily="Cascadia Mono,Consolas,monospace" TextTrimming="CharacterEllipsis" />
+                                     Classes="mono" TextTrimming="CharacterEllipsis" />
                           <TextBlock Text="{Binding CpuResourceText}" FontSize="11" Opacity="0.75" TextWrapping="Wrap"
-                                     FontFamily="Cascadia Mono,Consolas,monospace" />
+                                     Classes="mono" />
                           <controls:Sparkline Height="40" Values="{Binding CpuSeries}"
                                               Stroke="{StaticResource UsageCpuStrokeBrush}"
                                               AreaFill="{StaticResource UsageCpuAreaBrush}"
@@ -672,9 +672,9 @@
                         <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4" Margin="6,0,0,0"
                                     ToolTip.Tip="{Binding MemoryChartTooltip}">
                           <TextBlock Text="{Binding MemoryMeasuredText}" FontSize="11" Opacity="0.6"
-                                     FontFamily="Cascadia Mono,Consolas,monospace" TextTrimming="CharacterEllipsis" />
+                                     Classes="mono" TextTrimming="CharacterEllipsis" />
                           <TextBlock Text="{Binding MemoryResourceText}" FontSize="11" Opacity="0.75" TextWrapping="Wrap"
-                                     FontFamily="Cascadia Mono,Consolas,monospace" />
+                                     Classes="mono" />
                           <controls:Sparkline Height="40" Values="{Binding MemorySeries}"
                                               Stroke="{StaticResource UsageMemoryStrokeBrush}"
                                               AreaFill="{StaticResource UsageMemoryAreaBrush}"
@@ -746,7 +746,7 @@
                              node-selector term is not clickable. -->
                         <Border Classes="statusPill" Margin="0,0,4,4">
                           <TextBlock Text="{Binding Display}" FontSize="11.5"
-                                     FontFamily="Cascadia Mono,Consolas,monospace" />
+                                     Classes="mono" />
                         </Border>
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -795,7 +795,7 @@
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="core:PodToleration">
                       <SelectableTextBlock Text="{Binding Display}" FontSize="12" Margin="0,2"
-                                           FontFamily="Cascadia Mono,Consolas,monospace" />
+                                           Classes="mono" />
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
@@ -818,9 +818,9 @@
                         <TextBlock Grid.Column="0" Text="{Binding Kind}" FontSize="12" Opacity="0.6" VerticalAlignment="Top" />
                         <StackPanel Grid.Column="1" Spacing="1">
                           <SelectableTextBlock Text="{Binding Handler}" FontSize="12" TextWrapping="Wrap"
-                                               FontFamily="Cascadia Mono,Consolas,monospace" />
+                                               Classes="mono" />
                           <TextBlock Text="{Binding Timing}" FontSize="11" Opacity="0.55" TextWrapping="Wrap"
-                                     FontFamily="Cascadia Mono,Consolas,monospace" />
+                                     Classes="mono" />
                         </StackPanel>
                       </Grid>
                     </DataTemplate>

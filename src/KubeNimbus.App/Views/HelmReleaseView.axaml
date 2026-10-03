@@ -44,7 +44,7 @@
         <Grid>
           <Border Classes="card" Padding="0">
             <ae:TextEditor Name="ValuesEditor" IsReadOnly="True" ShowLineNumbers="True"
-                           FontFamily="Cascadia Mono,Consolas,monospace" FontSize="12" Margin="4" />
+                           Classes="mono" FontSize="12" Margin="4" />
           </Border>
           <TextBlock Text="This release was installed with chart defaults — no user values."
                      Opacity="0.55" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -55,7 +55,7 @@
       <TabItem Header="Manifest">
         <Border Classes="card" Padding="0">
           <ae:TextEditor Name="ManifestEditor" IsReadOnly="True" ShowLineNumbers="True"
-                         FontFamily="Cascadia Mono,Consolas,monospace" FontSize="12" Margin="4" />
+                         Classes="mono" FontSize="12" Margin="4" />
         </Border>
       </TabItem>
 
@@ -63,7 +63,7 @@
         <Grid>
           <Border Classes="card" Padding="8">
             <ScrollViewer>
-              <SelectableTextBlock Text="{Binding Notes}" FontFamily="Cascadia Mono,Consolas,monospace"
+              <SelectableTextBlock Text="{Binding Notes}" Classes="mono"
                                    FontSize="11.5" TextWrapping="Wrap" />
             </ScrollViewer>
           </Border>

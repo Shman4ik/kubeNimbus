@@ -10,6 +10,7 @@ using KubeNimbus.App.ViewModels;
 using KubeNimbus.App.Views;
 using KubeNimbus.Core;
 using KubeNimbus.Screenshot;
+using Nimbus.Ui.Fonts;
 
 // Usage: dotnet run --project tools/Screenshot -- <outputDir> [scenario-substring]
 // Renders every scenario in both light and dark, one PNG per (scenario, theme).
@@ -359,6 +360,8 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // maximized" switch sits below the fold of the shot above.
     ("main-window-preferences-logs", () => BuildMainWindowContent(openPreferences: true)),
     ("main-window-about", () => BuildMainWindowContent(openAbout: true)),
+    // The interface and code faces change open text from the page (FontChecks, rule 22).
+    ("ux-font-settings", () => BuildMainWindowContent(openPreferences: true)),
 
     // The Microsoft Store listing's screenshots (design/store/screenshots). The Store asks
     // for 1366×768 or larger and every scenario above is 1280 wide, so these are the same
@@ -389,6 +392,7 @@ foreach (var (name, build) in scenarios)
 
 TooltipChecks.ThrowIfAnyDead(filtered: filter is not null);
 AutomationChecks.ThrowIfAnyFailed(filtered: filter is not null);
+FontChecks.ThrowIfAnyFailed(filtered: filter is not null);
 Console.WriteLine($"Wrote screenshots to {Path.GetFullPath(outDir)}");
 try
 {
@@ -420,6 +424,10 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     // while the window is laid out, which is after the builder has returned.
     File.Delete(Path.Combine(scratch, "settings.json"));
     File.Delete(Path.Combine(scratch, "workspace.json"));
+
+    // The faces are application resources rather than something read from the file per
+    // window, so a scenario that changes one would otherwise reach every later capture.
+    App.ApplyFonts(App.LoadSettings());
 
     var content = build();
     var window = content as Window ?? new Window
@@ -461,6 +469,7 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     if (name == "cluster-tab-argo-resource-logs-hover") PaneLogsChecks.HoverArgoRow(window, "Deployment");
     if (name == "main-window-preferences-logs") UxInteractionChecks.ScrollPreferencesTo(window, "Open logs maximized");
     if (name.StartsWith("cluster-tab-row-logs", StringComparison.Ordinal)) UxInteractionChecks.HoverRow(window, 3);
+    if (name == "ux-font-settings") FontChecks.SettingsReachOpenText(window);
 
     // Last, so a pane a check just opened settles too: capture when the log streams have
     // stopped moving, not whenever the builder happened to return (ENG-10).
@@ -470,6 +479,7 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     // (DESIGN.md rule 21). Reported together after the last scenario.
     if (theme == ThemeVariant.Light) TooltipChecks.Reach(window, name);
     if (theme == ThemeVariant.Light) AutomationChecks.Walk(window, name);
+    if (theme == ThemeVariant.Light) FontChecks.Walk(window, name);
     using var frame = window.CaptureRenderedFrame();
     var themeLabel = theme == ThemeVariant.Dark ? "dark" : "light";
     var path = Path.Combine(outDir, $"{name}.{themeLabel}.png");
@@ -650,4 +660,5 @@ static Control BuildSwitcherContent(string? query = null, int width = 1280, int 
 static AppBuilder BuildAvaloniaApp() => AppBuilder.Configure<App>()
     .UseSkia()
     .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
-    .WithInterFont();
+    .WithInterFont()
+    .WithNimbusFonts();

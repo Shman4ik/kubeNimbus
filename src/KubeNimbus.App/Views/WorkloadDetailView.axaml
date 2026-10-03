@@ -68,7 +68,7 @@
             <DataGridTemplateColumn Header="Ready" Width="80">
               <DataGridTemplateColumn.CellTemplate>
                 <DataTemplate x:DataType="vm:ResourceRowViewModel">
-                  <TextBlock Text="{Binding ReadyText}" VerticalAlignment="Center" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5"/>
+                  <TextBlock Text="{Binding ReadyText}" VerticalAlignment="Center" Classes="mono" FontSize="11.5"/>
                 </DataTemplate>
               </DataGridTemplateColumn.CellTemplate>
             </DataGridTemplateColumn>
@@ -90,7 +90,7 @@
             <DataGridTemplateColumn Header="Restarts" Width="100">
               <DataGridTemplateColumn.CellTemplate>
                 <DataTemplate x:DataType="vm:ResourceRowViewModel">
-                  <TextBlock Text="{Binding RestartsText}" VerticalAlignment="Center" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5"/>
+                  <TextBlock Text="{Binding RestartsText}" VerticalAlignment="Center" Classes="mono" FontSize="11.5"/>
                 </DataTemplate>
               </DataGridTemplateColumn.CellTemplate>
             </DataGridTemplateColumn>
