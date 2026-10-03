@@ -1015,7 +1015,10 @@ single card. Three things are load-bearing:
   `TabControl.sidebar`). Not a segmented strip with a fade, which a screenshot can catch
   half-way. This app no longer has a bare `TabItem` style: an app style loads after the
   library and would re-pad the capsule's segments, and the one it had styled only headers
-  `TabControl.headerless` never draws.
+  `TabControl.headerless` never draws. Since 2026-10 the capsule is drawn as a macOS
+  segmented control (a tinted track, the selected segment a raised thumb in the body's
+  text colour, segments padded 8,2), and its selected segment is centred: Fluent's bottom
+  margin on the part named `PART_ItemsPresenter` had put 2px above it and 4px below.
 - **The page is one height on every tab** (`PreferencesView.PageHeight`, applied in
   `MeasureOverride` as `min(PageHeight, available height)`). The overlay's card is centred
   and sized to its content, so a page sized by its tab moved the strip under the pointer
