@@ -12,6 +12,8 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-01
+
 ### Fixed
 
 - **Apply works on an object opened in the YAML editor.** Opening a ConfigMap, Deployment or
@@ -820,7 +822,8 @@ First public release. Everything below is new.
 - Usage history is session-scoped and bounded at 30 minutes by design. Long-range
   metrics history is a non-goal — that's Prometheus's job.
 
-[Unreleased]: https://github.com/Shman4ik/kubeNimbus/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/Shman4ik/kubeNimbus/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.4.0
 [0.3.3]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.3.3
