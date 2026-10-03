@@ -12,6 +12,21 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+### Added
+
+- **A debug container for an image with no shell.** Exec into a distroless or .NET chiseled
+  image used to end on "No usable shell". The exec pane now says the image has no shell and
+  offers **Start debug container**, which does what `kubectl debug -it <pod> --image=busybox:1.37
+  --target=<container>` does: it adds an ephemeral container that shares the container's
+  processes and network, waits for it to start, and opens a shell in it. The container's
+  files are under `/proc/1/root`. The image can be changed (an air-gapped cluster needs its
+  own mirror), a debug container already running for that container is reused rather than
+  adding another, and the pane says that it stays in the pod until the pod is recreated.
+  Neither Lens nor FreeLens can add one.
+- **Exec on Windows nodes.** A pod on a Windows node is offered `powershell`, then `cmd`,
+  instead of `/bin/bash`, `/bin/sh` and `/bin/ash`, which it never has. The node is read from
+  the pod's `spec.os`, its `kubernetes.io/os` node selector or the node's label.
+
 ### Changed
 
 - **Preferences is four tabs.** General (kubeconfig files and folders, shortcut modifier),
@@ -20,6 +35,10 @@ it as the GitHub Release body, so headings must match tags exactly
   on the tab it was last left on.
 
 ### Fixed
+
+- **An exec that fails says why.** When every shell was refused, the pane printed the reason
+  the last one gave, so a missing permission read as a missing `/bin/ash`. It now says "has no
+  shell" only when the image really has none, and otherwise gives the first other reason.
 
 - **Apply works on an object opened in the YAML editor.** Opening a ConfigMap, Deployment or
   custom resource, changing a value and pressing Apply was refused with "metadata.managedFields

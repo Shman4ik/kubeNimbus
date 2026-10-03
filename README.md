@@ -234,7 +234,9 @@ variables with per-key on-demand reveal for Secret and ConfigMap refs; events
 as a card feed; owner-chain navigation from pod to replica set to deployment.
 **Exec** into a container — a real VT terminal, so `vi`, `top`, `mc` and `less`
 work rather than unspooling escape codes — and **port-forward**, both over
-websockets.
+websockets. An image with no shell (distroless, .NET chiseled) gets a **debug
+container** in one click, `kubectl debug`'s ephemeral container sharing the
+target's processes; a pod on a Windows node gets `powershell` or `cmd`.
 
 **Edit** — YAML view and edit for any resource with syntax highlighting,
 server-side apply through a field manager, conflicts surfaced with a
