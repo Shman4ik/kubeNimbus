@@ -13,7 +13,6 @@
         x:DataType="vm:MainWindowViewModel"
         Title="kubeNimbus"
         Width="1280" Height="800" MinWidth="960" MinHeight="600"
-        FontFamily="{StaticResource InterFontFamily}"
         Background="Transparent"
         TransparencyLevelHint="Mica,AcrylicBlur">
 
@@ -403,7 +402,7 @@
 
               <TextBlock TextWrapping="Wrap" Opacity="0.75" FontSize="12"
                          Text="kubeNimbus never stores credentials — it reads clusters from your kubeconfig: any file or folder you have opened here, then every entry of $KUBECONFIG, then the default location. Searched:" />
-              <TextBlock Text="{Binding KubeconfigSearchPaths}" FontFamily="Cascadia Mono,Consolas,monospace"
+              <TextBlock Text="{Binding KubeconfigSearchPaths}" Classes="mono"
                          FontSize="11.5" Opacity="0.85" TextWrapping="Wrap" />
 
               <!-- Ordered by what a user on a clean machine can actually do, most

@@ -160,7 +160,7 @@
 
                       <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" ToolTip.Tip="{Binding PodsTip}">
                         <TextBlock Text="{Binding PodsText}" FontSize="12" Width="40" VerticalAlignment="Center"
-                                   FontFamily="Cascadia Mono,Consolas,monospace" />
+                                   Classes="mono" />
                         <ItemsControl ItemsSource="{Binding Marks}" VerticalAlignment="Center">
                           <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
@@ -180,7 +180,7 @@
                       </StackPanel>
 
                       <TextBlock Grid.Column="4" Text="{Binding RestartsText}" FontSize="12" VerticalAlignment="Center"
-                                 FontFamily="Cascadia Mono,Consolas,monospace"
+                                 Classes="mono"
                                  Classes.hotRestarts="{Binding HasRecentRestart}" ToolTip.Tip="{Binding RestartsTip}" />
 
                       <!-- Only the revision is a code, so only it is monospace; the age and
@@ -188,7 +188,7 @@
                            them would be drawn as a space. -->
                       <TextBlock Grid.Column="5" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                                  Classes.recentDeploy="{Binding IsRecentDeploy}" ToolTip.Tip="{Binding LastDeployTip}">
-                        <Run Text="{Binding LastDeployRevision}" FontFamily="Cascadia Mono,Consolas,monospace" /><Run Text="{Binding LastDeployAge}" />
+                        <Run Text="{Binding LastDeployRevision}" FontFamily="{DynamicResource MonoFont}" LetterSpacing="0" /><Run Text="{Binding LastDeployAge}" />
                       </TextBlock>
 
                       <Panel Grid.Column="6" Width="100"

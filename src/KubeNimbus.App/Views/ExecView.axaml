@@ -54,7 +54,7 @@
            else. Empty means "try bash, then sh, then ash". -->
       <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
         <TextBox Text="{Binding ShellCommand}" Width="130" FontSize="11.5" PlaceholderText="auto (bash/sh/ash)"
-                 FontFamily="Cascadia Mono,Consolas,monospace"
+                 Classes="mono"
                  ToolTip.Tip="Shell to exec. Leave empty to try /bin/bash, /bin/sh, then /bin/ash." />
         <Button Classes="toolbar" Padding="6" Command="{Binding ReconnectCommand}" ToolTip.Tip="Reconnect with this shell">
           <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="14" Height="14" />
@@ -66,8 +66,13 @@
          edge and would otherwise square off the card's rounded corners. -->
     <Border Grid.Row="1" Classes="card" Padding="0" ClipToBounds="True">
       <Panel>
+        <!-- The token rather than the `mono` class, the one code surface that has to
+             (DESIGN.md rule 22): TerminalControl is a Grid with a FontFamily property of
+             its own, not inherited, which neither the class's selectors (TextBlock,
+             TemplatedControl) nor TextElement.FontFamily reach. With the class it drew
+             in the interface face, and `top`'s columns stopped lining up. -->
         <term:TerminalControl Name="Terminal" Model="{Binding Terminal}"
-                              FontFamily="Cascadia Mono,Consolas,DejaVu Sans Mono,monospace" FontSize="12" />
+                              FontFamily="{DynamicResource MonoFont}" FontSize="12" />
 
         <!-- The blank-screen states (UI rule 9): connecting, no usable shell, a
              session that ended before printing anything. A terminal with nothing in

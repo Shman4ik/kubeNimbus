@@ -56,6 +56,12 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Changed
 
+- **The interface is drawn in your system's font, and code in JetBrains Mono.** kubeNimbus used
+  Inter on every platform; it now uses San Francisco on macOS, Segoe UI on Windows and your
+  desktop's font on Linux, the same as pgNimbus. Logs, YAML, the terminal and every other place
+  that shows code use the bundled JetBrains Mono, so a Mac no longer falls back to Menlo.
+  Preferences has two new choices under Appearance: **Interface font** (System or Inter) and
+  **Code font** (the built-in one or any monospace font installed on the computer).
 - **A denser, quieter look, shared with pgNimbus.** Body text is 13px and list rows about
   24px, as in native apps. The list or tree the keyboard is in shows its selected row in the
   accent colour, and other lists in grey. Keyboard focus is a soft rounded accent ring

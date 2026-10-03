@@ -49,6 +49,30 @@ public sealed record AppSettings
     public string HotkeyScheme { get; set; } = "auto";
 
     /// <summary>
+    /// The face the interface draws in (DESIGN.md rule 22): <c>"auto"</c> (the default,
+    /// which is the platform's own face), <c>"system"</c> or <c>"inter"</c>. A plain
+    /// string for the same reason as <see cref="Theme"/>; the App maps it to
+    /// <c>Nimbus.Ui.Fonts.InterfaceFont</c>.
+    ///
+    /// <para>
+    /// "auto" is the system face, as in pgNimbus, and that was a decision rather than a
+    /// carry-over: kubeNimbus had been drawn in Inter on every platform until this setting
+    /// existed (through Fluent's own default, not by choice: its main window named a font
+    /// resource nothing defined). The two apps sit side by side on one desktop, and one
+    /// family in two faces there is the drift the shared design system exists to stop.
+    /// Inter stays one choice away for anyone who preferred it.
+    /// </para>
+    /// </summary>
+    public string InterfaceFont { get; set; } = "auto";
+
+    /// <summary>
+    /// The monospace family for code, values and identifiers, by name. Null (the default)
+    /// is the bundled JetBrains Mono NL. A name that is no longer installed falls back to
+    /// the bundled face rather than to a proportional one (<c>NimbusFonts.Mono</c>).
+    /// </summary>
+    public string? CodeFont { get; set; }
+
+    /// <summary>
     /// The single global "advanced view" switch: whether the sidebar lists every resource
     /// kind, or only the everyday built-ins (no API machinery, no CRDs). <b>On by
     /// default</b>, so nothing is missing until somebody asks for a shorter list.
@@ -233,6 +257,11 @@ public sealed record AppSettings
     {
         Theme = Canonical(Theme, "system", "light", "dark", "system"),
         HotkeyScheme = Canonical(HotkeyScheme, "auto", "windows", "mac", "auto"),
+        InterfaceFont = Canonical(InterfaceFont, "auto", "auto", "system", "inter"),
+        // Blank is the bundled face, the same as null, so the preferences page shows one
+        // selection for both. Anything else is a family name and is kept as written: one
+        // that does not resolve falls back to the bundled face at draw time.
+        CodeFont = string.IsNullOrWhiteSpace(CodeFont) ? null : CodeFont.Trim(),
         ExpandedSidebarSections = ExpandedSidebarSections ?? [],
         KubeconfigPaths = KubeconfigPaths ?? [],
         SidebarWidth = double.IsFinite(SidebarWidth)

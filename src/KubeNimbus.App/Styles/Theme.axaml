@@ -394,7 +394,8 @@
         <Setter Property="Padding" Value="4,1" />
         <Setter Property="MinWidth" Value="20" />
         <Setter Property="FontSize" Value="10.5" />
-        <Setter Property="FontFamily" Value="Cascadia Mono,Consolas,monospace" />
+        <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+        <Setter Property="LetterSpacing" Value="0" />
     </Style>
     <!-- The error / warning counts in a log pane's bar. Coloured like the rows they jump
          to; a count of zero is not drawn at all. -->
@@ -439,7 +440,8 @@
     <!-- The opened JSON: the line's own mono, a hair smaller, set in from the text so it
          reads as belonging to the line above it. -->
     <Style Selector="SelectableTextBlock.logJson">
-        <Setter Property="FontFamily" Value="Cascadia Mono,Consolas,monospace" />
+        <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+        <Setter Property="LetterSpacing" Value="0" />
         <Setter Property="FontSize" Value="10.5" />
         <Setter Property="Margin" Value="12,2,0,6" />
         <Setter Property="Opacity" Value="0.85" />
@@ -507,18 +509,21 @@
     <!-- Line numbers and line text. Monospace on both, so the two gutters stay one width
          and the text below a change lines up with the text above it. -->
     <Style Selector="TextBlock.diffGutter">
-        <Setter Property="FontFamily" Value="Cascadia Mono,Consolas,monospace" />
+        <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+        <Setter Property="LetterSpacing" Value="0" />
         <Setter Property="FontSize" Value="11" />
         <Setter Property="Opacity" Value="0.45" />
         <Setter Property="TextAlignment" Value="Right" />
         <Setter Property="Margin" Value="0,0,6,0" />
     </Style>
     <Style Selector="TextBlock.diffText">
-        <Setter Property="FontFamily" Value="Cascadia Mono,Consolas,monospace" />
+        <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+        <Setter Property="LetterSpacing" Value="0" />
         <Setter Property="FontSize" Value="11.5" />
     </Style>
     <Style Selector="SelectableTextBlock.diffText">
-        <Setter Property="FontFamily" Value="Cascadia Mono,Consolas,monospace" />
+        <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+        <Setter Property="LetterSpacing" Value="0" />
         <Setter Property="FontSize" Value="11.5" />
     </Style>
 
@@ -1015,7 +1020,8 @@
         <Setter Property="HorizontalAlignment" Value="Left" />
     </Style>
     <Style Selector="Border.evidence SelectableTextBlock">
-        <Setter Property="FontFamily" Value="Cascadia Mono,Consolas,monospace" />
+        <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+        <Setter Property="LetterSpacing" Value="0" />
         <Setter Property="FontSize" Value="11" />
         <Setter Property="TextWrapping" Value="Wrap" />
     </Style>

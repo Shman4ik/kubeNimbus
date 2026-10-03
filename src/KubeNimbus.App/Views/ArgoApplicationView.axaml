@@ -67,7 +67,7 @@
                     <TextBlock Text="{Binding HealthText}" FontSize="11.5" />
                   </Border>
                   <TextBlock Text="{Binding Application.ShortRevision}" VerticalAlignment="Center" Opacity="0.75"
-                             FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" />
+                             Classes="mono" FontSize="11.5" />
                 </StackPanel>
 
                 <!-- Argo's own words about why it is unhealthy. It is the one line on this
@@ -248,7 +248,7 @@
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="core:ArgoRevision">
                     <TextBlock Text="{Binding ShortRevision}" VerticalAlignment="Center"
-                               FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5"
+                               Classes="mono" FontSize="11.5"
                                ToolTip.Tip="{Binding Revision}" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>

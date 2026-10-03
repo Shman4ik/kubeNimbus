@@ -53,6 +53,45 @@ public class AppSettingsTests
             .IsEqualTo(expected);
     }
 
+    // ------------------------------------------------------------------------ fonts
+
+    /// <summary>
+    /// "auto" is the default and means the platform's own face (DESIGN.md rule 22), the same
+    /// as pgNimbus; kubeNimbus was drawn in Inter until the setting existed, so that default
+    /// is a choice this pins rather than an accident it inherits.
+    /// </summary>
+    [Test]
+    public async Task The_interface_font_defaults_to_auto_and_the_code_font_to_the_bundled_one()
+    {
+        var settings = new AppSettings().Normalized();
+        await Assert.That(settings.InterfaceFont).IsEqualTo("auto");
+        await Assert.That(settings.CodeFont).IsNull();
+    }
+
+    [Test]
+    [Arguments("Inter", "inter")]
+    [Arguments("SYSTEM", "system")]
+    [Arguments("Comic Sans", "auto")]
+    public async Task The_interface_font_is_canonicalized_like_the_theme(string written, string expected)
+    {
+        await Assert.That(new AppSettings { InterfaceFont = written }.Normalized().InterfaceFont).IsEqualTo(expected);
+    }
+
+    /// <summary>
+    /// A blank name is the bundled face, so the page selects one row for both; a name is kept
+    /// even when nothing by that name is installed, because the face falls back to the
+    /// bundled one at draw time and the page still shows what was chosen.
+    /// </summary>
+    [Test]
+    [Arguments("", null)]
+    [Arguments("   ", null)]
+    [Arguments(" Fira Code ", "Fira Code")]
+    [Arguments("Not Installed Mono", "Not Installed Mono")]
+    public async Task A_blank_code_font_is_the_bundled_one_and_a_name_is_kept(string written, string? expected)
+    {
+        await Assert.That(new AppSettings { CodeFont = written }.Normalized().CodeFont).IsEqualTo(expected);
+    }
+
     // ---------------------------------------------------------------- sidebar width
 
     [Test]

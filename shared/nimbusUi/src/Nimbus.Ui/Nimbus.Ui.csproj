@@ -26,6 +26,18 @@
     <PackageReference Include="Avalonia" Version="12.1.3" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.3" />
     <PackageReference Include="Avalonia.Controls.DataGrid" Version="12.1.2" />
+    <!-- For SkiaSharp, which Fonts/MonospaceFonts reads the installed families
+         through. Both apps already have it under Avalonia.Desktop, so this adds no
+         package to either; taking it through Avalonia.Skia rather than naming
+         SkiaSharp keeps its version whatever Avalonia's is, with no second pin to
+         drift. Same lowest-version rule as Avalonia itself. -->
+    <PackageReference Include="Avalonia.Skia" Version="12.1.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The bundled monospace face (Fonts/NimbusFonts.cs). Fonts are not globbed
+         the way .axaml files are, so they are listed. -->
+    <AvaloniaResource Include="Fonts\**\*.ttf" />
   </ItemGroup>
 
   <!-- No explicit item group for the .axaml files: Avalonia's own build targets

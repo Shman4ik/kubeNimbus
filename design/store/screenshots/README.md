@@ -4,7 +4,8 @@ The screenshots for the Microsoft Store listing, in the order the listing shows 
 Like [`../../screenshots`](../../screenshots/README.md), every PNG here is **generated**
 by the headless harness in [`tools/Screenshot`](../../../tools/Screenshot), from the demo
 cluster's synthetic dataset, and the same rule applies: **rebuild them on Windows**, because
-the monospace panes ask for Cascadia Mono or Consolas, which only Windows ships.
+the interface is drawn in the platform's own face and these show it in Segoe UI, as Windows
+users see it. (Code is the bundled JetBrains Mono NL everywhere since 2026-10.)
 
 They are a separate set from the README's because of size. The Store asks for desktop
 screenshots of 1366×768 or larger, and every ordinary harness scenario renders at 1280
