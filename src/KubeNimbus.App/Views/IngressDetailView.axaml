@@ -69,7 +69,7 @@
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:IngressRouteViewModel">
                     <TextBlock Text="{Binding PathText}" VerticalAlignment="Center"
-                               FontFamily="Cascadia Mono,Consolas,monospace" FontSize="12"
+                               Classes="mono" FontSize="12"
                                TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PathTypeText}" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>

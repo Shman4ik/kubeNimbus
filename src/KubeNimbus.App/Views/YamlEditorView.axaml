@@ -88,7 +88,7 @@
         </DockPanel>
       </Border>
       <Border Classes="card" Padding="0">
-        <ae:TextEditor Name="Editor" ShowLineNumbers="True" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="12"
+        <ae:TextEditor Name="Editor" ShowLineNumbers="True" Classes="mono" FontSize="12"
                        IsReadOnly="{Binding IsEditorReadOnly}" Margin="4" />
       </Border>
     </DockPanel>
@@ -131,7 +131,7 @@
                   <ListBoxItem Content="Fields" ToolTip.Tip="The changed fields by path, matched the way Kubernetes merges them" />
                 </ListBox>
 
-                <TextBlock Grid.Column="1" Text="{Binding LineSummary}" FontFamily="Cascadia Mono,Consolas,monospace"
+                <TextBlock Grid.Column="1" Text="{Binding LineSummary}" Classes="mono"
                            FontSize="11" Opacity="0.6" VerticalAlignment="Center" Margin="0,0,10,0"
                            IsVisible="{Binding HasBody}" ToolTip.Tip="Lines added and removed" />
 
@@ -254,21 +254,21 @@
                         <Grid ColumnDefinitions="14,*" Margin="0,2">
                           <!-- A glyph as well as a colour: the two directions of a diff are
                                the last thing that should depend on telling red from green. -->
-                          <TextBlock Grid.Column="0" Text="{Binding Marker}" FontFamily="Cascadia Mono,Consolas,monospace"
+                          <TextBlock Grid.Column="0" Text="{Binding Marker}" Classes="mono"
                                      FontSize="11.5" VerticalAlignment="Top"
                                      Classes.diffAdded="{Binding IsAdded}" Classes.diffRemoved="{Binding IsRemoved}"
                                      Classes.diffChanged="{Binding IsChanged}" />
                           <StackPanel Grid.Column="1" Spacing="1">
-                            <TextBlock Text="{Binding Path}" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5"
+                            <TextBlock Text="{Binding Path}" Classes="mono" FontSize="11.5"
                                        Classes.diffAdded="{Binding IsAdded}" Classes.diffRemoved="{Binding IsRemoved}"
                                        Classes.diffChanged="{Binding IsChanged}" />
                             <!-- Old above new, the way every diff is read. Selectable,
                                  because a previewed value is routinely the thing someone
                                  is about to paste somewhere else. -->
-                            <SelectableTextBlock Text="{Binding Before}" FontFamily="Cascadia Mono,Consolas,monospace"
+                            <SelectableTextBlock Text="{Binding Before}" Classes="mono"
                                                  FontSize="11.5" TextWrapping="Wrap" Opacity="0.55"
                                                  TextDecorations="Strikethrough" IsVisible="{Binding !IsAdded}" />
-                            <SelectableTextBlock Text="{Binding After}" FontFamily="Cascadia Mono,Consolas,monospace"
+                            <SelectableTextBlock Text="{Binding After}" Classes="mono"
                                                  FontSize="11.5" TextWrapping="Wrap" Opacity="0.85"
                                                  IsVisible="{Binding !IsRemoved}" />
                           </StackPanel>
@@ -296,7 +296,7 @@
             <DataTemplate x:DataType="vm:CertificateViewModel">
               <Grid ColumnDefinitions="150,*" Margin="0,3" ToolTip.Tip="{Binding Tooltip}">
                 <StackPanel Grid.Column="0" Spacing="1">
-                  <TextBlock Text="{Binding Position}" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5"
+                  <TextBlock Text="{Binding Position}" Classes="mono" FontSize="11.5"
                              TextTrimming="CharacterEllipsis" />
                   <TextBlock Text="{Binding Role}" FontSize="10.5" Opacity="0.55" IsVisible="{Binding IsAuthority}" />
                 </StackPanel>
@@ -336,12 +336,12 @@
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:RevealedValueViewModel">
                 <Grid ColumnDefinitions="150,*,Auto" Margin="0,3">
-                  <TextBlock Grid.Column="0" Text="{Binding Key}" FontFamily="Cascadia Mono,Consolas,monospace"
+                  <TextBlock Grid.Column="0" Text="{Binding Key}" Classes="mono"
                              FontSize="11.5" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Key}" />
                   <StackPanel Grid.Column="1" Spacing="1" Margin="0,0,6,0">
                     <!-- Selectable, because the whole point of revealing a value is to use it,
                          and re-typing a password read off a label is nobody's idea of a feature. -->
-                    <SelectableTextBlock Text="{Binding Value}" FontFamily="Cascadia Mono,Consolas,monospace"
+                    <SelectableTextBlock Text="{Binding Value}" Classes="mono"
                                          FontSize="11.5" TextWrapping="Wrap" />
                     <TextBlock Text="{Binding Detail}" FontSize="10.5" TextWrapping="Wrap" Classes="statusText"
                                Classes.warn="{Binding IsProblem}" Classes.dim="{Binding !IsProblem}"

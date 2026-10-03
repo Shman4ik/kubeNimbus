@@ -1,6 +1,7 @@
 using Avalonia;
 using KubeNimbus.Core;
 using KubeNimbus.Core.Settings;
+using Nimbus.Ui.Fonts;
 
 namespace KubeNimbus.App;
 
@@ -62,6 +63,7 @@ internal static class Program
         var builder = AppBuilder.Configure<App>()
             .UsePlatformDetect()
             .WithInterFont()
+            .WithNimbusFonts()
             .LogToTrace();
 #if DEBUG
         builder = builder.WithDeveloperTools();

@@ -1,10 +1,29 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KubeNimbus.Core.Settings;
+using Nimbus.Ui.Fonts;
 
 namespace KubeNimbus.App.ViewModels;
+
+/// <summary>
+/// One row of the code font list: a family by name, or the bundled face (<see cref="Name"/>
+/// null, which is what <see cref="AppSettings.CodeFont"/> stores for it). <see cref="Family"/>
+/// is the face the row draws its own name in. The same record as pgNimbus's.
+/// </summary>
+public sealed record CodeFontOption(string? Name)
+{
+    /// <summary>The bundled JetBrains Mono NL.</summary>
+    public static CodeFontOption Bundled { get; } = new((string?)null);
+
+    /// <summary>What the list shows.</summary>
+    public string Label => Name ?? "JetBrains Mono (built in)";
+
+    /// <summary>The face the row is drawn in, so the list previews each one.</summary>
+    public FontFamily Family => NimbusFonts.Mono(Name);
+}
 
 /// <summary>
 /// Backs the preferences window. Every change applies immediately and persists through
@@ -46,6 +65,21 @@ public sealed partial class PreferencesViewModel : ObservableObject
     [ObservableProperty]
     private bool _openLogsMaximized;
 
+    /// <summary>0 = the system face, 1 = Inter. Opens on what "auto" means on this platform.</summary>
+    [ObservableProperty]
+    private int _interfaceFontIndex;
+
+    /// <summary>The code font choices: the bundled face first, then the installed monospace families once they are read.</summary>
+    public RangeObservableCollection<CodeFontOption> CodeFonts { get; } = [];
+
+    /// <summary>The chosen code font. Never null once the page is built.</summary>
+    [ObservableProperty]
+    private CodeFontOption? _selectedCodeFont;
+
+    // Set while the list is rebuilt: the ComboBox reports a selection change for the old
+    // item leaving, which is not a choice.
+    private bool _loadingCodeFonts;
+
     /// <summary>
     /// The kubeconfig files the user has pointed the app at, newest last. Paths only
     /// (CLAUDE.md rule 4) — this list is what gets re-resolved through the kubeconfig
@@ -83,6 +117,9 @@ public sealed partial class PreferencesViewModel : ObservableObject
         _confirmDeletes = settings.ConfirmDeletes;
         _previewApplies = settings.PreviewApplies;
         _openLogsMaximized = settings.OpenLogsMaximized;
+        _interfaceFontIndex = App.InterfaceFontFromString(settings.InterfaceFont) == InterfaceFont.System ? 0 : 1;
+        SetCodeFonts([], settings.CodeFont);
+        _ = LoadInstalledCodeFontsAsync();
 
         RefreshKubeconfigPaths();
         _main.PropertyChanged += OnMainPropertyChanged;
@@ -108,6 +145,54 @@ public sealed partial class PreferencesViewModel : ObservableObject
 
     /// <summary>Unhooks from the shell when the window closes.</summary>
     public void Detach() => _main.PropertyChanged -= OnMainPropertyChanged;
+
+    /// <summary>
+    /// Fills <see cref="CodeFonts"/> with the installed monospace families, read once per
+    /// process off the UI thread (<see cref="MonospaceFonts"/>). The page opens with the
+    /// bundled face and the saved one already listed, so the box never shows empty while
+    /// the scan runs.
+    /// </summary>
+    public async Task LoadInstalledCodeFontsAsync()
+    {
+        IReadOnlyList<string> installed;
+        try
+        {
+            installed = await MonospaceFonts.InstalledAsync();
+        }
+        catch (Exception)
+        {
+            // The list then offers the bundled face and the saved one, which is enough to
+            // keep working: a platform whose font list cannot be read is no reason to lose
+            // the page.
+            return;
+        }
+
+        SetCodeFonts(installed, SelectedCodeFont?.Name);
+    }
+
+    private void SetCodeFonts(IReadOnlyList<string> installed, string? selected)
+    {
+        var options = new List<CodeFontOption> { CodeFontOption.Bundled };
+        options.AddRange(installed.Select(name => new CodeFontOption(name)));
+
+        // A saved family that is not installed (any more) stays listed, so the box shows
+        // what is saved; the face itself falls back to the bundled one.
+        if (selected is not null && !options.Any(option => option.Name == selected))
+        {
+            options.Add(new CodeFontOption(selected));
+        }
+
+        _loadingCodeFonts = true;
+        try
+        {
+            CodeFonts.ReplaceAll(options);
+            SelectedCodeFont = options.First(option => option.Name == selected);
+        }
+        finally
+        {
+            _loadingCodeFonts = false;
+        }
+    }
 
     /// <summary>
     /// Adds a kubeconfig file through the shell's own picker, so the path is validated,
@@ -234,4 +319,15 @@ public sealed partial class PreferencesViewModel : ObservableObject
 
     partial void OnOpenLogsMaximizedChanged(bool value) =>
         App.Update(s => s with { OpenLogsMaximized = value });
+
+    partial void OnInterfaceFontIndexChanged(int value) =>
+        App.SetInterfaceFont(value == 0 ? "system" : "inter");
+
+    partial void OnSelectedCodeFontChanged(CodeFontOption? value)
+    {
+        if (!_loadingCodeFonts && value is not null)
+        {
+            App.SetCodeFont(value.Name);
+        }
+    }
 }

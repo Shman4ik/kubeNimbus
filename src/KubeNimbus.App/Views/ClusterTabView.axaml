@@ -582,7 +582,7 @@
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding LastSeenText}" VerticalAlignment="Center" ToolTip.Tip="{Binding LastSeenTooltip}"
-                               FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" />
+                               Classes="mono" FontSize="11.5" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
@@ -633,7 +633,7 @@
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding EventCount}" VerticalAlignment="Center"
-                               FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" />
+                               Classes="mono" FontSize="11.5" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
@@ -688,7 +688,7 @@
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding ReadyText}" VerticalAlignment="Center"
-                               FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" />
+                               Classes="mono" FontSize="11.5" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
@@ -721,7 +721,7 @@
                     <!-- The count carries "(43m ago)": 200 restarts that stopped yesterday
                          and 200 still climbing are the same number and different problems. -->
                     <TextBlock Text="{Binding RestartsText}" VerticalAlignment="Center"
-                               FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" />
+                               Classes="mono" FontSize="11.5" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
@@ -836,7 +836,7 @@
                                           AreaFill="{StaticResource UsageCpuAreaBrush}"
                                           BaselineBrush="{StaticResource ChartBaselineBrush}" />
                       <TextBlock Grid.Column="1" Text="{Binding CpuText}" HorizontalAlignment="Right" VerticalAlignment="Center"
-                                 FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" />
+                                 Classes="mono" FontSize="11.5" />
                     </Grid>
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
@@ -851,7 +851,7 @@
                                           AreaFill="{StaticResource UsageMemoryAreaBrush}"
                                           BaselineBrush="{StaticResource ChartBaselineBrush}" />
                       <TextBlock Grid.Column="1" Text="{Binding MemoryText}" HorizontalAlignment="Right" VerticalAlignment="Center"
-                                 FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" />
+                                 Classes="mono" FontSize="11.5" />
                     </Grid>
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
@@ -868,7 +868,7 @@
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ResourceRowViewModel">
                     <TextBlock Text="{Binding AgeText}" VerticalAlignment="Center" ToolTip.Tip="{Binding AgeTooltip}"
-                               FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" Opacity="0.75" />
+                               Classes="mono" FontSize="11.5" Opacity="0.75" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
@@ -1159,7 +1159,7 @@
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate x:DataType="vm:ArgoApplicationRowViewModel">
                       <TextBlock Text="{Binding Revision}" VerticalAlignment="Center" Opacity="0.8"
-                                 FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" />
+                                 Classes="mono" FontSize="11.5" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>

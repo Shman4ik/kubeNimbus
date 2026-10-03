@@ -145,12 +145,10 @@
                     <DataTemplate x:DataType="vm:TemplateChangeViewModel">
                       <WrapPanel Margin="0,2">
                         <TextBlock Text="{Binding Field, StringFormat='{}{0}: '}" FontSize="11.5"
-                                   FontFamily="Cascadia Mono,Consolas,monospace" />
-                        <TextBlock Text="{Binding Before}" Classes="diffBefore" FontSize="11.5"
-                                   FontFamily="Cascadia Mono,Consolas,monospace" IsVisible="{Binding HasBefore}" />
+                                   Classes="mono" />
+                        <TextBlock Text="{Binding Before}" Classes="diffBefore mono" FontSize="11.5" IsVisible="{Binding HasBefore}" />
                         <TextBlock Text=" → " FontSize="11.5" Opacity="0.6" IsVisible="{Binding HasBefore}" />
-                        <TextBlock Text="{Binding After}" Classes="diffAfter" FontSize="11.5"
-                                   FontFamily="Cascadia Mono,Consolas,monospace" />
+                        <TextBlock Text="{Binding After}" Classes="diffAfter mono" FontSize="11.5" />
                       </WrapPanel>
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
@@ -166,7 +164,7 @@
                   </StackPanel>
                 </Button>
                 <SelectableTextBlock Text="{Binding CompareShas}" FontSize="11" Opacity="0.7" TextWrapping="Wrap"
-                                     FontFamily="Cascadia Mono,Consolas,monospace"
+                                     Classes="mono"
                                      IsVisible="{Binding CompareShas, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}" />
               </StackPanel>
             </Border>
@@ -187,7 +185,7 @@
                                Classes.idle="{Binding IsGone}" />
                       <StackPanel Grid.Column="1">
                         <TextBlock Text="{Binding Name}" FontSize="12" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}"
-                                   FontFamily="Cascadia Mono,Consolas,monospace" />
+                                   Classes="mono" />
                         <TextBlock Text="{Binding StateText}" FontSize="11" Opacity="0.6" TextTrimming="CharacterEllipsis" />
                       </StackPanel>
                       <TextBlock Grid.Column="2" Text="{Binding RestartsText}" FontSize="11" Opacity="0.6" VerticalAlignment="Center"
@@ -258,7 +256,7 @@
             <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="14,8,12,0">
               <TextBlock Grid.Column="0" Text="{Binding LogsCaption}" FontWeight="SemiBold" FontSize="12.5"
                          VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                         FontFamily="Cascadia Mono,Consolas,monospace" />
+                         Classes="mono" />
               <!-- Only where a distinct earlier run exists (the kubelet's own rule): a
                    waiting container's "previous" is its current, so no toggle there. -->
               <ToggleButton Grid.Column="1" Classes="chip checkedAccent" Padding="8,3" FontSize="11"

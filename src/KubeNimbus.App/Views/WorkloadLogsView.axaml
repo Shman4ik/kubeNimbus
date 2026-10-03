@@ -40,7 +40,7 @@
                        is how log lines once rendered invisible. -->
                   <Ellipse Width="8" Height="8" VerticalAlignment="Center" Fill="{Binding Brush}" />
                   <TextBlock Text="{Binding ShortName}" FontSize="12" VerticalAlignment="Center"
-                             FontFamily="Cascadia Mono,Consolas,monospace"
+                             Classes="mono"
                              Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
                   <TextBlock Text="{Binding StateLabel}" FontSize="10" Opacity="0.85" VerticalAlignment="Center"
                              Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"
@@ -240,7 +240,7 @@
                     CommandParameter="{Binding}" ToolTip.Tip="Pinned highlight — click to remove">
               <StackPanel Orientation="Horizontal" Spacing="6">
                 <Ellipse Width="8" Height="8" Fill="{Binding SolidBrush}" VerticalAlignment="Center" />
-                <TextBlock Text="{Binding Text}" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding Text}" Classes="mono" FontSize="11" VerticalAlignment="Center" />
                 <PathIcon Data="{StaticResource CloseIconGeometry}" Width="8" Height="8" Opacity="0.6" VerticalAlignment="Center" />
               </StackPanel>
             </Button>
@@ -299,7 +299,7 @@
                     <PathIcon Data="{StaticResource ChevronRightIconGeometry}" Width="8" Height="8" />
                   </ToggleButton>
                   <TextBlock Grid.Column="1" Text="{Binding Source.ShortName}" Width="150" Margin="0,0,10,0"
-                             FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11"
+                             Classes="mono" FontSize="11"
                              TextTrimming="CharacterEllipsis" VerticalAlignment="Top"
                              Foreground="{Binding Source.Brush}"
                              ToolTip.Tip="{Binding Source.PodName}">
@@ -313,8 +313,7 @@
                   <!-- Severity as classes rather than a Foreground binding — see the
                        `.logError`/`.logWarn`/`.logInfo` styles in Theme.axaml for why a
                        binding that produces UnsetValue is not safe on this property. -->
-                  <controls:LogLineText Grid.Column="2" Classes="logLine" Text="{Binding DisplayText}"
-                                        FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11"
+                  <controls:LogLineText Grid.Column="2" Classes="logLine mono" Text="{Binding DisplayText}" FontSize="11"
                                         MatchStart="{Binding MessageOffset}"
                                         LevelStart="{Binding DisplayLevelStart}" LevelLength="{Binding LevelLength}"
                                         IsCurrentMatch="{Binding IsCurrentMatch}"

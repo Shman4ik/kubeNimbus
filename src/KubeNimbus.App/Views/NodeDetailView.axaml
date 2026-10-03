@@ -109,13 +109,13 @@
                                                 OverBrush="{DynamicResource AppWarningBrush}" />
 
                         <TextBlock Grid.Column="2" FontSize="12" VerticalAlignment="Center"
-                                   TextAlignment="Right" FontFamily="Cascadia Mono,Consolas,monospace"
+                                   TextAlignment="Right" Classes="mono"
                                    Text="{Binding RequestedText}" />
                         <TextBlock Grid.Column="3" FontSize="12" VerticalAlignment="Center"
                                    TextAlignment="Center" Opacity="0.55" Text="/" />
                         <TextBlock Grid.Column="4" FontSize="12" VerticalAlignment="Center"
                                    TextAlignment="Right" Opacity="0.7"
-                                   FontFamily="Cascadia Mono,Consolas,monospace"
+                                   Classes="mono"
                                    Text="{Binding AllocatableText}" />
                         <TextBlock Grid.Column="5" FontSize="12" VerticalAlignment="Center"
                                    TextAlignment="Right" Margin="6,0,0,0"
@@ -127,8 +127,7 @@
                              rather than an empty slot the two rows above it fill. -->
                         <TextBlock Grid.Column="6" FontSize="12" VerticalAlignment="Center"
                                    TextAlignment="Right" Margin="10,0,0,0"
-                                   FontFamily="Cascadia Mono,Consolas,monospace"
-                                   Classes="statusText" Classes.warn="{Binding IsOvercommitted}"
+                                   Classes="statusText mono" Classes.warn="{Binding IsOvercommitted}"
                                    Text="{Binding LimitSummaryText}" />
                       </Grid>
                     </DataTemplate>
@@ -181,7 +180,7 @@
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="core:NodeTaint">
                       <SelectableTextBlock Text="{Binding Display}" FontSize="12" Margin="0,2"
-                                           FontFamily="Cascadia Mono,Consolas,monospace" />
+                                           Classes="mono" />
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
@@ -398,7 +397,7 @@
               <Grid RowDefinitions="Auto,Auto">
                 <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
                   <TextBlock Grid.Column="0" Text="CPU — node total" FontSize="12" FontWeight="SemiBold" Opacity="0.8" />
-                  <TextBlock Grid.Column="1" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" Opacity="0.8">
+                  <TextBlock Grid.Column="1" Classes="mono" FontSize="11.5" Opacity="0.8">
                     <Run Text="{Binding CpuText}" />
                     <Run Text="{Binding CpuShareText}" />
                     <Run Text="  · peak " />
@@ -418,7 +417,7 @@
               <Grid RowDefinitions="Auto,Auto">
                 <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
                   <TextBlock Grid.Column="0" Text="Memory — node total" FontSize="12" FontWeight="SemiBold" Opacity="0.8" />
-                  <TextBlock Grid.Column="1" FontFamily="Cascadia Mono,Consolas,monospace" FontSize="11.5" Opacity="0.8">
+                  <TextBlock Grid.Column="1" Classes="mono" FontSize="11.5" Opacity="0.8">
                     <Run Text="{Binding MemoryText}" />
                     <Run Text="{Binding MemoryShareText}" />
                     <Run Text="  · peak " />
