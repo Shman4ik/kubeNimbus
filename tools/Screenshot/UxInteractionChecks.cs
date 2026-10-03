@@ -331,7 +331,7 @@ internal static class UxInteractionChecks
         if (tabs.SelectedIndex != 0) throw new InvalidOperationException($"Preferences opened on tab {tabs.SelectedIndex}, expected 0.");
 
         var segment = tabs.GetVisualDescendants().OfType<TabItem>().First();
-        if (segment.Padding != new Thickness(8, 4)) throw new InvalidOperationException($"A tab segment's padding is {segment.Padding}, not the capsule's 8,4: a bare TabItem style is overriding it.");
+        if (segment.Padding != new Thickness(8, 2)) throw new InvalidOperationException($"A tab segment's padding is {segment.Padding}, not the capsule's 8,2: a bare TabItem style is overriding it.");
 
         var strip = tabs.GetVisualDescendants().OfType<Border>().First(b => b.Name == "PART_StripBorder");
         double? stripTop = null;
