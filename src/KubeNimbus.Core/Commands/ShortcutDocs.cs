@@ -34,7 +34,7 @@ public static class ShortcutDocs
         sb.AppendLine();
         sb.AppendLine("The **Windows / Linux** and **macOS** columns differ only in the primary");
         sb.AppendLine("modifier. That choice follows the platform by default and can be forced either");
-        sb.AppendLine("way in Preferences → Shortcut modifier.");
+        sb.AppendLine("way in Preferences → General → Shortcut modifier.");
         sb.AppendLine();
 
         foreach (var (category, rows) in CommandCatalog.CheatSheetSections())

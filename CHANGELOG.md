@@ -12,6 +12,13 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+### Changed
+
+- **Preferences is four tabs.** General (kubeconfig files and folders, shortcut modifier),
+  Appearance, Logs and metrics, and Changes (confirm before deleting, preview before applying),
+  the same strip pgNimbus's settings page uses. The page keeps one height on every tab and opens
+  on the tab it was last left on.
+
 ### Fixed
 
 - **Apply works on an object opened in the YAML editor.** Opening a ConfigMap, Deployment or

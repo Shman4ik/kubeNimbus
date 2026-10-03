@@ -80,6 +80,12 @@ public sealed partial class PreferencesViewModel : ObservableObject
     // item leaving, which is not a choice.
     private bool _loadingCodeFonts;
 
+    /// <summary>The page's tab: 0 General, 1 Appearance, 2 Logs and metrics, 3 Changes.</summary>
+    [ObservableProperty]
+    private int _selectedTab;
+
+    partial void OnSelectedTabChanged(int value) => _main.PreferencesTab = value;
+
     /// <summary>
     /// The kubeconfig files the user has pointed the app at, newest last. Paths only
     /// (CLAUDE.md rule 4) — this list is what gets re-resolved through the kubeconfig
@@ -108,6 +114,7 @@ public sealed partial class PreferencesViewModel : ObservableObject
     public PreferencesViewModel(MainWindowViewModel main)
     {
         _main = main ?? throw new ArgumentNullException(nameof(main));
+        _selectedTab = main.PreferencesTab;
 
         var settings = App.LoadSettings();
         _themeIndex = ThemeIndexOf(settings.Theme);
