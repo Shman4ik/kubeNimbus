@@ -86,6 +86,19 @@
                         </StackPanel>
                     </Border>
 
+                    <TextBlock Classes="sectionHeader" Text="APPLICATIONS" Margin="4,10,4,4" />
+                    <Border Classes="card" Padding="14,12">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="2" Margin="0,0,16,0">
+                                <TextBlock Classes="label" Text="Open applications with one click" />
+                                <TextBlock Classes="hint" Text="A click on a row of the Applications list opens its page. Off, it takes a double-click, as in the resource list, which always does: there a click selects the row the keys and the menu act on." />
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="1" VerticalAlignment="Center"
+                                          OnContent="" OffContent=""
+                                          IsChecked="{Binding OpenApplicationsOnSingleClick}" />
+                        </Grid>
+                    </Border>
+
                     <TextBlock Classes="sectionHeader" Text="KEYBOARD" Margin="4,10,4,4" />
                     <Border Classes="card" Padding="14,12">
                         <Grid ColumnDefinitions="*,Auto">

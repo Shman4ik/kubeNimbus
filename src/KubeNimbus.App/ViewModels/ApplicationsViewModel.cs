@@ -965,7 +965,7 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
 
     private bool HasSelectedRow => SelectedRow is not null;
 
-    /// <summary>Enter and double-click: open the selected application's page.</summary>
+    /// <summary>Enter: open the selected application's page. A click opens through <see cref="Open"/>.</summary>
     [RelayCommand(CanExecute = nameof(HasSelectedRow))]
     private void OpenSelected()
     {

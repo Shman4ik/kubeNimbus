@@ -143,20 +143,39 @@ public partial class ApplicationsView : UserControl
         }
     }
 
-    private void OnListDoubleTapped(object? sender, TappedEventArgs e)
+    /// <summary>
+    /// One click opens the row's page while <c>OpenApplicationsOnSingleClick</c> is on (the
+    /// default), read at the click so a change on the preferences page applies to the next
+    /// one. A click with a modifier only selects, as it would anywhere else.
+    /// </summary>
+    private void OnListTapped(object? sender, TappedEventArgs e)
     {
-        // Only a double-click on a row opens it; the empty space below the last row is not
-        // "the selected row".
-        if ((e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true) is null)
+        if (e.KeyModifiers == KeyModifiers.None && App.LoadSettings().OpenApplicationsOnSingleClick)
+        {
+            OpenTappedRow(e);
+        }
+    }
+
+    /// <summary>
+    /// Double-click opens whatever the preference says. With one click already opening, the
+    /// second press normally lands on the page; the guard in <see cref="OpenTappedRow"/>
+    /// covers the one where it still reaches the list.
+    /// </summary>
+    private void OnListDoubleTapped(object? sender, TappedEventArgs e) => OpenTappedRow(e);
+
+    private void OpenTappedRow(TappedEventArgs e)
+    {
+        // Only a click on a row opens it; the empty space below the last row is not "the
+        // selected row". The row comes from the item under the pointer, not the selection,
+        // so a click opens what it landed on even before the ListBox has selected it.
+        if ((e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true) is not { DataContext: ApplicationRowViewModel row }
+            || Vm is not { IsPageOpen: false } vm)
         {
             return;
         }
 
-        if (Vm is { } vm && vm.OpenSelectedCommand.CanExecute(null))
-        {
-            vm.OpenSelectedCommand.Execute(null);
-            e.Handled = true;
-        }
+        vm.Open(row);
+        e.Handled = true;
     }
 
     internal bool FocusPage() =>

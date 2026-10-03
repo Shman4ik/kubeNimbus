@@ -65,6 +65,10 @@ public sealed partial class PreferencesViewModel : ObservableObject
     [ObservableProperty]
     private bool _openLogsMaximized;
 
+    /// <summary>Whether one click on an Applications row opens its page.</summary>
+    [ObservableProperty]
+    private bool _openApplicationsOnSingleClick;
+
     /// <summary>0 = the system face, 1 = Inter. Opens on what "auto" means on this platform.</summary>
     [ObservableProperty]
     private int _interfaceFontIndex;
@@ -124,6 +128,7 @@ public sealed partial class PreferencesViewModel : ObservableObject
         _confirmDeletes = settings.ConfirmDeletes;
         _previewApplies = settings.PreviewApplies;
         _openLogsMaximized = settings.OpenLogsMaximized;
+        _openApplicationsOnSingleClick = settings.OpenApplicationsOnSingleClick;
         _interfaceFontIndex = App.InterfaceFontFromString(settings.InterfaceFont) == InterfaceFont.System ? 0 : 1;
         SetCodeFonts([], settings.CodeFont);
         _ = LoadInstalledCodeFontsAsync();
@@ -326,6 +331,9 @@ public sealed partial class PreferencesViewModel : ObservableObject
 
     partial void OnOpenLogsMaximizedChanged(bool value) =>
         App.Update(s => s with { OpenLogsMaximized = value });
+
+    partial void OnOpenApplicationsOnSingleClickChanged(bool value) =>
+        App.Update(s => s with { OpenApplicationsOnSingleClick = value });
 
     partial void OnInterfaceFontIndexChanged(int value) =>
         App.SetInterfaceFont(value == 0 ? "system" : "inter");

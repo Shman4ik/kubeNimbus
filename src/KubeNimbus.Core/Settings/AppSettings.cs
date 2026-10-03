@@ -210,6 +210,23 @@ public sealed record AppSettings
     public bool OpenLogsMaximized { get; set; }
 
     /// <summary>
+    /// Whether one click on a row of the Applications list opens its page. On by default:
+    /// that list is navigation, not selection — no row action, context menu or row key
+    /// needs a row selected without opening it, so the first click of a double-click was
+    /// a click that did nothing visible. Off restores double-click, the rule everywhere
+    /// else, for someone who wants the list to behave like the resource grid.
+    ///
+    /// <para>
+    /// Only the Applications list reads it. The resource grid stays on double-click,
+    /// because there selecting a row is a step of its own: the row keys (L, S, E, Delete…),
+    /// the context menu and the confirm strip all act on the selected row, and a click that
+    /// also docked an inspector would open one on every row chosen for those. Read by
+    /// <c>ApplicationsView</c> at the moment of the click, not cached.
+    /// </para>
+    /// </summary>
+    public bool OpenApplicationsOnSingleClick { get; set; } = true;
+
+    /// <summary>
     /// Whether the log panes print each line's timestamp. It used to be a per-pane toggle
     /// that reset on every pod opened, so someone who always reads with timestamps turned
     /// them on again for every pane. The last choice made in any log pane — pod detail's,

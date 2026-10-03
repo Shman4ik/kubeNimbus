@@ -121,6 +121,39 @@ internal static class ApplicationsChecks
         if (vm.IsPageOpen)
             throw new InvalidOperationException("Esc after a double-click did not return to the list: focus stayed on the hidden row.");
 
+        // One click opens a row by default (OpenApplicationsOnSingleClick), and opens the row
+        // it landed on, not the one selected before. With the setting off, one click only
+        // selects and a double-click still opens.
+        var single = vm.VisibleRows[1];
+        ClickRow(window, list, single);
+        SettlePage(window);
+        if (vm.Page?.Key != single.Key)
+            throw new InvalidOperationException("One click on a row did not open its application.");
+        window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        Dispatcher.UIThread.RunJobs();
+        if (vm.IsPageOpen)
+            throw new InvalidOperationException("Esc after a single click did not return to the list.");
+
+        KubeNimbus.App.App.Update(s => s with { OpenApplicationsOnSingleClick = false });
+        try
+        {
+            ClickRow(window, list, target);
+            SettlePage(window);
+            if (vm.IsPageOpen || !ReferenceEquals(vm.SelectedRow, target))
+                throw new InvalidOperationException("With one-click open off, a click opened the application instead of selecting it.");
+            ClickRow(window, list, target);
+            ClickRow(window, list, target);
+            SettlePage(window);
+            if (vm.Page?.Key != target.Key)
+                throw new InvalidOperationException("With one-click open off, a double-click did not open the application.");
+            window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+            Dispatcher.UIThread.RunJobs();
+        }
+        finally
+        {
+            KubeNimbus.App.App.Update(s => s with { OpenApplicationsOnSingleClick = true });
+        }
+
         // The mode switch, by pointer, and back — nothing is restarted either way.
         var rows = vm.Rows.Count;
         var switcher = window.FindControl<ListBox>("ModeSwitch")!;
@@ -131,7 +164,34 @@ internal static class ApplicationsChecks
         if (shell.Mode != ShellMode.Applications || vm.Rows.Count != rows || switcher.SelectedIndex != 0)
             throw new InvalidOperationException("Switching back to Applications lost the list.");
 
-        Console.WriteLine($"Applications interaction passed ({rows} applications; arrows, Enter, Esc, /, {Hotkeys.PrimaryLabel}+F, chips, double-click then Esc, mode switch).");
+        // The two controls named Applications agree: on a page, the selected mode segment
+        // goes back to the list like the page's "‹ Applications" link. From Resources it only
+        // switches mode and the page is kept.
+        ClickRow(window, list, target);
+        SettlePage(window);
+        if (vm.Page?.Key != target.Key)
+            throw new InvalidOperationException("One click did not open the application before the mode-switch check.");
+        Click(window, window.FindControl<ListBoxItem>("ResourcesModeItem")!);
+        Click(window, window.FindControl<ListBoxItem>("ApplicationsModeItem")!);
+        SettlePage(window);
+        if (shell.Mode != ShellMode.Applications || vm.Page?.Key != target.Key)
+            throw new InvalidOperationException("Coming back from Resources closed the application page; switching mode must keep it.");
+        Click(window, window.FindControl<ListBoxItem>("ApplicationsModeItem")!);
+        SettlePage(window);
+        if (vm.IsPageOpen || !ReferenceEquals(vm.SelectedRow, target))
+            throw new InvalidOperationException("The selected Applications segment did not go back to the list from a page.");
+
+        Console.WriteLine($"Applications interaction passed ({rows} applications; arrows, Enter, Esc, /, {Hotkeys.PrimaryLabel}+F, chips, double-click then Esc, one click on and off, mode switch, Applications segment back to the list).");
+    }
+
+    private static void ClickRow(Window window, ListBox list, ApplicationRowViewModel row)
+    {
+        var container = list.ContainerFromItem(row) as Control
+            ?? throw new InvalidOperationException($"Application row {row.Name} has no container.");
+        var centre = container.TranslatePoint(new Point(container.Bounds.Width / 2, container.Bounds.Height / 2), window)!.Value;
+        window.MouseDown(centre, MouseButton.Left);
+        window.MouseUp(centre, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
     }
 
     private static void Click(Window window, Control target)

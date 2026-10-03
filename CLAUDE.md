@@ -242,7 +242,10 @@ Three rules about it:
    is no. Secondary actions live in a command palette (Ctrl+K) or context menus.
 2. **Double-click = default action** everywhere (pod → logs/describe, deployment
    → details, service → its pods and endpoints, ingress → its routes, network policy →
-   its rules, context → connect); Space = quick-peek.
+   its rules, context → connect); Space = quick-peek. One exception: a row of the
+   Applications list opens on one click, because that list is navigation and nothing in it
+   acts on a selected-but-unopened row (`OpenApplicationsOnSingleClick`, on by default; see
+   [applications-mode](docs/engineering/applications-mode.md), rule 8).
 3. **Multi-cluster via tabs** (like pgNimbus query tabs): each tab bound to a
    kubeconfig context; drag-reorder; workspace snapshot restores tabs. Reaching
    a cluster that isn't already a tab goes through the **cluster switcher**, never
@@ -936,7 +939,7 @@ There are **two** persisted files and the split is not arbitrary:
   is *preferences* — what you chose once and expect to still be true next launch:
   theme, hotkey scheme, interface and code fonts, advanced view, sidebar visibility and expanded sections,
   picked kubeconfig paths, log scrollback, metrics poll interval, delete confirmation,
-  apply preview, open logs maximized, and the log panes' display toggles (timestamps,
+  apply preview, open logs maximized, open applications with one click, and the log panes' display toggles (timestamps,
   UTC, wrap). Those three are written by the panes themselves, not the preferences page,
   and nothing that changes *which* log lines are read — Previous, the search, the levels —
   is persisted at all; see [log-pane-reading](docs/engineering/log-pane-reading.md).
