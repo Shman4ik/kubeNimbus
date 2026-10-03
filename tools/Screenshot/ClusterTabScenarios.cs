@@ -2225,26 +2225,82 @@ internal static class ClusterTabScenarios
     }
 
     /// <summary>
-    /// The blank-terminal states, and the only one of them the harness can reach for
-    /// real: the offline client's three shell attempts all fail, so this is the actual
-    /// message <c>ConnectAsync</c> writes. A terminal with nothing in it is
-    /// indistinguishable from a broken pane, which is why the status covers it until
-    /// the first byte arrives (UI rule 9).
+    /// The offline client's exec attempts all fail at the socket. Waited out first, because
+    /// their continuations land on the same RunJobs() the capture pumps and a status set
+    /// before they finish is overwritten by "Unable to connect to the remote server".
+    /// </summary>
+    private static void SettleExec(ExecTabViewModel exec)
+    {
+        for (var i = 0; i < 300 && exec.StatusMessage?.StartsWith("Could not exec", StringComparison.Ordinal) != true; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(10);
+        }
+    }
+
+    /// <summary>The runtime's sentence for a shell the image does not have, as runc prints it.</summary>
+    private static string NoSuchShell(string shell) =>
+        "Internal error occurred: error executing command in container: failed to exec in container: "
+        + "OCI runtime exec failed: exec failed: unable to start container process: "
+        + $"exec: \"{shell}\": stat {shell}: no such file or directory: unknown";
+
+    /// <summary>
+    /// A distroless image: every shell refused as missing, so the pane says so and offers
+    /// a debug container in place (UI rule 9 — a blank terminal is a state). The offline
+    /// client never reaches a runtime, so the refusals are the runtime's real sentences,
+    /// handed to the same <c>DescribeFailure</c> a live connect uses.
     /// </summary>
     public static ClusterTabViewModel ExecNoShell()
     {
         var tab = BaseTab();
         var row = tab.Rows.First(r => r.Name.StartsWith("payment-service-report-generator", StringComparison.Ordinal));
         var exec = new ExecTabViewModel(FixtureData.CreateOfflineClient(), "payments", row.Name, "app") { IsPreview = false };
-
-        for (var i = 0; i < 100 && exec.StatusMessage?.StartsWith("No usable shell", StringComparison.Ordinal) != true; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-            Thread.Sleep(10);
-        }
+        SettleExec(exec);
+        exec.PresentExecFailures(PodOperatingSystem.Linux, [.. ExecShells.LinuxShells.Select(NoSuchShell)]);
 
         tab.InspectorTabs.Add(exec);
         tab.SelectedInspectorTab = exec;
+        return tab;
+    }
+
+    /// <summary>
+    /// The same pod after "Start debug container": a BusyBox shell in an ephemeral
+    /// container that shares the app's processes, its files reached through /proc/1/root.
+    /// </summary>
+    public static ClusterTabViewModel ExecDebugContainer()
+    {
+        var tab = BaseTab();
+        var row = tab.Rows.First(r => r.Name.StartsWith("payment-service-report-generator", StringComparison.Ordinal));
+        var exec = new ExecTabViewModel(FixtureData.CreateOfflineClient(), "payments", row.Name, "app") { IsPreview = false };
+        SettleExec(exec);
+        exec.PresentExecFailures(PodOperatingSystem.Linux, [.. ExecShells.LinuxShells.Select(NoSuchShell)]);
+
+        exec.DebugContainerName = "debugger-x7k2p";
+        exec.Title = $"Debug: {row.Name}/debugger-x7k2p";
+        exec.IsConnected = true;
+        exec.StatusMessage = "Connected to debug container debugger-x7k2p (/bin/sh). It shares app's processes; "
+            + "app's files are under /proc/1/root";
+        exec.Feed(string.Join(
+            "\r\n",
+            "/ # ps",
+            "PID   USER     TIME  COMMAND",
+            "    1 1654      0:42 dotnet PaymentService.ReportGenerator.dll",
+            "   38 root      0:00 sh",
+            "   45 root      0:00 /bin/sh",
+            "   51 root      0:00 ps",
+            "/ # ls /proc/1/root/app | head -5",
+            "PaymentService.ReportGenerator.dll",
+            "PaymentService.ReportGenerator.deps.json",
+            "PaymentService.ReportGenerator.runtimeconfig.json",
+            "appsettings.json",
+            "appsettings.Production.json",
+            "/ # wget -qO- localhost:8080/healthz",
+            "Healthy",
+            "/ # "));
+
+        tab.InspectorTabs.Add(exec);
+        tab.SelectedInspectorTab = exec;
+        tab.IsInspectorMaximized = true;
         return tab;
     }
 
@@ -2255,16 +2311,12 @@ internal static class ClusterTabScenarios
         var client = FixtureData.CreateOfflineClient();
         var exec = new ExecTabViewModel(client, "payments", row.Name, "app") { IsPreview = false };
 
-        // Drain the offline client's three failed shell attempts first. Their
-        // continuations land on the same RunJobs() the capture pumps, so a status set
-        // before they finish is overwritten by "Unable to connect to the remote
-        // server" — the same trap HelmReleaseDetail documents, and the reason this
-        // pane's screenshot used to caption a working session with a connect failure.
-        for (var i = 0; i < 100 && exec.StatusMessage?.StartsWith("No usable shell", StringComparison.Ordinal) != true; i++)
-        {
-            Dispatcher.UIThread.RunJobs();
-            Thread.Sleep(10);
-        }
+        // Drain the offline client's failed shell attempts first — the same trap
+        // HelmReleaseDetail documents, and the reason this pane's screenshot used to
+        // caption a working session with a connect failure. The failures then stand in
+        // for a Linux pod's, so the shell box reads what it reads on one.
+        SettleExec(exec);
+        exec.PresentExecFailures(PodOperatingSystem.Linux, []);
 
         exec.IsConnected = true;
         exec.StatusMessage = "Connected to app (/bin/sh)";

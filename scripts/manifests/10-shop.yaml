@@ -260,3 +260,30 @@ spec:
         target:
           type: Utilization
           averageUtilization: 80
+---
+# A container with no shell at all (the pause image: one static binary), the shape
+# of a distroless or .NET chiseled image. Exec into it lands on the "no shell" state
+# and its debug-container offer; Start debug container adds an ephemeral container
+# here, which stays until the pod is recreated (re-run sandbox-up.ps1 -Recreate).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shop-distroless
+  namespace: demo-shop
+  labels:
+    app: shop-distroless
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: shop-distroless
+  template:
+    metadata:
+      labels:
+        app: shop-distroless
+    spec:
+      terminationGracePeriodSeconds: 2
+      containers:
+        - name: web
+          image: docker.io/rancher/mirrored-pause:3.6
+          imagePullPolicy: IfNotPresent
