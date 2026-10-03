@@ -39,7 +39,18 @@ public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
     private readonly ClusterClient? _client;
     private readonly string _namespace;
     private readonly string _podName;
+
+    /// <summary>The container the pane was opened on — a debug container's target.</summary>
     private readonly string _container;
+
+    /// <summary>
+    /// The container the session execs into: <see cref="_container"/>, until a debug
+    /// container is started for it, and that container from then on (a reconnect included).
+    /// </summary>
+    private string _execContainer;
+
+    /// <summary>Null until the pod has been asked; see <see cref="DetectOperatingSystemAsync"/>.</summary>
+    private PodOperatingSystem? _operatingSystem;
 
     /// <summary>
     /// Decoded chunks waiting for the next flush. Guarded by its own lock: the socket
@@ -124,6 +135,7 @@ public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
         _namespace = @namespace;
         _podName = podName;
         _container = container;
+        _execContainer = container;
         Key = $"exec:{@namespace}/{podName}/{container}:{Guid.NewGuid():N}";
 
         Terminal = new TerminalControlModel(new TerminalOptions { Scrollback = ScrollbackLines });
@@ -140,22 +152,107 @@ public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
     }
 
     /// <summary>
-    /// Shells to try, in order. <c>/bin/sh</c> alone was hardcoded, which is right for
-    /// Alpine and wrong for a lot of images: many carry bash only, BusyBox images
-    /// carry ash, and a distroless image carries none of them. The API server does not
-    /// report a missing shell on stdout or stderr — it reports it on the error channel
-    /// (see <see cref="ExecSession.ReadTerminalStatusAsync"/>), so without reading that
-    /// a distroless container presented as a connected, permanently blank terminal.
+    /// The shell the user asked for, or empty to try <see cref="ExecShells.Candidates"/> for
+    /// the pod's OS, in order. <c>/bin/sh</c> alone used to be hardcoded, which is right for
+    /// Alpine and wrong for a lot of images: many carry bash only, BusyBox images carry ash,
+    /// a Windows node's carry <c>powershell</c> or only <c>cmd</c>, and a distroless image
+    /// carries none of them. The API server does not report a missing shell on stdout or
+    /// stderr — it reports it on the error channel (see
+    /// <see cref="ExecSession.ReadTerminalStatusAsync"/>), so without reading that a
+    /// distroless container presented as a connected, permanently blank terminal.
     /// </summary>
-    private static readonly string[] ShellCandidates = ["/bin/bash", "/bin/sh", "/bin/ash"];
-
-    /// <summary>The shell the user asked for, or null to try <see cref="ShellCandidates"/> in order.</summary>
     [ObservableProperty]
     private string _shellCommand = "";
 
     /// <summary>What the session actually got, for the header and for a reconnect.</summary>
     [ObservableProperty]
     private string _activeShell = "";
+
+    /// <summary>
+    /// True when every shell tried was refused because it is not in the image — not for a
+    /// 403 or a container that is not running, which another shell would not fix either.
+    /// It is what offers the debug container.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsDebugOfferVisible))]
+    [NotifyCanExecuteChangedFor(nameof(StartDebugContainerCommand))]
+    private bool _isShellMissing;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsDebugOfferVisible))]
+    [NotifyCanExecuteChangedFor(nameof(StartDebugContainerCommand))]
+    private bool _isStartingDebugContainer;
+
+    /// <summary>
+    /// The image the debug container runs. Not persisted: <see cref="DebugContainers.DefaultImage"/>
+    /// is right wherever Docker Hub is reachable, and an air-gapped cluster's mirror is typed
+    /// here, once per pane.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(StartDebugContainerCommand))]
+    private string _debugImage = DebugContainers.DefaultImage;
+
+    /// <summary>The debug container this pane is attached to, or null while it is on <see cref="_container"/>.</summary>
+    [ObservableProperty]
+    private string? _debugContainerName;
+
+    /// <summary>
+    /// False when Pod Security refused <c>SYS_PTRACE</c> and the debug container was added
+    /// without it, which the connected line then says (see <see cref="DebugContainers"/>).
+    /// </summary>
+    private bool _debugCanTrace = true;
+
+    /// <summary>
+    /// The offer under "no shell": an image box and a button. Not on a Windows node, which
+    /// has no ephemeral containers to offer, and not while one is already being started.
+    /// </summary>
+    public bool IsDebugOfferVisible =>
+        IsLive && IsShellMissing && !IsStartingDebugContainer && _operatingSystem != PodOperatingSystem.Windows;
+
+    private bool CanStartDebugContainer() => IsDebugOfferVisible && !string.IsNullOrWhiteSpace(DebugImage);
+
+    /// <summary>What an empty shell box will try, for its placeholder.</summary>
+    public string ShellPlaceholder => _operatingSystem switch
+    {
+        PodOperatingSystem.Linux => "auto (bash/sh/ash)",
+        PodOperatingSystem.Windows => "auto (powershell/cmd)",
+        _ => "auto",
+    };
+
+    public string ShellTip =>
+        $"Shell to exec. Leave empty to try {string.Join(", ", ExecShells.Candidates(_operatingSystem ?? PodOperatingSystem.Unknown))}.";
+
+    /// <summary>
+    /// How long a debug container may take to start. Most of it is the image pull, which on
+    /// a cold node and a slow registry is tens of seconds; three minutes is past any pull
+    /// that is going to finish.
+    /// </summary>
+    private static readonly TimeSpan DebugStartTimeout = TimeSpan.FromMinutes(3);
+
+    /// <summary>
+    /// The pod's OS, asked once per pane. A pod that cannot be read (RBAC, a network blip)
+    /// is <see cref="PodOperatingSystem.Unknown"/>: the exec can still work, and both
+    /// families of shells are then tried.
+    /// </summary>
+    private async Task DetectOperatingSystemAsync(ClusterClient client, CancellationToken ct)
+    {
+        try
+        {
+            _operatingSystem = await client.GetPodOperatingSystemAsync(_namespace, _podName, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            _operatingSystem = PodOperatingSystem.Unknown;
+        }
+
+        OnPropertyChanged(nameof(ShellPlaceholder));
+        OnPropertyChanged(nameof(ShellTip));
+        OnPropertyChanged(nameof(IsDebugOfferVisible));
+    }
 
     private async Task ConnectAsync()
     {
@@ -168,18 +265,33 @@ public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
         _cts = new CancellationTokenSource();
         var token = _cts.Token;
 
-        var candidates = string.IsNullOrWhiteSpace(ShellCommand)
-            ? ShellCandidates
+        IsShellMissing = false;
+        StatusMessage = "Connecting…";
+
+        var automatic = string.IsNullOrWhiteSpace(ShellCommand);
+        try
+        {
+            if (automatic && _operatingSystem is null)
+            {
+                await DetectOperatingSystemAsync(_client, token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        IReadOnlyList<string> candidates = automatic
+            ? ExecShells.Candidates(_operatingSystem ?? PodOperatingSystem.Unknown)
             : [ShellCommand.Trim()];
 
-        StatusMessage = "Connecting…";
-        Exception? lastFailure = null;
+        var failures = new List<string>();
 
         foreach (var shell in candidates)
         {
             try
             {
-                var session = await _client.ExecAsync(_namespace, _podName, _container, [shell], tty: true, token);
+                var session = await _client.ExecAsync(_namespace, _podName, _execContainer, [shell], tty: true, token);
 
                 // The websocket upgrading says nothing about the command: an image with
                 // no such shell answers on channel 3 and then closes. Started once and
@@ -192,14 +304,19 @@ public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
                 if (rejection is not null)
                 {
                     session.Dispose();
-                    lastFailure = new InvalidOperationException(rejection);
+                    failures.Add(rejection);
                     continue;
                 }
 
                 _session = session;
                 ActiveShell = shell;
                 IsConnected = true;
-                StatusMessage = $"Connected to {_container} ({shell})";
+                StatusMessage = DebugContainerName is { } debugger
+                    ? $"Connected to debug container {debugger} ({shell}). It shares {_container}'s processes; "
+                      + (_debugCanTrace
+                          ? $"{_container}'s files are under /proc/1/root"
+                          : $"Pod Security refused SYS_PTRACE, so {_container}'s files under /proc/1/root are readable only if both run as one user")
+                    : $"Connected to {_execContainer} ({shell})";
 
                 // The control sized the model during layout, before there was a session
                 // to tell. Report it now or the shell runs at the engine's 80×24 default
@@ -218,13 +335,137 @@ public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
             }
             catch (Exception ex)
             {
-                lastFailure = ex;
+                failures.Add(ex.Message);
             }
         }
 
-        StatusMessage = candidates.Length > 1
-            ? $"No usable shell in {_container} — tried {string.Join(", ", candidates)}. {lastFailure?.Message}"
-            : $"Exec failed: {lastFailure?.Message}";
+        StatusMessage = DescribeFailure(candidates, failures, automatic);
+    }
+
+    /// <summary>
+    /// The sentence for an exec that found nothing to run. "No shell" is said only when
+    /// every attempt said the command does not exist; otherwise the first failure that is
+    /// about something else — a 403, a container that is not running — is the one that
+    /// matters, and it used to be buried under whichever shell happened to be tried last.
+    /// </summary>
+    private string DescribeFailure(IReadOnlyList<string> candidates, List<string> failures, bool automatic)
+    {
+        var tried = string.Join(", ", candidates);
+        if (failures.Count > 0 && failures.TrueForAll(ExecShells.IsMissingExecutable))
+        {
+            if (!automatic)
+            {
+                return $"{candidates[0]} is not in {_execContainer}'s image. Clear the shell box to try the usual shells.";
+            }
+
+            IsShellMissing = true;
+            if (_operatingSystem == PodOperatingSystem.Windows)
+            {
+                return $"No shell in {_execContainer} — tried {tried}, and the image has none of them.";
+            }
+
+            return DebugContainerName is { } debugger
+                ? $"No shell in debug container {debugger} either — tried {tried}. Start one from an image that has a shell."
+                : $"{_execContainer} has no shell — tried {tried}. The image is probably distroless, "
+                  + "which leaves nothing to exec into; a debug container can bring a shell.";
+        }
+
+        var cause = failures.Find(f => !ExecShells.IsMissingExecutable(f)) ?? failures.LastOrDefault();
+        return candidates.Count > 1
+            ? $"Could not exec into {_execContainer} (tried {tried}): {cause}"
+            : $"Exec failed: {cause}";
+    }
+
+    /// <summary>
+    /// What the pane concludes from a set of refused execs, through the same
+    /// <see cref="DescribeFailure"/> a live connect uses. For the screenshot fixtures,
+    /// whose offline client fails at the socket and so never reaches the runtime's own
+    /// "no such file or directory" — the one failure the debug offer exists for.
+    /// </summary>
+    internal void PresentExecFailures(PodOperatingSystem os, IReadOnlyList<string> failures)
+    {
+        _operatingSystem = os;
+        OnPropertyChanged(nameof(ShellPlaceholder));
+        OnPropertyChanged(nameof(ShellTip));
+        IsShellMissing = false;
+        StatusMessage = DescribeFailure(ExecShells.Candidates(os), [.. failures], automatic: true);
+        OnPropertyChanged(nameof(IsDebugOfferVisible));
+    }
+
+    /// <summary>
+    /// <c>kubectl debug -it &lt;pod&gt; --image=&lt;image&gt; --target=&lt;container&gt;</c>, then a
+    /// shell in it. The click is the confirmation: the offer is shown only after the exec
+    /// found no shell, names the pod, and says the container stays in it — the strip the
+    /// resource list arms (UI rule 17) would be a second question about the same thing.
+    /// A running debug container from the same image for the same target is opened rather
+    /// than adding another, because none of them can be removed.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanStartDebugContainer))]
+    private async Task StartDebugContainerAsync()
+    {
+        if (_client is null || _cts is null)
+        {
+            return;
+        }
+
+        var client = _client;
+        var token = _cts.Token;
+        var image = DebugImage.Trim();
+        IsStartingDebugContainer = true;
+        try
+        {
+            StatusMessage = $"Adding a debug container ({image}) to {_podName}…";
+            var pod = await client.ReadResourceAsync(ResourceDescriptor.Pods, _namespace, _podName, token);
+            var name = pod is null ? null : DebugContainers.FindReusable(pod.Raw, _container, image);
+            _debugCanTrace = true;
+            if (name is null)
+            {
+                var added = await client.AddDebugContainerAsync(_namespace, _podName, _container, image, cancellationToken: token);
+                name = added.Name;
+                _debugCanTrace = added.CanTrace;
+                StatusMessage = $"Starting {name} — the node pulls {image} first if it does not have it…";
+
+                var started = name;
+                var state = await client.WaitForDebugContainerAsync(
+                    _namespace,
+                    _podName,
+                    name,
+                    DebugStartTimeout,
+                    s => Dispatcher.UIThread.Post(() => StatusMessage = $"Starting {started} — {s.Describe()}"),
+                    token);
+
+                if (state.Phase != DebugContainerPhase.Running)
+                {
+                    StatusMessage = $"Debug container {name} did not start — {state.Describe()}";
+                    return;
+                }
+            }
+
+            _execContainer = name;
+            DebugContainerName = name;
+            Title = $"Debug: {_podName}/{name}";
+
+            // A debug image is a Linux one: ephemeral containers do not exist on Windows nodes.
+            _operatingSystem = PodOperatingSystem.Linux;
+            OnPropertyChanged(nameof(ShellPlaceholder));
+            OnPropertyChanged(nameof(ShellTip));
+            ShellCommand = "";
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Could not add a debug container to {_podName}: {ex.Message}";
+            return;
+        }
+        finally
+        {
+            IsStartingDebugContainer = false;
+        }
+
+        await ReconnectAsync();
     }
 
     /// <summary>

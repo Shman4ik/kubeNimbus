@@ -38,7 +38,9 @@ anywhere. When you ask for a terminal on a cluster, kubeNimbus starts your syste
   credentials in your kubeconfig, and through the proxy a cluster's `proxy-url` names when
   it names one. What travels is what you ask for: resource lists and watches, logs, exec
   sessions, port-forwards, YAML you apply, and the actions you take (scale, restart, delete,
-  cordon, drain, sync). All of it goes to your cluster.
+  cordon, drain, sync, adding a debug container). All of it goes to your cluster. A debug
+  container's image is pulled by your cluster's node from the registry the image name
+  points at, not by kubeNimbus.
 - **Nowhere else.** kubeNimbus makes no other network connection of its own. There is no
   update check, no usage analytics, no automatic crash report and no remote configuration,
   and nothing is downloaded while it runs: fonts, icons and themes are built into the app.
