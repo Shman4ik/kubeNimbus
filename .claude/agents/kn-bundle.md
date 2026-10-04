@@ -46,7 +46,7 @@ of each item. Anything else you think is worth doing goes in the report.
   `## For BACKLOG / CHANGELOG / status-history`; the orchestrator applies it.
 - **Do** update `CLAUDE.md` and the `docs/engineering/` pages for what you change, in
   the same PR.
-- Never touch `shared/nimbusUi`, `installer/`, the MSIX identity or the MSI UpgradeCode.
+- Never touch `shared/nimbusUi`, `installer/`, or the MSIX identity.
 - Every behaviour change gets a test in `tests/KubeNimbus.App.Tests` or
   `tests/KubeNimbus.Core.Tests` that fails without it. Mutation-check at least the
   central one and say which.

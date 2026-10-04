@@ -77,15 +77,14 @@ Builds are self-contained NativeAOT binaries — **no .NET runtime to install**.
 
 | Platform | Installer | Portable |
 |---|---|---|
-| Windows x64 | `kubeNimbus-<version>-win-x64.msi` | `kubeNimbus-<version>-win-x64.zip` |
+| Windows x64 | the [Store](https://apps.microsoft.com/detail/9MZ3C28M65PB) | `kubeNimbus-<version>-win-x64.zip` |
 | macOS Apple Silicon | `kubeNimbus-<version>-osx-arm64.dmg` | `kubeNimbus-<version>-osx-arm64.tar.gz` |
 | Linux x64 | `kubeNimbus-<version>-linux-x64.deb` or `.AppImage` | `kubeNimbus-<version>-linux-x64.tar.gz` |
 | Linux arm64 | `kubeNimbus-<version>-linux-arm64.deb` or `.AppImage` | `kubeNimbus-<version>-linux-arm64.tar.gz` |
 
-The installers add a Start-menu entry or desktop launcher and an icon; the
-portable archives are the same binary with nothing to install. Every package is
-launched by CI on its own platform before the release is created, and the MSI is
-additionally installed, run and uninstalled there.
+The installers add a desktop launcher and an icon; the portable archives are
+the same binary with nothing to install. Every package is launched by CI on its
+own platform before the release is created.
 
 Intel Macs aren't published yet — [build from source](#building-from-source),
 it's one command.
@@ -100,15 +99,13 @@ build above is signed by Microsoft and does none of this.)
 **Store.** `winget install --id 9MZ3C28M65PB --source msstore` or the
 [listing](https://apps.microsoft.com/detail/9MZ3C28M65PB) — signed, and nothing below applies.
 
-**MSI.** Double-click it. The install is per-user into
-`%LocalAppData%\kubeNimbus`, so it never asks for administrator rights, and it
-adds a Start-menu entry. Installing a newer version replaces the old one in
-place; uninstall from Settings → Apps.
-
 **Zip.** Unblock it before extracting (Properties → Unblock, or `Unblock-File
 kubeNimbus-<version>-win-x64.zip` in PowerShell), then run `kubeNimbus.exe`.
+Nothing is installed: your settings live in `%AppData%\kubeNimbus`, so updating
+is replacing the folder with the new one. Up to 0.5.0 there was also an MSI; if
+you installed it, uninstall it from Settings → Apps.
 
-Either way SmartScreen shows "Windows protected your PC" the first time — click
+SmartScreen shows "Windows protected your PC" the first time — click
 **More info → Run anyway**.
 </details>
 

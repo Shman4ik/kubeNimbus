@@ -162,8 +162,9 @@ steps below are the mechanics it ends with.
 
 The workflow NativeAOT-publishes for `win-x64`, `linux-x64`, `linux-arm64` and
 `osx-arm64`, launches each binary (`--smoke-test`), packages every platform's
-installer beside the portable archive — MSI, `.dmg`, `.deb` and `.AppImage` —
-smoke-launches each of those through its own installed path, generates
+installer beside the portable archive — `.dmg`, `.deb` and `.AppImage`; Windows
+gets the portable zip only, since the Store covers installing —
+smoke-launches each of those through its own installed path (the zip unpacked), generates
 `SHA256SUMS.txt`, and creates the GitHub Release with the CHANGELOG section as
 its body. A plain tag (`v0.4.0`) is a full release and takes GitHub's
 **Latest** label; only a tag with a suffix (`v0.4.0-rc.1`) is published as a
@@ -176,11 +177,6 @@ any `dotnet publish` output:
 ./scripts/linux/build-packages.sh publish/app 0.0.0-dev linux-x64 dist   # .deb + .AppImage
 ./scripts/macos/build-app-bundle.sh publish/app 0.0.0-dev osx-arm64 dist # .app + .dmg
 ```
-
-The MSI is `wix build installer/windows/Product.wxs` (WiX 5, `dotnet tool
-install --global wix --version 5.*`); the workflow's own step has the exact
-invocation, including why `-d PublishDir=` and `-d IconFile=` must be absolute
-paths.
 
 Run it with `workflow_dispatch` and `dry_run: true` to build and archive
 everything without creating a release — worth doing once if you've touched the

@@ -219,11 +219,11 @@ in the log. Escape sent by computer-use does not reach the app either; the harne
       git push origin vX.Y.Z
       ```
 - [ ] Watch `release.yml` (`gh run watch`). Every RID's binary is launched before it
-      is archived, and every installer (MSI, `.dmg`, `.deb`, `.AppImage`) is
-      installed and launched through its own path, so a red smoke step is a real
+      is archived, and every package (the Windows zip unpacked, `.dmg`, `.deb`,
+      `.AppImage`) is installed and launched through its own path, so a red smoke step is a real
       failure. A red leg is fixed forward as a patch release; the tag is never moved.
 - [ ] The release page: the body is the CHANGELOG section plus the unsigned-binary
-      footer, `SHA256SUMS.txt` is attached, no `.msix` is attached, and the release
+      footer, `SHA256SUMS.txt` is attached, no `.msix`, `.msi` or `.wixpdb` is attached, and the release
       carries the **Latest** label (a plain `vX.Y.Z` tag does; only a suffixed tag is
       a pre-release).
 - [ ] Microsoft Store: download the `windows-msix` artifact from the release run (kept
@@ -234,7 +234,7 @@ in the log. Escape sent by computer-use does not reach the app either; the harne
 
 ## 6. After
 
-- [ ] Install from the channels a user would: the MSI from the release page, and the
+- [ ] Install from the channels a user would: the zip from the release page, and the
       Store update once certified. Launch each and check About shows the new version.
 - [ ] If this release came from a train, `/release-train`'s RECORD step moves
       `TRAIN.md` into `docs/product-loop/history/`. Either way, record the pass in
@@ -255,7 +255,7 @@ gets asked in a launch thread.
   run in the shipped app, which still makes no network connection except to the API
   servers of the clusters you open. pgNimbus's publish log states that an opt-out
   needs a paid Avalonia tier.
-- **Unsigned direct downloads.** The MSI and the Linux packages are unsigned and the
+- **Unsigned direct downloads.** The Windows zip and the Linux packages are unsigned and the
   `.dmg` is ad-hoc signed, so Windows shows SmartScreen and macOS quarantines the app.
   The Store package is signed by Microsoft, which is why the README sends Windows
   users there first.

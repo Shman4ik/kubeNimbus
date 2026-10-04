@@ -1,6 +1,6 @@
 ---
 name: release
-description: kubeNimbus release, CI and packaging rules — tag-driven release.yml, per-RID launch checks, MSI/.dmg/.deb/AppImage installers, Microsoft Store MSIX identity, assembly-name coupling, and the 0.5 GB Actions storage budget. Load before cutting a release or editing .github/workflows, installer/, or the packaging scripts.
+description: kubeNimbus release, CI and packaging rules — tag-driven release.yml, per-RID launch checks, the Windows zip, .dmg/.deb/AppImage installers, why NativeAOT is not compiled for size, Microsoft Store MSIX identity, assembly-name coupling, and the 0.5 GB Actions storage budget. Load before cutting a release or editing .github/workflows, installer/, or the packaging scripts.
 ---
 
 ## Actions storage is a 0.5 GB budget (2026-08)
@@ -154,21 +154,28 @@ to walk before tagging is [`docs/RELEASE-CHECKLIST.md`](../../../docs/RELEASE-CH
 - `workflow_dispatch` with `dry_run: true` builds and archives all four RIDs
   without creating anything public — use it after touching the workflow.
 
-### Installers (MSI, .dmg, .deb, .AppImage)
+### Installers (.dmg, .deb, .AppImage) and the Windows zip
 
-A zip and a tarball are what a developer wants. Everyone else expects an
+A tarball is what a developer wants. Everyone else expects an
 installer, and until this every platform's instructions in the README ended in
 "extract it and run the binary from a terminal" — which on macOS was not even
 optional, since an unbundled binary has no Dock icon, no app name and no way to
 be launched from Spotlight. `release.yml` now builds, per RID:
 
-- **MSI** (`installer/windows/Product.wxs`, WiX 5). Per-user into
-  `%LocalAppData%\kubeNimbus`, no elevation: the MSI is unsigned until there is
-  a certificate, and per-machine plus unsigned is a much rougher UAC and
-  SmartScreen experience than per-user plus unsigned. The app needs no
-  machine-wide state to justify the trade. **The `UpgradeCode` is fixed
-  forever** — regenerating it makes a new MSI install *beside* the old version
-  instead of upgrading it.
+- **Windows: the portable zip, and no installer.** The Store package covers
+  installing and updating, so the direct download is
+  `kubeNimbus-<version>-win-x64.zip`: one top-level folder, no `.pdb`, nothing
+  to install, and the app's data lives in `%AppData%\kubeNimbus` either way, so
+  replacing the folder is the update. **It replaced a per-user WiX MSI on
+  2026-10-04**, following pgNimbus (#343, 2026-10-01): across 0.3.2–0.5.0 the
+  MSI was downloaded once and the zip three times, the workflow installed WiX
+  as a floating `5.*` on every release run (WiX 7 has since started to require
+  accepting its OSMF EULA), and WiX wrote a `.wixpdb` beside the MSI in `dist/`
+  that every release from 0.3.2 attached as a public asset. What the zip gives
+  up is the Start menu entry, the Apps entry and upgrading in place. If an MSI
+  ever comes back, its old `UpgradeCode` was
+  `29a90bce-dcfd-4567-b2fc-da434722f319`; reuse it, so it upgrades the 0.3–0.5
+  installs instead of landing beside them.
 - **`.app` + `.dmg`** (`scripts/macos/build-app-bundle.sh`). The bundle is
   **ad-hoc signed**, and that is not decoration: a quarantined bundle with no
   signature at all is reported as *"kubeNimbus is damaged and can't be opened"*,
@@ -190,14 +197,12 @@ Three things about this are load-bearing:
 1. **Each package is smoke-launched through its own installed path**, not just
    after publishing. The launch check on the publish output (see "The launch
    check") proves the binary starts; it says nothing about what an installer can
-   break, which is a different list: a file missing from the WiX component
-   group, a bundle layout Gatekeeper refuses, a `Depends` line one library short
-   of what the X11 backend loads. The MSI leg is the strongest — it installs,
-   runs `%LocalAppData%\kubeNimbus\kubeNimbus.exe --smoke-test`, and
-   uninstalls, because leaving the product registered would make the next run
-   hit an upgrade path instead of a clean first install. The `.deb` leg is the
-   second: `apt` resolves the control file's own `Depends`, so a forgotten
-   library fails on a runner rather than on a minimal desktop.
+   break, which is a different list: a file left out of an archive, a bundle
+   layout Gatekeeper refuses, a `Depends` line one library short of what the
+   X11 backend loads. The zip leg unpacks the archive into a fresh folder, runs
+   both smoke modes from there, and fails if a `.pdb` reached it. The `.deb` leg
+   is the strongest: `apt` resolves the control file's own `Depends`, so a
+   forgotten library fails on a runner rather than on a minimal desktop.
 2. **The packages are written into `dist/`**, which is where the existing
    checksum and upload steps already look. Nothing about `SHA256SUMS.txt` or the
    release job needed a per-format branch.
@@ -283,6 +288,36 @@ release run, upload the `.msix` in Partner Center → kubeNimbus → Packages, a
 submit for certification. Moving to the Store submission API would need its own
 Entra ID app registration under the Partner Center account (free, unrelated to
 paid signing) and is not worth it before the second or third release.
+
+### NativeAOT does not compile for size, and that was measured (2026-10-04)
+
+`OptimizationPreference=Size` (ILC `-Os` instead of its default blended `-O`)
+was tried and rejected. Measured on win-x64, the same commit built both ways:
+
+| | default `-O` | `Size` |
+|---|---|---|
+| `kubeNimbus.exe` | 62.4 MB | 46.5 MB |
+| the zip a user downloads | 29.6 MB | 28.4 MB |
+| median `--smoke-test` (launch, first frame, exit) | 432–436 ms | 448–456 ms |
+| idle after 4 s: working set / private bytes | 101 / 111 MB | 128 / 130 MB |
+
+The 16 MB comes almost entirely out of what compresses well, so the download
+shrinks by 1.2 MB, and the app starts slower and holds about 20 MB more memory.
+Every package format here is compressed (zip, tar.gz, `.deb`, AppImage,
+`.dmg`, MSIX), so only the unpacked size on disk would gain. Re-measure before
+proposing it again, and compare compressed packages and memory, not the
+binary's size. The rest of a win-x64 package is native side-cars no ILC switch
+touches: `libSkiaSharp.dll` 11.1 MB, `av_libglesv2.dll` (ANGLE) 5.1 MB,
+`libHarfBuzzSharp.dll` 1.7 MB.
+
+Two traps for whoever measures it next. `IlcOptimizationPreference`, the name
+most samples and blog posts use, is the pre-.NET 8 spelling: it is silently
+ignored, the response file keeps `-O`, and the binary comes out the size it
+was, so check `obj/<platform>/Release/net10.0/<rid>/native/kubeNimbus.ilc.rsp`
+for `--Os` rather than trusting the property name. And `UseSystemResourceKeys`,
+the next size switch people reach for, stays off: it replaces the framework's
+exception messages with resource keys, and the connection failure view quotes
+those messages to the user.
 
 ### The app's assembly name is `kubeNimbus`, not `KubeNimbus.App`
 

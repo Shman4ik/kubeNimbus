@@ -29,6 +29,10 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Changed
 
+- **The Windows download is the portable zip only.** The MSI is gone: across 0.3.2 to 0.5.0
+  it was downloaded once, and the Microsoft Store already installs and updates kubeNimbus.
+  Unzip anywhere and run `kubeNimbus.exe`; settings stay in `%AppData%\kubeNimbus`. If you
+  installed an earlier MSI, uninstall it from Settings → Apps.
 - **Preferences is four tabs.** General (kubeconfig files and folders, opening applications with one click, shortcut modifier),
   Appearance, Logs and metrics, and Changes (confirm before deleting, preview before applying),
   the same strip pgNimbus's settings page uses. The page keeps one height on every tab and opens
