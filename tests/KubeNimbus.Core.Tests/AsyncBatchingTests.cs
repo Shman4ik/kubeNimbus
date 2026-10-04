@@ -23,24 +23,39 @@ public class AsyncBatchingTests
     [Test]
     public async Task Everything_already_queued_arrives_as_one_batch_in_order()
     {
-        var channel = Channel.CreateUnbounded<int>();
-        for (var i = 0; i < 1_000; i++)
+        // The pump starts with the first read and runs ahead of the consumer, so the first
+        // batch is whatever had arrived by then, which can be a single item. What is pinned is
+        // the rest: once the source has been read to its end, everything still queued comes in
+        // one batch. A fixed delay for this failed on a loaded CI runner (32 batches instead of
+        // two); the source now says when it has been read to its end. That is signalled when
+        // the pump asks for the item after the last one, which is after the last item was
+        // written to the buffer.
+        var queued = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        async IAsyncEnumerable<int> Source()
         {
-            channel.Writer.TryWrite(i);
+            for (var i = 0; i < 1_000; i++)
+            {
+                yield return i;
+            }
+
+            queued.SetResult();
+            await Task.CompletedTask;
         }
 
-        channel.Writer.Complete();
+        await using var batches = Source().InBatches(maxBatch: 10_000).GetAsyncEnumerator();
+        var received = new List<IReadOnlyList<int>>();
+        await Assert.That(await batches.MoveNextAsync()).IsTrue();
+        received.Add(batches.Current);
 
-        // The pump reads ahead of the consumer, so give it the whole queue before reading.
-        var batches = new List<IReadOnlyList<int>>();
-        await Task.Delay(100);
-        await foreach (var batch in FromChannel(channel.Reader).InBatches(maxBatch: 10_000))
+        await queued.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        while (await batches.MoveNextAsync())
         {
-            batches.Add(batch);
+            received.Add(batches.Current);
         }
 
-        await Assert.That(batches.SelectMany(b => b).ToList()).IsEquivalentTo(Enumerable.Range(0, 1_000).ToList());
-        await Assert.That(batches.Count).IsLessThan(10);
+        await Assert.That(received.SelectMany(b => b).SequenceEqual(Enumerable.Range(0, 1_000))).IsTrue();
+        await Assert.That(received.Count).IsLessThanOrEqualTo(2);
     }
 
     [Test]

@@ -12,6 +12,8 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-04
+
 ### Added
 
 - **A debug container for an image with no shell.** Exec into a distroless or .NET chiseled
@@ -43,6 +45,17 @@ it as the GitHub Release body, so headings must match tags exactly
 - **Applications in the command bar goes back to the list.** On an application page, clicking
   the already selected Applications mode (or Ctrl+Shift+A, Cmd+Shift+A on macOS) returns to
   the list, as the page's "‹ Applications" link does. It used to do nothing.
+- **The interface is drawn in your system's font, and code in JetBrains Mono.** kubeNimbus used
+  Inter on every platform; it now uses San Francisco on macOS, Segoe UI on Windows and your
+  desktop's font on Linux, the same as pgNimbus. Logs, YAML, the terminal and every other place
+  that shows code use the bundled JetBrains Mono, so a Mac no longer falls back to Menlo.
+  Preferences has two new choices under Appearance: **Interface font** (System or Inter) and
+  **Code font** (the built-in one or any monospace font installed on the computer).
+- **A denser, quieter look, shared with pgNimbus.** Body text is 13px and list rows about
+  24px, as in native apps. The list or tree the keyboard is in shows its selected row in the
+  accent colour, and other lists in grey. Keyboard focus is a soft rounded accent ring
+  instead of a black box. Switches are the small macOS kind, and the icon buttons in the
+  title bar now light up on hover.
 
 ### Fixed
 
@@ -90,19 +103,6 @@ it as the GitHub Release body, so headings must match tags exactly
   The values and the manifest also stop scrolling at their last line, so text that fits no
   longer gets a scroll bar.
 
-### Changed
-
-- **The interface is drawn in your system's font, and code in JetBrains Mono.** kubeNimbus used
-  Inter on every platform; it now uses San Francisco on macOS, Segoe UI on Windows and your
-  desktop's font on Linux, the same as pgNimbus. Logs, YAML, the terminal and every other place
-  that shows code use the bundled JetBrains Mono, so a Mac no longer falls back to Menlo.
-  Preferences has two new choices under Appearance: **Interface font** (System or Inter) and
-  **Code font** (the built-in one or any monospace font installed on the computer).
-- **A denser, quieter look, shared with pgNimbus.** Body text is 13px and list rows about
-  24px, as in native apps. The list or tree the keyboard is in shows its selected row in the
-  accent colour, and other lists in grey. Keyboard focus is a soft rounded accent ring
-  instead of a black box. Switches are the small macOS kind, and the icon buttons in the
-  title bar now light up on hover.
 
 ## [0.5.0] - 2026-09-29
 
@@ -856,7 +856,8 @@ First public release. Everything below is new.
 - Usage history is session-scoped and bounded at 30 minutes by design. Long-range
   metrics history is a non-goal — that's Prometheus's job.
 
-[Unreleased]: https://github.com/Shman4ik/kubeNimbus/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/Shman4ik/kubeNimbus/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.4.0
 [0.3.3]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.3.3
