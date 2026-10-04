@@ -10,8 +10,8 @@ Product ID `9MZ3C28M65PB`. Field limits are Partner Center's own: What's new 1,5
 description 10,000, short description 1,000, 20 product features of 200 characters each, 7 search
 terms. Every fenced block below is pasted as it stands.
 
-**Written for the release that follows 0.4.0.** The Store carries 0.3.x; 0.4.0 was submitted and
-failed certification on policy 10.5.1 (below), so the next package carries everything since. Keep
+**Written for 0.6.0, which carries everything since 0.4.0.** The Store carries 0.3.x; 0.4.0 was submitted and
+failed certification on policy 10.5.1 (below), so this package carries everything since. Keep
 this file's date in step with the release it describes.
 
 ## Privacy policy URL
@@ -41,6 +41,8 @@ data-collection answers stay as they are (no data is collected).
 ## What's new in this version
 
 ```text
+0.6: Apply works on an object opened in the YAML editor and Ctrl+S applies. Exec can start a debug container in an image with no shell. Tooltips open everywhere, big lists and logs stay responsive, and the look is denser and quieter, shared with pgNimbus.
+
 A cluster now opens on Applications: every Argo CD application, and every workload no application tracks, with its health and a one-line reason read from the cluster ("Crash-looping (exit 1) · 2 pods not created: namespace quota"). Enter opens a page with the facts behind the verdict, the pods, what the app is wired to, a timeline of the last hour and the crashing pod's last log lines. The full explorer is one click away as Resources.
 
 Logs got a proper viewer: search with match highlighting, regular expressions, exclusions, context lines, an Error/Warn/Info filter, error and warning counts with a jump to the latest error, JSON lines opened into their fields, and a choice of range. Open any pod's logs from the row, from a node or event that names it, or with Ctrl+Shift+L.
