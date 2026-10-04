@@ -28,10 +28,8 @@ without cutting a release. Each takes the same four arguments:
 | `macos/build-app-bundle.sh` | `kubeNimbus.app` and a drag-to-Applications `.dmg` | macOS (`sips`, `iconutil`, `hdiutil`, `codesign`) |
 | `windows/build-msix.ps1` | `.msix` for Microsoft Store submission | Windows (Windows SDK `makeappx`/`makepri`) |
 
-The MSI has no wrapper script — it is one `wix build` over
-[`installer/windows/Product.wxs`](../installer/windows/Product.wxs), and the
-exact invocation (including why two of its `-d` values must be absolute paths)
-is in that file's own comment and in the release workflow.
+The Windows direct download is a portable zip, packed by the release workflow
+itself from the staged publish output, so it has no script here either.
 
 ```bash
 dotnet publish src/KubeNimbus.App -c Release -r linux-x64 -p:PublishAot=true -o publish/app

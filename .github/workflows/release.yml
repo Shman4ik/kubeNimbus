@@ -95,13 +95,6 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "name=kubeNimbus-$version-${{ matrix.rid }}" >> "$GITHUB_OUTPUT"
-          # Windows Installer versions are numeric only — a prerelease label is
-          # not a version it can compare, and WiX warns that honouring one is
-          # "unpredictable and undefined" (measured: `wix build -d
-          # Version=0.4.0-rc.1` emits WIX1148 three times and still produces an
-          # MSI). So the MSI carries the numeric part and the file name keeps
-          # the full version, exactly as the MSIX packaging already does.
-          echo "msi_version=${version%%-*}" >> "$GITHUB_OUTPUT"
 
       # -p:Version overrides Directory.Build.props's VersionPrefix, so the tag —
       # not the checked-in value — is what ends up stamped in the binary.
@@ -187,10 +180,15 @@ jobs:
           done
 
       # ---------------------------------------------------------------------
-      # Installers. A zip and a tarball are what a developer wants; an MSI, a
-      # .dmg and a .deb/.AppImage are what everyone else expects, and until this
-      # every platform's instructions ended in "extract it and run the binary
-      # from a terminal".
+      # Installers. A tarball is what a developer wants; a .dmg and a
+      # .deb/.AppImage are what everyone else expects, and until these every
+      # platform's instructions ended in "extract it and run the binary from a
+      # terminal". Windows has no installer here: the Store package covers
+      # installing and updating, and the direct download is the portable zip
+      # below. It used to be a per-user WiX MSI as well, which was downloaded
+      # once across 0.3.2-0.5.0 (the zip three times) and needed WiX installed
+      # at a floating version on every release run; it went on 2026-10-04, as
+      # pgNimbus's did on 2026-10-01.
       #
       # Each format is built from the publish output the launch check above has
       # already run, and each is then smoke-launched AGAIN through its own
@@ -200,56 +198,6 @@ jobs:
       # X11 backend loads. The packages land in dist/, so the checksum and
       # upload steps below pick them up with no per-format wiring.
       # ---------------------------------------------------------------------
-      - name: Build MSI (WiX)
-        if: matrix.rid == 'win-x64'
-        shell: pwsh
-        run: |
-          dotnet tool install --global wix --version 5.*
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          # PublishDir and IconFile must be absolute: WiX resolves relative -d
-          # values against the .wxs file's own directory, not the cwd.
-          wix build installer/windows/Product.wxs `
-            -d PublishDir=${{ github.workspace }}\publish\win-x64 `
-            -d Version=${{ steps.version.outputs.msi_version }} `
-            -d IconFile=${{ github.workspace }}\src\KubeNimbus.App\Assets\app.ico `
-            -arch x64 `
-            -o dist/${{ steps.version.outputs.name }}.msi
-
-      # Installs it the way a user does — per-user and unelevated, so this needs
-      # no admin runner — launches what landed in %LocalAppData%, and uninstalls
-      # again: leaving the product registered would make a re-run of this job
-      # hit an upgrade path instead of a clean first install.
-      - name: Install check (MSI)
-        if: matrix.rid == 'win-x64'
-        timeout-minutes: 10
-        shell: pwsh
-        run: |
-          $msi = (Resolve-Path "dist/${{ steps.version.outputs.name }}.msi").Path
-          $log = "msi-install.log"
-          $install = Start-Process msiexec -ArgumentList "/i", "`"$msi`"", "/qn", "/l*v", $log -Wait -PassThru
-          if ($install.ExitCode -ne 0) {
-            Get-Content $log -Tail 60
-            throw "msiexec /i failed with $($install.ExitCode)"
-          }
-
-          $installed = Join-Path $env:LOCALAPPDATA "kubeNimbus\kubeNimbus.exe"
-          if (-not (Test-Path $installed)) { throw "The MSI installed, but $installed is not there" }
-
-          # Start-Process for the same reason the launch check above uses it:
-          # kubeNimbus.exe is WinExe, and PowerShell does not wait for a
-          # GUI-subsystem child invoked with the call operator.
-          $p = Start-Process -FilePath $installed -ArgumentList '--smoke-test' `
-                             -Wait -PassThru -NoNewWindow `
-                             -RedirectStandardOutput msi-smoke-out.txt `
-                             -RedirectStandardError msi-smoke-err.txt
-          Get-Content msi-smoke-out.txt, msi-smoke-err.txt -ErrorAction SilentlyContinue
-          if ($p.ExitCode -ne 0) {
-            throw "The installed MSI does not start: --smoke-test exited $($p.ExitCode)"
-          }
-
-          $uninstall = Start-Process msiexec -ArgumentList "/x", "`"$msi`"", "/qn" -Wait -PassThru
-          if ($uninstall.ExitCode -ne 0) { throw "msiexec /x failed with $($uninstall.ExitCode)" }
-
       - name: Build .app bundle + .dmg
         if: runner.os == 'macOS'
         shell: bash
@@ -388,6 +336,32 @@ jobs:
           Compress-Archive -Path "staging/${{ steps.version.outputs.name }}" `
                            -DestinationPath "dist/${{ steps.version.outputs.name }}.zip" `
                            -CompressionLevel Optimal
+
+      # The zip is the Windows download, so launch it the way its users get it:
+      # unpacked into a fresh folder, both smoke modes. It also fails if a .pdb
+      # reached the archive, which is what staging exists to prevent.
+      - name: Install check (zip)
+        if: matrix.archive == 'zip'
+        timeout-minutes: 5
+        shell: pwsh
+        run: |
+          $dest = Join-Path $env:RUNNER_TEMP "zip-smoke"
+          Expand-Archive -Path "dist/${{ steps.version.outputs.name }}.zip" -DestinationPath $dest -Force
+          $exe = Join-Path $dest "${{ steps.version.outputs.name }}\kubeNimbus.exe"
+          if (-not (Test-Path $exe)) { throw "kubeNimbus.exe is not at the top of the zip's folder ($exe)" }
+          $pdb = Get-ChildItem -Path $dest -Filter *.pdb -Recurse
+          if ($pdb) { throw "Debug symbols shipped in the zip: $($pdb.Name -join ', ')" }
+          # Start-Process for the reason the launch check above gives.
+          foreach ($mode in '--smoke-test', '--smoke-test=unreachable-cluster') {
+            $p = Start-Process -FilePath $exe -ArgumentList $mode `
+                               -Wait -PassThru -NoNewWindow `
+                               -RedirectStandardOutput zip-smoke-out.txt `
+                               -RedirectStandardError zip-smoke-err.txt
+            Get-Content zip-smoke-out.txt, zip-smoke-err.txt -ErrorAction SilentlyContinue
+            if ($p.ExitCode -ne 0) {
+              throw "The unpacked zip does not start: $mode exited $($p.ExitCode)"
+            }
+          }
 
       - name: Archive (tar.gz)
         if: matrix.archive == 'tar'

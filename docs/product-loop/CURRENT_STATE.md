@@ -36,7 +36,7 @@ Last surveyed: 2026-09-22, train v0.4.0, at `d1b8663` (v0.3.3 plus the train mac
 - **Shell.** Command palette (Ctrl/Cmd+K), F1 cheat sheet generated from the command
   catalog, preferences overlay, macOS native menu, "open a terminal on this cluster".
 - **Shipping.** NativeAOT on four RIDs, launch check on every published binary,
-  MSI/.dmg/.deb/AppImage/MSIX packaging.
+  .dmg/.deb/AppImage/MSIX packaging and a portable Windows zip.
 
 ## Partial
 

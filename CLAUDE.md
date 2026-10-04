@@ -1265,7 +1265,7 @@ tests/KubeNimbus.Core.Tests  TUnit unit + integration tests; the latter skip wit
 tests/KubeNimbus.App.Tests   TUnit view-model tests. No Avalonia app, no cluster, no display.
 tools/Screenshot           Headless visual-verification harness. Dev-only.
 design/                    Logo masters (.af) + generated SVG/masters/store/screenshots.
-installer/                 Packaging inputs: WiX MSI, macOS Info.plist, .desktop, MSIX manifest.
+installer/                 Packaging inputs: macOS Info.plist, .desktop, MSIX manifest.
 scripts/                   Sandbox bootstrap, the icon/logo pipeline, and the installer builds.
 ```
 
@@ -2018,7 +2018,7 @@ Three rules:
 
 ## Release, CI and packaging
 
-The release workflow, installers, Microsoft Store (MSIX) identity, the assembly-name coupling and the 0.5 GB Actions storage budget are in the `release` skill ([`.claude/skills/release/SKILL.md`](.claude/skills/release/SKILL.md)). Load it before cutting a release or touching `.github/workflows`, `installer/` or the packaging scripts. Two rules that must not wait for it: **every `upload-artifact` sets `retention-days`**, and **the MSIX identity in `installer/msix/Package.appxmanifest` and the MSI `UpgradeCode` are never edited**.
+The release workflow, installers, Microsoft Store (MSIX) identity, the assembly-name coupling and the 0.5 GB Actions storage budget are in the `release` skill ([`.claude/skills/release/SKILL.md`](.claude/skills/release/SKILL.md)). Load it before cutting a release or touching `.github/workflows`, `installer/` or the packaging scripts. Two rules that must not wait for it: **every `upload-artifact` sets `retention-days`**, and **the MSIX identity in `installer/msix/Package.appxmanifest` is never edited**. The Windows direct download is a portable zip since 2026-10-04 (the MSI is gone), and NativeAOT is deliberately not compiled for size (`OptimizationPreference=Size` was measured: 1.2 MB off the download for slower startup and about 20 MB more memory); both are reasoned in the skill.
 
 **Repository settings are kept the same in kubeNimbus and pgNimbus** (2026-09-30; nimbusUi carries the security half). On `main`: the required checks (`Build & test` and `dependency-review`), resolved threads, no force push or deletion, and **no required approval** (CODEOWNERS only names who is asked). `v*` tags sit under a `Release tags` ruleset (create, never move or delete), releases are immutable, every `uses:` is pinned to a commit SHA (`sha_pinning_required`), Dependabot alerts and security updates, secret scanning with push protection and private vulnerability reporting are on, and merged branches are deleted. A change to one repo's settings is made to the other in the same session.
 
