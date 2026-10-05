@@ -1,16 +1,16 @@
-# Pre-launch checklist — making kubeNimbus public, cutting v0.3.0, shipping to the Microsoft Store
+# Pre-launch checklist — making kubeNimbus public, shipping it, and telling people
 
 A one-time working document, in the same shape as pgNimbus's. Ordered so each
 phase gates the next: don't flip the repo public until the hygiene items are
 done, don't promote until there is something to download, and don't submit to
 the Store until a real release exists to point people at.
 
-Status when this was written (2026-08-27): the repository is **private**, has
-**no git tags and no GitHub Releases**, no description and no topics.
-Everything else — MIT LICENSE, CONTRIBUTING, SECURITY, CODE_OF_CONDUCT, issue
-templates, a PR template, Dependabot, CI with the launch check, and a release
-workflow — is already in place, which is why this list is much shorter than the
-sibling project's was.
+It was written on 2026-08-27 for a first release of v0.3.0, when the repository
+was private with no tags and no releases. **Re-audited on 2026-10-05 against the
+live repository**: phases 1 to 6 are done except for the items still unticked
+below, v0.6.0 is the latest release, and the Microsoft Store listing is live. What
+is left of the launch is the community scaffolding, a few decisions, and the whole
+of promotion (phases 7 and 8). Delete this file once those are behind us.
 
 ---
 
@@ -28,12 +28,11 @@ The history becomes permanently public the moment the switch flips.
       and client certs) has been git-ignored from the start.
 - [x] **Agent worktrees ignored** — `.claude/worktrees/` is throwaway checkouts
       of this repo; added to `.gitignore` so it cannot be committed by accident.
-- [ ] **Enable GitHub secret scanning + push protection** once public
-      (Settings → Code security). A backstop to the manual grep above.
-- [ ] **Accept that the personal commit email is in the history**
-      (`shman4ik@gmail.com` is author and committer throughout). Normal for open
-      source; if you would rather use GitHub's noreply address going forward,
-      set `git config user.email` now — rewriting history is not worth it.
+- [x] **GitHub secret scanning and push protection** are on (checked through the
+      API on 2026-10-05), with Dependabot security updates.
+- [x] **The personal commit email is in the history** (`shman4ik@gmail.com` is
+      author and committer throughout). Accepted: it is normal for open source,
+      and rewriting a public history is not worth it.
 - [x] **Package metadata in `Directory.Build.props`** — `Product`, `Authors`,
       `Copyright`, `RepositoryUrl`, `PackageLicenseExpression`. This is what
       shows in the shipped binary's file properties.
@@ -41,127 +40,106 @@ The history becomes permanently public the moment the switch flips.
       glasses.** Both are engineering notes rather than marketing, which is fine
       and is what pgNimbus does — but they name unverified paths and open
       defects openly, so skim for anything that reads worse out of context than
-      it does in it.
+      it does in it. The 2026-10-05 pass closed the backlog's stale rows and
+      duplicate IDs (rows still open for work that had shipped); the read for tone
+      is still to do.
 
 ## Phase 2 — Quality gates
 
 - [x] **CI on every PR and push** (`.github/workflows/ci.yml`): build, both test
-      projects, the screenshot render as a XAML smoke test, and the linux-x64
-      NativeAOT publish followed by an actual `--smoke-test` launch.
+      projects, the screenshot render as a XAML smoke test, the stress mode, and
+      the linux-x64 NativeAOT publish followed by an actual `--smoke-test` launch.
 - [x] **Dependabot** for NuGet and GitHub Actions, Avalonia grouped.
 - [x] **Vulnerability gate** — `NuGetAuditMode=all` with NU1902–NU1904 promoted
       to errors in `Directory.Build.props`.
-- [ ] **Branch protection on `main`** — require the CI check, require PRs. Do
-      this right after the repo is public, before anyone can open one.
+- [x] **Branch protection on `main`** — the `main` ruleset requires the CI checks
+      and resolved threads; `v*` tags sit under the `Release tags` ruleset. The
+      settings are kept the same as pgNimbus's (see `CLAUDE.md`, "Release, CI and
+      packaging").
 
 ## Phase 3 — Community scaffolding
 
 - [x] `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, issue templates
       (the bug form asks for the Kubernetes distribution and whether the sandbox
       reproduces it), a PR template built from CLAUDE.md's rules.
-- [ ] **Enable private vulnerability reporting** (Settings → Code security), or
-      `SECURITY.md`'s link 404s.
+- [x] **Private vulnerability reporting** is enabled, so `SECURITY.md`'s link
+      resolves.
 - [ ] **Curate 5–10 `good first issue` candidates** from `docs/BACKLOG.md`'s
-      Inbox. An empty issue tracker at launch reads as "not really open to
+      Inbox. The label exists, but on 2026-10-05 the tracker held no issues at all,
+      open or closed, and an empty tracker at launch reads as "not really open to
       contributors". The verification-debt rows are good candidates for anyone
-      with hardware this project has never run on (a Mac, an arm64 Linux box).
+      with hardware this project has rarely run on (a Mac, an arm64 Linux box).
+- [ ] **Pin a roadmap** — an issue or a Discussion with the top of the backlog, so
+      visitors can see where this is going. Discussions are enabled and empty.
 
-## Phase 4 — First release (v0.3.0)
+## Phase 4 — First release
 
-- [x] **`CHANGELOG.md` cut** — `## [0.3.0] - 2026-08-27`, with a note that 0.1.0
-      and 0.2.0 were never published, so nobody hunts for downloads that do not
-      exist.
-- [x] **`<VersionPrefix>` bumped to 0.3.0.**
-- [ ] **Dry-run the pipeline** — `workflow_dispatch` with `dry_run: true` builds
-      and archives all four RIDs, runs the launch check on each, and packs the
-      MSIX, without publishing anything. This is also the only way to find out
-      whether the new MSIX step works on a hosted Windows runner, so do it
-      *before* the tag rather than after.
-- [ ] **Tag and push:**
+The first public release ended up being v0.3.2 (2026-08-29, a pre-release), then
+v0.3.3, 0.4.0, 0.5.0 and 0.6.0. The release procedure now lives in the `release`
+skill and `docs/RELEASE-CHECKLIST.md`.
 
-      ```bash
-      git tag -a v0.3.0 -m "kubeNimbus v0.3.0"
-      git push origin v0.3.0
-      ```
-
-- [ ] **Check the release page** — four archives, `SHA256SUMS.txt`, the CHANGELOG
-      section as the body, the unsigned-binary footer, and the **Latest** label
-      (a suffixed tag such as `-rc.1` is a pre-release instead and never gets it).
+- [x] **`CHANGELOG.md` cut**, with a note that 0.1.0 and 0.2.0 were never
+      published, so nobody hunts for downloads that do not exist.
+- [x] **Dry-run the pipeline** — release run
+      [35968059715](https://github.com/Shman4ik/kubeNimbus/actions/runs/35968059715)
+      launched all four RIDs on their own runners.
+- [x] **Tag, push and check the release page** — every release since v0.3.2 carries
+      the archives, `SHA256SUMS.txt`, the CHANGELOG section as the body and the
+      unsigned-binary footer.
 - [ ] **Download and run one archive per platform you own.** The launch check
-      proves the binary starts on a runner; it does not prove the zip you
-      published extracts into something that starts on a real desktop.
-- [ ] **Confirm the README screenshots still match the UI.** They are generated
-      (`design/screenshots/`) and should already be current — every UI change
-      re-renders them (CLAUDE.md UI rule 21); the Age column drifting with the
-      clock is not a reason to regenerate.
-      Screenshots are the first thing every visitor judges.
-- [ ] **Code signing — decide, don't necessarily block.** The Store channel below
-      buys the SmartScreen trust for $0; a purchased Authenticode certificate
-      would additionally clean up the direct-download path. pgNimbus deliberately
-      does not buy one. Make the same decision consciously, because "is it
-      signed?" is the first question every thread asks.
+      proves the binary starts on a runner; it does not prove the archive you
+      published extracts into something that starts on a real desktop. The win-x64
+      build is walked in each release's manual pass (`docs/RELEASE-CHECKLIST.md`);
+      **no person has yet run the osx-arm64 build on a Mac** (backlog VER-8).
+- [x] **README screenshots match the UI.** All of them were re-rendered on Windows
+      for 0.6.0, and the hero again on 2026-10-05 so that its last row is not cut
+      off (`readme-applications-list`, 1280×880).
+- [ ] **Code signing — decide, don't necessarily block.** The Store channel buys the
+      SmartScreen trust for $0; a purchased Authenticode certificate would
+      additionally clean up the direct-download path, and macOS notarization needs
+      an Apple Developer account. pgNimbus deliberately does not buy one. Make the
+      same decision consciously (backlog DIST-1), because "is it signed?" is the
+      first question every thread asks.
 
 ## Phase 5 — Flip the repo public
 
-- [ ] **Description** — "A fast, open-source Kubernetes desktop client (.NET +
-      Avalonia, NativeAOT)".
-- [ ] **Topics** — `kubernetes`, `k8s`, `kubectl`, `gui`, `desktop-app`,
-      `avalonia`, `dotnet`, `csharp`, `native-aot`, `devops`. This is what GitHub
-      search and topic pages index.
-- [ ] **Social preview image** (Settings → General) — the dark-theme main window
-      at 1280×640. It is what renders when the link is pasted anywhere.
-- [ ] **Enable Discussions** — somewhere for "how do I…" that is not the issue
-      tracker.
-- [ ] **Make it public** (Settings → Danger Zone), then immediately verify:
-      README renders, screenshots load, Releases shows v0.3.0, LICENSE is
-      detected, the About sidebar looks right.
+- [x] **Description** — "A fast, open-source Kubernetes desktop client (.NET +
+      Avalonia, NativeAOT)", with the Store listing as the homepage.
+- [x] **Topics** — `kubernetes`, `k8s`, `kubectl`, `gui`, `desktop-app`,
+      `avalonia`, `dotnet`, `csharp`, `native-aot`, `devops`.
+- [x] **Social preview image** is set.
+- [x] **Discussions** are enabled.
+- [x] **Public.**
 
 ## Phase 6 — Microsoft Store
 
-The product identity is already reserved: `DmitriiShmanev.kubeNimbus`, Store ID
-`9MZ3C28M65PB` — the manifest carries it and it must not be edited. Mechanics
-and reasoning are in CLAUDE.md, "Microsoft Store (MSIX)".
+The product identity is `DmitriiShmanev.kubeNimbus`, Store ID `9MZ3C28M65PB` — the
+manifest carries it and it must not be edited. Mechanics and reasoning are in the
+`release` skill.
 
-- [ ] **Download the `windows-msix` artifact** from the v0.3.0 release run
-      (14-day retention — take it while it exists).
-- [ ] **Verify the package locally before uploading.** On a Windows box, install
-      it side-loaded after trusting the ephemeral certificate, and check that the
-      taskbar and Start icons are the crisp unplated marks rather than a
-      backplated square. A wrong `resources.pri` is invisible until exactly that
-      moment.
-- [ ] **Partner Center → kubeNimbus → Packages** — upload the `.msix`.
-- [ ] **Store listing** — description, at least one screenshot (1366×768 or
-      larger: `design/store/screenshots/`, 1920×1080 — the README's
-      `design/screenshots/` are 1280 wide and do not qualify), search terms
-      (`kubernetes`, `k8s`, `kubectl`, `cluster`, `devops`), and the support and
-      privacy links (this repo's Issues, and **`PRIVACY.md`** for the privacy
-      policy URL). The first submission pointed the privacy field at `SECURITY.md`
-      and failed certification on 10.5.1 ("resolves to a webpage that doesn't
-      display a privacy policy"); a security policy is not a privacy policy.
-      The text to paste is in `design/store/listing/store-listing.md`.
-- [ ] **Properties and age rating** — category Developer tools; declare **no data
-      collection**, which is true and is what makes the questionnaire short.
-- [ ] **The reviewer needs a working app with no cluster.** This is what the demo
-      cluster exists for: a certification reviewer on a clean Windows machine has
-      no kubeconfig and no Kubernetes anywhere. Confirm the no-kubeconfig empty
-      state still leads with **Explore demo cluster**, and say so in the notes for
-      certification so the reviewer does not have to find it.
-- [ ] **Submit for certification** and expect 24–72 hours.
-- [ ] **After it goes live**, add the Store badge and `winget install 9MZ3C28M65PB`
-      (Store apps are reachable through winget's `msstore` source with no separate
-      submission) to the README's Download section and to the release footer.
+- [x] **Listed and live** at
+      [apps.microsoft.com/detail/9MZ3C28M65PB](https://apps.microsoft.com/detail/9MZ3C28M65PB).
+      The 0.4.0 submission failed certification on policy 10.5.1 because the privacy
+      URL pointed at `SECURITY.md`; `PRIVACY.md` fixed that (see `CLAUDE.md`, "The
+      privacy policy and the Store listing text").
+- [x] **The README carries the Store badge** and `winget install --id 9MZ3C28M65PB
+      --source msstore`.
+- [ ] **Homebrew cask and AUR** — the other half of backlog DIST-2. Needs accounts
+      and, for Homebrew, a decision about the unsigned `.dmg`.
 
 ## Phase 7 — Promotion
 
 Sequence matters: seed the quiet channels first and save the spike for when the
-repo has a release, screenshots and a Store listing.
+repo has a release, screenshots and a Store listing — all three exist now.
 
 - [ ] **Write the pitch once.** The thesis is in CLAUDE.md's Mission and it is
       unusually defensible: KubeUI is the one true open-source native peer, and
       the difference is measured — ~156 ms to first window against ~645 ms, a
       ~62 MB payload against a 382 MiB single file, and no telemetry where theirs
-      is on by default. Lead with a 20–30 s capture: connect → pod list → logs
-      streaming → exec into a container → Ctrl+K.
+      is on by default. The README's three GIFs (#138) cover the capture this item
+      used to ask for; a 20–30 s video for the Store listing is still open (DIST-5).
+- [ ] **A comparison page** (backlog DIST-4, DIST-7, DIST-9) — the positioning lives
+      only in `CLAUDE.md` and `docs/research/`, where no prospective user reads it.
 - [ ] **awesome-kubernetes** and similar curated lists — permanent discovery.
 - [ ] **r/kubernetes and r/devops** — read the self-promotion rules first, and be
       in the comments all day.
@@ -185,5 +163,3 @@ repo has a release, screenshots and a Store listing.
 - [ ] **Label everything immediately** (`bug`, `enhancement`, `good first issue`).
 - [ ] **Fold recurring questions into the README** the same week, while they are
       fresh.
-- [ ] **Publish the roadmap** — pin an issue or a Discussion with the top of
-      `docs/BACKLOG.md`'s Ready table, so visitors can see where this is going.

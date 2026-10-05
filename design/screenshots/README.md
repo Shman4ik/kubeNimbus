@@ -29,7 +29,7 @@ then copy the ones the README uses:
 
 | This file | Harness scenario |
 |---|---|
-| `applications-list.light.png` / `.dark.png` | `applications-list` |
+| `applications-list.light.png` / `.dark.png` | `readme-applications-list` (1280×880, so all eleven applications fit) |
 | `application-page.light.png` | `applications-page-crashloop` |
 | `pod-detail.dark.png` | `cluster-tab-pod-detail` |
 | `exec-terminal.dark.png` | `cluster-tab-exec-fullscreen-maximized` |
