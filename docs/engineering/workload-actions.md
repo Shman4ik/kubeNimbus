@@ -81,29 +81,78 @@ is its own item; the rest are backlog candidates, not omissions this pass forgot
 
 ## Every confirm names its cluster
 
-The strip's `Target` names the context the action lands on, in every view, by the name the
-cluster switcher and the tab show: `Delete Pod/x in payments on prod-eu?`. It used to name the
-cluster only in a fleet list, so an ordinary tab's confirm said nothing about where — the
-wrong-cluster incident the environment colours exist to prevent. On a production cluster it
-also says `(production)` in words, because a cluster assigned production by hand need not have
-"prod" in its name and a colour is information only for someone who knows the code (UI rule 11),
-and the strip's own card border takes the production colour (`Border.card.actionStrip.production`).
+The strip names the context the action lands on, in every view, by the name the cluster
+switcher and the tab show: "Delete Pod x in payments on prod-eu". It used to name the cluster
+only in a fleet list, so an ordinary tab's confirm said nothing about where — the wrong-cluster
+incident the environment colours exist to prevent. On a production cluster it also says
+`(production)` in words, because a cluster assigned production by hand need not have "prod" in
+its name and a colour is information only for someone who knows the code (UI rule 11), and the
+strip's own card border takes the production colour (`Border.card.actionStrip.production`).
 That is the least chrome that does the job: no new element and no new row (UI rules 1 and 17),
 present only while an action is armed on such a cluster, and the same colour as the band under
 the command bar and the tab's edge. The YAML editor's own delete confirm names the cluster and
 takes the same border; the cluster tab stamps both onto the editor as it enters the dock
-(`YamlEditorTabViewModel.SetCluster`).
+(`YamlEditorTabViewModel.SetCluster`). `Target` keeps the `Kind/name in ns on cluster` form for
+the result lines ("Deleted Pod/x in payments on prod-eu."); the sentence below is built from its
+parts.
 
 ## Scale says "from N to M"
 
-The scale question reads `Scale Deployment/x in payments on prod-eu from 3 to 5`, live as the
-box changes (B3-4). N is the object's own `spec.replicas` until the `scale` subresource has been
-read, then that read's answer; the text beside the box is the running count alone, since the
-question already carries the set count (UI rule 20). Three deterministic warnings, none of which
-disables the confirm (`RowActionViewModel.ScaleWarningFor`): to 0 from anything else (every pod
-stops), ten times the current count or more, and ten or more from zero. They are a line of warn
-text, except scaling a production workload to zero, which is an outage and is the warn
+The scale sentence reads "Scale Deployment x in payments on prod-eu from 3 replicas (2 running)
+to [5]", where [5] is the replica box itself (B3-4, reshaped by FEAT-77 below); `Question`, the
+strip's accessible name, carries the box's number at the end: "… from 3 replicas (2 running) to
+5". N is the object's own `spec.replicas` until the `scale` subresource has been read, then that
+read's answer (`SetCurrentScale`), which also supplies the running count; with no starting count
+the sentence says "to" alone. The 2026-10 form of this said "— it is already at 3" when the box
+still held the starting count; with the box beside "from 3 replicas … to" that reads the same
+without a second phrasing. Three deterministic warnings, none of which disables the confirm
+(`RowActionViewModel.ScaleWarningFor`): to 0 from anything else (every pod stops), ten times the
+current count or more, and ten or more from zero. They are a line of warn text under the
+sentence, except scaling a production workload to zero, which is an outage and is the warn
 `infoBar`. `ScaleConfirmTests` pins the thresholds at their edges, mutation-checked.
+
+## How the strip reads (FEAT-77)
+
+The first strip was assembled like a form: a bare title line ("Scale Deployment/checkout-worker
+in payments"), a "Replicas" label over a spin box, a grey "currently 2 set · 1 running" caption
+beside it, and Scale / Cancel pushed to the window's far edge. The owner's verdict on it during
+the 0.5.0 pass was "this panel needs to be more elegant". It now reads as one sentence with its
+answer beside it, the same shape for every action it hosts:
+
+- **The verb's glyph leads**, in a tinted 32px square: the accent for the reversible actions,
+  red for the ones that destroy something (`RowActionViewModel.IsDestructive`: delete, drain and
+  Argo's sync with prune), whose confirm button is `danger` rather than `accent` too (UI rule 20).
+- **The object and the verb are one sentence**: "**Restart** Deployment **checkout-worker** in
+  payments on prod-eu (production)", composed in the view from `Verb`, `TargetKind`,
+  `TargetName`, `TargetPlace` and `HeadlineSuffix`, with the kind dimmed and the verb and name in
+  semibold. Under it, in the dim 12px weight, the `Consequence`: what the cluster does next.
+  `Question` is both as one string, for the strip's accessible name and the tests.
+- **A scale's current state is part of the sentence and its box is the sentence's blank**, as
+  above. The box has no label of its own because the sentence is its label; UI rule 11's
+  label-above-the-input is about a form field whose label sat in an `Auto` column with no gap,
+  and this box keeps a 10px margin from the words. `AutomationProperties.Name` says "Replicas"
+  for a screen reader.
+- **The buttons sit with the text, not across the window.** The sentence column is capped at
+  900px and left-aligned, so a short sentence keeps Scale / Cancel right after it, and a long
+  one wraps beside them rather than pushing them out of the card (the window's minimum width
+  included). The demo notice, the drain plan, the scale warnings and the result line stack
+  under the sentence in the same column.
+- **The result line leads with its state**: a moving bar while anything is in flight
+  (`IsWorking`, a drain included), a check on success, an alert on a refusal. An action that
+  fired on its click (UI rule 17) shows the glyph and this line only.
+- **Its styles are its own.** The glyph, sentence, busy bar and result-mark styles live in
+  `RowActionStrip.axaml`'s `UserControl.Styles`, not in the app theme: the strip is the only
+  thing that draws them.
+
+`LayoutChecks.ActionStripReadsAsOneBlock` asserts the layout half on every armed
+`cluster-tab-row-action-*` scenario (the two narrow ones at 960px included): the confirm starts
+within 32px of where the text's ink ends, and a scale's box starts within 16px of the sentence
+and level with it. It measures the laid-out text, not the `TextBlock`'s bounds, because a
+`TextBlock` stretches to its column: the first version of the check measured bounds and passed
+a strip whose buttons had been moved back to the far edge. `RowActionSentenceTests` pins the
+sentence. The work was built on 2026-10-05 (commit 9a7c077, never pushed) and landed with the
+2026-10 backlog sweep's bundle F, reconciled with the cluster naming, the production rule and
+the scale warnings above.
 
 ## CronJobs: run now, suspend, resume (FEAT-8)
 

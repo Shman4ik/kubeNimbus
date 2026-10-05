@@ -27,11 +27,11 @@ public class ScaleConfirmTests
         var raised = new List<string?>();
         action.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
 
-        await Assert.That(action.Question).IsEqualTo("Scale Deployment/checkout in payments on payments-eu — it is already at 3");
+        await Assert.That(action.Question).IsEqualTo("Scale Deployment checkout in payments on payments-eu from 3 replicas to 3");
 
         action.Replicas = 5;
 
-        await Assert.That(action.Question).IsEqualTo("Scale Deployment/checkout in payments on payments-eu from 3 to 5");
+        await Assert.That(action.Question).IsEqualTo("Scale Deployment checkout in payments on payments-eu from 3 replicas to 5");
         await Assert.That(raised).Contains(nameof(RowActionViewModel.Question));
     }
 
@@ -41,7 +41,7 @@ public class ScaleConfirmTests
         var action = Scale(from: null);
         action.Replicas = 4;
 
-        await Assert.That(action.Question).IsEqualTo("Scale Deployment/checkout in payments on payments-eu to 4");
+        await Assert.That(action.Question).IsEqualTo("Scale Deployment checkout in payments on payments-eu to 4");
         await Assert.That(action.HasScaleWarning).IsFalse();
     }
 

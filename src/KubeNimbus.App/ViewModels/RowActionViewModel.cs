@@ -148,12 +148,24 @@ public sealed partial class RowActionViewModel : ObservableObject
         var production = IsProduction ? " (production)" : "";
         var cluster = clusterName.Length > 0 ? $" on {clusterName}{production}" : production;
         Target = $"{descriptor.Kind}/{name}{where}{cluster}";
+        TargetKind = descriptor.Kind;
+        TargetName = name;
+        TargetPlace = $"{where}{cluster}";
     }
 
     public RowActionKind Kind { get; }
 
     /// <summary>What this action will act on, spelled out — a confirm that doesn't name its object isn't one.</summary>
     public string Target { get; }
+
+    /// <summary>The object's kind, as the strip's sentence prints it ("Deployment").</summary>
+    public string TargetKind { get; }
+
+    /// <summary>The object's name, the word the sentence sets in bold.</summary>
+    public string TargetName { get; }
+
+    /// <summary>" in payments on prod-eu (production)"; empty only for a cluster-scoped object in a hand-built strip.</summary>
+    public string TargetPlace { get; }
 
     /// <summary>The context the action lands on, as the cluster switcher names it; empty only in a hand-built strip.</summary>
     public string ClusterName { get; }
@@ -246,57 +258,126 @@ public sealed partial class RowActionViewModel : ObservableObject
         ConfirmCommand.Execute(null);
     }
 
-    /// <summary>The sentence above the controls. States the consequence, not the API call.</summary>
-    public string Question => Kind switch
+    /// <summary>
+    /// The verb that starts the strip's sentence ("Scale Deployment checkout-worker in
+    /// payments …"). The confirm button's label starts with the same word, so the sentence
+    /// and the button read as question and answer (FEAT-77).
+    /// </summary>
+    public string Verb => Kind switch
     {
-        RowActionKind.Scale => ScaleQuestion,
+        RowActionKind.Scale => "Scale",
+        RowActionKind.Restart => "Restart",
+        RowActionKind.Cordon => "Cordon",
+        RowActionKind.Uncordon => "Uncordon",
+        RowActionKind.Drain => "Drain",
+        RowActionKind.ArgoSync or RowActionKind.ArgoSyncPrune => "Sync",
+        RowActionKind.ArgoRefresh => "Refresh",
+        RowActionKind.Trigger => "Run",
+        RowActionKind.Suspend => "Suspend",
+        RowActionKind.Resume => "Resume",
+        _ => "Delete",
+    };
+
+    /// <summary>
+    /// What the sentence says after the object. For a scale it carries the count the scale
+    /// starts from — "from 4 replicas (1 running) to", with the replica box straight after it
+    /// as the sentence's blank — so "from N to M" (B3-4) is read across the sentence and the
+    /// box rather than from a caption beside it. "to" alone while the starting count is unknown.
+    /// </summary>
+    public string HeadlineSuffix => Kind switch
+    {
+        RowActionKind.Scale => _fromReplicas is { } from
+            ? $" from {(from == 1 ? "1 replica" : $"{from} replicas")}{(_running is { } r ? $" ({r} running)" : "")} to"
+            : " to",
+        RowActionKind.ArgoSyncPrune => " and prune",
+        RowActionKind.Trigger => " now",
+        _ => "",
+    };
+
+    /// <summary>The sentence the strip leads with, as plain text: verb, object, cluster, and for a scale the starting count.</summary>
+    public string Headline => $"{Verb} {TargetKind} {TargetName}{TargetPlace}{HeadlineSuffix}";
+
+    /// <summary>
+    /// The line under the sentence: what the cluster does next, not the API call. Empty for a
+    /// scale, whose consequence is the number in the box and the warning under it.
+    /// </summary>
+    public string Consequence => Kind switch
+    {
+        RowActionKind.Scale => "",
         RowActionKind.Restart =>
-            $"Restart {Target}? Its pods roll under the controller's own update strategy — surge, "
-            + "maxUnavailable and PodDisruptionBudgets are all honored.",
+            "Its pods roll under the controller's own update strategy — surge, maxUnavailable and "
+            + "PodDisruptionBudgets are all honored.",
         RowActionKind.Cordon =>
-            $"Cordon {Target}? Nothing new will schedule on it. Pods already running stay where they are — "
-            + "that is what a drain is for.",
-        RowActionKind.Uncordon =>
-            $"Uncordon {Target}? The scheduler starts placing pods on it again.",
+            "Nothing new will schedule on it. Pods already running stay where they are — that is what a drain is for.",
+        RowActionKind.Uncordon => "The scheduler starts placing pods on it again.",
         // The lifetime sentence is the important half and it is deliberately in the
         // confirm rather than in a tooltip: a drain runs inside this app's process, so
         // the one thing someone must know before starting one is what happens if they
         // close it.
         RowActionKind.Drain =>
-            $"Drain {Target}? It is cordoned first, then its pods are evicted one at a time, honouring "
-            + "PodDisruptionBudgets. The drain runs inside kubeNimbus — closing this tab or quitting stops "
-            + "it partway, leaving the node cordoned with some pods moved and some not.",
+            "It is cordoned first, then its pods are evicted one at a time, honouring PodDisruptionBudgets. "
+            + "The drain runs inside kubeNimbus — closing this tab or quitting stops it partway, leaving the "
+            + "node cordoned with some pods moved and some not.",
         // Both Argo sentences say what the cluster does next rather than what this app is
         // about to send, because in both cases the app's part ends immediately: Argo's
         // controller does the work and reports it back through the watch, seconds later.
         RowActionKind.ArgoSync =>
-            $"Sync {Target}? Argo CD applies the revision the Application targets, under its own sync options. "
+            "Argo CD applies the revision the Application targets, under its own sync options. "
             + "kubeNimbus asks; Argo does the work and reports back on the Application.",
         // Prune is the half of a sync that deletes, and the sentence says what it deletes and
         // where it comes back from, the same way the drain's confirm names what it destroys.
         RowActionKind.ArgoSyncPrune =>
-            $"Sync {Target} and prune? Argo CD applies the revision the Application targets and deletes every "
-            + "resource it manages that Git no longer declares. A pruned object is gone from the cluster; Git is "
-            + "where it comes back from.",
+            "Argo CD applies the revision the Application targets and deletes every resource it manages that "
+            + "Git no longer declares. A pruned object is gone from the cluster; Git is where it comes back from.",
         RowActionKind.ArgoRefresh =>
-            $"Refresh {Target}? Argo re-compares it against Git. Nothing on the cluster changes — this only "
-            + "updates what Argo thinks the difference is.",
+            "Argo re-compares it against Git. Nothing on the cluster changes — this only updates what Argo "
+            + "thinks the difference is.",
         // The run is a Job owned by the CronJob, like a scheduled one: its history limits
         // clean it up and deleting the CronJob deletes it. What it is not is scheduled —
         // the CronJob controller does not put a Job it did not create on its active list,
         // so the schedule and its concurrencyPolicy carry on as if nothing had run.
         RowActionKind.Trigger =>
-            $"Run {Target} now? A Job is created from its job template, as kubectl create job --from=cronjob does. "
-            + "The schedule is unchanged.",
+            "A Job is created from its job template, as kubectl create job --from=cronjob does. The schedule is unchanged.",
         RowActionKind.Suspend =>
-            $"Suspend {Target}? No new Jobs are scheduled until it is resumed. Jobs already running keep running.",
+            "No new Jobs are scheduled until it is resumed. Jobs already running keep running.",
         // The missed-run clause is the thing people are surprised by, and it is the API's
         // documented behaviour: resuming a CronJob with no startingDeadlineSeconds starts
         // the most recent run it missed while suspended straight away.
         RowActionKind.Resume =>
-            $"Resume {Target}? Its schedule applies again — and a run it missed while suspended can start straight "
-            + "away, unless startingDeadlineSeconds has passed.",
-        _ => $"Delete {Target}? This cannot be undone.",
+            "Its schedule applies again — and a run it missed while suspended can start straight away, "
+            + "unless startingDeadlineSeconds has passed.",
+        _ => "This cannot be undone.",
+    };
+
+    public bool HasConsequence => Consequence.Length > 0;
+
+    /// <summary>
+    /// The whole question as one string — the sentence, the number in a scale's box, and the
+    /// consequence — for the strip's accessible name and anything that wants it in one piece.
+    /// </summary>
+    public string Question => Kind == RowActionKind.Scale
+        ? Replicas is { } to ? $"{Headline} {to}" : Headline
+        : HasConsequence ? $"{Headline}? {Consequence}" : $"{Headline}?";
+
+    /// <summary>
+    /// The actions whose confirm destroys something that does not come back: a delete, a
+    /// drain (which evicts) and a sync that prunes. They get the red glyph and a red confirm,
+    /// as the YAML editor's Delete does (UI rule 20); everything else gets the accent.
+    /// </summary>
+    public bool IsDestructive => Kind is RowActionKind.Delete or RowActionKind.Drain or RowActionKind.ArgoSyncPrune;
+
+    /// <summary>The glyph the strip leads with: the verb's own icon, the one its menu item and button carry.</summary>
+    public string IconKey => Kind switch
+    {
+        RowActionKind.Scale => "ScaleIconGeometry",
+        RowActionKind.Restart => "RestartIconGeometry",
+        RowActionKind.Cordon or RowActionKind.Uncordon => "CordonIconGeometry",
+        RowActionKind.Drain => "DrainIconGeometry",
+        RowActionKind.ArgoSync or RowActionKind.ArgoSyncPrune => "SyncIconGeometry",
+        RowActionKind.ArgoRefresh => "RefreshIconGeometry",
+        RowActionKind.Trigger or RowActionKind.Resume => "PlayIconGeometry",
+        RowActionKind.Suspend => "PauseIconGeometry",
+        _ => "DeleteIconGeometry",
     };
 
     public string ConfirmLabel => Kind switch
@@ -372,23 +453,23 @@ public sealed partial class RowActionViewModel : ObservableObject
     /// </summary>
     private int? _fromReplicas;
 
-    /// <summary>"2 running now" — read from the scale subresource, which is
-    /// authoritative where the object's own spec.replicas may not be (a CRD can declare a
-    /// different specReplicasPath).</summary>
-    [ObservableProperty]
-    private string? _currentScale;
+    /// <summary>
+    /// How many replicas are running, as the scale subresource reports it, or null when it
+    /// did not say. Carried in the sentence ("from 4 replicas (1 running) to") rather than in
+    /// a caption beside the box (FEAT-77).
+    /// </summary>
+    private int? _running;
 
     /// <summary>
-    /// The scale question, live as the box changes (B3-4): "from 3 to 300" is the sentence
-    /// that catches a slipped digit, where "Scale Deployment/x" beside a number did not.
+    /// Records the scale subresource's reading — authoritative where the object's own
+    /// spec.replicas may not be (a CRD can declare a different specReplicasPath) — as the
+    /// count the scale starts from and the running count the sentence carries.
     /// </summary>
-    private string ScaleQuestion => (Replicas, _fromReplicas) switch
+    public void SetCurrentScale(int replicas, int? running)
     {
-        (null, _) => $"Scale {Target}",
-        ({ } to, null) => $"Scale {Target} to {to}",
-        ({ } to, { } from) when to == from => $"Scale {Target} — it is already at {from}",
-        ({ } to, { } from) => $"Scale {Target} from {from} to {to}",
-    };
+        _running = running;
+        SetFromReplicas(replicas);
+    }
 
     /// <summary>
     /// What the strip warns about the number in the box, or null: every pod stopping, or a
@@ -444,6 +525,8 @@ public sealed partial class RowActionViewModel : ObservableObject
     private void SetFromReplicas(int? value)
     {
         _fromReplicas = value;
+        OnPropertyChanged(nameof(HeadlineSuffix));
+        OnPropertyChanged(nameof(Headline));
         OnPropertyChanged(nameof(Question));
         OnPropertyChanged(nameof(ScaleWarning));
         OnPropertyChanged(nameof(HasScaleWarning));
@@ -503,6 +586,7 @@ public sealed partial class RowActionViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(ConfirmCommand))]
     [NotifyPropertyChangedFor(nameof(CanDismiss))]
     [NotifyPropertyChangedFor(nameof(IsPromptVisible))]
+    [NotifyPropertyChangedFor(nameof(IsWorking))]
     private bool _isDraining;
 
     /// <summary>
@@ -524,7 +608,14 @@ public sealed partial class RowActionViewModel : ObservableObject
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ConfirmCommand))]
     [NotifyPropertyChangedFor(nameof(IsEditable))]
+    [NotifyPropertyChangedFor(nameof(IsWorking))]
     private bool _isBusy;
+
+    /// <summary>
+    /// True while something is in flight — a request, a read, or a running drain — which is
+    /// when the result line leads with a moving bar rather than a verdict (UI rule 18).
+    /// </summary>
+    public bool IsWorking => IsBusy || IsDraining;
 
     /// <summary>True once the action has an answer and nothing is left to ask: it succeeded,
     /// or it fired on its click and failed. The strip stops being a prompt and becomes its
@@ -589,11 +680,8 @@ public sealed partial class RowActionViewModel : ObservableObject
         try
         {
             var scale = await _client.GetScaleAsync(_descriptor, _namespace, _name);
-            SetFromReplicas(scale.Replicas);
+            SetCurrentScale(scale.Replicas, scale.CurrentReplicas);
             Replicas = scale.Replicas;
-            // Only what the question above does not already say: it carries the set count
-            // ("from 3 to 5"), so beside the box this is the running count alone (UI rule 20).
-            CurrentScale = scale.CurrentReplicas is { } running ? $"{running} running now" : null;
             Message = null;
         }
         catch (Exception ex)

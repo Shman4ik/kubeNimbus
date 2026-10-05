@@ -202,6 +202,12 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-row-action-scale-jump", () => HostInMainWindow(ClusterTabScenarios.RowActionScaleJump())),
     ("cluster-tab-row-action-scale-zero-production",
         () => HostInMainWindow(ClusterTabScenarios.RowActionScaleZeroProduction())),
+    ("cluster-tab-row-action-scaled", () => HostInMainWindow(ClusterTabScenarios.RowActionScaled())),
+    ("cluster-tab-row-action-busy", () => HostInMainWindow(ClusterTabScenarios.RowActionBusy())),
+    // The window's minimum width: the sentence wraps beside its buttons instead of pushing
+    // them out of the card (FEAT-77), and the scale box stays at the sentence's end.
+    ("cluster-tab-row-action-scale-narrow", () => HostInMainWindow(ClusterTabScenarios.RowActionScale(), width: 960)),
+    ("cluster-tab-row-action-restart-narrow", () => HostInMainWindow(ClusterTabScenarios.RowActionRestart(), width: 960)),
     // "Open a terminal on this cluster" — the two outcomes the app has to state, since
     // the successful one opens a window in front of the app and needs no screenshot.
     ("cluster-tab-terminal-no-kubectl", () => HostInMainWindow(ClusterTabScenarios.TerminalNoKubectl())),
@@ -539,6 +545,9 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     if (name is "cluster-tab-list-unhealthy-fleet-partial-narrow" or "cluster-tab-list-unhealthy-narrow")
         LayoutChecks.ListHeaderFits(window);
     if (name == "palette-logs-narrow") LayoutChecks.PaletteFollowsWindow(window);
+    if (name.StartsWith("cluster-tab-row-action-", StringComparison.Ordinal)
+        && name is not ("cluster-tab-row-action-scaled" or "cluster-tab-row-action-busy"))
+        LayoutChecks.ActionStripReadsAsOneBlock(window);
     if (name.StartsWith("cluster-tab-fleet-list", StringComparison.Ordinal)
         || name == "cluster-tab-list-unhealthy-fleet-partial-narrow")
         LayoutChecks.GridReachesLastColumn(window);

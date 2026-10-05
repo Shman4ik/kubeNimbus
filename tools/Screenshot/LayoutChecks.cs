@@ -169,6 +169,53 @@ internal static class LayoutChecks
         : ToolTip.GetTip(control) is string tip ? $"\"{tip}\""
         : control.GetType().Name;
 
+    /// <summary>
+    /// FEAT-77: the confirm strip reads as one element. The confirm button sits right after
+    /// the question's text rather than at the far edge of the window, it ends inside the
+    /// window, and a scale's replica box is the blank at the end of the sentence — just
+    /// after it and level with it — not a field with a label of its own.
+    /// </summary>
+    internal static void ActionStripReadsAsOneBlock(Window window)
+    {
+        var strip = window.GetVisualDescendants().OfType<RowActionStrip>().First();
+        var text = strip.FindControl<Control>("QuestionText")!;
+        var sentence = strip.FindControl<TextBlock>("ActionSentence")!;
+        var confirm = strip.FindControl<Button>("ConfirmButton")!;
+        var box = strip.FindControl<NumericUpDown>("ReplicaInput") is { IsEffectivelyVisible: true } b ? b : null;
+
+        // Where the ink ends, not where the controls' boxes end: a TextBlock stretches to its
+        // column, so its bounds say nothing about whether the words reach the buttons.
+        var textRight = text.GetVisualDescendants().OfType<TextBlock>()
+            .Where(t => t.IsEffectivelyVisible)
+            .Select(InkRight)
+            .Append(box is null ? 0 : RightEdge(box, window))
+            .Max();
+        var confirmLeft = confirm.TranslatePoint(default, window)?.X ?? double.NaN;
+        var gap = confirmLeft - textRight;
+        if (!confirm.IsEffectivelyVisible || gap is < 0 or > 32 || RightEdge(confirm, window) > window.Bounds.Width + 0.5)
+            throw new InvalidOperationException(
+                $"The strip's confirm starts {gap:0}px after its text (x={confirmLeft:0}, text ends at x={textRight:0}) "
+                + $"in a {window.Bounds.Width:0}px window; it should sit with the sentence it answers (FEAT-77).");
+
+        if (box is not null)
+        {
+            var boxLeft = box.TranslatePoint(default, window)?.X ?? double.NaN;
+            var boxGap = boxLeft - InkRight(sentence);
+            var boxMiddle = box.TranslatePoint(new Point(0, box.Bounds.Height / 2), window)?.Y ?? double.NaN;
+            var sentenceTop = sentence.TranslatePoint(default, window)?.Y ?? double.NaN;
+            var sentenceBottom = sentenceTop + sentence.Bounds.Height;
+            if (boxGap is < 0 or > 16 || boxMiddle < sentenceTop || boxMiddle > sentenceBottom)
+                throw new InvalidOperationException(
+                    $"The replica box starts {boxGap:0}px after the sentence, centred at y={boxMiddle:0} against a sentence "
+                    + $"spanning y={sentenceTop:0}..{sentenceBottom:0}; it should be the sentence's blank (FEAT-77).");
+        }
+
+        Console.WriteLine($"Action strip reads as one block at {window.Bounds.Width:0}px (confirm {gap:0}px after the text).");
+
+        double InkRight(TextBlock block) =>
+            (block.TranslatePoint(default, window)?.X ?? double.NaN) + block.Padding.Left + block.TextLayout.Width;
+    }
+
     private static double RightEdge(Visual control, Visual root) =>
         control.TranslatePoint(new Point(control.Bounds.Width, 0), root)?.X ?? double.PositiveInfinity;
 }
