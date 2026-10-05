@@ -63,3 +63,19 @@ subjects and Secret values all come from the demo cluster's dataset,
 the harness shares with the app's "Explore demo cluster" — no real cluster
 was screenshotted, and nothing here needs redacting. The README says so under
 the gallery, and it should keep saying so.
+
+## The animated GIFs
+
+`applications-demo.gif`, `palette-logs-demo.gif` and `unhealthy-logs-demo.gif` are not
+harness output: a harness render is a still, and these show motion. They are screen
+recordings of the NativeAOT build running on the built-in demo cluster (so the "Demo
+cluster" banner is in every frame, on purpose), driven by scripted input. Scenes, the
+capture box and the encode recipe are in
+[`scripts/demo/record/README.md`](../../scripts/demo/record/README.md). Re-record them
+after a change to the surfaces they show; like the PNGs, they are made on Windows.
+
+| This file | Scene |
+|---|---|
+| `applications-demo.gif` | `scenes/applications.ps1` |
+| `palette-logs-demo.gif` | `scenes/palette-logs.ps1` |
+| `unhealthy-logs-demo.gif` | `scenes/unhealthy-logs.ps1` |
