@@ -321,6 +321,12 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // armed actions. All on the demo cluster, read at DemoData.Now, so the relative
     // times in them are the same on every run.
     ("applications-list", () => HostInMainWindow(ApplicationsScenarios.List(), mode: ShellMode.Applications)),
+    // The README's hero (design/screenshots/applications-list.*.png). At 1280×800 the
+    // demo cluster's eleventh application sits half under the list's bottom edge once the
+    // interface is drawn in Segoe UI, whose rows are taller than Inter's were, so the first
+    // image a visitor sees ended on a clipped row. 880 shows every application with room
+    // below the last one; the plain scenario stays at the size every other one uses.
+    ("readme-applications-list", () => HostInMainWindow(ApplicationsScenarios.List(), height: 880, mode: ShellMode.Applications)),
     ("applications-list-attention", () => HostInMainWindow(ApplicationsScenarios.List(chip: ApplicationChip.NeedsAttention), mode: ShellMode.Applications)),
     ("applications-list-system", () => HostInMainWindow(ApplicationsScenarios.List(showSystem: true), mode: ShellMode.Applications)),
     ("applications-list-filtered-empty", () => HostInMainWindow(ApplicationsScenarios.List(filter: "zzz"), mode: ShellMode.Applications)),

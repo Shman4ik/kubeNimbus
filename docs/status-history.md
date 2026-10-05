@@ -2611,3 +2611,30 @@ a typed `ls /proc/1/root/` answering, and a second start reusing the same contai
 verified: the Pod Security fallback against a real admission controller (the UI pass was
 stopped before it ran; covered by a stub-server test only), a Windows node, and the NativeAOT
 publish.
+
+### Launch clean-up: documents and the README hero (2026-10-05)
+
+A read of the backlog and the pre-launch checklist against the live repository, before
+promoting the launch, found the planning documents describing a project two releases
+old. The pre-launch checklist still asked for a private repository to be made public and
+a first Store submission; both had happened, and v0.6.0 was out. The backlog kept rows open
+for shipped work (ENG-3, ENG-30, VER-50, VER-52, VER-53), had never recorded that bundle F's
+live tests paid the API-server half of eight verification rows, and had issued VER-15 and
+VER-36 twice. `CURRENT_STATE.md` listed the Events list and log follow as partial, and
+`TRAIN.md` still read `Phase: BUILD` for v0.4.0. All four are corrected: the checklist is
+re-ticked against what the API reports (secret scanning, push protection, private
+vulnerability reporting, rulesets, topics, Discussions, social preview, the live Store
+page), the backlog rows name their commits or live tests and what is left, the duplicates
+are VER-54 and VER-55, and the v0.4.0 train is archived with a retro under
+`docs/product-loop/history/v0.4.0/` beside a fresh `TRAIN.md` for v0.7.0.
+
+The README hero, the first image a visitor sees, ended on a clipped row: with Segoe UI the
+Applications list's rows are taller than they were in Inter, and at 1280×800 the demo
+cluster's eleventh application sat half under the list's edge. A new harness scenario,
+`readme-applications-list`, renders the same fixture at 1280×880; both themes were
+re-rendered on Windows from it. The plain `applications-list` scenario is unchanged, so
+every check that uses it still runs at the common size. The Store's 1920×1080 image already
+showed every row and was not touched.
+
+Checks: the new scenario rendered with the harness's checks (85 tooltips, 0 dead; 0 unnamed
+controls; 0 font failures). Documents only otherwise; no code under `src/` changed.
