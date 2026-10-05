@@ -41,15 +41,27 @@ public partial class ClusterTabView : UserControl
         }
     }
 
+    // A click chooses the row alone and closes; its box or Ctrl/Cmd adds it and keeps the
+    // picker open (NamespacePickerGestures).
     private void OnNamespaceTapped(object? sender, TappedEventArgs e)
     {
-        if (e.Source is Avalonia.Visual visual && visual.FindAncestorOfType<ListBoxItem>() is not null)
-            ChooseNamespace();
+        if (NamespacePickerGestures.RowAt<NamespaceChoice>(e) is not { } choice || DataContext is not ClusterTabViewModel vm)
+            return;
+        vm.NamespaceCandidate = choice;
+        if (NamespacePickerGestures.IsAdd(e)) vm.ToggleNamespace(choice);
+        else ChooseNamespace();
+        e.Handled = true;
     }
 
     private void OnNamespaceKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter) { ChooseNamespace(); e.Handled = true; }
+        else if (e.Key == Key.Space && !NamespaceSearch.IsFocused
+            && DataContext is ClusterTabViewModel { NamespaceCandidate: { } candidate } vm)
+        {
+            vm.ToggleNamespace(candidate);
+            e.Handled = true;
+        }
         else if (e.Key == Key.Down && NamespaceSearch.IsFocused)
         {
             NamespaceList.Focus();

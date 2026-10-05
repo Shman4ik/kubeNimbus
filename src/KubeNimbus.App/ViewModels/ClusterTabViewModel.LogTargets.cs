@@ -51,11 +51,11 @@ public sealed partial class ClusterTabViewModel
         IsConnected: IsConnected,
         IsConnecting: IsConnecting,
         IsLoading: _logTargetsLoadingScope is not null,
-        Scope: LogTargetLoader.Scope(LogTargetsNamespace),
+        Scope: LogTargetLoader.Scope(LogTargetsNamespaces),
         Result: _logTargetsScope == LogTargetsScopeKey() ? _logTargets : null);
 
-    /// <summary>The namespace the rows come from: the tab's own selection, as the list uses it.</summary>
-    private string? LogTargetsNamespace => SelectedNamespace == AllNamespaces ? null : SelectedNamespace;
+    /// <summary>The namespaces the rows come from: the tab's own selection, as the list uses it (none: every namespace).</summary>
+    private IReadOnlyList<string> LogTargetsNamespaces => SelectedNamespaces;
 
     /// <summary>
     /// What makes two loads the same question: the namespace, and in fleet mode the
@@ -66,7 +66,7 @@ public sealed partial class ClusterTabViewModel
         var clusters = IsFleetView && FleetMembersProvider?.Invoke() is { Count: > 0 } members
             ? string.Join(",", members.Select(m => m.ClusterName))
             : "";
-        return $"{clusters}|{SelectedNamespace}";
+        return $"{clusters}|{string.Join(",", SelectedNamespaces)}";
     }
 
     /// <summary>
@@ -93,13 +93,13 @@ public sealed partial class ClusterTabViewModel
         _logTargetsCts?.Dispose();
         var cts = new CancellationTokenSource();
         _logTargetsCts = cts;
-        var @namespace = LogTargetsNamespace;
+        var namespaces = LogTargetsNamespaces;
 
         if (IsDemo)
         {
             // Every task the demo source returns is already complete, so this finishes
             // synchronously — no pool thread and no dispatcher hop for data in memory.
-            var demo = LogTargetLoader.LoadAsync(sources, @namespace, cancellationToken: cts.Token);
+            var demo = LogTargetLoader.LoadForNamespacesAsync(sources, namespaces, cancellationToken: cts.Token);
             if (demo.IsCompletedSuccessfully)
             {
                 LandLogTargets(scope, demo.Result, LogPaletteRows.Build(demo.Result.Targets, OpenLogTarget));
@@ -119,7 +119,7 @@ public sealed partial class ClusterTabViewModel
             IReadOnlyList<PaletteItem> rows;
             try
             {
-                result = await LogTargetLoader.LoadAsync(sources, @namespace, cancellationToken: cts.Token);
+                result = await LogTargetLoader.LoadForNamespacesAsync(sources, namespaces, cancellationToken: cts.Token);
                 rows = LogPaletteRows.Build(result.Targets, OpenLogTarget);
             }
             catch (OperationCanceledException)

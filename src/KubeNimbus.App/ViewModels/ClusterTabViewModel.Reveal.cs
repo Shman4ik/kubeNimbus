@@ -42,7 +42,12 @@ public sealed partial class ClusterTabViewModel
                 NamespaceOptions.Add(@namespace);
             }
 
-            SelectedNamespace = @namespace;
+            // Already among several chosen namespaces: the list is showing it, so it stays as
+            // it is rather than narrowing to the one.
+            if (!SelectedNamespaces.Contains(@namespace))
+            {
+                SelectedNamespace = @namespace;
+            }
         }
 
         RowFilter = "";

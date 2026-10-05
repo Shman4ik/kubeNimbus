@@ -84,6 +84,7 @@ if (stress)
 var scenarios = new (string Name, Func<Control> Build)[]
 {
     ("ux-namespace-picker", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
+    ("cluster-tab-namespace-picker-several", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
     ("ux-unhealthy-toggle", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
     ("ux-workload-pods", () => HostInMainWindow(ClusterTabScenarios.WorkloadDetail(), height: 1000)),
     ("ux-workload-pods-sort", () => HostInMainWindow(ClusterTabScenarios.WorkloadDetail(), height: 1000)),
@@ -454,6 +455,7 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     Dispatcher.UIThread.RunJobs();
 
     if (name == "ux-namespace-picker") UxInteractionChecks.NamespacePicker(window);
+    if (name == "cluster-tab-namespace-picker-several") UxInteractionChecks.NamespacePickerSeveral(window);
     if (name == "ux-applications-keys") ApplicationsChecks.Keys(window);
     if (name == "ux-workload-pods-sort") GridSortChecks.WorkloadPods(window);
     if (name == "ux-node-pods-sort") GridSortChecks.NodePods(window);

@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Effective 3 October 2026. This policy covers kubeNimbus, the desktop Kubernetes
+Effective 5 October 2026. This policy covers kubeNimbus, the desktop Kubernetes
 client, in every form it is distributed: the Microsoft Store package, the installers
 and archives on the GitHub Releases page, and builds made from this repository.
 
@@ -80,7 +80,7 @@ packaged apps, so check both.
 | File | What it holds | Encrypted |
 | --- | --- | --- |
 | `settings.json` | Your preferences: theme, keyboard scheme, which sidebar sections are open, sidebar width, log buffer size, metrics refresh interval, whether to confirm deletes and preview applies, whether one click opens an application, interface and code fonts, log display options, and the paths of the kubeconfig files or folders you added. | No |
-| `workspace.json` | What the window looked like: your open tabs (context name, kubeconfig path, the kind and namespace showing), pinned and recent contexts, environment labels you corrected, recent namespaces and kinds per cluster, column layouts per kind, and which mode the window was in. Names and paths only. | No |
+| `workspace.json` | What the window looked like: your open tabs (context name, kubeconfig path, the kind and the namespace or namespaces showing), pinned and recent contexts, environment labels you corrected, recent namespaces and kinds per cluster, column layouts per kind, and which mode the window was in. Names and paths only. | No |
 | `discovery/*.json` (cache folder) | Which resource kinds a cluster serves (kind, API group, version, verbs), so the next connect is faster. The file name is a hash of the server address, context, user name and kubeconfig path. Refreshed after six hours or a server upgrade. | No |
 | `terminal/` | Only if you open a terminal on a cluster: a small kubeconfig holding one context **name**, and on macOS a launcher script holding file paths. No cluster address, user or credential. | No |
 

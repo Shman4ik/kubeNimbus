@@ -183,8 +183,9 @@ internal static class ApplicationsChecks
             || vm.VisibleRows.Any(r => !r.Namespaces.Contains("payments")))
             throw new InvalidOperationException("Choosing payments in the namespace picker did not narrow the list to it.");
 
-        // Several namespaces by pointer: the picker stays open, each click adds a row, and
-        // the list holds both namespaces' applications.
+        // Several namespaces by pointer: a row's box adds it and the picker stays open, and
+        // the list holds both namespaces' applications. A click elsewhere on a row chooses it
+        // alone and closes the picker.
         var namespaceButton = view.FindControl<Button>("NamespaceButton")!;
         vm.SetNamespaces([]);
         Click(window, namespaceButton);
@@ -196,9 +197,7 @@ internal static class ApplicationsChecks
                 ?? throw new InvalidOperationException($"The namespace picker does not offer {name}.");
             namespaceList.ScrollIntoView(choice);
             SettlePage(window);
-            var item = namespaceList.ContainerFromItem(choice) as Control
-                ?? throw new InvalidOperationException($"The picker row for {name} has no container.");
-            ClickAt(window, item, item.Bounds.Width - 4);
+            UxInteractionChecks.ClickNamespaceBox(window, namespaceList, choice);
         }
 
         if (!vm.SelectedNamespaces.SequenceEqual(["monitoring", "payments"])
@@ -206,8 +205,12 @@ internal static class ApplicationsChecks
             || !vm.VisibleRows.Any(r => r.Namespaces.Contains("monitoring")))
             throw new InvalidOperationException("Two clicks in the namespace picker did not choose both namespaces.");
         if (namespaceButton.Flyout is not { IsOpen: true } flyout)
-            throw new InvalidOperationException("A click in the namespace picker closed it; choosing several needs it to stay open.");
-        flyout.Hide();
+            throw new InvalidOperationException("A click on a row's box closed the namespace picker; choosing several needs it to stay open.");
+        var monitoring = vm.NamespaceChoices.First(c => c.Name == "monitoring");
+        var monitoringRow = (Control)namespaceList.ContainerFromItem(monitoring)!;
+        ClickAt(window, monitoringRow, monitoringRow.Bounds.Width - 6);
+        if (!vm.SelectedNamespaces.SequenceEqual(["monitoring"]) || flyout.IsOpen)
+            throw new InvalidOperationException("A click on a namespace row did not choose it alone and close the picker.");
         vm.SetNamespaces([]);
         Dispatcher.UIThread.RunJobs();
 

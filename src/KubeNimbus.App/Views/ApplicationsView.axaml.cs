@@ -29,10 +29,10 @@ public partial class ApplicationsView : UserControl
     }
 
     // ------------------------------------------------------- namespace picker
-    // The Resources list's picker, gesture for gesture where it can be: Ctrl/Cmd+Shift+N
-    // opens it with the search focused, typing filters, ↓ moves to the rows, and Enter
-    // chooses one namespace and closes. It chooses several too: a click or Space adds or
-    // removes a row and keeps the picker open.
+    // The Resources list's picker, gesture for gesture: Ctrl/Cmd+Shift+N opens it with the
+    // search focused, typing filters, ↓ moves to the rows, Enter or a click chooses one
+    // namespace and closes, and a click on a row's box, Ctrl/Cmd+click or Space adds or
+    // removes one and keeps the picker open.
 
     private void OnNamespaceShortcut(object? sender, KeyEventArgs e)
     {
@@ -67,20 +67,29 @@ public partial class ApplicationsView : UserControl
     }
 
     /// <summary>
-    /// A click adds or removes the row it landed on and leaves the picker open, so several
-    /// can be chosen in a row. The row comes from the item under the pointer, not the
-    /// selection, which the press may not have moved yet.
+    /// A click chooses the row's namespace alone and closes the picker; on its box, or with
+    /// Ctrl/Cmd held, it adds or removes it and keeps the picker open (NamespacePickerGestures).
+    /// The row comes from the item under the pointer, not the selection, which the press may
+    /// not have moved yet.
     /// </summary>
     private void OnNamespaceTapped(object? sender, TappedEventArgs e)
     {
-        if (e.Source is Visual visual
-            && visual.FindAncestorOfType<ListBoxItem>(includeSelf: true) is { DataContext: ApplicationNamespaceChoice choice }
-            && Vm is { } vm)
+        if (NamespacePickerGestures.RowAt<ApplicationNamespaceChoice>(e) is not { } choice || Vm is not { } vm)
         {
-            vm.NamespaceCandidate = choice;
-            vm.ToggleNamespace(choice);
-            e.Handled = true;
+            return;
         }
+
+        vm.NamespaceCandidate = choice;
+        if (NamespacePickerGestures.IsAdd(e))
+        {
+            vm.ToggleNamespace(choice);
+        }
+        else
+        {
+            ChooseOnlyNamespace();
+        }
+
+        e.Handled = true;
     }
 
     private void OnNamespaceKeyDown(object? sender, KeyEventArgs e)

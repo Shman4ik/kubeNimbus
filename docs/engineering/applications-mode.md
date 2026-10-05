@@ -179,13 +179,12 @@ and Argo's own Degraded/Unknown when nothing read from the workloads explains it
    Argo shows "—": its ControllerRevisions are not read for the list. Only the revision is set
    monospace (`LastDeployRevision`); the age and "never synced" are words (`LastDeployAge`).
 9. **The namespace picker narrows what was read; it starts no watch** (2026-10). It sits beside
-   the title, where the Resources list keeps its own, and takes its gestures where they mean
-   the same thing: Ctrl/Cmd+Shift+N opens it with its search focused, typing filters, ↓ goes to
-   the rows, and Enter chooses that namespace alone and closes. It also chooses **several**: a
-   click or Space adds or removes a row and keeps the picker open, the All namespaces row clears
-   the choice, and a line under the search says so, because the Resources picker's click closes.
-   The button reads All namespaces, one or two names, or "3 namespaces" with the names in its
-   tooltip. Five decisions:
+   the title, where the Resources list keeps its own, and takes the same gestures
+   ([several-namespaces](several-namespaces.md)): Ctrl/Cmd+Shift+N opens it with its search
+   focused, typing filters, ↓ goes to the rows, a click or Enter chooses one namespace alone and
+   closes, and a row's box, Ctrl/Cmd+click or Space adds or removes one and keeps the picker
+   open. The All namespaces row's box clears the choice. The button reads All namespaces, one or
+   two names, or "3 namespaces" with the names in its tooltip. Five decisions:
    - **Its own selection, not the tab's.** The Resources list's namespace is often the
      kubeconfig context's, and this list is the whole cluster at a glance, so it opens on All
      namespaces whatever the other mode shows. Session state, like the chips.
@@ -197,10 +196,10 @@ and Argo's own Degraded/Unknown when nothing read from the workloads explains it
      namespace is chosen: choosing one is asking for what is in it, and the chip would do
      nothing. The chips' counts and the empty states follow the choice ("in payments", "in the
      3 chosen namespaces"). An application in several namespaces shows when any is chosen.
-   - **The check is drawn, not a `CheckBox`.** The row is the one target (UI rule 8) and the view
-     model the one writer of `ApplicationNamespaceChoice.IsChecked`; a CheckBox inside a row that
-     also toggles on a tap is UI rule 8b's double flip by another route. The row's accessible
-     name says ", chosen".
+   - **The check is drawn, not a `CheckBox`**, and the view model is the one writer of
+     `ApplicationNamespaceChoice.IsChecked`, for the reason several-namespaces.md gives. The
+     row's accessible name says ", chosen". A click on a row first toggled here; it was changed
+     to "this one alone" so both pickers read a click the same way.
    - **A toggle updates the rows' checks in place**, so the row the keyboard is on keeps its focus;
      the rows are rebuilt only when the picker opens and as its search is typed.
 
@@ -331,8 +330,8 @@ last). The screenshot harness renders `applications-list*` (`applications-list-s
 payments and monitoring sorted by Restarts, most first) and `applications-page-*` in both themes, and
 `ux-applications-keys` drives arrows, Enter, Esc, `/`, Ctrl/Cmd+F, the chips by pointer, a
 header by pointer at its far edge, the namespace picker from Ctrl/Cmd+Shift+N, two namespaces
-chosen by pointer with the picker staying open, and the mode switch by pointer against the
-rendered window. `applications-namespace-picker` renders the picker open with two chosen.
+added by their boxes with the picker staying open and then one chosen alone by a click on its
+row, and the mode switch by pointer against the rendered window. `applications-namespace-picker` renders the picker open with two chosen.
 
 Not verified here: a real cluster (Argo CD, SSO, narrow RBAC — the 403 fallback is pinned
 against the fixture seam, not an API server), the win-x64 publish, macOS.

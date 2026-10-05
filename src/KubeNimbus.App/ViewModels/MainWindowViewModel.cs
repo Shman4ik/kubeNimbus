@@ -1079,6 +1079,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             FleetMembersProvider = FleetMembers,
             RestoreKindKey = snapshot?.KindKey,
             RestoreNamespace = snapshot?.Namespace,
+            RestoreNamespaces = snapshot?.Namespaces,
         };
         tab.ViewStateChanged += (_, _) => SaveWorkspace();
         Tabs.Add(tab);
@@ -1187,7 +1188,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         var tabs = Tabs.Select(t => new TabSnapshot(
             t.Context.Name, t.Context.KubeconfigPath,
             t.ViewKindKey ?? t.RestoreKindKey,
-            t.SelectedKind is null ? t.RestoreNamespace : t.SelectedNamespace)).ToList();
+            t.SelectedKind is null ? t.RestoreNamespace : t.SelectedNamespace,
+            t.SelectedKind is null ? t.RestoreNamespaces : t.SelectedNamespaces is { Count: > 1 } several ? [.. several] : null)).ToList();
         WorkspaceStore.Save(settings with
         {
             Tabs = tabs,

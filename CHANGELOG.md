@@ -14,10 +14,14 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Added
 
-- **A namespace picker on the Applications list, for one namespace or several.** It sits beside
-  the title, as the Resources list's does, and opens with Ctrl/Cmd+Shift+N. It lists the
-  namespaces applications run in, with how many each has. A click or Space adds or removes a
-  namespace and keeps the picker open; Enter chooses one alone. The list, the chips' counts and
+- **Several namespaces at once, in both lists.** In either namespace picker a click still
+  chooses one namespace; a row's box, Ctrl/Cmd+click or Space adds another and keeps the picker
+  open. The Resources list then reads each chosen namespace with a watch of its own, so it works
+  where you may read those namespaces and not the whole cluster, and a restart reopens the tab
+  on the same namespaces. The Helm browser and the palette's log rows follow the choice.
+- **A namespace picker on the Applications list.** It sits beside the title, as the Resources
+  list's does, and opens with Ctrl/Cmd+Shift+N. It lists the namespaces applications run in,
+  with how many each has. The list, the chips' counts and
   the empty states follow the choice. It opens on All namespaces whatever the Resources mode
   shows, and choosing a kube-* namespace shows its applications.
 - **The Applications list sorts by any column.** A header click sorts ascending, a second one

@@ -72,7 +72,72 @@ internal static class UxInteractionChecks
         window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
         Dispatcher.UIThread.RunJobs();
         if (!button.IsFocused) throw new InvalidOperationException("Escape did not restore picker focus.");
-        Console.WriteLine("Namespace keyboard interaction passed (300 namespaces).");
+
+        // Several namespaces by pointer: a row's box adds it and keeps the picker open; a
+        // click on a row elsewhere chooses that one alone and closes it.
+        vm.SetNamespaces(["payments"]);
+        Dispatcher.UIThread.RunJobs();
+        button.Flyout!.ShowAt(button);
+        Settle(window);
+        var list = view.FindControl<ListBox>("NamespaceList")!;
+        ClickNamespaceBox(window, list, vm.FilteredNamespaces.First(c => c.Name == "monitoring"));
+        if (!vm.SelectedNamespaces.SequenceEqual(["monitoring", "payments"]) || !button.Flyout.IsOpen)
+            throw new InvalidOperationException("A row's box did not add the namespace with the picker kept open.");
+        if (vm.Rows.Count == 0 || vm.Rows.Any(r => r.Namespace is not ("payments" or "monitoring"))
+            || !vm.Rows.Any(r => r.Namespace == "monitoring"))
+            throw new InvalidOperationException("The list does not hold both chosen namespaces' rows.");
+        if (vm.NamespaceDisplay != "monitoring, payments")
+            throw new InvalidOperationException($"The picker reads \"{vm.NamespaceDisplay}\" for two namespaces.");
+        var payments = vm.FilteredNamespaces.First(c => c.Name == "payments");
+        list.ScrollIntoView(payments);
+        Settle(window);
+        var row = (Control)list.ContainerFromItem(payments)!;
+        // On the name, not the far edge, where 300 namespaces put the list's scroll bar.
+        Click(window, row, row.Bounds.Width / 2);
+        if (!vm.SelectedNamespaces.SequenceEqual(["payments"]) || button.Flyout.IsOpen)
+            throw new InvalidOperationException("A click on a row did not choose that namespace alone and close the picker.");
+
+        Console.WriteLine("Namespace picker interaction passed (300 namespaces; keyboard, a box to add one, a click for one alone).");
+    }
+
+    /// <summary>Opens the Resources picker with two namespaces chosen, for its screenshot.</summary>
+    internal static void NamespacePickerSeveral(Window window)
+    {
+        var view = window.GetVisualDescendants().OfType<ClusterTabView>().First();
+        var vm = (ClusterTabViewModel)view.DataContext!;
+        vm.SetNamespaces(["payments", "monitoring"]);
+        Dispatcher.UIThread.RunJobs();
+        var button = view.FindControl<Button>("NamespaceButton")!;
+        button.Flyout!.ShowAt(button);
+        Settle(window);
+    }
+
+    internal static void ClickNamespaceBox(Window window, ListBox list, object item)
+    {
+        list.ScrollIntoView(item);
+        Settle(window);
+        var container = list.ContainerFromItem(item) as Control
+            ?? throw new InvalidOperationException($"The picker row for {item} has no container.");
+        var box = container.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("nsCheckHit"));
+        Click(window, box, box.Bounds.Width / 2);
+    }
+
+    private static void Click(Window window, Control target, double x)
+    {
+        var point = target.TranslatePoint(new Point(x, target.Bounds.Height / 2), window)
+            ?? throw new InvalidOperationException($"{target} is not in the window.");
+        window.MouseDown(point, MouseButton.Left);
+        window.MouseUp(point, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    private static void Settle(Window window)
+    {
+        for (var i = 0; i < 4; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        }
     }
 
     /// <summary>

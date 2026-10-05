@@ -20,7 +20,15 @@ namespace KubeNimbus.App;
 /// "Pods, all namespaces, pick again" — two or three clicks on every launch, on every
 /// tab, which is exactly the tax the fast start was supposed to remove.
 /// </remarks>
-public sealed record TabSnapshot(string ContextName, string KubeconfigPath, string? KindKey = null, string? Namespace = null);
+/// <param name="Namespace">The namespace the tab showed — the first, when it showed several.</param>
+/// <param name="Namespaces">
+/// Every namespace, when the tab showed more than one; null otherwise. Kept beside
+/// <paramref name="Namespace"/> rather than in it, so a version that knows only the one opens
+/// on the first.
+/// </param>
+public sealed record TabSnapshot(
+    string ContextName, string KubeconfigPath, string? KindKey = null, string? Namespace = null,
+    IReadOnlyList<string>? Namespaces = null);
 
 /// <summary>
 /// Persisted shell state. Everything added after the initial (Theme, Tabs) pair is

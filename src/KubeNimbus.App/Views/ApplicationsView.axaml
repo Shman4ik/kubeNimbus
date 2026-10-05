@@ -39,9 +39,9 @@
             <Flyout Opened="OnNamespaceOpened" Closed="OnNamespaceClosed">
               <Grid RowDefinitions="Auto,Auto,Auto,*" Width="320" MaxHeight="440" KeyDown="OnNamespaceKeyDown">
                 <TextBox Name="NamespaceSearch" Text="{Binding NamespaceFilter}" PlaceholderText="Filter namespaces…" />
-                <!-- Says how the picker works, since a click here adds a namespace and keeps
-                     the picker open, where the Resources picker's click chooses and closes. -->
-                <TextBlock Grid.Row="1" Text="Click or Space to add or remove · Enter for that one only"
+                <!-- How to choose more than one, which nothing else on the row says. The same
+                     gestures as the Resources picker (NamespacePickerGestures). -->
+                <TextBlock Grid.Row="1" Text="{x:Static views:NamespacePickerGestures.Hint}"
                            FontSize="11" Opacity="0.55" Margin="4,6,0,0" TextTrimming="CharacterEllipsis" />
                 <TextBlock Grid.Row="2" Text="No matching namespaces." IsVisible="{Binding NoNamespaceMatches}" Margin="4,12" Opacity="0.65" />
                 <ListBox Grid.Row="3" Name="NamespaceList" ItemsSource="{Binding NamespaceChoices}"
@@ -53,11 +53,15 @@
                   </ListBox.ItemsPanel>
                   <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:ApplicationNamespaceChoice">
-                      <!-- A drawn check, not a CheckBox: the row is the one target and the
-                           view model the one writer (see ApplicationNamespaceChoice). -->
+                      <!-- The box is its own target (Border.nsCheckHit): a click there adds the
+                           namespace and keeps the picker open, a click anywhere else on the row
+                           chooses it alone. A drawn check, not a CheckBox, so the view model is
+                           the one writer (see ApplicationNamespaceChoice). -->
                       <Grid ColumnDefinitions="Auto,*,Auto">
-                        <Border Classes="nsCheck" Classes.checked="{Binding IsChecked}" VerticalAlignment="Center" Margin="0,0,8,0">
-                          <PathIcon Data="{StaticResource CheckIconGeometry}" Width="9" Height="9" IsVisible="{Binding IsChecked}" />
+                        <Border Classes="nsCheckHit" ToolTip.Tip="Add this namespace to the list, or take it out">
+                          <Border Classes="nsCheck" Classes.checked="{Binding IsChecked}">
+                            <PathIcon Data="{StaticResource CheckIconGeometry}" Width="9" Height="9" IsVisible="{Binding IsChecked}" />
+                          </Border>
                         </Border>
                         <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}"
                                    VerticalAlignment="Center" />

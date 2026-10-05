@@ -1006,7 +1006,19 @@
         <Setter Property="Opacity" Value="1" />
     </Style>
 
-    <!-- The Applications namespace picker's check: drawn, so the row stays the one target. -->
+    <!-- The namespace pickers' check: drawn rather than a CheckBox, so the view model is its
+         only writer. Its hit area (nsCheckHit) is a target of its own — add the namespace and
+         keep the picker open — with a transparent background so the whole box answers. -->
+    <Style Selector="Border.nsCheckHit">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Padding" Value="4,2,8,2" />
+        <Setter Property="Margin" Value="-4,0,0,0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.nsCheckHit:pointerover Border.nsCheck">
+        <Setter Property="BorderBrush" Value="{StaticResource AppAccentBrush}" />
+    </Style>
     <Style Selector="Border.nsCheck">
         <Setter Property="Width" Value="14" />
         <Setter Property="Height" Value="14" />
