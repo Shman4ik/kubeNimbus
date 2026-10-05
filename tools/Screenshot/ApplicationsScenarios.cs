@@ -22,13 +22,25 @@ public static class ApplicationsScenarios
     }
 
     public static ClusterTabViewModel List(
-        ApplicationChip chip = ApplicationChip.All, string filter = "", bool showSystem = false)
+        ApplicationChip chip = ApplicationChip.All, string filter = "", bool showSystem = false,
+        string[]? namespaces = null, ApplicationSortColumn? sort = null, bool descending = false)
     {
         var tab = DemoTab();
         var apps = tab.Applications;
         apps.Chip = chip;
         apps.Filter = filter;
         apps.ShowSystemNamespaces = showSystem;
+        apps.SetNamespaces(namespaces ?? []);
+        if (sort is { } column)
+        {
+            // A header click is the only way in: ascending first, a second click descending.
+            apps.SortByCommand.Execute(column);
+            if (descending)
+            {
+                apps.SortByCommand.Execute(column);
+            }
+        }
+
         apps.SelectedRow = apps.VisibleRows.FirstOrDefault();
         return tab;
     }

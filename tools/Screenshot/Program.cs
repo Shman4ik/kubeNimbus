@@ -324,6 +324,8 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("applications-list-attention", () => HostInMainWindow(ApplicationsScenarios.List(chip: ApplicationChip.NeedsAttention), mode: ShellMode.Applications)),
     ("applications-list-system", () => HostInMainWindow(ApplicationsScenarios.List(showSystem: true), mode: ShellMode.Applications)),
     ("applications-list-filtered-empty", () => HostInMainWindow(ApplicationsScenarios.List(filter: "zzz"), mode: ShellMode.Applications)),
+    ("applications-namespace-picker", () => HostInMainWindow(ApplicationsScenarios.List(namespaces: ["payments", "monitoring"]), mode: ShellMode.Applications)),
+    ("applications-list-sorted", () => HostInMainWindow(ApplicationsScenarios.List(namespaces: ["payments", "monitoring"], sort: ApplicationSortColumn.Restarts, descending: true), mode: ShellMode.Applications)),
     ("applications-list-narrow", () => HostInMainWindow(ApplicationsScenarios.List(), width: 1024, mode: ShellMode.Applications)),
     ("applications-list-loading", () => HostInMainWindow(ApplicationsScenarios.Loading(), mode: ShellMode.Applications)),
     ("applications-list-rbac-fallback", () => HostInMainWindow(ApplicationsScenarios.RbacFallback(), mode: ShellMode.Applications)),
@@ -449,6 +451,7 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
 
     if (name == "ux-namespace-picker") UxInteractionChecks.NamespacePicker(window);
     if (name == "ux-applications-keys") ApplicationsChecks.Keys(window);
+    if (name == "applications-namespace-picker") ApplicationsChecks.OpenNamespacePicker(window);
     if (name == "ux-hotkey-scheme") KeyboardChecks.HotkeyScheme(window);
     if (name == "ux-overlay-focus") UxInteractionChecks.OverlayTakesFocus(window);
     if (name == "ux-preferences-tabs") UxInteractionChecks.PreferencesTabs(window);

@@ -12,6 +12,19 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+### Added
+
+- **A namespace picker on the Applications list, for one namespace or several.** It sits beside
+  the title, as the Resources list's does, and opens with Ctrl/Cmd+Shift+N. It lists the
+  namespaces applications run in, with how many each has. A click or Space adds or removes a
+  namespace and keeps the picker open; Enter chooses one alone. The list, the chips' counts and
+  the empty states follow the choice. It opens on All namespaces whatever the Resources mode
+  shows, and choosing a kube-* namespace shows its applications.
+- **The Applications list sorts by any column.** A header click sorts ascending, a second one
+  descending, a third returns to the list's own order with its Needs attention group. Pods
+  sort by the Ready fraction, Restarts as a count and Last deploy by time, and the sort holds
+  as the cluster changes.
+
 ## [0.6.0] - 2026-10-04
 
 ### Added

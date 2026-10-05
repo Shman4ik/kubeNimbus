@@ -648,9 +648,18 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
     [ObservableProperty]
     private bool _hasNoReadableScope;
 
+    /// <summary>
+    /// The reads fell back to namespaces. Only then does the title line state the scope: in
+    /// the routine case it read "All namespaces" beside a namespace picker that said the
+    /// same (UI rule 20).
+    /// </summary>
+    [ObservableProperty]
+    private bool _isScopeNarrowed;
+
     private void UpdateScope()
     {
         var narrowed = _kinds.Where(k => k.Value.ClusterWide == false).ToList();
+        IsScopeNarrowed = narrowed.Count > 0;
         if (narrowed.Count == 0)
         {
             ScopeText = "All namespaces";
@@ -735,15 +744,24 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
     /// <summary>Rows exist, and the chips or the search hid all of them — a different state with a different way out.</summary>
     public bool IsFilterEmpty => _ordered.Count > 0 && VisibleRows.Count == 0;
 
-    public string FilterEmptyText => Filter.Trim().Length > 0
-        ? $"Nothing matches “{Filter.Trim()}”"
-        : Chip switch
+    public string FilterEmptyText
+    {
+        get
         {
-            ApplicationChip.NeedsAttention => "Nothing needs attention",
-            ApplicationChip.RecentDeploy => "Nothing was deployed in the last hour",
-            ApplicationChip.NotInArgo => "Every application here is in Argo CD",
-            _ => "Every application here is in a kube-* namespace",
-        };
+            var where = IsNamespaceSelected ? $" {SelectionPhrase}" : "";
+            return Filter.Trim().Length > 0
+                ? $"Nothing matches “{Filter.Trim()}”{where}"
+                : Chip switch
+                {
+                    ApplicationChip.NeedsAttention => $"Nothing needs attention{where}",
+                    ApplicationChip.RecentDeploy => $"Nothing was deployed in the last hour{where}",
+                    ApplicationChip.NotInArgo => $"Every application{(IsNamespaceSelected ? where : " here")} is in Argo CD",
+                    _ => IsNamespaceSelected
+                        ? $"No applications {SelectionPhrase}"
+                        : "Every application here is in a kube-* namespace",
+                };
+        }
+    }
 
     public string FilterEmptyDetail => $"{_ordered.Count} application{(_ordered.Count == 1 ? "" : "s")} in the list";
 
@@ -843,8 +861,232 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
     {
         Filter = "";
         Chip = ApplicationChip.All;
+        SetNamespaces([]);
         ShowSystemNamespaces = true;
     }
+
+    // ------------------------------------------------------------- namespace
+
+    public const string AllNamespaces = ClusterTabViewModel.AllNamespaces;
+
+    private readonly SortedSet<string> _selectedNamespaces = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The namespaces the list is narrowed to; empty means every namespace. Its own, not the
+    /// tab's: the Resources list's namespace is often the kubeconfig context's, and this
+    /// list's job is the whole cluster at a glance, so it opens on every namespace whatever
+    /// the other mode shows. Session state, like the chips. It narrows what was read and
+    /// starts no watch: under narrow RBAC the reads already cover every namespace the tab
+    /// knows of.
+    /// </summary>
+    public IReadOnlyCollection<string> SelectedNamespaces => _selectedNamespaces;
+
+    public bool IsNamespaceSelected => _selectedNamespaces.Count > 0;
+
+    /// <summary>
+    /// What the picker's button reads: All namespaces, the one chosen, two by name, or a
+    /// count past that — the names are in the picker and in the tooltip.
+    /// </summary>
+    public string NamespaceButtonText => _selectedNamespaces.Count switch
+    {
+        0 => AllNamespaces,
+        1 or 2 => string.Join(", ", _selectedNamespaces),
+        var n => $"{n} namespaces",
+    };
+
+    public string NamespaceButtonTip => _selectedNamespaces.Count > 2
+        ? $"Namespaces: {string.Join(", ", _selectedNamespaces)}. Click to change."
+        : "Choose namespaces: type to filter, click a row to add or remove it, Enter for that one only";
+
+    /// <summary>How an empty state names the selection: "in payments", "in the 3 chosen namespaces".</summary>
+    private string SelectionPhrase => _selectedNamespaces.Count == 1
+        ? $"in {_selectedNamespaces.Min}"
+        : $"in the {_selectedNamespaces.Count} chosen namespaces";
+
+    /// <summary>Narrows to exactly these namespaces; none means every namespace.</summary>
+    public void SetNamespaces(IEnumerable<string> namespaces)
+    {
+        var wanted = namespaces.Where(n => n.Length > 0 && n != AllNamespaces).ToHashSet(StringComparer.Ordinal);
+        if (_selectedNamespaces.SetEquals(wanted))
+        {
+            return;
+        }
+
+        _selectedNamespaces.Clear();
+        _selectedNamespaces.UnionWith(wanted);
+        OnNamespacesChanged();
+    }
+
+    /// <summary>A click on a picker row: adds or removes that namespace; All namespaces clears the selection.</summary>
+    internal void ToggleNamespace(ApplicationNamespaceChoice choice)
+    {
+        if (choice.IsAll)
+        {
+            SetNamespaces([]);
+            return;
+        }
+
+        if (!_selectedNamespaces.Remove(choice.Name))
+        {
+            _selectedNamespaces.Add(choice.Name);
+        }
+
+        OnNamespacesChanged();
+    }
+
+    /// <summary>Enter on a picker row: that namespace and no other, the single-namespace gesture.</summary>
+    internal void ChooseOnly(ApplicationNamespaceChoice choice) =>
+        SetNamespaces(choice.IsAll ? [] : [choice.Name]);
+
+    private void OnNamespacesChanged()
+    {
+        OnPropertyChanged(nameof(SelectedNamespaces));
+        OnPropertyChanged(nameof(IsNamespaceSelected));
+        OnPropertyChanged(nameof(NamespaceButtonText));
+        OnPropertyChanged(nameof(NamespaceButtonTip));
+
+        // In place, so the row the keyboard is on keeps its focus while it is toggled.
+        foreach (var choice in NamespaceChoices)
+        {
+            choice.IsChecked = choice.IsAll ? _selectedNamespaces.Count == 0 : _selectedNamespaces.Contains(choice.Name);
+        }
+
+        RefreshVisible();
+    }
+
+    /// <summary>The picker's search box.</summary>
+    [ObservableProperty]
+    private string _namespaceFilter = "";
+
+    partial void OnNamespaceFilterChanged(string value) => RebuildNamespaceChoices();
+
+    [ObservableProperty]
+    private ApplicationNamespaceChoice? _namespaceCandidate;
+
+    /// <summary>
+    /// The picker's rows: All namespaces, then every namespace an application runs in, with
+    /// how many do. Taken from the rows rather than from a namespace list, so the picker
+    /// offers only what narrows to something, and works where RBAC refuses
+    /// <c>list namespaces</c>. A kube-* namespace is offered even while the kube-* chip hides
+    /// its applications: choosing it is asking for them.
+    /// </summary>
+    public RangeObservableCollection<ApplicationNamespaceChoice> NamespaceChoices { get; } = [];
+
+    public bool NoNamespaceMatches => NamespaceChoices.Count == 0;
+
+    /// <summary>Rebuilt when the picker opens and as its search is typed, not on every watch tick.</summary>
+    internal void RebuildNamespaceChoices()
+    {
+        var query = NamespaceFilter.Trim();
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var row in _ordered)
+        {
+            foreach (var ns in row.Namespaces.Distinct(StringComparer.Ordinal))
+            {
+                counts[ns] = counts.GetValueOrDefault(ns) + 1;
+            }
+        }
+
+        // A namespace whose last application went away stays in the picker while it is
+        // chosen, so the picker can always show, and undo, what the list is narrowed to.
+        foreach (var ns in _selectedNamespaces)
+        {
+            counts.TryAdd(ns, 0);
+        }
+
+        var choices = new List<ApplicationNamespaceChoice>();
+        if (AllNamespaces.Contains(query, StringComparison.OrdinalIgnoreCase))
+        {
+            choices.Add(new(AllNamespaces, _ordered.Count, isAll: true) { IsChecked = _selectedNamespaces.Count == 0 });
+        }
+
+        choices.AddRange(counts
+            .Where(kv => kv.Key.Contains(query, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(kv => new ApplicationNamespaceChoice(kv.Key, kv.Value) { IsChecked = _selectedNamespaces.Contains(kv.Key) }));
+
+        NamespaceChoices.ReplaceAll(choices);
+
+        // With a query, the first namespace that matches, so Enter takes what was typed; with
+        // none, the first chosen row, where the reader left off.
+        NamespaceCandidate = query.Length == 0
+            ? NamespaceChoices.FirstOrDefault(c => c.IsChecked) ?? NamespaceChoices.FirstOrDefault()
+            : NamespaceChoices.FirstOrDefault(c => !c.IsAll) ?? NamespaceChoices.FirstOrDefault();
+        OnPropertyChanged(nameof(NoNamespaceMatches));
+    }
+
+    // ------------------------------------------------------------------ sort
+
+    /// <summary>
+    /// The column a header click sorted by, or null for the list's own order: urgency, then
+    /// name, with the two groups captioned. Session state, like the chips.
+    /// </summary>
+    [ObservableProperty]
+    private ApplicationSortColumn? _sortColumn;
+
+    [ObservableProperty]
+    private bool _sortDescending;
+
+    /// <summary>
+    /// A header click: ascending, then descending, then back to the list's own order — the
+    /// resource grid's three states, for the same reason: two would leave no way back.
+    /// </summary>
+    [RelayCommand]
+    private void SortBy(ApplicationSortColumn column)
+    {
+        if (SortColumn != column)
+        {
+            SortColumn = column;
+            SortDescending = false;
+        }
+        else if (!SortDescending)
+        {
+            SortDescending = true;
+        }
+        else
+        {
+            SortColumn = null;
+            SortDescending = false;
+        }
+
+        foreach (var name in HeaderProperties)
+        {
+            OnPropertyChanged(name);
+        }
+
+        RefreshVisible();
+    }
+
+    private static readonly string[] HeaderProperties =
+    [
+        nameof(HealthHeader), nameof(NameHeader), nameof(NamespaceHeader), nameof(PodsHeader),
+        nameof(RestartsHeader), nameof(LastDeployHeader), nameof(SyncHeader),
+    ];
+
+    // The arrow is drawn into the header text, as the resource grid draws it.
+    private string Header(ApplicationSortColumn column, string label) =>
+        SortColumn == column ? label + (SortDescending ? " ↓" : " ↑") : label;
+
+    public string HealthHeader => Header(ApplicationSortColumn.Health, "Health");
+
+    public string NameHeader => Header(ApplicationSortColumn.Name, "Application");
+
+    public string NamespaceHeader => Header(ApplicationSortColumn.Namespace, "Namespace");
+
+    public string PodsHeader => Header(ApplicationSortColumn.Pods, "Pods");
+
+    public string RestartsHeader => Header(ApplicationSortColumn.Restarts, "Restarts");
+
+    public string LastDeployHeader => Header(ApplicationSortColumn.LastDeploy, "Last deploy");
+
+    public string SyncHeader => Header(ApplicationSortColumn.Sync, "Sync");
+
+    /// <summary>
+    /// The group captions earn their row while the two groups are contiguous: in the list's
+    /// own order and sorted by Health either way. Sorted by anything else the groups
+    /// interleave, and a caption would head a group that is not under it.
+    /// </summary>
+    private bool IsGroupedOrder => SortColumn is null or ApplicationSortColumn.Health;
 
     private bool PassesChip(ApplicationRowViewModel row) => Chip switch
     {
@@ -857,22 +1099,38 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
     private void RefreshVisible()
     {
         var query = Filter.Trim();
-        var inScope = _ordered.Where(r => ShowSystemNamespaces || !r.IsSystem).ToList();
+
+        // A chosen namespace is a deliberate ask, so it shows that namespace's applications
+        // whether or not it is a kube-* one, and the kube-* chip, which would do nothing, goes.
+        // An application in several namespaces is shown when any of them is chosen.
+        var chosen = IsNamespaceSelected;
+        var inScope = !chosen
+            ? _ordered.Where(r => ShowSystemNamespaces || !r.IsSystem).ToList()
+            : _ordered.Where(r => r.Namespaces.Any(_selectedNamespaces.Contains)).ToList();
         AllCount = inScope.Count;
         AttentionCount = inScope.Count(r => r.NeedsAttention);
         RecentDeployCount = inScope.Count(r => r.IsRecentDeploy);
         NotInArgoCount = inScope.Count(r => !r.IsArgo);
-        SystemCount = _ordered.Count(r => r.IsSystem);
+        SystemCount = chosen ? 0 : _ordered.Count(r => r.IsSystem);
         HasArgo = _ordered.Any(r => r.IsArgo);
 
         var target = inScope.Where(r => PassesChip(r) && r.Matches(query)).ToList();
+
+        // A header sort is maintained, not applied once: every rebuild orders the rows
+        // again, so a row whose sorted value changes on a watch event moves with it.
+        // List.Sort is not stable, which the comparer's name-and-key tie-break makes moot.
+        if (SortColumn is { } column)
+        {
+            target.Sort(new ApplicationRowComparer(column, SortDescending));
+        }
 
         var attention = target.Count(r => r.NeedsAttention);
         var rest = target.Count - attention;
         // A heading earns its row only when it separates two groups. With one group on
         // screen — the Needs attention chip, or a healthy cluster — it repeated what the
-        // chip above already says, count included.
-        var grouped = attention > 0 && rest > 0;
+        // chip above already says, count included. Sorted by a column other than Health
+        // the groups interleave, and there is nothing for a heading to head.
+        var grouped = attention > 0 && rest > 0 && IsGroupedOrder;
         var firstAttention = grouped;
         var firstRest = grouped;
         foreach (var row in target)
