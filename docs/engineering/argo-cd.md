@@ -113,3 +113,7 @@ deliberately omits the `status` subresource real Argo declares — with it on, `
 apply` silently drops every `status` block and all five would come back Unknown/Unknown,
 which is one state, not five. Delete both CRDs before installing real Argo CD; they claim
 the same names.
+
+## Sorting
+
+The list sorts by a header click (2026-10): ascending, descending, then its default order, kept across reloads for the tab's life. How each column compares, and why a header double-click opens nothing, is in [resource-grid-resize-sort](resource-grid-resize-sort.md), "The inspector grids sort too".

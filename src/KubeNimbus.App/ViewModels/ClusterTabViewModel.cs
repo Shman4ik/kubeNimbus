@@ -919,7 +919,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         if (SelectedKind?.Descriptor.Namespaced == true)
         {
-            parts.Add($"in {SelectedNamespace}");
+            parts.Add($"in {NamespaceDisplay}");
         }
 
         // A CRD whose objects carry no status the app can read passes the kind gate
@@ -1319,6 +1319,13 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     public ObservableCollection<HelmReleaseRowViewModel> HelmReleases { get; } = [];
 
+    /// <summary>The Helm grid's header sort; namespace/name until a header is clicked. Kept across reloads for the tab's life.</summary>
+    public GridSort<HelmReleaseRowViewModel> HelmSort => _helmSort ??= new(
+        HelmReleases, HelmReleaseComparer.ByKey, (column, descending) => new HelmReleaseComparer(column, descending),
+        () => SelectedHelmRelease, release => SelectedHelmRelease = release);
+
+    private GridSort<HelmReleaseRowViewModel>? _helmSort;
+
     [ObservableProperty]
     private HelmReleaseRowViewModel? _selectedHelmRelease;
 
@@ -1335,6 +1342,13 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     // read from the Kubernetes API and nothing else — see ClusterClient.ArgoCd.cs.
 
     public ObservableCollection<ArgoApplicationRowViewModel> ArgoApplications { get; } = [];
+
+    /// <summary>The Argo grid's header sort; most urgent first until a header is clicked. Kept across reloads for the tab's life.</summary>
+    public GridSort<ArgoApplicationRowViewModel> ArgoSort => _argoSort ??= new(
+        ArgoApplications, ArgoApplicationComparer.ByRank, (column, descending) => new ArgoApplicationComparer(column, descending),
+        () => SelectedArgoApplication, application => SelectedArgoApplication = application);
+
+    private GridSort<ArgoApplicationRowViewModel>? _argoSort;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanSyncSelectedArgoApplication))]
@@ -1429,6 +1443,9 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// namespaces.
     /// </summary>
     public string? RestoreNamespace { get; init; }
+
+    /// <summary>Every namespace the tab was showing when the workspace was saved, when it was more than one; <see cref="RestoreNamespace"/> is the first.</summary>
+    public IReadOnlyList<string>? RestoreNamespaces { get; init; }
 
     /// <summary>The selected kind as a workspace key; see <see cref="RestoreKindKey"/>.</summary>
     public string? ViewKindKey => SelectedKind?.Descriptor is { } descriptor ? GridLayoutStore.KeyFor(descriptor) : null;
@@ -1685,6 +1702,13 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             {
                 SelectedNamespace = @namespace;
             }
+
+            // The others chosen with it, under the same rule: a name the namespace list was
+            // read without has been deleted and is dropped; one it could not read is kept.
+            if (RestoreNamespaces is { Count: > 1 } restored && SelectedNamespace == @namespace)
+            {
+                SetNamespaces(restored.Where(ns => NamespaceOptions.Contains(ns) || (NamespaceOptions.Count <= 1 && !IsDemo)));
+            }
         }
 
         var kinds = SidebarSections.SelectMany(s => s.Kinds).Where(k => !k.IsRecentEntry).ToList();
@@ -1732,8 +1756,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             && _watchCts is { } cts && IsMeteredKind(SelectedKind.Descriptor))
         {
             AreMetricsVisible = true;
-            StartMetricsPolling(SelectedKind.Descriptor, [("", client)],
-                SelectedNamespace == AllNamespaces ? null : SelectedNamespace, cts.Token);
+            StartMetricsPolling(SelectedKind.Descriptor, [("", client)], WatchNamespaces(SelectedKind.Descriptor), cts.Token);
         }
     }
 
@@ -2227,10 +2250,11 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             // hidden here for the same reason it is hidden in the Helm browser — aggregating
             // GitOps state across clusters is a different (and much bigger) question than
             // aggregating one kind's rows.
+            // In the order the header sort names, which is most urgent first until a header
+            // is clicked.
             foreach (var row in applications
                 .Select(a => new ArgoApplicationRowViewModel(a, descriptor))
-                .OrderBy(ArgoApplicationRowViewModel.Rank)
-                .ThenBy(r => r.Application.Key, StringComparer.Ordinal))
+                .Order(ArgoSort.Comparer))
             {
                 ArgoApplications.Add(row);
             }
@@ -2381,13 +2405,28 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         HelmReleases.Clear();
         try
         {
-            var @namespace = SelectedNamespace == AllNamespaces ? null : SelectedNamespace;
-            var releases = Client is null
-                ? Demo.DemoData.HelmReleases.Where(r => @namespace is null || r.Namespace == @namespace)
-                : await Client.ListHelmReleasesAsync(@namespace);
-            foreach (var release in releases)
+            // One read per chosen namespace (none: the whole cluster), as the list's watch does,
+            // so a user granted those namespaces and not the cluster can still read them.
+            var namespaces = SelectedNamespaces;
+            List<HelmRelease> releases = [];
+            if (Client is null)
             {
-                HelmReleases.Add(new HelmReleaseRowViewModel(release));
+                releases.AddRange(Demo.DemoData.HelmReleases.Where(r => namespaces.Count == 0 || namespaces.Contains(r.Namespace)));
+            }
+            else if (namespaces.Count == 0)
+            {
+                releases.AddRange(await Client.ListHelmReleasesAsync(null));
+            }
+            else
+            {
+                foreach (var ns in namespaces)
+                {
+                    releases.AddRange(await Client.ListHelmReleasesAsync(ns));
+                }
+            }
+            foreach (var release in releases.Select(r => new HelmReleaseRowViewModel(r)).Order(HelmSort.Comparer))
+            {
+                HelmReleases.Add(release);
             }
 
             SelectedHelmRelease = HelmReleases.FirstOrDefault();
@@ -2466,9 +2505,30 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
     }
 
-    partial void OnSelectedNamespaceChanged(string value)
+    partial void OnSelectedNamespaceChanging(string value)
     {
-        RememberNamespace(value);
+        // A namespace chosen on its own — the picker's Enter, the palette, a reveal, a
+        // restore — replaces any others chosen with the previous one. SetNamespaces sets
+        // the others itself, around this.
+        if (!_settingNamespaces)
+        {
+            _additionalNamespaces = [];
+        }
+    }
+
+    partial void OnSelectedNamespaceChanged(string value) => OnNamespacesChanged();
+
+    private void OnNamespacesChanged()
+    {
+        foreach (var ns in SelectedNamespaces.Reverse())
+        {
+            RememberNamespace(ns);
+        }
+
+        OnPropertyChanged(nameof(SelectedNamespaces));
+        OnPropertyChanged(nameof(NamespaceDisplay));
+        OnPropertyChanged(nameof(NamespaceButtonTip));
+        UpdateNamespaceChecks();
         RaiseViewStateChanged();
 
         if (IsHelmView)
@@ -2537,7 +2597,10 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
 
         var descriptor = SelectedKind.Descriptor;
-        var @namespace = descriptor.Namespaced && SelectedNamespace != AllNamespaces ? SelectedNamespace : null;
+        var namespaces = WatchNamespaces(descriptor);
+        var @namespace = namespaces is [var single] ? single : null;
+        _pendingNamespaces.Clear();
+        _fleetNamespaceFilter = null;
 
         if (Client is not { } client)
         {
@@ -2546,7 +2609,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             // Only reachable on the demo cluster — the guard above returned for every
             // other tab with no client. Rows come from the shipped dataset; no watch,
             // no metrics poll, no socket.
-            PopulateDemoRows(descriptor, @namespace);
+            PopulateDemoRows(descriptor, namespaces);
             return;
         }
 
@@ -2568,11 +2631,18 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             // so the columns go on for a metered kind and the poll takes them away
             // again if no cluster in scope actually serves metrics.k8s.io.
             AreMetricsVisible = IsMeteredKind(descriptor);
-            StartFleetWatch(descriptor, members, @namespace, token);
+            StartFleetWatch(descriptor, members, namespaces, token);
             return;
         }
 
         AreMetricsVisible = _metricsApiAvailable && IsMeteredKind(descriptor);
+
+        if (namespaces.Count > 1)
+        {
+            StartNamespacesWatch(client, descriptor, namespaces, token);
+            StartMetricsPolling(descriptor, [("", client)], namespaces, token);
+            return;
+        }
 
         _ = Task.Run(async () =>
         {
@@ -2612,7 +2682,168 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             }
         }, token);
 
-        StartMetricsPolling(descriptor, [("", client)], @namespace, token);
+        StartMetricsPolling(descriptor, [("", client)], namespaces, token);
+    }
+
+    /// <summary>
+    /// The namespaces a list of this kind reads: none for a cluster-scoped kind or All
+    /// namespaces (one read across the cluster, written as a single null), otherwise every
+    /// chosen one.
+    /// </summary>
+    private IReadOnlyList<string?> WatchNamespaces(ResourceDescriptor descriptor) =>
+        descriptor.Namespaced && SelectedNamespaces is { Count: > 0 } chosen ? [.. chosen] : [null];
+
+    // The namespaces of a several-namespace watch that have not yet delivered their Synced.
+    private readonly HashSet<string> _pendingNamespaces = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Several namespaces: one list+watch each, merged (<see cref="NamespaceWatch"/>). The
+    /// events carry their namespace, so a Reset clears only that namespace's rows, and the
+    /// list stops waiting at its first row or once every namespace has answered — never at
+    /// the first namespace to come back empty (UI rule 18).
+    /// </summary>
+    private void StartNamespacesWatch(
+        ClusterClient client, ResourceDescriptor descriptor, IReadOnlyList<string?> namespaces, CancellationToken token)
+    {
+        var names = namespaces.OfType<string>().ToList();
+        foreach (var ns in names)
+        {
+            _pendingNamespaces.Add(ns);
+        }
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await foreach (var batch in NamespaceWatch.WatchAsync(
+                    client, descriptor, names,
+                    connectionLost: (ns, ex) => Dispatcher.UIThread.Post(() =>
+                    {
+                        if (token.IsCancellationRequested)
+                        {
+                            return;
+                        }
+
+                        ConnectionWarning = $"{ns}: {ex.Message}";
+                        ConnectionWarningOffersReconnect = true;
+
+                        // A refusal is an answer, and the list must not wait for it for ever.
+                        if (ex.InnerException is HttpRequestException { StatusCode: System.Net.HttpStatusCode.Forbidden }
+                            or HttpRequestException { StatusCode: System.Net.HttpStatusCode.Forbidden })
+                        {
+                            ApplyNamespaced(new NamespacedResourceEvent(ns, ResourceEvent<DynamicResource>.Synced));
+                        }
+                    }),
+                    sourceFailed: (ns, ex) => Dispatcher.UIThread.Post(() =>
+                    {
+                        if (!token.IsCancellationRequested)
+                        {
+                            ConnectionWarning = $"{ns}: {ex.Message}";
+                        }
+                    }),
+                    cancellationToken: token).InBatches(cancellationToken: token))
+                {
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        if (!token.IsCancellationRequested)
+                        {
+                            ApplyNamespacedBatch(batch);
+                        }
+                    });
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // normal when switching kind/namespace or disconnecting
+            }
+            catch (Exception ex)
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    Status = $"Watch ended: {ex.Message}";
+                    IsListLoading = false;
+                    RecomputeListEmpty();
+                });
+            }
+        }, token);
+    }
+
+    /// <summary>One event of a several-namespace watch. Internal so the tests can post events the way the watch does.</summary>
+    internal void ApplyNamespaced(NamespacedResourceEvent tagged)
+    {
+        ApplyNamespacedOne(tagged);
+        RecomputeListEmpty();
+    }
+
+    /// <summary>The several-namespace counterpart of <see cref="ApplyBatch"/>.</summary>
+    internal void ApplyNamespacedBatch(IReadOnlyList<NamespacedResourceEvent> events)
+    {
+        _stagedRows = [];
+        try
+        {
+            foreach (var evt in events)
+            {
+                ApplyNamespacedOne(evt);
+            }
+        }
+        finally
+        {
+            FlushStagedRows();
+            _stagedRows = null;
+        }
+
+        RecomputeListEmpty();
+    }
+
+    private void ApplyNamespacedOne(NamespacedResourceEvent tagged)
+    {
+        switch (tagged.Event.Type)
+        {
+            case ResourceEventType.Reset:
+            {
+                // This namespace's rows only, in one pass and one notification — the fleet
+                // view's cluster-scoped Reset, with the namespace in the cluster's place.
+                _pendingNamespaces.Add(tagged.Namespace);
+                FlushStagedRows();
+                var stale = new HashSet<ResourceRowViewModel>();
+                foreach (var key in _rowsByKey
+                    .Where(entry => string.Equals(entry.Value.Namespace, tagged.Namespace, StringComparison.Ordinal))
+                    .Select(entry => entry.Key)
+                    .ToArray())
+                {
+                    if (_rowsByKey.Remove(key, out var row))
+                    {
+                        stale.Add(row);
+                    }
+                }
+
+                if (stale.Count > 0)
+                {
+                    Rows.ReplaceAll(Rows.Where(row => !stale.Contains(row)).ToList());
+                }
+
+                if (Rows.Count == 0 && (_stagedRows?.Count ?? 0) == 0)
+                {
+                    IsListLoading = true;
+                }
+
+                break;
+            }
+
+            case ResourceEventType.Synced:
+                _pendingNamespaces.Remove(tagged.Namespace);
+                if (_pendingNamespaces.Count == 0)
+                {
+                    IsListLoading = false;
+                    ConnectionWarning = null;
+                }
+
+                break;
+
+            default:
+                ApplyOne(tagged.Event);
+                break;
+        }
     }
 
     /// <summary>
@@ -2622,10 +2853,10 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// catalog is like that, and it has to read as an empty namespace rather than as
     /// something broken (UI rule 9).
     /// </summary>
-    private void PopulateDemoRows(ResourceDescriptor descriptor, string? @namespace)
+    private void PopulateDemoRows(ResourceDescriptor descriptor, IReadOnlyList<string?> namespaces)
     {
         var printerColumns = VisiblePrinterColumns;
-        foreach (var resource in Demo.DemoData.ResourcesFor(descriptor, @namespace))
+        foreach (var resource in namespaces.SelectMany(ns => Demo.DemoData.ResourcesFor(descriptor, ns)))
         {
             var row = new ResourceRowViewModel(resource);
             row.SetPrinterColumns(printerColumns);
@@ -2651,8 +2882,14 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// discovery, then run one list+watch per cluster merged into this list.
     /// </summary>
     private void StartFleetWatch(
-        ResourceDescriptor descriptor, IReadOnlyList<FleetMember> members, string? @namespace, CancellationToken token)
+        ResourceDescriptor descriptor, IReadOnlyList<FleetMember> members, IReadOnlyList<string?> namespaces, CancellationToken token)
     {
+        // Several namespaces across several clusters would be clusters × namespaces watches;
+        // the fleet reads each cluster whole instead and keeps the chosen namespaces' rows
+        // (ApplyFleetOne). One namespace, or none, is passed through as before.
+        var @namespace = namespaces is [var single] ? single : null;
+        _fleetNamespaceFilter = namespaces.Count > 1 ? [.. namespaces.OfType<string>()] : null;
+
         _ = Task.Run(async () =>
         {
             try
@@ -2704,7 +2941,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 StartMetricsPolling(
                     descriptor,
                     targets.Select(t => (t.Member.ClusterName, t.Member.Client)).ToArray(),
-                    @namespace,
+                    namespaces,
                     token);
 
                 await foreach (var batch in ClusterFleet.WatchAsync(
@@ -2731,6 +2968,9 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             }
         }, token);
     }
+
+    // The chosen namespaces a fleet watch keeps, when it reads each cluster whole; null otherwise.
+    private HashSet<string>? _fleetNamespaceFilter;
 
     /// <summary>Kinds metrics.k8s.io reports on. Everything else has no usage to show.</summary>
     private static bool IsMeteredKind(ResourceDescriptor descriptor) =>
@@ -2784,7 +3024,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     private void StartMetricsPolling(
         ResourceDescriptor descriptor,
         IReadOnlyList<(string ClusterName, ClusterClient Client)> sources,
-        string? @namespace,
+        IReadOnlyList<string?> namespaces,
         CancellationToken token)
     {
         if (!AreMetricsVisible || sources.Count == 0)
@@ -2813,9 +3053,13 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                         {
                             if (pods)
                             {
-                                foreach (var m in await client.GetPodMetricsAsync(@namespace, token))
+                                // One request per chosen namespace, as the watch reads them.
+                                foreach (var @namespace in namespaces)
                                 {
-                                    byKey[ResourceRowViewModel.KeyFor(clusterName, m.Key)] = (m.CpuNanocores, m.MemoryBytes);
+                                    foreach (var m in await client.GetPodMetricsAsync(@namespace, token))
+                                    {
+                                        byKey[ResourceRowViewModel.KeyFor(clusterName, m.Key)] = (m.CpuNanocores, m.MemoryBytes);
+                                    }
                                 }
                             }
                             else
@@ -3089,6 +3333,11 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 ConnectionWarning = null;
                 break;
             }
+
+            case ResourceEventType.Added or ResourceEventType.Modified when tagged.Event.Resource is { } added
+                && _fleetNamespaceFilter is { } only && !only.Contains(added.Namespace ?? ""):
+                // Read because the cluster was read whole; not one of the chosen namespaces.
+                break;
 
             case ResourceEventType.Added or ResourceEventType.Modified when tagged.Event.Resource is { } added:
                 IsListLoading = false;

@@ -180,6 +180,17 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
     public ObservableCollection<NodePodViewModel> Pods { get; } = [];
 
     /// <summary>
+    /// The Pods grid's header sort. Its default order is namespace/name, the order the list
+    /// always had; CPU req and Mem req compare the requests themselves, so "who asked for the
+    /// most of this node" is two clicks, and Age, as everywhere, puts the youngest first.
+    /// </summary>
+    public GridSort<NodePodViewModel> PodSort => _podSort ??= new GridSort<NodePodViewModel>(
+        Pods, NodePodComparer.ByKey, (column, descending) => new NodePodComparer(column, descending),
+        () => SelectedPod, pod => SelectedPod = pod);
+
+    private GridSort<NodePodViewModel>? _podSort;
+
+    /// <summary>
     /// True from the moment the pane opens until the watch's initial list has landed —
     /// "no pods here" is a verdict, and it is not one this pane has until then (UI rule 18).
     /// </summary>
@@ -677,11 +688,13 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
                 _podsByKey[key] = pod;
                 if (Pods.FirstOrDefault(p => p.Key == key) is { } existing)
                 {
+                    // The sort is maintained: a pod whose status changed moves.
                     existing.Update(pod);
+                    PodSort.Reposition(existing);
                 }
                 else
                 {
-                    Pods.Insert(SortedIndexFor(key), new NodePodViewModel(pod));
+                    PodSort.Insert(new NodePodViewModel(pod));
                 }
 
                 PodsError = null;
@@ -698,17 +711,6 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
         {
             RecomputeResources();
         }
-    }
-
-    private int SortedIndexFor(string key)
-    {
-        var index = 0;
-        while (index < Pods.Count && string.CompareOrdinal(Pods[index].Key, key) < 0)
-        {
-            index++;
-        }
-
-        return index;
     }
 
     private static string PodKey(DynamicResource pod) => $"{pod.Namespace}/{pod.Name}";
@@ -989,6 +991,13 @@ public sealed partial class NodePodViewModel : ObservableObject
     [ObservableProperty]
     private string _ageText = "";
 
+    /// <summary>The values behind the request and age texts, which is what the grid sorts by: "250m" and "1.5" do not compare as text.</summary>
+    public double CpuRequest { get; private set; }
+
+    public double MemoryRequest { get; private set; }
+
+    public DateTimeOffset? CreatedAt { get; private set; }
+
     internal void Update(DynamicResource pod)
     {
         Uid = pod.Uid;
@@ -997,10 +1006,11 @@ public sealed partial class NodePodViewModel : ObservableObject
         Status = summary.Status;
         StatusHealth = summary.Health;
 
-        CpuRequestText = NodeDetailTabViewModel.FormatCores(
-            NodeResources.EffectiveRequest(pod, NodeResources.Cpu, "requests"));
-        MemoryRequestText = NodeDetailTabViewModel.FormatBytes(
-            NodeResources.EffectiveRequest(pod, NodeResources.Memory, "requests"));
+        CpuRequest = NodeResources.EffectiveRequest(pod, NodeResources.Cpu, "requests");
+        MemoryRequest = NodeResources.EffectiveRequest(pod, NodeResources.Memory, "requests");
+        CpuRequestText = NodeDetailTabViewModel.FormatCores(CpuRequest);
+        MemoryRequestText = NodeDetailTabViewModel.FormatBytes(MemoryRequest);
+        CreatedAt = pod.CreationTimestamp;
         AgeText = pod.CreationTimestamp is { } created
             ? RelativeTime.Compact(DateTimeOffset.UtcNow - created)
             : "";
@@ -1043,4 +1053,60 @@ public sealed class NodeConditionViewModel
     };
 
     public string Health { get; }
+}
+
+/// <summary>
+/// The order of node detail's Pods grid: each column by what it means — the requests as
+/// numbers, Age as an instant (ascending is the youngest first), names as text — with the
+/// row key as a tie-break that is not reversed with the direction (resource-grid-resize-sort.md).
+/// </summary>
+public sealed class NodePodComparer(string column, bool descending) : IComparer<NodePodViewModel>
+{
+    public const string Namespace = "namespace";
+    public const string Name = "name";
+    public const string Status = "status";
+    public const string CpuRequest = "cpu-request";
+    public const string MemoryRequest = "memory-request";
+    public const string Age = "age";
+
+    /// <summary>namespace/name, the order the grid opens in.</summary>
+    public static IComparer<NodePodViewModel> ByKey { get; } =
+        Comparer<NodePodViewModel>.Create((x, y) => string.CompareOrdinal(x.Key, y.Key));
+
+    public int Compare(NodePodViewModel? x, NodePodViewModel? y)
+    {
+        if (ReferenceEquals(x, y))
+        {
+            return 0;
+        }
+
+        if (x is null || y is null)
+        {
+            return x is null ? 1 : -1;
+        }
+
+        var result = column switch
+        {
+            Namespace => string.Compare(x.Namespace, y.Namespace, StringComparison.OrdinalIgnoreCase),
+            Name => string.Compare(x.Name, y.Name, StringComparison.OrdinalIgnoreCase),
+            Status => string.Compare(x.Status, y.Status, StringComparison.OrdinalIgnoreCase),
+            CpuRequest => x.CpuRequest.CompareTo(y.CpuRequest),
+            MemoryRequest => x.MemoryRequest.CompareTo(y.MemoryRequest),
+            Age => Youngest(x.CreatedAt, y.CreatedAt),
+            _ => 0,
+        };
+
+        if (descending)
+        {
+            result = -result;
+        }
+
+        return result != 0 ? result : string.CompareOrdinal(x.Key, y.Key);
+    }
+
+    // A pod with no creation time has no age, and sorts after the ones that do.
+    private static int Youngest(DateTimeOffset? x, DateTimeOffset? y) =>
+        x is null || y is null
+            ? x is null && y is null ? 0 : x is null ? 1 : -1
+            : y.Value.CompareTo(x.Value);
 }

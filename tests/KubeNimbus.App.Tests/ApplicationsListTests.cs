@@ -225,6 +225,242 @@ public class ApplicationsListTests
         await Assert.That(Names(apps)).IsEqualTo("coredns, web");
     }
 
+    // ----------------------------------------------------------------- namespace
+
+    /// <summary>
+    /// The picker offers the namespaces applications run in, with their counts, and narrows
+    /// the list, the chips' counts with it. It opens on every namespace whatever the tab's
+    /// Resources list shows.
+    /// </summary>
+    [Test]
+    public async Task The_namespace_picker_narrows_the_list_and_its_counts()
+    {
+        var apps = List();
+        Add(apps, "Deployment", Deployment("checkout", 1, 0, ns: "payments"));
+        Add(apps, "Deployment", Deployment("ledger", 1, 1, ns: "payments"));
+        Add(apps, "Deployment", Deployment("search", 1, 1, ns: "catalog"));
+        Add(apps, "Pod", CrashingPod("checkout-1", "checkout", ns: "payments"));
+        Add(apps, "Pod", ReadyPod("ledger-1", "ledger", ns: "payments"));
+        Add(apps, "Pod", ReadyPod("search-1", "search", ns: "catalog"));
+        await Assert.That(apps.IsNamespaceSelected).IsFalse();
+        await Assert.That(apps.NamespaceButtonText).IsEqualTo(ApplicationsViewModel.AllNamespaces);
+
+        apps.RebuildNamespaceChoices();
+        await Assert.That(string.Join(", ", apps.NamespaceChoices.Select(c => $"{c.Name} {c.Count}")))
+            .IsEqualTo("All namespaces 3, catalog 1, payments 2");
+
+        apps.NamespaceFilter = "pay";
+        await Assert.That(apps.NamespaceChoices.Select(c => c.Name)).IsEquivalentTo(["payments"]);
+        apps.ChooseOnly(apps.NamespaceCandidate!);
+
+        await Assert.That(apps.SelectedNamespaces).IsEquivalentTo(["payments"]);
+        await Assert.That(apps.NamespaceButtonText).IsEqualTo("payments");
+        await Assert.That(Names(apps)).IsEqualTo("checkout, ledger");
+        await Assert.That(apps.AllCount).IsEqualTo(2);
+        await Assert.That(apps.AttentionCount).IsEqualTo(1);
+
+        apps.Filter = "search";
+        await Assert.That(apps.IsFilterEmpty).IsTrue();
+        await Assert.That(apps.FilterEmptyText).IsEqualTo("Nothing matches “search” in payments");
+
+        apps.ShowEverythingCommand.Execute(null);
+        await Assert.That(apps.IsNamespaceSelected).IsFalse();
+        await Assert.That(apps.VisibleRows.Count).IsEqualTo(3);
+    }
+
+    /// <summary>
+    /// Choosing a kube-* namespace is asking for its applications, so the kube-* chip's
+    /// hiding does not apply to it, and the chip, which would do nothing, goes.
+    /// </summary>
+    [Test]
+    public async Task A_chosen_kube_namespace_shows_its_applications()
+    {
+        var apps = List();
+        Add(apps, "Deployment", Deployment("coredns", 1, 1, ns: "kube-system"));
+        Add(apps, "Deployment", Deployment("web", 1, 1));
+        await Assert.That(Names(apps)).IsEqualTo("web");
+
+        apps.RebuildNamespaceChoices();
+        await Assert.That(apps.NamespaceChoices.Select(c => c.Name)).Contains("kube-system");
+
+        apps.SetNamespaces(["kube-system"]);
+        await Assert.That(Names(apps)).IsEqualTo("coredns");
+        await Assert.That(apps.HasSystem).IsFalse();
+    }
+
+    /// <summary>A namespace whose last application went away is still the selection, stated as such.</summary>
+    [Test]
+    public async Task A_namespace_left_empty_says_so()
+    {
+        var apps = List();
+        Add(apps, "Deployment", Deployment("web", 1, 1, ns: "team-a"));
+        Add(apps, "Deployment", Deployment("api", 1, 1, ns: "team-b"));
+        apps.SetNamespaces(["team-a"]);
+
+        apps.Apply("Deployment", TestObjects.Deleted(Deployment("web", 1, 1, ns: "team-a")));
+
+        await Assert.That(apps.IsFilterEmpty).IsTrue();
+        await Assert.That(apps.FilterEmptyText).IsEqualTo("No applications in team-a");
+        apps.RebuildNamespaceChoices();
+        await Assert.That(apps.NamespaceChoices.Single(c => c.Name == "team-a").Count).IsEqualTo(0);
+    }
+
+    /// <summary>
+    /// Several namespaces at once: a click adds or removes one and the list shows the
+    /// applications of every chosen namespace; the All namespaces row clears the choice, and
+    /// Enter chooses one alone. The rows' checks follow in place.
+    /// </summary>
+    [Test]
+    public async Task Several_namespaces_can_be_chosen_at_once()
+    {
+        var apps = List();
+        Add(apps, "Deployment", Deployment("web", 1, 1, ns: "team-a"));
+        Add(apps, "Deployment", Deployment("api", 1, 1, ns: "team-b"));
+        Add(apps, "Deployment", Deployment("db", 1, 1, ns: "team-c"));
+        Add(apps, "Deployment", Deployment("queue", 1, 1, ns: "team-d"));
+        apps.RebuildNamespaceChoices();
+        ApplicationNamespaceChoice Row(string name) => apps.NamespaceChoices.Single(c => c.Name == name);
+        await Assert.That(Row(ApplicationsViewModel.AllNamespaces).IsChecked).IsTrue();
+
+        apps.ToggleNamespace(Row("team-a"));
+        apps.ToggleNamespace(Row("team-c"));
+        await Assert.That(Names(apps)).IsEqualTo("db, web");
+        await Assert.That(apps.NamespaceButtonText).IsEqualTo("team-a, team-c");
+        await Assert.That(Row("team-a").IsChecked).IsTrue();
+        await Assert.That(Row("team-b").IsChecked).IsFalse();
+        await Assert.That(Row(ApplicationsViewModel.AllNamespaces).IsChecked).IsFalse();
+
+        apps.ToggleNamespace(Row("team-d"));
+        await Assert.That(apps.NamespaceButtonText).IsEqualTo("3 namespaces");
+        apps.Filter = "zzz";
+        await Assert.That(apps.FilterEmptyText).IsEqualTo("Nothing matches \u201Czzz\u201D in the 3 chosen namespaces");
+        apps.Filter = "";
+
+        apps.ToggleNamespace(Row("team-a"));
+        await Assert.That(Names(apps)).IsEqualTo("db, queue");
+
+        apps.ChooseOnly(Row("team-b"));
+        await Assert.That(Names(apps)).IsEqualTo("api");
+        await Assert.That(Row("team-c").IsChecked).IsFalse();
+
+        apps.ToggleNamespace(Row(ApplicationsViewModel.AllNamespaces));
+        await Assert.That(apps.IsNamespaceSelected).IsFalse();
+        await Assert.That(apps.VisibleRows.Count).IsEqualTo(4);
+        await Assert.That(Row(ApplicationsViewModel.AllNamespaces).IsChecked).IsTrue();
+    }
+
+    // ---------------------------------------------------------------------- sort
+
+    /// <summary>
+    /// A header click sorts ascending, then descending, then returns to the list's own order,
+    /// and the arrow is in the header text. Restarts compare as numbers, not as text.
+    /// </summary>
+    [Test]
+    public async Task A_header_click_cycles_ascending_descending_and_the_default_order()
+    {
+        var apps = List();
+        Add(apps, "Deployment", Deployment("zeta", 1, 1));
+        Add(apps, "Deployment", Deployment("alpha", 1, 1));
+        Add(apps, "Deployment", Deployment("broken", 1, 0));
+        Add(apps, "Pod", ReadyPod("zeta-1", "zeta"));
+        Add(apps, "Pod", ReadyPod("alpha-1", "alpha"));
+        Add(apps, "Pod", CrashingPod("broken-1", "broken"));
+        await Assert.That(Names(apps)).IsEqualTo("broken, alpha, zeta");
+
+        apps.SortByCommand.Execute(ApplicationSortColumn.Name);
+        await Assert.That(Names(apps)).IsEqualTo("alpha, broken, zeta");
+        await Assert.That(apps.NameHeader).IsEqualTo("Application ↑");
+        await Assert.That(apps.HealthHeader).IsEqualTo("Health");
+
+        apps.SortByCommand.Execute(ApplicationSortColumn.Name);
+        await Assert.That(Names(apps)).IsEqualTo("zeta, broken, alpha");
+        await Assert.That(apps.NameHeader).IsEqualTo("Application ↓");
+
+        apps.SortByCommand.Execute(ApplicationSortColumn.Name);
+        await Assert.That(apps.SortColumn).IsNull();
+        await Assert.That(Names(apps)).IsEqualTo("broken, alpha, zeta");
+        await Assert.That(apps.NameHeader).IsEqualTo("Application");
+
+        apps.SortByCommand.Execute(ApplicationSortColumn.Restarts);
+        apps.SortByCommand.Execute(ApplicationSortColumn.Restarts);
+        await Assert.That(apps.VisibleRows[0].Name).IsEqualTo("broken");
+    }
+
+    /// <summary>
+    /// The group captions head contiguous groups, so they stay under the list's own order and
+    /// a Health sort, and go under any other column, where the groups interleave.
+    /// </summary>
+    [Test]
+    public async Task Group_captions_go_when_the_sort_interleaves_the_groups()
+    {
+        var apps = List();
+        Add(apps, "Deployment", Deployment("alpha", 1, 1));
+        Add(apps, "Deployment", Deployment("broken", 1, 0));
+        Add(apps, "Pod", ReadyPod("alpha-1", "alpha"));
+        Add(apps, "Pod", CrashingPod("broken-1", "broken"));
+
+        apps.SortByCommand.Execute(ApplicationSortColumn.Name);
+        await Assert.That(apps.VisibleRows.All(r => r.GroupHeader is null)).IsTrue();
+
+        apps.SortByCommand.Execute(ApplicationSortColumn.Health);
+        apps.SortByCommand.Execute(ApplicationSortColumn.Health);
+        await Assert.That(Names(apps)).IsEqualTo("alpha, broken");
+        await Assert.That(apps.VisibleRows[0].GroupHeader).IsEqualTo("EVERYTHING ELSE · 1");
+        await Assert.That(apps.VisibleRows[1].GroupHeader).IsEqualTo("NEEDS ATTENTION · 1");
+    }
+
+    /// <summary>
+    /// The sort is maintained, not applied once: a watch event that changes the sorted value
+    /// moves the row, and it is still the same row instance, selection and all.
+    /// </summary>
+    [Test]
+    public async Task A_sorted_list_stays_sorted_through_a_watch_event()
+    {
+        var apps = List();
+        Add(apps, "Deployment", Deployment("web", 1, 1));
+        Add(apps, "Deployment", Deployment("api", 1, 1));
+        Add(apps, "Pod", ReadyPod("web-1", "web"));
+        Add(apps, "Pod", ReadyPod("api-1", "api"));
+        apps.SortByCommand.Execute(ApplicationSortColumn.Restarts);
+        apps.SortByCommand.Execute(ApplicationSortColumn.Restarts);
+        await Assert.That(Names(apps)).IsEqualTo("api, web");
+        var web = apps.VisibleRows.Single(r => r.Name == "web");
+        apps.SelectedRow = web;
+
+        apps.Apply("Pod", TestObjects.Modified(CrashingPod("web-1", "web")));
+
+        await Assert.That(Names(apps)).IsEqualTo("web, api");
+        await Assert.That(apps.VisibleRows[0]).IsSameReferenceAs(web);
+        await Assert.That(apps.SelectedRow).IsSameReferenceAs(web);
+    }
+
+    /// <summary>
+    /// A row with no value sorts after the rows that have one, ascending: an app outside
+    /// Argo CD has no sync state, and a Deployment with no ReplicaSet no deploy time.
+    /// </summary>
+    [Test]
+    public async Task Rows_with_no_value_sort_last_ascending()
+    {
+        TestObjects.RedirectStores();
+        var tab = new ClusterTabViewModel(ClusterContext.Demo);
+        tab.ConnectCommand.Execute(null);
+        var apps = tab.Applications;
+        apps.DeferRebuilds = false;
+        apps.Activate();
+
+        apps.SortByCommand.Execute(ApplicationSortColumn.Sync);
+        var argo = apps.VisibleRows.TakeWhile(r => r.IsArgo).Count();
+        await Assert.That(argo).IsGreaterThan(0);
+        await Assert.That(apps.VisibleRows.Skip(argo).Any(r => r.IsArgo)).IsFalse();
+        await Assert.That(apps.VisibleRows[0].IsOutOfSync).IsTrue();
+
+        apps.SortByCommand.Execute(ApplicationSortColumn.LastDeploy);
+        var dated = apps.VisibleRows.TakeWhile(r => r.Assessment.LastDeploy?.At is not null).ToList();
+        await Assert.That(dated.Count).IsGreaterThan(1);
+        await Assert.That(apps.VisibleRows.Skip(dated.Count).Any(r => r.Assessment.LastDeploy?.At is not null)).IsFalse();
+        await Assert.That(dated.Zip(dated.Skip(1)).All(p => p.First.Assessment.LastDeploy!.At >= p.Second.Assessment.LastDeploy!.At)).IsTrue();
+    }
+
     // -------------------------------------------------------- loading and RBAC
 
     /// <summary>

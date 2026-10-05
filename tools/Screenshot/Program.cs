@@ -84,8 +84,10 @@ if (stress)
 var scenarios = new (string Name, Func<Control> Build)[]
 {
     ("ux-namespace-picker", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
+    ("cluster-tab-namespace-picker-several", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
     ("ux-unhealthy-toggle", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
     ("ux-workload-pods", () => HostInMainWindow(ClusterTabScenarios.WorkloadDetail(), height: 1000)),
+    ("ux-workload-pods-sort", () => HostInMainWindow(ClusterTabScenarios.WorkloadDetail(), height: 1000)),
     ("ux-workload-conditions", () => HostInMainWindow(ClusterTabScenarios.WorkloadDetail(1), height: 1000)),
     ("ux-workload-events", () => HostInMainWindow(ClusterTabScenarios.WorkloadDetail(2), height: 1000)),
     ("cluster-tab-workloads-list", () => HostInMainWindow(ClusterTabScenarios.WorkloadsList())),
@@ -146,6 +148,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-port-forward", () => HostInMainWindow(ClusterTabScenarios.PortForward())),
     ("cluster-tab-port-forward-idle", () => HostInMainWindow(ClusterTabScenarios.PortForwardIdle())),
     ("cluster-tab-helm-releases", () => HostInMainWindow(ClusterTabScenarios.HelmReleases())),
+    ("ux-helm-sort", () => HostInMainWindow(ClusterTabScenarios.HelmReleases())),
     ("cluster-tab-helm-release-detail", () => HostInMainWindow(ClusterTabScenarios.HelmReleaseDetail())),
     ("cluster-tab-rbac-who-can", () => HostInMainWindow(ClusterTabScenarios.RbacWhoCan(), height: 1000)),
     ("cluster-tab-rbac-who-can-empty", () => HostInMainWindow(ClusterTabScenarios.RbacWhoCan(empty: true))),
@@ -232,6 +235,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-node-list", () => HostInMainWindow(ClusterTabScenarios.NodeList())),
     ("cluster-tab-node-detail", () => HostInMainWindow(ClusterTabScenarios.NodeDetail(), height: 1000)),
     ("cluster-tab-node-detail-pods", () => HostInMainWindow(ClusterTabScenarios.NodeDetailPods(), height: 1000)),
+    ("ux-node-pods-sort", () => HostInMainWindow(ClusterTabScenarios.NodeDetailPods(), height: 1000)),
     ("cluster-tab-node-detail-events", () => HostInMainWindow(ClusterTabScenarios.NodeDetailEvents(), height: 1000)),
     ("cluster-tab-node-detail-usage", () => HostInMainWindow(ClusterTabScenarios.NodeDetailUsage(), height: 1000)),
     ("cluster-tab-node-detail-cordoned", () => HostInMainWindow(ClusterTabScenarios.NodeDetailCordoned(), height: 1000)),
@@ -264,6 +268,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-argo-dashboard", () => HostInMainWindow(ClusterTabScenarios.ArgoDashboard())),
     ("cluster-tab-argo-application-detail",
         () => HostInMainWindow(ClusterTabScenarios.ArgoApplicationDetail(), height: 1000)),
+    ("ux-argo-sort", () => HostInMainWindow(ClusterTabScenarios.ArgoDashboard())),
     ("cluster-tab-argo-sync-unavailable", () => HostInMainWindow(ClusterTabScenarios.ArgoSyncUnavailable())),
     // L1 — the palette's log rows. On the demo cluster, which is the one place the rows
     // come from a real listing (the dataset) rather than a fixture; the states a sandbox
@@ -330,6 +335,8 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("applications-list-attention", () => HostInMainWindow(ApplicationsScenarios.List(chip: ApplicationChip.NeedsAttention), mode: ShellMode.Applications)),
     ("applications-list-system", () => HostInMainWindow(ApplicationsScenarios.List(showSystem: true), mode: ShellMode.Applications)),
     ("applications-list-filtered-empty", () => HostInMainWindow(ApplicationsScenarios.List(filter: "zzz"), mode: ShellMode.Applications)),
+    ("applications-namespace-picker", () => HostInMainWindow(ApplicationsScenarios.List(namespaces: ["payments", "monitoring"]), mode: ShellMode.Applications)),
+    ("applications-list-sorted", () => HostInMainWindow(ApplicationsScenarios.List(namespaces: ["payments", "monitoring"], sort: ApplicationSortColumn.Restarts, descending: true), mode: ShellMode.Applications)),
     ("applications-list-narrow", () => HostInMainWindow(ApplicationsScenarios.List(), width: 1024, mode: ShellMode.Applications)),
     ("applications-list-loading", () => HostInMainWindow(ApplicationsScenarios.Loading(), mode: ShellMode.Applications)),
     ("applications-list-rbac-fallback", () => HostInMainWindow(ApplicationsScenarios.RbacFallback(), mode: ShellMode.Applications)),
@@ -454,7 +461,13 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     Dispatcher.UIThread.RunJobs();
 
     if (name == "ux-namespace-picker") UxInteractionChecks.NamespacePicker(window);
+    if (name == "cluster-tab-namespace-picker-several") UxInteractionChecks.NamespacePickerSeveral(window);
     if (name == "ux-applications-keys") ApplicationsChecks.Keys(window);
+    if (name == "ux-workload-pods-sort") GridSortChecks.WorkloadPods(window);
+    if (name == "ux-node-pods-sort") GridSortChecks.NodePods(window);
+    if (name == "ux-helm-sort") GridSortChecks.ClusterTabGrid(window, "HelmGrid", "Rev", HelmReleaseComparer.Revision);
+    if (name == "ux-argo-sort") GridSortChecks.ClusterTabGrid(window, "ArgoGrid", "Health", ArgoApplicationComparer.Health);
+    if (name == "applications-namespace-picker") ApplicationsChecks.OpenNamespacePicker(window);
     if (name == "ux-hotkey-scheme") KeyboardChecks.HotkeyScheme(window);
     if (name == "ux-overlay-focus") UxInteractionChecks.OverlayTakesFocus(window);
     if (name == "ux-preferences-tabs") UxInteractionChecks.PreferencesTabs(window);

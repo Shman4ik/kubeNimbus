@@ -252,7 +252,7 @@
               </ContextMenu>
             </DataGrid.ContextMenu>
             <DataGrid.Columns>
-              <DataGridTemplateColumn Header="Namespace" Width="116">
+              <DataGridTemplateColumn Header="Namespace" Width="116" Tag="namespace" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:NodePodViewModel">
                     <TextBlock Text="{Binding Namespace}" VerticalAlignment="Center"
@@ -262,7 +262,7 @@
               </DataGridTemplateColumn>
               <!-- The row's logs icon, the resource list's own (L2): drawn on the hovered and
                    the selected row by Button.rowAction, Shift+click for full-size. -->
-              <DataGridTemplateColumn Header="Name" Width="*" MinWidth="100">
+              <DataGridTemplateColumn Header="Name" Width="*" MinWidth="100" Tag="name" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:NodePodViewModel">
                     <Grid ColumnDefinitions="*,Auto">
@@ -279,7 +279,7 @@
               <!-- The resource list's status pill, in place of a health dot beside plain
                    text: the dot and the pill's tint are the same verdict, and the list
                    stopped drawing both (status-dot.md). The dot's 20px went to this column. -->
-              <DataGridTemplateColumn Header="Status" Width="132">
+              <DataGridTemplateColumn Header="Status" Width="132" Tag="status" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:NodePodViewModel">
                     <Border Classes="statusPill" Classes.ok="{Binding StatusHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=ok}"
@@ -291,7 +291,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="CPU req" Width="92">
+              <DataGridTemplateColumn Header="CPU req" Width="92" Tag="cpu-request" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:NodePodViewModel">
                     <TextBlock Text="{Binding CpuRequestText}" VerticalAlignment="Center"
@@ -299,7 +299,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Mem req" Width="100">
+              <DataGridTemplateColumn Header="Mem req" Width="100" Tag="memory-request" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:NodePodViewModel">
                     <TextBlock Text="{Binding MemoryRequestText}" VerticalAlignment="Center"
@@ -307,7 +307,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Age" Width="64">
+              <DataGridTemplateColumn Header="Age" Width="64" Tag="age" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:NodePodViewModel">
                     <TextBlock Text="{Binding AgeText}" VerticalAlignment="Center" />

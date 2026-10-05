@@ -225,23 +225,36 @@
           <Button Grid.Column="1" Name="NamespaceButton" Classes="soft"
                   Margin="12,0,0,0" MinWidth="170" MaxWidth="280"
                   IsVisible="{Binding SelectedKind.Descriptor.Namespaced, FallbackValue=True}"
-                  ToolTip.Tip="Choose namespace — type to filter">
+                  ToolTip.Tip="{Binding NamespaceButtonTip}">
             <Grid ColumnDefinitions="*,Auto">
-              <TextBlock Text="{Binding SelectedNamespace}" TextTrimming="CharacterEllipsis"/>
+              <TextBlock Text="{Binding NamespaceDisplay}" TextTrimming="CharacterEllipsis"/>
               <PathIcon Grid.Column="1" Data="{StaticResource ChevronDownIconGeometry}" Width="10" Height="10" Margin="12,0,0,0"/>
             </Grid>
             <Button.Flyout>
               <Flyout Opened="OnNamespaceOpened" Closed="OnNamespaceClosed">
-                <Grid RowDefinitions="Auto,Auto,*" Width="320" MaxHeight="420" KeyDown="OnNamespaceKeyDown">
+                <Grid RowDefinitions="Auto,Auto,Auto,*" Width="320" MaxHeight="440" KeyDown="OnNamespaceKeyDown">
                   <TextBox Name="NamespaceSearch" Text="{Binding NamespaceFilter}" PlaceholderText="{Binding NamespaceSearchPlaceholder}"/>
-                  <TextBlock Grid.Row="1" Text="No matching namespaces." IsVisible="{Binding NoNamespaceMatches}" Margin="4,12" Opacity="0.65"/>
-                  <ListBox Grid.Row="2" Name="NamespaceList" ItemsSource="{Binding FilteredNamespaces}"
+                  <!-- How to choose more than one, which nothing else on the row says. -->
+                  <TextBlock Grid.Row="1" Text="{x:Static views:NamespacePickerGestures.Hint}"
+                             FontSize="11" Opacity="0.55" Margin="4,6,0,0" TextTrimming="CharacterEllipsis"/>
+                  <TextBlock Grid.Row="2" Text="No matching namespaces." IsVisible="{Binding NoNamespaceMatches}" Margin="4,12" Opacity="0.65"/>
+                  <ListBox Grid.Row="3" Name="NamespaceList" ItemsSource="{Binding FilteredNamespaces}"
                            SelectedItem="{Binding NamespaceCandidate}" Tapped="OnNamespaceTapped" Margin="0,6,0,0">
                     <ListBox.ItemTemplate><DataTemplate x:DataType="vm:NamespaceChoice">
-                      <Grid ColumnDefinitions="*,Auto">
-                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}"/>
-                        <TextBlock Grid.Column="1" Text="Recent" IsVisible="{Binding IsRecent}" Opacity="0.45" Margin="12,0,0,0"/>
-                        <TextBlock Grid.Column="1" Text="Open by name" IsVisible="{Binding IsTyped}" Opacity="0.45" Margin="12,0,0,0"
+                      <!-- The box is its own target (Border.nsCheckHit): a click there adds
+                           the namespace and keeps the picker open, a click anywhere else on
+                           the row chooses it alone. A drawn check, not a CheckBox, so the
+                           tab is the only writer of IsChecked. -->
+                      <Grid ColumnDefinitions="Auto,*,Auto">
+                        <Border Classes="nsCheckHit" ToolTip.Tip="Add this namespace to the list, or take it out">
+                          <Border Classes="nsCheck" Classes.checked="{Binding IsChecked}">
+                            <PathIcon Data="{StaticResource CheckIconGeometry}" Width="9" Height="9" IsVisible="{Binding IsChecked}"/>
+                          </Border>
+                        </Border>
+                        <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="2" Text="Recent" IsVisible="{Binding IsRecent}" Opacity="0.45" Margin="12,0,0,0" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="2" Text="Open by name" IsVisible="{Binding IsTyped}" Opacity="0.45" Margin="12,0,0,0" VerticalAlignment="Center"
                                    ToolTip.Tip="This cluster's namespaces could not be listed, so this name is opened as typed."/>
                       </Grid>
                     </DataTemplate></ListBox.ItemTemplate>
@@ -886,7 +899,7 @@
             <ProgressBar IsIndeterminate="True" Width="150" HorizontalAlignment="Center" />
             <TextBlock Text="{Binding SelectedKind.DisplayName, StringFormat='Loading {0}…'}"
                        FontWeight="SemiBold" FontSize="13" HorizontalAlignment="Center" Opacity="0.7" />
-            <TextBlock Text="{Binding SelectedNamespace, StringFormat='in {0}'}" FontSize="12" Opacity="0.5"
+            <TextBlock Text="{Binding NamespaceDisplay, StringFormat='in {0}'}" FontSize="12" Opacity="0.5"
                        HorizontalAlignment="Center"
                        IsVisible="{Binding SelectedKind.Descriptor.Namespaced}" />
           </StackPanel>
@@ -897,7 +910,7 @@
                       Width="28" Height="28" Opacity="0.25" HorizontalAlignment="Center" />
             <TextBlock Text="{Binding SelectedKind.DisplayName, StringFormat='No {0} found'}"
                        FontWeight="SemiBold" FontSize="13" HorizontalAlignment="Center" Opacity="0.7" />
-            <TextBlock Text="{Binding SelectedNamespace, StringFormat='in {0}'}" FontSize="12" Opacity="0.5"
+            <TextBlock Text="{Binding NamespaceDisplay, StringFormat='in {0}'}" FontSize="12" Opacity="0.5"
                        HorizontalAlignment="Center"
                        IsVisible="{Binding SelectedKind.Descriptor.Namespaced}" />
             <!-- Events only: an empty events list usually means "nothing recent", because
@@ -960,42 +973,42 @@
                    a dot in exactly one case — where a CRD's own printer columns have
                    replaced the Status column, so the dot is the last thing carrying the
                    classification — and this grid has no such case. -->
-              <DataGridTemplateColumn Header="Namespace" Width="Auto" MinWidth="80">
+              <DataGridTemplateColumn Header="Namespace" Width="Auto" MinWidth="80" Tag="namespace" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
                     <TextBlock Text="{Binding Namespace}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Namespace}" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Release" Width="2*" MinWidth="160">
+              <DataGridTemplateColumn Header="Release" Width="2*" MinWidth="160" Tag="name" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
                     <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Description}" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Chart" Width="*" MinWidth="140">
+              <DataGridTemplateColumn Header="Chart" Width="*" MinWidth="140" Tag="chart" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
                     <TextBlock Text="{Binding Chart}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Chart}" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="App" Width="Auto" MinWidth="70">
+              <DataGridTemplateColumn Header="App" Width="Auto" MinWidth="70" Tag="app" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
                     <TextBlock Text="{Binding AppVersion}" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Rev" Width="Auto" MinWidth="50">
+              <DataGridTemplateColumn Header="Rev" Width="Auto" MinWidth="50" Tag="revision" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
                     <TextBlock Text="{Binding Revision}" HorizontalAlignment="Right" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Status" Width="Auto" MinWidth="110">
+              <DataGridTemplateColumn Header="Status" Width="Auto" MinWidth="110" Tag="status" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
                     <Border Classes="statusPill" Classes.ok="{Binding StatusHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=ok}"
@@ -1007,7 +1020,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Updated" Width="Auto" MinWidth="150">
+              <DataGridTemplateColumn Header="Updated" Width="Auto" MinWidth="150" Tag="updated" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
                     <TextBlock Text="{Binding Updated}" Opacity="0.75" VerticalAlignment="Center" />
@@ -1025,7 +1038,7 @@
                       IsVisible="{Binding IsHelmEmpty}">
             <PathIcon Data="{StaticResource LayersIconGeometry}" Width="28" Height="28" Opacity="0.25" HorizontalAlignment="Center" />
             <TextBlock Text="No Helm releases found" FontWeight="SemiBold" FontSize="13" HorizontalAlignment="Center" Opacity="0.7" />
-            <TextBlock Text="{Binding SelectedNamespace, StringFormat='in {0}'}" FontSize="12" Opacity="0.5" HorizontalAlignment="Center" />
+            <TextBlock Text="{Binding NamespaceDisplay, StringFormat='in {0}'}" FontSize="12" Opacity="0.5" HorizontalAlignment="Center" />
           </StackPanel>
         </Grid>
 
@@ -1115,7 +1128,7 @@
                 </MenuFlyout>
               </DataGrid.ContextFlyout>
               <DataGrid.Columns>
-                <DataGridTemplateColumn Header="Application" Width="2*" MinWidth="150">
+                <DataGridTemplateColumn Header="Application" Width="2*" MinWidth="150" Tag="name" CanUserSort="True">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate x:DataType="vm:ArgoApplicationRowViewModel">
                       <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"
@@ -1123,14 +1136,14 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Project" Width="Auto" MinWidth="90">
+                <DataGridTemplateColumn Header="Project" Width="Auto" MinWidth="90" Tag="project" CanUserSort="True">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate x:DataType="vm:ArgoApplicationRowViewModel">
                       <TextBlock Text="{Binding Project}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Sync" Width="Auto" MinWidth="104">
+                <DataGridTemplateColumn Header="Sync" Width="Auto" MinWidth="104" Tag="sync" CanUserSort="True">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate x:DataType="vm:ArgoApplicationRowViewModel">
                       <Border Classes="statusPill"
@@ -1142,7 +1155,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Health" Width="Auto" MinWidth="104">
+                <DataGridTemplateColumn Header="Health" Width="Auto" MinWidth="104" Tag="health" CanUserSort="True">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate x:DataType="vm:ArgoApplicationRowViewModel">
                       <Border Classes="statusPill"
@@ -1155,7 +1168,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Revision" Width="Auto" MinWidth="82">
+                <DataGridTemplateColumn Header="Revision" Width="Auto" MinWidth="82" Tag="revision" CanUserSort="True">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate x:DataType="vm:ArgoApplicationRowViewModel">
                       <TextBlock Text="{Binding Revision}" VerticalAlignment="Center" Opacity="0.8"
@@ -1163,7 +1176,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Destination" Width="Auto" MinWidth="100">
+                <DataGridTemplateColumn Header="Destination" Width="Auto" MinWidth="100" Tag="destination" CanUserSort="True">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate x:DataType="vm:ArgoApplicationRowViewModel">
                       <TextBlock Text="{Binding Destination}" TextTrimming="CharacterEllipsis"
@@ -1171,7 +1184,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Source" Width="*" MinWidth="130">
+                <DataGridTemplateColumn Header="Source" Width="*" MinWidth="130" Tag="source" CanUserSort="True">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate x:DataType="vm:ArgoApplicationRowViewModel">
                       <TextBlock Text="{Binding SourceSummary}" TextTrimming="CharacterEllipsis"
@@ -1179,7 +1192,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Policy" Width="Auto" MinWidth="110">
+                <DataGridTemplateColumn Header="Policy" Width="Auto" MinWidth="110" Tag="policy" CanUserSort="True">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate x:DataType="vm:ArgoApplicationRowViewModel">
                       <TextBlock Text="{Binding SyncPolicy}" VerticalAlignment="Center" FontSize="11.5" Opacity="0.8"

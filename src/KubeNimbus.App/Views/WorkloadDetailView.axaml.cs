@@ -25,11 +25,15 @@ public partial class WorkloadDetailView : UserControl
         GridSelectionSync<WorkloadDetailTabViewModel, ResourceRowViewModel>.Track(
             this, PodsGrid, vm => vm.Pods, vm => vm.SelectedPod, (vm, pod) => vm.SelectedPod = pod,
             nameof(WorkloadDetailTabViewModel.SelectedPod));
+        GridSortHeaders.Track(this, PodsGrid, dataContext => (dataContext as WorkloadDetailTabViewModel)?.PodSort);
     }
 
     private void OnPodDoubleTapped(object? sender, TappedEventArgs e)
     {
-        if (DataContext is WorkloadDetailTabViewModel vm) vm.OpenPodCommand.Execute(null);
+        // Only a double-click on a row opens its pod. One on a header is two sort clicks
+        // (ascending, then descending), and used to open whichever pod was selected.
+        if (DataContext is WorkloadDetailTabViewModel vm && e.Source is Control { DataContext: ResourceRowViewModel })
+            vm.OpenPodCommand.Execute(null);
     }
 
     private void OnPodKeyDown(object? sender, KeyEventArgs e)

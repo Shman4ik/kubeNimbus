@@ -24,7 +24,96 @@ public partial class ApplicationsView : UserControl
         // Tunnel: ListBox consumes Enter and some letters on its own class handler before a
         // bubble handler would see them.
         AppList.AddHandler(KeyDownEvent, OnListKeyDown, RoutingStrategies.Tunnel);
+        AddHandler(KeyDownEvent, OnNamespaceShortcut, RoutingStrategies.Tunnel);
         DataContextChanged += (_, _) => Subscribe(DataContext as ApplicationsViewModel);
+    }
+
+    // ------------------------------------------------------- namespace picker
+    // The Resources list's picker, gesture for gesture: Ctrl/Cmd+Shift+N opens it with the
+    // search focused, typing filters, ↓ moves to the rows, Enter or a click chooses one
+    // namespace and closes, and a click on a row's box, Ctrl/Cmd+click or Space adds or
+    // removes one and keeps the picker open.
+
+    private void OnNamespaceShortcut(object? sender, KeyEventArgs e)
+    {
+        if (Hotkeys.NamespacePicker.Matches(e) && NamespaceButton.IsEffectivelyVisible)
+        {
+            NamespaceButton.Flyout?.ShowAt(NamespaceButton);
+            e.Handled = true;
+        }
+    }
+
+    private void OnNamespaceOpened(object? sender, EventArgs e)
+    {
+        if (Vm is { } vm)
+        {
+            vm.NamespaceFilter = "";
+            vm.RebuildNamespaceChoices();
+        }
+
+        Dispatcher.UIThread.Post(() => NamespaceSearch.Focus(), DispatcherPriority.Input);
+    }
+
+    private void OnNamespaceClosed(object? sender, EventArgs e) => NamespaceButton.Focus();
+
+    /// <summary>Enter: the highlighted namespace and no other, and the picker closes — the single-namespace gesture.</summary>
+    private void ChooseOnlyNamespace()
+    {
+        if (Vm is { NamespaceCandidate: { } candidate } vm)
+        {
+            vm.ChooseOnly(candidate);
+            NamespaceButton.Flyout?.Hide();
+        }
+    }
+
+    /// <summary>
+    /// A click chooses the row's namespace alone and closes the picker; on its box, or with
+    /// Ctrl/Cmd held, it adds or removes it and keeps the picker open (NamespacePickerGestures).
+    /// The row comes from the item under the pointer, not the selection, which the press may
+    /// not have moved yet.
+    /// </summary>
+    private void OnNamespaceTapped(object? sender, TappedEventArgs e)
+    {
+        if (NamespacePickerGestures.RowAt<ApplicationNamespaceChoice>(e) is not { } choice || Vm is not { } vm)
+        {
+            return;
+        }
+
+        vm.NamespaceCandidate = choice;
+        if (NamespacePickerGestures.IsAdd(e))
+        {
+            vm.ToggleNamespace(choice);
+        }
+        else
+        {
+            ChooseOnlyNamespace();
+        }
+
+        e.Handled = true;
+    }
+
+    private void OnNamespaceKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            ChooseOnlyNamespace();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Space && !NamespaceSearch.IsFocused && Vm is { NamespaceCandidate: { } candidate } vm)
+        {
+            vm.ToggleNamespace(candidate);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Down && NamespaceSearch.IsFocused)
+        {
+            NamespaceList.Focus();
+            if (NamespaceList.ContainerFromIndex(0) is ListBoxItem item)
+            {
+                item.Focus();
+            }
+
+            e.Handled = true;
+        }
     }
 
     private ApplicationsViewModel? _subscribed;

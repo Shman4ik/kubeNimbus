@@ -782,7 +782,7 @@ Three rules about it:
 Each feature's design rules, and the incidents behind them, live in a page of their own under [`docs/engineering/`](docs/engineering/), so a session loads only the ones it touches. **Read the page for any feature you change before changing it**, and keep it current in the same PR — the same discipline as this file.
 
 - [Connecting: credential plugins, proxies, failures and reconnect](docs/engineering/connecting.md) — BuildClientSetupAsync as the one entry→client path, KubeconfigReader instead of the library's YAML loader (banned; it froze YamlDotNet), bare plugin commands found like a login shell would, proxy-url on both transports, the failure view (step, cause, facts, no credential ever a fact), RefreshCredentialsAsync's in-place swap and 401-as-expiry, kubeconfig folders with rescan-on-focus, AppDataDirectory.
-- [The Applications mode](docs/engineering/applications-mode.md) — The first screen: apps (Argo or bare workloads) with health and a reason from Core's deterministic rules, per-namespace fallback under narrow RBAC, the application page (findings with quoted evidence, pods, linked resources, timeline, what changed, embedded logs), the kubelet's one-run-per-container log rule, DemoData.Now.
+- [The Applications mode](docs/engineering/applications-mode.md) — The first screen: apps (Argo or bare workloads) with health and a reason from Core's deterministic rules, per-namespace fallback under narrow RBAC, its own namespace picker (one or several, namespaces from the rows, starts no watch) and maintained header sort, the application page (findings with quoted evidence, pods, linked resources, timeline, what changed, embedded logs), the kubelet's one-run-per-container log rule, DemoData.Now.
 - [Multi-pod logs (one workload, one stream)](docs/engineering/multi-pod-logs.md) — WorkloadLogsTabViewModel: selector-resolved pods, per-pod tail budget, 50-stream cap, two-stage timestamp merge; and what both log panes say when a follow ends (LogStreamEnd reads the pod).
 - [One click to logs from the row, and logs opened full-size](docs/engineering/row-logs-and-maximized.md) — The row's logs icon (hover/selected, IsVisible style, Shift+click), Shift+L, the "Open logs maximized" preference read by OpenLogsForAsync, Esc restore; L3's logs from every list that names a pod (OpenNamedLogs, RowLogsGesture, stated "gone").
 - [Reading a log: find, levels, clear, local time, remembered display](docs/engineering/log-pane-reading.md) — Both log panes: search that finds (highlight, n of m, Enter/Shift+Enter) or filters, Levels with unleveled lines always shown, Clear that keeps the stream, local time with UTC one click away, display toggles in settings.json (never Previous), the default-container annotation, "not started" pods, one logs glyph, terminal colour codes removed (not drawn); and the log-viewer pass — level keyword coloured not the line, earliest/structured/klog severity, stack traces inheriting, NonBacktracking regex and match case, `!word` exclusions, grep -C context, error jump, overview ruler, pinned highlights, JSON lines opened in place.
@@ -794,6 +794,7 @@ Each feature's design rules, and the incidents behind them, live in a page of th
 - [macOS has a real menu bar, and the app is called kubeNimbus](docs/engineering/macos-menu-bar.md) — Application.Name, MacMenu.cs, platform-gated native menu built from CommandCatalog.
 - [Accessible names come from the tooltip](docs/engineering/accessible-names.md) — AutomationNames copies a control's tooltip into its UI Automation name (hand-written names win), list items name themselves through ToString, preferences cards from their labels, the harness walks the peer tree; and why the Applications page host has no IsVisible binding.
 - [The theme toggle wrote a string nothing could read](docs/engineering/theme-toggle-string.md) — Stringly-typed settings must write through the same helper that reads them.
+- [Several namespaces at once](docs/engineering/several-namespaces.md) — Both pickers' gestures (a click for one, the box or Ctrl/Cmd+click to add), the drawn check, SelectedNamespace as the first of SelectedNamespaces, one watch per namespace merged with a namespace-scoped Reset and a verdict that waits for every namespace, the fleet's whole-cluster read, TabSnapshot.Namespaces.
 - [The cluster switcher and environment colours](docs/engineering/cluster-switcher.md) — Ctrl/Cmd+P switcher (flat list, ranking) and environment colours (biased toward production).
 - [CRD printer columns](docs/engineering/crd-printer-columns.md) — additionalPrinterColumns: lazy CRD GET, JSONPath subset, ten fixed XAML slots, Tag-based column identity.
 - [The resource grid is the reader's to re-cut](docs/engineering/resource-grid-resize-sort.md) — Column drag + header sort: sorts VisibleRows never Rows, maintained sort, per-kind layout in workspace.json.
@@ -947,7 +948,7 @@ There are **two** persisted files and the split is not arbitrary:
   window looked like: open tabs, pinned and recent contexts, environment overrides, the
   recent namespaces and sidebar Recent kinds per cluster, and which mode (Applications or Resources) the window was showing.
 
-Each tab snapshot also carries the **kind and namespace** it was showing, and the
+Each tab snapshot also carries the **kind and namespace** (or namespaces) it was showing, and the
 workspace the index of the tab in front, so a restart lands where you left off instead
 of on Pods in all namespaces on every tab. With nothing saved, a tab opens on the
 kubeconfig context's own `namespace` (what kubectl would use), and the first launch
@@ -1041,6 +1042,8 @@ Double-click opens Deployments, StatefulSets, DaemonSets and batch Jobs in
 running and failed against its backoff limit), controller progress,
 conditions, events and a live pod list. The pod watch uses the workload selector,
 including match expressions. Closing the pane cancels its requests and watch.
+A header click sorts the pod list (the same in node detail; see
+[resource-grid-resize-sort](docs/engineering/resource-grid-resize-sort.md), "The inspector grids sort too").
 The workload status follows its list row; Refresh also reads the object directly,
 and tells the list so a row it heals or breaks is re-filtered (ENG-33). The pod
 grids of this pane and node detail sync their selection from code-behind
@@ -1057,6 +1060,9 @@ descriptor and cluster, even after the main list changes. Owner navigation uses
 the same detail routing. Events use the object UID when available.
 
 The namespace picker filters on input and commits only on Enter or a row click.
+It chooses several namespaces too: a row's box, Ctrl/Cmd+click or Space adds one and keeps
+it open, and the list then runs one watch per namespace — see
+[several-namespaces](docs/engineering/several-namespaces.md).
 Ctrl/Cmd+Shift+N opens it and focuses its search field. Escape closes it.
 Five recent namespaces appear first after All namespaces. `workspace.json`
 persists them per kubeconfig path and context. Deleted namespaces stay out of

@@ -22,3 +22,7 @@ added at connect time **only when the cluster actually stores releases** (UI rul
 a release docks a tab with its values, rendered manifest, notes and revision
 history; double-clicking a history row loads that revision. Everything is
 read-only: install/upgrade/rollback stays Helm's job.
+
+## Sorting
+
+The list sorts by a header click (2026-10): ascending, descending, then its default order, kept across reloads for the tab's life. How each column compares, and why a header double-click opens nothing, is in [resource-grid-resize-sort](resource-grid-resize-sort.md), "The inspector grids sort too".

@@ -40,7 +40,8 @@
              before a bubble handler here would see it. The menu captions are display-only
              and follow CommandCatalog's List-scoped rows by hand. The selection is synced
              from code-behind (GridSelectionSync) rather than bound two-way, which lost it
-             every time the inspector switched tabs. -->
+             every time the inspector switched tabs. A header click sorts (GridSortHeaders):
+             each column's Tag is its id, and CanUserSort is what makes the click arrive. -->
         <DataGrid Grid.Row="2" Name="PodsGrid" ItemsSource="{Binding Pods}"
                   IsReadOnly="True" AutoGenerateColumns="False" DoubleTapped="OnPodDoubleTapped">
           <DataGrid.ContextMenu><ContextMenu>
@@ -52,7 +53,7 @@
           <DataGrid.Columns>
             <!-- The row's logs icon, the resource list's own (L2): drawn on the hovered and
                  the selected row by Button.rowAction, Shift+click for full-size. -->
-            <DataGridTemplateColumn Header="Name" Width="*">
+            <DataGridTemplateColumn Header="Name" Width="*" Tag="name" CanUserSort="True">
               <DataGridTemplateColumn.CellTemplate>
                 <DataTemplate x:DataType="vm:ResourceRowViewModel">
                   <Grid ColumnDefinitions="*,Auto">
@@ -65,7 +66,7 @@
                 </DataTemplate>
               </DataGridTemplateColumn.CellTemplate>
             </DataGridTemplateColumn>
-            <DataGridTemplateColumn Header="Ready" Width="80">
+            <DataGridTemplateColumn Header="Ready" Width="80" Tag="ready" CanUserSort="True">
               <DataGridTemplateColumn.CellTemplate>
                 <DataTemplate x:DataType="vm:ResourceRowViewModel">
                   <TextBlock Text="{Binding ReadyText}" VerticalAlignment="Center" Classes="mono" FontSize="11.5"/>
@@ -74,7 +75,7 @@
             </DataGridTemplateColumn>
             <!-- The same pill as the resource list's Status column: this is the same pod,
                  and it read as plain text here. -->
-            <DataGridTemplateColumn Header="Status" Width="180">
+            <DataGridTemplateColumn Header="Status" Width="180" Tag="status" CanUserSort="True">
               <DataGridTemplateColumn.CellTemplate>
                 <DataTemplate x:DataType="vm:ResourceRowViewModel">
                   <Border Classes="statusPill" Classes.ok="{Binding StatusHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=ok}"
@@ -87,7 +88,7 @@
                 </DataTemplate>
               </DataGridTemplateColumn.CellTemplate>
             </DataGridTemplateColumn>
-            <DataGridTemplateColumn Header="Restarts" Width="100">
+            <DataGridTemplateColumn Header="Restarts" Width="100" Tag="restarts" CanUserSort="True">
               <DataGridTemplateColumn.CellTemplate>
                 <DataTemplate x:DataType="vm:ResourceRowViewModel">
                   <TextBlock Text="{Binding RestartsText}" VerticalAlignment="Center" Classes="mono" FontSize="11.5"/>

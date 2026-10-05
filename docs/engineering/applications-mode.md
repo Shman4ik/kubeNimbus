@@ -178,6 +178,47 @@ and Argo's own Degraded/Unknown when nothing read from the workloads explains it
    under an hour, which is also the "Deployed < 1 h" chip. A StatefulSet or DaemonSet outside
    Argo shows "—": its ControllerRevisions are not read for the list. Only the revision is set
    monospace (`LastDeployRevision`); the age and "never synced" are words (`LastDeployAge`).
+9. **The namespace picker narrows what was read; it starts no watch** (2026-10). It sits beside
+   the title, where the Resources list keeps its own, and takes the same gestures
+   ([several-namespaces](several-namespaces.md)): Ctrl/Cmd+Shift+N opens it with its search
+   focused, typing filters, ↓ goes to the rows, a click or Enter chooses one namespace alone and
+   closes, and a row's box, Ctrl/Cmd+click or Space adds or removes one and keeps the picker
+   open. The All namespaces row's box clears the choice. The button reads All namespaces, one or
+   two names, or "3 namespaces" with the names in its tooltip. Five decisions:
+   - **Its own selection, not the tab's.** The Resources list's namespace is often the
+     kubeconfig context's, and this list is the whole cluster at a glance, so it opens on All
+     namespaces whatever the other mode shows. Session state, like the chips.
+   - **Its rows are the namespaces applications run in, with their counts**, taken from the
+     rows rather than a namespace list. It offers only what narrows to something, and it works
+     where RBAC refuses `list namespaces`. A chosen namespace whose last application went away
+     stays in it, so the choice can be seen and undone, and the list says "No applications in …".
+   - **A chosen kube-* namespace shows its applications**, and the kube-* chip goes while any
+     namespace is chosen: choosing one is asking for what is in it, and the chip would do
+     nothing. The chips' counts and the empty states follow the choice ("in payments", "in the
+     3 chosen namespaces"). An application in several namespaces shows when any is chosen.
+   - **The check is drawn, not a `CheckBox`**, and the view model is the one writer of
+     `ApplicationNamespaceChoice.IsChecked`, for the reason several-namespaces.md gives. The
+     row's accessible name says ", chosen". A click on a row first toggled here; it was changed
+     to "this one alone" so both pickers read a click the same way.
+   - **A toggle updates the rows' checks in place**, so the row the keyboard is on keeps its focus;
+     the rows are rebuilt only when the picker opens and as its search is typed.
+
+   The title line's "· All namespaces" went with it: beside a picker reading the same words it
+   was the same fact twice (UI rule 20). The scope is stated only when the reads fell back to
+   namespaces under narrow RBAC (`IsScopeNarrowed`), which is the case it was there for.
+10. **A header click sorts** (2026-10): ascending, descending, then the list's own order, the
+   resource grid's three states for its reason ([resource-grid-resize-sort](resource-grid-resize-sort.md),
+   rule 6). The headers are buttons, so the whole cell is the target (UI rule 8), and the arrow
+   is drawn into the text. `ApplicationRowComparer` follows the resource grid's two rules: a
+   column is compared by what it means (Pods as the Ready fraction, with "—" as no value and
+   "0/0" as fully Ready; Restarts as a count; Last deploy as an instant, ascending being the
+   most recent, as Age is), and a row with no value sorts last ascending (an app outside Argo
+   has no Sync). Where a column is a verdict, ascending is worst first: Health in `AppStatus`
+   order, Sync OutOfSync, Unknown, Synced. The tie-break is the name, then the key, and is not
+   reversed. The sort is **maintained**: every rebuild orders the rows again, so a row whose
+   value changes on a watch event moves, as the same instance. The group captions stay under
+   the list's own order and a Health sort, where the groups are contiguous, and go under any
+   other column, where they would head rows that are not theirs. Session state; not persisted.
 
 ## The page (layout A)
 
@@ -283,10 +324,14 @@ DaemonSet).
 `ApplicationRulesTests` and `ApplicationSupportTests` (Core) pin every rule with a negative
 case; `ApplicationsListTests` and `ShellModeTests` (App) pin order, groups, chips, search,
 watch-apply keeping row identity, per-scope Reset, loading, RBAC statements, Esc back to the
-row and mode persistence. The screenshot harness renders `applications-list*` and
-`applications-page-*` in both themes, and `ux-applications-keys` drives arrows, Enter, Esc,
-`/`, Ctrl/Cmd+F, the chips by pointer and the mode switch by pointer against the rendered
-window.
+row, mode persistence, the namespace picker (choices, counts, kube-*, a namespace left empty, several at once)
+and the header sort (the three states, groups, a sort kept through a watch event, no value
+last). The screenshot harness renders `applications-list*` (`applications-list-sorted` is
+payments and monitoring sorted by Restarts, most first) and `applications-page-*` in both themes, and
+`ux-applications-keys` drives arrows, Enter, Esc, `/`, Ctrl/Cmd+F, the chips by pointer, a
+header by pointer at its far edge, the namespace picker from Ctrl/Cmd+Shift+N, two namespaces
+added by their boxes with the picker staying open and then one chosen alone by a click on its
+row, and the mode switch by pointer against the rendered window. `applications-namespace-picker` renders the picker open with two chosen.
 
 Not verified here: a real cluster (Argo CD, SSO, narrow RBAC — the 403 fallback is pinned
 against the fixture seam, not an API server), the win-x64 publish, macOS.

@@ -39,6 +39,17 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
     public bool CanScale => WorkloadActions.SupportsScale(_descriptor);
     public bool CanRestart => WorkloadActions.SupportsRestart(_descriptor, _row.Resource);
     public ObservableCollection<ResourceRowViewModel> Pods { get; } = [];
+
+    /// <summary>
+    /// The Pods grid's header sort (Name, Ready, Status, Restarts), compared as the resource
+    /// list compares the same columns. Its default order is by name, which is how the API
+    /// server lists them, so a cleared sort lands where the list opened.
+    /// </summary>
+    public GridSort<ResourceRowViewModel> PodSort { get; }
+
+    private static readonly IComparer<ResourceRowViewModel> PodsByName =
+        Comparer<ResourceRowViewModel>.Create((x, y) => string.CompareOrdinal(x.Name, y.Name));
+
     public ObservableCollection<WorkloadCondition> Conditions { get; } = [];
     public ObservableCollection<EventRowViewModel> Events { get; } = [];
     [ObservableProperty]
@@ -78,6 +89,9 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
         _activateTab = activateTab;
         _openLogs = openLogs;
         _rowRefreshed = rowRefreshed;
+        PodSort = new GridSort<ResourceRowViewModel>(
+            Pods, PodsByName, (column, descending) => new ResourceRowComparer(column, descending, []),
+            () => SelectedPod, pod => SelectedPod = pod);
         Key = KeyFor(row.ClusterName, descriptor, row.Namespace, row.Name);
         row.PropertyChanged += RowChanged;
         ReadStatus();
@@ -152,7 +166,7 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
         if (_client is null)
         {
             foreach (var pod in Demo.DemoData.Pods.Where(p => p.Namespace == _row.Namespace && selector.Matches(p.Labels)))
-                Pods.Add(new(pod, _row.ClusterName));
+                PodSort.Insert(new(pod, _row.ClusterName));
             PodsStatus = Pods.Count == 0 ? "No matching pods." : $"{Pods.Count} pods";
             return;
         }
@@ -187,8 +201,13 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
                 if (previous is not null) Pods.Remove(previous);
                 if (ReferenceEquals(SelectedPod, previous)) SelectedPod = null;
             }
-            else if (previous is not null) previous.Update(resource);
-            else Pods.Add(new(resource, _row.ClusterName));
+            else if (previous is not null)
+            {
+                // The sort is maintained: a pod whose restarts or status changed moves.
+                previous.Update(resource);
+                PodSort.Reposition(previous);
+            }
+            else PodSort.Insert(new(resource, _row.ClusterName));
         }
         PodsStatus = Pods.Count == 0 ? "No matching pods." : $"{Pods.Count} pods";
     }

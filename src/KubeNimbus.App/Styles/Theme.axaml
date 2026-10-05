@@ -977,6 +977,64 @@
     <Style Selector="ListBox.appList ListBoxItem /template/ ContentPresenter">
         <Setter Property="Background" Value="Transparent" />
     </Style>
+    <!-- The list's column headers sort, so each is a button drawn as the sectionHeader text
+         it replaced: the whole cell is the target (UI rule 8), the hand says so, hover
+         brightens the label and a press takes it to full strength. -->
+    <Style Selector="Button.appColumnHeader">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="CornerRadius" Value="0" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="LetterSpacing" Value="0.8" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.appColumnHeader /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Opacity" Value="0.55" />
+    </Style>
+    <Style Selector="Button.appColumnHeader:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Opacity" Value="0.85" />
+    </Style>
+    <Style Selector="Button.appColumnHeader:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Opacity" Value="1" />
+    </Style>
+
+    <!-- The namespace pickers' check: drawn rather than a CheckBox, so the view model is its
+         only writer. Its hit area (nsCheckHit) is a target of its own — add the namespace and
+         keep the picker open — with a transparent background so the whole box answers. -->
+    <Style Selector="Border.nsCheckHit">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Padding" Value="4,2,8,2" />
+        <Setter Property="Margin" Value="-4,0,0,0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.nsCheckHit:pointerover Border.nsCheck">
+        <Setter Property="BorderBrush" Value="{StaticResource AppAccentBrush}" />
+    </Style>
+    <Style Selector="Border.nsCheck">
+        <Setter Property="Width" Value="14" />
+        <Setter Property="Height" Value="14" />
+        <Setter Property="CornerRadius" Value="3" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.nsCheck.checked">
+        <Setter Property="BorderBrush" Value="{StaticResource AppAccentBrush}" />
+        <Setter Property="Background" Value="{StaticResource AppAccentBrush}" />
+    </Style>
+    <Style Selector="Border.nsCheck.checked PathIcon">
+        <Setter Property="Foreground" Value="White" />
+    </Style>
+
     <Style Selector="Border.appRowBody">
         <Setter Property="Padding" Value="0,6" />
         <Setter Property="CornerRadius" Value="6" />

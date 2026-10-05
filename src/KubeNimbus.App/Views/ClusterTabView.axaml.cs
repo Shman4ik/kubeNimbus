@@ -41,15 +41,27 @@ public partial class ClusterTabView : UserControl
         }
     }
 
+    // A click chooses the row alone and closes; its box or Ctrl/Cmd adds it and keeps the
+    // picker open (NamespacePickerGestures).
     private void OnNamespaceTapped(object? sender, TappedEventArgs e)
     {
-        if (e.Source is Avalonia.Visual visual && visual.FindAncestorOfType<ListBoxItem>() is not null)
-            ChooseNamespace();
+        if (NamespacePickerGestures.RowAt<NamespaceChoice>(e) is not { } choice || DataContext is not ClusterTabViewModel vm)
+            return;
+        vm.NamespaceCandidate = choice;
+        if (NamespacePickerGestures.IsAdd(e)) vm.ToggleNamespace(choice);
+        else ChooseNamespace();
+        e.Handled = true;
     }
 
     private void OnNamespaceKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter) { ChooseNamespace(); e.Handled = true; }
+        else if (e.Key == Key.Space && !NamespaceSearch.IsFocused
+            && DataContext is ClusterTabViewModel { NamespaceCandidate: { } candidate } vm)
+        {
+            vm.ToggleNamespace(candidate);
+            e.Handled = true;
+        }
         else if (e.Key == Key.Down && NamespaceSearch.IsFocused)
         {
             NamespaceList.Focus();
@@ -113,6 +125,8 @@ public partial class ClusterTabView : UserControl
     {
         InitializeComponent();
         AddHandler(KeyDownEvent, OnNamespaceShortcut, RoutingStrategies.Tunnel);
+        GridSortHeaders.Track(this, HelmGrid, dataContext => (dataContext as ClusterTabViewModel)?.HelmSort);
+        GridSortHeaders.Track(this, ArgoGrid, dataContext => (dataContext as ClusterTabViewModel)?.ArgoSort);
 
         _printerSlots.AddRange(ResourceGrid.Columns.Where(c => c.Tag as string == PrinterSlotTag));
         _slotIds = new string?[_printerSlots.Count];
@@ -808,11 +822,23 @@ public partial class ClusterTabView : UserControl
 
     private void OnRowDoubleTapped(object? sender, TappedEventArgs e) => Vm?.OpenSelectedCommand.Execute(null);
 
-    private void OnHelmRowDoubleTapped(object? sender, TappedEventArgs e) =>
-        Vm?.OpenSelectedHelmReleaseCommand.Execute(null);
+    // Only a double-click on a row opens it: one on a header is two sort clicks, and would
+    // otherwise open whichever row was selected.
+    private void OnHelmRowDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (e.Source is Control { DataContext: HelmReleaseRowViewModel })
+        {
+            Vm?.OpenSelectedHelmReleaseCommand.Execute(null);
+        }
+    }
 
-    private void OnArgoRowDoubleTapped(object? sender, TappedEventArgs e) =>
-        Vm?.OpenArgoApplicationCommand.Execute(null);
+    private void OnArgoRowDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (e.Source is Control { DataContext: ArgoApplicationRowViewModel })
+        {
+            Vm?.OpenArgoApplicationCommand.Execute(null);
+        }
+    }
 
     /// <summary>
     /// Ctrl/Cmd+F, routed here by <see cref="MainWindow"/> — the gesture is registered

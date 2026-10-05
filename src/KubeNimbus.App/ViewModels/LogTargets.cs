@@ -222,14 +222,26 @@ public static class LogTargetLoader
     /// </summary>
     public static readonly IReadOnlyList<string> WorkloadKinds = ["Deployment", "StatefulSet", "DaemonSet"];
 
-    public static async Task<LogTargetList> LoadAsync(
+    public static Task<LogTargetList> LoadAsync(
         IReadOnlyList<LogTargetSource> sources,
         string? @namespace,
         int maxPerKind = MaxPerKind,
+        CancellationToken cancellationToken = default) =>
+        LoadForNamespacesAsync(sources, @namespace is null ? [] : [@namespace], maxPerKind, cancellationToken);
+
+    /// <summary>
+    /// Every source in every chosen namespace (none: one read across the cluster), one list per
+    /// pair — the list's own reads, so the palette offers the pods the list shows.
+    /// </summary>
+    public static async Task<LogTargetList> LoadForNamespacesAsync(
+        IReadOnlyList<LogTargetSource> sources,
+        IReadOnlyList<string> namespaces,
+        int maxPerKind = MaxPerKind,
         CancellationToken cancellationToken = default)
     {
+        IReadOnlyList<string?> scopes = namespaces.Count == 0 ? [null] : [.. namespaces];
         var perSource = await Task.WhenAll(
-            sources.Select(s => LoadSourceAsync(s, @namespace, maxPerKind, cancellationToken))).ConfigureAwait(false);
+            sources.SelectMany(s => scopes.Select(ns => LoadSourceAsync(s, ns, maxPerKind, cancellationToken)))).ConfigureAwait(false);
 
         var workloads = new List<LogTarget>();
         var pods = new List<LogTarget>();
@@ -358,6 +370,15 @@ public static class LogTargetLoader
     /// <summary>"payments", or "every namespace" for the all-namespaces scope.</summary>
     public static string Scope(string? @namespace) =>
         string.IsNullOrEmpty(@namespace) ? "every namespace" : @namespace;
+
+    /// <summary>"payments", "payments and checkout", "3 namespaces", or "every namespace".</summary>
+    public static string Scope(IReadOnlyList<string> namespaces) => namespaces switch
+    {
+        [] => "every namespace",
+        [var one] => one,
+        [var first, var second] => $"{first} and {second}",
+        var many => $"{many.Count} namespaces",
+    };
 
     /// <summary>
     /// One sentence for a failed list. A 403 is named as a permission rather than as an

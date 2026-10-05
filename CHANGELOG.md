@@ -12,6 +12,34 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+### Added
+
+- **Several namespaces at once, in both lists.** In either namespace picker a click still
+  chooses one namespace; a row's box, Ctrl/Cmd+click or Space adds another and keeps the picker
+  open. The Resources list then reads each chosen namespace with a watch of its own, so it works
+  where you may read those namespaces and not the whole cluster, and a restart reopens the tab
+  on the same namespaces. The Helm browser and the palette's log rows follow the choice.
+- **A namespace picker on the Applications list.** It sits beside the title, as the Resources
+  list's does, and opens with Ctrl/Cmd+Shift+N. It lists the namespaces applications run in,
+  with how many each has. The list, the chips' counts and
+  the empty states follow the choice. It opens on All namespaces whatever the Resources mode
+  shows, and choosing a kube-* namespace shows its applications.
+- **The Applications list sorts by any column.** A header click sorts ascending, a second one
+  descending, a third returns to the list's own order with its Needs attention group. Pods
+  sort by the Ready fraction, Restarts as a count and Last deploy by time, and the sort holds
+  as the cluster changes.
+- **Workload and node detail's pod lists sort by any column.** Sort a workload's pods by
+  restarts or status, or a node's by CPU or memory request to see what has claimed the node.
+  The sort holds as pods come, go and change.
+- **The Helm release browser and the Argo CD dashboard sort by any column.** Helm releases by
+  revision, status or update time; Argo applications by sync or health, worst first. The Helm
+  browser now opens in namespace and name order.
+
+### Fixed
+
+- A double-click on a column header of workload detail's pod list, the Helm browser or the
+  Argo CD dashboard no longer opens the selected row.
+
 ## [0.6.0] - 2026-10-04
 
 ### Added

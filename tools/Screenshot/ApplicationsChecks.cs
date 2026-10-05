@@ -154,6 +154,66 @@ internal static class ApplicationsChecks
             KubeNimbus.App.App.Update(s => s with { OpenApplicationsOnSingleClick = true });
         }
 
+        // A header sorts by pointer, clicked at the cell's far edge where no text is (UI rule
+        // 8): ascending, descending, then the list's own order with its groups back.
+        var restartsHeader = view.FindControl<Button>("RestartsHeader")!;
+        ClickAt(window, restartsHeader, restartsHeader.Bounds.Width - 2);
+        ClickAt(window, restartsHeader, restartsHeader.Bounds.Width - 2);
+        if (vm.SortColumn != ApplicationSortColumn.Restarts || !vm.SortDescending
+            || vm.VisibleRows.Zip(vm.VisibleRows.Skip(1)).Any(p => p.First.Assessment.Restarts < p.Second.Assessment.Restarts)
+            || restartsHeader.Content as string != "Restarts ↓")
+            throw new InvalidOperationException("Two clicks on the Restarts header did not sort the list by restarts, most first.");
+        ClickAt(window, restartsHeader, restartsHeader.Bounds.Width - 2);
+        if (vm.SortColumn is not null || vm.VisibleRows[0].GroupHeader?.StartsWith("NEEDS ATTENTION", StringComparison.Ordinal) != true)
+            throw new InvalidOperationException("A third click on the header did not return the list to its own order.");
+
+        // The namespace picker from the keyboard: Ctrl/Cmd+Shift+N, type, Enter.
+        view.FocusList();
+        Dispatcher.UIThread.RunJobs();
+        window.KeyPress(Key.N, (RawInputModifiers)Hotkeys.Primary | RawInputModifiers.Shift, PhysicalKey.N, "N");
+        SettlePage(window);
+        var namespaceSearch = view.FindControl<TextBox>("NamespaceSearch")!;
+        if (!namespaceSearch.IsFocused)
+            throw new InvalidOperationException($"{Hotkeys.PrimaryLabel}+Shift+N did not open the namespace picker with its search focused.");
+        window.KeyTextInput("payments");
+        Dispatcher.UIThread.RunJobs();
+        window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, "\r");
+        SettlePage(window);
+        if (!vm.SelectedNamespaces.SequenceEqual(["payments"]) || vm.VisibleRows.Count == 0
+            || vm.VisibleRows.Any(r => !r.Namespaces.Contains("payments")))
+            throw new InvalidOperationException("Choosing payments in the namespace picker did not narrow the list to it.");
+
+        // Several namespaces by pointer: a row's box adds it and the picker stays open, and
+        // the list holds both namespaces' applications. A click elsewhere on a row chooses it
+        // alone and closes the picker.
+        var namespaceButton = view.FindControl<Button>("NamespaceButton")!;
+        vm.SetNamespaces([]);
+        Click(window, namespaceButton);
+        SettlePage(window);
+        var namespaceList = view.FindControl<ListBox>("NamespaceList")!;
+        foreach (var name in new[] { "payments", "monitoring" })
+        {
+            var choice = vm.NamespaceChoices.FirstOrDefault(c => c.Name == name)
+                ?? throw new InvalidOperationException($"The namespace picker does not offer {name}.");
+            namespaceList.ScrollIntoView(choice);
+            SettlePage(window);
+            UxInteractionChecks.ClickNamespaceBox(window, namespaceList, choice);
+        }
+
+        if (!vm.SelectedNamespaces.SequenceEqual(["monitoring", "payments"])
+            || vm.VisibleRows.Any(r => !r.Namespaces.Any(n => n is "payments" or "monitoring"))
+            || !vm.VisibleRows.Any(r => r.Namespaces.Contains("monitoring")))
+            throw new InvalidOperationException("Two clicks in the namespace picker did not choose both namespaces.");
+        if (namespaceButton.Flyout is not { IsOpen: true } flyout)
+            throw new InvalidOperationException("A click on a row's box closed the namespace picker; choosing several needs it to stay open.");
+        var monitoring = vm.NamespaceChoices.First(c => c.Name == "monitoring");
+        var monitoringRow = (Control)namespaceList.ContainerFromItem(monitoring)!;
+        ClickAt(window, monitoringRow, monitoringRow.Bounds.Width - 6);
+        if (!vm.SelectedNamespaces.SequenceEqual(["monitoring"]) || flyout.IsOpen)
+            throw new InvalidOperationException("A click on a namespace row did not choose it alone and close the picker.");
+        vm.SetNamespaces([]);
+        Dispatcher.UIThread.RunJobs();
+
         // The mode switch, by pointer, and back — nothing is restarted either way.
         var rows = vm.Rows.Count;
         var switcher = window.FindControl<ListBox>("ModeSwitch")!;
@@ -181,7 +241,25 @@ internal static class ApplicationsChecks
         if (vm.IsPageOpen || !ReferenceEquals(vm.SelectedRow, target))
             throw new InvalidOperationException("The selected Applications segment did not go back to the list from a page.");
 
-        Console.WriteLine($"Applications interaction passed ({rows} applications; arrows, Enter, Esc, /, {Hotkeys.PrimaryLabel}+F, chips, double-click then Esc, one click on and off, mode switch, Applications segment back to the list).");
+        Console.WriteLine($"Applications interaction passed ({rows} applications; arrows, Enter, Esc, /, {Hotkeys.PrimaryLabel}+F, chips, header sort by pointer, {Hotkeys.PrimaryLabel}+Shift+N namespace picker, two namespaces by pointer, double-click then Esc, one click on and off, mode switch, Applications segment back to the list).");
+    }
+
+    /// <summary>Opens the namespace picker for its screenshot: two namespaces chosen, so the checks show.</summary>
+    internal static void OpenNamespacePicker(Window window)
+    {
+        var view = window.GetVisualDescendants().OfType<ApplicationsView>().First(v => v.IsEffectivelyVisible);
+        var button = view.FindControl<Button>("NamespaceButton")!;
+        button.Flyout!.ShowAt(button);
+        SettlePage(window);
+    }
+
+    private static void ClickAt(Window window, Control target, double x)
+    {
+        var point = target.TranslatePoint(new Point(x, target.Bounds.Height / 2), window)
+            ?? throw new InvalidOperationException($"{target.Name} is not in the window.");
+        window.MouseDown(point, MouseButton.Left);
+        window.MouseUp(point, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
     }
 
     private static void ClickRow(Window window, ListBox list, ApplicationRowViewModel row)
