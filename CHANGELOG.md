@@ -24,6 +24,14 @@ it as the GitHub Release body, so headings must match tags exactly
   descending, a third returns to the list's own order with its Needs attention group. Pods
   sort by the Ready fraction, Restarts as a count and Last deploy by time, and the sort holds
   as the cluster changes.
+- **Workload and node detail's pod lists sort by any column.** Sort a workload's pods by
+  restarts or status, or a node's by CPU or memory request to see what has claimed the node.
+  The sort holds as pods come, go and change.
+
+### Fixed
+
+- A double-click on a column header of workload detail's pod list no longer opens the
+  selected pod.
 
 ## [0.6.0] - 2026-10-04
 

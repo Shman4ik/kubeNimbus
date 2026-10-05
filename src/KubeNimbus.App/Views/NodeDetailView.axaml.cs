@@ -28,6 +28,7 @@ public partial class NodeDetailView : UserControl
         GridSelectionSync<NodeDetailTabViewModel, NodePodViewModel>.Track(
             this, PodsGrid, vm => vm.Pods, vm => vm.SelectedPod, (vm, pod) => vm.SelectedPod = pod,
             nameof(NodeDetailTabViewModel.SelectedPod));
+        GridSortHeaders.Track(this, PodsGrid, dataContext => (dataContext as NodeDetailTabViewModel)?.PodSort);
     }
 
     private void OnPodKeyDown(object? sender, KeyEventArgs e)

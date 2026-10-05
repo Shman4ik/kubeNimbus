@@ -86,6 +86,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("ux-namespace-picker", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
     ("ux-unhealthy-toggle", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
     ("ux-workload-pods", () => HostInMainWindow(ClusterTabScenarios.WorkloadDetail(), height: 1000)),
+    ("ux-workload-pods-sort", () => HostInMainWindow(ClusterTabScenarios.WorkloadDetail(), height: 1000)),
     ("ux-workload-conditions", () => HostInMainWindow(ClusterTabScenarios.WorkloadDetail(1), height: 1000)),
     ("ux-workload-events", () => HostInMainWindow(ClusterTabScenarios.WorkloadDetail(2), height: 1000)),
     ("cluster-tab-workloads-list", () => HostInMainWindow(ClusterTabScenarios.WorkloadsList())),
@@ -232,6 +233,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-node-list", () => HostInMainWindow(ClusterTabScenarios.NodeList())),
     ("cluster-tab-node-detail", () => HostInMainWindow(ClusterTabScenarios.NodeDetail(), height: 1000)),
     ("cluster-tab-node-detail-pods", () => HostInMainWindow(ClusterTabScenarios.NodeDetailPods(), height: 1000)),
+    ("ux-node-pods-sort", () => HostInMainWindow(ClusterTabScenarios.NodeDetailPods(), height: 1000)),
     ("cluster-tab-node-detail-events", () => HostInMainWindow(ClusterTabScenarios.NodeDetailEvents(), height: 1000)),
     ("cluster-tab-node-detail-usage", () => HostInMainWindow(ClusterTabScenarios.NodeDetailUsage(), height: 1000)),
     ("cluster-tab-node-detail-cordoned", () => HostInMainWindow(ClusterTabScenarios.NodeDetailCordoned(), height: 1000)),
@@ -451,6 +453,8 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
 
     if (name == "ux-namespace-picker") UxInteractionChecks.NamespacePicker(window);
     if (name == "ux-applications-keys") ApplicationsChecks.Keys(window);
+    if (name == "ux-workload-pods-sort") GridSortChecks.WorkloadPods(window);
+    if (name == "ux-node-pods-sort") GridSortChecks.NodePods(window);
     if (name == "applications-namespace-picker") ApplicationsChecks.OpenNamespacePicker(window);
     if (name == "ux-hotkey-scheme") KeyboardChecks.HotkeyScheme(window);
     if (name == "ux-overlay-focus") UxInteractionChecks.OverlayTakesFocus(window);

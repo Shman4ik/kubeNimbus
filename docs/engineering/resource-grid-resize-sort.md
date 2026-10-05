@@ -124,3 +124,31 @@ clipped absolute timestamp) is not subsumed by this. And nothing here adds *hori
 scroll*: dragging redistributes the width the window has, so the fleet list's ten columns
 at 1280px still clip their rightmost headers (`ENG-6`) — a reader can now trade one of
 them away, which is a workaround and not the fix.
+
+## The inspector grids sort too
+
+Workload detail's and node detail's Pods grids sort by a header click as well (2026-10),
+through `GridSort<T>` (view model) and `GridSortHeaders` (view), which the Helm and Argo CD
+lists share. The rules above carry over at a smaller scale, with three differences:
+
+- **There is no second collection.** These grids show every row they hold, so the sort orders
+  the watch's own collection. That is safe here, and was not for the resource list (rule 1),
+  because their default order is a real order rather than arrival order: by name for a
+  workload's pods and namespace/name for a node's, which is how the API server lists them. The
+  third click returns to it.
+- **The sort is maintained the same way**: a new row is inserted where the order puts it
+  (`IndexFor`, a binary search), and a row changed in place is moved only when it is no longer
+  between its neighbours (`Reposition`). The selection is put back after every move, because
+  a DataGrid may drop the selection of a row moved under it and `GridSelectionSync` would pass
+  that on.
+- **The columns compare as the resource list's do.** Workload detail reuses
+  `ResourceRowComparer` (Name, Ready, Status, Restarts); node detail has `NodePodComparer`, whose
+  CPU req and Mem req compare the requests as numbers (text puts "250m" above "1") and whose Age
+  puts the youngest first.
+
+A double-click on a header is two sort clicks, and workload detail's grid used to answer it by
+opening the selected pod, because its `DoubleTapped` did not ask whether it landed on a row.
+It asks now, as node detail's always did. `ux-workload-pods-sort` double-clicks the Restarts
+header and fails if an inspector tab opens (confirmed red without the fix), then sorts by
+pointer; `ux-node-pods-sort` sorts by CPU req. `DetailPodSortTests` pins the order, the three
+states and the selection kept through a move.

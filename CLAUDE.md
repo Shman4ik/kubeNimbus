@@ -1041,6 +1041,8 @@ Double-click opens Deployments, StatefulSets, DaemonSets and batch Jobs in
 running and failed against its backoff limit), controller progress,
 conditions, events and a live pod list. The pod watch uses the workload selector,
 including match expressions. Closing the pane cancels its requests and watch.
+A header click sorts the pod list (the same in node detail; see
+[resource-grid-resize-sort](docs/engineering/resource-grid-resize-sort.md), "The inspector grids sort too").
 The workload status follows its list row; Refresh also reads the object directly,
 and tells the list so a row it heals or breaks is re-filtered (ENG-33). The pod
 grids of this pane and node detail sync their selection from code-behind
