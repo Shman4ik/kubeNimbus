@@ -147,6 +147,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-port-forward", () => HostInMainWindow(ClusterTabScenarios.PortForward())),
     ("cluster-tab-port-forward-idle", () => HostInMainWindow(ClusterTabScenarios.PortForwardIdle())),
     ("cluster-tab-helm-releases", () => HostInMainWindow(ClusterTabScenarios.HelmReleases())),
+    ("ux-helm-sort", () => HostInMainWindow(ClusterTabScenarios.HelmReleases())),
     ("cluster-tab-helm-release-detail", () => HostInMainWindow(ClusterTabScenarios.HelmReleaseDetail())),
     ("cluster-tab-rbac-who-can", () => HostInMainWindow(ClusterTabScenarios.RbacWhoCan(), height: 1000)),
     ("cluster-tab-rbac-who-can-empty", () => HostInMainWindow(ClusterTabScenarios.RbacWhoCan(empty: true))),
@@ -266,6 +267,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-argo-dashboard", () => HostInMainWindow(ClusterTabScenarios.ArgoDashboard())),
     ("cluster-tab-argo-application-detail",
         () => HostInMainWindow(ClusterTabScenarios.ArgoApplicationDetail(), height: 1000)),
+    ("ux-argo-sort", () => HostInMainWindow(ClusterTabScenarios.ArgoDashboard())),
     ("cluster-tab-argo-sync-unavailable", () => HostInMainWindow(ClusterTabScenarios.ArgoSyncUnavailable())),
     // L1 — the palette's log rows. On the demo cluster, which is the one place the rows
     // come from a real listing (the dataset) rather than a fixture; the states a sandbox
@@ -455,6 +457,8 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     if (name == "ux-applications-keys") ApplicationsChecks.Keys(window);
     if (name == "ux-workload-pods-sort") GridSortChecks.WorkloadPods(window);
     if (name == "ux-node-pods-sort") GridSortChecks.NodePods(window);
+    if (name == "ux-helm-sort") GridSortChecks.ClusterTabGrid(window, "HelmGrid", "Rev", HelmReleaseComparer.Revision);
+    if (name == "ux-argo-sort") GridSortChecks.ClusterTabGrid(window, "ArgoGrid", "Health", ArgoApplicationComparer.Health);
     if (name == "applications-namespace-picker") ApplicationsChecks.OpenNamespacePicker(window);
     if (name == "ux-hotkey-scheme") KeyboardChecks.HotkeyScheme(window);
     if (name == "ux-overlay-focus") UxInteractionChecks.OverlayTakesFocus(window);

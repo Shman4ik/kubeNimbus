@@ -27,11 +27,14 @@ it as the GitHub Release body, so headings must match tags exactly
 - **Workload and node detail's pod lists sort by any column.** Sort a workload's pods by
   restarts or status, or a node's by CPU or memory request to see what has claimed the node.
   The sort holds as pods come, go and change.
+- **The Helm release browser and the Argo CD dashboard sort by any column.** Helm releases by
+  revision, status or update time; Argo applications by sync or health, worst first. The Helm
+  browser now opens in namespace and name order.
 
 ### Fixed
 
-- A double-click on a column header of workload detail's pod list no longer opens the
-  selected pod.
+- A double-click on a column header of workload detail's pod list, the Helm browser or the
+  Argo CD dashboard no longer opens the selected row.
 
 ## [0.6.0] - 2026-10-04
 

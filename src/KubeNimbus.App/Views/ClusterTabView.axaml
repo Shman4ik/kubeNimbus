@@ -960,42 +960,42 @@
                    a dot in exactly one case — where a CRD's own printer columns have
                    replaced the Status column, so the dot is the last thing carrying the
                    classification — and this grid has no such case. -->
-              <DataGridTemplateColumn Header="Namespace" Width="Auto" MinWidth="80">
+              <DataGridTemplateColumn Header="Namespace" Width="Auto" MinWidth="80" Tag="namespace" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
                     <TextBlock Text="{Binding Namespace}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Namespace}" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Release" Width="2*" MinWidth="160">
+              <DataGridTemplateColumn Header="Release" Width="2*" MinWidth="160" Tag="name" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
                     <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Description}" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Chart" Width="*" MinWidth="140">
+              <DataGridTemplateColumn Header="Chart" Width="*" MinWidth="140" Tag="chart" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
                     <TextBlock Text="{Binding Chart}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Chart}" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="App" Width="Auto" MinWidth="70">
+              <DataGridTemplateColumn Header="App" Width="Auto" MinWidth="70" Tag="app" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
                     <TextBlock Text="{Binding AppVersion}" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Rev" Width="Auto" MinWidth="50">
+              <DataGridTemplateColumn Header="Rev" Width="Auto" MinWidth="50" Tag="revision" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
                     <TextBlock Text="{Binding Revision}" HorizontalAlignment="Right" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Status" Width="Auto" MinWidth="110">
+              <DataGridTemplateColumn Header="Status" Width="Auto" MinWidth="110" Tag="status" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
                     <Border Classes="statusPill" Classes.ok="{Binding StatusHealth, Converter={x:Static conv:HealthEqualsConverter.Instance}, ConverterParameter=ok}"
@@ -1007,7 +1007,7 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Updated" Width="Auto" MinWidth="150">
+              <DataGridTemplateColumn Header="Updated" Width="Auto" MinWidth="150" Tag="updated" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
                     <TextBlock Text="{Binding Updated}" Opacity="0.75" VerticalAlignment="Center" />
@@ -1115,7 +1115,7 @@
                 </MenuFlyout>
               </DataGrid.ContextFlyout>
               <DataGrid.Columns>
-                <DataGridTemplateColumn Header="Application" Width="2*" MinWidth="150">
+                <DataGridTemplateColumn Header="Application" Width="2*" MinWidth="150" Tag="name" CanUserSort="True">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate x:DataType="vm:ArgoApplicationRowViewModel">
                       <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"
@@ -1123,14 +1123,14 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Project" Width="Auto" MinWidth="90">
+                <DataGridTemplateColumn Header="Project" Width="Auto" MinWidth="90" Tag="project" CanUserSort="True">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate x:DataType="vm:ArgoApplicationRowViewModel">
                       <TextBlock Text="{Binding Project}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Sync" Width="Auto" MinWidth="104">
+                <DataGridTemplateColumn Header="Sync" Width="Auto" MinWidth="104" Tag="sync" CanUserSort="True">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate x:DataType="vm:ArgoApplicationRowViewModel">
                       <Border Classes="statusPill"
@@ -1142,7 +1142,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Health" Width="Auto" MinWidth="104">
+                <DataGridTemplateColumn Header="Health" Width="Auto" MinWidth="104" Tag="health" CanUserSort="True">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate x:DataType="vm:ArgoApplicationRowViewModel">
                       <Border Classes="statusPill"
@@ -1155,7 +1155,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Revision" Width="Auto" MinWidth="82">
+                <DataGridTemplateColumn Header="Revision" Width="Auto" MinWidth="82" Tag="revision" CanUserSort="True">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate x:DataType="vm:ArgoApplicationRowViewModel">
                       <TextBlock Text="{Binding Revision}" VerticalAlignment="Center" Opacity="0.8"
@@ -1163,7 +1163,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Destination" Width="Auto" MinWidth="100">
+                <DataGridTemplateColumn Header="Destination" Width="Auto" MinWidth="100" Tag="destination" CanUserSort="True">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate x:DataType="vm:ArgoApplicationRowViewModel">
                       <TextBlock Text="{Binding Destination}" TextTrimming="CharacterEllipsis"
@@ -1171,7 +1171,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Source" Width="*" MinWidth="130">
+                <DataGridTemplateColumn Header="Source" Width="*" MinWidth="130" Tag="source" CanUserSort="True">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate x:DataType="vm:ArgoApplicationRowViewModel">
                       <TextBlock Text="{Binding SourceSummary}" TextTrimming="CharacterEllipsis"
@@ -1179,7 +1179,7 @@
                     </DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Policy" Width="Auto" MinWidth="110">
+                <DataGridTemplateColumn Header="Policy" Width="Auto" MinWidth="110" Tag="policy" CanUserSort="True">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate x:DataType="vm:ArgoApplicationRowViewModel">
                       <TextBlock Text="{Binding SyncPolicy}" VerticalAlignment="Center" FontSize="11.5" Opacity="0.8"

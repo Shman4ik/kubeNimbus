@@ -119,17 +119,18 @@ therefore stops being a constant, which is the other half of why column identity
 to `Tag`.
 
 **Two things this deliberately does not do.** The Helm release list is a second grid with
-its own hardcoded columns and is untouched, so `FEAT-72` (its `Updated` column printing a
-clipped absolute timestamp) is not subsumed by this. And nothing here adds *horizontal
+its own hardcoded columns: it sorts now (see "The inspector grids sort too" below), but its
+widths are not remembered, and `FEAT-72` (its `Updated` column printing a clipped absolute
+timestamp) is not subsumed by this. And nothing here adds *horizontal
 scroll*: dragging redistributes the width the window has, so the fleet list's ten columns
 at 1280px still clip their rightmost headers (`ENG-6`) — a reader can now trade one of
 them away, which is a workaround and not the fix.
 
 ## The inspector grids sort too
 
-Workload detail's and node detail's Pods grids sort by a header click as well (2026-10),
-through `GridSort<T>` (view model) and `GridSortHeaders` (view), which the Helm and Argo CD
-lists share. The rules above carry over at a smaller scale, with three differences:
+Workload detail's and node detail's Pods grids, the Helm release browser and the Argo CD
+dashboard sort by a header click as well (2026-10), through `GridSort<T>` (view model) and
+`GridSortHeaders` (view). The rules above carry over at a smaller scale, with three differences:
 
 - **There is no second collection.** These grids show every row they hold, so the sort orders
   the watch's own collection. That is safe here, and was not for the resource list (rule 1),
@@ -141,6 +142,13 @@ lists share. The rules above carry over at a smaller scale, with three differenc
   between its neighbours (`Reposition`). The selection is put back after every move, because
   a DataGrid may drop the selection of a row moved under it and `GridSelectionSync` would pass
   that on.
+- **Helm and Argo are loaded, not watched**, so their sort orders each load: the rows go in
+  through `Order(sort.Comparer)`, and a header sort survives a reload for the tab's life. The
+  Helm browser now opens in namespace/name order (it was whatever order the Secrets were
+  listed in); the Argo dashboard still opens most urgent first (`ArgoApplicationRowViewModel.Rank`),
+  which is its default. Helm's Rev compares as a number, Status worst first (failed, pending,
+  deployed, superseded), and Updated chronologically, oldest first, because it prints a
+  timestamp rather than an age. Argo's Sync and Health put the worst first.
 - **The columns compare as the resource list's do.** Workload detail reuses
   `ResourceRowComparer` (Name, Ready, Status, Restarts); node detail has `NodePodComparer`, whose
   CPU req and Mem req compare the requests as numbers (text puts "250m" above "1") and whose Age
@@ -148,7 +156,11 @@ lists share. The rules above carry over at a smaller scale, with three differenc
 
 A double-click on a header is two sort clicks, and workload detail's grid used to answer it by
 opening the selected pod, because its `DoubleTapped` did not ask whether it landed on a row.
-It asks now, as node detail's always did. `ux-workload-pods-sort` double-clicks the Restarts
+It asks now, as node detail's always did, and the Helm and Argo grids ask too. Only
+workload detail's guard is exercised by a check: two headless clicks on the Helm and Argo
+headers arrive as two sort clicks and never as a `DoubleTapped`, so a check there passed with
+the guard removed. `ux-workload-pods-sort` double-clicks the Restarts
 header and fails if an inspector tab opens (confirmed red without the fix), then sorts by
 pointer; `ux-node-pods-sort` sorts by CPU req. `DetailPodSortTests` pins the order, the three
-states and the selection kept through a move.
+states and the selection kept through a move; `HelmArgoSortTests` the Helm and Argo orders and a
+sort kept through a reload; `ux-helm-sort` and `ux-argo-sort` sort by pointer.

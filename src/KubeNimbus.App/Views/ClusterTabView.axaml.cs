@@ -113,6 +113,8 @@ public partial class ClusterTabView : UserControl
     {
         InitializeComponent();
         AddHandler(KeyDownEvent, OnNamespaceShortcut, RoutingStrategies.Tunnel);
+        GridSortHeaders.Track(this, HelmGrid, dataContext => (dataContext as ClusterTabViewModel)?.HelmSort);
+        GridSortHeaders.Track(this, ArgoGrid, dataContext => (dataContext as ClusterTabViewModel)?.ArgoSort);
 
         _printerSlots.AddRange(ResourceGrid.Columns.Where(c => c.Tag as string == PrinterSlotTag));
         _slotIds = new string?[_printerSlots.Count];
@@ -808,11 +810,23 @@ public partial class ClusterTabView : UserControl
 
     private void OnRowDoubleTapped(object? sender, TappedEventArgs e) => Vm?.OpenSelectedCommand.Execute(null);
 
-    private void OnHelmRowDoubleTapped(object? sender, TappedEventArgs e) =>
-        Vm?.OpenSelectedHelmReleaseCommand.Execute(null);
+    // Only a double-click on a row opens it: one on a header is two sort clicks, and would
+    // otherwise open whichever row was selected.
+    private void OnHelmRowDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (e.Source is Control { DataContext: HelmReleaseRowViewModel })
+        {
+            Vm?.OpenSelectedHelmReleaseCommand.Execute(null);
+        }
+    }
 
-    private void OnArgoRowDoubleTapped(object? sender, TappedEventArgs e) =>
-        Vm?.OpenArgoApplicationCommand.Execute(null);
+    private void OnArgoRowDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (e.Source is Control { DataContext: ArgoApplicationRowViewModel })
+        {
+            Vm?.OpenArgoApplicationCommand.Execute(null);
+        }
+    }
 
     /// <summary>
     /// Ctrl/Cmd+F, routed here by <see cref="MainWindow"/> — the gesture is registered

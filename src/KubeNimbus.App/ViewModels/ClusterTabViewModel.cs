@@ -1319,6 +1319,13 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     public ObservableCollection<HelmReleaseRowViewModel> HelmReleases { get; } = [];
 
+    /// <summary>The Helm grid's header sort; namespace/name until a header is clicked. Kept across reloads for the tab's life.</summary>
+    public GridSort<HelmReleaseRowViewModel> HelmSort => _helmSort ??= new(
+        HelmReleases, HelmReleaseComparer.ByKey, (column, descending) => new HelmReleaseComparer(column, descending),
+        () => SelectedHelmRelease, release => SelectedHelmRelease = release);
+
+    private GridSort<HelmReleaseRowViewModel>? _helmSort;
+
     [ObservableProperty]
     private HelmReleaseRowViewModel? _selectedHelmRelease;
 
@@ -1335,6 +1342,13 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     // read from the Kubernetes API and nothing else — see ClusterClient.ArgoCd.cs.
 
     public ObservableCollection<ArgoApplicationRowViewModel> ArgoApplications { get; } = [];
+
+    /// <summary>The Argo grid's header sort; most urgent first until a header is clicked. Kept across reloads for the tab's life.</summary>
+    public GridSort<ArgoApplicationRowViewModel> ArgoSort => _argoSort ??= new(
+        ArgoApplications, ArgoApplicationComparer.ByRank, (column, descending) => new ArgoApplicationComparer(column, descending),
+        () => SelectedArgoApplication, application => SelectedArgoApplication = application);
+
+    private GridSort<ArgoApplicationRowViewModel>? _argoSort;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanSyncSelectedArgoApplication))]
@@ -2227,10 +2241,11 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             // hidden here for the same reason it is hidden in the Helm browser — aggregating
             // GitOps state across clusters is a different (and much bigger) question than
             // aggregating one kind's rows.
+            // In the order the header sort names, which is most urgent first until a header
+            // is clicked.
             foreach (var row in applications
                 .Select(a => new ArgoApplicationRowViewModel(a, descriptor))
-                .OrderBy(ArgoApplicationRowViewModel.Rank)
-                .ThenBy(r => r.Application.Key, StringComparer.Ordinal))
+                .Order(ArgoSort.Comparer))
             {
                 ArgoApplications.Add(row);
             }
@@ -2385,9 +2400,9 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             var releases = Client is null
                 ? Demo.DemoData.HelmReleases.Where(r => @namespace is null || r.Namespace == @namespace)
                 : await Client.ListHelmReleasesAsync(@namespace);
-            foreach (var release in releases)
+            foreach (var release in releases.Select(r => new HelmReleaseRowViewModel(r)).Order(HelmSort.Comparer))
             {
-                HelmReleases.Add(new HelmReleaseRowViewModel(release));
+                HelmReleases.Add(release);
             }
 
             SelectedHelmRelease = HelmReleases.FirstOrDefault();

@@ -72,6 +72,29 @@ internal static class GridSortChecks
         Console.WriteLine($"Node pods sort passed ({vm.Pods.Count} pods by CPU request, most first).");
     }
 
+    /// <summary>
+    /// The Helm browser or the Argo dashboard: two separate clicks on a header sort it
+    /// descending. The double-click guard these grids share with workload detail is not
+    /// exercised here: two headless clicks on these headers arrive as two sort clicks, never
+    /// as a DoubleTapped, so a check would pass with or without it (tried).
+    /// </summary>
+    internal static void ClusterTabGrid(Window window, string gridName, string label, string column)
+    {
+        var view = window.GetVisualDescendants().OfType<ClusterTabView>().First(v => v.IsEffectivelyVisible);
+        var vm = (ClusterTabViewModel)view.DataContext!;
+        var grid = view.FindControl<DataGrid>(gridName)!;
+        var sort = gridName == "HelmGrid" ? (IGridSort)vm.HelmSort : vm.ArgoSort;
+
+        Pause();
+        ClickHeader(window, grid, label);
+        Pause();
+        ClickHeader(window, grid, label);
+        if (sort.Column != column || !sort.Descending || !HeaderTexts(grid).Contains(label + " ↓"))
+            throw new InvalidOperationException($"Two clicks on the {gridName} {label} header did not sort it descending.");
+
+        Console.WriteLine($"{gridName} sort passed ({label}, descending).");
+    }
+
     private static int InspectorTabs(Window window) =>
         window.GetVisualDescendants().OfType<ClusterTabView>().Where(v => v.IsEffectivelyVisible)
             .Select(v => ((ClusterTabViewModel)v.DataContext!).InspectorTabs.Count).Sum();
