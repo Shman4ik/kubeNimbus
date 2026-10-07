@@ -48,4 +48,68 @@ public class AppDataDirectoryTests
         await Assert.That(Path.IsPathFullyQualified(AppDataDirectory.Local)).IsTrue();
         await Assert.That(Path.IsPathFullyQualified(TerminalLauncher.StateDirectory) || TerminalLauncher.DirectoryOverride is not null).IsTrue();
     }
+
+    // ------------------------------------------------- S1-4: private and atomic writes
+
+    [Test]
+    public async Task An_atomic_write_replaces_the_file_whole_and_leaves_nothing_beside_it()
+    {
+        var directory = Path.Combine(Directory.CreateTempSubdirectory("kubenimbus-atomic").FullName, "kubeNimbus");
+        var path = Path.Combine(directory, "settings.json");
+
+        AppDataDirectory.WriteAllTextAtomically(path, "first");
+        AppDataDirectory.WriteAllTextAtomically(path, "second, longer than the first");
+
+        await Assert.That(await File.ReadAllTextAsync(path)).IsEqualTo("second, longer than the first");
+        await Assert.That(Directory.GetFiles(directory).Select(f => Path.GetFileName(f))).IsEquivalentTo(["settings.json"]);
+    }
+
+    [Test]
+    public async Task The_settings_store_writes_through_the_atomic_path()
+    {
+        var directory = Directory.CreateTempSubdirectory("kubenimbus-atomic-settings").FullName;
+        var store = new KubeNimbus.Core.Settings.AppSettingsStore(Path.Combine(directory, "settings.json"));
+
+        store.Save(new KubeNimbus.Core.Settings.AppSettings());
+
+        await Assert.That(store.Exists()).IsTrue();
+        await Assert.That(Directory.GetFiles(directory).Select(f => Path.GetFileName(f))).IsEquivalentTo(["settings.json"]);
+    }
+
+    [Test]
+    public async Task On_linux_and_macos_the_files_are_owner_only()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            // Windows has no Unix modes; the per-user AppData folders are private to their user.
+            Skip.Test("Unix file modes do not exist on Windows.");
+            return;
+        }
+
+        var root = Directory.CreateTempSubdirectory("kubenimbus-private").FullName;
+        var directory = Path.Combine(root, "kubeNimbus");
+        var file = Path.Combine(directory, "workspace.json");
+
+        AppDataDirectory.WriteAllTextAtomically(file, "{}");
+
+        await Assert.That(File.GetUnixFileMode(directory)).IsEqualTo(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        await Assert.That(File.GetUnixFileMode(file)).IsEqualTo(UnixFileMode.UserRead | UnixFileMode.UserWrite);
+    }
+
+    [Test]
+    public async Task On_linux_and_macos_an_existing_wider_directory_is_tightened()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Skip.Test("Unix file modes do not exist on Windows.");
+            return;
+        }
+
+        var directory = Directory.CreateTempSubdirectory("kubenimbus-widen").FullName;
+        File.SetUnixFileMode(directory, (UnixFileMode)0b111_101_101); // 0755, what umask 022 gave
+
+        AppDataDirectory.CreatePrivate(directory);
+
+        await Assert.That(File.GetUnixFileMode(directory)).IsEqualTo(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+    }
 }

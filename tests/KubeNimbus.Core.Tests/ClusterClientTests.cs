@@ -1,4 +1,4 @@
-using k8s.Models;
+using System.Text.Json;
 using KubeNimbus.Core;
 
 namespace KubeNimbus.Core.Tests;
@@ -48,7 +48,7 @@ public class ClusterClientTests
             return;
         }
 
-        await using var watch = client.WatchPodsAsync("kube-system", cancellationToken: ct).GetAsyncEnumerator(ct);
+        await using var watch = client.WatchResourceAsync(ResourceDescriptor.Pods, "kube-system", cancellationToken: ct).GetAsyncEnumerator(ct);
         await Assert.That(await watch.MoveNextAsync()).IsTrue();
 
         await client.RefreshCredentialsAsync(force: true, ct);
@@ -69,10 +69,10 @@ public class ClusterClientTests
         }
 
         var sawReset = false;
-        var pods = new List<V1Pod>();
+        var pods = new List<DynamicResource>();
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        await foreach (var evt in client.WatchPodsAsync("kube-system", cancellationToken: cts.Token))
+        await foreach (var evt in client.WatchResourceAsync(ResourceDescriptor.Pods, "kube-system", cancellationToken: cts.Token))
         {
             if (evt.Type == ResourceEventType.Reset)
             {
@@ -118,7 +118,7 @@ public class ClusterClientTests
         var frames = new List<ResourceEventType>();
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        await foreach (var evt in client.WatchPodsAsync("kube-system", cancellationToken: cts.Token))
+        await foreach (var evt in client.WatchResourceAsync(ResourceDescriptor.Pods, "kube-system", cancellationToken: cts.Token))
         {
             frames.Add(evt.Type);
             if (evt.Type == ResourceEventType.Synced)
@@ -202,21 +202,21 @@ public class ClusterClientTests
         }
 
         // Find a running pod in kube-system to read logs from.
-        V1Pod? target = null;
+        DynamicResource? target = null;
         using (var findCts = CancellationTokenSource.CreateLinkedTokenSource(ct))
         {
-            await foreach (var evt in client.WatchPodsAsync("kube-system", cancellationToken: findCts.Token))
+            await foreach (var evt in client.WatchResourceAsync(ResourceDescriptor.Pods, "kube-system", cancellationToken: findCts.Token))
             {
-                if (evt is { Type: ResourceEventType.Added, Resource.Status.Phase: "Running" })
+                if (evt is { Type: ResourceEventType.Added, Resource: { } pod } && Phase(pod) == "Running")
                 {
-                    target = evt.Resource;
+                    target = pod;
                     await findCts.CancelAsync();
                     break;
                 }
             }
         }
 
-        if (target?.Metadata?.Name is null)
+        if (target is null)
         {
             return;
         }
@@ -229,7 +229,7 @@ public class ClusterClientTests
         try
         {
             await foreach (var line in client.StreamPodLogsAsync(
-                "kube-system", target.Metadata.Name, follow: true, tailLines: 5,
+                "kube-system", target.Name, follow: true, tailLines: 5,
                 cancellationToken: logCts.Token))
             {
                 lineCount++;
@@ -249,4 +249,11 @@ public class ClusterClientTests
         // rather than requiring output. Reaching here within the timeout is the pass.
         await Assert.That(lineCount).IsGreaterThanOrEqualTo(0);
     }
+
+    /// <summary><c>status.phase</c> of a pod read through the generic watch.</summary>
+    internal static string? Phase(DynamicResource pod) =>
+        pod.Raw.TryGetProperty("status", out var status) && status.ValueKind == JsonValueKind.Object
+        && status.TryGetProperty("phase", out var phase) && phase.ValueKind == JsonValueKind.String
+            ? phase.GetString()
+            : null;
 }

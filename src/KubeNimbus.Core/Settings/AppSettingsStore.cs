@@ -74,14 +74,10 @@ public sealed class AppSettingsStore
 
         try
         {
-            var directory = Path.GetDirectoryName(_filePath);
-            if (!string.IsNullOrEmpty(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-
+            // Atomically and owner-only: a crash mid-write used to leave a truncated file,
+            // which Load reads as "no settings" — every preference lost at once.
             var json = JsonSerializer.Serialize(settings.Normalized(), AppSettingsJsonContext.Default.AppSettings);
-            File.WriteAllText(_filePath, json);
+            AppDataDirectory.WriteAllTextAtomically(_filePath, json);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {

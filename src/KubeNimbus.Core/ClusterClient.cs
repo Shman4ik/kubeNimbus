@@ -65,32 +65,78 @@ public sealed partial class ClusterClient : IDisposable
     /// <summary>The proxy from the cluster's <c>proxy-url</c>, or null when requests go direct. Tests read it.</summary>
     internal IWebProxy? Proxy { get; private set; }
 
+    /// <summary>
+    /// Whether the cluster entry sets <c>insecure-skip-tls-verify</c>: the API server's
+    /// certificate is not checked at all, so anyone on the path can read the credential. The
+    /// one case <see cref="ApiServerCertificateValidator"/> is not installed, and the app says
+    /// so for as long as such a tab is connected.
+    /// </summary>
+    public bool SkipsTlsVerification { get; private set; }
+
     private ClusterClient(ClusterContext context, ClientSetup setup)
     {
         Context = context;
         _client = Create(setup);
         Proxy = setup.Proxy;
+        SkipsTlsVerification = SkipsTls(setup);
     }
 
+    private static bool SkipsTls(ClientSetup setup) => setup.Configuration.SkipTlsVerify;
+
     /// <summary>
-    /// A generated client for <paramref name="setup"/>, with the proxy applied to the
-    /// WebSocket transport as well: exec and port-forward open a <c>ClientWebSocket</c> of
-    /// their own, which the HTTP handler's proxy never reaches.
+    /// A generated client for <paramref name="setup"/>, with kubeNimbus's own rules on both of
+    /// its transports — the <c>SocketsHttpHandler</c> every HTTP request goes through and the
+    /// <c>ClientWebSocket</c> exec and port-forward open, which the handler's settings never
+    /// reach:
+    /// <list type="bullet">
+    /// <item>the API server's certificate is checked by <see cref="ApiServerCertificateValidator"/>,
+    /// replacing the library's callback, which ignores a host-name mismatch;</item>
+    /// <item><c>tls-server-name</c> and the kubeconfig's impersonation are sent
+    /// (<see cref="ApiServerRequestHandler"/>, <see cref="ApiServerWebSocketBuilder"/>);</item>
+    /// <item>the proxy from <c>proxy-url</c> reaches the WebSocket too.</item>
+    /// </list>
     /// </summary>
+    /// <remarks>
+    /// The handler is private to the library, so it is captured through
+    /// <c>FirstMessageHandlerSetup</c> (chained after whatever the setup put there — the
+    /// proxy), and the callback is replaced after the constructor returns: the library assigns
+    /// its own in <c>InitializeFromConfig</c>, which runs after that hook. No request has been
+    /// sent at that point, so nothing ever goes out under the library's check.
+    /// <c>ApiServerTlsTests</c> pin every case, and fail if this replacement is removed.
+    /// </remarks>
     private static Kubernetes Create(ClientSetup setup)
     {
-        var client = new Kubernetes(setup.Configuration);
-        if (setup.Proxy is { } proxy)
+        var configuration = setup.Configuration;
+        SocketsHttpHandler? handler = null;
+        var previous = configuration.FirstMessageHandlerSetup;
+        configuration.FirstMessageHandlerSetup = h =>
         {
-            client.CreateWebSocketBuilder = () =>
-            {
-                var builder = new WebSocketBuilder();
-                builder.Options.Proxy = proxy;
-                return builder;
-            };
-        }
+            previous?.Invoke(h);
+            handler = h;
+        };
 
-        return client;
+        var client = new Kubernetes(configuration, new ApiServerRequestHandler(configuration.TlsServerName, setup.Impersonation));
+        try
+        {
+            var validator = ApiServerCertificateValidator.For(configuration, client.BaseUri);
+            if (validator is not null)
+            {
+                // Fail closed: without the handler there is no way to replace the library's check.
+                (handler ?? throw new InvalidOperationException("The client library did not expose its HTTP handler; refusing to connect with its certificate check."))
+                    .SslOptions.RemoteCertificateValidationCallback = validator.Validate;
+            }
+
+            var proxy = setup.Proxy;
+            var tlsServerName = configuration.TlsServerName;
+            var impersonation = setup.Impersonation;
+            client.CreateWebSocketBuilder = () => new ApiServerWebSocketBuilder(proxy, validator, tlsServerName, impersonation);
+            return client;
+        }
+        catch
+        {
+            client.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
@@ -154,6 +200,7 @@ public sealed partial class ClusterClient : IDisposable
                 _retired.Add(_client);
                 _client = fresh;
                 Proxy = setup.Proxy;
+                SkipsTlsVerification = SkipsTls(setup);
                 while (_retired.Count > MaxRetiredClients)
                 {
                     _retired[0].Dispose();
@@ -207,9 +254,6 @@ public sealed partial class ClusterClient : IDisposable
         var setup = await Kubeconfig.BuildClientSetupAsync(context, cancellationToken).ConfigureAwait(false);
         return new ClusterClient(context, setup);
     }
-
-    /// <summary>Raw generated client, for tests only. App code goes through typed methods.</summary>
-    internal Kubernetes Api => _client;
 
     private string? _serverVersion;
 
@@ -265,43 +309,6 @@ public sealed partial class ClusterClient : IDisposable
         return new HttpRequestException(
             $"{_client.BaseUri.GetLeftPart(UriPartial.Authority)} answered, but not as a Kubernetes API server "
             + $"({(contentType is null ? "" : contentType + ": ")}{head}). A VPN, proxy or sign-in page may be in the way.");
-    }
-
-    /// <summary>
-    /// Live pod stream for a namespace (or all namespaces when null).
-    /// Starts with Reset + one Added per existing pod (paginated list), then
-    /// follows the watch. Reconnects with resourceVersion resume on connection
-    /// loss and relists (a new Reset) on 410 Gone. <paramref name="connectionLost"/>
-    /// fires on every transient failure so the UI can surface it instead of
-    /// silently hanging.
-    /// </summary>
-    public IAsyncEnumerable<ResourceEvent<V1Pod>> WatchPodsAsync(
-        string? @namespace = null,
-        Action<Exception>? connectionLost = null,
-        CancellationToken cancellationToken = default)
-    {
-        var path = @namespace is null
-            ? "api/v1/pods"
-            : $"api/v1/namespaces/{Uri.EscapeDataString(@namespace)}/pods";
-
-        return WatchAsync(
-            listPath: path,
-            listPage: (continueToken, ct) => ListPodPageAsync(@namespace, continueToken, ct),
-            deserialize: static el => KubernetesJson.Deserialize<V1Pod>(el),
-            resourceVersionOf: static pod => pod.Metadata?.ResourceVersion,
-            connectionLost: connectionLost,
-            cancellationToken: cancellationToken);
-    }
-
-    private async Task<(IList<V1Pod> Items, string? Continue, string? ResourceVersion)> ListPodPageAsync(
-        string? @namespace, string? continueToken, CancellationToken ct)
-    {
-        var list = @namespace is null
-            ? await _client.CoreV1.ListPodForAllNamespacesAsync(
-                continueParameter: continueToken, limit: ListPageSize, cancellationToken: ct).ConfigureAwait(false)
-            : await _client.CoreV1.ListNamespacedPodAsync(
-                @namespace, continueParameter: continueToken, limit: ListPageSize, cancellationToken: ct).ConfigureAwait(false);
-        return (list.Items, list.Metadata?.ContinueProperty, list.Metadata?.ResourceVersion);
     }
 
     /// <summary>
@@ -470,6 +477,10 @@ public sealed partial class ClusterClient : IDisposable
         // ("could not reach login.example.com") is the diagnosis, and the bare type name
         // this used to print was the one thing in the banner nobody could act on.
         ExecCredentialException or KubeconfigSetupException => ex.Message,
+
+        // The certificate changed under a running tab (or the tab was opened before this
+        // check existed): which name was expected is the whole diagnosis.
+        _ when ApiServerCertificateException.Find(ex) is { } refusal => refusal.Message,
         _ => ex.GetType().Name,
     };
 

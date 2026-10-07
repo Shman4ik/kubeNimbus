@@ -81,7 +81,7 @@ public class ExecPluginAuthTests
     }
 
     [Test]
-    public async Task A_bare_plugin_command_found_nowhere_is_still_the_plugins_own_error()
+    public async Task A_bare_plugin_command_found_nowhere_is_refused_by_name_before_it_is_started()
     {
         using var _ = ExecPluginPath.OverrideDirectories([]);
 

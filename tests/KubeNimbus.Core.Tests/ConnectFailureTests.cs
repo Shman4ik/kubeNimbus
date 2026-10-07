@@ -29,6 +29,39 @@ public class ConnectFailureTests
         await Assert.That(ex.Message).DoesNotContain("deserializ");
     }
 
+    /// <summary>
+    /// S1-6: a verbose or failing plugin can echo the token it got or the request it made,
+    /// and the failure view is what people screenshot into an issue.
+    /// </summary>
+    [Test]
+    public async Task A_credential_in_what_the_plugin_printed_is_redacted()
+    {
+        const string Jwt = "eyJhbGciOiJSUzI1NiIsImtpZCI6IngifQ.eyJzdWIiOiJzeXN0ZW06c2EifQ.c2lnbmF0dXJlLWJ5dGVz_-x";
+        var capture = new ExecCredentialCapture.Capture();
+        capture.Lines.Enqueue($"error: the server rejected id-token {Jwt} (expired)");
+        capture.Lines.Enqueue("retrying with Authorization: Bearer s3cr3t-0paque-t0ken");
+
+        var translated = ExecCredentialCapture.Translate(
+            new k8s.Exceptions.KubeConfigException("external exec failed due to failed deserialization process"), capture);
+
+        foreach (var text in new[] { translated.Message, translated.PluginOutput! })
+        {
+            await Assert.That(text).DoesNotContain(Jwt);
+            await Assert.That(text).DoesNotContain("eyJ");
+            await Assert.That(text).DoesNotContain("s3cr3t-0paque-t0ken");
+            await Assert.That(text).Contains("id-token [redacted] (expired)");
+            await Assert.That(text).Contains("Bearer [redacted]");
+        }
+    }
+
+    [Test]
+    [Arguments("could not reach login.example.com: dial tcp 10.0.0.1:443: i/o timeout")]
+    [Arguments("aws: error: argument --cluster-name is required")]
+    public async Task Ordinary_plugin_output_is_left_as_it_was(string line)
+    {
+        await Assert.That(ExecCredentialCapture.RedactCredentials(line)).IsEqualTo(line);
+    }
+
     [Test]
     public async Task An_exec_plugin_that_cannot_be_started_says_so()
     {

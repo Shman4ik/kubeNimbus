@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Effective 5 October 2026. This policy covers kubeNimbus, the desktop Kubernetes
+Effective 7 October 2026. This policy covers kubeNimbus, the desktop Kubernetes
 client, in every form it is distributed: the Microsoft Store package, the installers
 and archives on the GitHub Releases page, and builds made from this repository.
 
@@ -61,7 +61,9 @@ makes that request, not kubeNimbus:
 - Whatever credential your kubeconfig supplies: a client certificate, a token, or the
   output of the credential program.
 - Every request you make, as `kubectl` would make it, with the standard headers of the .NET
-  Kubernetes client library.
+  Kubernetes client library, plus the impersonation headers (`Impersonate-User` and its
+  companions) when your kubeconfig's user entry asks to act as someone else, as `kubectl`
+  sends them.
 - The name `kubenimbus` as the field manager of YAML you apply, and as the initiator of an
   Argo CD sync you start. The cluster records both in the objects concerned.
 
@@ -85,14 +87,18 @@ packaged apps, so check both.
 | `terminal/` | Only if you open a terminal on a cluster: a small kubeconfig holding one context **name**, and on macOS a launcher script holding file paths. No cluster address, user or credential. | No |
 
 None of these files contains a password, token, certificate or other credential. The app
-never copies credentials out of your kubeconfig, which stays where it is. kubeNimbus writes no
-log file and no crash report.
+never copies credentials out of your kubeconfig, which stays where it is. On macOS and Linux
+the folders and files are readable by your user only. kubeNimbus writes no log file and no
+crash report.
 
 Logs, metrics history and resource lists live in memory while the app is open and are not
 saved. Secret values are shown masked until you ask for them, and revealing one decodes it in
 memory only. Text goes to a file or the clipboard only when you save or copy it: copying puts
 it on the system clipboard, where clipboard history and clipboard managers can keep it, and
-saved logs go where you choose in the save dialog.
+saved logs go where you choose in the save dialog. A decoded Secret value is the exception:
+the copy is marked so that Windows keeps it out of clipboard history and cloud clipboard
+sync, and kubeNimbus clears it from the clipboard after a minute if it is still there.
+Clipboard managers that ignore that marking can still keep it.
 
 ## Deleting your data
 

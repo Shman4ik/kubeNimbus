@@ -1,6 +1,9 @@
 using System.Collections.Concurrent;
 using System.Net;
+using System.Net.Security;
 using System.Net.Sockets;
+using System.Security.Authentication;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 
 namespace KubeNimbus.Core.Tests;
@@ -17,16 +20,32 @@ internal sealed class ScriptedApiServer : IDisposable
     private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
     private readonly CancellationTokenSource _stop = new();
     private readonly Func<ScriptedRequest, ScriptedResponse> _handler;
+    private readonly X509Certificate2? _certificate;
+    private int _handshakeFailures;
 
-    public ScriptedApiServer(Func<ScriptedRequest, ScriptedResponse> handler)
+    /// <param name="handler">Decides each answer.</param>
+    /// <param name="certificate">
+    /// When set, the server speaks TLS with this certificate (which must carry its private
+    /// key) and <see cref="Url"/> is https — the stand-in for an API server whose certificate
+    /// the client has to check.
+    /// </param>
+    /// <param name="host">The host <see cref="Url"/> names; it always listens on 127.0.0.1.</param>
+    public ScriptedApiServer(
+        Func<ScriptedRequest, ScriptedResponse> handler, X509Certificate2? certificate = null, string host = "127.0.0.1")
     {
         _handler = handler;
+        _certificate = certificate;
         _listener.Start();
-        Url = $"http://127.0.0.1:{((IPEndPoint)_listener.LocalEndpoint).Port}";
+        Url = $"{(certificate is null ? "http" : "https")}://{host}:{Port}";
         _ = Task.Run(AcceptLoopAsync);
     }
 
     public string Url { get; }
+
+    public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
+
+    /// <summary>TLS handshakes the client abandoned or refused — a refused certificate shows here, never as a request.</summary>
+    public int HandshakeFailures => Volatile.Read(ref _handshakeFailures);
 
     public ConcurrentQueue<ScriptedRequest> Requests { get; } = new();
 
@@ -60,7 +79,25 @@ internal sealed class ScriptedApiServer : IDisposable
         {
             try
             {
-                await using var stream = connection.GetStream();
+                Stream stream = connection.GetStream();
+                if (_certificate is not null)
+                {
+                    var tls = new SslStream(stream, leaveInnerStreamOpen: false);
+                    try
+                    {
+                        await tls.AuthenticateAsServerAsync(_certificate);
+                    }
+                    catch (Exception e) when (e is AuthenticationException or IOException)
+                    {
+                        Interlocked.Increment(ref _handshakeFailures);
+                        await tls.DisposeAsync();
+                        return;
+                    }
+
+                    stream = tls;
+                }
+
+                await using var _ = stream;
                 var request = await ReadRequestAsync(stream);
                 if (request is null)
                 {
@@ -92,7 +129,7 @@ internal sealed class ScriptedApiServer : IDisposable
         }
     }
 
-    private static async Task<ScriptedRequest?> ReadRequestAsync(NetworkStream stream)
+    private static async Task<ScriptedRequest?> ReadRequestAsync(Stream stream)
     {
         var buffer = new List<byte>();
         var one = new byte[1];
@@ -113,12 +150,14 @@ internal sealed class ScriptedApiServer : IDisposable
         var lines = Encoding.ASCII.GetString([.. buffer]).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
         var requestLine = lines[0].Split(' ');
         var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var raw = new List<KeyValuePair<string, string>>();
         foreach (var line in lines.Skip(1))
         {
             var colon = line.IndexOf(':', StringComparison.Ordinal);
             if (colon > 0)
             {
                 headers[line[..colon].Trim()] = line[(colon + 1)..].Trim();
+                raw.Add(new(line[..colon].Trim(), line[(colon + 1)..].Trim()));
             }
         }
 
@@ -139,7 +178,7 @@ internal sealed class ScriptedApiServer : IDisposable
             }
         }
 
-        return new ScriptedRequest(requestLine[0], requestLine.Length > 1 ? requestLine[1] : "", headers);
+        return new ScriptedRequest(requestLine[0], requestLine.Length > 1 ? requestLine[1] : "", headers) { HeaderLines = raw };
     }
 
     public void Dispose()
@@ -152,6 +191,13 @@ internal sealed class ScriptedApiServer : IDisposable
 internal sealed record ScriptedRequest(string Method, string Target, IReadOnlyDictionary<string, string> Headers)
 {
     public string? Authorization => Headers.TryGetValue("Authorization", out var value) ? value : null;
+
+    /// <summary>Every header line as sent, in order — a header sent twice is two entries here.</summary>
+    public IReadOnlyList<KeyValuePair<string, string>> HeaderLines { get; init; } = [];
+
+    /// <summary>The values of every line named <paramref name="name"/>, case-insensitively.</summary>
+    public IReadOnlyList<string> Values(string name) =>
+        [.. HeaderLines.Where(h => string.Equals(h.Key, name, StringComparison.OrdinalIgnoreCase)).Select(h => h.Value)];
 }
 
 internal sealed record ScriptedResponse(int Status, string Body, string ContentType = "application/json", bool Hold = false);

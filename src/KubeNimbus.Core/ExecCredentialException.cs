@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 using k8s;
 using k8s.Exceptions;
 
@@ -49,7 +50,7 @@ public sealed class ExecCredentialException : Exception
 /// Collects an exec credential plugin's stderr for the operation that ran it and turns
 /// the library's exec failures into an <see cref="ExecCredentialException"/> — see there.
 /// </summary>
-internal static class ExecCredentialCapture
+internal static partial class ExecCredentialCapture
 {
     private const int MaxLines = 8;
     private const int MaxChars = 600;
@@ -140,7 +141,7 @@ internal static class ExecCredentialCapture
 
     internal static ExecCredentialException Translate(KubeConfigException ex, Capture capture)
     {
-        var output = capture.Lines.IsEmpty ? null : string.Join(" ", capture.Lines);
+        var output = capture.Lines.IsEmpty ? null : RedactCredentials(string.Join(" ", capture.Lines));
         if (output is { Length: > MaxChars })
         {
             output = "…" + output[^MaxChars..];
@@ -162,6 +163,25 @@ internal static class ExecCredentialCapture
 
         return new ExecCredentialException(message, capture.Command, output, ex);
     }
+
+    /// <summary>
+    /// Replaces what looks like a credential in a plugin's stderr with <c>[redacted]</c>
+    /// before it is shown: a JWT (<c>eyJ…</c> segments joined by dots — every OIDC ID token
+    /// and most access tokens) and the value after <c>Bearer</c>. A verbose or failing plugin
+    /// can echo the token it got or the request it made, and the failure view is a place
+    /// people take screenshots of for an issue. Over-matching costs a word of a diagnosis;
+    /// under-matching costs a credential.
+    /// </summary>
+    internal static string RedactCredentials(string text) =>
+        BearerValue().Replace(JsonWebToken().Replace(text, Redacted), "$1" + Redacted);
+
+    private const string Redacted = "[redacted]";
+
+    [GeneratedRegex(@"eyJ[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]*){1,4}", RegexOptions.CultureInvariant)]
+    private static partial Regex JsonWebToken();
+
+    [GeneratedRegex(@"(\bBearer\s+)(?!\[redacted\])\S+", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
+    private static partial Regex BearerValue();
 
     internal sealed class Capture
     {

@@ -375,6 +375,26 @@ public static class TerminalLauncher
 
         foreach (var directory in directories)
         {
+            // A relative entry (".", "bin", or an empty one between two separators) names
+            // the current directory, and whoever can put a file there would choose what runs
+            // as kubectl or as a credential plugin. Go's exec.LookPath refuses these with
+            // exec.ErrDot; so does this. Fully qualified by the host's own rules, since the
+            // probe below is a File.Exists on this host.
+            bool qualified;
+            try
+            {
+                qualified = Path.IsPathFullyQualified(directory);
+            }
+            catch (ArgumentException)
+            {
+                qualified = false;
+            }
+
+            if (!qualified)
+            {
+                continue;
+            }
+
             foreach (var extension in extensions)
             {
                 string candidate;
@@ -440,18 +460,15 @@ public static class TerminalLauncher
 
         try
         {
-            Directory.CreateDirectory(StateDirectory);
-            File.WriteAllText(plan.OverlayPath, plan.OverlayContent);
+            // Atomically: a terminal already open on this context names the overlay in its
+            // KUBECONFIG, and a half-written file read by its next kubectl would drop the
+            // pinned context — and with it, the guarantee of which cluster it talks to.
+            AppDataDirectory.WriteAllTextAtomically(plan.OverlayPath, plan.OverlayContent);
 
             if (plan.LauncherScriptPath is { } script && plan.LauncherScriptContent is { } body)
             {
-                File.WriteAllText(script, body);
-                if (!OperatingSystem.IsWindows())
-                {
-                    File.SetUnixFileMode(
-                        script,
-                        UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-                }
+                AppDataDirectory.WriteAllTextAtomically(
+                    script, body, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

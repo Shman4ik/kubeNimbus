@@ -5,17 +5,18 @@ namespace KubeNimbus.Core;
 
 /// <summary>
 /// Generic (built-in or CRD) resource access, layered on the same list+watch
-/// engine <see cref="WatchPodsAsync"/> uses — the sidebar tree, list views and
-/// YAML editor all go through this for every resource kind except pods (which
-/// keep their typed, source-generated path for the live pod list).
+/// engine every live list uses — the sidebar tree, list views and YAML editor all go
+/// through this for every resource kind, pods included. The client library's typed API is
+/// not used anywhere: one path, read as JSON, is the least of the library to depend on.
 /// </summary>
 public sealed partial class ClusterClient
 {
     private const int DynamicListPageSize = 500;
 
     /// <summary>
-    /// Live stream of one resource kind, informer-style (see <see cref="WatchPodsAsync"/>
-    /// for the semantics). <paramref name="labelSelector"/> narrows both the initial list
+    /// Live stream of one resource kind, informer-style: a Reset, one Added per existing
+    /// object (paginated), Synced, then the watch, resuming from the last resourceVersion on
+    /// a dropped connection and relisting on 410 Gone.<paramref name="labelSelector"/> narrows both the initial list
     /// and the watch to the objects a workload owns, and <paramref name="fieldSelector"/>
     /// to the objects a server-side field names (the pods on one node) — each the same
     /// selector on both halves, or the watch would report additions the list never

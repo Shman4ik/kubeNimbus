@@ -357,7 +357,7 @@
            the shell's own status — the kubeconfig load result — always is. -->
       <Border DockPanel.Dock="Bottom" Classes="statusBar"
               IsVisible="{Binding SelectedTab.IsStatusWorthShowing, FallbackValue=True}">
-        <Grid ColumnDefinitions="*,Auto">
+        <Grid ColumnDefinitions="*,Auto,Auto">
           <!-- With no tab open there is no SelectedTab.Status to show, and that is
                exactly when the shell's own status (kubeconfig load result) matters. -->
           <TextBlock Grid.Column="0" Classes="statusText statusMessage" Text="{Binding SelectedTab.Status}"
@@ -366,6 +366,11 @@
                      IsVisible="{Binding SelectedTab, Converter={x:Static aconv:ObjectConverters.IsNull}}" />
           <TextBlock Grid.Column="1" Classes="statusText warn statusMessage" Text="{Binding SelectedTab.ConnectionWarning}"
                      IsVisible="{Binding SelectedTab.ConnectionWarning, Converter={x:Static aconv:ObjectConverters.IsNotNull}}" />
+          <!-- insecure-skip-tls-verify, for as long as the tab is connected: its own slot, so
+               a status line or a watch warning written later can never replace it. -->
+          <TextBlock Grid.Column="2" Classes="statusText warn statusMessage" Margin="12,0,0,0"
+                     Text="{x:Static vm:ClusterTabViewModel.TlsUnverifiedNotice}"
+                     IsVisible="{Binding SelectedTab.IsTlsUnverified, FallbackValue=False}" />
         </Grid>
       </Border>
 

@@ -18,7 +18,7 @@ public sealed record ConnectionFact(string Label, string Value);
 /// <param name="Headline">The cause, as one sentence.</param>
 /// <param name="Detail">The exception's own message, untouched — the thing to paste into an issue.</param>
 /// <param name="Advice">What usually fixes this cause, or null when there is nothing general to say.</param>
-/// <param name="Facts">Kubeconfig file, context, cluster, server, user, sign-in method, proxy.</param>
+/// <param name="Facts">Kubeconfig file, context, cluster, server, TLS, user, sign-in method, impersonation, proxy.</param>
 public sealed record ConnectionFailureReport(
     string Step,
     string Headline,
@@ -102,8 +102,26 @@ public static class ConnectionReport
 
             facts.Add(new ConnectionFact("Cluster", clusterName ?? "(the context names no cluster)"));
             facts.Add(new ConnectionFact("Server", server ?? "(the cluster entry has no server)"));
+            if (cluster?.ClusterEndpoint is { } endpoint)
+            {
+                if (endpoint.SkipTlsVerify)
+                {
+                    facts.Add(new ConnectionFact("TLS", "not verified (insecure-skip-tls-verify)"));
+                }
+                else if (!string.IsNullOrWhiteSpace(endpoint.TlsServerName))
+                {
+                    facts.Add(new ConnectionFact("TLS server name", endpoint.TlsServerName.Trim()));
+                }
+            }
+
             facts.Add(new ConnectionFact("User", user?.Name ?? "(the context names no user)"));
             facts.Add(new ConnectionFact("Signs in with", SignIn(user, Path.GetDirectoryName(Path.GetFullPath(context.KubeconfigPath)))));
+
+            // Who the requests act as, when the entry impersonates: the identity, never a credential.
+            if (Kubeconfig.ContextUser(config, context.Name) is { } userEntry && document.ImpersonationOf(userEntry) is { User.Length: > 0 } impersonation)
+            {
+                facts.Add(new ConnectionFact("Acts as", impersonation.Describe()));
+            }
 
             if (user?.UserCredentials?.ExternalExecution?.InstallHint is { Length: > 0 } hint)
             {
@@ -191,6 +209,21 @@ public static class ConnectionReport
 
         (string Step, string Headline, string? Advice) verdict = exception switch
         {
+            // kubeNimbus's own certificate check refused the server: its sentence names the
+            // expected name and what the certificate is for instead. The TLS stack carries it
+            // as the cause of the request's failure, a few exceptions deep.
+            _ when ApiServerCertificateException.Find(exception) is { } refusal => (
+                SettingUpTls,
+                refusal.Message,
+                refusal.Problem switch
+                {
+                    ApiServerCertificateProblem.NameMismatch =>
+                        $"If you reach this server through another address (an IP, a tunnel, a load balancer), set tls-server-name on the cluster entry in the kubeconfig to a name the certificate lists. kubeNimbus checked it against \"{refusal.ExpectedName}\", as kubectl does. A certificate for another name is also exactly what an interception looks like, so do not turn verification off to get past this.",
+                    ApiServerCertificateProblem.Untrusted =>
+                        "The cluster entry's certificate-authority has to be the CA that signed this server's certificate. If the cluster was recreated, fetch its kubeconfig again.",
+                    _ => null,
+                }),
+
             ExecCredentialException e when e.Message.StartsWith("Could not run", StringComparison.Ordinal) => (
                 RunningPlugin,
                 e.Command is { Length: > 0 } command

@@ -43,10 +43,10 @@ internal sealed class DiscoveryCache(string? directory = null)
         string? temporary = null;
         try
         {
-            Directory.CreateDirectory(_directory);
+            AppDataDirectory.CreatePrivate(_directory);
             var path = PathFor(identity);
             temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-            await using (var stream = File.Create(temporary))
+            await using (var stream = new FileStream(temporary, AppDataDirectory.CreateNewOptions()))
                 await JsonSerializer.SerializeAsync(stream, new DiscoveryCacheEntry(1, version, DateTimeOffset.UtcNow, resources.ToArray()),
                     DiscoveryCacheJson.Default.DiscoveryCacheEntry, ct);
             File.Move(temporary, path, overwrite: true);

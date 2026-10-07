@@ -2,6 +2,7 @@
 
 Everything between a kubeconfig entry and a working `ClusterClient`, and what the app says
 when that does not work. Read this before changing `Kubeconfig.BuildClientSetupAsync`,
+`ClusterClient.Create`, `ApiServerCertificateValidator`, `ApiServerTransport`,
 `ExecPluginPath`, `KubeconfigProxy`, `ClusterClient.RefreshCredentialsAsync`, the informer's
 401 branch, `ConnectionReport`, `ConnectionFailureView`, the kubeconfig folder search or the
 app-data paths. The research behind most of it is
@@ -52,8 +53,17 @@ in `TerminalLauncher.LoginShellDirectories` (`/usr/local/bin`, `/opt/homebrew/bi
   extension is looked up as exactly that name.
 - **A command with a separator but not rooted resolves against the kubeconfig's folder**,
   which is client-go's rule.
-- A command found nowhere is left alone, so the error is still the plugin's own "could not
-  start" sentence, which names it; the failure view then says where it looked.
+- **A command found nowhere is refused before anything starts** (S1-3), as an
+  `ExecCredentialException` that names it; the failure view reads it as a plugin that could
+  not be started and says where it looked. It used to be handed to `Process.Start` as the bare
+  name, and .NET searches the app's own folder and the current directory before `PATH`, on
+  Windows (`CreateProcess`) and Unix (`Process.ResolvePath`) alike — so a file called `aws`
+  in whatever folder the app was started from would have run with the user's cluster in its
+  environment. Go refuses the same lookup (`exec.ErrDot`).
+- **A `PATH` entry that is not fully qualified is skipped** (`.`, `bin`, an empty entry), in
+  `TerminalLauncher.FindExecutable`, which both the plugin lookup and the kubectl probe use,
+  for the same reason. "Fully qualified" is the host's own rule, because the probe is a
+  `File.Exists` on this host.
 
 `ExecPluginPath.OverrideDirectories` is an `AsyncLocal` test seam — tests run in parallel and
 the value must reach the pool continuation that builds the configuration.
@@ -88,9 +98,10 @@ model throws on a key given twice, where the old loader kept the last value — 
 kubeconfig that worked yesterday must not stop loading because the parser changed. Three
 deliberate differences, all towards kubectl: an empty file is an empty configuration (the old
 loader threw a `NullReferenceException`), an `as-user-extra` value written as a list (its
-client-go shape, which the model cannot hold) is skipped instead of failing the file, and the
-parse error names its line and column (YamlDotNet 18 no longer puts them in the message).
-`KubeconfigReaderTests` pins each of these.
+client-go shape, which the model cannot hold) is left out of the model instead of failing the
+file — and read, with `as-uid`, into `KubeconfigDocument.Impersonations` instead (see
+"Impersonation" below) — and the parse error names its line and column (YamlDotNet 18 no
+longer puts them in the message). `KubeconfigReaderTests` pins each of these.
 
 ## `proxy-url` is read by kubeNimbus, because the library drops it (FEAT-54)
 
@@ -114,6 +125,114 @@ which the handler's proxy never reaches.
 Tested against a loopback stand-in that plays an HTTP proxy for a `.invalid` host (RFC 6761
 names resolve nowhere, so the request can only succeed through the proxy). SOCKS is not
 exercised end to end — no SOCKS stand-in exists in the tests.
+
+## The API server's certificate is checked by kubeNimbus, not by the library (S1-1)
+
+`KubernetesClient.Aot` — every version up to 19.0.2 and upstream main — validates a kubeconfig
+that carries a `certificate-authority(-data)` in `Kubernetes.CertificateValidationCallBack`,
+which returns "the chain builds to that CA" from inside its chain-errors branch and never looks
+at `RemoteCertificateNameMismatch`. A cluster CA is never in the system store, so every such
+kubeconfig takes that branch, and **any server certificate that CA signed was accepted for any
+host name**: a kubelet's serving certificate on EKS, AKS, k3s or kubeadm with
+`serverTLSBootstrap`, presented by whoever can sit on the path, received the bearer token. The
+EKU check does work (a clientAuth-only certificate is refused), and the same callback guards the
+WebSocket transport, so exec and port-forward were affected too.
+
+`ClusterClient.Create` therefore replaces the library's check on both transports with
+`ApiServerCertificateValidator`, kubectl's rules (Go's `crypto/tls`):
+
+- **The name** is `tls-server-name` when set, otherwise the URL's host (IDN form, no IPv6
+  brackets), matched with `X509Certificate2.MatchesHostname(allowWildcards: true,
+  allowCommonName: false)`: subject alternative names only, IP entries included, never the
+  common name (Go stopped reading it in 1.15).
+- **With the kubeconfig's CA**, a fresh `X509Chain` with `CustomRootTrust` and exactly those
+  certificates — never the system store — `RevocationMode.NoCheck` (kubectl does no
+  revocation either), the serverAuth EKU in `ApplicationPolicy`, and the intermediates the
+  server sent in `ExtraStore`. The chain is checked before the name, Go's order.
+- **Without one**, the TLS stack's own chain verdict against the system's trust stands, and
+  only the name check is ours.
+- **`insecure-skip-tls-verify: true`** still accepts anything (the library's accept-all is left
+  in place), and is stated: a `TLS` fact in the connection report, and a warning in the status
+  bar for as long as such a tab is connected (`ClusterTabViewModel.IsTlsUnverified`). The status
+  bar is the least chrome that cannot be missed: it is already the row for "something about
+  this connection is worth knowing", it is on screen in both modes, it costs nothing on a
+  verified tab, and the notice has its own column so no later status or watch warning can
+  replace it.
+
+**How it is installed, and why that way.** The library's `SocketsHttpHandler` is private. It
+is captured through `FirstMessageHandlerSetup` (chained after the proxy's setup), and the
+callback is replaced after `new Kubernetes(...)` returns, because the library assigns its own
+in `InitializeFromConfig`, which runs after that hook; no request has been sent at that point.
+If the handler was not captured, the connect fails rather than proceed under the library's
+check. For the WebSocket, `StreamConnectAsync` calls the non-virtual `ExpectServerCertificate`
+(the flawed check) and then the virtual `BuildAndConnectAsync`, so `CreateWebSocketBuilder`
+always returns an `ApiServerWebSocketBuilder` whose `BuildAndConnectAsync` installs the
+validator last, just before connecting. The builder also carries the proxy, the
+`tls-server-name` `Host` header and the impersonation headers.
+
+**`tls-server-name` is sent, not only checked.** The library sets `Host` to it in its own
+`SendRequestRaw`, and `SocketsHttpHandler` takes SNI from `Host`; `ClusterClient.SendRequestAsync`
+did not, and "worked" only because a name mismatch was ignored. `ApiServerRequestHandler`, the
+`DelegatingHandler` in front of the library's handler, now sets it on every request, ours and
+the generated client's alike.
+
+**A refusal is an exception, so the report can say what was wrong.** The validator throws
+`ApiServerCertificateException` (an `AuthenticationException`) instead of returning false; the
+TLS stack carries it out as the inner cause of the request's `HttpRequestException`, so it is
+attached to exactly the connection that failed — a value recorded on the side could not promise
+that once connections are pooled. `ConnectionReport` finds it anywhere in the cause chain and
+says "Setting up TLS: the API server's certificate is not valid for "10.0.0.1"; it is for
+ip-10-0-0-1.ec2.internal", with advice to set `tls-server-name` (and not to turn verification
+off). The watch banner's `Describe` uses the same sentence.
+
+**The library is kept anyway.** It carries the authentication zoo — exec plugins and their
+refresh, OIDC, every client-key format — and replacing it is a much larger change than
+replacing one callback. The typed API is no longer used at all (pods go through the same
+generic watch as every other kind), which leaves the configuration, the handler, the
+credentials and the exec/port-forward WebSocket helpers as the whole of what is used.
+
+`ApiServerTlsTests` drives every case through the real connect path — a temp kubeconfig,
+`ClusterClient.ConnectAsync`, a request — against `ScriptedApiServer` serving TLS with
+certificates from `TestPki`: the wrong DNS name (refused, and the server never receives a
+request, so never the token), an IP SAN, `https://localhost`, `tls-server-name`, another CA,
+a clientAuth-only EKU, no CA with an untrusted certificate, skip-verify, and exec and
+port-forward against the wrong name. Removing the replacement in `ClusterClient.Create` turns
+six of them red; that was checked.
+
+## Impersonation is honoured (S1-8)
+
+`as`, `as-uid`, `as-groups` and `as-user-extra` are parsed by the library into its model and
+never sent, so the app acted as the base identity — with more rights than kubectl has in the
+same context, which is the opposite of what a kubeconfig that impersonates was written for.
+Now `KubeconfigReader` reads them in client-go's own shapes (`as-user-extra` is a list per key;
+`as-uid` is not in the library's model) into `KubeconfigDocument.Impersonations`, keyed by user
+name case-insensitively with the first entry winning, which is how the library finds the user
+entry a context names. They are sent as `Impersonate-User`, `Impersonate-Uid`,
+`Impersonate-Group` and `Impersonate-Extra-<key>` (the key percent-escaped as client-go's
+`headerKeyEscape` does), over HTTP by `ApiServerRequestHandler` and over the WebSocket by
+`ApiServerWebSocketBuilder`. The connection report's facts gain "Acts as", naming the identity
+and never a credential.
+
+**At most one group, and one value per extra key — or the connect is refused.** The API server
+reads each `Impersonate-Group` header *line* as one group and never splits on commas. .NET's
+HTTP client cannot send a header twice: it joins the values into one line
+(`Impersonate-Group: a, b`, measured on this SDK), which the server would read as one group
+called "a, b"; the WebSocket options cannot hold two values at all. Acting as that group would
+be acting as somebody the kubeconfig did not name, so such an entry fails at "Reading the
+kubeconfig" with a sentence that says why. So do groups, a UID or extras without `as`, which
+client-go refuses too. Both checks run before any plugin, like the proxy's.
+
+`ImpersonationTests` checks the headers on the wire over both transports, that nothing is sent
+without `as`, both refusals and the report fact. Not run: a live check against a real API
+server's impersonation authorizer (the sandbox was not up when this was built).
+
+## A plugin's stderr is redacted before it is shown (S1-6)
+
+`ExecCredentialCapture.Translate` replaces JWT-shaped strings (`eyJ…` segments joined by dots)
+and the value after `Bearer` with `[redacted]` in what the plugin printed, before it reaches the
+failure view or the watch banner. A verbose or failing plugin can echo the token it got or the
+request it made, and the failure view is what people screenshot into an issue. Over-matching
+costs a word of a diagnosis; under-matching costs a credential.
 
 ## A failed connect is a state of the content area (FEAT-51)
 
@@ -227,3 +346,16 @@ is absolute, then the XDG default under home, then the temp directory — and ne
 path. `GetFolderPath` returns `""` for a folder that does not exist yet, which on a fresh Linux
 `HOME` put the discovery cache in `./kubeNimbus/discovery` of whatever directory the app was
 started from.
+
+**Owner-only, and written whole (S1-4).** On Linux and macOS the directories are created 0700
+(`AppDataDirectory.CreatePrivate`) and the files 0600, and `Program.Main` tightens existing
+`kubeNimbus` directories on every launch (`SecureExisting`), because every profile written
+before this came out 0755/0644 under umask 022. The files hold no credential, but they are not
+nothing: context names (an EKS context is an ARN with the account ID in it), kubeconfig paths,
+namespaces and the clusters' resource catalogs — kubectl keeps its kubeconfig 0600. The
+settings, workspace and terminal-overlay writes go through `WriteAllTextAtomically` (a
+temporary file beside the target, then one `File.Move(overwrite: true)`), as the discovery cache
+already did: a crash mid-write used to leave a truncated `settings.json`, which loads as "no
+settings", and a half-written overlay read by an open terminal's next kubectl would drop the
+context it pins. The Unix-mode assertions in `AppDataDirectoryTests` skip on Windows, where the
+per-user AppData folders are already private; they have not run on this Windows machine.
