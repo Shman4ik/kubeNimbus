@@ -129,6 +129,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-pod-detail-usage-unavailable", () => HostInMainWindow(ClusterTabScenarios.PodDetailUsageUnavailable())),
     ("cluster-tab-pod-detail-usage-unset", () => HostInMainWindow(ClusterTabScenarios.PodDetailUsageUnset())),
     ("cluster-tab-yaml-editor", () => HostInMainWindow(ClusterTabScenarios.YamlEditor())),
+    ("cluster-tab-yaml-delete-production", () => HostInMainWindow(ClusterTabScenarios.YamlEditorDeleteProduction())),
     ("cluster-tab-yaml-editor-maximized", () => HostInMainWindow(ClusterTabScenarios.YamlEditorMaximized())),
     ("cluster-tab-yaml-diff-preview", () => HostInMainWindow(ClusterTabScenarios.YamlEditorDiffPreview())),
     ("cluster-tab-yaml-diff-split", () => HostInMainWindow(ClusterTabScenarios.YamlEditorDiffSplit())),
@@ -182,6 +183,12 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-row-action-scale", () => HostInMainWindow(ClusterTabScenarios.RowActionScale())),
     ("cluster-tab-row-action-restart", () => HostInMainWindow(ClusterTabScenarios.RowActionRestart())),
     ("cluster-tab-row-action-failed", () => HostInMainWindow(ClusterTabScenarios.RowActionFailed())),
+    // The safety pass on mutating actions (security block 3): a production delete names the
+    // cluster in words and colour, and the scale question warns about the number in the box.
+    ("cluster-tab-row-action-delete-production", () => HostInMainWindow(ClusterTabScenarios.RowActionDeleteProduction())),
+    ("cluster-tab-row-action-scale-jump", () => HostInMainWindow(ClusterTabScenarios.RowActionScaleJump())),
+    ("cluster-tab-row-action-scale-zero-production",
+        () => HostInMainWindow(ClusterTabScenarios.RowActionScaleZeroProduction())),
     // "Open a terminal on this cluster" — the two outcomes the app has to state, since
     // the successful one opens a window in front of the app and needs no screenshot.
     ("cluster-tab-terminal-no-kubectl", () => HostInMainWindow(ClusterTabScenarios.TerminalNoKubectl())),

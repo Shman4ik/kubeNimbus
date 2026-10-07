@@ -880,7 +880,9 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
     [RelayCommand(CanExecute = nameof(IsLive))]
     private async Task RequestDeleteAsync()
     {
-        if (!App.LoadSettings().ConfirmDeletes)
+        // The same rule as the list's strip, from the same place: a production cluster
+        // always asks, whatever the preference says (B3-1).
+        if (!RowActionViewModel.DeleteNeedsConfirm(App.LoadSettings().ConfirmDeletes, ClusterEnvironment))
         {
             await ConfirmDeleteAsync();
             return;
@@ -937,10 +939,44 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
         "Nothing was applied: this document has no apiVersion:/kind:. Reload from the server, "
         + $"or add apiVersion: {_descriptor.ApiVersion} and kind: {_descriptor.Kind}.";
 
-    /// <summary>What the delete confirmation names, so "Confirm delete" can't be ambiguous about its target.</summary>
-    public string DeleteTargetDescription => _namespace is null
-        ? $"{_descriptor.Kind}/{_name}"
-        : $"{_descriptor.Kind}/{_name} in namespace {_namespace}";
+    /// <summary>
+    /// What the delete confirmation names, so "Confirm delete" can't be ambiguous about its
+    /// target — the cluster included, by the name the switcher shows, and "(production)" in
+    /// words on a production cluster, exactly as the action strip's <c>Target</c> does.
+    /// </summary>
+    public string DeleteTargetDescription
+    {
+        get
+        {
+            var where = _namespace is null ? "" : $" in namespace {_namespace}";
+            var production = IsProductionCluster ? " (production)" : "";
+            var cluster = ContextName.Length > 0 ? $" on {ContextName}{production}" : production;
+            return $"{_descriptor.Kind}/{_name}{where}{cluster}";
+        }
+    }
+
+    /// <summary>The context this object lives on, as the switcher names it; set by the owning cluster tab.</summary>
+    public string ContextName { get; private set; } = "";
+
+    /// <summary>The environment of the cluster this object lives on; set by the owning cluster tab.</summary>
+    public ClusterEnvironment ClusterEnvironment { get; private set; }
+
+    /// <summary>True on a production cluster: the delete always confirms and its card takes the production colour.</summary>
+    public bool IsProductionCluster => ClusterEnvironment == ClusterEnvironment.Production;
+
+    /// <summary>
+    /// Names the cluster this editor's object lives on. Called by the cluster tab as the editor
+    /// enters the dock, with its own cluster's name and environment (the row's own in a fleet).
+    /// </summary>
+    internal void SetCluster(string contextName, ClusterEnvironment environment)
+    {
+        ContextName = contextName;
+        ClusterEnvironment = environment;
+        OnPropertyChanged(nameof(ContextName));
+        OnPropertyChanged(nameof(ClusterEnvironment));
+        OnPropertyChanged(nameof(IsProductionCluster));
+        OnPropertyChanged(nameof(DeleteTargetDescription));
+    }
 
     public override Task OnClosingAsync()
     {

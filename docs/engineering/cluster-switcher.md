@@ -68,6 +68,15 @@ pill in the switcher, and a 2px band under the command bar **only** while the
 selected cluster is production — the sole always-visible chrome the scheme adds
 (UI rule 1), and it costs nothing the rest of the time because it isn't there.
 
+**It is not only colour any more** (security block 3, B3-1). The environment used to drive
+the band and nothing else, so with "Confirm before deleting" off the Delete key deleted at
+once on a production cluster too. Now a production cluster (classified or assigned here)
+always confirms a delete, every armed action strip names its cluster and says
+"(production)" there, and that strip's border takes the production colour — see
+[workload-actions](workload-actions.md), "Every confirm names its cluster". In an aggregated
+fleet list each row is judged by its own cluster's environment, which travels on
+`FleetMember.Environment`.
+
 **The switcher button is a `+` after the last tab, not a chip before the first.** The chip
 named the selected cluster, which its own tab — highlighted, two inches to the right — named
 as well, so the bar printed the cluster in front twice and the chip read as one more tab.

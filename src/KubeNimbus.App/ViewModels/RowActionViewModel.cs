@@ -109,7 +109,8 @@ public sealed partial class RowActionViewModel : ObservableObject
         string clusterName = "",
         int? replicas = null,
         ResourceDescriptor? podDescriptor = null,
-        ResourceDescriptor? jobDescriptor = null)
+        ResourceDescriptor? jobDescriptor = null,
+        ClusterEnvironment environment = ClusterEnvironment.Unknown)
     {
         Kind = kind;
         _client = client;
@@ -119,13 +120,25 @@ public sealed partial class RowActionViewModel : ObservableObject
         _namespace = @namespace;
         _name = name;
         _replicas = replicas;
+        _fromReplicas = replicas;
+        ClusterName = clusterName;
+        Environment = environment;
 
         // Empty as well as null: a cluster-scoped row (a Node, a PersistentVolume) has
         // no namespace, and ResourceRowViewModel.Namespace is a non-nullable string, so
         // the naive null check printed "Node/demo-worker-1 in " — visible only in a
         // rendered strip, which is where it was found.
         var where = string.IsNullOrEmpty(@namespace) ? "" : $" in {@namespace}";
-        var cluster = clusterName.Length > 0 ? $" · {clusterName}" : "";
+
+        // The cluster, always, by the name the switcher and the tab show (B3-1). It used to
+        // be named only in an aggregated fleet list, so an ordinary tab's strip read "Delete
+        // Pod/x in payments?" and said nothing about which cluster — the very wrong-cluster
+        // incident the environment colours exist to prevent. Production is said in words as
+        // well as in the strip's colour (UI rule 11: a colour carries the information only for
+        // someone who already knows the code), because a cluster assigned production by hand
+        // need not have "prod" anywhere in its name.
+        var production = IsProduction ? " (production)" : "";
+        var cluster = clusterName.Length > 0 ? $" on {clusterName}{production}" : production;
         Target = $"{descriptor.Kind}/{name}{where}{cluster}";
     }
 
@@ -133,6 +146,36 @@ public sealed partial class RowActionViewModel : ObservableObject
 
     /// <summary>What this action will act on, spelled out — a confirm that doesn't name its object isn't one.</summary>
     public string Target { get; }
+
+    /// <summary>The context the action lands on, as the cluster switcher names it; empty only in a hand-built strip.</summary>
+    public string ClusterName { get; }
+
+    /// <summary>The environment of the cluster the action lands on — the row's own cluster in a fleet list.</summary>
+    public ClusterEnvironment Environment { get; }
+
+    /// <summary>
+    /// True when the action lands on a production cluster (classified or user-assigned). The
+    /// strip carries the production colour, and a delete there always asks — see
+    /// <see cref="NeedsConfirm"/>.
+    /// </summary>
+    public bool IsProduction => Environment == ClusterEnvironment.Production;
+
+    /// <summary>
+    /// Whether this action must stop at the strip rather than run on the press. Only a delete
+    /// can skip it, and only when "Confirm before deleting" is off <em>and</em> the cluster is
+    /// not production: the preference is a convenience for clusters where a wrong delete is
+    /// cheap, and on production it never is (B3-1). Read with the preference as it is at the
+    /// press, by both delete paths (the list and the YAML editor).
+    /// </summary>
+    public bool NeedsConfirm(bool confirmDeletesPreference) =>
+        Kind != RowActionKind.Delete || DeleteNeedsConfirm(confirmDeletesPreference, Environment);
+
+    /// <summary>
+    /// The delete rule itself, shared by the strip and the YAML editor's own Delete so the two
+    /// cannot disagree: ask when the preference says so, and on production always.
+    /// </summary>
+    public static bool DeleteNeedsConfirm(bool confirmDeletesPreference, ClusterEnvironment environment) =>
+        confirmDeletesPreference || environment == ClusterEnvironment.Production;
 
     public bool IsScale => Kind == RowActionKind.Scale;
 
@@ -155,7 +198,7 @@ public sealed partial class RowActionViewModel : ObservableObject
     /// <summary>The sentence above the controls. States the consequence, not the API call.</summary>
     public string Question => Kind switch
     {
-        RowActionKind.Scale => $"Scale {Target}",
+        RowActionKind.Scale => ScaleQuestion,
         RowActionKind.Restart =>
             $"Restart {Target}? Its pods roll under the controller's own update strategy — surge, "
             + "maxUnavailable and PodDisruptionBudgets are all honored.",
@@ -258,17 +301,97 @@ public sealed partial class RowActionViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ConfirmCommand))]
-    [NotifyPropertyChangedFor(nameof(IsScalingToZero))]
+    [NotifyPropertyChangedFor(nameof(Question))]
+    [NotifyPropertyChangedFor(nameof(ScaleWarning))]
+    [NotifyPropertyChangedFor(nameof(HasScaleWarning))]
+    [NotifyPropertyChangedFor(nameof(IsScaleWarningProminent))]
+    [NotifyPropertyChangedFor(nameof(HasPlainScaleWarning))]
     private int? _replicas;
 
-    /// <summary>"currently 3 set · 2 running" — read from the scale subresource, which is
+    /// <summary>
+    /// The count the scale starts from: the object's own <c>spec.replicas</c> while the scale
+    /// subresource is being read, then that read's answer. The "from" of "from N to M".
+    /// </summary>
+    private int? _fromReplicas;
+
+    /// <summary>"2 running now" — read from the scale subresource, which is
     /// authoritative where the object's own spec.replicas may not be (a CRD can declare a
     /// different specReplicasPath).</summary>
     [ObservableProperty]
     private string? _currentScale;
 
-    /// <summary>Scaling to zero stops every pod. Legitimate and common — and worth saying out loud.</summary>
-    public bool IsScalingToZero => IsScale && Replicas == 0;
+    /// <summary>
+    /// The scale question, live as the box changes (B3-4): "from 3 to 300" is the sentence
+    /// that catches a slipped digit, where "Scale Deployment/x" beside a number did not.
+    /// </summary>
+    private string ScaleQuestion => (Replicas, _fromReplicas) switch
+    {
+        (null, _) => $"Scale {Target}",
+        ({ } to, null) => $"Scale {Target} to {to}",
+        ({ } to, { } from) when to == from => $"Scale {Target} — it is already at {from}",
+        ({ } to, { } from) => $"Scale {Target} from {from} to {to}",
+    };
+
+    /// <summary>
+    /// What the strip warns about the number in the box, or null: every pod stopping, or a
+    /// jump of ten times or more (or to ten or more from none). See <see cref="ScaleWarningFor"/>.
+    /// </summary>
+    public string? ScaleWarning => IsScale ? ScaleWarningFor(_fromReplicas, Replicas, IsProduction) : null;
+
+    public bool HasScaleWarning => ScaleWarning is not null;
+
+    /// <summary>
+    /// Scaling a production workload to zero: the one scale warning drawn as an
+    /// <c>infoBar</c> rather than a line of warn text, because on production it is an outage.
+    /// </summary>
+    public bool IsScaleWarningProminent => IsScale && IsProduction && Replicas == 0 && _fromReplicas != 0;
+
+    /// <summary>A scale warning drawn as an ordinary warn line.</summary>
+    public bool HasPlainScaleWarning => HasScaleWarning && !IsScaleWarningProminent;
+
+    /// <summary>
+    /// The warning for scaling from <paramref name="from"/> (null when unknown) to
+    /// <paramref name="to"/>. Deterministic thresholds, stated: to zero from anything but zero;
+    /// ten times the current count or more; ten or more from zero. They are a fat-finger
+    /// guard, not a policy — the confirm stays live either way.
+    /// </summary>
+    internal static string? ScaleWarningFor(int? from, int? to, bool production)
+    {
+        if (to is not { } target)
+        {
+            return null;
+        }
+
+        if (target == 0 && from != 0)
+        {
+            return production
+                ? "This is a production cluster: 0 replicas stops every pod this workload owns, and it serves "
+                  + "nothing until it is scaled up again."
+                : "0 replicas stops every pod this workload owns. Nothing else about it is removed.";
+        }
+
+        if (from is { } current && current > 0 && target >= 10L * current)
+        {
+            return $"{target} is {target / current}× the current {current}. Check the number before scaling.";
+        }
+
+        if (from == 0 && target >= 10)
+        {
+            return $"{target} pods would start where none run now. Check the number before scaling.";
+        }
+
+        return null;
+    }
+
+    private void SetFromReplicas(int? value)
+    {
+        _fromReplicas = value;
+        OnPropertyChanged(nameof(Question));
+        OnPropertyChanged(nameof(ScaleWarning));
+        OnPropertyChanged(nameof(HasScaleWarning));
+        OnPropertyChanged(nameof(IsScaleWarningProminent));
+        OnPropertyChanged(nameof(HasPlainScaleWarning));
+    }
 
     // ------------------------------------------------------------------ drain
     //
@@ -406,10 +529,11 @@ public sealed partial class RowActionViewModel : ObservableObject
         try
         {
             var scale = await _client.GetScaleAsync(_descriptor, _namespace, _name);
+            SetFromReplicas(scale.Replicas);
             Replicas = scale.Replicas;
-            CurrentScale = scale.CurrentReplicas is { } running
-                ? $"currently {scale.Replicas} set · {running} running"
-                : $"currently {scale.Replicas}";
+            // Only what the question above does not already say: it carries the set count
+            // ("from 3 to 5"), so beside the box this is the running count alone (UI rule 20).
+            CurrentScale = scale.CurrentReplicas is { } running ? $"{running} running now" : null;
             Message = null;
         }
         catch (Exception ex)

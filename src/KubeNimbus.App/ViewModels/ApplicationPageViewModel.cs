@@ -391,7 +391,9 @@ public sealed partial class ApplicationPageViewModel : ObservableObject
     {
         if (PrimaryWorkload is { } w)
         {
-            Arm(new RowActionViewModel(RowActionKind.Restart, _list.Tab.Client, DescriptorFor(w), w.Namespace, w.Name));
+            Arm(new RowActionViewModel(
+                RowActionKind.Restart, _list.Tab.Client, DescriptorFor(w), w.Namespace, w.Name,
+                _list.Tab.ContextNameFor(""), environment: _list.Tab.Environment));
         }
     }
 
@@ -402,7 +404,9 @@ public sealed partial class ApplicationPageViewModel : ObservableObject
     {
         if (Entry.Argo is { } argo && ArgoDescriptor() is { } d)
         {
-            Arm(new RowActionViewModel(RowActionKind.ArgoSync, _list.Tab.Client, d, argo.Namespace, argo.Name));
+            Arm(new RowActionViewModel(
+                RowActionKind.ArgoSync, _list.Tab.Client, d, argo.Namespace, argo.Name,
+                _list.Tab.ContextNameFor(""), environment: _list.Tab.Environment));
         }
     }
 

@@ -51,6 +51,16 @@ Six things are load-bearing:
    in there. "Confirm before deleting" is read **at the press** (same as
    `YamlEditorTabViewModel.RequestDeleteAsync`, same reason). Scale and restart do not
    consult it: it is a setting about deleting, and scale needs its input step regardless.
+   **On a production cluster a delete always asks, whatever the preference says** (security
+   block 3, B3-1): the preference is a convenience for clusters where a wrong delete is cheap,
+   and it used to reach production too, so the Delete key deleted at once on the one cluster
+   the colours exist to protect. Production means classified or assigned by hand
+   (`MainWindowViewModel.EnvironmentFor`). Both paths go through one rule,
+   `RowActionViewModel.DeleteNeedsConfirm`; in an aggregated fleet list it is the **row's
+   own** cluster's environment that counts (`FleetMember.Environment`, read live through
+   `ClusterTabViewModel.EnvironmentOf`), never the tab's. `MutatingActionSafetyTests` pins
+   both directions and the YAML editor's path, mutation-checked.
+
 6. **The demo cluster arms the strip and refuses in place.** All three actions need an
    API server, so `RowActionViewModel.IsDemo` (`client is null`, as everywhere) renders
    the notice and disables Confirm — never a silent no-op. That is also why the demo
@@ -65,6 +75,32 @@ Six things are load-bearing:
 **Not shipped, deliberately:** rollout *status*/history/undo, pause/resume, and scaling
 from a row's inline editor. `kubectl rollout undo` needs ReplicaSet revision walking and
 is its own item; the rest are backlog candidates, not omissions this pass forgot.
+
+## Every confirm names its cluster
+
+The strip's `Target` names the context the action lands on, in every view, by the name the
+cluster switcher and the tab show: `Delete Pod/x in payments on prod-eu?`. It used to name the
+cluster only in a fleet list, so an ordinary tab's confirm said nothing about where — the
+wrong-cluster incident the environment colours exist to prevent. On a production cluster it
+also says `(production)` in words, because a cluster assigned production by hand need not have
+"prod" in its name and a colour is information only for someone who knows the code (UI rule 11),
+and the strip's own card border takes the production colour (`Border.card.actionStrip.production`).
+That is the least chrome that does the job: no new element and no new row (UI rules 1 and 17),
+present only while an action is armed on such a cluster, and the same colour as the band under
+the command bar and the tab's edge. The YAML editor's own delete confirm names the cluster and
+takes the same border; the cluster tab stamps both onto the editor as it enters the dock
+(`YamlEditorTabViewModel.SetCluster`).
+
+## Scale says "from N to M"
+
+The scale question reads `Scale Deployment/x in payments on prod-eu from 3 to 5`, live as the
+box changes (B3-4). N is the object's own `spec.replicas` until the `scale` subresource has been
+read, then that read's answer; the text beside the box is the running count alone, since the
+question already carries the set count (UI rule 20). Three deterministic warnings, none of which
+disables the confirm (`RowActionViewModel.ScaleWarningFor`): to 0 from anything else (every pod
+stops), ten times the current count or more, and ten or more from zero. They are a line of warn
+text, except scaling a production workload to zero, which is an outage and is the warn
+`infoBar`. `ScaleConfirmTests` pins the thresholds at their edges, mutation-checked.
 
 ## CronJobs: run now, suspend, resume (FEAT-8)
 

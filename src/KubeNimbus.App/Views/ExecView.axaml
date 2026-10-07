@@ -96,7 +96,7 @@
                     <TextBlock Name="DebugImageLabel" Classes="fieldLabel" Text="Debug image" />
                     <TextBox Text="{Binding DebugImage}" Classes="mono" FontSize="11.5"
                              AutomationProperties.LabeledBy="{Binding #DebugImageLabel}"
-                             ToolTip.Tip="Any image with a shell. busybox is 4 MB; an air-gapped cluster needs its own mirror here." />
+                             ToolTip.Tip="Any image with a shell. The default is BusyBox 1.37 from Docker Hub (4 MB), pinned to its digest; an air-gapped cluster needs its own mirror here." />
                   </StackPanel>
                   <Button Grid.Column="1" Classes="accent" Margin="8,0,0,0" VerticalAlignment="Bottom"
                           Content="Start debug container" Command="{Binding StartDebugContainerCommand}" />

@@ -781,28 +781,77 @@ internal static class ClusterTabScenarios
     /// against the offline fixture client instead — the same thing the exec, YAML and
     /// Helm scenarios do with their inspector tabs, and for the same reason.
     /// </summary>
+    /// <remarks>
+    /// The strip names the tab's context and takes its environment, as the tab's own
+    /// <c>ArmRowAction</c> does. The environment is the name guess rather than the tab's
+    /// <c>Environment</c>, which the shell stamps only once the tab is hosted — after this
+    /// runs. The fixture context is <c>prod-payments</c>, so these strips are production ones.
+    /// </remarks>
     private static RowActionViewModel ArmRowAction(ClusterTabViewModel tab, RowActionKind kind)
     {
         var row = tab.SelectedRow!;
         var action = new RowActionViewModel(
             kind, FixtureData.CreateOfflineClient(), tab.SelectedKind!.Descriptor, row.Namespace, row.Name,
-            replicas: WorkloadActions.DeclaredReplicas(row.Resource));
+            tab.Context.Name,
+            replicas: WorkloadActions.DeclaredReplicas(row.Resource),
+            environment: ClusterEnvironments.Classify(tab.Context.Name, tab.Context.ClusterName));
 
         tab.PendingRowAction = action;
         return action;
     }
 
     /// <summary>
-    /// Scale, armed: the replica box, the current scale beside it, and the confirm. The
-    /// scale subresource cannot be read from an offline client, so the reading it would
-    /// have produced is written in — obviously-fake numbers, as with every other fixture.
+    /// Scale, armed: the replica box, the running count beside it, and the confirm, whose
+    /// question reads "from 4 to 6" (checkout-worker declares 4). The scale subresource
+    /// cannot be read from an offline client, so the reading it would have produced is
+    /// written in — obviously-fake numbers, as with every other fixture.
     /// </summary>
     public static ClusterTabViewModel RowActionScale()
     {
         var tab = DeploymentsTab();
         var action = ArmRowAction(tab, RowActionKind.Scale);
-        action.Replicas = 4;
-        action.CurrentScale = "currently 2 set · 1 running";
+        action.Replicas = 6;
+        action.CurrentScale = "1 running now";
+        return tab;
+    }
+
+    /// <summary>
+    /// A slipped digit: 40 typed for a Deployment at 4. The question says "from 4 to 40" and
+    /// the strip says it is ten times the current count (B3-4), in the warn line.
+    /// </summary>
+    public static ClusterTabViewModel RowActionScaleJump()
+    {
+        var tab = DeploymentsTab();
+        var action = ArmRowAction(tab, RowActionKind.Scale);
+        action.Replicas = 40;
+        action.CurrentScale = "1 running now";
+        return tab;
+    }
+
+    /// <summary>
+    /// Scaling a production workload to zero: the one scale warning drawn as an infoBar,
+    /// because on production it is an outage (B3-4).
+    /// </summary>
+    public static ClusterTabViewModel RowActionScaleZeroProduction()
+    {
+        var tab = DeploymentsTab();
+        var action = ArmRowAction(tab, RowActionKind.Scale);
+        action.Replicas = 0;
+        action.CurrentScale = "1 running now";
+        return tab;
+    }
+
+    /// <summary>
+    /// Delete, armed on a production cluster: the strip names the cluster and says
+    /// "(production)", and its border takes the production colour (B3-1). On production this
+    /// is what a delete shows even with "Confirm before deleting" turned off.
+    /// </summary>
+    public static ClusterTabViewModel RowActionDeleteProduction()
+    {
+        var tab = BaseTab();
+        tab.SelectedRow = tab.Rows.FirstOrDefault(r => r.Name.StartsWith("checkout-worker", StringComparison.Ordinal))
+            ?? tab.Rows.First();
+        ArmRowAction(tab, RowActionKind.Delete);
         return tab;
     }
 
@@ -1903,6 +1952,20 @@ internal static class ClusterTabScenarios
 
         tab.InspectorTabs.Add(yamlTab);
         tab.SelectedInspectorTab = yamlTab;
+        return tab;
+    }
+
+    /// <summary>
+    /// The YAML editor's own delete confirm on a production cluster: it names the cluster and
+    /// says "(production)", with the action strip's production border (B3-1). The cluster tab
+    /// stamps the editor as it enters the dock; a fixture adds it by hand, so it stamps here.
+    /// </summary>
+    public static ClusterTabViewModel YamlEditorDeleteProduction()
+    {
+        var tab = YamlEditor();
+        var editor = (YamlEditorTabViewModel)tab.SelectedInspectorTab!;
+        editor.SetCluster(tab.Context.Name, ClusterEnvironments.Classify(tab.Context.Name, tab.Context.ClusterName));
+        editor.IsConfirmingDelete = true;
         return tab;
     }
 

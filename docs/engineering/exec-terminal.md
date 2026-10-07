@@ -140,7 +140,8 @@ pane's answer is the one kubectl has: an ephemeral container from another image,
 target's process namespace (`targetContainerName`) and network, with the target's files
 reachable as `/proc/1/root`. The rules are `Core/DebugContainers` (pure, `DebugContainersTests`
 byte for byte) and the HTTP is `ClusterClient.Debug.cs`; `DebugContainerLiveTests` runs the
-whole thing against the sandbox with the pause image, which has no shell at all.
+whole thing against the sandbox with the pause image, which has no shell at all, and the
+pinned default debug image.
 
 1. **The offer appears only after a verdict of "no shell"**, in the overlay that states it, on
    an opaque `overlayCard` (the terminal is black in both themes, and a translucent `card` put
@@ -170,10 +171,48 @@ whole thing against the sandbox with the pause image, which has no shell at all.
 6. **A running one is reused.** Ephemeral containers cannot be removed, so a second click
    adding a second container would leave the pod carrying both. `FindReusable` opens a running
    debug container that targets the same container from the same image instead.
-7. **The image is not a preference.** `busybox:1.37` (4 MB, a shell, `wget`, `nc`, `ps`) is
+7. **The image is not a preference.** BusyBox 1.37 (4 MB, a shell, `wget`, `nc`, `ps`) is
    right wherever Docker Hub is reachable; an air-gapped cluster types its mirror into the
    box, once per pane. If people end up retyping it, a setting is the next step, with a line
-   in `PRIVACY.md`.
+   in `PRIVACY.md`. The default is written out in full and pinned — see "The debug image
+   pin" below. A typed image is sent exactly as typed and reuse compares it exactly as typed,
+   so a mirror keeps working and never matches a debugger added from the default.
+
+### The debug image pin
+
+`DebugContainers.DefaultImage` is
+`docker.io/library/busybox:1.37@sha256:<digest of the 1.37 OCI image index>`, not
+`busybox:1.37` (security block 3, B3-2). The container it starts runs as root with
+`SYS_PTRACE`, in the target's process namespace, so it can read the target's memory and
+environment, and `kubectl debug` has no default image — the app makes this choice for the
+user, so it must not move under them. A short name does: on CRI-O with
+`unqualified-search-registries` it can resolve to a registry other than Docker Hub, and a
+tag on Docker Hub is mutable. The registry and repository fix where it comes from, and the
+digest fixes the bytes; the tag stays only so a person reading the box sees which BusyBox it
+is (the runtime ignores a tag beside a digest). The digest is the **index** (the multi-arch
+list, 17 entries), so every node architecture resolves its own image from it.
+
+**Nothing updates the pin automatically**, and Dependabot does not see a string constant.
+Update it when BusyBox ships a release worth having (a CVE in the shell or `wget`, or a new
+minor), and look at it at least once per release:
+
+1. Get an anonymous pull token:
+   `GET https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/busybox:pull`.
+2. `HEAD https://registry-1.docker.io/v2/library/busybox/manifests/<tag>` with
+   `Authorization: Bearer <token>` and
+   `Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json`,
+   and read `Docker-Content-Digest`. Check that the response's content type is an index and
+   not a single manifest, and, if you like, that the SHA-256 of the body a `GET` returns is
+   the same digest.
+3. Change the tag and the digest together in `DefaultImage`, and run
+   `DebugContainerLiveTests` against the sandbox: it starts a debug container from the
+   default and checks that the runtime's `imageID` carries the pinned digest.
+
+The 2026-10-07 pin was read exactly that way (`Docker-Content-Digest` of `busybox:1.37`,
+`application/vnd.oci.image.index.v1+json`, matching the body's own SHA-256). A debug
+container added before the pin (`busybox:1.37`) is not reused by a later click, which adds
+one from the pinned image; the pod carries both until it is recreated, as with any image
+change.
 
 **A defect in the dependency, found here and not fixed here.** Reverse video with
 *default* colours does not invert. `TerminalControlModel.CreateStyleKey` swaps the

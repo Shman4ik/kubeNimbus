@@ -54,7 +54,10 @@ public class DebugContainerLiveTests
             await Assert.That(ExecShells.IsMissingExecutable(refusal)).IsTrue();
         }
 
-        var added = await client.AddDebugContainerAsync(LiveCluster.Namespace, name, "app", LiveCluster.Image, cancellationToken: ct);
+        // The pane's own default — the fully qualified, digest-pinned image (B3-2) — so this
+        // proves the runtime pulls and starts exactly what a user gets without typing anything.
+        var added = await client.AddDebugContainerAsync(
+            LiveCluster.Namespace, name, "app", DebugContainers.DefaultImage, cancellationToken: ct);
         await Assert.That(added.Name).StartsWith(DebugContainers.NamePrefix);
 
         var state = await client.WaitForDebugContainerAsync(
@@ -77,7 +80,18 @@ public class DebugContainerLiveTests
 
         // A second "Start debug container" opens this one instead of adding another.
         var after = await client.ReadResourceAsync(ResourceDescriptor.Pods, LiveCluster.Namespace, name, ct);
-        await Assert.That(DebugContainers.FindReusable(after!.Raw, "app", LiveCluster.Image)).IsEqualTo(added.Name);
+        await Assert.That(DebugContainers.FindReusable(after!.Raw, "app", DebugContainers.DefaultImage)).IsEqualTo(added.Name);
+
+        // The server keeps the image exactly as it was sent — registry, tag and digest — which
+        // is what FindReusable compares against, and what a mirror typed into the box relies on.
+        var debugger = after.Raw.GetProperty("spec").GetProperty("ephemeralContainers").EnumerateArray()
+            .Single(c => c.GetProperty("name").GetString() == added.Name);
+        await Assert.That(debugger.GetProperty("image").GetString()).IsEqualTo(DebugContainers.DefaultImage);
+
+        // And the runtime ran those bytes: the status's imageID carries the pinned index digest.
+        var debuggerStatus = after.Raw.GetProperty("status").GetProperty("ephemeralContainerStatuses").EnumerateArray()
+            .Single(c => c.GetProperty("name").GetString() == added.Name);
+        await Assert.That(debuggerStatus.GetProperty("imageID").GetString()).Contains(DebugContainers.DefaultImage[(DebugContainers.DefaultImage.IndexOf('@') + 1)..]);
     }
 
     private static async Task<string> ReadAllAsync(Stream stream, CancellationToken ct)

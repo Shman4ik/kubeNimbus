@@ -11,7 +11,11 @@
        and the success line are the same code in both places — three near-identical
        confirms is exactly how they would drift apart. See ClusterTabView for why it is
        hosted through an inline DataTemplate rather than a DataContext on a Border. -->
-  <Border Classes="card" Padding="12,10">
+  <!-- On a production cluster the card's own border takes the production colour
+       (Border.card.actionStrip.production): no new element, no new row, present only while
+       an action is armed there. The words are in Target, "(production)", because a colour
+       alone is information only for someone who knows the code (UI rule 11). -->
+  <Border Classes="card actionStrip" Classes.production="{Binding IsProduction}" Padding="12,10">
     <StackPanel Spacing="8">
       <TextBlock Text="{Binding Question}" TextWrapping="Wrap" FontSize="12.5" />
 
@@ -108,8 +112,14 @@
                 Command="{Binding DismissCommand}" IsEnabled="{Binding IsEditable}" />
       </Grid>
 
-      <TextBlock Classes="statusText warn" TextWrapping="Wrap" IsVisible="{Binding IsScalingToZero}"
-                 Text="0 replicas stops every pod this workload owns. Nothing else about it is removed." />
+      <!-- The number in the box, checked (B3-4): every pod stopping, or a jump of ten times
+           or more. A line of warn text, except scaling a production workload to zero, which
+           is an outage and gets the warn infoBar. Neither disables the confirm. -->
+      <TextBlock Classes="statusText warn" TextWrapping="Wrap" IsVisible="{Binding HasPlainScaleWarning}"
+                 Text="{Binding ScaleWarning}" />
+      <Border Classes="infoBar warn" IsVisible="{Binding IsScaleWarningProminent}">
+        <TextBlock Text="{Binding ScaleWarning}" TextWrapping="Wrap" FontSize="12" FontWeight="SemiBold" />
+      </Border>
 
       <!-- Every state gets a visual (UI rule 9): reading, in flight, the API
            server's own refusal (a 403 here names the subject, the verb and the

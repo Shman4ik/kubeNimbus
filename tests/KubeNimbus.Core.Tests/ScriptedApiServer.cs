@@ -161,7 +161,9 @@ internal sealed class ScriptedApiServer : IDisposable
             }
         }
 
-        // Drain a body so the client is not left writing into a closed socket.
+        // Drain a body so the client is not left writing into a closed socket, and keep it
+        // for the tests that check what was sent.
+        var text = "";
         if (headers.TryGetValue("Content-Length", out var length) && int.TryParse(length, out var count) && count > 0)
         {
             var body = new byte[count];
@@ -176,9 +178,15 @@ internal sealed class ScriptedApiServer : IDisposable
 
                 read += n;
             }
+
+            text = Encoding.UTF8.GetString(body, 0, read);
         }
 
-        return new ScriptedRequest(requestLine[0], requestLine.Length > 1 ? requestLine[1] : "", headers) { HeaderLines = raw };
+        return new ScriptedRequest(requestLine[0], requestLine.Length > 1 ? requestLine[1] : "", headers)
+        {
+            HeaderLines = raw,
+            Body = text,
+        };
     }
 
     public void Dispose()
@@ -194,6 +202,9 @@ internal sealed record ScriptedRequest(string Method, string Target, IReadOnlyDi
 
     /// <summary>Every header line as sent, in order — a header sent twice is two entries here.</summary>
     public IReadOnlyList<KeyValuePair<string, string>> HeaderLines { get; init; } = [];
+
+    /// <summary>The request body as UTF-8 text; empty when there was none.</summary>
+    public string Body { get; init; } = "";
 
     /// <summary>The values of every line named <paramref name="name"/>, case-insensitively.</summary>
     public IReadOnlyList<string> Values(string name) =>

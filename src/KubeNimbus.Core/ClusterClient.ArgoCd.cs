@@ -66,14 +66,25 @@ public sealed partial class ClusterClient
     /// which is why the strip reports "sync requested" rather than a result it would have to
     /// invent. An Application with an operation already in flight is Argo's own concern: it
     /// rejects or supersedes the request, and its message is what the strip prints.
+    /// <para>
+    /// The operation's initiator is the user this connection authenticates as, read from the
+    /// API server (<see cref="GetCurrentUsernameAsync"/>), so Argo's history says who asked.
+    /// What authorises the sync is Kubernetes RBAC on the Application (<c>patch</c>), not Argo
+    /// CD's project roles — exactly as for <c>kubectl patch</c>; the application controller
+    /// still applies the project's sync windows to it. See <c>docs/engineering/argo-cd.md</c>.
+    /// </para>
     /// </remarks>
-    public Task SyncArgoApplicationAsync(
+    public async Task SyncArgoApplicationAsync(
         ResourceDescriptor descriptor,
         string? @namespace,
         string name,
         bool prune = false,
-        CancellationToken cancellationToken = default) =>
-        PatchArgoApplicationAsync(descriptor, @namespace, name, ArgoCd.SyncPatch(prune), cancellationToken);
+        CancellationToken cancellationToken = default)
+    {
+        var username = await GetCurrentUsernameAsync(cancellationToken).ConfigureAwait(false);
+        await PatchArgoApplicationAsync(descriptor, @namespace, name, ArgoCd.SyncPatch(prune, username), cancellationToken)
+            .ConfigureAwait(false);
+    }
 
     private async Task PatchArgoApplicationAsync(
         ResourceDescriptor descriptor, string? @namespace, string name, string body, CancellationToken ct)

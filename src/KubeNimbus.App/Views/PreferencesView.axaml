@@ -250,7 +250,7 @@
                         <Grid ColumnDefinitions="*,Auto">
                             <StackPanel Spacing="2" Margin="0,0,16,0">
                                 <TextBlock Classes="label" Text="Confirm before deleting" />
-                                <TextBlock Classes="hint" Text="Deleting a resource takes a second click. Off is a deliberate choice: this deletes objects in a live cluster, and nothing here can undo it." />
+                                <TextBlock Classes="hint" Text="Deleting a resource takes a second click. Off is a deliberate choice: this deletes objects in a live cluster, and nothing here can undo it. A production cluster always asks, whatever this says." />
                             </StackPanel>
                             <ToggleSwitch Grid.Column="1" VerticalAlignment="Center"
                                           OnContent="" OffContent=""

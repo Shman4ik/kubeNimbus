@@ -102,7 +102,45 @@ public class ArgoCdTests
     public async Task Sync_patch_writes_the_top_level_operation()
     {
         await Assert.That(ArgoCd.SyncPatch(prune: false)).IsEqualTo(
-            """{"operation":{"initiatedBy":{"username":"kubenimbus"},"info":[{"name":"Reason","value":"Sync requested from kubeNimbus"}],"sync":{"prune":false,"syncStrategy":{"hook":{}}}}}""");
+            """{"operation":{"initiatedBy":{"username":"kubeNimbus"},"info":[{"name":"Reason","value":"Sync requested from kubeNimbus"}],"sync":{"prune":false,"syncStrategy":{"hook":{}}}}}""");
+    }
+
+    /// <summary>
+    /// B3-3: Argo's sync history names who asked, not only which tool — the username the API
+    /// server reported for this connection, with the tool beside it.
+    /// </summary>
+    [Test]
+    public async Task Sync_patch_names_the_user_beside_the_tool()
+    {
+        using var doc = JsonDocument.Parse(ArgoCd.SyncPatch(prune: false, "jane@example.com"));
+
+        await Assert.That(doc.RootElement.GetProperty("operation").GetProperty("initiatedBy")
+            .GetProperty("username").GetString()).IsEqualTo("jane@example.com (kubeNimbus)");
+    }
+
+    /// <summary>With no name from the server (pre-1.27, a refusal) the initiator is the tool alone.</summary>
+    [Test]
+    [Arguments(null)]
+    [Arguments("")]
+    [Arguments("   ")]
+    public async Task Sync_patch_falls_back_to_the_tool_without_a_username(string? username)
+    {
+        using var doc = JsonDocument.Parse(ArgoCd.SyncPatch(prune: false, username));
+
+        await Assert.That(doc.RootElement.GetProperty("operation").GetProperty("initiatedBy")
+            .GetProperty("username").GetString()).IsEqualTo("kubeNimbus");
+    }
+
+    /// <summary>A username is free text; it is written as a JSON string, never spliced into the body.</summary>
+    [Test]
+    public async Task Sync_patch_escapes_a_username_rather_than_splicing_it()
+    {
+        using var doc = JsonDocument.Parse(ArgoCd.SyncPatch(prune: false, "evil\",\"automated\":true,\"x\":\""));
+        var initiatedBy = doc.RootElement.GetProperty("operation").GetProperty("initiatedBy");
+
+        await Assert.That(initiatedBy.TryGetProperty("automated", out _)).IsFalse();
+        await Assert.That(initiatedBy.GetProperty("username").GetString())
+            .IsEqualTo("evil\",\"automated\":true,\"x\":\" (kubeNimbus)");
     }
 
     [Test]
