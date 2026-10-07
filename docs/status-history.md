@@ -2638,3 +2638,29 @@ showed every row and was not touched.
 
 Checks: the new scenario rendered with the harness's checks (85 tooltips, 0 dead; 0 unnamed
 controls; 0 font failures). Documents only otherwise; no code under `src/` changed.
+
+### Security audit, block 2: untrusted data from the cluster (2026-10-07)
+
+The second block of the staged pre-1.0 security audit, PR #145. The threat model is a person
+who can write some objects or output in a cluster — a tenant, a CI pipeline, a compromised
+workload, the author of a CRD or an Argo CD Application — aiming at the operator who opens
+that cluster in kubeNimbus with broader rights. Nothing found was worse than Low, and the
+most concrete was confirmed on the sandbox: a reference naming a pod `..` in `kube-system`
+went out as `/api/v1/namespaces/kube-system/` and returned the Namespace. Path segments are
+now checked where paths are built, discovery drops unsafe values, and a resolved owner or log
+target must match the reference it came from. The rest: one parse depth (256) for all cluster
+JSON, with an unreadable object skipped and named rather than ending its watch; a cap on
+Helm release decompression; Argo's address read from Argo's own namespace; exec paste that
+drops control characters, brackets when the shell asked for it and confirms a multi-line paste
+to a shell that did not; visible markers for bidi and zero-width characters; caps on log
+lines and watch frames; and the Argo tracking-label fallback limited to the namespaces an
+Application deploys to.
+
+Checks: build clean; Core 807 of 808 against the live sandbox (the one failure is the
+pre-existing hour rounding in `EventsLiveTests`, ENG-60), App 499 of 499; win-x64 NativeAOT
+publish with only the DataGrid warnings, both smoke scenarios exit 0; the full harness and
+`--stress` green. Mutation checks: the path check forced through turned 12 of 17 tests red
+and the identity check 1; the default parse depth turned 3 of 6 red and the item-by-item
+fallback 1; the paste filter 2, and routing Ctrl+Shift+V back to the control's own paste made
+`ux-exec-paste` throw. Not verified: paste against real shells (VER-59), the Argo namespace
+rule against a real Argo CD (VER-60), the marker glyphs on macOS and Linux.
