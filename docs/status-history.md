@@ -2765,3 +2765,38 @@ this machine, which hides the bug in local runs. Mutation checks: the bare-name 
 turned four launcher tests red, and the old first-context rule two shell tests. Not verified:
 a real terminal launch on Linux or macOS, and the fallback directory's mode, which only a Unix
 run checks.
+
+### Security audit, block 5: supply chain, CI and release (2026-10-07)
+
+The fifth block of the staged pre-1.0 security audit, PR #148. The one Medium finding was in
+the Linux packaging: `build-packages.sh` downloaded appimagetool from upstream's moving
+`continuous` release with no check and ran it on both Linux release legs before the checksum
+step, so a compromised tool could have rewritten the AppImage, the `.deb` and the tarball and
+`SHA256SUMS.txt` would have vouched for them. appimagetool is now pinned to 1.9.1 by SHA-256,
+and so is the AppImage runtime it embeds (type2-runtime 20251108, which appimagetool had also
+been fetching from `continuous` and which is the first code a user of the AppImage runs). The
+release job attests build provenance for every file; every checkout stops persisting the job's
+token (zizmor's `artipacked` findings went from 8 to 0); a repository `nuget.config` maps every
+package to nuget.org; and a real release can be dispatched only from `main`, tagging the commit
+the run built. Code signing is deliberately left for after 1.0.
+
+Checks: a clean restore through the new `nuget.config` for the solution and all four AOT RIDs;
+build with no warnings; Core 781 passed / 62 skipped (sandbox not reachable) / 0 failed, App 521
+of 521; `build-packages.sh` end to end in an Ubuntu 24.04 container, plus the hash-mismatch
+path; actionlint clean; release dry run 37670653121 green on all four RIDs with the pinned
+tools verified on both Linux legs. Not verified: the release job itself (the attestation step,
+the dispatch guard, `--target`), which a dry run skips (VER-62).
+
+### Security audit, block 6: the security and privacy policies for 1.0 (2026-10-07)
+
+The last block of the audit read `SECURITY.md` and `PRIVACY.md` against the code after blocks
+1 to 5. The supported-versions section still said "pre-1.0"; it now names the owner's policy
+(only the latest release is fixed — from 1.0 on the latest 1.x — and 0.x is unsupported once
+1.0 ships). The
+"read-mostly" paragraph listed four writes where the app now has many more, and promised a
+two-step confirm that #146 and #147 had refined; it now lists every write and the rule for
+which ones ask. A new paragraph says that data from a cluster is untrusted input and what the
+app does about it, so a report of a tenant attacking an operator is plainly in scope. The
+Secret-masking promise now says what it does not cover (Helm and Argo CD values, logs), and
+the privacy policy's list of preferences gained the three it had missed (advanced view,
+sidebar visibility, logs opened full-size).

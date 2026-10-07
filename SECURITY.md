@@ -6,8 +6,11 @@ than leaving implied.
 
 ## Supported versions
 
-kubeNimbus is pre-1.0. Only the **latest release** receives security fixes.
-There are no maintained release branches yet.
+Only the **latest release** receives security fixes; from 1.0 on, that is the
+latest 1.x release. There are no maintained release branches: a fix ships in
+the next release, and an older release is not patched in place, so the remedy
+for a vulnerable version is to update. Releases before 1.0 (0.x) stop being
+supported when 1.0 is out.
 
 ## Reporting a vulnerability
 
@@ -76,10 +79,38 @@ kubeconfig placed in it, the same way a directory on `PATH` trusts every
 program in it; kubeNimbus lists the contexts it finds there but never
 connects to one of them on its own.
 
-**The app is read-mostly, and every write is explicit.** Writes happen only
-through actions you take: server-side apply from the YAML editor, delete
-(two-step confirm), exec, and port-forward. There is no background mutation,
-no auto-apply, and no "fix it for you" behaviour.
+**The app is read-mostly, and every write is one you started.** Nothing changes
+on a cluster except through an action you take on a named object: server-side
+apply from the YAML editor (shown as a server-side dry run first, unless you
+turn that off), delete, scale, rollout restart, cordon and uncordon, drain, a
+CronJob's run-now, suspend and resume, an Argo CD sync or refresh, adding a
+debug container to a pod, and the exec sessions and port-forwards you open. An
+action that destroys, disrupts or cannot be taken back (delete, drain, rollout
+restart, an Argo CD sync with prune, a CronJob's run-now and resume) names its
+object and its cluster and asks first; one that is taken back by its twin or
+only moves the cluster toward what is already declared (cordon, uncordon,
+suspend, an Argo CD sync without prune, a refresh) runs on the click and
+reports in place. Scale takes its number in the same strip, and adding a debug
+container is a button of its own whose text says the container stays in the
+pod. "Confirm before deleting" can be turned off, except on a cluster
+classified or marked as production, where a delete always asks. There is no
+background mutation, no auto-apply, and no "fix it for you" behaviour.
+
+**Data from a cluster is untrusted input.** Anyone who can write some objects
+or some output in a cluster — another tenant, a CI pipeline, a compromised
+workload, the author of a CRD or an Argo CD Application — may be trying to
+attack whoever opens that cluster with broader rights, and that is in scope. A
+name taken from another object (an owner reference, an Event, an Argo CD
+status) never builds a request path unchecked, and what a lookup returns must
+match the reference it came from. Terminal escape sequences in logs are
+removed, characters that reorder or hide text (bidirectional overrides,
+zero-width spaces) are shown as markers, the exec terminal never writes the
+emulator's replies back into the container, and pasting into it is filtered and
+asks before sending several lines to a shell that would run them at once. Links
+taken from cluster data open only as `http`/`https`. Parsers and decoders have
+limits (nesting depth, line length, decompressed size), and an object that
+cannot be read is skipped and named rather than taking the rest of its list
+with it.
 
 **No telemetry, ever.** kubeNimbus makes no network connection other than to
 the Kubernetes API servers of the contexts you connect to (through the proxy a
@@ -100,7 +131,13 @@ cannot see webhook or node authorizers. Treat its output accordingly.
 the YAML editor, as `kubectl` does; decoding is a separate, explicit toggle,
 and env-var references reveal one key at a time on demand. A decoded value
 copied to the clipboard is kept out of Windows clipboard history and cloud
-clipboard sync, and is cleared after a minute if it is still there.
+clipboard sync, and is cleared after a minute if it is still there. The masking
+covers a Secret's own values and the references to them; it does not cover
+what other objects carry in the clear. A Helm release's values and manifest are
+shown as `helm get values` and `helm get manifest` show them, an Argo CD
+Application's inline Helm values as `kubectl get` does, and a container's logs
+as it wrote them — each of which can hold a credential the chart, the
+application or the program was given.
 
 ## Out of scope
 
