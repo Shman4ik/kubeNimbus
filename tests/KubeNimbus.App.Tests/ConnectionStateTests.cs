@@ -377,6 +377,114 @@ public class KubeconfigShellTests
         await Assert.That(picked.Any(p => p.EndsWith("team.yaml", StringComparison.Ordinal))).IsFalse();
     }
 
+    /// <summary>
+    /// B4-4, the central one. A picked folder trusts every kubeconfig dropped into it, and
+    /// picked paths are searched first, so a file a stranger drops into a shared or synced
+    /// folder used to set the chain's current-context — and the first launch with no
+    /// workspace opened a tab on it by itself, running its exec plugin without a click.
+    /// The context is listed, so a click can still open it; nothing opens it on its own.
+    /// </summary>
+    [Test]
+    public async Task A_first_launch_never_opens_a_tab_on_a_context_a_picked_folder_supplied()
+    {
+        FreshStores();
+        var folder = Folder();
+        await File.WriteAllTextAsync(Path.Combine(folder, "dropped.yaml"), KubeconfigText("dropped", current: true));
+        var own = Path.Combine(Path.GetDirectoryName(folder)!, "own.yaml");
+        await File.WriteAllTextAsync(own, KubeconfigText("mine", current: true));
+        Kubeconfig.EnvironmentSearchOverride = [own];
+        App.Update(s => s with { KubeconfigPaths = [folder] });
+        try
+        {
+            using var shell = new MainWindowViewModel();
+            await shell.Initialization;
+
+            await Assert.That(shell.AvailableContexts.Select(c => c.Name)).Contains("dropped");
+            await Assert.That(shell.AvailableContexts.Select(c => c.Name)).Contains("mine");
+            await Assert.That(shell.AvailableContexts.Single(c => c.Name == "dropped").FromFolderScan).IsTrue();
+            await Assert.That(shell.AvailableContexts.Single(c => c.Name == "mine").FromFolderScan).IsFalse();
+
+            // kubectl's rule makes the folder file's current-context the chain's, and the
+            // answer to that is nothing, not the user's own file's context instead.
+            await Assert.That(shell.Tabs.Count).IsEqualTo(0);
+
+            // A rescan and the folder picker are the other two automatic opens.
+            await shell.ReloadContextsCommand.ExecuteAsync(null);
+            await shell.AddKubeconfigFolderPathAsync(folder);
+            await Assert.That(shell.Tabs.Count).IsEqualTo(0);
+        }
+        finally
+        {
+            Kubeconfig.EnvironmentSearchOverride = [];
+        }
+    }
+
+    /// <summary>Adding a folder with no other kubeconfig anywhere opens nothing either.</summary>
+    [Test]
+    public async Task Adding_a_folder_does_not_open_a_tab_on_what_is_in_it()
+    {
+        FreshStores();
+        var folder = Folder();
+        await File.WriteAllTextAsync(Path.Combine(folder, "team.yaml"), KubeconfigText("team", current: false));
+        using var shell = new MainWindowViewModel();
+        await shell.Initialization;
+
+        await shell.AddKubeconfigFolderPathAsync(folder);
+
+        await Assert.That(shell.AvailableContexts.Select(c => c.Name)).Contains("team");
+        await Assert.That(shell.Tabs.Count).IsEqualTo(0);
+    }
+
+    /// <summary>
+    /// The other direction: a file the user named still opens, folder or not. The folder
+    /// people pick is most often <c>~/.kube</c>, and its <c>config</c> — named on its own as
+    /// the default location — is no less theirs for being in it.
+    /// </summary>
+    [Test]
+    public async Task A_first_launch_still_opens_the_current_context_of_a_file_the_user_named()
+    {
+        FreshStores();
+        var folder = Folder();
+        var own = Path.Combine(folder, "config");
+        await File.WriteAllTextAsync(own, KubeconfigText("mine", current: true));
+        await File.WriteAllTextAsync(Path.Combine(folder, "other.yaml"), KubeconfigText("other", current: false));
+        Kubeconfig.EnvironmentSearchOverride = [own];
+        App.Update(s => s with { KubeconfigPaths = [folder] });
+        try
+        {
+            using var shell = new MainWindowViewModel();
+            await shell.Initialization;
+
+            await Assert.That(shell.AvailableContexts.Single(c => c.Name == "mine").FromFolderScan).IsFalse();
+            await Assert.That(shell.AvailableContexts.Single(c => c.Name == "other").FromFolderScan).IsTrue();
+            await Assert.That(shell.Tabs.Select(t => t.Context.Name)).IsEquivalentTo(["mine"]);
+        }
+        finally
+        {
+            Kubeconfig.EnvironmentSearchOverride = [];
+        }
+    }
+
+    /// <summary>A kubeconfig with one context on a loopback port nothing listens on, and a token.</summary>
+    private static string KubeconfigText(string name, bool current) => $"""
+        apiVersion: v1
+        kind: Config
+        clusters:
+        - name: {name}
+          cluster:
+            server: http://127.0.0.1:1
+        contexts:
+        - name: {name}
+          context:
+            cluster: {name}
+            user: {name}
+        {(current ? $"current-context: {name}" : "")}
+        users:
+        - name: {name}
+          user:
+            token: not-a-credential
+        """;
+
     private static string Folder()
     {
         var directory = Path.Combine(Path.GetTempPath(), "kubenimbus-app-tests", Guid.NewGuid().ToString("n"), "kubeconfigs");

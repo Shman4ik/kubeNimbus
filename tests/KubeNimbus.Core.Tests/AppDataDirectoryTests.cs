@@ -12,12 +12,15 @@ public class AppDataDirectoryTests
     private static readonly string Root = Path.Combine(Path.GetTempPath(), "kubenimbus-appdata-test");
     private static readonly string Temp = Path.Combine(Root, "tmp");
 
+    /// <summary>Stands in for <see cref="AppDataDirectory.ProcessFallback"/>, which creates a directory.</summary>
+    private static string Fallback() => Temp;
+
     [Test]
     public async Task The_platform_answer_wins_when_it_is_absolute()
     {
         var special = Path.Combine(Root, "special");
 
-        await Assert.That(AppDataDirectory.Choose(special, Path.Combine(Root, "xdg"), Root, ".config", Temp)).IsEqualTo(special);
+        await Assert.That(AppDataDirectory.Choose(special, Path.Combine(Root, "xdg"), Root, ".config", Fallback)).IsEqualTo(special);
     }
 
     [Test]
@@ -25,9 +28,9 @@ public class AppDataDirectoryTests
     {
         var xdg = Path.Combine(Root, "xdg");
 
-        await Assert.That(AppDataDirectory.Choose("", xdg, Root, ".config", Temp)).IsEqualTo(xdg);
-        await Assert.That(AppDataDirectory.Choose("", null, Root, ".config", Temp)).IsEqualTo(Path.Combine(Root, ".config"));
-        await Assert.That(AppDataDirectory.Choose("", null, "", ".config", Temp)).IsEqualTo(Path.Combine(Temp, "kubeNimbus-fallback"));
+        await Assert.That(AppDataDirectory.Choose("", xdg, Root, ".config", Fallback)).IsEqualTo(xdg);
+        await Assert.That(AppDataDirectory.Choose("", null, Root, ".config", Fallback)).IsEqualTo(Path.Combine(Root, ".config"));
+        await Assert.That(AppDataDirectory.Choose("", null, "", ".config", Fallback)).IsEqualTo(Temp);
     }
 
     [Test]
@@ -35,10 +38,57 @@ public class AppDataDirectoryTests
     {
         // The XDG spec: a relative $XDG_CONFIG_HOME is invalid and must be ignored. A
         // relative HOME is no better. Either would put files in the current directory.
-        var chosen = AppDataDirectory.Choose("kubeNimbus", "relative/xdg", "relative-home", ".config", Temp);
+        var chosen = AppDataDirectory.Choose("kubeNimbus", "relative/xdg", "relative-home", ".config", Fallback);
 
-        await Assert.That(chosen).IsEqualTo(Path.Combine(Temp, "kubeNimbus-fallback"));
+        await Assert.That(chosen).IsEqualTo(Temp);
         await Assert.That(Path.IsPathFullyQualified(chosen)).IsTrue();
+    }
+
+    /// <summary>
+    /// B4-2: the fallback used to be <c>/tmp/kubeNimbus-fallback</c>, a name any other local
+    /// user could create first and fill with a settings file pointing at their kubeconfig.
+    /// It is a directory this process created, with a random name, and every caller in the
+    /// process gets the same one, so Roaming and Local do not split.
+    /// </summary>
+    [Test]
+    public async Task The_fallback_is_a_fresh_random_directory_that_stays_put_for_the_process()
+    {
+        var first = AppDataDirectory.ProcessFallback;
+        var second = AppDataDirectory.ProcessFallback;
+
+        await Assert.That(second).IsEqualTo(first);
+        await Assert.That(Directory.Exists(first)).IsTrue();
+        await Assert.That(Path.IsPathFullyQualified(first)).IsTrue();
+        await Assert.That(Path.GetFileName(first)).StartsWith("kubeNimbus-");
+        await Assert.That(Path.GetFileName(first)).IsNotEqualTo("kubeNimbus-fallback");
+        await Assert.That(Path.GetFileName(first).Length).IsGreaterThan("kubeNimbus-".Length);
+        await Assert.That(Path.GetFullPath(Path.GetDirectoryName(first)!).TrimEnd(Path.DirectorySeparatorChar))
+            .IsEqualTo(Path.GetFullPath(Path.GetTempPath()).TrimEnd(Path.DirectorySeparatorChar));
+
+        if (!OperatingSystem.IsWindows())
+        {
+            await Assert.That(File.GetUnixFileMode(first))
+                .IsEqualTo(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        // With no usable home, the decision hands back exactly that directory — once per
+        // call, never a second one.
+        var calls = 0;
+        string Counting() { calls++; return AppDataDirectory.ProcessFallback; }
+        await Assert.That(AppDataDirectory.Choose("", null, "", ".config", Counting)).IsEqualTo(first);
+        await Assert.That(AppDataDirectory.Choose("", null, "", Path.Combine(".local", "share"), Counting)).IsEqualTo(first);
+        await Assert.That(calls).IsEqualTo(2);
+    }
+
+    /// <summary>The fallback is not created when a real answer exists: no stray temp directories.</summary>
+    [Test]
+    public async Task The_fallback_is_not_consulted_when_a_home_resolves()
+    {
+        var consulted = false;
+        string Tracking() { consulted = true; return Temp; }
+
+        await Assert.That(AppDataDirectory.Choose("", null, Root, ".config", Tracking)).IsEqualTo(Path.Combine(Root, ".config"));
+        await Assert.That(consulted).IsFalse();
     }
 
     [Test]

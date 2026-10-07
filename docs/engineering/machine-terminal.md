@@ -10,7 +10,7 @@ inside the app: that needs a PTY dependency (`Porta.Pty` and its `Vanara.PInvoke
 the only place this repo would ever need one), and it still would not be *your* terminal,
 with your prompt, your fonts, your fzf and your kubectl plugins.
 
-Six things are load-bearing:
+Seven things are load-bearing:
 
 1. **The context is pinned through a one-key overlay kubeconfig, and that is the whole
    design.** kubectl has no environment variable for "current context" — kubectx and
@@ -43,8 +43,8 @@ Six things are load-bearing:
    an already-running window, and `open` goes through LaunchServices — so the shell
    inherits **that** process's environment and not ours. A tab that looks right and is
    aimed at the wrong cluster is the one outcome this feature must not have. So:
-   **Windows** starts `pwsh.exe` → `powershell.exe` → `cmd.exe` directly with the
-   environment on the `ProcessStartInfo`, which still lands inside Windows Terminal
+   **Windows** starts `pwsh.exe` → `powershell.exe` → `cmd.exe` directly (each by its full
+   path, rule 7) with the environment on the `ProcessStartInfo`, which still lands inside Windows Terminal
    wherever it is the default terminal application (a console-host setting, not a
    command line) and inside conhost where it is not — i.e. the item's stated fallback,
    reached by a different route. **macOS** writes a `.command` launcher script that
@@ -72,6 +72,24 @@ Six things are load-bearing:
    prints the exact `KUBECONFIG` value in selectable text, because that is what makes
    the gesture completable by hand. Two entry points and no new always-visible control
    (UI rules 1 and 15): the ☰ menu and a Ctrl/Cmd+K entry.
+7. **Nothing is started by a bare name (B4-1, ENG-58).** With `UseShellExecute = false`, .NET
+   looks for a name with no directory in it in the app's own folder and then the *current
+   directory* before `PATH`, on Windows (`CreateProcess` with no application name) and on Unix
+   (`Process.ResolvePath`) alike. So a `cmd.exe` or `pwsh.exe` left in a downloads folder or a
+   cloned repository the app was started from, or in the folder a portable zip was extracted
+   into, would have run with `KUBECONFIG` pointed at a cluster. Every candidate is resolved to
+   an absolute path first, by `TerminalLauncher.Resolve` over a `TerminalLookup` (PATH, PATHEXT
+   and the system directory, passed in so the tests can fake all three):
+   `cmd.exe` and `WindowsPowerShell\v1.0\powershell.exe` from `Environment.SystemDirectory`;
+   `pwsh`, a bare `$TERMINAL` and the Linux emulators through `FindExecutable` over PATH, which
+   skips entries that are not fully qualified; macOS's `/usr/bin/open` as it is; a `$TERMINAL`
+   with a directory in it only when it is a full path that exists. A candidate that does not
+   resolve is skipped, and the "nothing could be opened" notice lists it as "(not found)".
+   `TerminalCandidate.Source` says which rule applies, so `Candidates` stays pure and the
+   resolution is a separate step `Plan` runs when given a lookup. The credential-plugin lookup
+   (`ExecPluginPath`, S1-3) closed the same hole first; this was its other half.
+   `TerminalLauncherTests.APlantedShellInTheCurrentDirectoryIsNeverTheOneStarted` puts a planted
+   copy behind `.` and a relative PATH entry, and turns red if `Resolve` hands back the bare name.
 
 **The `terminal/` directory is never pruned, and that is a decision, not an
 oversight (ENG-15).** One `context-<hash>.kubeconfig` (and on macOS one

@@ -291,14 +291,31 @@ public static partial class Kubeconfig
         IEnumerable<string>? kubeconfigPaths = null,
         IEnumerable<string>? extraPaths = null,
         ICollection<KubeconfigReadFailure>? failures = null,
+        CancellationToken cancellationToken = default) =>
+        (await LoadChainAsync(kubeconfigPaths, extraPaths, failures, cancellationToken).ConfigureAwait(false)).Contexts;
+
+    /// <summary>
+    /// <see cref="LoadContextsAsync"/>, plus where the chain's <c>current-context</c> came
+    /// from — which a caller that opens a tab on its own needs (B4-4, see
+    /// <see cref="KubeconfigChain.AutomaticFirstContext"/>).
+    /// </summary>
+    public static async Task<KubeconfigChain> LoadChainAsync(
+        IEnumerable<string>? kubeconfigPaths = null,
+        IEnumerable<string>? extraPaths = null,
+        ICollection<KubeconfigReadFailure>? failures = null,
         CancellationToken cancellationToken = default)
     {
         var result = new List<ClusterContext>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         string? currentContext = null;
+        var currentFromFolderScan = false;
+
+        // An explicit list is the caller naming every file, so nothing in it came from a scan.
+        var folderOnly = kubeconfigPaths is null ? FolderOnlyPaths(extraPaths) : [];
 
         foreach (var path in kubeconfigPaths ?? DiscoverPaths(extraPaths))
         {
+            var fromFolderScan = folderOnly.Contains(path);
             cancellationToken.ThrowIfCancellationRequested();
             K8SConfiguration config;
             try
@@ -315,6 +332,7 @@ public static partial class Kubeconfig
             if (currentContext is null && !string.IsNullOrEmpty(config.CurrentContext))
             {
                 currentContext = config.CurrentContext;
+                currentFromFolderScan = fromFolderScan;
             }
 
             foreach (var ctx in config.Contexts ?? [])
@@ -329,13 +347,49 @@ public static partial class Kubeconfig
                     ClusterName: ctx.ContextDetails?.Cluster ?? "",
                     Namespace: ctx.ContextDetails?.Namespace,
                     UserName: ctx.ContextDetails?.User,
-                    KubeconfigPath: path));
+                    KubeconfigPath: path)
+                {
+                    FromFolderScan = fromFolderScan,
+                });
             }
         }
 
-        return currentContext is null
+        IReadOnlyList<ClusterContext> contexts = currentContext is null
             ? result
             : [.. result.Select(c => c.Name == currentContext ? c with { IsCurrentContext = true } : c)];
+        return new KubeconfigChain(contexts, currentContext, currentFromFolderScan);
+    }
+
+    /// <summary>
+    /// The files the search reaches only by scanning a picked folder: found in one, and not
+    /// also named on their own — as a picked file, a <c>$KUBECONFIG</c> entry or the default
+    /// <c>~/.kube/config</c>. The last matters because the folder people pick is most often
+    /// <c>~/.kube</c>, and its <c>config</c> is no less the user's own file for being in it.
+    /// </summary>
+    internal static HashSet<string> FolderOnlyPaths(IEnumerable<string>? extraPaths)
+    {
+        var picked = extraPaths?.ToArray() ?? [];
+        var named = new HashSet<string>(
+            CandidatePathsShallow(picked).Where(p => !Directory.Exists(p)).Select(Normalize),
+            StringComparer.OrdinalIgnoreCase);
+
+        return new HashSet<string>(
+            CandidatePaths(picked)
+                .Where(c => c.Source == InPickedFolderSource && !named.Contains(Normalize(c.Path)))
+                .Select(c => c.Path),
+            StringComparer.OrdinalIgnoreCase);
+
+        static string Normalize(string path)
+        {
+            try
+            {
+                return Path.GetFullPath(path);
+            }
+            catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException)
+            {
+                return path;
+            }
+        }
     }
 
     /// <summary>
@@ -467,6 +521,54 @@ public static partial class Kubeconfig
     {
         var end = message.IndexOfAny(['\r', '\n']);
         return end < 0 ? message : message[..end];
+    }
+}
+
+/// <summary>
+/// What a load of the kubeconfig chain found: its contexts, the chain's
+/// <c>current-context</c> (kubectl's rule: the first file that sets one), and whether the
+/// file that set it was reached only by scanning a picked folder.
+/// </summary>
+public sealed record KubeconfigChain(
+    IReadOnlyList<ClusterContext> Contexts,
+    string? CurrentContext,
+    bool CurrentContextFromFolderScan)
+{
+    /// <summary>
+    /// The context the app may open a tab on by itself — on a first launch with no
+    /// workspace, after a rescan or after adding a folder — or null when it should open
+    /// nothing and leave the choice to the switcher or the empty state.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Never a context from a folder scan, and never one a folder scan chose (B4-4).</b>
+    /// A picked folder trusts every kubeconfig placed in it, the way a directory on PATH
+    /// trusts every program in it; that is its point, and a click on such a context is the
+    /// user's choice. But connecting runs the context's exec plugin, and picked paths are
+    /// searched first, so a file dropped into a shared or synced folder used to set the
+    /// chain's current-context and have its own command run on the next launch without a
+    /// click. kubectl only ever reads files it was named.
+    /// </para>
+    /// <para>
+    /// So: when the chain's current-context was set by such a file, nothing; when it names
+    /// a context defined first in such a file (a folder file shadowing one of the user's
+    /// own names), nothing; when it names one from a file the user named, that one; and
+    /// with no current-context at all, the first context from a named file.
+    /// </para>
+    /// </remarks>
+    public ClusterContext? AutomaticFirstContext()
+    {
+        if (CurrentContextFromFolderScan)
+        {
+            return null;
+        }
+
+        if (Contexts.FirstOrDefault(c => c.IsCurrentContext) is { } current)
+        {
+            return current.FromFolderScan ? null : current;
+        }
+
+        return Contexts.FirstOrDefault(c => !c.FromFolderScan);
     }
 }
 

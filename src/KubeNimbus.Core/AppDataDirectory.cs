@@ -20,9 +20,21 @@ namespace KubeNimbus.Core;
 /// The resolution order is: the platform's own answer, asked to create the folder
 /// (<see cref="Environment.SpecialFolderOption.Create"/>); then the XDG variable for it
 /// when that is absolute (the XDG spec says a relative value must be ignored); then the
-/// XDG default under the home directory; and last, the temp directory. The last one loses
-/// preferences across a reboot, which is a real cost — and the right one next to writing
-/// files into whatever directory the app happened to be started from.
+/// XDG default under the home directory; and last, a fresh directory under the temp
+/// directory (<see cref="ProcessFallback"/>). The last one loses preferences between runs,
+/// which is a real cost — and the right one next to writing files into whatever directory
+/// the app happened to be started from.
+/// </para>
+/// <para>
+/// <b>The fallback is never a predictable name (B4-2).</b> It used to be
+/// <c>/tmp/kubeNimbus-fallback</c>, a fixed name in a directory every local user can write
+/// to. Another user could create it first and plant a <c>settings.json</c> whose
+/// <c>KubeconfigPaths</c> named a kubeconfig of theirs, and its exec plugin would then run
+/// as the victim on the next connect; <see cref="CreatePrivate"/> cannot tighten a
+/// directory it does not own, and the settings store reads from it either way. The
+/// fallback is now <see cref="Directory.CreateTempSubdirectory(string?)"/>: a random name,
+/// created by this process, 0700 on Linux and macOS, and the same one for every caller
+/// for the life of the process.
 /// </para>
 /// </remarks>
 public static class AppDataDirectory
@@ -55,15 +67,27 @@ public static class AppDataDirectory
             Environment.GetEnvironmentVariable(xdgVariable),
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             xdgDefault,
-            Path.GetTempPath());
+            () => ProcessFallback);
     }
+
+    private static readonly Lazy<string> Fallback = new(
+        () => Directory.CreateTempSubdirectory("kubeNimbus-").FullName,
+        LazyThreadSafetyMode.ExecutionAndPublication);
+
+    /// <summary>
+    /// The directory used when no home directory can be resolved: created on first use with
+    /// a random name under the temp directory (owner-only on Linux and macOS), and the same
+    /// answer for <see cref="Roaming"/> and <see cref="Local"/> for the rest of the process.
+    /// </summary>
+    internal static string ProcessFallback => Fallback.Value;
 
     /// <summary>
     /// The decision, with every input passed in so it can be asserted on any platform.
-    /// Returns the first candidate that is a fully qualified path, and the temp
-    /// directory's <c>kubeNimbus-fallback</c> child when none is.
+    /// Returns the first candidate that is a fully qualified path, and what
+    /// <paramref name="fallback"/> returns when none is — <see cref="ProcessFallback"/> in
+    /// the app, which is only created when it is actually needed.
     /// </summary>
-    internal static string Choose(string? special, string? xdgValue, string? home, string xdgDefault, string tempRoot)
+    internal static string Choose(string? special, string? xdgValue, string? home, string xdgDefault, Func<string> fallback)
     {
         if (IsAbsolute(special))
         {
@@ -80,7 +104,7 @@ public static class AppDataDirectory
             return Path.Combine(home!, xdgDefault);
         }
 
-        return Path.Combine(tempRoot, "kubeNimbus-fallback");
+        return fallback();
     }
 
     private static bool IsAbsolute(string? path) =>

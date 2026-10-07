@@ -13,11 +13,54 @@ public enum TerminalHostPlatform
     Linux,
 }
 
+/// <summary>Where a <see cref="TerminalCandidate"/>'s executable is looked for.</summary>
+public enum TerminalExecutableSource
+{
+    /// <summary>A bare name, searched for on <c>PATH</c> (fully qualified entries only).</summary>
+    Path,
+
+    /// <summary>A path relative to the Windows system directory (<c>System32</c>).</summary>
+    SystemDirectory,
+
+    /// <summary>Already a path; used only if it is fully qualified and exists.</summary>
+    Absolute,
+}
+
 /// <summary>One external-terminal invocation to try, in order.</summary>
-/// <param name="Executable">Resolved through the child process's own PATH search.</param>
+/// <param name="Executable">
+/// What to look for, read according to <paramref name="Source"/>. Never handed to the
+/// process start as it is: see <see cref="TerminalLauncher.Resolve"/>.
+/// </param>
 /// <param name="Arguments">Passed as an argument list — never a concatenated command line.</param>
 /// <param name="Label">What the UI calls it when it worked, or lists when nothing did.</param>
-public sealed record TerminalCandidate(string Executable, IReadOnlyList<string> Arguments, string Label);
+/// <param name="Source">How <paramref name="Executable"/> becomes an absolute path.</param>
+public sealed record TerminalCandidate(
+    string Executable,
+    IReadOnlyList<string> Arguments,
+    string Label,
+    TerminalExecutableSource Source = TerminalExecutableSource.Path)
+{
+    /// <summary>
+    /// The absolute path the candidate will be started as, once <see cref="TerminalLauncher.Resolve"/>
+    /// has found it; null before resolution, and after it when nothing was found.
+    /// </summary>
+    public string? ResolvedPath { get; init; }
+}
+
+/// <summary>
+/// What <see cref="TerminalLauncher.Resolve"/> searches: this process's <c>PATH</c> and
+/// <c>PATHEXT</c> and the Windows system directory, passed in so the rules are testable with a
+/// fake PATH and a fake <c>System32</c>.
+/// </summary>
+public sealed record TerminalLookup(string? PathValue, string? PathExt, string? SystemDirectory, bool Windows)
+{
+    /// <summary>The running process's own values.</summary>
+    public static TerminalLookup Current => new(
+        Environment.GetEnvironmentVariable("PATH"),
+        Environment.GetEnvironmentVariable("PATHEXT"),
+        OperatingSystem.IsWindows() ? Environment.SystemDirectory : null,
+        OperatingSystem.IsWindows());
+}
 
 /// <summary>How <see cref="TerminalLauncher.OpenAsync"/> ended.</summary>
 public enum TerminalLaunchOutcome
@@ -152,7 +195,9 @@ public static class TerminalLauncher
     /// The whole plan — overlay contents, <c>KUBECONFIG</c> value and the ordered
     /// candidate list — without starting anything or writing anything. Pure apart from
     /// reading <paramref name="preferredTerminal"/>, so the decisions can be asserted on
-    /// a machine that has no terminal at all.
+    /// a machine that has no terminal at all. With a <paramref name="lookup"/>, each
+    /// candidate also carries the absolute path it would be started as
+    /// (<see cref="Resolve"/>), which reads the file system and nothing else.
     /// </summary>
     public static TerminalLaunchPlan Plan(
         TerminalHostPlatform platform,
@@ -160,7 +205,8 @@ public static class TerminalLauncher
         string kubeconfigPath,
         string stateDirectory,
         string? preferredTerminal = null,
-        char? pathSeparator = null)
+        char? pathSeparator = null,
+        TerminalLookup? lookup = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(contextName);
         ArgumentException.ThrowIfNullOrEmpty(kubeconfigPath);
@@ -183,14 +229,97 @@ public static class TerminalLauncher
             scriptContent = LauncherScript(kubeconfigValue);
         }
 
+        var candidates = Candidates(platform, preferredTerminal, scriptPath);
+        if (lookup is not null)
+        {
+            candidates = [.. candidates.Select(candidate => Resolve(candidate, lookup))];
+        }
+
         return new TerminalLaunchPlan(
             contextName,
             overlayPath,
             ContextOverlay(contextName),
             kubeconfigValue,
-            Candidates(platform, preferredTerminal, scriptPath),
+            candidates,
             scriptPath,
             scriptContent);
+    }
+
+    /// <summary>
+    /// The absolute path <paramref name="candidate"/> is started as, or a candidate whose
+    /// <see cref="TerminalCandidate.ResolvedPath"/> is null when there is none (B4-1).
+    ///
+    /// <para>
+    /// <b>Nothing is ever started by a bare name.</b> With <c>UseShellExecute = false</c>, .NET
+    /// looks for a name with no directory in it in the app's own folder and then the
+    /// <em>current directory</em> before <c>PATH</c> — on Windows (<c>CreateProcess</c> with no
+    /// application name) and on Unix (<c>Process.ResolvePath</c>) alike. A <c>cmd.exe</c> or a
+    /// <c>pwsh</c> left in a downloads folder or a cloned repository the app was started from
+    /// would then run with <c>KUBECONFIG</c> pointed at a cluster. The shells Windows ships
+    /// come from the system directory; everything else is searched for on <c>PATH</c> through
+    /// <see cref="FindExecutable"/>, which skips any entry that is not fully qualified; a
+    /// path (macOS's <c>/usr/bin/open</c>, a <c>$TERMINAL</c> naming one) is used only when it
+    /// is fully qualified and exists. The credential-plugin lookup closed the same hole
+    /// first (<c>ExecPluginPath</c>).
+    /// </para>
+    /// </summary>
+    public static TerminalCandidate Resolve(TerminalCandidate candidate, TerminalLookup lookup)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+        ArgumentNullException.ThrowIfNull(lookup);
+
+        var path = candidate.Source switch
+        {
+            TerminalExecutableSource.Absolute =>
+                IsFullyQualified(candidate.Executable) && File.Exists(candidate.Executable) ? candidate.Executable : null,
+
+            TerminalExecutableSource.SystemDirectory =>
+                lookup.SystemDirectory is { } system && IsFullyQualified(system)
+                    ? Existing(Path.Combine([system, .. candidate.Executable.Split('\\', '/')]))
+                    : null,
+
+            _ => FindOnPath(candidate.Executable, lookup),
+        };
+
+        return candidate with { ResolvedPath = path };
+    }
+
+    private static string? FindOnPath(string name, TerminalLookup lookup)
+    {
+        // A bare name only. Anything with a directory in it would be resolved against the
+        // current directory, which is the lookup this method exists to refuse.
+        if (name.Contains('/') || name.Contains('\\'))
+        {
+            return null;
+        }
+
+        // On Windows a name that carries its extension ("pwsh.exe") is looked for as
+        // exactly that; FindExecutable would otherwise append every PATHEXT entry to it.
+        return lookup.Windows && Path.HasExtension(name)
+            ? FindExecutable(Path.GetFileNameWithoutExtension(name), lookup.PathValue, Path.GetExtension(name), windows: true)
+            : FindExecutable(name, lookup.PathValue, lookup.PathExt, lookup.Windows);
+    }
+
+    /// <summary>
+    /// What the "nothing could be opened" notice lists. A candidate that resolved to nothing
+    /// is never started — not by its bare name either, which is the lookup that reaches the
+    /// current directory — and is named as not found.
+    /// </summary>
+    internal static List<string> TriedLabels(IEnumerable<TerminalCandidate> candidates) =>
+        [.. candidates.Select(c => c.ResolvedPath is null ? $"{c.Label} (not found)" : c.Label)];
+
+    private static string? Existing(string path) => File.Exists(path) ? path : null;
+
+    private static bool IsFullyQualified(string path)
+    {
+        try
+        {
+            return !string.IsNullOrWhiteSpace(path) && Path.IsPathFullyQualified(path);
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -231,15 +360,28 @@ public static class TerminalLauncher
 
         if (!string.IsNullOrWhiteSpace(preferredTerminal) && platform != TerminalHostPlatform.MacOs)
         {
-            candidates.Add(new TerminalCandidate(preferredTerminal.Trim(), [], $"$TERMINAL ({preferredTerminal.Trim()})"));
+            // A value with a directory in it is a path and is used only if it is a full one
+            // (Resolve refuses "./term" and "bin/term", which name the current directory);
+            // a bare name is searched for on PATH like every other candidate.
+            var terminal = preferredTerminal.Trim();
+            var isPath = terminal.Contains('/') || (platform == TerminalHostPlatform.Windows && terminal.Contains('\\'));
+            candidates.Add(new TerminalCandidate(
+                terminal, [], $"$TERMINAL ({terminal})",
+                isPath ? TerminalExecutableSource.Absolute : TerminalExecutableSource.Path));
         }
 
         switch (platform)
         {
             case TerminalHostPlatform.Windows:
+                // PowerShell 7 has no fixed home (an MSI under Program Files, a Store app
+                // alias, a zip anywhere), so it is found on PATH. The two shells Windows
+                // ships are taken from System32 by full path and never searched for.
                 candidates.Add(new TerminalCandidate("pwsh.exe", ["-NoLogo"], "PowerShell 7"));
-                candidates.Add(new TerminalCandidate("powershell.exe", ["-NoLogo"], "Windows PowerShell"));
-                candidates.Add(new TerminalCandidate("cmd.exe", [], "Command Prompt"));
+                candidates.Add(new TerminalCandidate(
+                    @"WindowsPowerShell\v1.0\powershell.exe", ["-NoLogo"], "Windows PowerShell",
+                    TerminalExecutableSource.SystemDirectory));
+                candidates.Add(new TerminalCandidate(
+                    "cmd.exe", [], "Command Prompt", TerminalExecutableSource.SystemDirectory));
                 break;
 
             case TerminalHostPlatform.MacOs:
@@ -247,7 +389,9 @@ public static class TerminalLauncher
                 // nothing honest to open, so no bare `open -a Terminal` fallback.
                 if (launcherScriptPath is { Length: > 0 })
                 {
-                    candidates.Add(new TerminalCandidate("open", ["-a", "Terminal", launcherScriptPath], "Terminal"));
+                    candidates.Add(new TerminalCandidate(
+                        "/usr/bin/open", ["-a", "Terminal", launcherScriptPath], "Terminal",
+                        TerminalExecutableSource.Absolute));
                 }
 
                 break;
@@ -454,9 +598,10 @@ public static class TerminalLauncher
             context.Name,
             context.KubeconfigPath,
             StateDirectory,
-            Environment.GetEnvironmentVariable("TERMINAL"));
+            Environment.GetEnvironmentVariable("TERMINAL"),
+            lookup: TerminalLookup.Current);
 
-        var tried = plan.Candidates.Select(c => c.Label).ToList();
+        var tried = TriedLabels(plan.Candidates);
 
         try
         {
@@ -485,7 +630,12 @@ public static class TerminalLauncher
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var info = new ProcessStartInfo(candidate.Executable)
+            if (candidate.ResolvedPath is not { } executable)
+            {
+                continue;
+            }
+
+            var info = new ProcessStartInfo(executable)
             {
                 // Required for Environment to be honoured at all, and it is the whole
                 // mechanism here.

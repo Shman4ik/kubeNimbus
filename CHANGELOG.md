@@ -102,6 +102,17 @@ it as the GitHub Release body, so headings must match tags exactly
   your pod.
 - Argo CD syncs record who asked: the operation's initiator is your username as the cluster
   reports it, followed by "(kubeNimbus)".
+- "Open a terminal on this cluster" no longer finds its shell or terminal in the current
+  directory: Windows' own shells are started from the system folder and everything else is
+  found on `PATH`. A copy of `cmd.exe` or `pwsh.exe` in the folder kubeNimbus was started from
+  could previously have been run instead.
+- A context in a kubeconfig folder added in Preferences is no longer opened on its own, at the
+  first launch, on a rescan or when the folder is added. Anyone who could write to that folder
+  could previously choose a context, and with it the credential program kubeNimbus ran without
+  a click. The contexts are still listed and open on a click.
+- When no home folder can be found, settings now go to a new private folder with a random
+  name, not a fixed folder in the shared temporary directory that another local user could
+  create first.
 
 ## [0.6.0] - 2026-10-04
 

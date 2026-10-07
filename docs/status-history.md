@@ -2739,3 +2739,29 @@ threshold 3 of 16 `ScaleConfirmTests`. Live: SelfSubjectReview names the admin's
 CN and a narrow ServiceAccount, a stand-in Application's sync carries the name, and the
 pinned debug image pulls and runs. Not verified: the initiator and sync windows against a
 real Argo CD (VER-15).
+
+### Security audit, block 4: external processes and OS integration (2026-10-07)
+
+The fourth block of the staged pre-1.0 security audit, PR #149. Nothing worse than Low.
+"Open a terminal on this cluster" started `cmd.exe`, `powershell.exe`, `pwsh.exe` and the
+Linux emulators by bare name, and both Windows' `CreateProcess` and .NET on Unix look in the
+app's folder and the current directory before the system folders and `PATH`; every candidate
+is now resolved to an absolute path first (`TerminalLauncher.Resolve`), closing ENG-58. The
+app-data fallback for a process with no home folder was a fixed name in the shared temporary
+directory, which another local user could create first and fill with a `settings.json` naming
+their own kubeconfig; it is now a private directory with a random name, per process. The
+smoke test's seed directory got the same treatment. And a context that reached the chain only
+through a picked folder is never opened automatically — at the first launch, on a rescan or
+when a folder is added — because anyone who can write to that folder could otherwise choose
+the credential program the app runs without a click (`KubeconfigChain.AutomaticFirstContext`).
+
+Checks: build clean; Core 851 passed / 2 skipped (Unix file modes) / 0 failed against the
+live sandbox, App 524 of 524; win-x64 NativeAOT publish with only the DataGrid warnings, both
+smoke scenarios exit 0. `TerminalLauncher.OpenAsync` was driven with planted `pwsh.exe`,
+`powershell.exe` and `cmd.exe` in its current directory and started System32's
+`powershell.exe`; a bare `Process.Start` in the same folder ran the planted copy once
+`NoDefaultCurrentDirectoryInExePath` was cleared — the variable is set in the agent shell on
+this machine, which hides the bug in local runs. Mutation checks: the bare-name resolution
+turned four launcher tests red, and the old first-context rule two shell tests. Not verified:
+a real terminal launch on Linux or macOS, and the fallback directory's mode, which only a Unix
+run checks.

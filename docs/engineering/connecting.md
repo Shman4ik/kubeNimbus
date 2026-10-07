@@ -328,6 +328,23 @@ a file dropped into it later is found by the next rescan. Settings still hold th
   `aws eks update-kubeconfig` in a terminal, for plain files.
 - An empty folder is kept when picked (it is the ordinary start of the thing this is for),
   unlike a picked *file* that yields no contexts.
+- **A context from a folder scan is never opened without a click on it (B4-4).** A picked
+  folder trusts every kubeconfig placed in it, the way a directory on `PATH` trusts every
+  program in it, and connecting runs a context's exec plugin. Picked paths are searched first,
+  so a file dropped into a shared or synced folder used to set the chain's `current-context`,
+  and the app's automatic first tab (first launch with no workspace, a rescan from the empty
+  state, adding a folder) opened it and ran its plugin. kubectl only reads files it was named.
+  `Kubeconfig.LoadChainAsync` returns a `KubeconfigChain`: each `ClusterContext` carries
+  `FromFolderScan` (its file was reached *only* through a folder — a file also named as a
+  picked file, in `$KUBECONFIG` or as `~/.kube/config` is the user's, which is what keeps a
+  picked `~/.kube` working), and the chain carries whether its `current-context` was set by
+  such a file. `KubeconfigChain.AutomaticFirstContext` is the one rule every automatic open goes
+  through: nothing when a folder file set the current-context or defined the context it names
+  first; the named context otherwise; with no current-context, the first context from a named
+  file. The context is still listed, and a click on it opens it; restoring tabs from
+  `workspace.json` is unchanged, because the user opened those. `KubeconfigShellTests` pins
+  both directions at the shell and `KubeconfigFolderTests` the chain; the shell test turns red
+  with the old "current-context, else the first context" rule put back.
 
 ## The shell's two lines in the no-kubeconfig state (ENG-29)
 
@@ -342,10 +359,23 @@ the diagnosis when there is one.
 
 `AppDataDirectory.Roaming` (settings, workspace, terminal overlays) and `.Local` (discovery
 cache) resolve `GetFolderPath(…, SpecialFolderOption.Create)`, then the XDG variable when it
-is absolute, then the XDG default under home, then the temp directory — and never a relative
-path. `GetFolderPath` returns `""` for a folder that does not exist yet, which on a fresh Linux
-`HOME` put the discovery cache in `./kubeNimbus/discovery` of whatever directory the app was
-started from.
+is absolute, then the XDG default under home, then a fallback under the temp directory — and
+never a relative path. `GetFolderPath` returns `""` for a folder that does not exist yet, which
+on a fresh Linux `HOME` put the discovery cache in `./kubeNimbus/discovery` of whatever
+directory the app was started from.
+
+**The fallback is a fresh random directory per process (B4-2).** It used to be
+`<temp>/kubeNimbus-fallback`, a fixed name in `/tmp`, which every local user can write to.
+Another user could create it first and plant a `settings.json` whose `KubeconfigPaths` named a
+kubeconfig of theirs; its exec plugin would then run as the victim on the next connect.
+`CreatePrivate` cannot tighten a directory it does not own, and the settings store read from it
+either way. `AppDataDirectory.ProcessFallback` is now `Directory.CreateTempSubdirectory("kubeNimbus-")`,
+created on first use only (when no home resolves), random-named, 0700 on Unix, and the same
+answer for `Roaming` and `Local` for the life of the process. The cost is stated in
+`PRIVACY.md`: preferences do not survive between runs in that state, which a service account
+or an `env -i` launch does not miss. `AppDataDirectoryTests` pins the name, the stability and
+that the fallback is not created when a home resolves. The smoke test's seed directory
+(`--smoke-test=unreachable-cluster`) was the same class and is created the same way (B4-3).
 
 **Owner-only, and written whole (S1-4).** On Linux and macOS the directories are created 0700
 (`AppDataDirectory.CreatePrivate`) and the files 0600, and `Program.Main` tightens existing
