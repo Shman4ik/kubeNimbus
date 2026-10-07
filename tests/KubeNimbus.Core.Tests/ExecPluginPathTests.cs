@@ -69,6 +69,7 @@ public class ExecPluginPathTests
         // gke-gcloud-auth-plugin runs gcloud, kubelogin's CLI mode runs az: finding the
         // plugin and not its tool would move the bug one level down.
         var (extra, _) = Tool("gcloud");
+        await File.WriteAllTextAsync(Path.Combine(extra, HostExecutable("gke-gcloud-auth-plugin")), "");
         using var _ = ExecPluginPath.OverrideDirectories([extra]);
 
         var plain = new ExternalExecution { Command = "gke-gcloud-auth-plugin" };
@@ -96,6 +97,47 @@ public class ExecPluginPathTests
 
         await Assert.That(missing).IsEmpty();
     }
+
+    /// <summary>
+    /// S1-3: a command found nowhere is refused before anything is started. Handed to
+    /// <c>Process.Start</c> as a bare name, .NET would look for it in the app's folder and the
+    /// current directory before PATH — so a file of that name left in whatever folder the app
+    /// was started from would run with the user's credentials in its environment. Here such a
+    /// file exists in the current directory, and the plugin is still not found.
+    /// </summary>
+    [Test]
+    public async Task A_command_found_nowhere_is_refused_and_never_looked_up_in_the_current_directory()
+    {
+        var name = $"kubenimbus-cwd-plugin-{Guid.NewGuid():N}";
+        var planted = Path.Combine(Environment.CurrentDirectory, HostExecutable(name));
+        await File.WriteAllTextAsync(planted, "");
+        try
+        {
+            using var _ = ExecPluginPath.OverrideDirectories([]);
+            var exec = new ExternalExecution { Command = name };
+
+            var failure = await Assert.ThrowsAsync<ExecCredentialException>(() =>
+            {
+                ExecPluginPath.Apply(exec, kubeconfigDirectory: null);
+                return Task.CompletedTask;
+            });
+
+            await Assert.That(failure!.Command).IsEqualTo(name);
+            await Assert.That(failure.Message).StartsWith("Could not run");
+            await Assert.That(exec.Command).IsEqualTo(name);
+
+            // The failure view reads it as a plugin that could not be started, with its advice.
+            var report = ConnectionReport.Explain(failure, [], "https://example:6443", []);
+            await Assert.That(report.Step).IsEqualTo(ConnectionReport.RunningPlugin);
+            await Assert.That(report.Headline).Contains("could not be started");
+        }
+        finally
+        {
+            File.Delete(planted);
+        }
+    }
+
+    private static string HostExecutable(string name) => OperatingSystem.IsWindows() ? name + ".exe" : name;
 
     private static (string Directory, string File) Tool(string name)
     {

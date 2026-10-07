@@ -65,3 +65,29 @@ read"), never an absent chip. The demo ships `checkout-tls`: a real chain genera
 throwaway CA and a leaf it signed, neither key kept) and a placeholder string for `tls.key`.
 Its expiry wording follows the wall clock like every Age, so its colour will change as the
 binary ages — the deterministic wording is pinned by tests at a fixed instant instead.
+
+## A copied Secret value does not outlive the copy (S1-5)
+
+The YAML editor's reveal panel copies a decoded value with one click. On Windows, ordinary
+clipboard text enters clipboard history (Win+V), where it survives later copies, and with
+cloud clipboard on it is synced to every device on the same account — so a database password
+copied once used to stay in both indefinitely. `SensitiveClipboard` now does three things, and
+only for a **Secret's** values (a ConfigMap's `binaryData`, a log line or a URL is not a secret,
+and a clipboard that empties itself under someone pasting a log is a bug):
+
+- **The copy is marked private on Windows**: `ExcludeClipboardContentFromMonitorProcessing`,
+  plus `CanIncludeInClipboardHistory` and `CanUploadToCloudClipboard` as a DWORD 0, written
+  beside the text in the same clipboard write through Avalonia's bytes platform formats — no
+  interop, nothing for the AOT compiler to trim. Verified against the real Win32 clipboard
+  (`EnumClipboardFormats` lists all three, 4 bytes each, next to `CF_UNICODETEXT`). Password
+  managers mark their copies the same way.
+- **It is cleared after 60 seconds**, but only if the clipboard still holds exactly that
+  value; anything copied since, from this app or another, is left alone. A newer copy of the
+  same value restarts the minute.
+- **The status line says so** ("… cleared in 60 seconds unless something else is copied
+  first"), and says when it did.
+
+The clear runs detached from the Copy command: an `AsyncRelayCommand` that is still running
+disables its button, and every Copy in the panel shares one command. `SensitiveClipboardTests`
+pins the clear rule and the formats; that the clear happens in the running app is not covered
+by a test.

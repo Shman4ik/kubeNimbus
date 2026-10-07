@@ -1418,6 +1418,17 @@ internal static class ClusterTabScenarios
     }
 
     /// <summary>
+    /// A healthy tab whose cluster entry sets <c>insecure-skip-tls-verify</c>: the routine
+    /// "Connected" line would hide the status bar, and the TLS notice keeps it on screen.
+    /// </summary>
+    public static ClusterTabViewModel TlsUnverified()
+    {
+        var tab = BaseTab();
+        tab.IsTlsUnverified = true;
+        return tab;
+    }
+
+    /// <summary>
     /// A connect that failed, as the content area states it. The report is written in
     /// rather than produced by a failing connect so the shot is the same on every machine
     /// (no temp paths, no developer home directory); its sentences are the ones

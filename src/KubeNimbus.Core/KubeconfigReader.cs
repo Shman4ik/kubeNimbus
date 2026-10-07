@@ -31,7 +31,8 @@ namespace KubeNimbus.Core;
 /// <para>
 /// <b>What it reads is exactly what the library's model holds</b> — the same keys, the same
 /// types, unknown keys ignored — plus each cluster's <c>proxy-url</c>, which the model
-/// drops (see <see cref="KubeconfigProxy"/>). It is built on YamlDotNet's event parser, the
+/// drops (see <see cref="KubeconfigProxy"/>), and each user's impersonation
+/// (see <see cref="KubeconfigImpersonation"/>). It is built on YamlDotNet's event parser, the
 /// lowest and most stable layer of that package, and never on its object deserializer,
 /// which is neither trim-safe nor needed for a schema this small.
 /// </para>
@@ -41,8 +42,10 @@ namespace KubeNimbus.Core;
 /// <c>NullReferenceException</c>; a key given twice keeps its last value rather than failing
 /// the file (YamlDotNet's representation model rejects duplicates, which is why this does
 /// not use it); and an <c>as-user-extra</c> value written as a list, which is its real
-/// shape in client-go but not in the library's model, is skipped rather than failing the
-/// file. Nothing the Aot client does reads that field.
+/// shape in client-go but not in the library's model, is left out of the model rather than
+/// failing the file. The library never sends impersonation at all; kubeNimbus does, from
+/// <see cref="KubeconfigDocument.Impersonations"/>, which reads every impersonation field in
+/// client-go's own shape (<c>as-uid</c> and the lists included).
 /// </para>
 /// </remarks>
 internal static class KubeconfigReader
@@ -91,9 +94,14 @@ internal static class KubeconfigReader
     {
         var config = new K8SConfiguration();
         var proxies = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        // Case-insensitive, first entry wins: that is how the library finds the user entry a
+        // context names (FirstOrDefault, OrdinalIgnoreCase), and the impersonation sent must
+        // be the one of the entry whose credentials are used.
+        var impersonations = new Dictionary<string, KubeconfigImpersonation>(StringComparer.OrdinalIgnoreCase);
         if (root is null)
         {
-            return new KubeconfigDocument(config, proxies);
+            return new KubeconfigDocument(config, proxies, impersonations);
         }
 
         var map = Expect<MapNode>(root, "the top level");
@@ -117,7 +125,54 @@ internal static class KubeconfigReader
             }
         }
 
-        return new KubeconfigDocument(config, proxies);
+        if (map.Get("users") is SeqNode users)
+        {
+            foreach (var entry in users.Items.OfType<MapNode>())
+            {
+                if (Text(entry, "name") is { } name
+                    && entry.Get("user") is MapNode credentials
+                    && !impersonations.ContainsKey(name))
+                {
+                    impersonations[name] = ReadImpersonation(credentials);
+                }
+            }
+        }
+
+        return new KubeconfigDocument(config, proxies, impersonations);
+    }
+
+    /// <summary>
+    /// <c>as</c>, <c>as-uid</c>, <c>as-groups</c> and <c>as-user-extra</c> in client-go's own
+    /// shapes — an extra is a list of values per key, and a single value is read as a list of
+    /// one. The library's model has no <c>as-uid</c> and cannot hold a list per key, which is
+    /// why this is carried beside it, as <c>proxy-url</c> is.
+    /// </summary>
+    private static KubeconfigImpersonation ReadImpersonation(MapNode credentials)
+    {
+        var groups = credentials.Get("as-groups") is { } groupsNode
+            ? [.. Expect<SeqNode>(groupsNode, "as-groups").Items.Select(g => ScalarText(g, "an as-groups entry")).OfType<string>()]
+            : new List<string>();
+
+        var extra = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+        if (credentials.Get("as-user-extra") is { } extraNode)
+        {
+            foreach (var (key, value) in Expect<MapNode>(extraNode, "as-user-extra").Children)
+            {
+                List<string> values = value switch
+                {
+                    ScalarNode { Text: { } text } => [text],
+                    SeqNode seq => [.. seq.Items.Select(v => ScalarText(v, $"an as-user-extra {key} value")).OfType<string>()],
+                    _ => [],
+                };
+
+                if (values.Count > 0)
+                {
+                    extra[key] = values;
+                }
+            }
+        }
+
+        return new KubeconfigImpersonation(Text(credentials, "as"), Text(credentials, "as-uid"), groups, extra);
     }
 
     private static Cluster ReadCluster(MapNode map)
@@ -370,11 +425,19 @@ internal static class KubeconfigReader
 }
 
 /// <summary>
-/// A parsed kubeconfig: the client library's model, and the one field that model drops —
-/// each cluster's <c>proxy-url</c>, by cluster name.
+/// A parsed kubeconfig: the client library's model, and what that model drops or cannot
+/// hold — each cluster's <c>proxy-url</c>, by cluster name, and each user entry's
+/// impersonation in client-go's shape, by user name.
 /// </summary>
-internal sealed record KubeconfigDocument(K8SConfiguration Configuration, IReadOnlyDictionary<string, string> ProxyUrls)
+internal sealed record KubeconfigDocument(
+    K8SConfiguration Configuration,
+    IReadOnlyDictionary<string, string> ProxyUrls,
+    IReadOnlyDictionary<string, KubeconfigImpersonation> Impersonations)
 {
     /// <summary>The <c>proxy-url</c> of cluster <paramref name="clusterName"/>, or null.</summary>
     public string? ProxyUrl(string clusterName) => ProxyUrls.TryGetValue(clusterName, out var url) ? url : null;
+
+    /// <summary>The impersonation of user entry <paramref name="userName"/> (possibly empty), or null when there is no such entry.</summary>
+    public KubeconfigImpersonation? ImpersonationOf(string userName) =>
+        Impersonations.TryGetValue(userName, out var impersonation) ? impersonation : null;
 }

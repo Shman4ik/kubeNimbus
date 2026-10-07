@@ -196,6 +196,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("applications-connection-failed",
         () => HostInMainWindow(ClusterTabScenarios.ConnectionFailed("plugin"), height: 900, mode: ShellMode.Applications)),
     ("cluster-tab-credentials-expired", () => HostInMainWindow(ClusterTabScenarios.CredentialsExpired())),
+    ("cluster-tab-tls-unverified", () => HostInMainWindow(ClusterTabScenarios.TlsUnverified())),
     // The demo cluster, built by running the real ConnectCommand — see ClusterTabScenarios.
     ("cluster-tab-demo-list", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
     ("cluster-tab-demo-pod-detail", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetail(), height: 1000)),

@@ -194,7 +194,22 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// version). Anything else — connecting, a failure, a watch that ended, a connection
     /// warning — still gets the bar.
     /// </summary>
-    public bool IsStatusWorthShowing => Status != _routineStatus || ConnectionWarning is not null;
+    public bool IsStatusWorthShowing => Status != _routineStatus || ConnectionWarning is not null || IsTlsUnverified;
+
+    /// <summary>
+    /// The connected cluster's entry sets <c>insecure-skip-tls-verify</c>: nothing checks
+    /// that the server is the cluster, so anyone on the network path can read the credential
+    /// and answer in the cluster's name. It keeps the status bar on screen, with
+    /// <see cref="TlsUnverifiedNotice"/>, for as long as the tab is connected — the one row
+    /// already there for "something about this connection is worth knowing", in both modes,
+    /// costing nothing on a tab without the flag.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsStatusWorthShowing))]
+    private bool _isTlsUnverified;
+
+    /// <summary>What the status bar says while <see cref="IsTlsUnverified"/>.</summary>
+    public const string TlsUnverifiedNotice = "TLS not verified: this cluster's kubeconfig sets insecure-skip-tls-verify.";
 
     partial void OnStatusChanged(string value) => OnPropertyChanged(nameof(IsStatusWorthShowing));
 
@@ -1526,6 +1541,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             Client = client;
             created = null;
             IsConnected = true;
+            IsTlsUnverified = client.SkipsTlsVerification;
             SetConnectedStatus(version.GitVersion);
 
             var sidebar = BuildSidebarAsync();
@@ -1560,6 +1576,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             // be the same sentence twice on one screen.
             Status = $"Connection failed ({ConnectionFailure.Report.StepPhrase}).";
             IsConnected = false;
+            IsTlsUnverified = false;
         }
         finally
         {
@@ -1609,6 +1626,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         {
             await client.RefreshCredentialsAsync(force: true);
             var version = await client.GetServerVersionAsync();
+            IsTlsUnverified = client.SkipsTlsVerification;
             Status = $"Connected — Kubernetes {version.GitVersion}. Credentials re-read from the kubeconfig.";
             Refresh();
         }

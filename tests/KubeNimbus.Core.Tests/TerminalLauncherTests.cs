@@ -319,6 +319,36 @@ public class TerminalLauncherTests
             .IsEqualTo(Path.Combine(root, kubectl)).IgnoringCase();
     }
 
+    /// <summary>
+    /// S1-3: a PATH entry that is not fully qualified (".", "bin", an empty one) names the
+    /// current directory, and whoever can write there would choose what runs as kubectl or as
+    /// a credential plugin. Go refuses these (exec.ErrDot); so does this. The entry here is a
+    /// real folder under the current directory that does hold the executable.
+    /// </summary>
+    [Test]
+    public async Task FindExecutableSkipsPathEntriesThatAreNotFullyQualified()
+    {
+        var relative = $"kubenimbus-relative-{Guid.NewGuid():N}";
+        var folder = Path.Combine(Environment.CurrentDirectory, relative);
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var kubectl = HostExecutable("kubectl");
+            await File.WriteAllTextAsync(Path.Combine(folder, kubectl), "");
+
+            await Assert.That(TerminalLauncher.FindExecutable("kubectl", relative, null, windows: HostIsWindows)).IsNull();
+            await Assert.That(TerminalLauncher.FindExecutable("kubectl", "", null, windows: HostIsWindows, [relative])).IsNull();
+
+            // The same folder named absolutely is found, so the miss above is the rule, not the file.
+            await Assert.That(TerminalLauncher.FindExecutable("kubectl", folder, null, windows: HostIsWindows))
+                .IsEqualTo(Path.Combine(folder, kubectl)).IgnoringCase();
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
     /// <summary>Windows has no Homebrew; the extra directories are a Unix answer to a Unix problem.</summary>
     [Test]
     public async Task LoginShellDirectoriesAreUnixOnly()

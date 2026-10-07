@@ -85,4 +85,111 @@ public static class AppDataDirectory
 
     private static bool IsAbsolute(string? path) =>
         !string.IsNullOrWhiteSpace(path) && Path.IsPathFullyQualified(path);
+
+    /// <summary>Owner-only: read, write and search for the user, nothing for anyone else (0700).</summary>
+    internal const UnixFileMode PrivateDirectoryMode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+
+    /// <summary>Owner read and write only (0600), what kubectl keeps a kubeconfig at.</summary>
+    internal const UnixFileMode PrivateFileMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+
+    /// <summary>
+    /// Creates <paramref name="directory"/> (and any missing parents) and, on Linux and macOS,
+    /// makes it owner-only (0700) — including when it already existed with a wider mode, which
+    /// is what every directory created before this was under a umask of 022.
+    /// </summary>
+    /// <remarks>
+    /// The files in these directories carry no credential (hard rule 4), but they are not
+    /// nothing: context names (an EKS context is an ARN with the account ID in it), kubeconfig
+    /// paths, namespaces and the clusters' resource catalogs. kubectl keeps its kubeconfig
+    /// 0600; a world-readable copy of the map of someone's clusters is the gap this closes.
+    /// On Windows the per-user AppData folders are already private to their user.
+    /// </remarks>
+    public static void CreatePrivate(string directory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        if (OperatingSystem.IsWindows())
+        {
+            Directory.CreateDirectory(directory);
+            return;
+        }
+
+        Directory.CreateDirectory(directory, PrivateDirectoryMode);
+        File.SetUnixFileMode(directory, PrivateDirectoryMode);
+    }
+
+    /// <summary>
+    /// Tightens the app's own two directories to owner-only when they exist, so a profile
+    /// created by an older build is fixed on the next launch rather than only for files
+    /// written from now on. Best effort: a failure here must not stop the app starting.
+    /// </summary>
+    public static void SecureExisting()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        foreach (var directory in new[] { Roaming, Local })
+        {
+            try
+            {
+                if (Directory.Exists(directory))
+                {
+                    File.SetUnixFileMode(directory, PrivateDirectoryMode);
+                }
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+
+    /// <summary>Options that create a new file, with <paramref name="unixMode"/> on Linux and macOS.</summary>
+    internal static FileStreamOptions CreateNewOptions(UnixFileMode unixMode = PrivateFileMode)
+    {
+        var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write };
+        if (!OperatingSystem.IsWindows())
+        {
+            options.UnixCreateMode = unixMode;
+        }
+
+        return options;
+    }
+
+    /// <summary>
+    /// Writes <paramref name="contents"/> to <paramref name="path"/> so that a reader — or a
+    /// crash, or a second instance writing at the same moment — sees the old file or the new
+    /// one and never half of either: the text goes to a temporary file beside it, which then
+    /// replaces it in one rename. The directory is created owner-only (<see cref="CreatePrivate"/>),
+    /// and on Linux and macOS the file is created with <paramref name="unixMode"/> (0600 unless
+    /// said otherwise). Throws what the file system throws; callers that are best effort catch.
+    /// </summary>
+    public static void WriteAllTextAtomically(string path, string contents, UnixFileMode unixMode = PrivateFileMode)
+    {
+        var directory = Path.GetDirectoryName(Path.GetFullPath(path))!;
+        CreatePrivate(directory);
+        var temporary = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            using (var stream = new FileStream(temporary, CreateNewOptions(unixMode)))
+            using (var writer = new StreamWriter(stream, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false)))
+            {
+                writer.Write(contents);
+                writer.Flush();
+                stream.Flush(flushToDisk: true);
+            }
+
+            File.Move(temporary, path, overwrite: true);
+        }
+        finally
+        {
+            try
+            {
+                File.Delete(temporary);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+    }
 }

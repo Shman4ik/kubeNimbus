@@ -596,10 +596,39 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
             return;
         }
 
-        await clipboard.SetTextAsync(text);
-        StatusMessage = row.CopiesBase64
-            ? $"Copied {row.Key} (base64) to the clipboard."
-            : $"Copied {row.Key} to the clipboard.";
+        var what = row.CopiesBase64 ? $"{row.Key} (base64)" : row.Key;
+        if (!IsSecret)
+        {
+            // A ConfigMap's binaryData is not a secret: an ordinary copy that stays.
+            await clipboard.SetTextAsync(text);
+            StatusMessage = $"Copied {what} to the clipboard.";
+            return;
+        }
+
+        // A Secret's value: kept out of clipboard history and cloud sync, and cleared after a
+        // minute if nothing else has been copied since (SensitiveClipboard).
+        var cleared = await SensitiveClipboard.CopyAsync(clipboard, text);
+        var copiedMessage = $"Copied {what} to the clipboard. It is cleared in {SensitiveClipboard.ClearAfter.TotalSeconds:0} seconds unless something else is copied first.";
+        StatusMessage = copiedMessage;
+
+        // Not awaited here: the command would stay running for the whole minute, and an
+        // AsyncRelayCommand that is running disables its button — every Copy in the panel.
+        _ = ReportClearedAsync(cleared, what, copiedMessage);
+    }
+
+    private async Task ReportClearedAsync(Task<bool> cleared, string what, string copiedMessage)
+    {
+        try
+        {
+            if (await cleared && StatusMessage == copiedMessage)
+            {
+                StatusMessage = $"Cleared {what} from the clipboard.";
+            }
+        }
+        catch (Exception)
+        {
+            // The clipboard went away with the window; there is nothing left to report.
+        }
     }
 
     /// <summary>

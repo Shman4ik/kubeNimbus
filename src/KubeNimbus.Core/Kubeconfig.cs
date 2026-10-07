@@ -427,6 +427,16 @@ public static partial class Kubeconfig
 
             var proxy = clusterName is null ? null : KubeconfigProxy.Create(document.ProxyUrl(clusterName));
 
+            // Checked before any plugin runs, like the proxy: an entry that cannot be honoured
+            // exactly must not cost an SSO prompt first.
+            var userEntry = ContextUser(config, context.Name);
+            var impersonation = userEntry is null ? null : document.ImpersonationOf(userEntry);
+            impersonation?.Validate(userEntry!);
+            if (impersonation is { IsEmpty: true })
+            {
+                impersonation = null;
+            }
+
             var configuration = KubernetesClientConfiguration.BuildConfigFromConfigObject(config, context.Name);
             if (proxy is not null)
             {
@@ -437,8 +447,12 @@ public static partial class Kubeconfig
                 };
             }
 
-            return new ClientSetup(configuration, proxy);
+            return new ClientSetup(configuration, proxy, impersonation);
         });
+
+    /// <summary>The user entry name a context names, or null.</summary>
+    internal static string? ContextUser(K8SConfiguration config, string contextName) =>
+        config.Contexts?.FirstOrDefault(c => c.Name == contextName)?.ContextDetails?.User;
 
     /// <summary>The cluster name and user entry a context points at, when the file has them.</summary>
     internal static (string? ClusterName, User? User) Entry(K8SConfiguration config, string contextName)
@@ -463,5 +477,10 @@ public sealed record KubeconfigReadFailure(string Path, string Message);
 /// <param name="IsFolder">A picked folder; its kubeconfigs follow it as their own candidates.</param>
 public sealed record KubeconfigCandidate(string Path, bool Exists, string Source, bool IsFolder = false);
 
-/// <summary>A client configuration and the proxy it was built with (null when direct).</summary>
-internal sealed record ClientSetup(KubernetesClientConfiguration Configuration, IWebProxy? Proxy);
+/// <summary>
+/// A client configuration, the proxy it was built with (null when direct), and the user
+/// entry's impersonation (null when it asks for none) — the two things the library's
+/// configuration cannot carry.
+/// </summary>
+internal sealed record ClientSetup(
+    KubernetesClientConfiguration Configuration, IWebProxy? Proxy, KubeconfigImpersonation? Impersonation = null);

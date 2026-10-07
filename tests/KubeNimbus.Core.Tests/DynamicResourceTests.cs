@@ -1,5 +1,5 @@
 using System.Net.Sockets;
-using k8s.Models;
+using System.Text.Json;
 using KubeNimbus.Core;
 
 namespace KubeNimbus.Core.Tests;
@@ -207,7 +207,7 @@ public class DynamicResourceTests
         try
         {
             session = await client.ExecAsync(
-                pod.Metadata!.NamespaceProperty!, pod.Metadata.Name!, containerName,
+                pod.Namespace!, pod.Name, containerName,
                 ["/bin/sh", "-c", "echo kubenimbus-exec-ok"], tty: false, ct);
         }
         catch (Exception)
@@ -268,15 +268,17 @@ public class DynamicResourceTests
         await Assert.That(tcp.Connected).IsTrue();
     }
 
-    private static async Task<(V1Pod Pod, string Container)?> FindRunningPodWithContainerAsync(ClusterClient client, CancellationToken ct)
+    private static async Task<(DynamicResource Pod, string Container)?> FindRunningPodWithContainerAsync(ClusterClient client, CancellationToken ct)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        await foreach (var evt in client.WatchPodsAsync("kube-system", cancellationToken: cts.Token))
+        await foreach (var evt in client.WatchResourceAsync(ResourceDescriptor.Pods, "kube-system", cancellationToken: cts.Token))
         {
-            if (evt is { Type: ResourceEventType.Added, Resource.Status.Phase: "Running" } && evt.Resource.Spec?.Containers is { Count: > 0 } containers)
+            if (evt is { Type: ResourceEventType.Added, Resource: { } pod } && ClusterClientTests.Phase(pod) == "Running"
+                && Containers(pod).FirstOrDefault() is { } first
+                && first.TryGetProperty("name", out var name) && name.GetString() is { } containerName)
             {
                 await cts.CancelAsync();
-                return (evt.Resource, containers[0].Name);
+                return (pod, containerName);
             }
         }
 
@@ -286,24 +288,50 @@ public class DynamicResourceTests
     private static async Task<(string Namespace, string Name, int Port)?> FindRunningPodWithTcpPortAsync(ClusterClient client, CancellationToken ct)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        await foreach (var evt in client.WatchPodsAsync("kube-system", cancellationToken: cts.Token))
+        await foreach (var evt in client.WatchResourceAsync(ResourceDescriptor.Pods, "kube-system", cancellationToken: cts.Token))
         {
-            if (evt is not { Type: ResourceEventType.Added, Resource.Status.Phase: "Running" })
+            if (evt is not { Type: ResourceEventType.Added, Resource: { } pod } || ClusterClientTests.Phase(pod) != "Running")
             {
                 continue;
             }
 
-            var port = evt.Resource.Spec?.Containers
-                .SelectMany(c => c.Ports ?? [])
-                .FirstOrDefault(p => p.Protocol is null or "TCP");
+            int? port = null;
+            foreach (var container in Containers(pod))
+            {
+                if (!container.TryGetProperty("ports", out var ports) || ports.ValueKind != JsonValueKind.Array)
+                {
+                    continue;
+                }
 
-            if (port is not null)
+                foreach (var candidate in ports.EnumerateArray())
+                {
+                    var protocol = candidate.TryGetProperty("protocol", out var p) ? p.GetString() : null;
+                    if (protocol is null or "TCP" && candidate.TryGetProperty("containerPort", out var number))
+                    {
+                        port = number.GetInt32();
+                        break;
+                    }
+                }
+
+                if (port is not null)
+                {
+                    break;
+                }
+            }
+
+            if (port is { } found)
             {
                 await cts.CancelAsync();
-                return (evt.Resource.Metadata!.NamespaceProperty!, evt.Resource.Metadata.Name!, port.ContainerPort);
+                return (pod.Namespace!, pod.Name, found);
             }
         }
 
         return null;
     }
+
+    private static IEnumerable<JsonElement> Containers(DynamicResource pod) =>
+        pod.Raw.TryGetProperty("spec", out var spec) && spec.TryGetProperty("containers", out var containers)
+        && containers.ValueKind == JsonValueKind.Array
+            ? containers.EnumerateArray()
+            : [];
 }

@@ -19,6 +19,9 @@ internal static class Program
         args = SmokeTest.Consume(args);
         ApplyIsolatedProfile();
 
+        // Owner-only on Linux and macOS, for profiles an older build created under umask 022.
+        AppDataDirectory.SecureExisting();
+
         if (SmokeTest.IsRequested)
         {
             return SmokeTest.Run(BuildAvaloniaApp(), args);

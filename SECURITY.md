@@ -36,9 +36,24 @@ a vulnerability worth reporting.
 of truth. kubeNimbus reads every `$KUBECONFIG` entry plus `~/.kube/config` at
 connect time and re-resolves through that chain on every connection. Tokens,
 client certificates and exec-plugin output are never copied into application
-storage, and the app's own settings file
-(`WorkspaceStore` — window/tab layout) holds context *names* only, never
-credential material.
+storage. The files the app does write hold context *names*, paths and display
+choices, never credential material; the [privacy policy](PRIVACY.md) lists every
+one of them. On Linux and macOS they are readable by your user only.
+
+**The API server is verified the way `kubectl` verifies it.** Its certificate
+must chain to the kubeconfig's `certificate-authority` — only that CA, never the
+system store, when the kubeconfig names one — and must be valid for the server's
+host name, or for the cluster's `tls-server-name` when it sets one. kubeNimbus
+performs this check itself rather than relying on its Kubernetes client
+library's, for every request including exec and port-forward. A cluster entry
+with `insecure-skip-tls-verify: true` is not verified, as with `kubectl`, and
+the app says so for as long as such a cluster is connected.
+
+**Impersonation in the kubeconfig is honoured.** A user entry's `as`,
+`as-uid`, `as-groups` and `as-user-extra` are sent as `kubectl` sends them, so
+the app acts as the identity the context names, never as the more privileged
+base identity. An entry kubeNimbus cannot send exactly (more than one group, or
+more than one value for an extra) is refused rather than half-honoured.
 
 **Exec-plugin auth runs external programs.** Contexts using
 `aws eks get-token`, `gke-gcloud-auth-plugin`, `azure kubelogin` and friends
@@ -49,7 +64,9 @@ script from one. This is inherent to the kubeconfig format, not specific to
 kubeNimbus. A command named bare (`command: aws`) that is not on the app's own
 `PATH` is also looked for in the directories a login shell adds (`/usr/local/bin`,
 `/opt/homebrew/bin`, `/opt/local/bin`, `~/.local/bin`, `~/bin`) — the same
-program a terminal on the same machine would run. When a credential is rejected
+program a terminal on the same machine would run. A command that is found in
+neither is refused rather than looked up in the current directory, and `PATH`
+entries that are not absolute are ignored. When a credential is rejected
 (401), the plugin is run again rather than its previous output reused.
 
 **The app is read-mostly, and every write is explicit.** Writes happen only
@@ -74,7 +91,9 @@ cannot see webhook or node authorizers. Treat its output accordingly.
 
 **Secret values stay masked until asked for.** Secret `data` renders base64 in
 the YAML editor, as `kubectl` does; decoding is a separate, explicit toggle,
-and env-var references reveal one key at a time on demand.
+and env-var references reveal one key at a time on demand. A decoded value
+copied to the clipboard is kept out of Windows clipboard history and cloud
+clipboard sync, and is cleared after a minute if it is still there.
 
 ## Out of scope
 

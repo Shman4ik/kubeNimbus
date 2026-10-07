@@ -175,10 +175,10 @@ public static class WorkspaceStore
     {
         try
         {
-            var dir = Path.GetDirectoryName(FilePath)!;
-            Directory.CreateDirectory(dir);
+            // Atomically and owner-only (0600 in a 0700 directory on Linux and macOS): the
+            // file names every context and namespace the user has open.
             var json = JsonSerializer.Serialize(settings, WorkspaceJsonContext.Default.WorkspaceSettings);
-            File.WriteAllText(FilePath, json);
+            AppDataDirectory.WriteAllTextAtomically(FilePath, json);
         }
         catch (Exception)
         {

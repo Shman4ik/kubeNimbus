@@ -108,6 +108,36 @@ public class ConnectionStateTests
         }
     }
 
+    /// <summary>
+    /// S1-2: a cluster entry with <c>insecure-skip-tls-verify</c> keeps the status bar on
+    /// screen, saying so, for as long as the tab is connected — the routine "Connected" line
+    /// that hides the bar on a verified tab must not hide this.
+    /// </summary>
+    [Test]
+    public async Task A_tab_connected_without_tls_verification_keeps_saying_so()
+    {
+        TestObjects.RedirectStores();
+        await using var server = new VersionOnlyServer();
+        var unverified = new ClusterTabViewModel(new ClusterContext("slow", "slow", null, "tester", server.Kubeconfig(insecureSkipTlsVerify: true)));
+        var verified = new ClusterTabViewModel(new ClusterContext("slow", "slow", null, "tester", server.Kubeconfig()));
+
+        _ = unverified.ConnectCommand.ExecuteAsync(null);
+        _ = verified.ConnectCommand.ExecuteAsync(null);
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!(unverified.IsConnected && verified.IsConnected) && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(20);
+        }
+
+        await Assert.That(unverified.IsConnected).IsTrue();
+        await Assert.That(unverified.IsTlsUnverified).IsTrue();
+        await Assert.That(unverified.IsStatusWorthShowing).IsTrue();
+
+        await Assert.That(verified.IsConnected).IsTrue();
+        await Assert.That(verified.IsTlsUnverified).IsFalse();
+        await Assert.That(verified.IsStatusWorthShowing).IsFalse();
+    }
+
     [Test]
     public async Task Only_a_lost_watch_offers_reconnect_and_a_later_warning_does_not_inherit_it()
     {
@@ -176,7 +206,7 @@ internal sealed class VersionOnlyServer : IAsyncDisposable
 
     private int Port => ((System.Net.IPEndPoint)_listener.LocalEndpoint).Port;
 
-    public string Kubeconfig()
+    public string Kubeconfig(bool insecureSkipTlsVerify = false)
     {
         var directory = Path.Combine(Path.GetTempPath(), "kubenimbus-app-tests", Guid.NewGuid().ToString("n"));
         Directory.CreateDirectory(directory);
@@ -188,6 +218,7 @@ internal sealed class VersionOnlyServer : IAsyncDisposable
               - name: slow
                 cluster:
                   server: http://127.0.0.1:{Port}
+                  insecure-skip-tls-verify: {(insecureSkipTlsVerify ? "true" : "false")}
             contexts:
               - name: slow
                 context:

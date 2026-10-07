@@ -75,6 +75,19 @@ internal static class ExecPluginPath
         {
             exec.Command = resolved;
         }
+        else if (!string.IsNullOrWhiteSpace(command) && !Path.IsPathFullyQualified(command))
+        {
+            // Never hand a command that was not found to Process.Start: .NET looks for a bare
+            // name in the app's own folder and the current directory before PATH, on Windows
+            // (CreateProcess) and on Unix (Process.ResolvePath) alike, so a file called "aws"
+            // left in whatever folder the app was started from would run with the user's
+            // cluster credentials in its environment. Go refuses the same lookup (exec.ErrDot).
+            throw new ExecCredentialException(
+                $"Could not run the kubeconfig's credential plugin: \"{command}\" was not found on PATH or in the usual install folders.",
+                command,
+                pluginOutput: null,
+                new FileNotFoundException("Credential plugin not found.", command));
+        }
 
         var added = MissingDirectories(pathValue, windows, extra);
         if (added.Count > 0 && !SetsPath(exec))
@@ -95,9 +108,9 @@ internal static class ExecPluginPath
     }
 
     /// <summary>
-    /// The absolute path <paramref name="command"/> should be run as, or null to leave it
-    /// alone — already absolute, empty, or not found anywhere (in which case the client's
-    /// own "could not start" error, which names the command, is the right message).
+    /// The absolute path <paramref name="command"/> should be run as, or null — already
+    /// absolute, empty, or not found anywhere. <see cref="Apply"/> refuses the last case
+    /// itself rather than letting the process start search the current directory.
     /// Pure: every input is passed in, so the Windows rules are testable anywhere.
     /// </summary>
     internal static string? Resolve(
