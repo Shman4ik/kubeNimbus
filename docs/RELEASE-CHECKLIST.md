@@ -226,6 +226,9 @@ in the log. Escape sent by computer-use does not reach the app either; the harne
       footer, `SHA256SUMS.txt` is attached, no `.msix`, `.msi` or `.wixpdb` is attached, and the release
       carries the **Latest** label (a plain `vX.Y.Z` tag does; only a suffixed tag is
       a pre-release).
+- [ ] Download one asset and check both the release attestation and the build
+      provenance: `gh release verify-asset vX.Y.Z <file> --repo Shman4ik/kubeNimbus`
+      and `gh attestation verify <file> --repo Shman4ik/kubeNimbus`.
 - [ ] Microsoft Store: download the `windows-msix` artifact from the release run (kept
       14 days), upload it in Partner Center → kubeNimbus → Packages, and submit.
       The package identity is never edited to make an upload pass. Submit only once

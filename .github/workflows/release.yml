@@ -45,6 +45,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
@@ -407,10 +409,34 @@ jobs:
     # Skipped for a dry run, so the workflow can be exercised end to end without
     # creating anything public.
     if: github.event_name == 'push' || inputs.dry_run == false
+    # Job-level only; the workflow default stays `contents: read`, so no build
+    # leg can write anything. `id-token` and `attestations` are for the
+    # provenance attestation below: the first lets the job ask GitHub's OIDC
+    # provider for the token Sigstore signs against, the second stores the
+    # attestation on the repository.
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
+      # A dispatch builds whatever ref it was started from, and `gh release
+      # create` below then tags and publishes it. A dry run from any branch is
+      # how the workflow itself is tested, but a real release from a branch
+      # would publish code that never went through a PR to main.
+      - name: Refuse a release dispatched from a branch other than main
+        if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
+        shell: bash
+        env:
+          DISPATCH_REF: ${{ github.ref }}
+        run: |
+          echo "::error::A release can only be dispatched from main, and this run was dispatched from $DISPATCH_REF. Re-run with dry_run checked to test a branch, or dispatch from main." >&2
+          exit 1
+
+      # No persisted token: this job holds `contents: write`, and nothing here
+      # runs git against the remote. `gh` reads GH_TOKEN from its step's env.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Resolve version
         id: version
@@ -470,6 +496,20 @@ jobs:
           cat SHA256SUMS.txt
           ls -la
 
+      # Build provenance: a signed statement, in Sigstore's public transparency
+      # log and on the repository, that this workflow run built each file from
+      # this commit. It is what `gh attestation verify <file> --repo
+      # Shman4ik/kubeNimbus` checks (README, "Verifying the download"), and it is
+      # independent of the release page: SHA256SUMS.txt sits beside the files it
+      # vouches for, so anyone able to replace one could replace the other.
+      # Here rather than in the build legs so that a dry run, which never reaches
+      # this job, never puts a throwaway build into the public log; and before
+      # the release exists, so a release is never published without it.
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: artifacts/*
+
       # The CHANGELOG is the source of truth for release notes, so a release
       # can't say something the repository doesn't.
       - name: Extract release notes
@@ -497,19 +537,24 @@ jobs:
             echo
             echo '---'
             echo
-            echo '**Binaries are unsigned.** Windows shows a SmartScreen prompt; macOS quarantines the app (`xattr -dr com.apple.quarantine <path>`). See the [README](https://github.com/Shman4ik/kubeNimbus#download) for per-platform instructions and verifying `SHA256SUMS.txt`.'
+            echo '**Binaries are unsigned.** Windows shows a SmartScreen prompt; macOS quarantines the app (`xattr -dr com.apple.quarantine <path>`). See the [README](https://github.com/Shman4ik/kubeNimbus#download) for per-platform instructions and for verifying the download (`SHA256SUMS.txt`, `gh release verify-asset`, `gh attestation verify`).'
           } >> notes.md
           cat notes.md
 
       # No explicit --latest: GitHub's automatic choice (highest semver among
       # full releases) already gives a new tag the label, and forcing it would
       # hand it to an older tag re-published through workflow_dispatch.
+      # --target matters only for a dispatch, where the tag does not exist yet:
+      # without it the tag lands on main's head at this moment, which is not the
+      # commit the build legs compiled if anything merged during the run. A
+      # pushed tag already exists, and gh leaves it where it is.
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           gh release create '${{ steps.version.outputs.tag }}' \
+            --target "$GITHUB_SHA" \
             --title 'kubeNimbus ${{ steps.version.outputs.version }}' \
             --notes-file notes.md \
             ${{ steps.version.outputs.prerelease == 'true' && '--prerelease' || '' }} \

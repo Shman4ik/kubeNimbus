@@ -116,3 +116,33 @@ Dependency vulnerabilities are treated as security issues. Builds run with
 `NuGetAuditMode=all` and NuGet audit warnings (`NU1902`/`NU1903`/`NU1904`) are
 errors, so a known-vulnerable package fails CI rather than shipping quietly.
 Dependabot watches NuGet and GitHub Actions.
+
+Packages come from nuget.org only. The repository's `nuget.config` clears every
+inherited package source and maps every package ID to nuget.org, so a feed
+listed in a developer's own NuGet configuration cannot supply a package to a
+build of this repository.
+
+## Release integrity
+
+Release binaries are built and published by `.github/workflows/release.yml` on
+GitHub-hosted runners, never on a developer's machine. They are **not
+code-signed** yet: Authenticode and Apple Developer ID signing are planned for
+after 1.0, and until then Windows users who want a signed build can install
+from the Microsoft Store, whose package Microsoft signs. What a download can be
+checked against instead (the commands are in the README, "Verifying the
+download"):
+
+- **`SHA256SUMS.txt`** on the release page. It detects a damaged download, but
+  it sits beside the files it describes and proves nothing on its own.
+- **Release attestations.** Releases are immutable: once published, a release's
+  tag and files cannot be changed, and GitHub signs a record of the files it was
+  published with. `gh release verify-asset` checks a downloaded file against it.
+- **Build provenance.** The release job signs a provenance attestation for every
+  file (Sigstore, recorded in its public transparency log), stating the workflow
+  run and commit that built it. `gh attestation verify` checks it.
+
+Every action a workflow uses is pinned to a full commit SHA. Tools a release
+downloads and runs are pinned by version and SHA-256 and checked before they
+run; today that is appimagetool and the AppImage runtime it embeds. Workflow
+checkouts do not keep the job's token in the working copy, and a real release
+can only be dispatched from `main`.

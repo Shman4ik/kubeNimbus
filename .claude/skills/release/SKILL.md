@@ -67,7 +67,8 @@ unconditionally. So:
    a PR touching only `docs/`, `design/`, `.claude/`, `LICENSE` or `*.md` skips
    every build (except `docs/keyboard-shortcuts.md`, which `ShortcutDocsTests`
    reads), and the AOT job runs only for `src/`, `shared/`, the build-wide props,
-   `global.json` or `ci.yml` itself. It is a job and not `paths-ignore` because
+   `global.json`, `nuget.config` (it decides where the ILCompiler comes from) or
+   `ci.yml` itself. It is a job and not `paths-ignore` because
    `Build & test` is required: a workflow skipped by its trigger never reports
    the check, and the PR would wait for it forever, while a job skipped by its
    own `if:` reports success. The consumers test `!= 'false'`, so a failed
@@ -154,6 +155,40 @@ to walk before tagging is [`docs/RELEASE-CHECKLIST.md`](../../../docs/RELEASE-CH
 - `workflow_dispatch` with `dry_run: true` builds and archives all four RIDs
   without creating anything public — use it after touching the workflow.
 
+### Supply chain of a release (2026-10, security audit block 5)
+
+Four rules, each closing a way a release could ship something nobody reviewed:
+
+1. **A tool a release downloads and runs is pinned by version and SHA-256, and
+   checked before it runs.** `scripts/linux/build-packages.sh` used to fetch
+   appimagetool from its `continuous` release and run it unchecked on both Linux
+   legs, *before* the Checksum step, so a compromised tool could have rewritten
+   that runner's `.AppImage`, `.deb` and `.tar.gz` and `SHA256SUMS.txt` would
+   then have vouched for them. It now fetches a tagged appimagetool and a tagged
+   type2-runtime (appimagetool 1.9.x otherwise downloads the runtime it embeds,
+   from `continuous`, at build time) and verifies both with `sha256sum -c`.
+   Neither upstream release is immutable (1.9.1's assets were re-uploaded two
+   weeks after it was published), which is why a pinned tag alone is not enough.
+   How to move the pin is a comment beside the hashes. A new download in any
+   release step follows the same rule; an action is pinned by commit SHA instead.
+2. **Build provenance is attested in the `release` job only**
+   (`actions/attest-build-provenance`, over `artifacts/*` and `SHA256SUMS.txt`,
+   before `gh release create`). Not in the build legs: a dry run never reaches the
+   `release` job, so it never puts a throwaway build into Sigstore's public
+   transparency log. The job alone holds `id-token: write` and
+   `attestations: write`; the workflow default stays `contents: read`. A dry run
+   therefore cannot exercise the step, and the first real release is its test
+   (`docs/RELEASE-CHECKLIST.md` has the `gh attestation verify` row).
+3. **A real release is dispatched from `main` only.** The `release` job's first
+   step fails a `workflow_dispatch` from any other ref; a dry run from a branch is
+   still how the workflow is tested. `gh release create` passes `--target
+   "$GITHUB_SHA"`, so a dispatched release tags the commit the legs built rather
+   than whatever `main` points at when the job reaches that line.
+4. **Every `actions/checkout` sets `persist-credentials: false`.** Nothing in
+   any workflow runs git against the remote; `gh` reads `GH_TOKEN` from its
+   step's env. A persisted token sits in `.git/config` for every later step,
+   including third-party code, and in the `release` job it can write.
+
 ### Installers (.dmg, .deb, .AppImage) and the Windows zip
 
 A tarball is what a developer wants. Everyone else expects an
@@ -214,7 +249,8 @@ Three things about this are load-bearing:
    14-day retention.
 
 **Not done:** winget manifests, a Homebrew cask, and signing/notarization of any
-kind. The first two are distribution channels that need this to exist first; the
+kind (deferred until after 1.0; build provenance and GitHub's release
+attestations are what a download can be checked against meanwhile). The first two are distribution channels that need this to exist first; the
 third needs a paid certificate and an Apple Developer account.
 
 ### Microsoft Store (MSIX)
