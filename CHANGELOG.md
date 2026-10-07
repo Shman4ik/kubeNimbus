@@ -43,6 +43,27 @@ it as the GitHub Release body, so headings must match tags exactly
   draws "Connecting to …", "No applications found" and "Reading …" over each other on the
   Applications page. While the cluster's resource types are read, the page says only that.
 
+### Security
+
+- The API server's certificate is now verified the way kubectl verifies it — against the
+  kubeconfig's certificate-authority only, and for the server's host name or the cluster's
+  `tls-server-name` — on every request, including exec and port-forward. Previously a
+  certificate signed by the cluster's CA was accepted for any host name.
+- Kubeconfig impersonation (`as`, `as-uid`, `as-groups`, `as-user-extra`) is now sent with
+  every request, so the app acts as the identity the context names, as kubectl does. An entry
+  with more than one group or extra value is refused with an explanation, because it cannot
+  be sent exactly.
+- A cluster with `insecure-skip-tls-verify` now says so in the status bar for as long as it is
+  connected, and in the connection report.
+- A credential plugin that cannot be found is no longer looked up in the current directory,
+  and relative `PATH` entries are ignored.
+- On Linux and macOS the app's settings, workspace, terminal overlays and discovery cache are
+  readable by your user only; settings, workspace and overlays are written atomically.
+- A decoded Secret value copied from the YAML editor is kept out of Windows clipboard history
+  and cloud clipboard sync, and is cleared from the clipboard after a minute if it is still
+  there.
+- Tokens in a credential plugin's error output are redacted before they are shown.
+
 ## [0.6.0] - 2026-10-04
 
 ### Added

@@ -2638,3 +2638,33 @@ showed every row and was not touched.
 
 Checks: the new scenario rendered with the harness's checks (85 tooltips, 0 dead; 0 unnamed
 controls; 0 font failures). Documents only otherwise; no code under `src/` changed.
+
+### Security audit, block 1: connecting, credentials and local files (2026-10-07)
+
+The first block of a staged security audit before 1.0. The main finding was in the client
+library rather than in this repository: `KubernetesClient.Aot`'s certificate check
+(`Kubernetes.CertificateValidationCallBack`, unchanged in upstream's default branch) never
+looks at a host-name mismatch whenever the chain does not build to a system root, which is
+always the case for a cluster CA. Any server certificate the cluster CA had signed was
+therefore accepted for any host name, over HTTP and over the exec and port-forward
+WebSocket, and the bearer token went to whoever presented it. The library is kept (it
+carries the exec-plugin protocol, OIDC and the key formats); its callback is replaced by
+`ApiServerCertificateValidator`, installed by `ApiServerTransport` on both transports, and
+`ApiServerTlsTests` turn red if the replacement is removed. The same pass found that
+kubeconfig impersonation was parsed and never sent, so the app acted as the base user;
+the `Impersonate-*` headers are now sent, and an entry with several groups is refused
+because .NET would join them into one header line. Smaller items: `insecure-skip-tls-verify`
+stays visible in the status bar, a credential plugin is never looked up in the current
+directory, the app's own files are owner-only on Linux and macOS and written atomically,
+a copied Secret value stays out of Windows clipboard history and is cleared after a minute,
+plugin stderr is redacted, and the unused typed pod watch is gone.
+
+Checks: build clean; Core.Tests 742 passed / 61 skipped / 0 failed, App.Tests 500 passed;
+win-x64 NativeAOT publish clean and both smoke scenarios exit 0; the AOT binary refused a
+loopback server presenting a CA-signed certificate for another name, and the server logged
+no request; the privacy clipboard formats were seen on the real Win32 clipboard; full
+screenshot harness green. Mutation checks: removing the validator replacement turned 6 of
+15 `ApiServerTlsTests` red; the impersonation, `tls-server-name`, plugin-lookup, redaction
+and status-bar wiring each turned their own test red. Not verified: the live tests (sandbox
+down), including a live impersonation check (VER-56); the Unix file modes (VER-57); the
+in-app clipboard clear (VER-58).
