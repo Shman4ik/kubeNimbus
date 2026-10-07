@@ -51,6 +51,9 @@ Six things are load-bearing:
    in there. "Confirm before deleting" is read **at the press** (same as
    `YamlEditorTabViewModel.RequestDeleteAsync`, same reason). Scale and restart do not
    consult it: it is a setting about deleting, and scale needs its input step regardless.
+   With it off, a delete on a cluster that is not production goes through
+   `RowActionViewModel.RunNow`, the same path the one-click actions of UI rule 17 take, so
+   the strip is only its result line and names the object it deleted.
    **On a production cluster a delete always asks, whatever the preference says** (security
    block 3, B3-1): the preference is a convenience for clusters where a wrong delete is cheap,
    and it used to reach production too, so the Delete key deleted at once on the one cluster
@@ -104,9 +107,12 @@ text, except scaling a production workload to zero, which is an outage and is th
 
 ## CronJobs: run now, suspend, resume (FEAT-8)
 
-`CronJobActions.cs` (Core) and `ClusterTabViewModel.CronJobs.cs` (App). The three arm the
-same strip, from the row menu and the palette; nothing is always visible. Six things are
-load-bearing:
+`CronJobActions.cs` (Core) and `ClusterTabViewModel.CronJobs.cs` (App). The three land on
+the same strip, from the row menu and the palette; nothing is always visible. Run now and
+resume arm a confirm, because each can start a Job straight away and a Job's side effects
+(a migration, a batch of mail) cannot be taken back; suspend fires on its click, because
+resume takes it back and running Jobs carry on (UI rule 17, revised 2026-10-07). Six things
+are load-bearing:
 
 1. **Run now is `kubectl create job --from=cronjob/…`, byte for byte where it matters.**
    The Job is the CronJob's `jobTemplate.spec` verbatim, with the template's labels, its
@@ -149,4 +155,5 @@ load-bearing:
    place like `NodeActions.SupportsCordon`.
 
 The demo cluster ships one scheduled and one suspended CronJob, so both halves of the slot
-render; the strip refuses in place there like every other action.
+render; the strip refuses in place there like every other action — a suspend with a result
+line saying nothing was sent, run-now and resume with their confirm disabled.

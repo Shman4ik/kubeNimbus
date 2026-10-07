@@ -445,15 +445,16 @@
                      Exactly one of the pair is present, so nothing above or below moves.
                      They appear only on a node: unlike scale and restart, whose kinds a
                      reader might reasonably wonder about, "cordon this ConfigMap" is not
-                     a question anyone has. -->
-                <MenuItem Header="Cordon…" Command="{Binding CordonSelectedCommand}"
+                     a question anyone has. Cordon and uncordon fire on the click and carry
+                     no ellipsis, since each takes the other back (UI rule 17); the drain asks. -->
+                <MenuItem Header="Cordon" Command="{Binding CordonSelectedCommand}"
                           IsVisible="{Binding CanCordonSelectedRow}"
                           ToolTip.Tip="Stop scheduling new pods on this node. Its running pods stay put.">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource CordonIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
-                <MenuItem Header="Uncordon…" Command="{Binding UncordonSelectedCommand}"
+                <MenuItem Header="Uncordon" Command="{Binding UncordonSelectedCommand}"
                           IsVisible="{Binding CanUncordonSelectedRow}"
                           ToolTip.Tip="Put this node back into service — the scheduler starts using it again.">
                   <MenuItem.Icon>
@@ -469,7 +470,8 @@
                 </MenuItem>
                 <!-- CronJob actions (FEAT-8), present only on an object with a Job template,
                      for the reason cordon is present only on a node. Suspend and resume are
-                     one slot, like cordon and uncordon: exactly one is ever shown. -->
+                     one slot, like cordon and uncordon: exactly one is ever shown. Suspend
+                     fires on the click; run-now and resume ask, since each can start a Job. -->
                 <MenuItem Header="Run now…" Command="{Binding TriggerSelectedCommand}"
                           IsVisible="{Binding CanTriggerSelectedRow}"
                           ToolTip.Tip="Create a Job from this CronJob's template now — kubectl create job --from=cronjob">
@@ -477,7 +479,7 @@
                     <PathIcon Data="{StaticResource PlayIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
-                <MenuItem Header="Suspend…" Command="{Binding SuspendSelectedCommand}"
+                <MenuItem Header="Suspend" Command="{Binding SuspendSelectedCommand}"
                           IsVisible="{Binding CanSuspendSelectedRow}"
                           ToolTip.Tip="Stop scheduling new Jobs. Jobs already running carry on.">
                   <MenuItem.Icon>
@@ -494,15 +496,23 @@
                 <!-- Argo CD, on an ordinary Applications list. Present only for that kind,
                      for the same reason cordon is present only on a node: "sync this
                      ConfigMap" is not a question anyone has. The dashboard's own rows carry
-                     the identical pair, and both arm the same strip. -->
-                <MenuItem Header="Sync…" Command="{Binding SyncArgoApplicationCommand}"
+                     the identical three. Sync and refresh fire on the click; sync with prune,
+                     which deletes, asks (UI rule 17). -->
+                <MenuItem Header="Sync" Command="{Binding SyncArgoApplicationCommand}"
                           IsVisible="{Binding CanSyncSelectedArgoApplication}"
-                          ToolTip.Tip="Ask Argo CD to apply the revision this Application targets">
+                          ToolTip.Tip="Ask Argo CD to apply the revision this Application targets. Sent on the click.">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource SyncIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
-                <MenuItem Header="Refresh from Git…" Command="{Binding RefreshArgoApplicationCommand}"
+                <MenuItem Header="Sync with prune…" Command="{Binding SyncArgoApplicationWithPruneCommand}"
+                          IsVisible="{Binding CanSyncSelectedArgoApplication}"
+                          ToolTip.Tip="Sync, and delete the resources Git no longer declares. Asks first.">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource SyncIconGeometry}" Width="13" Height="13" />
+                  </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="Refresh from Git" Command="{Binding RefreshArgoApplicationCommand}"
                           IsVisible="{Binding CanSyncSelectedArgoApplication}"
                           ToolTip.Tip="Ask Argo to re-compare this Application against Git. Changes nothing on the cluster.">
                   <MenuItem.Icon>
@@ -1105,18 +1115,25 @@
                        IsReadOnly="True" GridLinesVisibility="Horizontal" CanUserResizeColumns="True"
                        DoubleTapped="OnArgoRowDoubleTapped">
               <!-- The two actions Argo's own UI leads with, on the row rather than on a
-                   toolbar (UI rule 1). Both arm the confirm strip above the list rather than
-                   firing on the click — a sync applies whatever Git currently says to a live
-                   cluster, which is at least as consequential as a rollout restart. -->
+                   toolbar (UI rule 1). Sync and refresh fire on the click, with the strip
+                   above the list as their result line: a sync applies what Git already
+                   declares and a refresh changes nothing. Sync with prune deletes what Git
+                   no longer declares, so it asks first (UI rule 17). -->
               <DataGrid.ContextFlyout>
                 <MenuFlyout>
-                  <MenuItem Header="Sync…" Command="{Binding SyncArgoApplicationCommand}"
-                            ToolTip.Tip="Ask Argo CD to apply the revision this Application targets">
+                  <MenuItem Header="Sync" Command="{Binding SyncArgoApplicationCommand}"
+                            ToolTip.Tip="Ask Argo CD to apply the revision this Application targets. Sent on the click.">
                     <MenuItem.Icon>
                       <PathIcon Data="{StaticResource SyncIconGeometry}" Width="13" Height="13" />
                     </MenuItem.Icon>
                   </MenuItem>
-                  <MenuItem Header="Refresh…" Command="{Binding RefreshArgoApplicationCommand}"
+                  <MenuItem Header="Sync with prune…" Command="{Binding SyncArgoApplicationWithPruneCommand}"
+                            ToolTip.Tip="Sync, and delete the resources Git no longer declares. Asks first.">
+                    <MenuItem.Icon>
+                      <PathIcon Data="{StaticResource SyncIconGeometry}" Width="13" Height="13" />
+                    </MenuItem.Icon>
+                  </MenuItem>
+                  <MenuItem Header="Refresh" Command="{Binding RefreshArgoApplicationCommand}"
                             ToolTip.Tip="Ask Argo to re-compare this Application against Git. Changes nothing on the cluster.">
                     <MenuItem.Icon>
                       <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="13" Height="13" />

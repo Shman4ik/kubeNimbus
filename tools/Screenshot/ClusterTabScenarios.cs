@@ -989,16 +989,28 @@ internal static class ClusterTabScenarios
     }
 
     /// <summary>
-    /// The armed sync on the demo cluster: the confirm sentence, the prune checkbox — the
-    /// half of a sync that deletes — and the in-place refusal. This is the one Argo
-    /// scenario that runs the real command path end to end, since the demo path is designed
-    /// to work without a client.
+    /// A sync on the demo cluster. It fires on its click (UI rule 17), so the strip is only its
+    /// result line: nothing was sent, named against the Application, with Close. This and the
+    /// prune confirm below run the real command path end to end, since the demo path is
+    /// designed to work without a client.
     /// </summary>
     public static ClusterTabViewModel ArgoSyncUnavailable()
     {
         var tab = ArgoTab();
         tab.SelectedArgoApplication = tab.ArgoApplications.First(a => a.Name == "ledger-api");
         tab.SyncArgoApplicationCommand.Execute(null);
+        return tab;
+    }
+
+    /// <summary>
+    /// Sync with prune, armed on the demo cluster: the half of a sync that deletes, so the one
+    /// sync that asks first — the sentence that says what it deletes, and the in-place refusal.
+    /// </summary>
+    public static ClusterTabViewModel ArgoSyncPrune()
+    {
+        var tab = ArgoTab();
+        tab.SelectedArgoApplication = tab.ArgoApplications.First(a => a.Name == "ledger-api");
+        tab.SyncArgoApplicationWithPruneCommand.Execute(null);
         return tab;
     }
 

@@ -56,8 +56,8 @@ public sealed partial class ClusterClient
     /// </summary>
     /// <param name="prune">
     /// Delete resources that are no longer declared in Git. Off unless somebody has said yes:
-    /// this is the half of a sync that removes things, and it is surfaced in the confirm
-    /// before the patch is sent.
+    /// this is the half of a sync that removes things, so a sync with it is a separate action
+    /// that asks before the patch is sent, where a plain sync fires on its click.
     /// </param>
     /// <remarks>
     /// This is asynchronous in the strongest sense — the API server accepting the patch means

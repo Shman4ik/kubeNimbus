@@ -278,6 +278,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
         () => HostInMainWindow(ClusterTabScenarios.ArgoApplicationDetail(), height: 1000)),
     ("ux-argo-sort", () => HostInMainWindow(ClusterTabScenarios.ArgoDashboard())),
     ("cluster-tab-argo-sync-unavailable", () => HostInMainWindow(ClusterTabScenarios.ArgoSyncUnavailable())),
+    ("cluster-tab-argo-sync-prune", () => HostInMainWindow(ClusterTabScenarios.ArgoSyncPrune())),
     // L1 — the palette's log rows. On the demo cluster, which is the one place the rows
     // come from a real listing (the dataset) rather than a fixture; the states a sandbox
     // cannot produce on demand (in flight, refused, capped, a fleet) are written in
@@ -355,6 +356,8 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("applications-page-rollout", () => HostInMainWindow(ApplicationsScenarios.Page("notification-dispatcher"), mode: ShellMode.Applications)),
     ("applications-page-selfheal", () => HostInMainWindow(ApplicationsScenarios.Page("checkout", editYaml: true), mode: ShellMode.Applications)),
     ("applications-page-restart", () => HostInMainWindow(ApplicationsScenarios.Page("checkout", restart: true), mode: ShellMode.Applications)),
+    ("applications-page-sync", () => HostInMainWindow(ApplicationsScenarios.Page("checkout", sync: true), mode: ShellMode.Applications)),
+    ("applications-page-sync-prune", () => HostInMainWindow(ApplicationsScenarios.Page("checkout", syncPrune: true), mode: ShellMode.Applications)),
     ("ux-applications-keys", () => HostInMainWindow(ApplicationsScenarios.List(), mode: ShellMode.Applications)),
     // VER-19 and ENG-20: keyboard contracts that need a real window (KeyboardChecks).
     ("ux-hotkey-scheme", () => BuildMainWindowContent()),

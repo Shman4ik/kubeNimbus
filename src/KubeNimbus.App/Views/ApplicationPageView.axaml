@@ -35,14 +35,34 @@
         <TextBlock Text="{Binding Subtitle}" FontSize="12" Opacity="0.6" TextTrimming="CharacterEllipsis" />
       </StackPanel>
 
-      <!-- The actions reuse what exists: Restart and Sync arm the shared confirm strip
-           (UI rule 17), Edit YAML opens the existing editor, and Open in Argo CD exists
-           only when argocd-cm names Argo's URL. -->
+      <!-- The actions reuse what exists: Restart arms the shared confirm strip (UI rule 17);
+           Sync fires on its click, since it applies what Git already declares, and the strip
+           is its result line; Sync with prune, which deletes, is on Sync's arrow and asks
+           first. Edit YAML opens the existing editor, and Open in Argo CD exists only when
+           argocd-cm names Argo's URL. -->
       <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Bottom" Margin="0,0,0,2">
         <Button Content="Restart…" Command="{Binding RestartCommand}"
                 ToolTip.Tip="Rollout restart: stamps restartedAt so the controller rolls its pods" />
-        <Button Content="Sync…" Command="{Binding SyncCommand}" IsVisible="{Binding IsArgo}"
-                ToolTip.Tip="Ask Argo CD to sync this Application to what Git declares" />
+        <SplitButton Content="Sync" Command="{Binding SyncCommand}" IsVisible="{Binding IsArgo}"
+                     ToolTip.Tip="Ask Argo CD to sync this Application to what Git declares. Sent on the click.">
+          <!-- The arrow is a template part with no text of its own, so it gets its tooltip
+               (and with it its accessible name) here, or a screen reader reads "button". -->
+          <SplitButton.Styles>
+            <Style Selector="SplitButton /template/ Button#PART_SecondaryButton">
+              <Setter Property="ToolTip.Tip" Value="More sync options: sync with prune" />
+            </Style>
+          </SplitButton.Styles>
+          <SplitButton.Flyout>
+            <MenuFlyout Placement="BottomEdgeAlignedRight">
+              <MenuItem Header="Sync with prune…" Command="{Binding SyncWithPruneCommand}"
+                        ToolTip.Tip="Also delete the resources Git no longer declares. Asks first.">
+                <MenuItem.Icon>
+                  <PathIcon Data="{StaticResource SyncIconGeometry}" Width="13" Height="13" />
+                </MenuItem.Icon>
+              </MenuItem>
+            </MenuFlyout>
+          </SplitButton.Flyout>
+        </SplitButton>
         <Button Content="Edit YAML…" Command="{Binding EditYamlCommand}"
                 ToolTip.Tip="Open the workload's manifest in the YAML editor (Resources mode)" />
         <Button Classes="linkText" Command="{Binding OpenInArgoCommand}" IsVisible="{Binding HasArgoUrl}"
@@ -55,7 +75,8 @@
       </StackPanel>
     </Grid>
 
-    <!-- The armed Restart / Sync. The same strip as the Resources list's, not a copy. -->
+    <!-- Restart's or Sync with prune's confirm, or a Sync's result line. The same strip as
+         the Resources list's, not a copy. -->
     <ContentControl DockPanel.Dock="Top" Content="{Binding PendingAction}" Margin="0,4,0,8" IsVisible="{Binding HasPendingAction}">
       <ContentControl.ContentTemplate>
         <DataTemplate x:DataType="vm:RowActionViewModel">

@@ -612,23 +612,46 @@ Three rules about it:
    `nimbusUi` — which is where to get it back from if this app ever grows a second
    window. Adding one *without* it is the bug to remember: the black-caption-over-white
    -page failure is invisible on a machine whose OS theme happens to match the app's.
-17. **A mutating action arms a strip; it never fires on the click that started it.**
-   Scale, rollout restart and delete all land on one `RowActionViewModel` rendered above
-   the resource list, which names the object, holds the replica box when there is one,
-   and carries the in-flight / succeeded / refused states in an `infoBar` (rule 11).
-   One strip for all three, because the confirm sentence, the busy state, the RBAC 403
-   and the success line are the same work three times over otherwise, and three
-   near-identical confirms is precisely how they drift apart. Four alternatives were
-   considered and rejected, and the reasons are the rule: a **second window** is
-   forbidden outright (rule 16); an **OverlayPanel** covers the very list the action is
-   about, and rule 16b scopes overlays to shell-level surfaces; an **inspector dock tab**
-   spends a third row of chrome inside a ~300px dock (rule 10) on a question with a
-   one-word answer; and a **menu item that acts immediately** puts a destructive verb one
-   twitch away from Edit YAML. The strip is present only while an action is armed, so it
-   costs nothing the rest of the time (rule 1). It is one control, `Views/RowActionStrip`,
-   hosted by the resource list and by the Applications page alike — the page's Restart and
-   Sync arm the very same confirm, not a copy. It is docked *outside* `ContentRows`
-   for the same reason the demo banner is — that grid's row indices are load-bearing for
+17. **A mutating action that destroys, disrupts or cannot be taken back arms a strip and
+   never fires on the click that started it; one that can be taken back fires on the click,
+   and the same strip is its result line.** Every mutating action lands on one
+   `RowActionViewModel` rendered above the resource list, which names the object, holds the
+   replica box when there is one, and carries the in-flight / succeeded / refused states in
+   an `infoBar` (rule 11). One strip for all of them, because the confirm sentence, the busy
+   state, the RBAC 403 and the success line are the same work many times over otherwise,
+   and near-identical confirms are precisely how they drift apart.
+   - **Asks first:** delete, drain, rollout restart (it rolls every pod), Argo's sync with
+     prune (it deletes what Git no longer declares), a CronJob's run-now and its resume
+     (each can start a Job straight away, and a Job's side effects do not come back).
+     Scale is a form rather than a confirm: it needs a number before there is anything to
+     send.
+   - **Fires on the click:** cordon and uncordon (no running pod is touched, and each takes
+     the other back), suspend (running Jobs carry on, and resume takes it back), Argo's sync
+     without prune (it applies what Git already declares) and refresh (nothing on the
+     cluster changes). `RowActionViewModel.FiresOnClick` is the list and
+     `RowActionClickRuleTests` pins it kind by kind; `RunNow` sends the action and hides the
+     question and the prompt row, so the strip is the in-flight line, then the outcome and
+     Close. A refusal is that outcome too, since there is no prompt to go back to; trying
+     again is the same click. A delete with "Confirm before deleting" off takes the same path,
+     except on a production cluster, which always asks (see the paragraph below).
+   - **An ellipsis in a label means it asks**, in menus, the palette and on buttons: "Sync",
+     "Cordon", "Suspend" carry none; "Sync with prune…", "Drain…", "Restart…" do.
+
+   The line used to be "every mutating action asks", and the owner reported the result on
+   the Applications page (2026-10-07): **Sync…** opened a strip whose answer was another
+   **Sync** button, a confirm for an action whose consequence is what Argo does on its own
+   next reconcile. A confirm on everything trains the reader to click through it, which
+   costs the confirms that matter their weight. Four alternatives to the strip were
+   considered and rejected, and the reasons still hold: a **second window** is forbidden
+   outright (rule 16); an **OverlayPanel** covers the very list the action is about, and
+   rule 16b scopes overlays to shell-level surfaces; an **inspector dock tab** spends a
+   third row of chrome inside a ~300px dock (rule 10) on a question with a one-word answer;
+   and a **menu item that acts immediately with nowhere to report** puts a destructive verb
+   one twitch away from Edit YAML and its 403 nowhere. The strip is present only while an
+   action is armed or reporting, so it costs nothing the rest of the time (rule 1). It is
+   one control, `Views/RowActionStrip`, hosted by the resource list and by the Applications
+   page alike — the page's Restart and Sync use the very same strip, not a copy. It is
+   docked *outside* `ContentRows` for the same reason the demo banner is — that grid's row indices are load-bearing for
    `ApplyDockState`. And it is a `ContentControl` + inline `DataTemplate`, not a `Border`
    with `DataContext` and `x:DataType` both set on it: `x:DataType` re-roots an element's
    **own** bindings too, so that combination compiles against the wrong type and renders

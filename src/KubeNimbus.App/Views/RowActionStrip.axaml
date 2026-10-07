@@ -5,10 +5,12 @@
              x:Class="KubeNimbus.App.Views.RowActionStrip"
              x:DataType="vm:RowActionViewModel">
 
-  <!-- The armed-action strip (UI rule 17): the one confirm step for scale, rollout
-       restart, delete, cordon, drain and Argo's sync and refresh. Shared by the Resources
-       list and the Applications page, so the question, the busy state, the RBAC refusal
-       and the success line are the same code in both places — three near-identical
+  <!-- The action strip (UI rule 17): the one confirm step for scale, rollout restart,
+       delete, drain, a CronJob's run-now and resume and Argo's sync with prune, and the
+       result line of the actions that fire on their click (cordon, uncordon, suspend,
+       Argo's sync and refresh), which show no question and no prompt row. Shared by the
+       Resources list and the Applications page, so the question, the busy state, the RBAC
+       refusal and the success line are the same code in both places — three near-identical
        confirms is exactly how they would drift apart. See ClusterTabView for why it is
        hosted through an inline DataTemplate rather than a DataContext on a Border. -->
   <!-- On a production cluster the card's own border takes the production colour
@@ -17,9 +19,10 @@
        alone is information only for someone who knows the code (UI rule 11). -->
   <Border Classes="card actionStrip" Classes.production="{Binding IsProduction}" Padding="12,10">
     <StackPanel Spacing="8">
-      <TextBlock Text="{Binding Question}" TextWrapping="Wrap" FontSize="12.5" />
+      <TextBlock Text="{Binding Question}" TextWrapping="Wrap" FontSize="12.5"
+                 IsVisible="{Binding IsQuestionVisible}" />
 
-      <Border Classes="demoBar" IsVisible="{Binding IsDemo}">
+      <Border Classes="demoBar" IsVisible="{Binding IsDemoNoticeVisible}">
         <DockPanel>
           <PathIcon DockPanel.Dock="Left" Data="{StaticResource AlertCircleIconGeometry}" Width="12" Height="12"
                     VerticalAlignment="Top" Margin="0,2,8,0" />
@@ -76,14 +79,6 @@
           </StackPanel>
         </Border>
       </StackPanel>
-
-      <!-- Prune, on a sync only. It is the half of a sync that deletes —
-           resources that have left Git are removed from the cluster — so it gets
-           the same treatment as the drain's two destructive options above: off
-           by default, on screen rather than in a menu, and said in words. -->
-      <CheckBox IsChecked="{Binding ArgoPrune}" Content="Prune resources removed from Git"
-                IsVisible="{Binding IsArgoSync}" IsEnabled="{Binding IsEditable}"
-                ToolTip.Tip="Argo's --prune. Objects the Application no longer declares are deleted from the cluster." />
 
       <!-- The prompt row: present only while the action is a question. Once it has an
            answer the result line below is the whole strip, and Close sits on it. -->

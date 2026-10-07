@@ -151,12 +151,12 @@ public class ArgoDashboardTests
     // ------------------------------------------------------------------ actions
 
     /// <summary>
-    /// Sync and refresh arm the shared strip rather than firing on the click, and they name
-    /// the Application they would act on — a confirm that does not name its object is not
-    /// one.
+    /// Sync is sent on the click (UI rule 17): it applies what Git already declares. The strip
+    /// above the list is then only its result line, naming the Application it acted on — on
+    /// the demo cluster, to say nothing was sent (demo rule 5).
     /// </summary>
     [Test]
-    public async Task Sync_arms_the_confirm_strip_against_the_selected_application()
+    public async Task Sync_fires_on_the_click_against_the_selected_application()
     {
         var tab = ArgoTab();
         tab.SelectedArgoApplication = tab.ArgoApplications.First(a => a.Name == "checkout");
@@ -166,50 +166,62 @@ public class ArgoDashboardTests
 
         tab.SyncArgoApplicationCommand.Execute(null);
 
-        await Assert.That(tab.PendingRowAction!.Kind).IsEqualTo(RowActionKind.ArgoSync);
-        await Assert.That(tab.PendingRowAction!.IsArgoSync).IsTrue();
-        await Assert.That(tab.PendingRowAction!.Target).Contains("checkout");
-    }
-
-    /// <summary>Prune deletes things, so it is off until somebody says otherwise.</summary>
-    [Test]
-    public async Task Prune_is_off_by_default()
-    {
-        var tab = ArgoTab();
-        tab.SelectedArgoApplication = tab.ArgoApplications[0];
-        tab.SyncArgoApplicationCommand.Execute(null);
-
-        await Assert.That(tab.PendingRowAction!.ArgoPrune).IsFalse();
+        var action = tab.PendingRowAction!;
+        await Assert.That(action.Kind).IsEqualTo(RowActionKind.ArgoSync);
+        await Assert.That(action.FiredOnClick).IsTrue();
+        await Assert.That(action.IsQuestionVisible).IsFalse();
+        await Assert.That(action.IsPromptVisible).IsFalse();
+        await Assert.That(action.IsDone).IsTrue();
+        await Assert.That(action.Message).Contains("checkout");
+        await Assert.That(action.Message).Contains("demo cluster");
     }
 
     /// <summary>
-    /// A refresh changes nothing on the cluster, and the confirm says so — otherwise the
-    /// two actions read as the same thing with different names.
+    /// Prune deletes what Git no longer declares, so a sync with it is its own action and
+    /// asks first, with a sentence that says what it deletes.
     /// </summary>
     [Test]
-    public async Task Refresh_says_it_changes_nothing()
+    public async Task Sync_with_prune_asks_first()
+    {
+        var tab = ArgoTab();
+        tab.SelectedArgoApplication = tab.ArgoApplications.First(a => a.Name == "checkout");
+
+        tab.SyncArgoApplicationWithPruneCommand.Execute(null);
+
+        var action = tab.PendingRowAction!;
+        await Assert.That(action.Kind).IsEqualTo(RowActionKind.ArgoSyncPrune);
+        await Assert.That(action.FiredOnClick).IsFalse();
+        await Assert.That(action.IsQuestionVisible).IsTrue();
+        await Assert.That(action.IsPromptVisible).IsTrue();
+        await Assert.That(action.Question).Contains("deletes");
+        await Assert.That(action.ConfirmLabel).IsEqualTo("Sync and prune");
+    }
+
+    /// <summary>A refresh changes nothing on the cluster, so it is sent on the click too.</summary>
+    [Test]
+    public async Task Refresh_fires_on_the_click()
     {
         var tab = ArgoTab();
         tab.SelectedArgoApplication = tab.ArgoApplications[0];
         tab.RefreshArgoApplicationCommand.Execute(null);
 
         await Assert.That(tab.PendingRowAction!.Kind).IsEqualTo(RowActionKind.ArgoRefresh);
-        await Assert.That(tab.PendingRowAction!.IsArgoSync).IsFalse();
-        await Assert.That(tab.PendingRowAction!.Question).Contains("Nothing on the cluster changes");
+        await Assert.That(tab.PendingRowAction!.FiredOnClick).IsTrue();
     }
 
     /// <summary>
-    /// The demo cluster arms the strip and refuses in place with a reason (demo rule 5) —
-    /// never a hidden action, and never a silent no-op.
+    /// The demo cluster arms the prune confirm and refuses in place with a reason (demo
+    /// rule 5) — never a hidden action, and never a silent no-op.
     /// </summary>
     [Test]
-    public async Task The_demo_cluster_arms_the_strip_and_refuses_in_place()
+    public async Task The_demo_cluster_arms_the_prune_confirm_and_refuses_in_place()
     {
         var tab = ArgoTab();
         tab.SelectedArgoApplication = tab.ArgoApplications[0];
-        tab.SyncArgoApplicationCommand.Execute(null);
+        tab.SyncArgoApplicationWithPruneCommand.Execute(null);
 
         await Assert.That(tab.PendingRowAction!.IsDemo).IsTrue();
+        await Assert.That(tab.PendingRowAction!.IsDemoNoticeVisible).IsTrue();
         await Assert.That(tab.PendingRowAction!.ConfirmCommand.CanExecute(null)).IsFalse();
     }
 
