@@ -2694,3 +2694,26 @@ and the identity check 1; the default parse depth turned 3 of 6 red and the item
 fallback 1; the paste filter 2, and routing Ctrl+Shift+V back to the control's own paste made
 `ux-exec-paste` throw. Not verified: paste against real shells (VER-59), the Argo namespace
 rule against a real Argo CD (VER-60), the marker glyphs on macOS and Linux.
+
+### Security audit, block 3: mutating actions and operator safety (2026-10-07)
+
+The third block of the staged pre-1.0 security audit, PR #146. Four findings, none worse
+than Low–Medium, all confirmed against the code before fixing. With "Confirm before
+deleting" off, the Delete key deleted at once on a production cluster, and an ordinary tab's
+confirm did not name the cluster. A production cluster now always asks, judged per row in a
+fleet list, and every armed strip and the YAML editor's delete confirm name their context,
+with "(production)" and the production colour on the strip's border. The debug container's
+default image is fully qualified and pinned to the busybox 1.37 index digest, read from
+Docker Hub's registry API. Argo CD syncs record the SelfSubjectReview username beside
+"kubeNimbus", and argo-cd.md now says a sync from here is authorised by Kubernetes RBAC
+rather than Argo's roles, while the controller still enforces sync windows. Scale states
+"from N to M" and warns about zero and ten-fold jumps.
+
+Checks: build clean; Core 857 passed / 2 skipped (Unix file modes) / 0 failed against the
+live sandbox, App 534 of 534; win-x64 NativeAOT publish with only the DataGrid warnings,
+both smoke scenarios exit 0; full harness green. Mutation checks: the production gate turned
+4 of 13 `MutatingActionSafetyTests` red, the fleet resolution 2, and the scale question and
+threshold 3 of 16 `ScaleConfirmTests`. Live: SelfSubjectReview names the admin's certificate
+CN and a narrow ServiceAccount, a stand-in Application's sync carries the name, and the
+pinned debug image pulls and runs. Not verified: the initiator and sync windows against a
+real Argo CD (VER-15).
