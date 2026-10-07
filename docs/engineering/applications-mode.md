@@ -32,7 +32,17 @@ the rows are made of.
    `app.kubernetes.io/instance` label and the `argocd.argoproj.io/tracking-id` annotation,
    whose first field (up to the colon) must equal the Application's name, so `checkout`
    never claims what `checkout-v2` tracks. An annotation naming another app outranks the
-   label.
+   label. **The fallback looks only in the namespaces the Application deploys to**
+   (`ApplicationCatalog.DeployNamespaces`: `spec.destination.namespace` and every namespace
+   its `status.resources` lists). It used to look across the cluster, and a label is written
+   by whoever writes the workload while an Application's name is chosen by whoever writes the
+   Application, so an Application named after another team's instance label claimed that
+   team's Deployment — and the page's Restart then targeted it. An Application with no
+   destination namespace and no status yet claims nothing by label until Argo has written what
+   it manages. `status.resources` itself is no stronger: Argo's CRD has no status
+   subresource, so whoever can write an Application can write its status, and pass 1 is as
+   trustworthy as the Application. The confirm strip names the object it is about to restart,
+   which is the check that remains.
 2. **A tracked workload gets no row of its own.** Two rows for one thing would double every
    problem the list exists to point at.
 3. **No Argo API server, and no history of our own.** Argo is read through its CRDs exactly as
@@ -269,7 +279,11 @@ and Argo's own Degraded/Unknown when nothing read from the workloads explains it
    uses (`RowActionStrip`, UI rule 17). Edit YAML opens the existing editor in the Resources
    dock — and when the Argo app has `selfHeal: true`, the strip first says Argo will revert a
    manual edit and names the Git path. "Open in Argo CD" exists only when `argocd-cm`
-   `data.url` was readable (hidden in the demo cluster, which has no Argo UI to open).
+   `data.url` was readable (hidden in the demo cluster, which has no Argo UI to open), and
+   that ConfigMap is read from **Argo's own namespace, never the Application's** unless the two
+   are the same — `ArgoUi.ConfigMapNamespace`, whose rule is in
+   [argo-cd](argo-cd.md#where-open-in-argo-cd-goes). The button's tooltip names the host it
+   opens and where the address came from; only http and https are opened.
 7. **Esc returns to the list with the same row selected**, from anywhere on the page except a
    text box, whose Esc is its own. The page takes focus when it opens, and that is posted at
    Background priority from `ApplicationsView` rather than done on attach: a double-click

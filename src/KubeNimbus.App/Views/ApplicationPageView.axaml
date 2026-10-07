@@ -46,7 +46,7 @@
         <Button Content="Edit YAML…" Command="{Binding EditYamlCommand}"
                 ToolTip.Tip="Open the workload's manifest in the YAML editor (Resources mode)" />
         <Button Classes="linkText" Command="{Binding OpenInArgoCommand}" IsVisible="{Binding HasArgoUrl}"
-                Margin="8,0,0,0" VerticalAlignment="Center" ToolTip.Tip="{Binding ArgoUrl}">
+                Margin="8,0,0,0" VerticalAlignment="Center" ToolTip.Tip="{Binding ArgoUrlTip}">
           <StackPanel Orientation="Horizontal" Spacing="4">
             <TextBlock Text="Open in Argo CD" />
             <PathIcon Data="{StaticResource OpenInNewIconGeometry}" Width="11" Height="11" />

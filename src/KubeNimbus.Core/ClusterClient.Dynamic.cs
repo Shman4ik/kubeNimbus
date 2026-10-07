@@ -33,7 +33,8 @@ public sealed partial class ClusterClient
         WatchAsync(
             listPath: descriptor.CollectionPath(descriptor.Namespaced ? @namespace : null),
             listPage: (continueToken, ct) => ListResourcePageAsync(
-                descriptor, @namespace, continueToken, ct, fieldSelector: fieldSelector, labelSelector: labelSelector),
+                descriptor, @namespace, continueToken, ct, fieldSelector: fieldSelector, labelSelector: labelSelector,
+                skipped: message => connectionLost?.Invoke(new UnreadableObjectException(message))),
             // Watch frames do carry kind/apiVersion, so this is a clone in
             // practice — routing both sources through one factory is what keeps
             // "came from the list" and "came from the watch" indistinguishable.
@@ -125,7 +126,8 @@ public sealed partial class ClusterClient
         CancellationToken ct,
         string? fieldSelector = null,
         LabelSelector? labelSelector = null,
-        int pageSize = DynamicListPageSize)
+        int pageSize = DynamicListPageSize,
+        Action<string>? skipped = null)
     {
         var path = descriptor.CollectionPath(descriptor.Namespaced ? @namespace : null);
         var query = $"?limit={pageSize}";
@@ -136,43 +138,104 @@ public sealed partial class ClusterClient
 
         query += SelectorQuery(fieldSelector, labelSelector);
 
-        using var doc = await GetJsonDocumentAsync(path + query, ct).ConfigureAwait(false);
-        var root = doc.RootElement;
+        using var response = await SendRequestAsync(
+            HttpMethod.Get, path + query, content: null, HttpCompletionOption.ResponseContentRead, ct).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+        var body = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
 
-        var items = new List<DynamicResource>();
-        if (root.TryGetProperty("items", out var itemsEl) && itemsEl.ValueKind == JsonValueKind.Array)
+        JsonDocument doc;
+        try
         {
-            foreach (var item in itemsEl.EnumerateArray())
+            doc = ClusterJson.Parse(body);
+        }
+        catch (JsonException) when (skipped is not null)
+        {
+            // One item the app cannot read (nested past the depth limit) makes the whole page
+            // unparseable as a document. Read it item by item instead, so it costs that item:
+            // a watch that failed here reported a lost connection and retried for ever, with
+            // every object of the kind gone from the list meanwhile.
+            return ReadPageItemByItem(body, descriptor, skipped);
+        }
+
+        using (doc)
+        {
+            var root = doc.RootElement;
+            var items = new List<DynamicResource>();
+            if (root.TryGetProperty("items", out var itemsEl) && itemsEl.ValueKind == JsonValueKind.Array)
             {
-                // A list's items carry no kind/apiVersion (the enclosing
-                // PodList implies them); the descriptor supplies them so a
-                // list-seeded row behaves exactly like a watch-seeded one.
-                items.Add(DynamicResource.FromListItem(item, descriptor));
+                foreach (var item in itemsEl.EnumerateArray())
+                {
+                    // A list's items carry no kind/apiVersion (the enclosing
+                    // PodList implies them); the descriptor supplies them so a
+                    // list-seeded row behaves exactly like a watch-seeded one.
+                    items.Add(DynamicResource.FromListItem(item, descriptor));
+                }
+            }
+
+            string? next = null;
+            string? resourceVersion = null;
+            if (root.TryGetProperty("metadata", out var meta) && meta.ValueKind == JsonValueKind.Object)
+            {
+                if (meta.TryGetProperty("continue", out var c) && c.ValueKind == JsonValueKind.String)
+                {
+                    next = c.GetString();
+                }
+
+                if (meta.TryGetProperty("resourceVersion", out var rv) && rv.ValueKind == JsonValueKind.String)
+                {
+                    resourceVersion = rv.GetString();
+                }
+            }
+
+            return (items, next, resourceVersion);
+        }
+    }
+
+    /// <summary>
+    /// A list page whose body would not parse whole: each item parsed on its own, each that
+    /// still fails named through <paramref name="skipped"/>. Throws the original kind of
+    /// failure when the body is not readable even item by item.
+    /// </summary>
+    private static (IList<DynamicResource> Items, string? Continue, string? ResourceVersion) ReadPageItemByItem(
+        byte[] body, ResourceDescriptor descriptor, Action<string> skipped)
+    {
+        var unreadable = new List<string>();
+        var documents = ClusterJson.ReadListItems(body, unreadable, out var next, out var resourceVersion)
+            ?? throw new JsonException($"The {descriptor.Plural} list could not be read as JSON.");
+        var items = new List<DynamicResource>(documents.Count);
+        foreach (var document in documents)
+        {
+            using (document)
+            {
+                items.Add(DynamicResource.FromListItem(document.RootElement, descriptor));
             }
         }
 
-        string? next = null;
-        string? resourceVersion = null;
-        if (root.TryGetProperty("metadata", out var meta))
+        foreach (var what in unreadable)
         {
-            if (meta.TryGetProperty("continue", out var c))
-            {
-                next = c.GetString();
-            }
-
-            if (meta.TryGetProperty("resourceVersion", out var rv))
-            {
-                resourceVersion = rv.GetString();
-            }
+            skipped($"Skipped {what}: kubeNimbus could not read it.");
         }
 
         return (items, next, resourceVersion);
     }
 
-    /// <summary>Single object fetch, or null on 404.</summary>
+    /// <summary>
+    /// Single object fetch, or null on 404 — and null, with no request sent, for a name or
+    /// namespace no object can have (<see cref="ResourceDescriptor.IsValidPathSegment"/>).
+    /// Names reach this from references other objects carry, so "cannot exist" is answered
+    /// the way "does not exist" is, rather than with a request whose path the dot segments
+    /// have rewritten.
+    /// </summary>
     public async Task<DynamicResource?> ReadResourceAsync(
         ResourceDescriptor descriptor, string? @namespace, string name, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(descriptor);
+        if (!ResourceDescriptor.IsValidPathSegment(name)
+            || (descriptor.Namespaced && @namespace is not null && !ResourceDescriptor.IsValidPathSegment(@namespace)))
+        {
+            return null;
+        }
+
         using var response = await SendRequestAsync(
             HttpMethod.Get, descriptor.ItemPath(@namespace, name), content: null,
             HttpCompletionOption.ResponseContentRead, cancellationToken).ConfigureAwait(false);
@@ -188,7 +251,7 @@ public sealed partial class ClusterClient
         // whole diagnosis — see EnsureSuccessAsync.
         await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
         var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+        using var doc = await ClusterJson.ParseAsync(stream, cancellationToken).ConfigureAwait(false);
         return DynamicResource.FromListItem(doc.RootElement, descriptor);
     }
 
@@ -212,7 +275,7 @@ public sealed partial class ClusterClient
         var body = await SendApplyAsync(
             descriptor, @namespace, name, yaml, fieldManager, force, dryRun: false, cancellationToken).ConfigureAwait(false);
 
-        using var doc = JsonDocument.Parse(body);
+        using var doc = ClusterJson.Parse(body);
         return DynamicResource.FromListItem(doc.RootElement, descriptor);
     }
 
@@ -243,7 +306,7 @@ public sealed partial class ClusterClient
         var body = await SendApplyAsync(
             descriptor, @namespace, name, yaml, fieldManager, force, dryRun: true, cancellationToken).ConfigureAwait(false);
 
-        using var doc = JsonDocument.Parse(body);
+        using var doc = ClusterJson.Parse(body);
         var previewed = DynamicResource.FromListItem(doc.RootElement, descriptor);
         return new ApplyPreview(
             ResourceDiff.Between(live?.Raw, previewed.Raw), previewed, live, StrictValidation: _supportsFieldValidation);
@@ -259,6 +322,9 @@ public sealed partial class ClusterClient
         bool dryRun,
         CancellationToken cancellationToken)
     {
+        // The last guard before a write: an empty or dot-segment name would apply to a path
+        // the URI resolver has rewritten (the collection, or a parent path).
+        ResourceDescriptor.RequireName(name);
         var json = ApplyBody(yaml);
         var path = descriptor.ItemPath(@namespace, name);
 
@@ -416,6 +482,8 @@ public sealed partial class ClusterClient
     public async Task DeleteResourceAsync(
         ResourceDescriptor descriptor, string? @namespace, string name, CancellationToken cancellationToken = default)
     {
+        // An empty name is the collection, where a DELETE is a deletecollection.
+        ResourceDescriptor.RequireName(name);
         using var response = await SendRequestAsync(
             HttpMethod.Delete, descriptor.ItemPath(@namespace, name), content: null,
             HttpCompletionOption.ResponseContentRead, cancellationToken).ConfigureAwait(false);

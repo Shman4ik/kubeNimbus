@@ -117,7 +117,7 @@ public sealed class ExecSession(IStreamDemuxer demuxer, Stream stdIn, Stream std
 
         try
         {
-            using var document = JsonDocument.Parse(text);
+            using var document = ClusterJson.Parse(text);
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object)
             {

@@ -179,7 +179,7 @@ public sealed class ResourceDiff
             writer.WriteEndObject();
         }
 
-        using var document = JsonDocument.Parse(buffer.WrittenMemory);
+        using var document = ClusterJson.Parse(buffer.WrittenMemory);
         return YamlJson.ToYamlString(document.RootElement);
     }
 

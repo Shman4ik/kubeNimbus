@@ -695,6 +695,81 @@ public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
         _writes = _writes.ContinueWith(_ => WriteAsync(e.Data), TaskScheduler.Default).Unwrap();
 
     /// <summary>
+    /// A paste — the Ctrl+Shift+V gesture and the right-click menu's Paste both land here.
+    /// The text goes through <see cref="ExecPaste.Prepare"/> (controls removed, line endings
+    /// as Return, bracketed when the shell asked for it) and then the same
+    /// <see cref="TerminalControlModel.Send(string)"/> a keystroke does.
+    /// </summary>
+    /// <remarks>
+    /// A shell that has not turned on bracketed paste — BusyBox <c>sh</c>, which is most
+    /// containers, never does — runs each pasted line the moment its Return arrives. So a
+    /// paste of more than one line there is armed first, as the pane's own strip (UI rule
+    /// 17's pattern: the gesture that starts it never runs it), and runs on
+    /// <see cref="ConfirmPasteCommand"/>. One line, or any paste to a shell that brackets, is
+    /// what typing it would have done and is sent at once.
+    /// </remarks>
+    public void Paste(string? text)
+    {
+        if (IsDemo || string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        var bracketed = Terminal.Terminal.Engine.BracketedPasteMode;
+        var prepared = ExecPaste.Prepare(text, bracketed);
+        if (prepared.Length == 0)
+        {
+            return;
+        }
+
+        var lines = ExecPaste.LineCount(prepared);
+        if (!bracketed && lines > 1)
+        {
+            PendingPastePrompt =
+                $"Paste {lines} lines? This shell has not turned on bracketed paste, so each line runs as soon as it arrives.";
+            PendingPaste = text;
+            return;
+        }
+
+        PendingPaste = null;
+        Terminal.Send(prepared);
+    }
+
+    /// <summary>The clipboard text waiting for <see cref="ConfirmPasteCommand"/>; null when nothing is armed.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPendingPaste))]
+    private string? _pendingPaste;
+
+    /// <summary>What the armed paste strip says: how many lines, and why it is asking.</summary>
+    [ObservableProperty]
+    private string _pendingPastePrompt = "";
+
+    public bool HasPendingPaste => PendingPaste is not null;
+
+    /// <summary>
+    /// Sends the armed paste. Prepared again here rather than at arming, so a shell that
+    /// turned bracketed paste on meanwhile gets the markers.
+    /// </summary>
+    [RelayCommand]
+    private void ConfirmPaste()
+    {
+        if (PendingPaste is not { } text)
+        {
+            return;
+        }
+
+        PendingPaste = null;
+        var prepared = ExecPaste.Prepare(text, Terminal.Terminal.Engine.BracketedPasteMode);
+        if (prepared.Length > 0)
+        {
+            Terminal.Send(prepared);
+        }
+    }
+
+    [RelayCommand]
+    private void CancelPaste() => PendingPaste = null;
+
+    /// <summary>
     /// The emulator's own geometry, reported after every layout change. Core has had
     /// <c>ResizeAsync</c> since exec shipped and for a long time nothing called it, so
     /// every session ran at the default 80×24 — which is why anything drawing a

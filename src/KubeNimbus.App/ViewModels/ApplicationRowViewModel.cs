@@ -146,7 +146,7 @@ public sealed partial class ApplicationRowViewModel : ObservableObject
         IsSystem = entry.Namespaces.Count > 0 && entry.Namespaces.All(ApplicationScope.IsSystemNamespace);
         Status = assessment.Status;
         StatusText = assessment.Status.Label();
-        Reason = assessment.Reason;
+        Reason = InvisibleCharacters.Reveal(assessment.Reason);
         PodsText = assessment.PodsText;
         PodsTip = assessment.Desired < 0
             ? "Nothing here runs a fixed number of replicas."

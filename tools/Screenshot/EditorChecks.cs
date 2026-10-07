@@ -25,6 +25,9 @@ internal static class EditorChecks
     private const string Url = "https://grafana.example.com/d/checkout";
     private const string Email = "ops@example.com";
 
+    // A right-to-left override in an annotation: drawn as a marker, not obeyed (B2-6).
+    private const string Rlo = "\u202E";
+
     private const string Yaml = $"""
         apiVersion: apps/v1
         kind: Deployment
@@ -33,6 +36,7 @@ internal static class EditorChecks
           annotations:
             link.argocd.argoproj.io/external-link: {Url}
             maintainer: {Email}
+            note: "deny{Rlo}wolla"
         spec:
           template:
             spec:
@@ -128,6 +132,15 @@ internal static class EditorChecks
 
         if (links.Count > 0)
             throw new InvalidOperationException($"{what} drew {string.Join(" and ", links)} as a link, in Blue over the highlighting.");
+
+        // The bidi override is one element of its own, drawn as its marker box, rather than a
+        // character inside a text run that reorders the rest of the line.
+        var marked = textView.VisualLines.SelectMany(line => line.Elements.Select(element => (line, element)))
+            .Any(pair => pair.element is FormattedTextElement && pair.element.DocumentLength == 1
+                         && editor.Document.GetCharAt(pair.line.FirstDocumentLine.Offset + pair.element.RelativeTextOffset) == Rlo[0]);
+        if (!marked)
+            throw new InvalidOperationException(
+                $"{what} drew U+202E as an invisible character that reorders its line; EditorDefaults should mark it.");
 
         // An editor with nothing laid out would pass the line above without having drawn anything.
         if (!lines.Any(l => l.Contains(Url, StringComparison.Ordinal)) || !lines.Any(l => l.Contains(Email, StringComparison.Ordinal)))

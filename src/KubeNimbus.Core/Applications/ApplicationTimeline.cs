@@ -124,8 +124,8 @@ public static class ApplicationTimeline
             {
                 var count = e.Occurrences();
                 items.Add(new TimelineItem(at, TimelineKind.WarningEvent,
-                    count > 1 ? $"{e.Reason()} ×{count}" : e.Reason(),
-                    $"{e.ObjectText()}: {e.Message()}"));
+                    InvisibleCharacters.Reveal(count > 1 ? $"{e.Reason()} ×{count}" : e.Reason()),
+                    InvisibleCharacters.Reveal($"{e.ObjectText()}: {e.Message()}")));
             }
         }
 

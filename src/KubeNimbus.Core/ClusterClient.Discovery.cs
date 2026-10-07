@@ -43,7 +43,10 @@ public sealed partial class ClusterClient
             {
                 var groupName = group.TryGetProperty("name", out var n) ? n.GetString() : null;
                 var version = PreferredVersion(group);
-                if (groupName is not null && version is not null) groupVersions.Add((groupName, version));
+                // Both go into a path unescaped, so a value that could not be part of one is
+                // not requested at all (see ResourceDescriptor.IsSafeDiscoveryValue).
+                if (ResourceDescriptor.IsSafeDiscoveryValue(groupName) && ResourceDescriptor.IsSafeDiscoveryValue(version))
+                    groupVersions.Add((groupName!, version!));
             }
 
         // One request per API group, issued concurrently. These used to go out one after
@@ -120,7 +123,7 @@ public sealed partial class ClusterClient
         if (response.StatusCode is System.Net.HttpStatusCode.NotFound or System.Net.HttpStatusCode.NotAcceptable)
             return null;
         await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+        return ClusterJson.Parse(await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
     }
 
     private static bool IsAggregated(JsonElement root) =>
@@ -141,13 +144,19 @@ public sealed partial class ClusterClient
             var version = versions[0];
             if (!version.TryGetProperty("freshness", out var freshness) || freshness.GetString() != "Current") return null;
             if (!version.TryGetProperty("resources", out var resources)) return null;
+
+            // Group, version and plural go into every path for the kind unescaped, so a group
+            // or version that could not be a path segment is dropped with its resources.
+            var versionName = version.TryGetProperty("version", out var vn) ? vn.GetString() : null;
+            if ((name.Length > 0 && !ResourceDescriptor.IsSafeDiscoveryValue(name))
+                || !ResourceDescriptor.IsSafeDiscoveryValue(versionName)) continue;
             foreach (var resource in resources.EnumerateArray())
             {
                 var plural = resource.GetProperty("resource").GetString() ?? "";
-                if (plural.Length == 0 || plural.Contains('/') || !IsListable(resource, out var verbs)) continue;
+                if (!ResourceDescriptor.IsSafeDiscoveryValue(plural) || !IsListable(resource, out var verbs)) continue;
                 if (!resource.TryGetProperty("responseKind", out var responseKind)
                     || !responseKind.TryGetProperty("kind", out var kind) || string.IsNullOrEmpty(kind.GetString())) continue;
-                result.Add(new ResourceDescriptor(name, version.GetProperty("version").GetString()!,
+                result.Add(new ResourceDescriptor(name, versionName!,
                     kind.GetString()!, plural,
                     resource.TryGetProperty("singularResource", out var singular) ? singular.GetString() ?? plural : plural,
                     resource.TryGetProperty("scope", out var scope) && scope.GetString() == "Namespaced",
@@ -228,7 +237,9 @@ public sealed partial class ClusterClient
             ? (gv.GetString() ?? "v1").Split('/').Last()
             : "v1";
 
-        if (!resourceList.TryGetProperty("resources", out var resources) || resources.ValueKind != JsonValueKind.Array)
+        if (!resourceList.TryGetProperty("resources", out var resources) || resources.ValueKind != JsonValueKind.Array
+            || (group.Length > 0 && !ResourceDescriptor.IsSafeDiscoveryValue(group))
+            || !ResourceDescriptor.IsSafeDiscoveryValue(version))
         {
             return [];
         }
@@ -273,6 +284,11 @@ public sealed partial class ClusterClient
             if (!IsListable(res, out var verbs))
             {
                 continue; // not listable — nothing to show in a table
+            }
+
+            if (!ResourceDescriptor.IsSafeDiscoveryValue(name))
+            {
+                continue; // a plural that could not be a path segment — "..", or "a%2f" — never builds one
             }
 
             yield return new ResourceDescriptor(

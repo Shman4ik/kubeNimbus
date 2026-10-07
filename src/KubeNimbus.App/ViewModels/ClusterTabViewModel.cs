@@ -2655,8 +2655,10 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                         ConnectionWarning = ex.Message;
 
                         // After the warning, which resets it: a lost or refused watch is
-                        // the one warning a reconnect can actually do something about.
-                        ConnectionWarningOffersReconnect = true;
+                        // the one warning a reconnect can actually do something about. An
+                        // object the app could not read is not — the watch is still up, and
+                        // a reconnect would read the same object again.
+                        ConnectionWarningOffersReconnect = ex is not UnreadableObjectException;
                     }),
                     cancellationToken: token).InBatches(cancellationToken: token))
                 {
@@ -2725,7 +2727,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                         }
 
                         ConnectionWarning = $"{ns}: {ex.Message}";
-                        ConnectionWarningOffersReconnect = true;
+                        ConnectionWarningOffersReconnect = ex is not UnreadableObjectException;
 
                         // A refusal is an answer, and the list must not wait for it for ever.
                         if (ex.InnerException is HttpRequestException { StatusCode: System.Net.HttpStatusCode.Forbidden }
@@ -4046,13 +4048,16 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         var resolved = await client.ResolveOwnerAsync(owner, namespaceHint);
         if (resolved is null)
         {
-            ConnectionWarning = $"Owner {owner.Kind}/{owner.Name} could not be resolved (deleted?).";
+            ConnectionWarning = $"{owner.Kind}/{owner.Name} could not be resolved — deleted, replaced, or not a name an object can have.";
             return;
         }
 
+        // The descriptor of the object that came back, not of the reference: ResolveOwnerAsync
+        // has checked they agree, and the inspector must never bind one kind's descriptor to
+        // another kind's object (it opened whatever a rewritten path returned, before).
         var catalog = await client.GetResourceCatalogAsync();
         var descriptor = catalog.FirstOrDefault(d =>
-            d.ApiVersion == owner.ApiVersion && d.Kind == owner.Kind);
+            d.ApiVersion == resolved.ApiVersion && d.Kind == resolved.Kind);
         if (descriptor is null)
         {
             return;

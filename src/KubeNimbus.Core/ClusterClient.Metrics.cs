@@ -48,7 +48,7 @@ public sealed partial class ClusterClient
         var version = await RequireMetricsVersionAsync(cancellationToken).ConfigureAwait(false);
         var path = @namespace is null
             ? $"apis/{MetricsGroup}/{version}/pods"
-            : $"apis/{MetricsGroup}/{version}/namespaces/{Uri.EscapeDataString(@namespace)}/pods";
+            : $"apis/{MetricsGroup}/{version}/namespaces/{ResourceDescriptor.PathSegment(@namespace, "namespace")}/pods";
 
         using var doc = await GetMetricsDocumentAsync(path, cancellationToken).ConfigureAwait(false);
         var result = new List<PodMetrics>();
@@ -68,7 +68,7 @@ public sealed partial class ClusterClient
         string @namespace, string podName, CancellationToken cancellationToken = default)
     {
         var version = await RequireMetricsVersionAsync(cancellationToken).ConfigureAwait(false);
-        var path = $"apis/{MetricsGroup}/{version}/namespaces/{Uri.EscapeDataString(@namespace)}/pods/{Uri.EscapeDataString(podName)}";
+        var path = $"apis/{MetricsGroup}/{version}/namespaces/{ResourceDescriptor.PathSegment(@namespace, "namespace")}/pods/{ResourceDescriptor.PathSegment(podName)}";
 
         using var response = await SendRequestAsync(
             HttpMethod.Get, path, content: null, HttpCompletionOption.ResponseContentRead, cancellationToken)
@@ -81,7 +81,7 @@ public sealed partial class ClusterClient
 
         EnsureMetricsSuccess(response);
         var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+        using var doc = await ClusterJson.ParseAsync(stream, cancellationToken).ConfigureAwait(false);
         return ReadPodMetrics(doc.RootElement);
     }
 
@@ -111,7 +111,7 @@ public sealed partial class ClusterClient
     public async Task<NodeMetrics?> GetNodeMetricsAsync(string nodeName, CancellationToken cancellationToken = default)
     {
         var version = await RequireMetricsVersionAsync(cancellationToken).ConfigureAwait(false);
-        var path = $"apis/{MetricsGroup}/{version}/nodes/{Uri.EscapeDataString(nodeName)}";
+        var path = $"apis/{MetricsGroup}/{version}/nodes/{ResourceDescriptor.PathSegment(nodeName)}";
 
         using var response = await SendRequestAsync(
             HttpMethod.Get, path, content: null, HttpCompletionOption.ResponseContentRead, cancellationToken)
@@ -124,7 +124,7 @@ public sealed partial class ClusterClient
 
         EnsureMetricsSuccess(response);
         var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+        using var doc = await ClusterJson.ParseAsync(stream, cancellationToken).ConfigureAwait(false);
         var usage = ReadUsage(doc.RootElement);
         return new NodeMetrics(ReadName(doc.RootElement), usage.Cpu, usage.Memory);
     }
@@ -140,7 +140,7 @@ public sealed partial class ClusterClient
             HttpMethod.Get, path, content: null, HttpCompletionOption.ResponseContentRead, ct).ConfigureAwait(false);
         EnsureMetricsSuccess(response);
         var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-        return await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
+        return await ClusterJson.ParseAsync(stream, ct).ConfigureAwait(false);
     }
 
     /// <summary>

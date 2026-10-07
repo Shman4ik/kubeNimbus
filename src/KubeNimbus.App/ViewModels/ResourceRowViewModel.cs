@@ -312,10 +312,10 @@ public sealed partial class ResourceRowViewModel : ObservableObject
         _eventFirstSeen = resource.FirstSeen();
         EventType = resource.Type();
         IsWarningEvent = string.Equals(EventType, "Warning", StringComparison.OrdinalIgnoreCase);
-        EventReason = resource.Reason();
+        EventReason = InvisibleCharacters.Reveal(resource.Reason());
         EventCount = resource.Occurrences();
 
-        var objectText = resource.ObjectText();
+        var objectText = InvisibleCharacters.Reveal(resource.ObjectText());
         var involvedNamespace = resource.InvolvedObjectNamespace();
         EventObject = objectText.Length > 0 ? objectText : "—";
         EventObjectTooltip = objectText.Length == 0
@@ -324,7 +324,7 @@ public sealed partial class ResourceRowViewModel : ObservableObject
                 ? $"{objectText} in {ns} — double-click to open it"
                 : $"{objectText} — double-click to open it";
 
-        var message = resource.Message().Trim();
+        var message = InvisibleCharacters.Reveal(resource.Message().Trim());
         EventMessage = OneLine(message);
         EventMessageTooltip = message;
     }
@@ -387,7 +387,7 @@ public sealed partial class ResourceRowViewModel : ObservableObject
 
             var column = _printerColumns[i];
             _printerDates[i] = PrinterColumns.DateValue(column, Resource.Raw);
-            PrinterCells[i].Text = PrinterColumns.Evaluate(column, Resource.Raw, now);
+            PrinterCells[i].Text = InvisibleCharacters.Reveal(PrinterColumns.Evaluate(column, Resource.Raw, now));
         }
     }
 
