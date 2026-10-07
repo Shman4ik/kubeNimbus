@@ -451,8 +451,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             }
         };
 
-        _ = InitializeAsync();
+        Initialization = InitializeAsync();
     }
+
+    /// <summary>The first kubeconfig load and workspace restore, for tests to await.</summary>
+    internal Task Initialization { get; }
 
     /// <summary>
     /// Reads what has to exist before the first tab opens: the session state that
@@ -666,10 +669,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             // as changed on the next focus rather than being missed. Inline: it is a
             // handful of stat calls, the same cost as the search-path refresh below.
             var fingerprint = Kubeconfig.ChainFingerprint(picked);
-            var contexts = await Kubeconfig.LoadContextsAsync(
+            var chain = await Kubeconfig.LoadChainAsync(
                 extraPaths: picked, failures: failures);
+            _lastChain = chain;
             AvailableContexts.Clear();
-            foreach (var ctx in contexts)
+            foreach (var ctx in chain.Contexts)
             {
                 AvailableContexts.Add(ctx);
             }
@@ -730,6 +734,16 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     /// </summary>
     [ObservableProperty]
     private string _kubeconfigDiagnosis = "";
+
+    /// <summary>The last load's chain, for <see cref="AutomaticFirstContext"/>.</summary>
+    private KubeconfigChain? _lastChain;
+
+    /// <summary>
+    /// The context a tab may be opened on without a click on it, or null. Never one from a
+    /// file found only by scanning a picked folder, nor one such a file named current (B4-4):
+    /// see <see cref="KubeconfigChain.AutomaticFirstContext"/>.
+    /// </summary>
+    internal ClusterContext? AutomaticFirstContext() => _lastChain?.AutomaticFirstContext();
 
     /// <summary>What <see cref="Kubeconfig.ChainFingerprint"/> said at the last load, for <see cref="RescanIfChangedAsync"/>.</summary>
     private string? _lastChainFingerprint;
@@ -807,9 +821,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task ReloadContextsAsync()
     {
-        if (await LoadContextsAsync() && Tabs.Count == 0 && AvailableContexts.Count > 0)
+        if (await LoadContextsAsync() && Tabs.Count == 0 && AutomaticFirstContext() is { } first)
         {
-            await AddTabAsync(AvailableContexts[0]);
+            await AddTabAsync(first);
         }
     }
 
@@ -943,9 +957,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             Status = $"No kubeconfig in {Path.GetFileName(path.TrimEnd('/', '\\'))} yet — files added there are picked up when kubeNimbus is next focused.";
         }
 
-        if (Tabs.Count == 0 && AvailableContexts.Count > 0)
+        if (Tabs.Count == 0 && AutomaticFirstContext() is { } first)
         {
-            await AddTabAsync(AvailableContexts.FirstOrDefault(c => c.IsCurrentContext) ?? AvailableContexts[0]);
+            await AddTabAsync(first);
         }
     }
 
@@ -1001,13 +1015,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 }
             }
 
-            if (Tabs.Count == 0 && AvailableContexts.Count > 0)
+            if (Tabs.Count == 0 && AutomaticFirstContext() is { } first)
             {
                 // No workspace yet: open the kubeconfig's current-context — the cluster
                 // kubectl would talk to — rather than whichever context the merge
-                // happened to list first.
-                var current = AvailableContexts.FirstOrDefault(c => c.IsCurrentContext);
-                connects.Add(AddTabAsync(current ?? AvailableContexts[0]));
+                // happened to list first. Never one a picked folder supplied (B4-4).
+                connects.Add(AddTabAsync(first));
             }
             else if (settings.SelectedTabIndex is { } index && index >= 0 && index < Tabs.Count)
             {

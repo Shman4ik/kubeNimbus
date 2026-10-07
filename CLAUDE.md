@@ -815,7 +815,7 @@ Three rules about it:
 
 Each feature's design rules, and the incidents behind them, live in a page of their own under [`docs/engineering/`](docs/engineering/), so a session loads only the ones it touches. **Read the page for any feature you change before changing it**, and keep it current in the same PR — the same discipline as this file.
 
-- [Connecting: credential plugins, proxies, failures and reconnect](docs/engineering/connecting.md) — BuildClientSetupAsync as the one entry→client path, KubeconfigReader instead of the library's YAML loader (banned; it froze YamlDotNet), bare plugin commands found like a login shell would (never in the current directory), proxy-url on both transports, our own certificate check replacing the library's (host name, tls-server-name, skip-verify stated), impersonation headers, plugin stderr redacted, the failure view (step, cause, facts, no credential ever a fact), RefreshCredentialsAsync's in-place swap and 401-as-expiry, kubeconfig folders with rescan-on-focus, AppDataDirectory (owner-only, atomic writes).
+- [Connecting: credential plugins, proxies, failures and reconnect](docs/engineering/connecting.md) — BuildClientSetupAsync as the one entry→client path, KubeconfigReader instead of the library's YAML loader (banned; it froze YamlDotNet), bare plugin commands found like a login shell would (never in the current directory), proxy-url on both transports, our own certificate check replacing the library's (host name, tls-server-name, skip-verify stated), impersonation headers, plugin stderr redacted, the failure view (step, cause, facts, no credential ever a fact), RefreshCredentialsAsync's in-place swap and 401-as-expiry, kubeconfig folders with rescan-on-focus (a folder's context is never opened on its own), AppDataDirectory (owner-only, atomic writes, a random per-process fallback).
 - [The Applications mode](docs/engineering/applications-mode.md) — The first screen: apps (Argo or bare workloads) with health and a reason from Core's deterministic rules, per-namespace fallback under narrow RBAC, its own namespace picker (one or several, namespaces from the rows, starts no watch) and maintained header sort, the application page (findings with quoted evidence, pods, linked resources, timeline, what changed, embedded logs), the kubelet's one-run-per-container log rule, DemoData.Now.
 - [Multi-pod logs (one workload, one stream)](docs/engineering/multi-pod-logs.md) — WorkloadLogsTabViewModel: selector-resolved pods, per-pod tail budget, 50-stream cap, two-stage timestamp merge; and what both log panes say when a follow ends (LogStreamEnd reads the pod).
 - [One click to logs from the row, and logs opened full-size](docs/engineering/row-logs-and-maximized.md) — The row's logs icon (hover/selected, IsVisible style, Shift+click), Shift+L, the "Open logs maximized" preference read by OpenLogsForAsync, Esc restore; L3's logs from every list that names a pod (OpenNamedLogs, RowLogsGesture, stated "gone").
@@ -839,7 +839,7 @@ Each feature's design rules, and the incidents behind them, live in a page of th
 - [Networking: Service, Ingress and NetworkPolicy panes, and the list columns](docs/engineering/networking-detail.md) — Service pane joins selector-matched pods to EndpointSlice endpoints (slices by the `kubernetes.io/service-name` label, not owner refs; no verdict before both watches sync; the three degenerate shapes as three sentences); Ingress routes with a URL built from a validated host, never copied; NetworkPolicy rules in words with the empty selector meaning every pod; kubectl's list columns for Ingress/Endpoints/EndpointSlice/NetworkPolicy; Gateway API filed under Network by group.
 - [Node operations (detail, cordon / uncordon, drain)](docs/engineering/node-operations.md) — Node detail (System card, Events by kind+name, measured Usage vs allocatable), cordon/uncordon, drain: allocatable math, eviction plan table, partial-drain lifetime; pods-on-node and the drain are one field-selected watch, not a poll.
 - [The exec terminal](docs/engineering/exec-terminal.md) — SvcSystems.UI.Terminal over XTerm.NET: bytes in/out, stateful UTF-8 decoder, keyboard ownership, reverse-video defect; paste filtered, bracketed when asked and armed when multi-line into a shell that did not ask; shells by the pod's OS (powershell/cmd on Windows nodes), "no shell" as a verdict over every attempt, and the debug container (kubectl debug's ephemeral container: SYS_PTRACE with a Pod Security fallback, watched start, reuse).
-- [The machine's own terminal ("open a terminal on this cluster")](docs/engineering/machine-terminal.md) — TerminalLauncher: one-key overlay kubeconfig, env-inheritance trap on wt.exe/open, per-platform launch.
+- [The machine's own terminal ("open a terminal on this cluster")](docs/engineering/machine-terminal.md) — TerminalLauncher: one-key overlay kubeconfig, env-inheritance trap on wt.exe/open, per-platform launch, every candidate started by an absolute path (never found in the current directory).
 - [The apply preview (server-side dry run)](docs/engineering/apply-preview.md) — Server-side dry-run diff, TextDiff/LCS bounds, view modes, strict fieldValidation with pre-1.27 fallback.
 - [Metrics (metrics.k8s.io)](docs/engineering/metrics.md) — metrics.k8s.io via discovery, the one polled API, UsageHistory ring and Sparkline.
 - [Helm release browsing (read-only)](docs/engineering/helm-releases.md) — Reading Helm 3 release Secrets (base64+gzip) with no Helm binary, a decompression cap with unreadable releases listed and explained; synthetic sidebar kind.
@@ -987,7 +987,9 @@ workspace the index of the tab in front, so a restart lands where you left off i
 of on Pods in all namespaces on every tab. With nothing saved, a tab opens on the
 kubeconfig context's own `namespace` (what kubectl would use), and the first launch
 opens the chain's `current-context` rather than whichever context the merge listed
-first. `ClusterTabViewModel.ApplyInitialView` is the one place that decides, and
+first — unless a picked folder supplied it or named it current, in which case nothing opens on
+its own (B4-4, `KubeconfigChain.AutomaticFirstContext`; see
+[connecting](docs/engineering/connecting.md)). `ClusterTabViewModel.ApplyInitialView` is the one place that decides, and
 `ClusterTabInitialViewTests` pins it — including that a saved namespace missing from a
 namespace list that *was* read is not opened (it was deleted), while one missing because
 listing was refused by RBAC is added and selected.
@@ -1020,13 +1022,17 @@ Five rules:
    reading).
 4. **Nothing here may become a credential** (rule 4). `KubeconfigPaths` (files *or
    folders* — a folder contributes every kubeconfig in it on each search) is the closest
-   it comes and is paths only, re-resolved through the chain at connect time. The
+   it comes and is paths only, re-resolved through the chain at connect time. A folder trusts
+   every kubeconfig dropped into it, so a context found only through one is listed but never
+   connected to without a click (B4-4). The
    preferences page says so in the panel, which is where someone would worry about it.
 5. **`AppSettingsStore.DirectoryOverride`** exists for the screenshot harness, same as
    `WorkspaceStore.DirectoryOverride` and for a stronger reason: the preferences a
    scenario touches are exactly the ones the developer running it has chosen for
    themselves. Without an override, both files — and the discovery cache and the terminal
-   overlays — live under `AppDataDirectory`, which never resolves to a relative path:
+   overlays — live under `AppDataDirectory`, which never resolves to a relative path, nor to a fixed
+   name in a shared temp directory (its last-resort fallback is a fresh random directory per
+   process, B4-2):
    `GetFolderPath` returns `""` for a folder that does not exist yet, and on a fresh Linux
    `HOME` that used to put the discovery cache in the current directory (ENG-39).
 

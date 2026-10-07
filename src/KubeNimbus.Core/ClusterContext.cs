@@ -42,6 +42,14 @@ public sealed record ClusterContext(
     public bool IsCurrentContext { get; init; }
 
     /// <summary>
+    /// True when the file this context came from was reached only by scanning a picked
+    /// folder — not named as a file, in <c>$KUBECONFIG</c> or as <c>~/.kube/config</c>. The
+    /// app never opens such a context on its own (<see cref="KubeconfigChain.AutomaticFirstContext"/>):
+    /// anyone who can write to the folder chose what its exec plugin runs.
+    /// </summary>
+    public bool FromFolderScan { get; init; }
+
+    /// <summary>
     /// The one demo context. Named so that nothing about it reads like a real
     /// cluster — and so <c>ClusterEnvironments.Classify</c> lands it on
     /// <see cref="ClusterEnvironment.Development"/> rather than anywhere near

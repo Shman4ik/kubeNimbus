@@ -90,12 +90,82 @@ public class KubeconfigFolderTests
         await Assert.That(entry.Source).IsEqualTo(Kubeconfig.PickedSource);
     }
 
+    // ------------------------------------------- B4-4: what the app may open by itself
+
+    /// <summary>
+    /// A file found only by scanning a picked folder is marked as such, and when it sets the
+    /// chain's current-context — which it does whenever it says one, since picked paths are
+    /// searched first — the chain says so.
+    /// </summary>
+    [Test]
+    public async Task A_folder_file_that_sets_the_current_context_is_marked_and_chosen_by_nobody()
+    {
+        var folder = Folder();
+        Write(folder, "dropped.yaml", "dropped-ctx", current: true);
+
+        var chain = await Kubeconfig.LoadChainAsync(extraPaths: [folder], failures: []);
+
+        await Assert.That(chain.CurrentContext).IsEqualTo("dropped-ctx");
+        await Assert.That(chain.CurrentContextFromFolderScan).IsTrue();
+        await Assert.That(chain.Contexts.Single(c => c.Name == "dropped-ctx").FromFolderScan).IsTrue();
+        await Assert.That(chain.AutomaticFirstContext()).IsNull();
+    }
+
+    /// <summary>
+    /// A file named on its own is the user's, whether or not it also sits in a picked folder
+    /// and whichever of the two was picked first — <c>~/.kube/config</c> under a picked
+    /// <c>~/.kube</c> is the everyday case.
+    /// </summary>
+    [Test]
+    [Arguments(true)]
+    [Arguments(false)]
+    public async Task A_file_named_on_its_own_is_not_a_folder_scan_even_inside_a_picked_folder(bool fileFirst)
+    {
+        var folder = Folder();
+        Write(folder, "config", "own-ctx", current: true);
+        Write(folder, "other.yaml", "other-ctx");
+        var file = Path.Combine(folder, "config");
+
+        var chain = await Kubeconfig.LoadChainAsync(
+            extraPaths: fileFirst ? [file, folder] : [folder, file], failures: []);
+
+        await Assert.That(chain.CurrentContextFromFolderScan).IsFalse();
+        await Assert.That(chain.Contexts.Single(c => c.Name == "own-ctx").FromFolderScan).IsFalse();
+        await Assert.That(chain.Contexts.Single(c => c.Name == "other-ctx").FromFolderScan).IsTrue();
+        await Assert.That(chain.AutomaticFirstContext()?.Name).IsEqualTo("own-ctx");
+    }
+
+    [Test]
+    public async Task The_automatic_first_context_follows_the_rule_in_each_case()
+    {
+        var own = new ClusterContext("own", "c", null, "u", "/own");
+        var scanned = new ClusterContext("scanned", "c", null, "u", "/folder/scanned") { FromFolderScan = true };
+
+        // Named current by a file the user named: that one.
+        await Assert.That(new KubeconfigChain([scanned, own with { IsCurrentContext = true }], "own", false)
+            .AutomaticFirstContext()?.Name).IsEqualTo("own");
+
+        // Named current by a folder file, even one naming the user's own context: nothing.
+        await Assert.That(new KubeconfigChain([scanned, own with { IsCurrentContext = true }], "own", true)
+            .AutomaticFirstContext()).IsNull();
+
+        // Named current by the user's file, but defined first by a folder file (a folder file
+        // shadowing one of the user's names): nothing.
+        await Assert.That(new KubeconfigChain([scanned with { IsCurrentContext = true }, own], "scanned", false)
+            .AutomaticFirstContext()).IsNull();
+
+        // No current-context anywhere: the first context from a named file, never a scanned one.
+        await Assert.That(new KubeconfigChain([scanned, own], null, false).AutomaticFirstContext()?.Name).IsEqualTo("own");
+        await Assert.That(new KubeconfigChain([scanned], null, false).AutomaticFirstContext()).IsNull();
+    }
+
     private static string Folder() => Directory.CreateTempSubdirectory("kubenimbus-kubeconfig-folder").FullName;
 
-    private static void Write(string folder, string name, string context) =>
+    private static void Write(string folder, string name, string context, bool current = false) =>
         File.WriteAllText(Path.Combine(folder, name), $"""
             apiVersion: v1
             kind: Config
+            {(current ? $"current-context: {context}" : "")}
             clusters:
             - name: {context}
               cluster:

@@ -67,7 +67,14 @@ kubeNimbus. A command named bare (`command: aws`) that is not on the app's own
 program a terminal on the same machine would run. A command that is found in
 neither is refused rather than looked up in the current directory, and `PATH`
 entries that are not absolute are ignored. When a credential is rejected
-(401), the plugin is run again rather than its previous output reused.
+(401), the plugin is run again rather than its previous output reused. The
+same holds for the terminal "Open a terminal on this cluster" starts: the
+shells Windows ships are taken from its system folder by full path, and
+every other terminal is found on `PATH` before it is started, never in the
+current directory. A kubeconfig folder added in Preferences trusts every
+kubeconfig placed in it, the same way a directory on `PATH` trusts every
+program in it; kubeNimbus lists the contexts it finds there but never
+connects to one of them on its own.
 
 **The app is read-mostly, and every write is explicit.** Writes happen only
 through actions you take: server-side apply from the YAML editor, delete

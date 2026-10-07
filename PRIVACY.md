@@ -79,6 +79,12 @@ The version from the Microsoft Store can keep these under
 and `…\LocalCache\Local\kubeNimbus` instead. Which one Windows uses depends on how it runs
 packaged apps, so check both.
 
+When no home folder can be found at all (a service account, or a program started with an
+empty environment), both are one new folder under the system's temporary folder, named
+`kubeNimbus-` followed by random characters and readable by your user only. kubeNimbus
+creates a fresh one each time it starts in that state, so preferences are not kept from one
+run to the next there.
+
 | File | What it holds | Encrypted |
 | --- | --- | --- |
 | `settings.json` | Your preferences: theme, keyboard scheme, which sidebar sections are open, sidebar width, log buffer size, metrics refresh interval, whether to confirm deletes and preview applies, whether one click opens an application, interface and code fonts, log display options, and the paths of the kubeconfig files or folders you added. | No |

@@ -164,10 +164,143 @@ public class TerminalLauncherTests
     [Test]
     public async Task WindowsStartsAShellDirectlyAndNeverGoesThroughWindowsTerminal()
     {
-        var executables = Plan(TerminalHostPlatform.Windows).Candidates.Select(c => c.Executable).ToList();
+        var candidates = Plan(TerminalHostPlatform.Windows).Candidates;
+        var executables = candidates.Select(c => Path.GetFileName(c.Executable.Replace('\\', '/'))).ToList();
 
         await Assert.That(executables).IsEquivalentTo(new[] { "pwsh.exe", "powershell.exe", "cmd.exe" });
         await Assert.That(executables.Any(e => e.Contains("wt", StringComparison.OrdinalIgnoreCase))).IsFalse();
+    }
+
+    /// <summary>
+    /// B4-1: the two shells Windows ships are taken from System32 by full path, never looked
+    /// for by name. Windows PowerShell lives in a subfolder of it, not in it.
+    /// </summary>
+    [Test]
+    public async Task WindowsTakesItsOwnShellsFromTheSystemDirectory()
+    {
+        var candidates = Plan(TerminalHostPlatform.Windows).Candidates;
+
+        await Assert.That(candidates[0].Source).IsEqualTo(TerminalExecutableSource.Path);
+        await Assert.That(candidates[1].Source).IsEqualTo(TerminalExecutableSource.SystemDirectory);
+        await Assert.That(candidates[1].Executable).IsEqualTo(@"WindowsPowerShell\v1.0\powershell.exe");
+        await Assert.That(candidates[2].Source).IsEqualTo(TerminalExecutableSource.SystemDirectory);
+        await Assert.That(candidates[2].Executable).IsEqualTo("cmd.exe");
+
+        var system = TempTree();
+        var powershell = Path.Combine(system, "WindowsPowerShell", "v1.0", "powershell.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(powershell)!);
+        await File.WriteAllTextAsync(powershell, "");
+        await File.WriteAllTextAsync(Path.Combine(system, "cmd.exe"), "");
+
+        var resolved = TerminalLauncher.Plan(
+            TerminalHostPlatform.Windows, "payments-prod", Home, State,
+            lookup: new TerminalLookup(PathValue: "", PathExt: null, SystemDirectory: system, Windows: HostIsWindows)).Candidates;
+
+        await Assert.That(resolved[1].ResolvedPath).IsEqualTo(powershell);
+        await Assert.That(resolved[2].ResolvedPath).IsEqualTo(Path.Combine(system, "cmd.exe"));
+    }
+
+    /// <summary>
+    /// B4-1, the central one. With <c>UseShellExecute = false</c> a bare name is looked for in
+    /// the app's folder and the current directory before PATH, so a <c>cmd.exe</c> or a
+    /// <c>pwsh.exe</c> left in a downloads folder the app was started from would run with
+    /// <c>KUBECONFIG</c> pointed at a cluster. Every candidate is resolved to an absolute path
+    /// first, and a planted copy reachable only through the current directory — a relative
+    /// PATH entry, ".", or the current directory itself — is never the one chosen.
+    /// </summary>
+    [Test]
+    public async Task APlantedShellInTheCurrentDirectoryIsNeverTheOneStarted()
+    {
+        var relative = $"kubenimbus-planted-{Guid.NewGuid():N}";
+        var planted = Path.Combine(Environment.CurrentDirectory, relative);
+        Directory.CreateDirectory(planted);
+        try
+        {
+            // "pwsh.exe" is what the Windows candidate names, on any host.
+            const string shell = "pwsh.exe";
+            var xterm = HostExecutable("xterm");
+            await File.WriteAllTextAsync(Path.Combine(planted, shell), "");
+            await File.WriteAllTextAsync(Path.Combine(planted, "cmd.exe"), "");
+            await File.WriteAllTextAsync(Path.Combine(planted, xterm), "");
+
+            var real = TempTree();
+            await File.WriteAllTextAsync(Path.Combine(real, shell), "");
+            await File.WriteAllTextAsync(Path.Combine(real, xterm), "");
+
+            var system = TempTree();
+            await File.WriteAllTextAsync(Path.Combine(system, "cmd.exe"), "");
+
+            // The planted folder is named relatively and comes first, and "." is on PATH too.
+            var lookup = new TerminalLookup(HostPath(".", relative, real), null, system, HostIsWindows);
+
+            var windows = TerminalLauncher.Plan(TerminalHostPlatform.Windows, "c", Home, State, lookup: lookup).Candidates;
+            await Assert.That(windows[0].ResolvedPath).IsEqualTo(Path.Combine(real, shell)).IgnoringCase();
+            await Assert.That(windows[2].ResolvedPath).IsEqualTo(Path.Combine(system, "cmd.exe"));
+
+            var linux = TerminalLauncher.Plan(TerminalHostPlatform.Linux, "c", Home, State, lookup: lookup).Candidates;
+            await Assert.That(linux.Single(c => c.Label == "xterm").ResolvedPath).IsEqualTo(Path.Combine(real, xterm)).IgnoringCase();
+
+            // Every candidate that resolved did so to a fully qualified path outside the planted folder.
+            foreach (var candidate in windows.Concat(linux).Where(c => c.ResolvedPath is not null))
+            {
+                await Assert.That(Path.IsPathFullyQualified(candidate.ResolvedPath!)).IsTrue();
+                await Assert.That(candidate.ResolvedPath!.StartsWith(planted, StringComparison.OrdinalIgnoreCase)).IsFalse();
+            }
+
+            // A $TERMINAL that names the planted file relatively is refused, not resolved against
+            // the current directory.
+            var preferred = TerminalLauncher.Plan(
+                TerminalHostPlatform.Linux, "c", Home, State, preferredTerminal: $"{relative}/{xterm}",
+                lookup: lookup).Candidates[0];
+            await Assert.That(preferred.Source).IsEqualTo(TerminalExecutableSource.Absolute);
+            await Assert.That(preferred.ResolvedPath).IsNull();
+        }
+        finally
+        {
+            Directory.Delete(planted, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// A candidate that does not resolve is skipped rather than started by its bare name, and
+    /// the "nothing could be opened" notice names it as not found.
+    /// </summary>
+    [Test]
+    public async Task ACandidateThatDoesNotResolveIsSkippedAndListedAsNotFound()
+    {
+        var nowhere = new TerminalLookup("", null, Path.Combine(TempTree(), "no-such-system32"), HostIsWindows);
+
+        var candidates = TerminalLauncher.Plan(TerminalHostPlatform.Windows, "c", Home, State, lookup: nowhere).Candidates;
+
+        await Assert.That(candidates.All(c => c.ResolvedPath is null)).IsTrue();
+        await Assert.That(TerminalLauncher.TriedLabels(candidates)).IsEquivalentTo(new[]
+        {
+            "PowerShell 7 (not found)", "Windows PowerShell (not found)", "Command Prompt (not found)",
+        });
+
+        // A system directory that is not a full path is not searched either.
+        var relativeSystem = TerminalLauncher.Plan(
+            TerminalHostPlatform.Windows, "c", Home, State, lookup: nowhere with { SystemDirectory = "System32" }).Candidates;
+        await Assert.That(relativeSystem.All(c => c.ResolvedPath is null)).IsTrue();
+    }
+
+    /// <summary>A fully qualified $TERMINAL is used as it is, when it exists.</summary>
+    [Test]
+    public async Task AFullyQualifiedTerminalVariableIsUsedWhenItExists()
+    {
+        var root = TempTree();
+        var terminal = Path.Combine(root, "myterm");
+        await File.WriteAllTextAsync(terminal, "");
+        var lookup = new TerminalLookup("", null, null, HostIsWindows);
+        var platform = HostIsWindows ? TerminalHostPlatform.Windows : TerminalHostPlatform.Linux;
+
+        var found = TerminalLauncher.Plan(
+            platform, "c", Home, State, preferredTerminal: terminal, lookup: lookup).Candidates[0];
+        var missing = TerminalLauncher.Plan(
+            platform, "c", Home, State, preferredTerminal: terminal + "-gone", lookup: lookup).Candidates[0];
+
+        await Assert.That(found.ResolvedPath).IsEqualTo(terminal);
+        await Assert.That(missing.ResolvedPath).IsNull();
     }
 
     /// <summary>
@@ -182,7 +315,9 @@ public class TerminalLauncherTests
 
         await Assert.That(plan.LauncherScriptPath).IsNotNull();
         await Assert.That(plan.Candidates).Count().IsEqualTo(1);
-        await Assert.That(plan.Candidates[0].Executable).IsEqualTo("open");
+        // By full path (B4-1): a bare "open" would be looked for in the current directory first.
+        await Assert.That(plan.Candidates[0].Executable).IsEqualTo("/usr/bin/open");
+        await Assert.That(plan.Candidates[0].Source).IsEqualTo(TerminalExecutableSource.Absolute);
         await Assert.That(plan.Candidates[0].Arguments)
             .IsEquivalentTo(new[] { "-a", "Terminal", plan.LauncherScriptPath! });
 

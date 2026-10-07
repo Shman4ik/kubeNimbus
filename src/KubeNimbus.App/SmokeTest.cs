@@ -212,8 +212,10 @@ internal static class SmokeTest
     private static void SeedUnreachableCluster()
     {
         _stage = "seeding the unreachable-cluster scenario";
-        _seedDirectory = Path.Combine(Path.GetTempPath(), $"kubenimbus-smoke-{Environment.ProcessId}");
-        Directory.CreateDirectory(_seedDirectory);
+        // A fresh directory with a random name (and mode 0700 on Linux and macOS), never a
+        // predictable one under a shared /tmp: another local user could create that name
+        // first and plant the kubeconfig this scenario then connects with.
+        _seedDirectory = Directory.CreateTempSubdirectory("kubenimbus-smoke-").FullName;
 
         // Port 1 on loopback: nothing listens there, so the connect is refused rather
         // than timing out, and the scenario ends in seconds on every platform. A token
