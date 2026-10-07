@@ -54,6 +54,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # The SDK has to be in place before the manual build below, and pinned by
       # global.json for the same reason every other workflow pins it: the runner

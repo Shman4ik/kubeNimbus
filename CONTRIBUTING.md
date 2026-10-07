@@ -165,8 +165,8 @@ The workflow NativeAOT-publishes for `win-x64`, `linux-x64`, `linux-arm64` and
 installer beside the portable archive — `.dmg`, `.deb` and `.AppImage`; Windows
 gets the portable zip only, since the Store covers installing —
 smoke-launches each of those through its own installed path (the zip unpacked), generates
-`SHA256SUMS.txt`, and creates the GitHub Release with the CHANGELOG section as
-its body. A plain tag (`v0.4.0`) is a full release and takes GitHub's
+`SHA256SUMS.txt`, signs a build-provenance attestation over every file, and
+creates the GitHub Release with the CHANGELOG section as its body. A plain tag (`v0.4.0`) is a full release and takes GitHub's
 **Latest** label; only a tag with a suffix (`v0.4.0-rc.1`) is published as a
 pre-release.
 
@@ -178,9 +178,14 @@ any `dotnet publish` output:
 ./scripts/macos/build-app-bundle.sh publish/app 0.0.0-dev osx-arm64 dist # .app + .dmg
 ```
 
+The Linux script downloads appimagetool and the AppImage runtime from tagged
+upstream releases and refuses to run either unless its SHA-256 matches the one
+written in the script; how to move that pin is a comment beside it.
+
 Run it with `workflow_dispatch` and `dry_run: true` to build and archive
 everything without creating a release — worth doing once if you've touched the
-workflow.
+workflow. A dry run can be dispatched from any branch; a real release
+(`dry_run` unchecked) only from `main`, and the release job fails otherwise.
 
 ### Microsoft Store submission (manual)
 

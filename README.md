@@ -166,6 +166,22 @@ Every release ships `SHA256SUMS.txt`:
 ```bash
 sha256sum -c SHA256SUMS.txt --ignore-missing     # shasum -a 256 -c on macOS
 ```
+
+That file sits on the same page as the downloads, so it catches a damaged
+download but not a replaced one. Two checks with the
+[GitHub CLI](https://cli.github.com/) do not depend on the release page:
+
+```bash
+# The file is the one published in that release. Releases are immutable, and
+# GitHub signs a record of every file a release was published with.
+gh release verify-asset v<version> <file> --repo Shman4ik/kubeNimbus
+
+# The file was built by this repository's release workflow, and from which
+# commit (a build-provenance attestation, on releases after 0.6.0).
+gh attestation verify <file> --repo Shman4ik/kubeNimbus
+```
+
+The binaries are not code-signed yet; see [SECURITY.md](SECURITY.md#release-integrity).
 </details>
 
 Then point it at a cluster — kubeNimbus reads your `$KUBECONFIG` chain and
