@@ -5,7 +5,7 @@
 
 `ArgoCd.cs` + `ClusterClient.ArgoCd.cs` (Core), an `Argo` sidebar section holding a
 GitOps dashboard above that cluster's own Argo kinds, an Application detail pane, and
-Sync / Refresh on the shared confirm strip. It is the feature Lens shipped in
+Sync / Sync with prune / Refresh on the shared action strip. It is the feature Lens shipped in
 2026.8 — "Argo CD in the navigator, detected automatically from the cluster, with
 Sync and Refresh" — with two differences that are the point of doing it here: it is
 **free** (Lens gates Argo CD behind Plus/Pro/Enterprise) and it is **quiet** (no
@@ -72,16 +72,25 @@ Nine things are load-bearing.
    is "Argo CD". The row itself is gated on the *Application kind* existing, because a
    cluster running only Rollouts has an Argo section with no Argo CD in it.
 8. **The detail pane is read-only and the actions stay on the list.** Sync and Refresh
-   arm the strip above the list (UI rule 17), and an action fired from inside a dock tab
-   would arm a strip a maximized inspector is covering. The pane's own Reload button is a
+   report on the strip above the list (UI rule 17), and an action fired from inside a dock
+   tab would report on a strip a maximized inspector is covering. The pane's own Reload button is a
    different thing and says so: it re-reads the object, where Refresh asks Argo to
    re-compare against Git. Managed resources carry the chevron owner chips already use,
    so the Deployment Argo calls Degraded is one click from its own manifest.
-9. **Prune gets the drain's treatment.** It is the half of a sync that *deletes* —
-   resources that have left Git go with it — so it is a checkbox on the strip, off by
-   default, in words rather than in a menu. Terminating a running sync is **not** shipped:
-   it means writing `status.operationState.phase`, which is a status-subresource patch and
-   its own item.
+9. **Sync fires on its click; Sync with prune asks** (2026-10-07, UI rule 17 revised). A
+   sync without prune applies what Git already declares — on an auto-sync Application it is
+   what Argo would do on its own next reconcile — so it is sent on the click and the strip
+   is only its result line. That replaced a Sync button that opened a strip with a second
+   Sync button, which the owner reported as the double click it was. Prune is the half of a
+   sync that *deletes* — resources that have left Git go with it — so it is its own action,
+   `RowActionKind.ArgoSyncPrune`: "Sync with prune…" on the Applications page's Sync arrow,
+   in both row menus and in the palette, arming a confirm whose sentence says what it
+   deletes and where it comes back from. It used to be a checkbox on the sync's strip; with
+   the sync firing on its click there is no strip to hold it, and a checkbox whose unticked
+   state is a one-click action is a confirm for nothing. Refresh changes nothing on the
+   cluster and fires on its click too. Terminating a running sync is **not** shipped: it
+   means writing `status.operationState.phase`, which is a status-subresource patch and its
+   own item.
 
 **Two rendering defects, both found by looking at the rendered pane rather than by any
 test.** The second is the more general one: the detail pane's resource rows are two lines
@@ -105,7 +114,8 @@ live cluster's list goes through, covering every state the dashboard classifies 
 including the two that are easy to get wrong, Synced-but-Degraded and an Application Argo
 cannot compare at all (unreachable repository, no resources, a `ComparisonError`
 condition). Only the sync and refresh requests have no honest offline stand-in, and
-`RowActionViewModel.IsDemo` says so in place with the confirm disabled. **The sandbox
+`RowActionViewModel.IsDemo` says so in place: a sync or refresh ends on a result line saying
+nothing was sent, and the prune confirm is armed with its confirm disabled. **The sandbox
 gained a shape rather than an installation**: `scripts/manifests/70-argocd-crds.yaml`
 declares a stand-in Application CRD with Argo's own group, kind, version and printer
 columns, and `71-argocd-applications.yaml` five Applications in the same states. It

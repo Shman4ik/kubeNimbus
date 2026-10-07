@@ -1453,18 +1453,19 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
             // Node actions, gated the same way: cordon/uncordon on which of the two the
             // node's own spec.unschedulable makes meaningful, drain additionally on the
-            // server serving pods/eviction.
+            // server serving pods/eviction. An ellipsis marks the ones that ask first (UI
+            // rule 17): cordon and uncordon are sent on the click.
             if (rowTab.CanCordonSelectedRow)
             {
                 yield return new PaletteItem(
-                    "Cordon node…", $"{where} · stop scheduling new pods here", "CordonIconGeometry",
+                    "Cordon node", $"{where} · stop scheduling new pods here", "CordonIconGeometry",
                     () => rowTab.CordonSelectedCommand.Execute(null));
             }
 
             if (rowTab.CanUncordonSelectedRow)
             {
                 yield return new PaletteItem(
-                    "Uncordon node…", $"{where} · put it back into service", "CheckIconGeometry",
+                    "Uncordon node", $"{where} · put it back into service", "CheckIconGeometry",
                     () => rowTab.UncordonSelectedCommand.Execute(null));
             }
 
@@ -1488,7 +1489,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             if (rowTab.CanSuspendSelectedRow)
             {
                 yield return new PaletteItem(
-                    "Suspend CronJob…", $"{where} · stop scheduling new Jobs", "PauseIconGeometry",
+                    "Suspend CronJob", $"{where} · stop scheduling new Jobs", "PauseIconGeometry",
                     () => rowTab.SuspendSelectedCommand.Execute(null));
             }
 
@@ -1517,7 +1518,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             }
         }
 
-        // Argo CD's two actions. Their own block rather than one inside the selected-row
+        // Argo CD's actions. Their own block rather than one inside the selected-row
         // section above, because they have two sources: the GitOps dashboard's selected
         // Application (where the resource list has no selection at all) and an ordinary
         // Applications list's selected row. The tab resolves whichever is showing, so this
@@ -1526,11 +1527,15 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             && argoTab.ArgoActionLabel is { } argoWhere)
         {
             yield return new PaletteItem(
-                "Argo CD: sync…", $"{argoWhere} · apply the revision Git declares", "SyncIconGeometry",
+                "Argo CD: sync", $"{argoWhere} · apply the revision Git declares", "SyncIconGeometry",
                 () => argoTab.SyncArgoApplicationCommand.Execute(null));
 
             yield return new PaletteItem(
-                "Argo CD: refresh from Git…", $"{argoWhere} · re-compare, change nothing", "RefreshIconGeometry",
+                "Argo CD: sync with prune…", $"{argoWhere} · also delete what Git no longer declares", "SyncIconGeometry",
+                () => argoTab.SyncArgoApplicationWithPruneCommand.Execute(null));
+
+            yield return new PaletteItem(
+                "Argo CD: refresh from Git", $"{argoWhere} · re-compare, change nothing", "RefreshIconGeometry",
                 () => argoTab.RefreshArgoApplicationCommand.Execute(null));
         }
 

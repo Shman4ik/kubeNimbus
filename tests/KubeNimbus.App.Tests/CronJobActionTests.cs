@@ -6,8 +6,9 @@ namespace KubeNimbus.App.Tests;
 
 /// <summary>
 /// FEAT-8 in the App layer: which of run-now / suspend / resume the selected row offers,
-/// that each arms the shared confirm strip (UI rule 17) and refuses in place on the demo
-/// cluster, that the menu follows a CronJob whose suspend flag the watch has just changed,
+/// that run-now and resume arm the shared confirm strip while suspend fires on its click
+/// (UI rule 17), that each refuses in place on the demo cluster, that the menu follows a
+/// CronJob whose suspend flag the watch has just changed,
 /// and that a Job opens in the workload pane where its pods are.
 /// </summary>
 public class CronJobActionTests
@@ -113,6 +114,43 @@ public class CronJobActionTests
         await Assert.That(action.ConfirmLabel).IsEqualTo("Run now");
         await Assert.That(action.IsDemo).IsTrue();
         await Assert.That(action.ConfirmCommand.CanExecute(null)).IsFalse();
+    }
+
+    /// <summary>
+    /// Suspend is sent on the click (UI rule 17) — resume takes it back — so on the demo
+    /// cluster the strip is the result line saying nothing was sent, with Close, rather than a
+    /// confirm the real cluster would not have asked for.
+    /// </summary>
+    [Test]
+    public async Task Suspend_fires_on_the_click_and_the_demo_cluster_says_nothing_was_sent()
+    {
+        var tab = DemoKind("batch", "CronJob");
+        tab.SelectedRow = Row(tab, "nightly-reconcile");
+
+        tab.SuspendSelectedCommand.Execute(null);
+
+        var action = tab.PendingRowAction!;
+        await Assert.That(action.Kind).IsEqualTo(RowActionKind.Suspend);
+        await Assert.That(action.FiredOnClick).IsTrue();
+        await Assert.That(action.IsPromptVisible).IsFalse();
+        await Assert.That(action.IsDone).IsTrue();
+        await Assert.That(action.Message).Contains("demo cluster");
+        await Assert.That(action.Message).Contains("CronJob/nightly-reconcile");
+    }
+
+    /// <summary>Resume can start a missed run straight away, so it keeps its confirm.</summary>
+    [Test]
+    public async Task Resume_still_asks_first()
+    {
+        var tab = DemoKind("batch", "CronJob");
+        tab.SelectedRow = Row(tab, "quarterly-report");
+
+        tab.ResumeSelectedCommand.Execute(null);
+
+        var action = tab.PendingRowAction!;
+        await Assert.That(action.Kind).IsEqualTo(RowActionKind.Resume);
+        await Assert.That(action.FiredOnClick).IsFalse();
+        await Assert.That(action.IsPromptVisible).IsTrue();
     }
 
     [Test]

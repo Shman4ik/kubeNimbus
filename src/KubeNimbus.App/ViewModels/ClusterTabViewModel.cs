@@ -974,6 +974,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [NotifyCanExecuteChangedFor(nameof(DrainSelectedCommand))]
     [NotifyPropertyChangedFor(nameof(CanSyncSelectedArgoApplication))]
     [NotifyCanExecuteChangedFor(nameof(SyncArgoApplicationCommand))]
+    [NotifyCanExecuteChangedFor(nameof(SyncArgoApplicationWithPruneCommand))]
     [NotifyCanExecuteChangedFor(nameof(RefreshArgoApplicationCommand))]
     private ResourceRowViewModel? _selectedRow;
 
@@ -1368,6 +1369,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanSyncSelectedArgoApplication))]
     [NotifyCanExecuteChangedFor(nameof(SyncArgoApplicationCommand))]
+    [NotifyCanExecuteChangedFor(nameof(SyncArgoApplicationWithPruneCommand))]
     [NotifyCanExecuteChangedFor(nameof(RefreshArgoApplicationCommand))]
     [NotifyCanExecuteChangedFor(nameof(OpenArgoApplicationCommand))]
     private ArgoApplicationRowViewModel? _selectedArgoApplication;
@@ -2370,8 +2372,13 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     public string? ArgoActionLabel =>
         ArgoActionTarget() is { } target ? $"{target.Namespace}/{target.Name}" : null;
 
+    /// <summary>Sync, sent on the click (UI rule 17); the strip above the list is its result line.</summary>
     [RelayCommand(CanExecute = nameof(CanSyncSelectedArgoApplication))]
     private void SyncArgoApplication() => ArmArgoAction(RowActionKind.ArgoSync);
+
+    /// <summary>Sync with prune, which deletes, so it arms the confirm instead of firing.</summary>
+    [RelayCommand(CanExecute = nameof(CanSyncSelectedArgoApplication))]
+    private void SyncArgoApplicationWithPrune() => ArmArgoAction(RowActionKind.ArgoSyncPrune);
 
     [RelayCommand(CanExecute = nameof(CanSyncSelectedArgoApplication))]
     private void RefreshArgoApplication() => ArmArgoAction(RowActionKind.ArgoRefresh);
@@ -2407,6 +2414,10 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         };
 
         PendingRowAction = action;
+        if (RowActionViewModel.FiresOnClick(kind))
+        {
+            action.RunNow();
+        }
     }
 
     /// <summary>Reloads the Helm release list for the selected namespace.</summary>
@@ -3758,13 +3769,14 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     {
         if (ArmRowAction(RowActionKind.Delete) is { } action && !App.LoadSettings().ConfirmDeletes)
         {
-            action.ConfirmCommand.Execute(null);
+            action.RunNow();
         }
     }
 
     // ---------------------------------------------------------------- node actions
     //
-    // Cordon, uncordon and drain, on the same armed strip as scale/restart/delete. They
+    // Cordon, uncordon and drain, on the same strip as scale/restart/delete — the first two
+    // firing on their click, since each takes the other back, and the drain asking. They
     // are node-only and they say so through the same kind of capability check the other
     // three use — with one honest difference, argued in NodeActions.SupportsCordon: there
     // is no discovery signal or object marker for "can be cordoned", because
@@ -3866,6 +3878,11 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         };
 
         PendingRowAction = action;
+        if (RowActionViewModel.FiresOnClick(kind))
+        {
+            action.RunNow();
+        }
+
         return action;
     }
 

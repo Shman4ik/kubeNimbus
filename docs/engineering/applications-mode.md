@@ -275,8 +275,12 @@ and Argo's own Degraded/Unknown when nothing read from the workloads explains it
    https and ssh forms) and Bitbucket Cloud (`branches/compare/<newer>..<older>#diff`); an
    unknown host shows both SHAs, a chart source shows the chart versions, and nothing else is
    guessed. It opens in the system browser.
-6. **Actions reuse what exists.** Restart and Sync arm the very confirm strip the Resources list
-   uses (`RowActionStrip`, UI rule 17). Edit YAML opens the existing editor in the Resources
+6. **Actions reuse what exists.** Restart arms the very confirm strip the Resources list uses
+   (`RowActionStrip`, UI rule 17). Sync fires on its click and the same strip is its result
+   line; it is a `SplitButton` whose arrow holds "Sync with prune…", the one sync that asks
+   (it deletes what Git no longer declares; see [argo-cd](argo-cd.md), item 9). The arrow is a
+   template part with no text, so the view gives it a tooltip through a style, which is also
+   its accessible name. Edit YAML opens the existing editor in the Resources
    dock — and when the Argo app has `selfHeal: true`, the strip first says Argo will revert a
    manual edit and names the Git path. "Open in Argo CD" exists only when `argocd-cm`
    `data.url` was readable (hidden in the demo cluster, which has no Argo UI to open), and
