@@ -23,21 +23,89 @@ public sealed record ResourceDescriptor(
         ? $"api/{Version}/{Plural}"
         : $"apis/{Group}/{Version}/{Plural}";
 
-    /// <summary>List/watch path for a namespace (or cluster-scoped / all-namespaces when null).</summary>
+    /// <summary>
+    /// List/watch path for a namespace (or cluster-scoped / all-namespaces when null).
+    /// Throws <see cref="ArgumentException"/> for a namespace that cannot be a path segment
+    /// (see <see cref="IsValidPathSegment"/>).
+    /// </summary>
     public string CollectionPath(string? @namespace) =>
         Namespaced && @namespace is not null
             ? string.IsNullOrEmpty(Group)
-                ? $"api/{Version}/namespaces/{Uri.EscapeDataString(@namespace)}/{Plural}"
-                : $"apis/{Group}/{Version}/namespaces/{Uri.EscapeDataString(@namespace)}/{Plural}"
+                ? $"api/{Version}/namespaces/{PathSegment(@namespace, "namespace")}/{Plural}"
+                : $"apis/{Group}/{Version}/namespaces/{PathSegment(@namespace, "namespace")}/{Plural}"
             : BasePath;
 
-    /// <summary>Path to one object by name (used for get/patch/delete).</summary>
+    /// <summary>
+    /// Path to one object by name (used for get/patch/delete). Throws
+    /// <see cref="ArgumentException"/> for a name or namespace that cannot be a path segment.
+    /// </summary>
     public string ItemPath(string? @namespace, string name) =>
-        $"{CollectionPath(@namespace)}/{Uri.EscapeDataString(name)}";
+        $"{CollectionPath(@namespace)}/{PathSegment(name, "name")}";
 
     /// <summary>Path to one of this kind's subresources, e.g. <c>…/deployments/web/scale</c>.</summary>
     public string SubresourcePath(string? @namespace, string name, string subresource) =>
         $"{ItemPath(@namespace, name)}/{subresource}";
+
+    /// <summary>
+    /// Whether <paramref name="value"/> can be one segment of an API path: not empty, not
+    /// <c>.</c> or <c>..</c>, and without <c>/</c> or <c>%</c>. That is the API server's own
+    /// rule for an object's name (<c>path.IsValidPathSegmentName</c>), so no object that exists
+    /// fails it.
+    /// </summary>
+    /// <remarks>
+    /// The names that reach these paths are often not ones the app chose: an owner reference,
+    /// the object an Event is about, an env var's ConfigMap, an Argo Application's
+    /// <c>status.resources</c> — strings whoever wrote that object wrote. Escaping is not
+    /// enough on its own: <see cref="Uri.EscapeDataString"/> leaves <c>.</c> alone, and
+    /// <c>new Uri(base, relative)</c> then collapses dot segments, so a name of <c>..</c> turned
+    /// <c>…/namespaces/a/pods/..</c> into <c>…/namespaces/a/</c> and a namespace of <c>..</c> made
+    /// a request cluster-wide; an empty name was the collection itself.
+    /// </remarks>
+    public static bool IsValidPathSegment(string? value) =>
+        !string.IsNullOrEmpty(value)
+        && value is not "." and not ".."
+        && value.AsSpan().IndexOfAny('/', '%') < 0;
+
+    /// <summary>
+    /// Whether a discovery value (group, version, plural) is safe to put in a path unescaped,
+    /// the way <see cref="BasePath"/> does: letters, digits, <c>-</c>, <c>.</c> and <c>_</c>, and
+    /// not a dot segment. Every real group, version and resource name is that shape; a
+    /// discovery document that says otherwise is dropped from the catalog rather than
+    /// trusted to build a path.
+    /// </summary>
+    public static bool IsSafeDiscoveryValue(string? value) =>
+        !string.IsNullOrEmpty(value)
+        && value is not "." and not ".."
+        && value.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '.' or '_');
+
+    /// <summary>Whether every part of <see cref="BasePath"/> is <see cref="IsSafeDiscoveryValue"/> (the group may be empty: the core group).</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool HasSafePath =>
+        (Group.Length == 0 || IsSafeDiscoveryValue(Group)) && IsSafeDiscoveryValue(Version) && IsSafeDiscoveryValue(Plural);
+
+    /// <summary>Throws <see cref="ArgumentException"/> unless <paramref name="name"/> can be an object's name.</summary>
+    public static void RequireName(string? name, string parameterName = "name")
+    {
+        if (!IsValidPathSegment(name))
+        {
+            throw new ArgumentException(InvalidSegmentMessage(name, "name"), parameterName);
+        }
+    }
+
+    /// <summary>
+    /// <paramref name="value"/> escaped as one path segment, or <see cref="ArgumentException"/> when it
+    /// cannot be one (<see cref="IsValidPathSegment"/>). For the paths built outside this type —
+    /// a pod's log, its metrics, a CRD by name.
+    /// </summary>
+    public static string PathSegment(string value, string role = "name") =>
+        IsValidPathSegment(value)
+            ? Uri.EscapeDataString(value)
+            : throw new ArgumentException(InvalidSegmentMessage(value, role), role);
+
+    private static string InvalidSegmentMessage(string? value, string role) =>
+        string.IsNullOrEmpty(value)
+            ? $"An object's {role} cannot be empty."
+            : $"\"{value}\" cannot be an object's {role}: it is a dot segment or contains '/' or '%'.";
 
     /// <summary>
     /// The subresources discovery reported for this kind — <c>"scale"</c>, <c>"status"</c>,

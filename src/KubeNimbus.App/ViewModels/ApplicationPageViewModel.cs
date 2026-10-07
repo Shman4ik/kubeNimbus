@@ -482,6 +482,13 @@ public sealed partial class ApplicationPageViewModel : ObservableObject
     /// <summary>Shown only when <c>argocd-cm</c>'s <c>data.url</c> was readable; otherwise hidden rather than guessed.</summary>
     public bool HasArgoUrl => ArgoUrl is not null;
 
+    /// <summary>
+    /// The button's tooltip: the host it opens, first, and where that address came from — the
+    /// last check against an address somebody other than Argo's admin wrote.
+    /// </summary>
+    [ObservableProperty]
+    private string _argoUrlTip = "";
+
     [RelayCommand(CanExecute = nameof(HasArgoUrl))]
     private void OpenInArgo()
     {
@@ -852,11 +859,18 @@ public sealed partial class ApplicationPageViewModel : ObservableObject
             return;
         }
 
+        // Argo's own namespace, never one the Application's author chose (ArgoUi.ConfigMapNamespace).
+        if (ArgoUi.ConfigMapNamespace(argo, _list.LastSnapshot?.ArgoApplications ?? []) is not { } argoNamespace)
+        {
+            return;
+        }
+
         try
         {
-            var cm = await client.ReadResourceAsync(ResourceDescriptor.ConfigMaps, argo.Namespace, ArgoUi.ConfigMapName, _cts.Token);
+            var cm = await client.ReadResourceAsync(ResourceDescriptor.ConfigMaps, argoNamespace, ArgoUi.ConfigMapName, _cts.Token);
             if (ArgoUi.BaseUrl(cm) is { } baseUrl)
             {
+                ArgoUrlTip = $"Opens {baseUrl.Host} in your browser — the address {ArgoUi.ConfigMapName} in {argoNamespace} names.";
                 ArgoUrl = ArgoUi.ApplicationUrl(baseUrl, argo);
             }
         }
@@ -930,12 +944,12 @@ public sealed partial class FindingViewModel : ObservableObject
 
     internal void Update(Finding finding)
     {
-        Title = finding.Title;
-        Detail = finding.Detail;
+        Title = InvisibleCharacters.Reveal(finding.Title);
+        Detail = InvisibleCharacters.Reveal(finding.Detail);
         IsError = finding.Severity == FindingSeverity.Error;
         IsWarn = finding.Severity == FindingSeverity.Warning;
         IsInfo = finding.Severity == FindingSeverity.Info;
-        var texts = finding.Evidence.Where(e => e.Value.Length > 0 || e.Field.Length > 0).Select(e => e.Text).ToList();
+        var texts = finding.Evidence.Where(e => e.Value.Length > 0 || e.Field.Length > 0).Select(e => InvisibleCharacters.Reveal(e.Text)).ToList();
         if (!texts.SequenceEqual(Evidence))
         {
             Evidence.Clear();

@@ -44,7 +44,7 @@ public sealed partial class ClusterClient
 
         response.EnsureSuccessStatusCode();
         var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+        using var doc = await ClusterJson.ParseAsync(stream, cancellationToken).ConfigureAwait(false);
 
         if (!doc.RootElement.TryGetProperty("status", out var status) || status.ValueKind != JsonValueKind.Object)
         {

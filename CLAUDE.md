@@ -797,7 +797,7 @@ Each feature's design rules, and the incidents behind them, live in a page of th
 - [The Applications mode](docs/engineering/applications-mode.md) — The first screen: apps (Argo or bare workloads) with health and a reason from Core's deterministic rules, per-namespace fallback under narrow RBAC, its own namespace picker (one or several, namespaces from the rows, starts no watch) and maintained header sort, the application page (findings with quoted evidence, pods, linked resources, timeline, what changed, embedded logs), the kubelet's one-run-per-container log rule, DemoData.Now.
 - [Multi-pod logs (one workload, one stream)](docs/engineering/multi-pod-logs.md) — WorkloadLogsTabViewModel: selector-resolved pods, per-pod tail budget, 50-stream cap, two-stage timestamp merge; and what both log panes say when a follow ends (LogStreamEnd reads the pod).
 - [One click to logs from the row, and logs opened full-size](docs/engineering/row-logs-and-maximized.md) — The row's logs icon (hover/selected, IsVisible style, Shift+click), Shift+L, the "Open logs maximized" preference read by OpenLogsForAsync, Esc restore; L3's logs from every list that names a pod (OpenNamedLogs, RowLogsGesture, stated "gone").
-- [Reading a log: find, levels, clear, local time, remembered display](docs/engineering/log-pane-reading.md) — Both log panes: search that finds (highlight, n of m, Enter/Shift+Enter) or filters, Levels with unleveled lines always shown, Clear that keeps the stream, local time with UTC one click away, display toggles in settings.json (never Previous), the default-container annotation, "not started" pods, one logs glyph, terminal colour codes removed (not drawn); and the log-viewer pass — level keyword coloured not the line, earliest/structured/klog severity, stack traces inheriting, NonBacktracking regex and match case, `!word` exclusions, grep -C context, error jump, overview ruler, pinned highlights, JSON lines opened in place.
+- [Reading a log: find, levels, clear, local time, remembered display](docs/engineering/log-pane-reading.md) — Both log panes: search that finds (highlight, n of m, Enter/Shift+Enter) or filters, Levels with unleveled lines always shown, Clear that keeps the stream, local time with UTC one click away, display toggles in settings.json (never Previous), the default-container annotation, "not started" pods, one logs glyph, terminal colour codes removed (not drawn), bidi and zero-width characters shown as markers, a 1 MiB line cap; and the log-viewer pass — level keyword coloured not the line, earliest/structured/klog severity, stack traces inheriting, NonBacktracking regex and match case, `!word` exclusions, grep -C context, error jump, overview ruler, pinned highlights, JSON lines opened in place.
 - [Log severity is three classes, not a brush binding](docs/engineering/log-severity-classes.md) — Why severity is style classes and never a Foreground binding (the invisible-plain-line bug, twice).
 - [Pod detail's Overview tab (conditions, tolerations, QoS, priority, probes)](docs/engineering/pod-overview-tab.md) — Conditions/tolerations/QoS/probes tab: index 4, condition polarity, API-server probe defaults, signature-guarded rebuild.
 - [Requests and limits are text on the Usage tab](docs/engineering/requests-and-limits.md) — Usage tab's declared requests/limits: words not blanks, not gated on metrics.
@@ -816,12 +816,12 @@ Each feature's design rules, and the incidents behind them, live in a page of th
 - [Mutating workload actions (scale, rollout restart, delete, CronJob run/suspend)](docs/engineering/workload-actions.md) — Scale / rollout restart / delete: merge patches, scale subresource, capability from discovery; a CronJob's run-now (kubectl's Job, server-named), suspend/resume, Open Job.
 - [Networking: Service, Ingress and NetworkPolicy panes, and the list columns](docs/engineering/networking-detail.md) — Service pane joins selector-matched pods to EndpointSlice endpoints (slices by the `kubernetes.io/service-name` label, not owner refs; no verdict before both watches sync; the three degenerate shapes as three sentences); Ingress routes with a URL built from a validated host, never copied; NetworkPolicy rules in words with the empty selector meaning every pod; kubectl's list columns for Ingress/Endpoints/EndpointSlice/NetworkPolicy; Gateway API filed under Network by group.
 - [Node operations (detail, cordon / uncordon, drain)](docs/engineering/node-operations.md) — Node detail (System card, Events by kind+name, measured Usage vs allocatable), cordon/uncordon, drain: allocatable math, eviction plan table, partial-drain lifetime; pods-on-node and the drain are one field-selected watch, not a poll.
-- [The exec terminal](docs/engineering/exec-terminal.md) — SvcSystems.UI.Terminal over XTerm.NET: bytes in/out, stateful UTF-8 decoder, keyboard ownership, reverse-video defect; shells by the pod's OS (powershell/cmd on Windows nodes), "no shell" as a verdict over every attempt, and the debug container (kubectl debug's ephemeral container: SYS_PTRACE with a Pod Security fallback, watched start, reuse).
+- [The exec terminal](docs/engineering/exec-terminal.md) — SvcSystems.UI.Terminal over XTerm.NET: bytes in/out, stateful UTF-8 decoder, keyboard ownership, reverse-video defect; paste filtered, bracketed when asked and armed when multi-line into a shell that did not ask; shells by the pod's OS (powershell/cmd on Windows nodes), "no shell" as a verdict over every attempt, and the debug container (kubectl debug's ephemeral container: SYS_PTRACE with a Pod Security fallback, watched start, reuse).
 - [The machine's own terminal ("open a terminal on this cluster")](docs/engineering/machine-terminal.md) — TerminalLauncher: one-key overlay kubeconfig, env-inheritance trap on wt.exe/open, per-platform launch.
 - [The apply preview (server-side dry run)](docs/engineering/apply-preview.md) — Server-side dry-run diff, TextDiff/LCS bounds, view modes, strict fieldValidation with pre-1.27 fallback.
 - [Metrics (metrics.k8s.io)](docs/engineering/metrics.md) — metrics.k8s.io via discovery, the one polled API, UsageHistory ring and Sparkline.
-- [Helm release browsing (read-only)](docs/engineering/helm-releases.md) — Reading Helm 3 release Secrets (base64+gzip) with no Helm binary; synthetic sidebar kind.
-- [Argo CD (GitOps in the navigator)](docs/engineering/argo-cd.md) — Argo CD through the Kubernetes API only: sync is a top-level operation patch, sync vs health pills.
+- [Helm release browsing (read-only)](docs/engineering/helm-releases.md) — Reading Helm 3 release Secrets (base64+gzip) with no Helm binary, a decompression cap with unreadable releases listed and explained; synthetic sidebar kind.
+- [Argo CD (GitOps in the navigator)](docs/engineering/argo-cd.md) — Argo CD through the Kubernetes API only: sync is a top-level operation patch, sync vs health pills; where "Open in Argo CD" goes (Argo's own namespace, never one a tenant names).
 - [RBAC access review](docs/engineering/rbac-access-review.md) — SelfSubjectRulesReview, binding provenance, who-can rule scan mirroring API-server matching.
 - [Multi-cluster aggregated (fleet) views](docs/engineering/fleet-views.md) — ClusterFleet/AsyncMerge: per-cluster descriptors, cluster-scoped Reset, cluster-qualified keys.
 - [The status dot, and where it survives](docs/engineering/status-dot.md) — The health dot survives only beside CRD printer columns; the Helm grid is separate.
@@ -1389,6 +1389,29 @@ with `HttpCompletionOption.ResponseHeadersRead`:
   a value`. `ConnectFailureTests` pins all of it.
 - Watch frames are line-delimited JSON, parsed with `System.Text.Json.JsonDocument`
   (AOT-safe) and materialized with source-generated `KubernetesJson.Deserialize`.
+- **Every parse of cluster JSON goes through `ClusterJson`** (depth 256, where
+  `JsonDocument`'s default is 64 and the API server accepts about 10,000). One Argo
+  Application with a `valuesObject` 65 levels deep used to make every list and watch of the
+  kind throw, reported as a lost connection and retried for ever, with every Argo app gone
+  from the Applications mode. **One unreadable object does not end a watch**: a list page
+  that will not parse whole is read item by item (`ClusterJson.ReadListItems`), and a watch
+  frame that will not parse is skipped; either is named through `connectionLost` as an
+  `UnreadableObjectException`, which is not a `WatchConnectionException` — nothing was lost,
+  and the list does not offer a reconnect for it.
+- **Both streams have a line cap** (`BoundedLineReader`, `ClusterClient.Limits.cs`), because
+  `ReadLineAsync` holds a line with no newline in memory for as long as it keeps coming. A
+  watch frame past 32 MiB ends the stream with a stated error and a relist after the
+  backoff; a log line past 1 MiB arrives cut with a marker and the rest of it is dropped
+  (see [log-pane-reading](docs/engineering/log-pane-reading.md)).
+- **A name from another object never builds a path unchecked.** `ResourceDescriptor`'s path
+  builders throw for an empty, `.` or `..` segment or one containing `/` or `%` (the API
+  server's own rule for names), because `new Uri(base, relative)` collapses dot segments and
+  `EscapeDataString` leaves dots alone — an owner reference naming `..` was a GET of the
+  namespace. `ReadResourceAsync` answers such a name with null and sends nothing; every write
+  refuses an invalid name before building anything; `ResolveOwnerAsync` and the named-logs
+  path return the object only when its apiVersion, kind, name and UID match the reference.
+  Discovery drops a group, version or plural that could not be a path segment. See
+  [events-list](docs/engineering/events-list.md).
 - The informer loop lives in `ClusterClient.PumpAsync`/`StreamWatchAsync`:
   paginated initial list (Reset + Added per item) → resumable watch →
   relist on `ERROR` frame / 410 Gone → exponential backoff with

@@ -1,8 +1,10 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using KubeNimbus.App.ViewModels;
 using SvcSystems.UI.Terminal;
 
 namespace KubeNimbus.App.Views;
@@ -61,11 +63,52 @@ public partial class ExecView : UserControl
                 e.Handled = true;
                 return;
             case Key.V:
-                _ = Terminal.PasteFromClipboardAsync();
+                _ = PasteFromClipboardAsync();
                 e.Handled = true;
                 return;
         }
     }
+
+    /// <summary>
+    /// Reads the clipboard and hands the text to <see cref="ExecTabViewModel.Paste"/>. Never
+    /// the control's own <c>PasteFromClipboardAsync</c>, which sends the clipboard raw — no
+    /// bracketed-paste markers and no filtering of the escape sequences in it.
+    /// </summary>
+    private async Task PasteFromClipboardAsync()
+    {
+        if (DataContext is not ExecTabViewModel exec || TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard)
+        {
+            return;
+        }
+
+        try
+        {
+            exec.Paste(await clipboard.TryGetTextAsync());
+        }
+        catch (Exception)
+        {
+            // An unreadable clipboard pastes nothing, as an empty one does.
+        }
+
+        if (exec.HasPendingPaste)
+        {
+            Dispatcher.UIThread.Post(() => PasteConfirmButton.Focus(), DispatcherPriority.Input);
+        }
+    }
+
+    /// <summary>Esc on the armed paste strip cancels it; either way focus goes back to the terminal.</summary>
+    private void OnPasteStripKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape && DataContext is ExecTabViewModel exec)
+        {
+            exec.CancelPasteCommand.Execute(null);
+            e.Handled = true;
+            Terminal.Focus();
+        }
+    }
+
+    private void OnPasteStripButtonClick(object? sender, RoutedEventArgs e) =>
+        Dispatcher.UIThread.Post(() => Terminal.Focus(), DispatcherPriority.Input);
 
     private void OnTerminalContextRequested(object? sender, TerminalContextRequestedEventArgs e)
     {
@@ -77,7 +120,7 @@ public partial class ExecView : UserControl
 
     private void OnCopyClick(object? sender, RoutedEventArgs e) => _ = Terminal.CopySelectionAsync();
 
-    private void OnPasteClick(object? sender, RoutedEventArgs e) => _ = Terminal.PasteFromClipboardAsync();
+    private void OnPasteClick(object? sender, RoutedEventArgs e) => _ = PasteFromClipboardAsync();
 
     private void OnSelectAllClick(object? sender, RoutedEventArgs e) => Terminal.SelectAll();
 }

@@ -57,7 +57,7 @@ public sealed partial class ClusterClient
         // A CRD's own name is required to be exactly `<plural>.<group>`, so the kind
         // we are looking at names the object we need with no search.
         var name = $"{descriptor.Plural}.{descriptor.Group}";
-        var path = $"apis/apiextensions.k8s.io/v1/customresourcedefinitions/{Uri.EscapeDataString(name)}";
+        var path = $"apis/apiextensions.k8s.io/v1/customresourcedefinitions/{ResourceDescriptor.PathSegment(name)}";
 
         try
         {
@@ -76,7 +76,7 @@ public sealed partial class ClusterClient
             }
 
             var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken)
+            using var document = await ClusterJson.ParseAsync(stream, cancellationToken)
                 .ConfigureAwait(false);
             return PrinterColumns.Parse(document.RootElement, descriptor.Version);
         }

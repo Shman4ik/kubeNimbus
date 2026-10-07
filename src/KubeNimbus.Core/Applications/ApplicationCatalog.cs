@@ -88,10 +88,16 @@ public static class ApplicationCatalog
             byArgo.Add((app, mine));
         }
 
-        // Pass 2: Argo's tracking marks, for what no status listed.
+        // Pass 2: Argo's tracking marks, for what no status listed — only in the namespaces the
+        // Application deploys to. A label is written by whoever writes the workload, and an
+        // Application's name is chosen by whoever writes the Application, so across the whole
+        // cluster this let an Application claim another namespace's Deployment by naming
+        // itself after its instance label, and the page's Restart then targeted that one.
         foreach (var (app, mine) in byArgo)
         {
-            foreach (var w in candidates.Where(w => !claimed.Contains(w) && IsTrackedBy(w, app)))
+            var namespaces = DeployNamespaces(app);
+            foreach (var w in candidates.Where(w => !claimed.Contains(w)
+                         && namespaces.Contains(w.Namespace ?? "") && IsTrackedBy(w, app)))
             {
                 claimed.Add(w);
                 mine.Add(w);
@@ -212,6 +218,28 @@ public static class ApplicationCatalog
 
         var status = J.Obj(workload.Raw, "status");
         return (J.Int(status, "active") ?? 0) > 0 || J.Str(J.Condition(status, "Failed"), "status") == "True";
+    }
+
+    /// <summary>
+    /// The namespaces an Application deploys to, which is where its tracking marks are looked
+    /// for: <c>spec.destination.namespace</c>, and every namespace its <c>status.resources</c>
+    /// lists (an Application whose manifests name their own namespaces deploys to those). An
+    /// Application with neither — no destination namespace and no status yet — claims nothing
+    /// by label until Argo has written what it manages.
+    /// </summary>
+    public static IReadOnlySet<string> DeployNamespaces(ArgoApplication app)
+    {
+        ArgumentNullException.ThrowIfNull(app);
+        var namespaces = app.Resources
+            .Select(r => r.Namespace)
+            .Where(n => n.Length > 0)
+            .ToHashSet(StringComparer.Ordinal);
+        if (app.DestinationNamespace.Length > 0)
+        {
+            namespaces.Add(app.DestinationNamespace);
+        }
+
+        return namespaces;
     }
 
     /// <summary>

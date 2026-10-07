@@ -17,10 +17,19 @@ public static class EditorDefaults
     /// in the middle of a string-coloured value, and a Ctrl+click on it opened the browser
     /// or the mail client. Nothing in a manifest is a link.
     /// </summary>
+    /// <remarks>
+    /// It also makes the bidi and zero-width characters visible
+    /// (<see cref="InvisibleCharacterGenerator"/>): a manifest is text whoever wrote the object
+    /// chose, and a right-to-left override in it reorders what the editor draws.
+    /// </remarks>
     public static void Apply(TextEditor editor)
     {
         editor.Options.EnableHyperlinks = false;
         editor.Options.EnableEmailHyperlinks = false;
+        if (!editor.TextArea.TextView.ElementGenerators.OfType<InvisibleCharacterGenerator>().Any())
+        {
+            editor.TextArea.TextView.ElementGenerators.Add(new InvisibleCharacterGenerator());
+        }
     }
 
     /// <summary>

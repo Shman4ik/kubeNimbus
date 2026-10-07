@@ -105,6 +105,27 @@
             </Border>
           </StackPanel>
         </Border>
+
+        <!-- The armed multi-line paste (ExecTabViewModel.Paste): the shell has not turned
+             on bracketed paste, so each line would run as it arrived. Laid over the top of
+             the terminal rather than docked as a row above it: present only while armed
+             (UI rule 1), no third row of dock chrome (rule 10) and no resize of the remote
+             PTY for a question; the top, because the prompt the paste will land at is at
+             the bottom and stays in view. The gesture that armed it never runs it (rule 17's
+             pattern), and Esc cancels. -->
+        <Border Classes="overlayCard" IsVisible="{Binding HasPendingPaste}" VerticalAlignment="Top"
+                HorizontalAlignment="Stretch" Margin="10" Padding="12,10" KeyDown="OnPasteStripKeyDown">
+          <Grid ColumnDefinitions="*,Auto,Auto">
+            <TextBlock Grid.Column="0" Text="{Binding PendingPastePrompt}" TextWrapping="Wrap" FontSize="12"
+                       VerticalAlignment="Center" />
+            <Button Grid.Column="1" Name="PasteConfirmButton" Classes="accent" Content="Paste" Margin="12,0,0,0"
+                    VerticalAlignment="Center" Command="{Binding ConfirmPasteCommand}" Click="OnPasteStripButtonClick"
+                    ToolTip.Tip="Send every line to the shell" />
+            <Button Grid.Column="2" Content="Cancel" Margin="6,0,0,0" VerticalAlignment="Center"
+                    Command="{Binding CancelPasteCommand}" Click="OnPasteStripButtonClick"
+                    ToolTip.Tip="Send nothing (Esc)" />
+          </Grid>
+        </Border>
       </Panel>
     </Border>
   </Grid>

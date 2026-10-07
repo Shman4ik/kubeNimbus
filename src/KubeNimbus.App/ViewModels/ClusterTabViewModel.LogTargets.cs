@@ -360,6 +360,17 @@ public sealed partial class ClusterTabViewModel
             return $"{target.Kind} {qualified} no longer exists — it was deleted or replaced since this was listed.";
         }
 
+        // What came back must be what was named. A GET by a name the server validated returns
+        // that object, but the name here is whatever the naming pane's object said (an Event's
+        // involvedObject, an Argo status entry), so the kind and name are checked as well as
+        // the UID before a pane opens on it.
+        if (!string.Equals(resolved.ApiVersion, target.ApiVersion, StringComparison.Ordinal)
+            || !string.Equals(resolved.Kind, target.Kind, StringComparison.Ordinal)
+            || !string.Equals(resolved.Name, target.Name, StringComparison.Ordinal))
+        {
+            return $"{target.Kind}/{target.Name} could not be read: the cluster answered with a different object.";
+        }
+
         if (target.Uid is { Length: > 0 } uid && !string.Equals(resolved.Uid, uid, StringComparison.Ordinal))
         {
             var qualified = resolved.Namespace is { Length: > 0 } ns ? $"{ns}/{target.Name}" : target.Name;

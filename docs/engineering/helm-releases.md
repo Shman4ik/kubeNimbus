@@ -12,6 +12,20 @@ thrown — one broken release must not take out the list. The encoding is pinned
 by `HelmReleaseTests` (no cluster needed), because getting a layer wrong fails
 silently as "no releases".
 
+**The unwrap is bounded.** gzip turns a run of zeros into almost nothing — 600 MiB fits in a
+Secret under 1 MiB — and opening the Helm view decodes every release Secret in scope, so one
+Secret written by anyone with write access to Secrets anywhere in that scope used to cost
+600 MiB of memory per open. Now a `data.release` value longer than 4 MiB of text (more than
+any Secret can hold) is not decoded at all, and decompression stops at 32 MiB
+(`ClusterClient.Gunzip`, which reads in chunks into a buffer that stops growing at the cap).
+A record past either cap, or nested past the cluster-JSON depth limit, **is listed, not
+skipped**: its name and revision come from the labels Helm puts on every release Secret, its
+status is `unreadable` (a warn pill) and its description says why; opening it states the same
+sentence in the tab instead of "no longer stored". A record that simply does not unwrap is
+still skipped without comment, because that is a foreign object wearing the type.
+`HelmReleaseTests` builds a 200 MiB bomb and pins the cap, the allocation it costs and both
+sentences.
+
 In the App layer the Helm entry is a **synthetic sidebar kind**
 (`SidebarGrouping.HelmReleaseDescriptor`, group `helm.sh` — no server serves
 that, so it can't collide with a discovered kind). Selecting it stops the watch

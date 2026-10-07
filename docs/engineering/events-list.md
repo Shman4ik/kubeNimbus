@@ -124,3 +124,17 @@ named above. `cluster-tab-events-edge-cases` is deliberately synthetic, over a f
 event naming no object, one with no timestamp at all and a multi-line message. None of
 those belongs in a dataset a Store reviewer browses, and a real API server always stamps
 `creationTimestamp`, so "no timestamp" exists only there.
+
+**Reason, Object and Message show bidi and zero-width characters as markers**
+(`InvisibleCharacters.Reveal`, the same set the log panes mark — see
+[log-pane-reading](log-pane-reading.md)), in the list and in every Events tab. An Event's text
+is written by whatever controller or client created it, and the search matches the marked
+text, so a query for `U+202E` finds the event that carries one.
+
+**Opening an Event's object checks what came back.** `ClusterClient.ResolveOwnerAsync` returns
+the object only when its apiVersion, kind, name and (when the reference carries one) UID equal
+the involved object's — the kubelet's own node events, which carry the node's name as the UID,
+excepted. A name no object can have (empty, `.`, `..`, or with `/` or `%`) never reaches a
+path: `new Uri(base, relative)` collapses dot segments, so a pod called `..` used to be a GET of
+its namespace. A stale UID (a StatefulSet pod recreated under the same name) is now "could not
+be resolved" rather than the new pod.

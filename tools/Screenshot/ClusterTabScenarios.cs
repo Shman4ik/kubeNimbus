@@ -2315,6 +2315,19 @@ internal static class ClusterTabScenarios
         return tab;
     }
 
+    /// <summary>
+    /// A three-line paste into BusyBox <c>sh</c>, which never turns on bracketed paste: the
+    /// pane asks before sending, over the top of the terminal, with the prompt the lines would
+    /// land at still in view below.
+    /// </summary>
+    public static ClusterTabViewModel ExecPasteArmed()
+    {
+        var tab = Exec();
+        var exec = (ExecTabViewModel)tab.SelectedInspectorTab!;
+        exec.Paste("cd /tmp\nrm -rf report-cache\n./run.sh --once\n");
+        return tab;
+    }
+
     private static ClusterTabViewModel BuildExec(string output)
     {
         var tab = BaseTab();

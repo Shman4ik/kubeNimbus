@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Input.Raw;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -112,6 +113,112 @@ internal static class KeyboardChecks
 
         Console.WriteLine("Exec terminal key mapping passed (^C 0x03, ^D 0x04, Tab 0x09, Ctrl+Shift+C not ^C).");
     }
+
+    /// <summary>
+    /// B2-5: a paste reaches the pod as XTerm.NET's own paste would send it, never raw. The
+    /// clipboard is pasted with the pane's real Ctrl+Shift+V and the bytes are read off the
+    /// terminal model, as <see cref="ExecKeys"/> reads them:
+    /// <list type="bullet">
+    /// <item>escape sequences in the clipboard are dropped, so <c>ESC[201~</c> cannot end a
+    /// bracketed paste early and run what follows as typed;</item>
+    /// <item>with bracketed paste on, a multi-line paste goes at once, inside the markers;</item>
+    /// <item>with it off (BusyBox <c>sh</c>), a multi-line paste sends nothing until it is
+    /// confirmed, Enter on the armed strip sends it, and Esc sends nothing.</item>
+    /// </list>
+    /// The terminal control's own <c>PasteFromClipboardAsync</c> sends the clipboard raw, so
+    /// routing the gesture back to it turns this red.
+    /// </summary>
+    internal static void ExecPaste(Window window)
+    {
+        var view = window.GetVisualDescendants().OfType<ExecView>().First();
+        var exec = (ExecTabViewModel)view.DataContext!;
+        var terminal = view.GetVisualDescendants().OfType<TerminalControl>().First();
+        var clipboard = TopLevel.GetTopLevel(view)?.Clipboard
+                        ?? throw new InvalidOperationException("The headless window has no clipboard to paste from.");
+
+        var sent = new List<byte>();
+        void OnInput(object? sender, TerminalUserInputEventArgs e) => sent.AddRange(e.Data.ToArray());
+        exec.Terminal.UserInput += OnInput;
+        try
+        {
+            string PasteWith(string text, Func<bool> done)
+            {
+                sent.Clear();
+                var write = clipboard.SetTextAsync(text);
+                while (!write.IsCompleted)
+                {
+                    Dispatcher.UIThread.RunJobs();
+                }
+
+                terminal.Focus();
+                Dispatcher.UIThread.RunJobs();
+                window.KeyPress(Key.V, RawInputModifiers.Control | RawInputModifiers.Shift, PhysicalKey.V, "V");
+                window.KeyRelease(Key.V, RawInputModifiers.Control | RawInputModifiers.Shift, PhysicalKey.V, "V");
+                for (var i = 0; i < 200 && !done(); i++)
+                {
+                    Dispatcher.UIThread.RunJobs();
+                    Thread.Sleep(5);
+                }
+
+                return System.Text.Encoding.UTF8.GetString([.. sent]);
+            }
+
+            void Check(string actual, string expected, string what)
+            {
+                if (actual != expected)
+                    throw new InvalidOperationException(
+                        $"{what}: sent {Escape(actual)} where {Escape(expected)} was expected.");
+            }
+
+            exec.Terminal.Feed("\u001b[?2004l");
+            Check(PasteWith("echo hi\u001b[201~; rm -rf /tmp/x\u009b1m", () => sent.Count > 0),
+                "echo hi[201~; rm -rf /tmp/x1m", "A single-line paste with escape sequences in it");
+
+            exec.Terminal.Feed("\u001b[?2004h");
+            Check(PasteWith("one\ntwo\r\n", () => sent.Count > 0),
+                "\u001b[200~one\rtwo\r\u001b[201~", "A multi-line paste to a shell with bracketed paste on");
+
+            exec.Terminal.Feed("\u001b[?2004l");
+            Check(PasteWith("one\ntwo\nthree", () => exec.HasPendingPaste), "", "A multi-line paste to a shell without bracketed paste, before it is confirmed");
+            if (!exec.PendingPastePrompt.StartsWith("Paste 3 lines?", StringComparison.Ordinal))
+                throw new InvalidOperationException($"The armed paste says \"{exec.PendingPastePrompt}\".");
+
+            var confirm = view.FindControl<Button>("PasteConfirmButton")!;
+            for (var i = 0; i < 20 && !confirm.IsFocused; i++)
+            {
+                Dispatcher.UIThread.RunJobs();
+            }
+
+            if (!confirm.IsFocused)
+                throw new InvalidOperationException("The armed paste's Paste button did not take focus, so Enter would reach the terminal.");
+
+            window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, "\r");
+            window.KeyRelease(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, "\r");
+            Dispatcher.UIThread.RunJobs();
+            Check(System.Text.Encoding.UTF8.GetString([.. sent]), "one\rtwo\rthree", "Enter on the armed paste");
+            if (exec.HasPendingPaste)
+                throw new InvalidOperationException("The paste stayed armed after it was sent.");
+
+            Check(PasteWith("one\ntwo", () => exec.HasPendingPaste), "", "A second multi-line paste, before Esc");
+            var strip = confirm.GetVisualAncestors().OfType<Border>().First(b => b.Classes.Contains("overlayCard"));
+            confirm.Focus();
+            Dispatcher.UIThread.RunJobs();
+            window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+            window.KeyRelease(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+            Dispatcher.UIThread.RunJobs();
+            if (exec.HasPendingPaste || sent.Count > 0 || strip.IsVisible)
+                throw new InvalidOperationException("Esc on the armed paste did not cancel it, or sent something.");
+        }
+        finally
+        {
+            exec.Terminal.UserInput -= OnInput;
+        }
+
+        Console.WriteLine("Exec paste passed (controls dropped, bracketed when asked, multi-line armed until confirmed, Esc cancels).");
+    }
+
+    private static string Escape(string text) =>
+        "\"" + string.Concat(text.Select(c => char.IsControl(c) ? $"\\x{(int)c:X2}" : c.ToString())) + "\"";
 
     /// <summary>
     /// The log pane's keys, sent as key events to a real window: Alt+R and Alt+C flip the

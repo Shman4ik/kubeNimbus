@@ -84,10 +84,18 @@ public sealed partial class ClusterClient
             ? $",involvedObject.uid={uid}" : $",involvedObject.kind={target.Kind}");
     }
 
-    /// <summary>Resolves an ownerReference to the actual object, or null if it's gone or unresolvable.</summary>
+    /// <summary>
+    /// Resolves a reference (an ownerReference, an Event's involved object, a binding) to the
+    /// object it names, or null when it is gone, unresolvable, or not what the reference
+    /// says. The reference was written by whoever wrote the object holding it, so the answer
+    /// is checked against it (<see cref="OwnerRef.IsIdentityOf"/>): a name of <c>..</c> no
+    /// longer reaches a path at all, and whatever a GET returns has to have the reference's
+    /// apiVersion, kind, name and (when it carries one) UID to be returned.
+    /// </summary>
     public async Task<DynamicResource?> ResolveOwnerAsync(
         OwnerRef owner, string? namespaceHint, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(owner);
         var catalog = await GetResourceCatalogAsync(cancellationToken).ConfigureAwait(false);
         var descriptor = catalog.FirstOrDefault(d =>
             string.Equals(d.ApiVersion, owner.ApiVersion, StringComparison.Ordinal)
@@ -98,8 +106,9 @@ public sealed partial class ClusterClient
             return null;
         }
 
-        return await ReadResourceAsync(descriptor, descriptor.Namespaced ? namespaceHint : null, owner.Name, cancellationToken)
-            .ConfigureAwait(false);
+        var resolved = await ReadResourceAsync(
+            descriptor, descriptor.Namespaced ? namespaceHint : null, owner.Name, cancellationToken).ConfigureAwait(false);
+        return resolved is not null && owner.IsIdentityOf(resolved) ? resolved : null;
     }
 }
 

@@ -75,13 +75,22 @@ public sealed partial class ClusterClient
 
         JsonDocument? best = null;
         HelmRelease? bestRelease = null;
+        HelmRelease? unreadable = null;
         try
         {
             foreach (var secret in secrets)
             {
-                var document = TryReadReleaseRecord(secret);
+                var document = TryReadReleaseRecord(secret, out var problem);
                 if (document is null)
                 {
+                    if (problem is not null && UnreadableRelease(secret, problem) is { } skipped
+                        && string.Equals(skipped.Name, name, StringComparison.Ordinal)
+                        && (revision is not { } wantedRevision || skipped.Revision == wantedRevision)
+                        && (unreadable is null || skipped.Revision > unreadable.Revision))
+                    {
+                        unreadable = skipped;
+                    }
+
                     continue;
                 }
 
@@ -103,6 +112,14 @@ public sealed partial class ClusterClient
                 {
                     document.Dispose();
                 }
+            }
+
+            // The revision asked for (or the newest, when none was) is one that cannot be
+            // read: say why, rather than "no longer stored", which would be untrue.
+            if (unreadable is not null && (bestRelease is null || unreadable.Revision > bestRelease.Revision))
+            {
+                throw new InvalidDataException(
+                    $"Revision {unreadable.Revision} of {unreadable.Name}: {unreadable.Description}");
             }
 
             if (best is null || bestRelease is null)
@@ -133,10 +150,14 @@ public sealed partial class ClusterClient
         var result = new List<HelmRelease>();
         foreach (var secret in secrets)
         {
-            using var document = TryReadReleaseRecord(secret);
+            using var document = TryReadReleaseRecord(secret, out var problem);
             if (document is not null)
             {
                 result.Add(ReadRelease(document.RootElement, secret.Namespace));
+            }
+            else if (problem is not null)
+            {
+                result.Add(UnreadableRelease(secret, problem));
             }
         }
 
@@ -153,13 +174,45 @@ public sealed partial class ClusterClient
     /// object wearing the type, or a future storage format) — one bad release
     /// must not take out the whole list.
     /// </summary>
-    internal static JsonDocument? TryReadReleaseRecord(DynamicResource secret)
+    internal static JsonDocument? TryReadReleaseRecord(DynamicResource secret) => TryReadReleaseRecord(secret, out _);
+
+    /// <summary>
+    /// The longest <c>data.release</c> value read. A Secret is at most 1 MiB, and two base64
+    /// layers make that about 1.8 MiB of text; anything longer did not come from a Secret
+    /// the API server stored, and is not decoded.
+    /// </summary>
+    internal const int MaxEncodedReleaseChars = 4 * 1024 * 1024;
+
+    /// <summary>
+    /// How large a release record may be once decompressed. gzip turns a run of zeros into
+    /// almost nothing — 600 MiB fits in a Secret under 1 MiB — and opening the Helm view
+    /// decodes every release Secret in scope, so without a cap one Secret written by anyone
+    /// with write access to Secrets anywhere in that scope was 600 MiB of memory per open.
+    /// A real release (manifest, values, chart metadata) is well under a few MiB.
+    /// </summary>
+    internal const int MaxDecompressedReleaseBytes = 32 * 1024 * 1024;
+
+    /// <summary>
+    /// The same unwrap, saying why a record that <em>is</em> a release could not be read:
+    /// <paramref name="problem"/> is set when it is too large to read (encoded or decompressed),
+    /// and left null for one that simply does not unwrap, which is a foreign object wearing
+    /// the type and is skipped without comment as before.
+    /// </summary>
+    internal static JsonDocument? TryReadReleaseRecord(DynamicResource secret, out string? problem)
     {
+        problem = null;
         if (!secret.Raw.TryGetProperty("data", out var data)
             || data.ValueKind != JsonValueKind.Object
             || !data.TryGetProperty("release", out var releaseEl)
+            || releaseEl.ValueKind != JsonValueKind.String
             || releaseEl.GetString() is not { } encoded)
         {
+            return null;
+        }
+
+        if (encoded.Length > MaxEncodedReleaseChars)
+        {
+            problem = $"Its release record is {encoded.Length / (1024 * 1024)} MiB encoded, more than a Secret can hold, so kubeNimbus does not decode it.";
             return null;
         }
 
@@ -173,20 +226,76 @@ public sealed partial class ClusterClient
             // keep support for the rare uncompressed record.
             if (payload.Length > 2 && payload[0] == 0x1f && payload[1] == 0x8b)
             {
-                using var compressed = new MemoryStream(payload);
-                using var gzip = new GZipStream(compressed, CompressionMode.Decompress);
-                using var plain = new MemoryStream();
-                gzip.CopyTo(plain);
-                payload = plain.ToArray();
+                if (Gunzip(payload, MaxDecompressedReleaseBytes) is not { } plain)
+                {
+                    problem = $"Its release record is larger than {MaxDecompressedReleaseBytes / (1024 * 1024)} MiB once decompressed, so kubeNimbus does not read it.";
+                    return null;
+                }
+
+                payload = plain;
             }
 
-            return JsonDocument.Parse(payload);
+            return ClusterJson.Parse(payload);
         }
-        catch (Exception ex) when (ex is FormatException or InvalidDataException or JsonException or DecoderFallbackException)
+        catch (JsonException ex) when (ex.Message.Contains("depth", StringComparison.OrdinalIgnoreCase))
+        {
+            problem = $"Its release record is nested deeper than {ClusterJson.MaxDepth} levels, so kubeNimbus does not read it.";
+            return null;
+        }
+        catch (Exception ex) when (ex is FormatException or InvalidDataException or JsonException or DecoderFallbackException
+                                       or IOException)
         {
             return null;
         }
     }
+
+    /// <summary>
+    /// Decompresses at most <paramref name="maxBytes"/>; null when there is more. Read in
+    /// chunks into a buffer that stops growing at the cap, so a bomb costs the cap and the
+    /// time to read that much, never what it expands to.
+    /// </summary>
+    internal static byte[]? Gunzip(byte[] compressed, int maxBytes)
+    {
+        using var input = new MemoryStream(compressed);
+        using var gzip = new GZipStream(input, CompressionMode.Decompress);
+        using var plain = new MemoryStream();
+        var buffer = new byte[81920];
+        int read;
+        while ((read = gzip.Read(buffer, 0, buffer.Length)) > 0)
+        {
+            if (plain.Length + read > maxBytes)
+            {
+                return null;
+            }
+
+            plain.Write(buffer, 0, read);
+        }
+
+        return plain.ToArray();
+    }
+
+    /// <summary>
+    /// A row for a release whose record could not be read: its name and revision from the
+    /// labels Helm puts on every release Secret (<c>name</c>, <c>version</c>), and the reason
+    /// as its description — so a release that is there but unreadable is said, not dropped.
+    /// </summary>
+    internal static HelmRelease UnreadableRelease(DynamicResource secret, string problem)
+    {
+        var labels = secret.Labels;
+        return new HelmRelease(
+            Name: labels.TryGetValue("name", out var name) && name.Length > 0 ? name : secret.Name,
+            Namespace: secret.Namespace ?? "",
+            Revision: labels.TryGetValue("version", out var version) && int.TryParse(version, out var revision) ? revision : 0,
+            Status: UnreadableStatus,
+            ChartName: "",
+            ChartVersion: "",
+            AppVersion: "",
+            Updated: null,
+            Description: problem);
+    }
+
+    /// <summary>The status an unreadable release is listed with.</summary>
+    public const string UnreadableStatus = "unreadable";
 
     internal static HelmRelease ReadRelease(JsonElement root, string? secretNamespace)
     {

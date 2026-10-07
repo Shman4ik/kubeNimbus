@@ -393,7 +393,7 @@ public sealed partial class ClusterClient : IDisposable
 
                     var relist = await StreamWatchAsync(
                         listPath, resourceVersion!, deserialize, resourceVersionOf, writer,
-                        rv => resourceVersion = rv, extraQuery, ct).ConfigureAwait(false);
+                        rv => resourceVersion = rv, extraQuery, connectionLost, ct).ConfigureAwait(false);
                     if (relist)
                     {
                         needRelist = true;
@@ -409,6 +409,16 @@ public sealed partial class ClusterClient : IDisposable
                 catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Gone)
                 {
                     needRelist = true;
+                }
+                catch (WatchFrameTooLargeException ex)
+                {
+                    // Said in its own words rather than as a lost connection, and relisted after
+                    // the backoff rather than at once: a server that sends the same frame again
+                    // must not turn this into a tight loop.
+                    connectionLost?.Invoke(new UnreadableObjectException(ex.Message));
+                    needRelist = true;
+                    await Task.Delay(backoff, ct).ConfigureAwait(false);
+                    backoff = backoff * 2 > MaxBackoff ? MaxBackoff : backoff * 2;
                 }
                 catch (Exception ex) when (IsUnauthorized(ex))
                 {
@@ -520,6 +530,7 @@ public sealed partial class ClusterClient : IDisposable
         ChannelWriter<ResourceEvent<T>> writer,
         Action<string?> updateResourceVersion,
         string extraQuery,
+        Action<Exception>? connectionLost,
         CancellationToken ct)
         where T : class
     {
@@ -534,36 +545,71 @@ public sealed partial class ClusterClient : IDisposable
         response.EnsureSuccessStatusCode();
 
         await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-        using var reader = new StreamReader(stream);
+        var reader = new BoundedLineReader(stream, MaxWatchFrameBytes, discardOverflow: false);
 
         while (true)
         {
-            var line = await reader.ReadLineAsync(ct).ConfigureAwait(false);
-            if (line is null)
+            if (await reader.ReadLineAsync(ct).ConfigureAwait(false) is not { } line)
             {
                 return false; // stream ended cleanly
             }
 
-            if (line.Length == 0)
+            if (line.Truncated)
+            {
+                // One frame is one object, and no object an API server stores comes near the
+                // cap. Reading on would mean holding an unbounded line in memory; reading past
+                // it would mean resuming mid-frame. Neither, so the stream ends here and the
+                // pump relists after its backoff.
+                throw new WatchFrameTooLargeException(
+                    $"A watch frame was larger than {MaxWatchFrameBytes / (1024 * 1024)} MiB"
+                    + $" ({ClusterJson.NameOf(line.Bytes.Span)}); kubeNimbus does not read frames that large.");
+            }
+
+            if (line.Bytes.IsEmpty)
             {
                 continue;
             }
 
-            using var doc = JsonDocument.Parse(line);
+            JsonDocument doc;
+            try
+            {
+                doc = ClusterJson.Parse(line.Bytes);
+            }
+            catch (JsonException ex)
+            {
+                // One object the app cannot read — nested past the depth limit, or not JSON —
+                // costs that object, not the watch. It is said, and the stream goes on.
+                connectionLost?.Invoke(new UnreadableObjectException(
+                    $"Skipped {ClusterJson.Describe(line.Bytes.Span, ex)}: kubeNimbus could not read it."));
+                continue;
+            }
+
+            using var owned = doc;
             var root = doc.RootElement;
             if (!root.TryGetProperty("type", out var typeEl) || !root.TryGetProperty("object", out var objEl))
             {
                 continue;
             }
 
-            var typeName = typeEl.GetString();
+            var typeName = typeEl.ValueKind == JsonValueKind.String ? typeEl.GetString() : null;
             if (string.Equals(typeName, "ERROR", StringComparison.Ordinal))
             {
                 // Expired resourceVersion or similar: caller must relist.
                 return true;
             }
 
-            var resource = deserialize(objEl);
+            T? resource;
+            try
+            {
+                resource = deserialize(objEl);
+            }
+            catch (JsonException ex)
+            {
+                connectionLost?.Invoke(new UnreadableObjectException(
+                    $"Skipped {ClusterJson.Describe(line.Bytes.Span, ex)}: kubeNimbus could not read it."));
+                continue;
+            }
+
             if (resource is null)
             {
                 continue;
@@ -616,7 +662,7 @@ public sealed partial class ClusterClient : IDisposable
         Action? responseReady = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var path = $"api/v1/namespaces/{Uri.EscapeDataString(@namespace)}/pods/{Uri.EscapeDataString(podName)}/log";
+        var path = $"api/v1/namespaces/{ResourceDescriptor.PathSegment(@namespace, "namespace")}/pods/{ResourceDescriptor.PathSegment(podName)}/log";
         var query = $"?follow={(follow ? "true" : "false")}";
         if (container is not null)
         {
@@ -654,17 +700,16 @@ public sealed partial class ClusterClient : IDisposable
         responseReady?.Invoke();
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        using var reader = new StreamReader(stream);
+        var reader = new BoundedLineReader(stream, MaxLogLineBytes);
 
         while (true)
         {
-            var line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
-            if (line is null)
+            if (await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false) is not { } line)
             {
                 yield break;
             }
 
-            yield return line;
+            yield return line.Truncated ? TruncatedLogLine(line.Bytes.Span) : line.Text;
         }
     }
 
@@ -711,7 +756,7 @@ public sealed partial class ClusterClient : IDisposable
             HttpMethod.Get, relativePath, content: null, HttpCompletionOption.ResponseContentRead, ct).ConfigureAwait(false);
         await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
         var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-        return await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
+        return await ClusterJson.ParseAsync(stream, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -829,7 +874,7 @@ public sealed class KubernetesApiException : HttpRequestException
 
         try
         {
-            using var doc = JsonDocument.Parse(body);
+            using var doc = ClusterJson.Parse(body);
             return doc.RootElement.ValueKind == JsonValueKind.Object
                 && doc.RootElement.TryGetProperty("message", out var message)
                 && message.ValueKind == JsonValueKind.String

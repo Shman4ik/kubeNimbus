@@ -49,6 +49,7 @@ public sealed partial class ClusterClient
         CancellationToken cancellationToken = default)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(replicas);
+        ResourceDescriptor.RequireName(name);
 
         using var content = new StringContent(WorkloadActions.ScalePatch(replicas), Encoding.UTF8, MergePatchContentType);
         using var response = await SendRequestAsync(
@@ -64,7 +65,7 @@ public sealed partial class ClusterClient
         await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
 
         var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+        using var doc = await ClusterJson.ParseAsync(stream, cancellationToken).ConfigureAwait(false);
         return ReadScale(doc.RootElement);
     }
 
@@ -87,6 +88,9 @@ public sealed partial class ClusterClient
         DateTimeOffset? at = null,
         CancellationToken cancellationToken = default)
     {
+        // The path builder refuses a bad name too; this says so before anything is built,
+        // because a write is the one place a rewritten path must never be reached.
+        ResourceDescriptor.RequireName(name);
         var body = WorkloadActions.RestartPatch(at ?? DateTimeOffset.UtcNow);
         using var content = new StringContent(body, Encoding.UTF8, MergePatchContentType);
 
@@ -112,6 +116,7 @@ public sealed partial class ClusterClient
         bool suspended,
         CancellationToken cancellationToken = default)
     {
+        ResourceDescriptor.RequireName(name);
         using var content = new StringContent(CronJobActions.SuspendPatch(suspended), Encoding.UTF8, MergePatchContentType);
         using var response = await SendRequestAsync(
             HttpMethod.Patch,
@@ -140,6 +145,10 @@ public sealed partial class ClusterClient
         ArgumentNullException.ThrowIfNull(cronJobDescriptor);
         ArgumentNullException.ThrowIfNull(jobDescriptor);
 
+        // The Job is POSTed to a collection, so no path would catch an empty name here —
+        // and a read of the empty name is the CronJob list, not a CronJob.
+        ResourceDescriptor.RequireName(name);
+
         var cronJob = await ReadResourceAsync(cronJobDescriptor, @namespace, name, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException($"CronJob {name} no longer exists.");
 
@@ -155,7 +164,7 @@ public sealed partial class ClusterClient
         await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
 
         var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+        using var doc = await ClusterJson.ParseAsync(stream, cancellationToken).ConfigureAwait(false);
         return DynamicResource.FromListItem(doc.RootElement, jobDescriptor);
     }
 

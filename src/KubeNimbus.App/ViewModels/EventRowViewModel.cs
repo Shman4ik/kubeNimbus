@@ -7,9 +7,9 @@ public sealed class EventRowViewModel(DynamicResource e)
 {
     public string Type { get; } = e.Type();
 
-    public string Reason { get; } = e.Reason();
+    public string Reason { get; } = InvisibleCharacters.Reveal(e.Reason());
 
-    public string Message { get; } = e.Message();
+    public string Message { get; } = InvisibleCharacters.Reveal(e.Message());
 
     public int Count { get; } = e.Count();
 

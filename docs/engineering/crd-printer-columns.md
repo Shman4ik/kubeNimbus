@@ -123,3 +123,9 @@ The sandbox produces every one of these states — see `scripts/manifests/50-crd
 (the shop Widget's mixed types plus a priority-1 column and one path that resolves to
 nothing, the demo Backup's condition filter and non-creationTimestamp date, and the
 factory Widget deliberately declaring **none**, which is the degradation path).
+
+**A cell shows a bidi or zero-width character as a marker** (`⟨U+202E⟩`, through
+`InvisibleCharacters.Reveal`). A column's value is whatever the custom resource's author wrote,
+and a right-to-left override in it reordered the cell — see
+[log-pane-reading](log-pane-reading.md), "Terminal colour codes are removed, not drawn", for
+the set and why the joiners are left alone.
