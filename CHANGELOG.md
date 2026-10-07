@@ -113,6 +113,18 @@ it as the GitHub Release body, so headings must match tags exactly
 - When no home folder can be found, settings now go to a new private folder with a random
   name, not a fixed folder in the shared temporary directory that another local user could
   create first.
+- Release builds are now attested: every file on a release page carries a build-provenance
+  attestation naming the workflow run and commit that built it. Check one with
+  `gh attestation verify <file> --repo Shman4ik/kubeNimbus`, and that it is the file the
+  release was published with using `gh release verify-asset <tag> <file> --repo
+  Shman4ik/kubeNimbus` (README, "Verifying the download").
+- The Linux packages are built with a pinned, hash-checked appimagetool (1.9.1) and AppImage
+  runtime (type2-runtime 20251108) instead of upstream's moving `continuous` builds.
+- Builds restore packages from nuget.org only (a repository `nuget.config`), whatever feeds the
+  machine's own NuGet configuration lists.
+- The security policy is written for 1.0: only the latest release receives security fixes (from
+  1.0 on, the latest 1.x release), and it states that data from a cluster is untrusted input,
+  what the app does about it, and which writes ask first.
 
 ## [0.6.0] - 2026-10-04
 
