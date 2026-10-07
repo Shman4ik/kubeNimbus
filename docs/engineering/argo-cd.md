@@ -109,10 +109,38 @@ condition). Only the sync and refresh requests have no honest offline stand-in, 
 gained a shape rather than an installation**: `scripts/manifests/70-argocd-crds.yaml`
 declares a stand-in Application CRD with Argo's own group, kind, version and printer
 columns, and `71-argocd-applications.yaml` five Applications in the same states. It
-deliberately omits the `status` subresource real Argo declares — with it on, `kubectl
-apply` silently drops every `status` block and all five would come back Unknown/Unknown,
-which is one state, not five. Delete both CRDs before installing real Argo CD; they claim
-the same names.
+declares no `status` subresource, and neither does real Argo (its CRD carries
+`subresources: {}`, checked against `manifests/crds/application-crd.yaml` on 2026-10-07; this
+page used to say otherwise) — with one on, `kubectl apply` would silently drop every `status`
+block and all five would come back Unknown/Unknown, which is one state, not five. Delete both
+CRDs before installing real Argo CD; they claim the same names.
+
+## Where "Open in Argo CD" goes
+
+The Applications page's "Open in Argo CD" opens `argocd-cm`'s `data.url` in the system
+browser. That ConfigMap used to be read from the Application's own namespace, and with Argo's
+"applications in any namespace" a tenant who may create an Application in their namespace may
+also create a ConfigMap there called `argocd-cm`, with a URL of their choosing. The namespace is
+now chosen by `ArgoUi.ConfigMapNamespace`, deterministically, from what the cluster says:
+
+1. **The claim.** Argo CD 2.5+ writes `status.controllerNamespace` on every Application it
+   reconciles; before 2.5 there is no field, and Argo only reconciled Applications in its own
+   namespace, so the Application's namespace is the claim then.
+2. **The evidence.** Because the CRD has no status subresource, whoever writes an Application
+   writes that field too, so a claim is checked against the *other* Applications in view: one
+   that names a controller namespace other than its own is evidence of where Argo runs — a
+   tenant gains nothing by naming somebody else's namespace, and an Application's own claim is
+   never evidence for itself.
+3. **The rule.** With no such evidence (the classic install, every Application in Argo's own
+   namespace) the claim stands. With evidence, the claim must be in it. A claim that disagrees
+   gives **no link** rather than a guess: on a cluster running two Argo instances, one
+   instance's address on the other's Application would be just as wrong.
+
+What it cannot catch, stated rather than implied: an author with nothing else in view to compare
+against (the only Applications the operator can see are theirs), and one who can write in two
+namespaces and names one from the other. The tooltip names the host the button opens and the
+namespace the address was read from, which is the last check, and only http and https are ever
+opened. `ApplicationSupportTests` pins each case.
 
 ## Sorting
 

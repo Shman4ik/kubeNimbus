@@ -50,6 +50,37 @@ public class ApplicationCatalogTests
     }
 
     [Test]
+    public async Task A_tracking_mark_claims_only_in_the_namespaces_the_app_deploys_to()
+    {
+        // An Application named after another team's instance label, deploying to "shop": the
+        // label in "payments" used to be claimed anyway, and the page's Restart then targeted it.
+        var foreign = Deployment("ledger", ns: "payments", labels: """{"app.kubernetes.io/instance":"storefront"}""");
+        var own = Deployment("web", ns: "shop", labels: """{"app.kubernetes.io/instance":"storefront"}""");
+        var listedElsewhere = Deployment("worker", ns: "batch", annotations: """{"argocd.argoproj.io/tracking-id":"storefront:apps/Deployment:batch/worker"}""");
+        var statusInBatch = """[{"group":"apps","version":"v1","kind":"ConfigMap","namespace":"batch","name":"settings"}]""";
+
+        var entries = ApplicationCatalog.Build(Snapshot(
+            argo: [Argo("storefront", destinationNamespace: "shop", resources: statusInBatch)],
+            workloads: [foreign, own, listedElsewhere]));
+
+        var storefront = entries.Single(e => e.IsArgo);
+        await Assert.That(storefront.Input.Workloads.Select(w => $"{w.Namespace}/{w.Name}"))
+            .IsEquivalentTo(["shop/web", "batch/worker"]);
+        await Assert.That(entries.Any(e => e.Key == "Deployment:payments/ledger")).IsTrue();
+        await Assert.That(ApplicationCatalog.DeployNamespaces(storefront.Argo!)).IsEquivalentTo(["shop", "batch"]);
+    }
+
+    [Test]
+    public async Task An_app_with_no_destination_namespace_and_no_status_claims_nothing_by_label()
+    {
+        var labelled = Deployment("web", ns: "shop", labels: """{"app.kubernetes.io/instance":"storefront"}""");
+        var entries = ApplicationCatalog.Build(Snapshot(argo: [Argo("storefront", destinationNamespace: "")], workloads: [labelled]));
+
+        await Assert.That(entries.Single(e => e.IsArgo).Input.Workloads.Count).IsEqualTo(0);
+        await Assert.That(entries.Any(e => e.Key == "Deployment:shop/web")).IsTrue();
+    }
+
+    [Test]
     public async Task A_prefix_of_an_app_name_does_not_claim_and_a_tracking_id_outranks_the_label()
     {
         var other = Deployment("web", annotations: """{"argocd.argoproj.io/tracking-id":"storefront-v2:apps/Deployment:shop/web"}""");
@@ -117,6 +148,48 @@ public class ApplicationCatalogTests
         var empty = R("""{"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"argocd-cm"},"data":{}}""");
         await Assert.That(ArgoUi.BaseUrl(empty)).IsNull();
         await Assert.That(ArgoUi.BaseUrl(null)).IsNull();
+
+        var javascript = R("""{"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"argocd-cm"},"data":{"url":"javascript:alert(1)"}}""");
+        await Assert.That(ArgoUi.BaseUrl(javascript)).IsNull();
+    }
+
+    /// <summary>An Application in <paramref name="ns"/> whose status names <paramref name="controller"/>.</summary>
+    private static ArgoApplication InNamespace(string name, string ns, string controller = "") =>
+        ArgoCd.ReadApplication(R(T("""
+            {"apiVersion":"argoproj.io/v1alpha1","kind":"Application","metadata":{"name":"%name%","namespace":"%ns%"},
+             "spec":{"destination":{"namespace":"%ns%"}},"status":{%controller%"sync":{"status":"Synced"}}}
+            """, ("name", name), ("ns", ns),
+            ("controller", controller.Length > 0 ? $"\"controllerNamespace\":\"{controller}\"," : ""))));
+
+    [Test]
+    public async Task Argo_cm_is_read_from_the_controller_namespace_and_never_from_one_a_tenant_names()
+    {
+        var classic = InNamespace("checkout", "argocd", controller: "argocd");
+        var preTwoFive = InNamespace("checkout", "argocd");
+        var tenant = InNamespace("shop", "team-a", controller: "argocd");
+        var otherTenant = InNamespace("billing", "team-b", controller: "argocd");
+        var forged = InNamespace("phish", "team-a", controller: "team-a");
+        var unreconciled = InNamespace("phish", "team-a");
+
+        await Assert.That(classic.ControllerNamespace).IsEqualTo("argocd");
+
+        // Classic install: every Application in Argo's own namespace, with or without the field.
+        await Assert.That(ArgoUi.ConfigMapNamespace(classic, [classic])).IsEqualTo("argocd");
+        await Assert.That(ArgoUi.ConfigMapNamespace(preTwoFive, [preTwoFive])).IsEqualTo("argocd");
+
+        // Applications in any namespace: a tenant's app reads Argo's namespace, not its own.
+        await Assert.That(ArgoUi.ConfigMapNamespace(tenant, [classic, tenant, otherTenant])).IsEqualTo("argocd");
+
+        // A tenant naming its own namespace, or nothing, against evidence of where Argo runs: no link.
+        await Assert.That(ArgoUi.ConfigMapNamespace(forged, [classic, otherTenant, forged])).IsNull();
+        await Assert.That(ArgoUi.ConfigMapNamespace(unreconciled, [otherTenant, unreconciled])).IsNull();
+
+        // Argo's own Applications still resolve beside the tenants'.
+        await Assert.That(ArgoUi.ConfigMapNamespace(classic, [classic, tenant, otherTenant])).IsEqualTo("argocd");
+
+        // The forger's own claim is not evidence for itself.
+        var second = InNamespace("phish-2", "team-a", controller: "team-c");
+        await Assert.That(ArgoUi.ConfigMapNamespace(forged, [forged, second, otherTenant])).IsNull();
     }
 }
 

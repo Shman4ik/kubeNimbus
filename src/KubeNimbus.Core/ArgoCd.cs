@@ -236,7 +236,7 @@ public static class ArgoCd
             Project: String(spec, "project") ?? "default",
             Sync: ParseSync(String(sync, "status")),
             Health: ParseHealth(String(health, "status")),
-            HealthMessage: String(health, "message") ?? "",
+            HealthMessage: InvisibleCharacters.Reveal(String(health, "message") ?? ""),
             Revision: String(sync, "revision") ?? "",
             RepoUrl: String(source, "repoURL") ?? "",
             SourcePath: String(source, "path") ?? String(source, "chart") ?? "",
@@ -248,13 +248,16 @@ public static class ArgoCd
             AutoPrune: Bool(automated, "prune"),
             SelfHeal: Bool(automated, "selfHeal"),
             OperationPhase: String(operationState, "phase") ?? "",
-            OperationMessage: String(operationState, "message") ?? "",
+            OperationMessage: InvisibleCharacters.Reveal(String(operationState, "message") ?? ""),
             OperationStartedAt: Timestamp(operationState, "startedAt"),
             OperationFinishedAt: Timestamp(operationState, "finishedAt"),
             Conditions: ReadConditions(status),
             Resources: ReadResources(status),
             History: ReadHistory(status),
-            Resource: resource);
+            Resource: resource)
+        {
+            ControllerNamespace = String(status, "controllerNamespace") ?? "",
+        };
     }
 
     private static IReadOnlyList<ArgoCondition> ReadConditions(JsonElement status)
@@ -264,7 +267,7 @@ public static class ArgoCd
         {
             result.Add(new ArgoCondition(
                 Type: String(condition, "type") ?? "",
-                Message: String(condition, "message") ?? "",
+                Message: InvisibleCharacters.Reveal(String(condition, "message") ?? ""),
                 LastTransitionAt: Timestamp(condition, "lastTransitionTime")));
         }
 
@@ -370,6 +373,14 @@ public sealed record ArgoApplication(
 {
     /// <summary>"payments/checkout" — unique across the cluster, and the row key.</summary>
     public string Key => $"{Namespace}/{Name}";
+
+    /// <summary>
+    /// <c>status.controllerNamespace</c>: where the Argo CD controller that reconciled this
+    /// Application runs, written by Argo 2.5+ on every reconcile; empty before that. Status is
+    /// not a subresource on Argo's CRD, so this is only as trustworthy as whoever can write the
+    /// Application — see <see cref="Applications.ArgoUi.ConfigMapNamespace"/> for how it is used.
+    /// </summary>
+    public string ControllerNamespace { get; init; } = "";
 
     /// <summary>
     /// Whether this Application is one of the ones to look at first. Degraded, Missing and

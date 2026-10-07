@@ -80,6 +80,40 @@ Seven things are load-bearing:
    chrome row carries the state anyway. The demo cluster is unchanged: no `ClusterClient`,
    so `Border.demoUnavailable` and nothing else.
 
+## A paste is filtered, bracketed, and asked about when it would run line by line
+
+The terminal control's own `PasteFromClipboardAsync` hands the clipboard to the shell raw:
+no bracketed-paste markers even when the shell asked for them, and every control character
+included. XTerm.NET's `Terminal.Paste` does both properly, but the control never calls it. So
+both paste routes — Ctrl+Shift+V and the right-click menu's Paste — read the clipboard in
+`ExecView` and go through `ExecTabViewModel.Paste`, which applies `ExecPaste.Prepare`:
+
+1. **Line endings become carriage returns**, which is what Return sends and what a shell
+   reading a terminal expects.
+2. **Every other control character except tab is dropped**, C1 as well as C0 — U+009B opens a
+   sequence exactly as `ESC [` does. That is what makes the bracket mean anything: a clipboard
+   holding `ESC[201~` would otherwise end the bracketed paste early and the rest would run as
+   typed, and any other escape sequence would reach the shell's line editor as keystrokes.
+3. **Bracketed when the shell asked** (`BracketedPasteMode`, set by the shell's own
+   `ESC[?2004h`): bash and zsh then treat the whole paste as text and run nothing until Return.
+
+A shell that never asks — BusyBox `sh`, which is most containers — runs each pasted line the
+moment its Return arrives. So a paste of **more than one line** there is armed rather than
+sent: a card over the top of the terminal says how many lines and why it is asking, with
+**Paste** (focused, so Enter confirms) and **Cancel** (and Esc). It is drawn over the terminal
+rather than docked above it because it costs nothing while nothing is armed (UI rule 1), a
+third row of dock chrome would come out of the terminal (rule 10) and would resize the remote
+PTY for the sake of a question, and the top rather than the bottom keeps the prompt the lines
+would land at in view. It is rule 17's pattern — the gesture that started it never runs it —
+in a pane, not the list's strip, which is about rows. One line, with or without its own Return,
+is what typing it would have done and is sent at once. The armed text is prepared again on
+confirm, so a shell that turned bracketed paste on meanwhile gets the markers.
+
+`UntrustedTextTests` pins `ExecPaste`; the harness's `ux-exec-paste` pastes through the real
+gesture and reads the bytes off the terminal model (filtered single line, bracketed multi-line,
+armed then confirmed with Enter, armed then cancelled with Esc), and fails if the gesture is
+routed back to the control's own paste. `cluster-tab-exec-paste-confirm` renders the armed card.
+
 ## Which shells, and what "no shell" means
 
 The shells tried depend on the pod's OS (`Core/ExecShells`): `/bin/bash`, `/bin/sh`,

@@ -355,6 +355,9 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // by the app, reopened on the last tab (UxInteractionChecks.PreferencesTabs).
     ("ux-preferences-tabs", () => BuildMainWindowContent()),
     ("ux-exec-keys", () => HostInMainWindow(ClusterTabScenarios.Exec())),
+    // B2-5: a paste is filtered, bracketed when the shell asked, and armed when it did not (KeyboardChecks.ExecPaste).
+    ("ux-exec-paste", () => HostInMainWindow(ClusterTabScenarios.Exec())),
+    ("cluster-tab-exec-paste-confirm", () => HostInMainWindow(ClusterTabScenarios.ExecPasteArmed())),
     // URLs and e-mail addresses in YAML are drawn as text, not AvaloniaEdit's blue links (EditorChecks).
     ("ux-yaml-editor-links", () => HostInMainWindow(ClusterTabScenarios.YamlEditor())),
     ("ux-helm-editor-links", () => HostInMainWindow(ClusterTabScenarios.HelmReleaseDetail())),
@@ -478,6 +481,7 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
         || name == "cluster-tab-list-unhealthy-fleet-partial-narrow")
         LayoutChecks.GridReachesLastColumn(window);
     if (name == "ux-exec-keys") KeyboardChecks.ExecKeys(window);
+    if (name == "ux-exec-paste") KeyboardChecks.ExecPaste(window);
     if (name == "ux-log-search-keys") KeyboardChecks.LogSearchKeys(window);
     if (name == "ux-yaml-apply-key") KeyboardChecks.YamlApplyKey(window);
     if (name == "ux-yaml-editor-links") EditorChecks.YamlEditorLinks(window);

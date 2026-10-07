@@ -78,6 +78,7 @@ public sealed partial class ClusterClient
     private async Task PatchArgoApplicationAsync(
         ResourceDescriptor descriptor, string? @namespace, string name, string body, CancellationToken ct)
     {
+        ResourceDescriptor.RequireName(name);
         // RFC 7386, the same content type the workload actions use and for the same reason:
         // a strategic merge patch is a 415 on a custom resource, and every object touched
         // here is one.

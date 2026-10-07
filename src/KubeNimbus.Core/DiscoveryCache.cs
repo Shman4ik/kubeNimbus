@@ -26,7 +26,9 @@ internal sealed class DiscoveryCache(string? directory = null)
                 || entry.WrittenAt > DateTimeOffset.UtcNow || DateTimeOffset.UtcNow - entry.WrittenAt > Lifetime
                 || entry.Resources is null || entry.Resources.Any(r => r is null || string.IsNullOrEmpty(r.Version)
                     || string.IsNullOrEmpty(r.Kind) || string.IsNullOrEmpty(r.Plural) || r.Group is null
-                    || r.Verbs is null || r.Subresources is null || r.ShortNames is null || r.Categories is null)) return null;
+                    || r.Verbs is null || r.Subresources is null || r.ShortNames is null || r.Categories is null
+                    // A cache written before discovery checked its values for a path: re-discover.
+                    || !r.HasSafePath)) return null;
             return entry.Resources;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { return null; }

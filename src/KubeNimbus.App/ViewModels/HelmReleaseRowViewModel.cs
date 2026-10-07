@@ -35,6 +35,7 @@ public sealed partial class HelmReleaseRowViewModel : ObservableObject
         "superseded" or "uninstalled" => "idle",
         "failed" => "error",
         "pending-install" or "pending-upgrade" or "pending-rollback" or "uninstalling" => "warn",
+        ClusterClient.UnreadableStatus => "warn",
         _ => "idle",
     };
 

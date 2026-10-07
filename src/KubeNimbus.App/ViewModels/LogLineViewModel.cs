@@ -144,7 +144,7 @@ public sealed partial class LogLineViewModel : ObservableObject
     {
         try
         {
-            using var document = System.Text.Json.JsonDocument.Parse(message);
+            using var document = KubeNimbus.Core.ClusterJson.Parse(message);
             using var buffer = new MemoryStream();
             using (var writer = new System.Text.Json.Utf8JsonWriter(buffer, new System.Text.Json.JsonWriterOptions
                    {
@@ -201,7 +201,7 @@ public sealed partial class LogLineViewModel : ObservableObject
 
     public LogLineViewModel(string rawLine, bool showTimestamp, LogSourceViewModel? source = null, bool utcTimestamp = false)
     {
-        RawLine = TerminalEscapes.Strip(rawLine);
+        RawLine = KubeNimbus.Core.InvisibleCharacters.Reveal(TerminalEscapes.Strip(rawLine));
         (Timestamp, _at, Message) = SplitTimestamp(RawLine);
         (Severity, LevelIndex, LevelLength) = DetectSeverity(Message);
         var trimmed = Message.AsSpan().Trim();

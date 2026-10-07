@@ -4,7 +4,36 @@ using System.Text.Json;
 namespace KubeNimbus.Core;
 
 /// <summary>An ownerReference entry, enough for owner-chain navigation (pod → replicaset → deployment).</summary>
-public sealed record OwnerRef(string ApiVersion, string Kind, string Name, string? Uid, bool Controller);
+public sealed record OwnerRef(string ApiVersion, string Kind, string Name, string? Uid, bool Controller)
+{
+    /// <summary>
+    /// Whether <paramref name="resolved"/> is the object this reference names: the same
+    /// apiVersion, kind and name, and the same UID when the reference carries one.
+    /// </summary>
+    /// <remarks>
+    /// A reference is a string some object's author wrote — an owner reference, an Event's
+    /// <c>involvedObject</c>, an Argo Application's <c>status.resources</c> — so what a GET
+    /// for it returns is checked against it before anything is opened or acted on, rather
+    /// than trusted to be what was asked for. One exception to the UID rule: the kubelet
+    /// writes its own node events with <c>involvedObject.uid</c> set to the node's
+    /// <em>name</em> (see <c>ClusterClient.EventSelectorFor</c>), so for a Node a UID equal to
+    /// the name is the kubelet's convention, not a mismatch.
+    /// </remarks>
+    public bool IsIdentityOf(DynamicResource resolved)
+    {
+        ArgumentNullException.ThrowIfNull(resolved);
+        if (!string.Equals(resolved.ApiVersion, ApiVersion, StringComparison.Ordinal)
+            || !string.Equals(resolved.Kind, Kind, StringComparison.Ordinal)
+            || !string.Equals(resolved.Name, Name, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return Uid is not { Length: > 0 } uid
+            || string.Equals(resolved.Uid, uid, StringComparison.Ordinal)
+            || (Kind == "Node" && string.Equals(uid, Name, StringComparison.Ordinal));
+    }
+}
 
 /// <summary>
 /// Any Kubernetes object (built-in or CRD), kept as its raw JSON — CRD shapes
@@ -74,7 +103,7 @@ public sealed class DynamicResource
         // Clone() detaches the element from the document backing this buffer —
         // the same "safe past the JsonDocument that produced it" guarantee the
         // watch path relies on.
-        using var document = JsonDocument.Parse(buffer.WrittenMemory);
+        using var document = ClusterJson.Parse(buffer.WrittenMemory);
         return new DynamicResource(document.RootElement.Clone());
     }
 

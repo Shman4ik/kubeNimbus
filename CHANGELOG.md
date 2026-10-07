@@ -43,6 +43,27 @@ it as the GitHub Release body, so headings must match tags exactly
   draws "Connecting to …", "No applications found" and "Reading …" over each other on the
   Applications page. While the cluster's resource types are read, the page says only that.
 
+### Security
+
+- A name or namespace taken from another object (an owner reference, an Event's object, an
+  env var's ConfigMap, an Argo Application's status) can no longer rewrite the request path:
+  `..`, `.`, empty names and names with `/` or `%` are refused, and what a lookup returns
+  must match the reference it came from.
+- One Argo CD Application (or any object) nested more than 64 levels deep no longer empties
+  the Applications mode and retries for ever; objects up to 256 levels are read, and one that
+  cannot be read is skipped and named.
+- A Helm release record that decompresses past 32 MiB is listed as "unreadable" with the
+  reason instead of being decoded into memory.
+- "Open in Argo CD" reads Argo's address from Argo's own namespace, never from one an
+  Application's author chose; its tooltip names the host.
+- Pasting into the exec terminal drops control characters, uses bracketed paste when the
+  shell asks for it, and asks before sending several lines to a shell that does not.
+- Bidi-override and zero-width characters in logs, Events, CRD columns, Argo messages and the
+  YAML editor are shown as `⟨U+202E⟩` markers.
+- A log line over 1 MiB is cut with a marker, and a watch frame over 32 MiB restarts the
+  watch, instead of either being held in memory without limit.
+- An Argo Application's tracking label claims workloads only in the namespaces it deploys to.
+
 ## [0.6.0] - 2026-10-04
 
 ### Added

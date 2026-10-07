@@ -189,6 +189,32 @@ it line by line. And a line drawn as one bound string is what keeps selection, C
 search highlight simple (`Controls/LogLineText`) — rendering colour means `Inlines` of runs
 and giving all three up. If that trade is ever wanted, this is the decision to revisit.
 
+**Bidi and zero-width characters are shown as markers.** They are Unicode *format*
+characters, not controls, so the stripping above let them through: a right-to-left override
+(U+202E) reordered the rest of its line, so a log line could be made to read as a different
+one, and a zero-width space made two different strings look the same. A container's stdout is
+written by whatever runs in it. `InvisibleCharacters.Reveal` (Core) replaces each of them with
+a visible `⟨U+202E⟩`, right after the escape stripping, so the display, the search, Copy and
+Download all see the marker — what is found and copied is what is shown. The set is the bidi
+embeddings, overrides, isolates and marks (U+061C, U+200E/F, U+202A–202E, U+2066–2069), the
+zero-width space, the word joiner and U+FEFF. The zero-width joiner and non-joiner (U+200C/D)
+are left alone: they shape Persian and Indic text and join emoji sequences, reorder nothing,
+and marking them would turn ordinary text into noise. The same helper marks an Event's reason,
+object and message (the Events list and every Events tab), a CRD's printer-column cells, Argo
+CD's health, operation and condition messages, and the Applications page's findings, reason
+line and timeline; the YAML editor and the Helm viewers draw the same characters as an amber
+marker box through `Editing/InvisibleCharacterGenerator`, without changing the document.
+`InvisibleCharactersTests`, `UntrustedTextTests` and the harness's `ux-yaml-editor-links` /
+`ux-helm-editor-links` pin it.
+
+**A line has a length cap.** The log stream is read by `BoundedLineReader`, not
+`StreamReader.ReadLineAsync`, which would hold a line with no newline in memory for as long as
+it kept coming. A line past 1 MiB (`ClusterClient.MaxLogLineBytes`) arrives as its head, cut on
+a whole character, followed by ` … [line cut at 1 MiB by kubeNimbus]`, and the rest of it up to
+its newline is read and dropped without being kept. Line endings are the ones `StreamReader`
+used (`\n`, `\r`, `\r\n`), so a progress bar drawn with carriage returns still splits the way
+it did.
+
 **.NET's console-logger levels are severities.** `Microsoft.Extensions.Logging` prints
 `info:`, `warn:`, `fail:`, `crit:`. The first two already matched the INFO/WARN keywords once
 the escapes were gone; `fail:` and `crit:` are read as Error, and only with the colon, the
