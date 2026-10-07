@@ -104,8 +104,15 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
     // ---------------------------------------------------------------- lifecycle
 
     /// <summary>True once the mode has been shown for this tab and its reads have begun.</summary>
+    /// <remarks>
+    /// The connection states read it too, and must be told. The tab sets <c>IsConnected</c>
+    /// as soon as <c>/version</c> answers but stays connecting through namespaces, discovery
+    /// and the metrics probe — seconds on a distant cluster signed in through SSO — so the
+    /// reads start while the tab is still connecting. Without this, "Connecting to …" stayed
+    /// on screen and the next state was drawn over it in the same cell.
+    /// </remarks>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsLoading), nameof(IsEmpty))]
+    [NotifyPropertyChangedFor(nameof(IsLoading), nameof(LoadingText), nameof(IsEmpty), nameof(IsConnecting), nameof(IsDisconnected), nameof(ShowsConnectionFailure))]
     private bool _hasStarted;
 
     /// <summary>
@@ -155,10 +162,19 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
 
         if (_tab.Client is { } client)
         {
+            // Before HasStarted, whose notification is what the view reads the states on.
+            _readingCatalog = true;
             HasStarted = true;
             _ = StartAsync(client);
         }
     }
+
+    /// <summary>
+    /// The catalog is being read and no watch has started yet. Nothing is pending in that
+    /// gap, so without this the list read as empty — "No applications found" — for as long
+    /// as discovery took, which on a distant cluster is seconds (UI rule 18).
+    /// </summary>
+    private bool _readingCatalog;
 
     /// <summary>
     /// The demo cluster's "watches": the shipped dataset, poured through the same store, the
@@ -204,6 +220,10 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
             // is never assumed.
             catalog = [];
         }
+        finally
+        {
+            _readingCatalog = false;
+        }
 
         foreach (var (group, kind, plural) in WatchedKinds)
         {
@@ -226,6 +246,9 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
         _clockTimer.Tick += (_, _) => ScheduleRebuild();
         _clockTimer.Start();
         UpdateScope();
+
+        // The scopes just started are pending; say so now rather than on the first event.
+        RefreshStates();
     }
 
     private static ResourceDescriptor WellKnown(string group, string kind, string plural) =>
@@ -729,9 +752,11 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
         };
 
     /// <summary>Waiting, with nothing to show yet (UI rule 18): names what it is waiting for.</summary>
-    public bool IsLoading => HasStarted && _pending.Count > 0 && _ordered.Count == 0;
+    public bool IsLoading => HasStarted && (_readingCatalog || _pending.Count > 0) && _ordered.Count == 0;
 
-    public string LoadingText => $"Reading {PendingText}…";
+    public string LoadingText => _pending.Count == 0 && _readingCatalog
+        ? "Reading the cluster's resource types…"
+        : $"Reading {PendingText}…";
 
     /// <summary>Rows are on screen and some kinds are still arriving — said in the scope line, not as a spinner over the rows.</summary>
     public bool IsPartiallyLoaded => _pending.Count > 0 && _ordered.Count > 0;
@@ -739,7 +764,7 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
     public string StillReadingText => $"Still reading {PendingText}…";
 
     /// <summary>The verdict "there are no applications", given only once every read has answered.</summary>
-    public bool IsEmpty => HasStarted && _pending.Count == 0 && _ordered.Count == 0;
+    public bool IsEmpty => HasStarted && !_readingCatalog && _pending.Count == 0 && _ordered.Count == 0;
 
     /// <summary>Rows exist, and the chips or the search hid all of them — a different state with a different way out.</summary>
     public bool IsFilterEmpty => _ordered.Count > 0 && VisibleRows.Count == 0;

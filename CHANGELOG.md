@@ -39,6 +39,9 @@ it as the GitHub Release body, so headings must match tags exactly
 
 - A double-click on a column header of workload detail's pod list, the Helm browser or the
   Argo CD dashboard no longer opens the selected row.
+- Connecting to a slow cluster (an EKS cluster signed in through AWS SSO, for one) no longer
+  draws "Connecting to …", "No applications found" and "Reading …" over each other on the
+  Applications page. While the cluster's resource types are read, the page says only that.
 
 ## [0.6.0] - 2026-10-04
 

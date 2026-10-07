@@ -62,6 +62,52 @@ public class ConnectionStateTests
         await Assert.That(notified).IsEqualTo(0);
     }
 
+    /// <summary>
+    /// The tab is connected once <c>/version</c> answers and still connecting while
+    /// discovery runs, and the Applications reads start in that gap. On an EKS cluster signed
+    /// in through AWS SSO the gap was seconds, and the page drew three states in one cell:
+    /// "Connecting to …" (never told it had ended), "No applications found" (nothing was
+    /// pending while the catalog was read, so the list counted as empty) and then
+    /// "Reading …". Here a server answers <c>/version</c> and never answers anything else,
+    /// so the real connect stops exactly in that gap.
+    /// </summary>
+    [Test]
+    public async Task While_the_catalog_is_read_the_page_says_so_and_nothing_else()
+    {
+        TestObjects.RedirectStores();
+        await using var server = new VersionOnlyServer();
+        var tab = new ClusterTabViewModel(new ClusterContext("slow", "slow", null, "tester", server.Kubeconfig()));
+        var applications = tab.Applications;
+        var notified = new List<string?>();
+        applications.PropertyChanged += (_, e) => notified.Add(e.PropertyName);
+        applications.Activate();
+
+        _ = tab.ConnectCommand.ExecuteAsync(null);
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!applications.HasStarted && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(20);
+        }
+
+        // HasStarted is set on the connect's thread; let its notifications finish.
+        await Task.Delay(100);
+        try
+        {
+            await Assert.That(applications.HasStarted).IsTrue();
+            await Assert.That(tab.IsConnecting).IsTrue();
+
+            await Assert.That(applications.IsConnecting).IsFalse();
+            await Assert.That(notified).Contains(nameof(ApplicationsViewModel.IsConnecting));
+            await Assert.That(applications.IsEmpty).IsFalse();
+            await Assert.That(applications.IsLoading).IsTrue();
+            await Assert.That(applications.LoadingText).IsEqualTo("Reading the cluster's resource types…");
+        }
+        finally
+        {
+            await applications.DisposeAsync();
+        }
+    }
+
     [Test]
     public async Task Only_a_lost_watch_offers_reconnect_and_a_later_warning_does_not_inherit_it()
     {
@@ -109,6 +155,105 @@ public class ConnectionStateTests
                   token: not-a-credential
             """);
         return path;
+    }
+}
+
+/// <summary>
+/// An API server that answers <c>/version</c> and holds every other request open until it
+/// is disposed: a cluster whose discovery is slow, with the slowness made unbounded.
+/// </summary>
+internal sealed class VersionOnlyServer : IAsyncDisposable
+{
+    private readonly System.Net.Sockets.TcpListener _listener = new(System.Net.IPAddress.Loopback, 0);
+    private readonly CancellationTokenSource _stop = new();
+    private readonly Task _accepting;
+
+    public VersionOnlyServer()
+    {
+        _listener.Start();
+        _accepting = AcceptAsync();
+    }
+
+    private int Port => ((System.Net.IPEndPoint)_listener.LocalEndpoint).Port;
+
+    public string Kubeconfig()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "kubenimbus-app-tests", Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "kubeconfig.yaml");
+        File.WriteAllText(path, $"""
+            apiVersion: v1
+            kind: Config
+            clusters:
+              - name: slow
+                cluster:
+                  server: http://127.0.0.1:{Port}
+            contexts:
+              - name: slow
+                context:
+                  cluster: slow
+                  user: tester
+            current-context: slow
+            users:
+              - name: tester
+                user:
+                  token: not-a-credential
+            """);
+        return path;
+    }
+
+    private async Task AcceptAsync()
+    {
+        try
+        {
+            while (true)
+            {
+                var connection = await _listener.AcceptTcpClientAsync(_stop.Token);
+                _ = ServeAsync(connection);
+            }
+        }
+        catch (Exception)
+        {
+            // stopped
+        }
+    }
+
+    private async Task ServeAsync(System.Net.Sockets.TcpClient connection)
+    {
+        using var _ = connection;
+        try
+        {
+            var stream = connection.GetStream();
+            using var reader = new StreamReader(stream, leaveOpen: true);
+            while (await reader.ReadLineAsync(_stop.Token) is { } requestLine)
+            {
+                while (await reader.ReadLineAsync(_stop.Token) is { Length: > 0 })
+                {
+                    // headers; no request this server answers has a body
+                }
+
+                var path = requestLine.Split(' ')[1];
+                if (!path.StartsWith("/version", StringComparison.Ordinal))
+                {
+                    await Task.Delay(Timeout.Infinite, _stop.Token);
+                }
+
+                const string body = """{"major":"1","minor":"31","gitVersion":"v1.31.0","platform":"linux/amd64"}""";
+                var response = $"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {body.Length}\r\n\r\n{body}";
+                await stream.WriteAsync(System.Text.Encoding.ASCII.GetBytes(response), _stop.Token);
+            }
+        }
+        catch (Exception)
+        {
+            // stopped, or the client hung up
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _stop.CancelAsync();
+        _listener.Stop();
+        await _accepting;
     }
 }
 
