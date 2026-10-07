@@ -1130,7 +1130,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 name = $"{tab.Header} ({suffix++})";
             }
 
-            members.Add(new FleetMember(name, client));
+            // The member's own environment travels with it, so a fleet row's delete is gated
+            // and coloured by the cluster it is on rather than the tab showing it.
+            members.Add(new FleetMember(name, client, tab.Environment));
         }
 
         return members;

@@ -67,11 +67,28 @@ public static class DebugContainers
     public const string Subresource = "ephemeralcontainers";
 
     /// <summary>
-    /// A shell, coreutils, <c>wget</c>, <c>nc</c>, <c>ps</c> and <c>top</c> in 4 MB. Pinned to a
-    /// minor so what the pane offers does not change under anyone; an air-gapped cluster
-    /// types its own mirror into the box.
+    /// A shell, coreutils, <c>wget</c>, <c>nc</c>, <c>ps</c> and <c>top</c> in 4 MB, fully
+    /// qualified and pinned to the multi-arch index digest; an air-gapped cluster types its
+    /// own mirror into the box.
     /// </summary>
-    public const string DefaultImage = "busybox:1.37";
+    /// <remarks>
+    /// <para>
+    /// The debug container runs as root with <c>SYS_PTRACE</c> in the target's process
+    /// namespace, so it can read the target's memory and environment. <c>kubectl debug</c> has
+    /// no default image; here the app chooses one, so the choice must not move under anyone:
+    /// a tag on Docker Hub is mutable, and a short name on CRI-O with
+    /// <c>unqualified-search-registries</c> can resolve to another registry altogether. The
+    /// registry, repository and digest pin the exact bytes; the tag stays only so a person
+    /// reading the box sees which BusyBox it is (the runtime ignores a tag beside a digest).
+    /// </para>
+    /// <para>
+    /// The digest is <c>Docker-Content-Digest</c> of the <c>1.37</c> OCI image index (17
+    /// platform entries), read on 2026-10-07. Nothing updates it automatically; how and when
+    /// to is in <c>docs/engineering/exec-terminal.md</c>, "The debug image pin".
+    /// </para>
+    /// </remarks>
+    public const string DefaultImage =
+        "docker.io/library/busybox:1.37@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e";
 
     /// <summary>kubectl's own prefix, so a container this app added reads the same in <c>kubectl describe</c>.</summary>
     public const string NamePrefix = "debugger-";

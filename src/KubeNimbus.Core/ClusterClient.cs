@@ -199,6 +199,10 @@ public sealed partial class ClusterClient : IDisposable
 
                 _retired.Add(_client);
                 _client = fresh;
+
+                // A new credential can be a different identity (another SSO role), so who
+                // the server says this connection is gets asked again.
+                _username = null;
                 Proxy = setup.Proxy;
                 SkipsTlsVerification = SkipsTls(setup);
                 while (_retired.Count > MaxRetiredClients)

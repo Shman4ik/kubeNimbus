@@ -2716,3 +2716,52 @@ first render, and it carries a tooltip now. Mutation checks: dropping Suspend fr
 1 red. README `application-page.light.png` and Store `02-applications-page.light.png` were
 re-rendered on Windows. Not verified (VER-61): a sync, refresh, cordon or suspend sent on the
 click to a real API server, and the split button driven by a real mouse.
+
+### Security audit, block 3: mutating actions and operator safety (2026-10-07)
+
+The third block of the staged pre-1.0 security audit, PR #146. Four findings, none worse
+than Low–Medium, all confirmed against the code before fixing. With "Confirm before
+deleting" off, the Delete key deleted at once on a production cluster, and an ordinary tab's
+confirm did not name the cluster. A production cluster now always asks, judged per row in a
+fleet list, and every armed strip and the YAML editor's delete confirm name their context,
+with "(production)" and the production colour on the strip's border. The debug container's
+default image is fully qualified and pinned to the busybox 1.37 index digest, read from
+Docker Hub's registry API. Argo CD syncs record the SelfSubjectReview username beside
+"kubeNimbus", and argo-cd.md now says a sync from here is authorised by Kubernetes RBAC
+rather than Argo's roles, while the controller still enforces sync windows. Scale states
+"from N to M" and warns about zero and ten-fold jumps.
+
+Checks: build clean; Core 857 passed / 2 skipped (Unix file modes) / 0 failed against the
+live sandbox, App 534 of 534; win-x64 NativeAOT publish with only the DataGrid warnings,
+both smoke scenarios exit 0; full harness green. Mutation checks: the production gate turned
+4 of 13 `MutatingActionSafetyTests` red, the fleet resolution 2, and the scale question and
+threshold 3 of 16 `ScaleConfirmTests`. Live: SelfSubjectReview names the admin's certificate
+CN and a narrow ServiceAccount, a stand-in Application's sync carries the name, and the
+pinned debug image pulls and runs. Not verified: the initiator and sync windows against a
+real Argo CD (VER-15).
+
+### Security audit, block 4: external processes and OS integration (2026-10-07)
+
+The fourth block of the staged pre-1.0 security audit, PR #149. Nothing worse than Low.
+"Open a terminal on this cluster" started `cmd.exe`, `powershell.exe`, `pwsh.exe` and the
+Linux emulators by bare name, and both Windows' `CreateProcess` and .NET on Unix look in the
+app's folder and the current directory before the system folders and `PATH`; every candidate
+is now resolved to an absolute path first (`TerminalLauncher.Resolve`), closing ENG-58. The
+app-data fallback for a process with no home folder was a fixed name in the shared temporary
+directory, which another local user could create first and fill with a `settings.json` naming
+their own kubeconfig; it is now a private directory with a random name, per process. The
+smoke test's seed directory got the same treatment. And a context that reached the chain only
+through a picked folder is never opened automatically — at the first launch, on a rescan or
+when a folder is added — because anyone who can write to that folder could otherwise choose
+the credential program the app runs without a click (`KubeconfigChain.AutomaticFirstContext`).
+
+Checks: build clean; Core 851 passed / 2 skipped (Unix file modes) / 0 failed against the
+live sandbox, App 524 of 524; win-x64 NativeAOT publish with only the DataGrid warnings, both
+smoke scenarios exit 0. `TerminalLauncher.OpenAsync` was driven with planted `pwsh.exe`,
+`powershell.exe` and `cmd.exe` in its current directory and started System32's
+`powershell.exe`; a bare `Process.Start` in the same folder ran the planted copy once
+`NoDefaultCurrentDirectoryInExePath` was cleared — the variable is set in the agent shell on
+this machine, which hides the bug in local runs. Mutation checks: the bare-name resolution
+turned four launcher tests red, and the old first-context rule two shell tests. Not verified:
+a real terminal launch on Linux or macOS, and the fallback directory's mode, which only a Unix
+run checks.

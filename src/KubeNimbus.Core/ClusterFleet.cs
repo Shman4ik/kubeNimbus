@@ -1,7 +1,13 @@
 namespace KubeNimbus.Core;
 
 /// <summary>One cluster taking part in an aggregated (fleet-wide) view.</summary>
-public sealed record FleetMember(string ClusterName, ClusterClient Client);
+/// <param name="Environment">
+/// The environment that member's tab is treated as (the user's assignment, else the name
+/// guess). Carried here because a fleet row's mutating action has to be gated and coloured by
+/// its <em>own</em> cluster's environment, not by the tab that happens to be showing it.
+/// </param>
+public sealed record FleetMember(
+    string ClusterName, ClusterClient Client, ClusterEnvironment Environment = ClusterEnvironment.Unknown);
 
 /// <summary>
 /// A member paired with the descriptor <em>that member's own</em> discovery

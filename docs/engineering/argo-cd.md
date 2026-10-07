@@ -25,7 +25,8 @@ Nine things are load-bearing.
    `ArgoCd.SyncPatch` writes `operation.initiatedBy` / `operation.info` /
    `operation.sync`, which is exactly what Argo's own API server writes when somebody
    presses Sync in its UI; the application controller watches for a non-null
-   `operation`, runs it, and moves the outcome into `status.operationState`. A refresh
+   `operation`, runs it, and moves the outcome into `status.operationState`. The initiator
+   is the user the API server names — see "Who a sync says it came from" below. A refresh
    is `argocd.argoproj.io/refresh: normal|hard`, the annotation `argocd app get
    --refresh` sets. Both are pinned byte-for-byte by `ArgoCdTests` for the same reason
    the workload patches are: **every failure here is silent**. A patch into `spec`
@@ -91,6 +92,44 @@ Nine things are load-bearing.
    cluster and fires on its click too. Terminating a running sync is **not** shipped: it
    means writing `status.operationState.phase`, which is a status-subresource patch and its
    own item.
+
+## Who a sync says it came from, and what authorises it
+
+**The initiator is the user, with the tool beside it** (security block 3, B3-3).
+`operation.initiatedBy.username` used to be the constant `kubenimbus`, so Argo's sync history
+lost who asked; the Kubernetes audit log kept the real user, but that is not where someone
+reading the Application looks. `ClusterClient.GetCurrentUsernameAsync` asks the API server who
+this connection is — a `SelfSubjectReview`, what `kubectl auth whoami` sends: `POST
+apis/authentication.k8s.io/v1/selfsubjectreviews` (GA in 1.28), then `v1beta1` (1.27), and
+nothing when neither is served — and the sync writes `"<username> (kubeNimbus)"`, or
+`"kubeNimbus"` alone when the server could not say (`ArgoCd.InitiatorFor`). Asked lazily, by
+the first sync on a connection; kept only in that `ClusterClient`, and forgotten by
+`RefreshCredentialsAsync`, because a refreshed credential can be a different identity. A
+refusal or a timeout is not cached (the next sync asks again); "neither version is served" is
+the server's settled answer and is. Only the username is used, never groups, the UID or
+extras. `ArgoSyncIdentityTests` pins the request, the v1beta1 fallback, the caching and what
+the patch carries; `IdentityLiveTests` reads the sandbox admin's certificate CN and a narrow
+ServiceAccount's username back from a real API server and syncs a stand-in Application.
+
+**The field is attribution, not proof.** `initiatedBy.username` is free text in the
+Application's spec-level `operation`, and anyone allowed to patch the Application can write
+any name there — this app, `kubectl patch`, a script. Read it as "who says they asked"; the
+API server's audit log is the record of who did.
+
+**What authorises a sync from here is Kubernetes RBAC, not Argo CD's.** The sync is a merge
+patch of the Application, so the API server checks `patch` on `applications.argoproj.io` for
+the user's kubeconfig identity, exactly as for `kubectl patch`. Argo CD's own project roles and
+`argocd-rbac-cm` (`applications, sync, <project>/<app>`) are enforced by the Argo CD API
+server, and this path never goes through it. Granting someone `patch` on Applications is
+therefore granting them sync (and prune) on every Application in that namespace, whatever
+their Argo role says, with this app or with kubectl alike — worth knowing before handing out
+that verb. What still applies is everything the **application controller**
+enforces when it runs the operation: the project's sync windows (`controller/sync.go`,
+`syncWindowPreventsSync`, which calls `window.CanSync(isManual, …)`; a sync from here carries
+no `initiatedBy.automated`, so it is a manual sync and a window's `manualSync` setting decides
+it), and the project's source, destination and resource allow and deny lists
+(`validateSyncPermissions` in the same file). Checked against argoproj/argo-cd `master` at
+`eb54713` on 2026-10-07.
 
 **Two rendering defects, both found by looking at the rendered pane rather than by any
 test.** The second is the more general one: the detail pane's resource rows are two lines

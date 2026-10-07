@@ -712,6 +712,16 @@
         <Setter Property="Background" Value="{StaticResource EnvProductionBrush}" />
     </Style>
 
+    <!-- An action armed against a production cluster: the strip's own card border in the
+         production colour, the same colour as the band and the tab's edge. It recolours a
+         border the strip already has rather than adding a mark, and it is there only while
+         such an action is armed (UI rules 1 and 17). Not ErrorBrush: an environment is not a
+         failure (cluster-switcher.md, rule 4). -->
+    <Style Selector="Border.card.actionStrip.production">
+        <Setter Property="BorderBrush" Value="{StaticResource EnvProductionBrush}" />
+        <Setter Property="BorderThickness" Value="1.5" />
+    </Style>
+
     <!-- Cluster tab in the top strip. The environment reads as a left edge rather
          than a background tint: a tint dark enough to see would fight the selected
          state, and the edge stacks cleanly with it. -->

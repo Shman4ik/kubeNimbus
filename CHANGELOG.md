@@ -90,6 +90,29 @@ it as the GitHub Release body, so headings must match tags exactly
 - A log line over 1 MiB is cut with a marker, and a watch frame over 32 MiB restarts the
   watch, instead of either being held in memory without limit.
 - An Argo Application's tracking label claims workloads only in the namespaces it deploys to.
+- A delete on a production cluster always asks. "Confirm before deleting" turned off used to
+  reach production clusters too; it still skips the confirm elsewhere. In the multi-cluster
+  list, each row follows its own cluster.
+- Every confirm names its cluster: the action strip and the YAML editor's delete confirm say
+  which cluster they act on, and say "(production)" with a red border on a production cluster.
+- Scale says "from 3 to 5", and warns when the new count stops every pod or is ten times the
+  current one.
+- The debug container's default image is pinned: `docker.io/library/busybox:1.37` by its
+  digest, so a moved tag or another registry cannot change what runs with ptrace rights in
+  your pod.
+- Argo CD syncs record who asked: the operation's initiator is your username as the cluster
+  reports it, followed by "(kubeNimbus)".
+- "Open a terminal on this cluster" no longer finds its shell or terminal in the current
+  directory: Windows' own shells are started from the system folder and everything else is
+  found on `PATH`. A copy of `cmd.exe` or `pwsh.exe` in the folder kubeNimbus was started from
+  could previously have been run instead.
+- A context in a kubeconfig folder added in Preferences is no longer opened on its own, at the
+  first launch, on a rescan or when the folder is added. Anyone who could write to that folder
+  could previously choose a context, and with it the credential program kubeNimbus ran without
+  a click. The contexts are still listed and open on a click.
+- When no home folder can be found, settings now go to a new private folder with a random
+  name, not a fixed folder in the shared temporary directory that another local user could
+  create first.
 
 ## [0.6.0] - 2026-10-04
 
