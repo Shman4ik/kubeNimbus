@@ -90,6 +90,18 @@ it as the GitHub Release body, so headings must match tags exactly
 - A log line over 1 MiB is cut with a marker, and a watch frame over 32 MiB restarts the
   watch, instead of either being held in memory without limit.
 - An Argo Application's tracking label claims workloads only in the namespaces it deploys to.
+- A delete on a production cluster always asks. "Confirm before deleting" turned off used to
+  reach production clusters too; it still skips the confirm elsewhere. In the multi-cluster
+  list, each row follows its own cluster.
+- Every confirm names its cluster: the action strip and the YAML editor's delete confirm say
+  which cluster they act on, and say "(production)" with a red border on a production cluster.
+- Scale says "from 3 to 5", and warns when the new count stops every pod or is ten times the
+  current one.
+- The debug container's default image is pinned: `docker.io/library/busybox:1.37` by its
+  digest, so a moved tag or another registry cannot change what runs with ptrace rights in
+  your pod.
+- Argo CD syncs record who asked: the operation's initiator is your username as the cluster
+  reports it, followed by "(kubeNimbus)".
 
 ## [0.6.0] - 2026-10-04
 

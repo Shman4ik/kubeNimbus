@@ -67,10 +67,26 @@ public static class ArgoCd
     public const string RefreshAnnotation = "argocd.argoproj.io/refresh";
 
     /// <summary>
-    /// Recorded as the operation's initiator, so an Argo CD user reading the Application's
-    /// history sees which tool asked for the sync. Argo shows this verbatim in its own UI.
+    /// Recorded as the operation's initiator when the API server could not say who this
+    /// connection is, so an Argo CD user reading the Application's history still sees which
+    /// tool asked for the sync. Argo shows this verbatim in its own UI.
     /// </summary>
-    public const string OperationInitiator = "kubenimbus";
+    public const string OperationInitiator = "kubeNimbus";
+
+    /// <summary>
+    /// What a sync records as its initiator: <c>"jane@example.com (kubeNimbus)"</c> when the
+    /// API server named the user this connection authenticates as (a SelfSubjectReview), and
+    /// <see cref="OperationInitiator"/> alone when it did not.
+    /// </summary>
+    /// <remarks>
+    /// Only the username, never groups, UIDs or extras: Argo's history is read by everyone
+    /// who can read the Application, and the name is the part a reader needs. It is
+    /// attribution, not proof — <c>operation.initiatedBy.username</c> is free text that anyone
+    /// allowed to patch the Application can set to anything, which is why the Kubernetes audit
+    /// log, not this field, is the record of who did it.
+    /// </remarks>
+    public static string InitiatorFor(string? username) =>
+        string.IsNullOrWhiteSpace(username) ? OperationInitiator : $"{username.Trim()} ({OperationInitiator})";
 
     /// <summary>True for the Argo CD Application kind, whatever version this server serves it at.</summary>
     public static bool IsApplicationKind(ResourceDescriptor descriptor) =>
@@ -150,8 +166,13 @@ public static class ArgoCd
     /// Git are removed from the cluster. That is ordinary GitOps and also the way a sync
     /// destroys something, so it is a decision, not a default.
     /// </para>
+    /// <para>
+    /// <paramref name="username"/> is who the API server says this connection is
+    /// (<see cref="ClusterClient.GetCurrentUsernameAsync"/>); <see cref="InitiatorFor"/> turns
+    /// it into the initiator Argo records.
+    /// </para>
     /// </remarks>
-    public static string SyncPatch(bool prune)
+    public static string SyncPatch(bool prune, string? username = null)
     {
         var buffer = new ArrayBufferWriter<byte>(256);
         using (var writer = new Utf8JsonWriter(buffer))
@@ -159,7 +180,7 @@ public static class ArgoCd
             writer.WriteStartObject();
             writer.WriteStartObject("operation");
             writer.WriteStartObject("initiatedBy");
-            writer.WriteString("username", OperationInitiator);
+            writer.WriteString("username", InitiatorFor(username));
             writer.WriteEndObject();
             writer.WriteStartArray("info");
             writer.WriteStartObject();

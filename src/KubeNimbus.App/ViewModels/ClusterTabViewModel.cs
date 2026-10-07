@@ -115,7 +115,12 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [ObservableProperty]
     private bool _isSelected;
 
-    public ClusterClient? Client { get; private set; }
+    /// <summary>
+    /// The connection, once one succeeded; null on the demo cluster for its whole life.
+    /// The setter is internal for the view-model tests, which hand a tab an offline client
+    /// so a mutating path runs past its demo refusal; only <c>ConnectAsync</c> sets it here.
+    /// </summary>
+    public ClusterClient? Client { get; internal set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsIdle))]
@@ -2403,7 +2408,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
 
         var action = new RowActionViewModel(
-            kind, target.Client, target.Descriptor, target.Namespace, target.Name, target.Cluster);
+            kind, target.Client, target.Descriptor, target.Namespace, target.Name, ContextNameFor(target.Cluster),
+            environment: EnvironmentOf(target.Cluster));
 
         action.Dismissed = () =>
         {
@@ -3014,6 +3020,36 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         clusterName.Length > 0 && _fleetTargets.TryGetValue(clusterName, out var target)
             ? target.Member.Client
             : Client;
+
+    /// <summary>
+    /// The name a confirm uses for the cluster a row came from: the fleet member's name in an
+    /// aggregated list (which is that tab's context name), this tab's context otherwise — the
+    /// name the cluster switcher and the tab strip show.
+    /// </summary>
+    internal string ContextNameFor(string clusterName) => clusterName.Length > 0 ? clusterName : Context.Name;
+
+    /// <summary>
+    /// The environment of the cluster a row came from. In an aggregated list that is the
+    /// row's <em>own</em> cluster's, read live from the shell's members (an override made
+    /// since the fleet watch started counts), then from the watch's targets; a name nothing
+    /// knows is classified by name, which leans toward production (cluster-switcher.md).
+    /// </summary>
+    internal ClusterEnvironment EnvironmentOf(string clusterName)
+    {
+        if (clusterName.Length == 0)
+        {
+            return Environment;
+        }
+
+        if (FleetMembersProvider?.Invoke().FirstOrDefault(m => m.ClusterName == clusterName) is { } member)
+        {
+            return member.Environment;
+        }
+
+        return _fleetTargets.TryGetValue(clusterName, out var target)
+            ? target.Member.Environment
+            : ClusterEnvironments.Classify(clusterName);
+    }
 
     /// <summary>Remembers a cluster's core/v1 Pod descriptor, verbs and subresources included.</summary>
     private void RecordPodDescriptor(string clusterName, IReadOnlyList<ResourceDescriptor> catalog)
@@ -3763,11 +3799,16 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// do not consult it — it is a setting about deleting, and scale needs its input
     /// step regardless.
     /// </para>
+    /// <para>
+    /// A production cluster always asks, whatever the preference says
+    /// (<see cref="RowActionViewModel.NeedsConfirm"/>) — in a fleet list, by the row's own
+    /// cluster's environment.
+    /// </para>
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanDeleteSelectedRow))]
     private void DeleteSelected()
     {
-        if (ArmRowAction(RowActionKind.Delete) is { } action && !App.LoadSettings().ConfirmDeletes)
+        if (ArmRowAction(RowActionKind.Delete) is { } action && !action.NeedsConfirm(App.LoadSettings().ConfirmDeletes))
         {
             action.RunNow();
         }
@@ -3864,9 +3905,9 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
 
         var action = new RowActionViewModel(
-            kind, client, descriptor, row.Namespace, row.Name, row.ClusterName,
+            kind, client, descriptor, row.Namespace, row.Name, ContextNameFor(row.ClusterName),
             kind == RowActionKind.Scale ? WorkloadActions.DeclaredReplicas(row.Resource) : null,
-            PodDescriptorFor(row), JobDescriptorFor(row));
+            PodDescriptorFor(row), JobDescriptorFor(row), EnvironmentOf(row.ClusterName));
         ConfigureCronJobAction(action, row, client);
 
         action.Dismissed = () =>
@@ -4048,6 +4089,14 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     private void AddInspectorTab(InspectorTabViewModelBase tab, bool replacePreview)
     {
+        // The YAML editor's own Delete has to name the cluster and follow the production
+        // rule just as the strip does. Stamped here, the one way any editor enters the dock
+        // (the list, workload detail, owner navigation), from the editor's own cluster.
+        if (tab is YamlEditorTabViewModel editor)
+        {
+            editor.SetCluster(ContextNameFor(editor.ClusterName), EnvironmentOf(editor.ClusterName));
+        }
+
         if (replacePreview)
         {
             var previousPreview = InspectorTabs.FirstOrDefault(t => t.IsPreview);

@@ -174,7 +174,8 @@ public sealed record AppSettings
     /// Whether deleting a resource requires the two-step confirm. On by default, and
     /// the default is not neutral: this app deletes things in someone's cluster, and a
     /// misclick on a production Deployment is not undoable. Turning it off is a
-    /// deliberate choice by someone who has decided they want the speed.
+    /// deliberate choice by someone who has decided they want the speed — and it does not
+    /// reach a production cluster (classified or user-assigned), where a delete always asks.
     /// </summary>
     public bool ConfirmDeletes { get; set; } = true;
 

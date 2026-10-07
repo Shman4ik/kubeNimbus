@@ -632,7 +632,8 @@ Three rules about it:
      `RowActionClickRuleTests` pins it kind by kind; `RunNow` sends the action and hides the
      question and the prompt row, so the strip is the in-flight line, then the outcome and
      Close. A refusal is that outcome too, since there is no prompt to go back to; trying
-     again is the same click. A delete with "Confirm before deleting" off takes the same path.
+     again is the same click. A delete with "Confirm before deleting" off takes the same path,
+     except on a production cluster, which always asks (see the paragraph below).
    - **An ellipsis in a label means it asks**, in menus, the palette and on buttons: "Sync",
      "Cordon", "Suspend" carry none; "Sync with prune…", "Drain…", "Restart…" do.
 
@@ -649,13 +650,22 @@ Three rules about it:
    one twitch away from Edit YAML and its 403 nowhere. The strip is present only while an
    action is armed or reporting, so it costs nothing the rest of the time (rule 1). It is
    one control, `Views/RowActionStrip`, hosted by the resource list and by the Applications
-   page alike — the page's Restart and Sync use the very same strip, not a copy. It is docked *outside* `ContentRows`
-   for the same reason the demo banner is — that grid's row indices are load-bearing for
+   page alike — the page's Restart and Sync use the very same strip, not a copy. It is
+   docked *outside* `ContentRows` for the same reason the demo banner is — that grid's row indices are load-bearing for
    `ApplyDockState`. And it is a `ContentControl` + inline `DataTemplate`, not a `Border`
    with `DataContext` and `x:DataType` both set on it: `x:DataType` re-roots an element's
    **own** bindings too, so that combination compiles against the wrong type and renders
    *nothing at all*, silently — which is how the first cut of this shipped past the
    compiler and was caught only by looking at the screenshot.
+   **The strip names the cluster, and production always asks** (security block 3, 2026-10).
+   Its `Target` names the context in every view, by the name the switcher shows, and says
+   "(production)" in words there, with the card's own border in the production colour; it
+   used to name the cluster only in a fleet list. "Confirm before deleting" turned off skips
+   the strip for a delete everywhere except a production cluster (classified or assigned),
+   where it always asks — in a fleet list by the row's own cluster's environment. The YAML
+   editor's own delete follows the same rule (`RowActionViewModel.DeleteNeedsConfirm`). Scale
+   says "from N to M" as the box changes and warns, without blocking, about zero and a
+   ten-fold jump. See [workload-actions](docs/engineering/workload-actions.md).
 18. **While the app is waiting, it says it is waiting — and it never shows a verdict it
    does not have yet.** This is rule 9 sharpened by a report from a real, distant
    cluster: clicking Pods there rendered the "No pods found" panel for several seconds
@@ -835,15 +845,15 @@ Each feature's design rules, and the incidents behind them, live in a page of th
 - [The Events list reads like `kubectl get events`](docs/engineering/events-list.md) — Last seen (fallback chain, series before eventTime) / Type / Reason / Object / Count / Message, newest-first default with a remembered clear, both Event groups, why not printer slots.
 - [Unhealthy only: the list's second narrowing](docs/engineering/unhealthy-only.md) — Warn/error predicate over StatusHealth, per-Modified re-evaluation, kind gate, third empty state, list-scoped Ctrl+Z.
 - [An Auto DataGrid column ratchets, and only one grid can afford it](docs/engineering/datagrid-auto-columns.md) — Why the resource list has no Width=Auto columns (measured ratchet) and why Helm/Argo keep them.
-- [Mutating workload actions (scale, rollout restart, delete, CronJob run/suspend)](docs/engineering/workload-actions.md) — Scale / rollout restart / delete: merge patches, scale subresource, capability from discovery; a CronJob's run-now (kubectl's Job, server-named), suspend/resume, Open Job.
+- [Mutating workload actions (scale, rollout restart, delete, CronJob run/suspend)](docs/engineering/workload-actions.md) — Scale / rollout restart / delete: merge patches, scale subresource, capability from discovery; a CronJob's run-now (kubectl's Job, server-named), suspend/resume, Open Job; every confirm names its cluster, production deletes always ask (fleet rows by their own cluster), scale says "from N to M" and warns about zero and ten-fold jumps.
 - [Networking: Service, Ingress and NetworkPolicy panes, and the list columns](docs/engineering/networking-detail.md) — Service pane joins selector-matched pods to EndpointSlice endpoints (slices by the `kubernetes.io/service-name` label, not owner refs; no verdict before both watches sync; the three degenerate shapes as three sentences); Ingress routes with a URL built from a validated host, never copied; NetworkPolicy rules in words with the empty selector meaning every pod; kubectl's list columns for Ingress/Endpoints/EndpointSlice/NetworkPolicy; Gateway API filed under Network by group.
 - [Node operations (detail, cordon / uncordon, drain)](docs/engineering/node-operations.md) — Node detail (System card, Events by kind+name, measured Usage vs allocatable), cordon/uncordon, drain: allocatable math, eviction plan table, partial-drain lifetime; pods-on-node and the drain are one field-selected watch, not a poll.
-- [The exec terminal](docs/engineering/exec-terminal.md) — SvcSystems.UI.Terminal over XTerm.NET: bytes in/out, stateful UTF-8 decoder, keyboard ownership, reverse-video defect; paste filtered, bracketed when asked and armed when multi-line into a shell that did not ask; shells by the pod's OS (powershell/cmd on Windows nodes), "no shell" as a verdict over every attempt, and the debug container (kubectl debug's ephemeral container: SYS_PTRACE with a Pod Security fallback, watched start, reuse).
+- [The exec terminal](docs/engineering/exec-terminal.md) — SvcSystems.UI.Terminal over XTerm.NET: bytes in/out, stateful UTF-8 decoder, keyboard ownership, reverse-video defect; paste filtered, bracketed when asked and armed when multi-line into a shell that did not ask; shells by the pod's OS (powershell/cmd on Windows nodes), "no shell" as a verdict over every attempt, and the debug container (kubectl debug's ephemeral container: SYS_PTRACE with a Pod Security fallback, watched start, reuse; the default image fully qualified and pinned by index digest, updated by hand).
 - [The machine's own terminal ("open a terminal on this cluster")](docs/engineering/machine-terminal.md) — TerminalLauncher: one-key overlay kubeconfig, env-inheritance trap on wt.exe/open, per-platform launch.
 - [The apply preview (server-side dry run)](docs/engineering/apply-preview.md) — Server-side dry-run diff, TextDiff/LCS bounds, view modes, strict fieldValidation with pre-1.27 fallback.
 - [Metrics (metrics.k8s.io)](docs/engineering/metrics.md) — metrics.k8s.io via discovery, the one polled API, UsageHistory ring and Sparkline.
 - [Helm release browsing (read-only)](docs/engineering/helm-releases.md) — Reading Helm 3 release Secrets (base64+gzip) with no Helm binary, a decompression cap with unreadable releases listed and explained; synthetic sidebar kind.
-- [Argo CD (GitOps in the navigator)](docs/engineering/argo-cd.md) — Argo CD through the Kubernetes API only: sync is a top-level operation patch, sync vs health pills; where "Open in Argo CD" goes (Argo's own namespace, never one a tenant names).
+- [Argo CD (GitOps in the navigator)](docs/engineering/argo-cd.md) — Argo CD through the Kubernetes API only: sync is a top-level operation patch whose initiator is the user a SelfSubjectReview names, authorised by Kubernetes RBAC rather than Argo's roles, sync vs health pills; where "Open in Argo CD" goes (Argo's own namespace, never one a tenant names).
 - [RBAC access review](docs/engineering/rbac-access-review.md) — SelfSubjectRulesReview, binding provenance, who-can rule scan mirroring API-server matching.
 - [Multi-cluster aggregated (fleet) views](docs/engineering/fleet-views.md) — ClusterFleet/AsyncMerge: per-cluster descriptors, cluster-scoped Reset, cluster-qualified keys.
 - [The status dot, and where it survives](docs/engineering/status-dot.md) — The health dot survives only beside CRD printer columns; the Helm grid is separate.

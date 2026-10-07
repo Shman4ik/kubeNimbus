@@ -40,7 +40,7 @@ anywhere. When you ask for a terminal on a cluster, kubeNimbus starts your syste
   sessions, port-forwards, YAML you apply, and the actions you take (scale, restart, delete,
   cordon, drain, sync, adding a debug container). All of it goes to your cluster. A debug
   container's image is pulled by your cluster's node from the registry the image name
-  points at, not by kubeNimbus.
+  points at (by default Docker Hub, for a digest-pinned `busybox`), not by kubeNimbus.
 - **Nowhere else.** kubeNimbus makes no other network connection of its own. There is no
   update check, no usage analytics, no automatic crash report and no remote configuration,
   and nothing is downloaded while it runs: fonts, icons and themes are built into the app.
@@ -64,8 +64,14 @@ makes that request, not kubeNimbus:
   Kubernetes client library, plus the impersonation headers (`Impersonate-User` and its
   companions) when your kubeconfig's user entry asks to act as someone else, as `kubectl`
   sends them.
-- The name `kubenimbus` as the field manager of YAML you apply, and as the initiator of an
-  Argo CD sync you start. The cluster records both in the objects concerned.
+- The name `kubenimbus` as the field manager of YAML you apply. The cluster records it in
+  the objects concerned.
+- When you start an Argo CD sync, one extra request asking the cluster who your credential
+  is (a `SelfSubjectReview`, what `kubectl auth whoami` sends), at most once per connection.
+  The sync then records your username with kubeNimbus beside it (`jane@example.com
+  (kubeNimbus)`), or `kubeNimbus` alone when the cluster cannot say, as the operation's
+  initiator on the Application. Nothing else from the answer (groups, IDs) is used, and the
+  answer is kept only in memory for that connection.
 
 ## What the app stores
 

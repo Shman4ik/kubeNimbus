@@ -30,6 +30,10 @@ connected cluster and interleave the results. Four things are load-bearing:
   Opening a row uses **its own** cluster's client and descriptor
   (`ClusterTabViewModel.ClientFor`/`DescriptorFor`), or a YAML apply would land
   on the wrong cluster; owner-chain navigation stays pinned to the same cluster.
+  The same goes for its **environment**: `FleetMember.Environment` carries each member
+  tab's own (override or guess), and `ClusterTabViewModel.EnvironmentOf` is what gates a
+  fleet row's delete and colours its confirm — a production member's row always asks, even
+  from a development tab (see [workload-actions](workload-actions.md)).
 
 Why a channel-based merge (`AsyncMerge`): the sources are long-lived watch
 streams that each block indefinitely, so a sequential `await foreach` over them

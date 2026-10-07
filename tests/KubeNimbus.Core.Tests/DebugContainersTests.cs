@@ -124,6 +124,47 @@ public class DebugContainersTests
         await Assert.That(DebugContainers.FindReusable(Json("""{"spec":{"containers":[]}}"""), "web", "busybox:1.37")).IsNull();
     }
 
+    /// <summary>
+    /// B3-2: the default the app chooses for a root, SYS_PTRACE container in somebody's pod
+    /// names its registry and pins its bytes — a short name can resolve to another registry
+    /// on CRI-O, and a tag on Docker Hub can be moved.
+    /// </summary>
+    [Test]
+    public async Task The_default_image_is_fully_qualified_and_pinned_to_a_digest()
+    {
+        var image = DebugContainers.DefaultImage;
+
+        await Assert.That(image).StartsWith("docker.io/library/busybox:");
+        var at = image.IndexOf("@sha256:", StringComparison.Ordinal);
+        await Assert.That(at).IsGreaterThan(0);
+        var digest = image[(at + "@sha256:".Length)..];
+        await Assert.That(digest.Length).IsEqualTo(64);
+        await Assert.That(digest.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f')).IsTrue();
+    }
+
+    /// <summary>
+    /// Reuse compares the image as written, so the pinned default finds its own debugger and a
+    /// mirror typed into the box finds its own — and neither is mistaken for the other.
+    /// </summary>
+    [Test]
+    public async Task Reuse_tells_the_pinned_default_and_a_typed_mirror_apart()
+    {
+        const string mirror = "registry.internal.example/mirror/busybox:1.37";
+        var pod = Json("""
+            {"spec":{"containers":[{"name":"web"}],"ephemeralContainers":[
+               {"name":"debugger-pinned","image":"PINNED","targetContainerName":"web"},
+               {"name":"debugger-mirror","image":"MIRROR","targetContainerName":"web"}]},
+             "status":{"phase":"Running","ephemeralContainerStatuses":[
+               {"name":"debugger-pinned","state":{"running":{}}},
+               {"name":"debugger-mirror","state":{"running":{}}}]}}
+            """.Replace("PINNED", DebugContainers.DefaultImage, StringComparison.Ordinal)
+               .Replace("MIRROR", mirror, StringComparison.Ordinal));
+
+        await Assert.That(DebugContainers.FindReusable(pod, "web", DebugContainers.DefaultImage)).IsEqualTo("debugger-pinned");
+        await Assert.That(DebugContainers.FindReusable(pod, "web", $"  {mirror} ")).IsEqualTo("debugger-mirror");
+        await Assert.That(DebugContainers.FindReusable(pod, "web", "busybox:1.37")).IsNull();
+    }
+
     // ---- over HTTP ---------------------------------------------------------------
 
     private const string PodPath = "/api/v1/namespaces/shop/pods/web-0";

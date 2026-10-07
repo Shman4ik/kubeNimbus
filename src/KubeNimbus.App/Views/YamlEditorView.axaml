@@ -364,8 +364,10 @@
 
     <!-- Delete step 2. Its own strip rather than a pair of buttons swapped into the
          header: at dock height the header is a crowded row, and "Confirm delete" has
-         to name what it deletes. -->
-    <Border Grid.Row="4" Classes="card" Padding="10" Margin="0,8,0,0" IsVisible="{Binding IsConfirmingDelete}">
+         to name what it deletes, the cluster included. On production it takes the
+         action strip's production border, the same mark for the same question. -->
+    <Border Grid.Row="4" Classes="card actionStrip" Classes.production="{Binding IsProductionCluster}"
+            Padding="10" Margin="0,8,0,0" IsVisible="{Binding IsConfirmingDelete}">
       <Grid ColumnDefinitions="*,Auto,Auto">
         <TextBlock Grid.Column="0" Classes="statusText warn" TextWrapping="Wrap" VerticalAlignment="Center"
                    Text="{Binding DeleteTargetDescription, StringFormat='Delete {0}? This cannot be undone.'}" />
