@@ -2694,3 +2694,25 @@ and the identity check 1; the default parse depth turned 3 of 6 red and the item
 fallback 1; the paste filter 2, and routing Ctrl+Shift+V back to the control's own paste made
 `ux-exec-paste` throw. Not verified: paste against real shells (VER-59), the Argo namespace
 rule against a real Argo CD (VER-60), the marker glyphs on macOS and Linux.
+
+### UI rule 17 revised: reversible actions fire on the click (2026-10-07)
+
+The owner reported the Applications page's Sync as a double click: **Sync…** opened the
+confirm strip, whose answer was a second **Sync** button. Rule 17 had said that every mutating
+action asks, and the owner chose to change it rather than the button. The new split: delete,
+drain, rollout restart, a CronJob's run-now and resume, and Argo's new sync with prune still
+ask; cordon, uncordon, suspend, and Argo's sync and refresh fire on the click
+(`RowActionViewModel.FiresOnClick`, `RunNow`). The strip stays the place every action reports:
+in flight, the outcome or the server's refusal, and Close. Prune was a checkbox on the sync's
+strip and is now its own action (`RowActionKind.ArgoSyncPrune`), on the arrow of the page's
+new Sync `SplitButton`, in both row menus and in the palette. The labels changed with it: an
+ellipsis now means "asks first".
+
+Checks: build clean; Core 841 of 843 against the live sandbox (two skips, Unix file modes),
+App 521 of 521; win-x64 NativeAOT publish with only the DataGrid warnings, both smoke scenarios
+exit 0; the harness's accessibility check caught the split button's arrow with no name on the
+first render, and it carries a tooltip now. Mutation checks: dropping Suspend from
+`FiresOnClick` turned 2 tests red, and leaving a refused one-click action without Close turned
+1 red. README `application-page.light.png` and Store `02-applications-page.light.png` were
+re-rendered on Windows. Not verified (VER-61): a sync, refresh, cordon or suspend sent on the
+click to a real API server, and the split button driven by a real mouse.

@@ -35,6 +35,15 @@ it as the GitHub Release body, so headings must match tags exactly
   revision, status or update time; Argo applications by sync or health, worst first. The Helm
   browser now opens in namespace and name order.
 
+### Changed
+
+- **Actions that can be taken back no longer ask first.** Argo CD's Sync and Refresh, Cordon,
+  Uncordon and Suspend now act on the click, and the strip above the list shows what was sent,
+  the result or the server's refusal. Sync used to open a strip with a second Sync button in it.
+  Actions that delete, disrupt or cannot be undone still ask: Delete, Drain, Restart, a
+  CronJob's Run now and Resume, and Argo CD's new **Sync with prune…**, which replaces the
+  prune checkbox. On the Applications page it is on the arrow beside Sync.
+
 ### Fixed
 
 - A double-click on a column header of workload detail's pod list, the Helm browser or the

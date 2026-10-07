@@ -13,8 +13,10 @@ half-present before this — `ResourceStatusSummary.SummarizeNode` already rende
 behind it and no way to act on what it said.
 
 Double-clicking a node opens the detail pane rather than its manifest (UI rule 2), and
-the three actions land on FEAT-1's shared confirm strip (UI rule 17) from the row context
-menu and the command palette. Nothing new is always visible.
+the three actions land on FEAT-1's shared action strip (UI rule 17) from the row context
+menu and the command palette. Nothing new is always visible. Cordon and uncordon fire on
+their click, since each takes the other back and neither touches a running pod; the strip
+is only their result line. The drain asks, with its plan (2026-10-07; both used to ask).
 
 ### The read-only half
 

@@ -51,6 +51,9 @@ Six things are load-bearing:
    in there. "Confirm before deleting" is read **at the press** (same as
    `YamlEditorTabViewModel.RequestDeleteAsync`, same reason). Scale and restart do not
    consult it: it is a setting about deleting, and scale needs its input step regardless.
+   With it off, the delete goes through `RowActionViewModel.RunNow`, the same path the
+   one-click actions of UI rule 17 take, so the strip is only its result line and names
+   the object it deleted.
 6. **The demo cluster arms the strip and refuses in place.** All three actions need an
    API server, so `RowActionViewModel.IsDemo` (`client is null`, as everywhere) renders
    the notice and disables Confirm — never a silent no-op. That is also why the demo
@@ -68,9 +71,12 @@ is its own item; the rest are backlog candidates, not omissions this pass forgot
 
 ## CronJobs: run now, suspend, resume (FEAT-8)
 
-`CronJobActions.cs` (Core) and `ClusterTabViewModel.CronJobs.cs` (App). The three arm the
-same strip, from the row menu and the palette; nothing is always visible. Six things are
-load-bearing:
+`CronJobActions.cs` (Core) and `ClusterTabViewModel.CronJobs.cs` (App). The three land on
+the same strip, from the row menu and the palette; nothing is always visible. Run now and
+resume arm a confirm, because each can start a Job straight away and a Job's side effects
+(a migration, a batch of mail) cannot be taken back; suspend fires on its click, because
+resume takes it back and running Jobs carry on (UI rule 17, revised 2026-10-07). Six things
+are load-bearing:
 
 1. **Run now is `kubectl create job --from=cronjob/…`, byte for byte where it matters.**
    The Job is the CronJob's `jobTemplate.spec` verbatim, with the template's labels, its
@@ -113,4 +119,5 @@ load-bearing:
    place like `NodeActions.SupportsCordon`.
 
 The demo cluster ships one scheduled and one suspended CronJob, so both halves of the slot
-render; the strip refuses in place there like every other action.
+render; the strip refuses in place there like every other action — a suspend with a result
+line saying nothing was sent, run-now and resume with their confirm disabled.

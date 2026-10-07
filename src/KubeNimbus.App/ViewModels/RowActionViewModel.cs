@@ -29,6 +29,13 @@ public enum RowActionKind
     /// <summary>Ask Argo CD to reconcile an Application with the revision Git declares.</summary>
     ArgoSync,
 
+    /// <summary>
+    /// The same sync with Argo's prune: resources the Application no longer declares are
+    /// deleted. A kind of its own rather than a checkbox on the sync, because the sync fires
+    /// on its click and this one, which deletes, does not (UI rule 17).
+    /// </summary>
+    ArgoSyncPrune,
+
     /// <summary>Ask Argo CD to re-compare an Application against Git, changing nothing.</summary>
     ArgoRefresh,
 
@@ -43,11 +50,12 @@ public enum RowActionKind
 }
 
 /// <summary>
-/// The armed state of one mutating action on one object: what it is about to do, the
-/// replica count or the drain options when it needs them, whether it is running, and how
-/// it ended. It is the app's confirm step for scale / rollout restart / delete / cordon /
-/// uncordon / drain / a CronJob's run-now, suspend and resume / Argo's sync and refresh, and
-/// it is one view model for all of them deliberately — the confirm sentence, the in-flight
+/// One mutating action on one object: what it is about to do, the replica count or the
+/// drain options when it needs them, whether it is running, and how it ended. It is the
+/// app's confirm step for scale / rollout restart / delete / drain / a CronJob's run-now and
+/// resume / Argo's sync with prune, and the result line of the actions that fire on their
+/// click (cordon, uncordon, suspend, Argo's sync and refresh — see <see cref="FiresOnClick"/>).
+/// It is one view model for all of them deliberately — the confirm sentence, the in-flight
 /// state, the RBAC 403 and the success line are identical work many times over otherwise,
 /// and near-identical strips are exactly how they drift apart.
 ///
@@ -140,17 +148,60 @@ public sealed partial class RowActionViewModel : ObservableObject
 
     public bool IsDrain => Kind == RowActionKind.Drain;
 
-    /// <summary>True for the sync, which is the one Argo action with a decision attached to it.</summary>
-    public bool IsArgoSync => Kind == RowActionKind.ArgoSync;
+    /// <summary>
+    /// Whether an action of this kind fires on the click that asked for it (UI rule 17).
+    /// These are the ones whose result can be taken back by one click of their twin, or that
+    /// only move the cluster toward what is already declared: a cordon touches no running
+    /// pod and uncordon reverses it, a suspend leaves running Jobs alone and resume reverses
+    /// it, a sync without prune applies what Git already says, and a refresh changes nothing
+    /// on the cluster. Everything else destroys, disrupts or cannot be taken back — delete,
+    /// drain, rollout restart, a sync that prunes, a CronJob's run-now and its resume (which
+    /// can start a missed run straight away) — and keeps the confirm. Scale is a form, not a
+    /// confirm: it needs a number before there is anything to send.
+    /// </summary>
+    public static bool FiresOnClick(RowActionKind kind) => kind is
+        RowActionKind.Cordon or RowActionKind.Uncordon or RowActionKind.Suspend
+        or RowActionKind.ArgoSync or RowActionKind.ArgoRefresh;
 
     /// <summary>
-    /// Delete resources that have left Git as part of the sync — Argo's own prune, and the
-    /// half of a sync that removes things rather than adding them. Off by default and stated
-    /// in the confirm, the same treatment the drain's two destructive options get: pruning is
-    /// ordinary GitOps and is also how a sync destroys something.
+    /// True once the action was sent by the click that armed it, with no question asked. The
+    /// strip is then only its result line: the in-flight message, the outcome and Close.
+    /// Set by <see cref="RunNow"/>, never by the kind alone, because a delete with "Confirm
+    /// before deleting" turned off fires on its click too.
     /// </summary>
     [ObservableProperty]
-    private bool _argoPrune;
+    [NotifyPropertyChangedFor(nameof(IsQuestionVisible))]
+    [NotifyPropertyChangedFor(nameof(IsPromptVisible))]
+    [NotifyPropertyChangedFor(nameof(IsDemoNoticeVisible))]
+    private bool _firedOnClick;
+
+    /// <summary>The question is a question only while it is one; an action already sent shows its result alone.</summary>
+    public bool IsQuestionVisible => !FiredOnClick;
+
+    /// <summary>
+    /// The demo cluster's paragraph about this step. An action that fired on its click has no
+    /// step to describe, so its refusal is the result line instead (<see cref="RunNow"/>).
+    /// </summary>
+    public bool IsDemoNoticeVisible => IsDemo && !FiredOnClick;
+
+    /// <summary>
+    /// Sends the action now, on the click that armed it, and leaves the strip as its result
+    /// line. On the demo cluster nothing is sent and the result line says so, with Close —
+    /// never a strip that waits for a confirm the real cluster would not have asked for.
+    /// </summary>
+    public void RunNow()
+    {
+        FiredOnClick = true;
+        if (IsDemo)
+        {
+            Message =
+                $"Nothing was sent: the demo cluster has no API server. On a real cluster this click acts on {Target} straight away.";
+            IsDone = true;
+            return;
+        }
+
+        ConfirmCommand.Execute(null);
+    }
 
     /// <summary>The sentence above the controls. States the consequence, not the API call.</summary>
     public string Question => Kind switch
@@ -178,6 +229,12 @@ public sealed partial class RowActionViewModel : ObservableObject
         RowActionKind.ArgoSync =>
             $"Sync {Target}? Argo CD applies the revision the Application targets, under its own sync options. "
             + "kubeNimbus asks; Argo does the work and reports back on the Application.",
+        // Prune is the half of a sync that deletes, and the sentence says what it deletes and
+        // where it comes back from, the same way the drain's confirm names what it destroys.
+        RowActionKind.ArgoSyncPrune =>
+            $"Sync {Target} and prune? Argo CD applies the revision the Application targets and deletes every "
+            + "resource it manages that Git no longer declares. A pruned object is gone from the cluster; Git is "
+            + "where it comes back from.",
         RowActionKind.ArgoRefresh =>
             $"Refresh {Target}? Argo re-compares it against Git. Nothing on the cluster changes — this only "
             + "updates what Argo thinks the difference is.",
@@ -207,6 +264,7 @@ public sealed partial class RowActionViewModel : ObservableObject
         RowActionKind.Uncordon => "Uncordon",
         RowActionKind.Drain => "Drain",
         RowActionKind.ArgoSync => "Sync",
+        RowActionKind.ArgoSyncPrune => "Sync and prune",
         RowActionKind.ArgoRefresh => "Refresh",
         RowActionKind.Trigger => "Run now",
         RowActionKind.Suspend => "Suspend",
@@ -336,16 +394,18 @@ public sealed partial class RowActionViewModel : ObservableObject
     /// slot for Stop, rather than leaving a dead Drain button under it — the same "one
     /// slot, swapped on the state" the port-forward pane settled (UI rule 11). The first
     /// rendering of this had Stop drawn over the confirm, which the screenshot caught.
+    /// An action that fired on its click never had a prompt, so it never shows one.
     /// </summary>
-    public bool IsPromptVisible => !IsDone && !IsDraining;
+    public bool IsPromptVisible => !FiredOnClick && !IsDone && !IsDraining;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ConfirmCommand))]
     [NotifyPropertyChangedFor(nameof(IsEditable))]
     private bool _isBusy;
 
-    /// <summary>True once the action has succeeded: the strip stops being a prompt and
-    /// becomes its own result, with one button left (Close).</summary>
+    /// <summary>True once the action has an answer and nothing is left to ask: it succeeded,
+    /// or it fired on its click and failed. The strip stops being a prompt and becomes its
+    /// own result, with one button left (Close).</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ConfirmCommand))]
     [NotifyPropertyChangedFor(nameof(IsEditable))]
@@ -613,18 +673,21 @@ public sealed partial class RowActionViewModel : ObservableObject
         IsBusy = true;
         IsError = false;
         IsSuccess = false;
+        // The kinds that fire on their click name their object here, because for them this
+        // line is the whole strip: there was no question above it to say what it is about.
         Message = Kind switch
         {
             RowActionKind.Scale => $"Scaling to {Replicas}…",
             RowActionKind.Restart => "Restarting…",
-            RowActionKind.Cordon => "Cordoning…",
-            RowActionKind.Uncordon => "Uncordoning…",
-            RowActionKind.ArgoSync => "Asking Argo to sync…",
-            RowActionKind.ArgoRefresh => "Asking Argo to refresh…",
+            RowActionKind.Cordon => $"Cordoning {Target}…",
+            RowActionKind.Uncordon => $"Uncordoning {Target}…",
+            RowActionKind.ArgoSync => $"Asking Argo to sync {Target}…",
+            RowActionKind.ArgoSyncPrune => "Asking Argo to sync and prune…",
+            RowActionKind.ArgoRefresh => $"Asking Argo to refresh {Target}…",
             RowActionKind.Trigger => "Creating the Job…",
-            RowActionKind.Suspend => "Suspending…",
+            RowActionKind.Suspend => $"Suspending {Target}…",
             RowActionKind.Resume => "Resuming…",
-            _ => "Deleting…",
+            _ => $"Deleting {Target}…",
         };
 
         try
@@ -660,19 +723,24 @@ public sealed partial class RowActionViewModel : ObservableObject
                 // reaches the list through the watch, so a message claiming "synced" here
                 // would be asserting something this app has not observed.
                 case RowActionKind.ArgoSync:
-                    await client.SyncArgoApplicationAsync(_descriptor, _namespace, _name, ArgoPrune);
-                    Message = ArgoPrune
-                        ? "Sync requested, with prune. Argo reports progress on the Application — the list "
-                          + "follows it as the watch reports it."
-                        : "Sync requested. Argo reports progress on the Application — the list follows it as "
-                          + "the watch reports it.";
+                    await client.SyncArgoApplicationAsync(_descriptor, _namespace, _name, prune: false);
+                    Message =
+                        $"Sync of {Target} requested. Argo reports progress on the Application — the list follows "
+                        + "it as the watch reports it.";
+                    break;
+
+                case RowActionKind.ArgoSyncPrune:
+                    await client.SyncArgoApplicationAsync(_descriptor, _namespace, _name, prune: true);
+                    Message =
+                        "Sync requested, with prune. Argo reports progress on the Application — the list "
+                        + "follows it as the watch reports it.";
                     break;
 
                 case RowActionKind.ArgoRefresh:
                     await client.RefreshArgoApplicationAsync(_descriptor, _namespace, _name);
                     Message =
-                        "Refresh requested. Argo clears the annotation once it has re-compared, so there is "
-                        + "nothing on the object to watch — the sync status updates when it is done.";
+                        $"Refresh of {Target} requested. Argo clears the annotation once it has re-compared, so "
+                        + "there is nothing on the object to watch — the sync status updates when it is done.";
                     break;
 
                 // The Job's name is the server's (generateName), so it is only known from
@@ -695,7 +763,7 @@ public sealed partial class RowActionViewModel : ObservableObject
 
                 default:
                     await client.DeleteResourceAsync(_descriptor, _namespace, _name);
-                    Message = "Deleted.";
+                    Message = $"Deleted {Target}.";
                     break;
             }
 
@@ -708,6 +776,11 @@ public sealed partial class RowActionViewModel : ObservableObject
             // names the subject, the verb and the resource — i.e. the whole diagnosis.
             IsError = true;
             Message = $"{ConfirmLabel} failed: {FirstLine(ex.Message)}";
+
+            // A confirmed action keeps its prompt so it can be tried again. One that fired on
+            // its click has no prompt to go back to, so the failure is its answer and Close
+            // sits beside it; trying again is the same click on the same control.
+            IsDone = FiredOnClick;
         }
         finally
         {

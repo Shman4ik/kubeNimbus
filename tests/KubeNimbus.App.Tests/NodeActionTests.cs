@@ -108,11 +108,12 @@ public class NodeActionTests
     }
 
     /// <summary>
-    /// Arming names the object and changes nothing yet (UI rule 17). On the demo cluster
-    /// the confirm is dead and the strip says why — never a silent no-op.
+    /// Cordon is sent on the click (UI rule 17): it touches no running pod and uncordon takes
+    /// it back. On the demo cluster nothing is sent, and the strip's result line says so and
+    /// names the node — never a silent no-op, and never a confirm a real cluster would skip.
     /// </summary>
     [Test]
-    public async Task Cordon_arms_the_shared_strip_and_refuses_in_place_on_the_demo_cluster()
+    public async Task Cordon_fires_on_the_click_and_the_demo_cluster_says_nothing_was_sent()
     {
         var tab = NodeTab();
         tab.SelectedRow = Row(tab, "demo-worker-1");
@@ -122,8 +123,10 @@ public class NodeActionTests
         var action = tab.PendingRowAction;
         await Assert.That(action).IsNotNull();
         await Assert.That(action!.Kind).IsEqualTo(RowActionKind.Cordon);
-        await Assert.That(action.Target).Contains("Node/demo-worker-1");
+        await Assert.That(action.FiredOnClick).IsTrue();
         await Assert.That(action.IsDemo).IsTrue();
+        await Assert.That(action.IsDone).IsTrue();
+        await Assert.That(action.Message).Contains("Node/demo-worker-1");
         await Assert.That(action.ConfirmCommand.CanExecute(null)).IsFalse();
     }
 

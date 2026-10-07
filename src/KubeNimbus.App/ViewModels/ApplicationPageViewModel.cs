@@ -372,7 +372,10 @@ public sealed partial class ApplicationPageViewModel : ObservableObject
 
     // --------------------------------------------------------------- actions
 
-    /// <summary>The armed Restart or Sync strip (UI rule 17), or null.</summary>
+    /// <summary>
+    /// The action strip (UI rule 17), or null: Restart's or Sync with prune's confirm, or the
+    /// result line of a Sync, which fires on its click.
+    /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasPendingAction))]
     private RowActionViewModel? _pendingAction;
@@ -397,12 +400,19 @@ public sealed partial class ApplicationPageViewModel : ObservableObject
 
     public bool CanSync => Entry.Argo is not null && ArgoDescriptor() is { } d && ArgoCd.SupportsSync(d);
 
+    /// <summary>Sync, sent on the click: it applies what Git already declares.</summary>
     [RelayCommand(CanExecute = nameof(CanSync))]
-    private void Sync()
+    private void Sync() => ArmSync(RowActionKind.ArgoSync);
+
+    /// <summary>Sync with prune, which deletes what Git no longer declares, so it asks first.</summary>
+    [RelayCommand(CanExecute = nameof(CanSync))]
+    private void SyncWithPrune() => ArmSync(RowActionKind.ArgoSyncPrune);
+
+    private void ArmSync(RowActionKind kind)
     {
         if (Entry.Argo is { } argo && ArgoDescriptor() is { } d)
         {
-            Arm(new RowActionViewModel(RowActionKind.ArgoSync, _list.Tab.Client, d, argo.Namespace, argo.Name));
+            Arm(new RowActionViewModel(kind, _list.Tab.Client, d, argo.Namespace, argo.Name));
         }
     }
 
@@ -426,6 +436,10 @@ public sealed partial class ApplicationPageViewModel : ObservableObject
         };
         IsSelfHealWarningOpen = false;
         PendingAction = action;
+        if (RowActionViewModel.FiresOnClick(action.Kind))
+        {
+            action.RunNow();
+        }
     }
 
     public bool CanEditYaml => PrimaryWorkload is not null && (_list.Tab.Client is not null || IsDemo);
@@ -547,6 +561,7 @@ public sealed partial class ApplicationPageViewModel : ObservableObject
         OnPropertyChanged(nameof(SelfHealWarning));
         RestartCommand.NotifyCanExecuteChanged();
         SyncCommand.NotifyCanExecuteChanged();
+        SyncWithPruneCommand.NotifyCanExecuteChanged();
         EditYamlCommand.NotifyCanExecuteChanged();
         UpdateLogState();
     }

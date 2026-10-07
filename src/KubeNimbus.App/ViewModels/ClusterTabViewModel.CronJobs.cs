@@ -5,8 +5,9 @@ using KubeNimbus.Core;
 namespace KubeNimbus.App.ViewModels;
 
 /// <summary>
-/// FEAT-8: a CronJob's run-now, suspend and resume, on the shared confirm strip (UI rule
-/// 17) like every other mutating action. Kept in its own file because the capability
+/// FEAT-8: a CronJob's run-now, suspend and resume, on the shared action strip (UI rule
+/// 17). Run-now and resume ask first, because each can start a Job straight away; suspend
+/// fires on its click, because resume takes it back. Kept in its own file because the capability
 /// checks, the Job descriptor they depend on and the selected-row notifications are one
 /// piece, and the main file is already the longest in the app.
 /// </summary>

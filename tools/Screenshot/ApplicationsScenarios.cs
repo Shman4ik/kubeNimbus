@@ -73,8 +73,11 @@ public static class ApplicationsScenarios
         return tab;
     }
 
+    /// <param name="sync">Click Sync: it fires on the click, so the strip is its result line (on the demo cluster, that nothing was sent).</param>
+    /// <param name="syncPrune">Choose Sync with prune from Sync's arrow: the one sync that asks first.</param>
     public static ClusterTabViewModel Page(
-        string name, bool merged = false, bool editYaml = false, bool restart = false)
+        string name, bool merged = false, bool editYaml = false, bool restart = false,
+        bool sync = false, bool syncPrune = false)
     {
         var tab = DemoTab();
         var apps = tab.Applications;
@@ -94,6 +97,16 @@ public static class ApplicationsScenarios
         if (restart)
         {
             page.RestartCommand.Execute(null);
+        }
+
+        if (sync)
+        {
+            page.SyncCommand.Execute(null);
+        }
+
+        if (syncPrune)
+        {
+            page.SyncWithPruneCommand.Execute(null);
         }
 
         DrainLogs(page);
