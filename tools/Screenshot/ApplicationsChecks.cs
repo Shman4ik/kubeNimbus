@@ -46,6 +46,7 @@ internal static class ApplicationsChecks
         Dispatcher.UIThread.RunJobs();
         view.FocusList();
         Dispatcher.UIThread.RunJobs();
+        SelectionChecks.RequireFocused(list, "The focused Applications list");
         window.KeyPress(Key.Down, RawInputModifiers.None, PhysicalKey.ArrowDown, null);
         Dispatcher.UIThread.RunJobs();
         if (!ReferenceEquals(vm.SelectedRow, vm.VisibleRows[1]))
@@ -220,6 +221,7 @@ internal static class ApplicationsChecks
         Click(window, window.FindControl<ListBoxItem>("ResourcesModeItem")!);
         if (shell.Mode != ShellMode.Resources || !window.GetVisualDescendants().OfType<ClusterTabView>().Any(v => v.IsEffectivelyVisible))
             throw new InvalidOperationException("Clicking Resources did not switch the content to the explorer.");
+        SelectionChecks.RequireFocused(switcher, "The clicked mode switch");
         Click(window, window.FindControl<ListBoxItem>("ApplicationsModeItem")!);
         if (shell.Mode != ShellMode.Applications || vm.Rows.Count != rows || switcher.SelectedIndex != 0)
             throw new InvalidOperationException("Switching back to Applications lost the list.");

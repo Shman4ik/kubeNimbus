@@ -2800,3 +2800,21 @@ app does about it, so a report of a tenant attacking an operator is plainly in s
 Secret-masking promise now says what it does not cover (Helm and Argo CD values, logs), and
 the privacy policy's list of preferences gained the three it had missed (advanced view,
 sidebar visibility, logs opened full-size).
+
+### White text on a light selection (2026-10-08)
+
+The owner reported the Applications list's selected row in the light theme: the name was white
+on the pale wash. The cause was the shared rule 20 (`9328e4b`), which gives the list holding
+keyboard focus the solid accent *and* white text on `PART_ContentPresenter`. Four kubeNimbus
+lists repaint that part's fill and had never set its text colour, because before rule 20 none
+was set: the Applications list and the switcher (a transparent part under a row body of their
+own), the application page's pods and every `segmented` tab strip, the mode switch included
+(the wash). A click focuses the list, so a clicked row went white on near-white. Each of the
+four now sets `SystemControlForegroundBaseHighBrush` with its fill.
+
+`SelectionChecks` in the harness is the regression check: every light scenario fails on a
+selected row whose part draws white text over a fill that is not opaque, unless ordinary text
+is white in that theme anyway, and `ux-applications-keys` focuses the Applications list and
+clicks the mode switch and requires both to hold focus and pass. Against the unfixed styles it
+failed with "ListBox AppList draws its selected row's text white on a transparent fill". No
+published screenshot shows a focused list, so none was re-rendered.

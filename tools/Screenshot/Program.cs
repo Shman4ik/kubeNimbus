@@ -425,6 +425,7 @@ foreach (var (name, build) in scenarios)
 TooltipChecks.ThrowIfAnyDead(filtered: filter is not null);
 AutomationChecks.ThrowIfAnyFailed(filtered: filter is not null);
 FontChecks.ThrowIfAnyFailed(filtered: filter is not null);
+SelectionChecks.ThrowIfAnyFailed(filtered: filter is not null);
 Console.WriteLine($"Wrote screenshots to {Path.GetFullPath(outDir)}");
 try
 {
@@ -519,6 +520,7 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     if (theme == ThemeVariant.Light) TooltipChecks.Reach(window, name);
     if (theme == ThemeVariant.Light) AutomationChecks.Walk(window, name);
     if (theme == ThemeVariant.Light) FontChecks.Walk(window, name);
+    if (theme == ThemeVariant.Light) SelectionChecks.Walk(window, name);
     using var frame = window.CaptureRenderedFrame();
     var themeLabel = theme == ThemeVariant.Dark ? "dark" : "light";
     var path = Path.Combine(outDir, $"{name}.{themeLabel}.png");

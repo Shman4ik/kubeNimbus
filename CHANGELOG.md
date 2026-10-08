@@ -51,6 +51,9 @@ it as the GitHub Release body, so headings must match tags exactly
 - Connecting to a slow cluster (an EKS cluster signed in through AWS SSO, for one) no longer
   draws "Connecting to …", "No applications found" and "Reading …" over each other on the
   Applications page. While the cluster's resource types are read, the page says only that.
+- In the light theme, a selected row's text is readable again once you have clicked it. The
+  Applications list, an application's pods, the cluster switcher and every tab strip (the
+  Applications | Resources switch among them) drew it white on their pale selection colour.
 
 ### Security
 
