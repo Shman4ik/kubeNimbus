@@ -274,8 +274,16 @@
     <Style Selector="ListBox.segmented ListBoxItem:pointerover /template/ ContentPresenter">
         <Setter Property="Background" Value="{StaticResource HoverBackgroundBrush}" />
     </Style>
+    <!-- A list that repaints the selected fill must set the text colour with it. The shared
+         rule for the list holding keyboard focus (DESIGN.md rule 20) sets the solid accent and
+         white text on this same part, so replacing only the fill left white text on the light
+         wash, unreadable in the light theme as soon as a tab was clicked. A tab strip keeps the
+         wash and ordinary text, which is rule 20's `strip` case. The Applications list, the
+         switcher and the application page's pods do the same below; SelectionChecks in the
+         screenshot harness fails the run on white text over anything but the opaque accent. -->
     <Style Selector="ListBox.segmented ListBoxItem:selected /template/ ContentPresenter">
         <Setter Property="Background" Value="{StaticResource AppSelectionBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}" />
     </Style>
 
     <!-- Divider between the tab strip and the tools sharing its row. -->
@@ -769,6 +777,7 @@
     </Style>
     <Style Selector="ListBox.switcherList ListBoxItem /template/ ContentPresenter">
         <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}" />
     </Style>
     <Style Selector="Border.switcherRowBody">
         <Setter Property="Padding" Value="10,7" />
@@ -986,6 +995,7 @@
     </Style>
     <Style Selector="ListBox.appList ListBoxItem /template/ ContentPresenter">
         <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}" />
     </Style>
     <!-- The list's column headers sort, so each is a button drawn as the sectionHeader text
          it replaced: the whole cell is the target (UI rule 8), the hand says so, hover
@@ -1108,6 +1118,7 @@
     </Style>
     <Style Selector="ListBox.podList ListBoxItem:selected /template/ ContentPresenter">
         <Setter Property="Background" Value="{StaticResource AppSelectionBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}" />
     </Style>
 
     <!-- A linked object: a link-styled button, whole row clickable. -->
