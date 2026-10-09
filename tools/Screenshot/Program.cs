@@ -223,6 +223,10 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // The log viewer pass: regex filter with context, a pin, the error jump; a JSON line opened.
     ("cluster-tab-demo-pod-detail-grep", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetailGrep(), height: 1000)),
     ("cluster-tab-demo-pod-detail-json", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetailJson(), height: 1000)),
+    // Both log panes scrolled to their end: the last line stays clear of the horizontal
+    // scroll bar, which Fluent draws over the content (LayoutChecks.LogEndClearsScrollBar).
+    ("ux-log-end-gap-pod", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetailSearch(query: ""))),
+    ("ux-log-end-gap-workload", () => HostInMainWindow(ClusterTabScenarios.DemoWorkloadLogs())),
     // The CRD printer-column pair: the same Certificate list without and with the
     // advanced view, which is where the CRD's own `priority: 1` columns live.
     ("cluster-tab-crd-printer-columns", () => HostInMainWindow(ClusterTabScenarios.DemoCrdPrinterColumns())),
@@ -514,6 +518,9 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     // Last, so a pane a check just opened settles too: capture when the log streams have
     // stopped moving, not whenever the builder happened to return (ENG-10).
     LogSettle.Run(window);
+
+    // After the settle, so every line has arrived before the pane is scrolled to its end.
+    if (name.StartsWith("ux-log-end-gap", StringComparison.Ordinal)) LayoutChecks.LogEndClearsScrollBar(window);
 
     // Every scenario, once: the pointer over each tooltip has to reach its element
     // (DESIGN.md rule 21). Reported together after the last scenario.

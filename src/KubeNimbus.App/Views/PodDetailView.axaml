@@ -335,7 +335,11 @@
                    off hard-clipped every long line — a stack trace or a JSON log entry
                    simply ran off the edge with no way to reach the rest of it. -->
               <ScrollViewer Name="LogScroll" Grid.Column="0" HorizontalScrollBarVisibility="Auto">
-                <ItemsControl Name="LogItems" ItemsSource="{Binding LogLines}">
+                <!-- The bottom margin is room for the horizontal scroll bar. Fluent's scroll
+                     bars hide themselves and are drawn over the content rather than beside it,
+                     so the last line used to sit under the bar, which is exactly where Follow
+                     keeps the line being read. 14 is the bar's 10 (ScrollBarSize) and a gap. -->
+                <ItemsControl Name="LogItems" ItemsSource="{Binding LogLines}" Margin="0,0,0,14">
                   <!-- Virtualized: only the rows in sight exist. With the default StackPanel every
                        buffered line was a live row of about ten controls, so a full 4,000-line
                        buffer took seconds to lay out and made every theme switch restyle ~37,000

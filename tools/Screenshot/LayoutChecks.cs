@@ -1,5 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Headless;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using KubeNimbus.App.Views;
 
@@ -61,6 +63,46 @@ internal static class LayoutChecks
         if (columns > viewport + 0.5 && (bar is null || !bar.IsVisible || bar.Maximum <= 0))
             throw new InvalidOperationException(
                 $"The list's columns need {columns:0}px of a {viewport:0}px grid and it does not scroll sideways (ENG-6).");
+    }
+
+    /// <summary>
+    /// A log pane scrolled to its end, which is where Follow keeps it, leaves its last line
+    /// clear of the horizontal scroll bar. Fluent's scroll bars hide themselves and are drawn
+    /// over the content rather than beside it, so the last line sat under the bar until the
+    /// panes gave their content a bottom margin. Left scrolled to the end, so the PNG shows it.
+    /// </summary>
+    internal static void LogEndClearsScrollBar(Window window)
+    {
+        var scroll = window.GetVisualDescendants().OfType<ScrollViewer>()
+                .FirstOrDefault(s => s.Name == "LogScroll" && s.IsEffectivelyVisible)
+            ?? throw new InvalidOperationException("No visible log pane.");
+        var items = scroll.GetVisualDescendants().OfType<ItemsControl>().First(i => i.Name == "LogItems");
+
+        // A log shorter than its pane has no end to scroll to, and would pass without
+        // having measured anything.
+        if (scroll.Extent.Height <= scroll.Bounds.Height + 0.5)
+            throw new InvalidOperationException(
+                $"The log pane's {items.ItemCount} lines fit its {scroll.Bounds.Height:0}px, so there was nothing to scroll and nothing was checked.");
+
+        // Twice: the list is virtualized, and the first pass can land on an estimated extent.
+        for (var i = 0; i < 2; i++)
+        {
+            scroll.ScrollToEnd();
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Dispatcher.UIThread.RunJobs();
+        }
+
+        var last = items.ContainerFromIndex(items.ItemCount - 1)
+            ?? throw new InvalidOperationException("The log's last line has no row after scrolling to the end.");
+        var bottom = last.TranslatePoint(new Point(0, last.Bounds.Height), scroll)?.Y ?? double.PositiveInfinity;
+        var bar = scroll.TryFindResource("ScrollBarSize", out var size) && size is double d ? d : 10;
+        var gap = scroll.Bounds.Height - bottom;
+        if (gap < bar - 0.5)
+            throw new InvalidOperationException(
+                $"Scrolled to its end, the log pane's last line ends {gap:0.#}px above the pane's bottom edge, under the {bar:0}px horizontal scroll bar.");
+
+        Console.WriteLine($"Log pane's last line ends {gap:0}px above its bottom edge (scroll bar {bar:0}px).");
     }
 
     private static double RightEdge(Visual control, Visual root) =>

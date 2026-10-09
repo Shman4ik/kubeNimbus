@@ -274,6 +274,19 @@ Neither re-opens on every status update of a still-pending pod.
   row, "Logs (all pods)", and the catalog's Logs / Previous logs / logs-palette commands. The
   clock stays where it means time — the timestamp toggle and the sidebar's Recent section.
 
+## The last line clears the scroll bar
+
+Fluent's scroll bars hide themselves and are drawn over the content rather than beside it, so
+a pane scrolled to its end, which is where Follow keeps it, used to put the last line under
+the horizontal bar, half hidden (reported by the owner, 2026-10-09). Both panes' scrolled
+content has a 14px bottom margin, the bar's 10 (`ScrollBarSize`) and a gap, so the end of the
+log always stops above the bar, whether or not the bar is showing. It is a margin on the
+scrolled content and not padding on the card, because only space inside the scroll extent is
+reached by scrolling to the end. The harness's `ux-log-end-gap-pod` and
+`ux-log-end-gap-workload` scroll each pane to its end and fail if the last row ends closer to
+the bottom edge than the bar is tall (`LayoutChecks.LogEndClearsScrollBar`); with the margin
+removed both measured 0px.
+
 ## Verification
 
 `LogPaneTests` (App tests) drives the real `Enqueue`/`Flush` of both panes: find vs filter,
