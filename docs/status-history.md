@@ -2818,3 +2818,19 @@ is white in that theme anyway, and `ux-applications-keys` focuses the Applicatio
 clicks the mode switch and requires both to hold focus and pass. Against the unfixed styles it
 failed with "ListBox AppList draws its selected row's text white on a transparent fill". No
 published screenshot shows a focused list, so none was re-rendered.
+
+### The last log line under the scroll bar (2026-10-09)
+
+The owner reported the last line of a log hard to read: Fluent's scroll bars hide themselves
+and are drawn over the content rather than beside it, so a log pane scrolled to its end (where
+Follow keeps it) put the last line under the horizontal bar. Pod detail's and the multi-pod
+pane's scrolled content now has a 14px bottom margin, the bar's 10 and a gap, so the end of the
+log always stops above the bar.
+
+`ux-log-end-gap-pod` and `ux-log-end-gap-workload` in the harness scroll each pane to its end
+and fail if the last row ends closer to the bottom edge than the bar is tall
+(`LayoutChecks.LogEndClearsScrollBar`). With the margins removed both failed at 0px; with them,
+both measure 14px. The published screenshots were re-rendered on Windows to check: the log
+panes in them are not scrolled to an end and render identically, and only the Age column had
+moved with the clock, so none was replaced. Not checked in the running app or on macOS and
+Linux, where the bar is drawn by the same Fluent template.

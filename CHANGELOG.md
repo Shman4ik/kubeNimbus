@@ -54,6 +54,8 @@ it as the GitHub Release body, so headings must match tags exactly
 - In the light theme, a selected row's text is readable again once you have clicked it. The
   Applications list, an application's pods, the cluster switcher and every tab strip (the
   Applications | Resources switch among them) drew it white on their pale selection colour.
+- The last line of a log is no longer half hidden under the horizontal scroll bar. Both log
+  panes now always leave a gap below the end of the log, which is where Follow keeps you.
 
 ### Security
 

@@ -268,7 +268,9 @@
                                    MatchBrush="{DynamicResource LogCurrentMatchBrush}"
                                    CursorBrush="{DynamicResource SystemAccentColor}" />
         <ScrollViewer Name="LogScroll" Grid.Column="0" HorizontalScrollBarVisibility="Auto">
-          <StackPanel>
+          <!-- The bottom margin is room for the horizontal scroll bar, as in pod detail's
+               pane: the bar is drawn over the content, and the last line used to sit under it. -->
+          <StackPanel Margin="0,0,0,14">
           <ItemsControl Name="LogItems" ItemsSource="{Binding LogLines}">
             <!-- Virtualized: only the rows in sight exist. With the default StackPanel every
                  buffered line was a live row of about ten controls, so a full 4,000-line
