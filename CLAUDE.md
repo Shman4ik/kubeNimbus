@@ -1323,7 +1323,19 @@ tools/Screenshot           Headless visual-verification harness. Dev-only.
 design/                    Logo masters (.af) + generated SVG/masters/store/screenshots.
 installer/                 Packaging inputs: macOS Info.plist, .desktop, MSIX manifest.
 scripts/                   Sandbox bootstrap, the icon/logo pipeline, and the installer builds.
+.oss-scanner/              Image + threat model for Anthropic's OSS Scanner (see below).
 ```
+
+`.oss-scanner/` is what Anthropic's [OSS Scanner](https://github.com/anthropics/oss-scanner)
+builds and reads: a `Dockerfile` (the SDK image with every package restored, a
+sha256-checked k3s, both suites run once), `services.sh` (starts k3s as an API server
+with no node, for reproducers that want real objects) and `threat_model.md` (what is
+untrusted, how findings are rated, what is accepted by design; it leans on SECURITY.md's
+security model rather than restating it). The scan runs with no network, so anything a
+test or reproducer needs is fetched in the Dockerfile. No CI job builds it (a failed
+build is emailed by the scanner); the commands to check it by hand are at its top. Its
+k3s version follows `scripts/sandbox-up.sh`, and a change that moves a trust boundary or
+accepts a finding by design updates `threat_model.md` in the same PR.
 
 Public-facing docs, each with one job — don't duplicate content between them:
 
