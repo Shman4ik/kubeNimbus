@@ -76,6 +76,24 @@ starts from scratch.
 | `-Wsl` (`sandbox-up.ps1`/`sandbox-down.ps1` only) | off | route every docker call through `wsl.exe docker ...` instead of a native Windows docker.exe |
 | `-WslDistribution` | WSL default | which distro `-Wsl` targets (`wsl -d <name>`) |
 
+## cert-manager for the live tests (by hand, optional)
+
+A few live tests need CRDs and a mutating admission webhook this repository did not write
+(`Live/ApplyPreviewTextDiffLiveTests`, the cert-manager half of `Live/PrinterColumnsLiveTests`).
+They use cert-manager, which the sandbox scripts do not install; those tests skip with the
+reason when it is absent. To install it, once per sandbox, from the official release manifest:
+
+```powershell
+gh release download v1.21.2 -R cert-manager/cert-manager -p cert-manager.yaml -D <empty dir>
+# SHA-256 e03b668ec8675214af6b0a671699d088f2601fa3878e0dbe1b41d3feafd1879f
+# (the digest GitHub lists for the asset)
+kubectl apply -f <empty dir>/cert-manager.yaml
+kubectl -n cert-manager rollout status deploy/cert-manager-webhook
+```
+
+It pulls three images from `quay.io/jetstack` (controller, cainjector, webhook, all
+`v1.21.2`). No test installs or removes it.
+
 ## Docker without Docker Desktop (WSL2)
 
 Docker Desktop is not required. Docker Engine can run directly inside a WSL2

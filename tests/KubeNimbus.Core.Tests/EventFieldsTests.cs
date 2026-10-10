@@ -191,7 +191,10 @@ public class EventFieldsTests
             await Assert.That(e.LastSeen()).IsNotNull();
             await Assert.That(e.Occurrences()).IsGreaterThanOrEqualTo(1);
 
-            if (modern.TryGetValue(e.Key, out var twin))
+            // Only the same revision: the two lists are two reads, and an event another
+            // test run bumps between them (a series count going from 1 to 2) is a newer
+            // object, not a disagreement between the groups (#261).
+            if (modern.TryGetValue(e.Key, out var twin) && twin.ResourceVersion == e.ResourceVersion)
             {
                 await Assert.That(twin.IsEvent()).IsTrue();
                 await Assert.That(twin.ObjectText()).IsEqualTo(e.ObjectText());

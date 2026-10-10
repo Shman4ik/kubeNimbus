@@ -157,3 +157,8 @@ are load-bearing:
 The demo cluster ships one scheduled and one suspended CronJob, so both halves of the slot
 render; the strip refuses in place there like every other action — a suspend with a result
 line saying nothing was sent, run-now and resume with their confirm disabled.
+
+**Suspend and resume against a real API server** (`Live/OneClickActionsLiveTests`, VER-61): the
+patch lands, a watch of the namespace's CronJobs reports each change as a Modified event, the
+server's Table (what `kubectl get cronjobs` prints) reads `True` then `False` under SUSPEND, and a
+read-only user gets the server's own 403 sentence with the CronJob unchanged.

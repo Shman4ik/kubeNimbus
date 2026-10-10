@@ -372,6 +372,18 @@ and a 401 mid-watch recovering. The plugin is a `.cmd` on Windows and a `sh` scr
 and the server is `ScriptedApiServer` — a raw `TcpListener`, because `HttpListener` on Windows
 needs an elevated URL reservation to listen on 127.0.0.1.
 
+**Against the sandbox** (`Live/ConnectFanOutLiveTests`, VER-37, k3s v1.33.4): a plugin that
+prints a real ServiceAccount token, driven through connect's own order (`/version` alone,
+then discovery, namespaces and the metrics probe together, then the first pod list). The
+fan-out runs the plugin no more times than `/version` did, and a Reconnect costs no more than
+a connect. But the plugin runs **twice** per connect, not once: `KubernetesClient`'s
+`BuildConfigFromConfigObject` runs it to build the configuration, and the `ExecTokenProvider`
+it installs starts empty and runs it again on the first request. The test pins the observed
+count, so a fix (seeding the provider with the build's credential) has to change it. The same
+class reads discovery of 44 groups through a loopback proxy that adds 100 ms per request:
+aggregated discovery is two requests in flight together, and the legacy path (the proxy asks
+the server for plain JSON) is 48 requests, at most 17 in flight, the bound plus `/api/v1`.
+
 ## Kubeconfig folders, and rescan on focus (FEAT-57)
 
 A picked path can be a **folder**: `Kubeconfig.CandidatePaths` expands it on every search, so

@@ -230,3 +230,14 @@ load-bearing.
    preview describes one exact request; whether *that* request was strict is a property of
    it, not of whatever the connection has learned since. The default is `true`, so every
    fixture and test that builds a preview by hand keeps meaning "strict".
+
+**The line diff over real answers** (`Live/ApplyPreviewTextDiffLiveTests`, VER-34, k3s v1.33.4
+with cert-manager v1.21.2): a Deployment manifest with every default left out, previewed as a
+create, shows the defaults (`progressDeadlineSeconds`, `revisionHistoryLimit`, the rolling
+update's `maxSurge`, `imagePullPolicy`, `terminationMessagePath`, `schedulerName`, `dnsPolicy`)
+as added lines; a CertificateRequest's preview shows the `username` and `groups` cert-manager's
+**mutating webhook** writes, which a dry run calls because the webhook declares no side effects;
+and cert-manager's 900-line Certificate CRD, with two descriptions edited far apart and
+force-previewed, diffs to exactly those two lines, collapses to two hunks of three context lines
+each, and under a 100-cell budget reports `IsApproximate` with both edits still shown. What is
+left of VER-34 is the panel itself in both dock heights, driven by hand.
