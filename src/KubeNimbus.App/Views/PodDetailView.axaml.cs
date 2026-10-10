@@ -59,7 +59,14 @@ public partial class PodDetailView : UserControl
         LogSearchGestures.AttachRuler(LogRuler, LogItems, LogScroll);
         LogSearchGestures.AttachProblemKeys(this, () => _vm?.Problems);
         LogSearchGestures.AttachReveal(LogItems, () => _vm?.IsLogFilterMode == true, line => _vm?.RevealLine(line));
+
+        // ENG-51: at a narrow window Range, Levels, the context chip and then Copy move into the ⋯ menu.
+        LogBar = new LogBarOverflow(LogBarRow, DetailTabStrip, LogSearchBox, LogBarTools,
+            (RangeSlot, MenuRange), (LevelsSlot, MenuLevels), (ContextSlot, MenuContext), (CopySlot, MenuCopy));
     }
+
+    /// <summary>The log bar's narrow-window behaviour; internal for the screenshot harness's check.</summary>
+    internal LogBarOverflow LogBar { get; }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {

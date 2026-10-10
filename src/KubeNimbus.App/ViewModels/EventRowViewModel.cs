@@ -9,7 +9,14 @@ public sealed class EventRowViewModel(DynamicResource e)
 
     public string Reason { get; } = InvisibleCharacters.Reveal(e.Reason());
 
-    public string Message { get; } = InvisibleCharacters.Reveal(e.Message());
+    /// <summary>
+    /// The event's message, trimmed at both ends as the Events list trims it (and as
+    /// <c>kubectl get events</c> prints it): the kubelet ends a probe's output with a newline,
+    /// which drew a blank line under every probe event in the panes that wrap it (ENG-49).
+    /// Line breaks inside the message are kept — the panes wrap, and an exec probe's output
+    /// can be several lines; the list folds them only because its cell is one line.
+    /// </summary>
+    public string Message { get; } = InvisibleCharacters.Reveal(e.Message().Trim());
 
     public int Count { get; } = e.Count();
 

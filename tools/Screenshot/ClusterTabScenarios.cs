@@ -477,11 +477,17 @@ internal static class ClusterTabScenarios
             return;
         }
 
-        for (var i = 0; i < 800 && logs.LogLines.Count < 22; i++)
+        // Until every replayed stream has ended (ENG-53), not until some number of lines has
+        // arrived: a search set after the drain lands on the newest match there is, so a drain
+        // that stopped part-way through the replay put "14 of 17" in one run and "15 of 17"
+        // in the next.
+        for (var i = 0; i < 800 && logs.Sources.Any(s => s.State is LogSourceState.Starting or LogSourceState.Streaming); i++)
         {
             Dispatcher.UIThread.RunJobs();
             Thread.Sleep(10);
         }
+
+        Dispatcher.UIThread.RunJobs();
     }
 
     /// <summary>Pumps the dispatcher until the demo log replay has produced something to render.</summary>
@@ -1961,6 +1967,37 @@ internal static class ClusterTabScenarios
                 new SubjectRef("User", "oncall@example.com", null),
                 [new SubjectBinding("RoleBinding", "oncall-restart", "payments", "ClusterRole", "pod-restarter", [namedPods])]),
         ];
+    }
+
+    /// <summary>
+    /// My permissions under its "Signed in as" line (FEAT-56): the name and groups the API
+    /// server reports (an EKS role, the case behind "I connected but everything is 403"), or,
+    /// with <paramref name="identity"/> given, one of the ways it could not say. The review
+    /// itself needs a real cluster, so the fixture sets what <c>LoadAsync</c> would.
+    /// </summary>
+    public static ClusterTabViewModel RbacMyPermissions(SelfSubjectIdentity? identity = null)
+    {
+        var tab = BaseTab();
+        var rbacTab = new RbacTabViewModel(FixtureData.CreateOfflineClient(), "payments", load: false)
+        {
+            IsPreview = false,
+            Identity = identity ?? new SelfSubjectIdentity(
+                SelfSubjectReviewOutcome.Answered,
+                "arn:aws:iam::111122223333:role/payments-dev",
+                ["payments-oncall", "system:authenticated"],
+                Detail: null),
+        };
+
+        rbacTab.MyRules.Add(new PolicyRule(["get", "list", "watch"], [""], ["pods", "pods/log", "services", "configmaps"], [], []));
+        rbacTab.MyRules.Add(new PolicyRule(["get", "list", "watch"], ["apps"], ["deployments", "replicasets", "statefulsets"], [], []));
+        rbacTab.MyRules.Add(new PolicyRule(["create"], [""], ["pods/exec"], [], []));
+        rbacTab.MyRules.Add(new PolicyRule(["patch"], ["apps"], ["deployments"], ["checkout-worker"], []));
+        rbacTab.MyRules.Add(new PolicyRule(["create"], ["authorization.k8s.io"], ["selfsubjectaccessreviews", "selfsubjectrulesreviews"], [], []));
+        rbacTab.MyRules.Add(new PolicyRule(["get"], [], [], [], ["/healthz", "/version"]));
+
+        tab.InspectorTabs.Add(rbacTab);
+        tab.SelectedInspectorTab = rbacTab;
+        return tab;
     }
 
     public static ClusterTabViewModel YamlEditor()

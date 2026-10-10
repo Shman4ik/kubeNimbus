@@ -72,6 +72,10 @@ makes that request, not kubeNimbus:
   (kubeNimbus)`), or `kubeNimbus` alone when the cluster cannot say, as the operation's
   initiator on the Application. Nothing else from the answer (groups, IDs) is used, and the
   answer is kept only in memory for that connection.
+- When you open the access review, the same `SelfSubjectReview` again, each time the review
+  loads, so that it can show who the cluster says you are: your username and your groups. It
+  is shown in that pane and nowhere else, kept only while the pane is open, and never
+  written to disk. The IDs and any other details in the answer are not read.
 
 ## What the app stores
 

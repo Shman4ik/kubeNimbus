@@ -830,9 +830,9 @@ Each feature's design rules, and the incidents behind them, live in a page of th
 
 - [Connecting: credential plugins, proxies, failures and reconnect](docs/engineering/connecting.md) — BuildClientSetupAsync as the one entry→client path, KubeconfigReader instead of the library's YAML loader (banned; it froze YamlDotNet), bare plugin commands found like a login shell would (never in the current directory), proxy-url on both transports, our own certificate check replacing the library's (host name, tls-server-name, every root of a CA bundle, skip-verify and plain http:// stated), impersonation headers (live-checked against the sandbox), tokenFile read on every build, plugin stderr redacted, the failure view (step, cause, facts, no credential ever a fact), RefreshCredentialsAsync's in-place swap and 401-as-expiry, kubeconfig folders with rescan-on-focus (a folder's context is never opened on its own), AppDataDirectory (owner-only, atomic writes, a random per-process fallback).
 - [The Applications mode](docs/engineering/applications-mode.md) — The first screen: apps (Argo or bare workloads) with health and a reason from Core's deterministic rules, per-namespace fallback under narrow RBAC, its own namespace picker (one or several, namespaces from the rows, starts no watch) and maintained header sort, the application page (findings with quoted evidence, pods, linked resources, timeline, what changed, embedded logs), the kubelet's one-run-per-container log rule, DemoData.Now.
-- [Multi-pod logs (one workload, one stream)](docs/engineering/multi-pod-logs.md) — WorkloadLogsTabViewModel: selector-resolved pods, per-pod tail budget, 50-stream cap, two-stage timestamp merge; and what both log panes say when a follow ends (LogStreamEnd reads the pod).
+- [Multi-pod logs (one workload, one stream)](docs/engineering/multi-pod-logs.md) — WorkloadLogsTabViewModel: selector-resolved pods, per-pod tail budget, 50-stream cap, two-stage timestamp merge, the demo's one time-ordered replay per pane (ENG-53, deterministic screenshots); and what both log panes say when a follow ends (LogStreamEnd reads the pod).
 - [One click to logs from the row, and logs opened full-size](docs/engineering/row-logs-and-maximized.md) — The row's logs icon (hover/selected, IsVisible style, Shift+click), Shift+L, the "Open logs maximized" preference read by OpenLogsForAsync, Esc restore; L3's logs from every list that names a pod (OpenNamedLogs, RowLogsGesture, stated "gone").
-- [Reading a log: find, levels, clear, local time, remembered display](docs/engineering/log-pane-reading.md) — Both log panes: search that finds (highlight, n of m, Enter/Shift+Enter) or filters, Levels with unleveled lines always shown, Clear that keeps the stream, local time with UTC one click away, display toggles in settings.json (never Previous), the default-container annotation, "not started" pods, one logs glyph, terminal colour codes removed (not drawn), bidi and zero-width characters shown as markers, a 1 MiB line cap; and the log-viewer pass — level keyword coloured not the line, earliest/structured/klog severity, stack traces inheriting, NonBacktracking regex and match case, `!word` exclusions, grep -C context, error jump, overview ruler, pinned highlights, JSON lines opened in place.
+- [Reading a log: find, levels, clear, local time, remembered display](docs/engineering/log-pane-reading.md) — Both log panes: search that finds (highlight, n of m, Enter/Shift+Enter) or filters, Levels with unleveled lines always shown, Clear that keeps the stream, local time with UTC one click away, display toggles in settings.json (never Previous), the default-container annotation, "not started" pods, one logs glyph, terminal colour codes removed (not drawn), bidi and zero-width characters shown as markers, a 1 MiB line cap; and the log-viewer pass — level keyword coloured not the line, earliest/structured/klog severity, stack traces inheriting, NonBacktracking regex and match case, `!word` exclusions, grep -C context, error jump, overview ruler, pinned highlights, JSON lines opened in place; and the bar at a narrow window (Range, Levels, context into the `⋯` menu, then a narrower search box; ENG-51).
 - [Log severity is three classes, not a brush binding](docs/engineering/log-severity-classes.md) — Why severity is style classes and never a Foreground binding (the invisible-plain-line bug, twice).
 - [Pod detail's Overview tab (conditions, tolerations, QoS, priority, probes)](docs/engineering/pod-overview-tab.md) — Conditions/tolerations/QoS/probes tab: index 4, condition polarity, API-server probe defaults, signature-guarded rebuild.
 - [Requests and limits are text on the Usage tab](docs/engineering/requests-and-limits.md) — Usage tab's declared requests/limits: words not blanks, not gated on metrics.
@@ -857,7 +857,7 @@ Each feature's design rules, and the incidents behind them, live in a page of th
 - [Metrics (metrics.k8s.io)](docs/engineering/metrics.md) — metrics.k8s.io via discovery, the one polled API, UsageHistory ring and Sparkline.
 - [Helm release browsing (read-only)](docs/engineering/helm-releases.md) — Reading Helm 3 release Secrets (base64+gzip) with no Helm binary, a decompression cap with unreadable releases listed and explained; synthetic sidebar kind.
 - [Argo CD (GitOps in the navigator)](docs/engineering/argo-cd.md) — Argo CD through the Kubernetes API only: sync is a top-level operation patch whose initiator is the user a SelfSubjectReview names, authorised by Kubernetes RBAC rather than Argo's roles, sync vs health pills; where "Open in Argo CD" goes (Argo's own namespace, never one a tenant names).
-- [RBAC access review](docs/engineering/rbac-access-review.md) — SelfSubjectRulesReview, binding provenance, who-can rule scan mirroring API-server matching.
+- [RBAC access review](docs/engineering/rbac-access-review.md) — SelfSubjectRulesReview, binding provenance, who-can rule scan mirroring API-server matching; the "Signed in as" line (SelfSubjectReview: username and groups, never cached, a stated state on a server before 1.27).
 - [Multi-cluster aggregated (fleet) views](docs/engineering/fleet-views.md) — ClusterFleet/AsyncMerge: per-cluster descriptors, cluster-scoped Reset, cluster-qualified keys.
 - [The status dot, and where it survives](docs/engineering/status-dot.md) — The health dot survives only beside CRD printer columns; the Helm grid is separate.
 - [The meter track was invisible, and the token was the reason](docs/engineering/meter-track.md) — MeterTrackBrush: never reuse a hover token as a chart colour.
@@ -2046,14 +2046,17 @@ directory itself was one fixed name under `%TEMP%`, so two harness runs at once 
 worktrees, two agents — wrote each other's `settings.json` mid-render; measured, that
 alone made 189 of 272 PNGs differ between two runs (sidebar sections expanded in one and
 collapsed in the other). Each run now gets its own directory and removes it at the end.
-**What remains:** panes
-that merge several replayed streams (`cluster-tab-workload-logs*`,
-`applications-page-crashloop-merged`, `applications-page-rollout`, and `ux-logs-palette`, which ends
-on a workload's logs) still order lines by
-which flush tick they arrived in — the log panes' documented design for a live tail — so
-those PNGs can differ between runs; a byte diff that flags only them is not a regression.
-Measured after the fix: two sequential runs of one build differ in 4 of 272 PNGs, all of
-them that class.
+**The merged log panes were the last of them (ENG-53).** Panes that merge several replayed
+streams (`cluster-tab-workload-logs*`, `applications-page-crashloop-merged`,
+`applications-page-rollout`, and `ux-logs-palette`, which ends on a workload's logs) ordered
+lines by which flush tick they arrived in, so those PNGs differed between runs. The demo now
+replays every stream of a pane from one loop in the order the lines were logged
+([multi-pod-logs](docs/engineering/multi-pod-logs.md)), and `DrainWorkloadLogs` waits for every
+stream to end before a scenario sets its search, which had landed on whichever match was newest
+part-way through. Measured: two full runs of one build, back to back, matched in all 418 PNGs, and three
+filtered runs of the workload-log scenarios matched each other byte for byte. What still moves
+is the clock: the demo's Age column and a restart's "71d ago" are relative to now, so a byte diff
+across a day boundary flags them, which is not a regression.
 
 When Docker is available (unlike this session — `docker version` succeeds but
 `dockerd` isn't running here), prefer driving the harness against a real
