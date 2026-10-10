@@ -296,7 +296,8 @@ Full detail, including *why* each piece is built the way it is, lives in
 ## Privacy
 
 kubeNimbus has no telemetry, no account and no update check, and it talks only to the
-clusters you open. It stores your preferences and window layout in your profile folder, and
+clusters you open. To hear about new versions, use GitHub's Watch → Custom → Releases on the
+repository; the Microsoft Store build updates itself. It stores your preferences and window layout in your profile folder, and
 never a password, token or certificate. The [privacy policy](PRIVACY.md) lists every file it
 writes and every connection it makes; the same page is linked from the About box and from the
 Microsoft Store listing.

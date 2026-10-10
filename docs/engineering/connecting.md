@@ -190,6 +190,13 @@ WebSocket transport, so exec and port-forward were affected too.
   reconnect and failure, so the two cannot disagree. The http case is not refused: kubectl
   connects too, and a local `kubectl proxy` on loopback is a legitimate use of it — which is
   why the notice says the traffic is sent in the clear rather than that it crosses a network.
+- **There is no app-side "allow untrusted certificate authorities" switch (ENG-21, refused by
+  the owner 2026-10-10, #241).** The kubeconfig already has the only such switch,
+  `insecure-skip-tls-verify`, and the app states it in the status bar and the report. A second,
+  per-cluster setting kept in `settings.json` would be a trust decision outside the kubeconfig,
+  which hard rule 4 makes the single source of truth, and one that kubectl and every other tool
+  reading the same kubeconfig would not share. A cluster whose CA is not trusted is fixed in the
+  kubeconfig (`certificate-authority(-data)`, every root of a bundle now trusted, ENG-57).
 
 **How it is installed, and why that way.** The library's `SocketsHttpHandler` is private. It
 is captured through `FirstMessageHandlerSetup` (chained after the proxy's setup), and the

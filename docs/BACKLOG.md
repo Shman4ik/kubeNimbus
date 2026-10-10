@@ -83,6 +83,8 @@ Kept so the same proposal does not come back every quarter.
 | Long-range metrics history | Prometheus's job. `UsageHistory` is bounded to the session and never persisted — a permanent non-goal. |
 | Helm install / upgrade / rollback | Read-only browsing is the deliberate scope; mutation stays Helm's. Revisit only with real demand evidence. |
 | Cluster provisioning, in-cluster agents, telemetry | Permanent non-goals. |
+| An update check of any kind (DIST-3, #229) | Decided by the owner on 2026-10-10: the README's promise of no network connection other than to the clusters stands. GitHub's Watch → Releases tells people about new versions, and the Microsoft Store build updates itself. |
+| A per-cluster "allow untrusted certificate authorities" setting (ENG-21, #241) | Refused by the owner on 2026-10-10: `insecure-skip-tls-verify` in the kubeconfig already does it and is flagged; see docs/engineering/connecting.md. |
 | Coalescing same-named CRD kinds into one sidebar row | Rejected once already: nesting inside a 100-kind section costs more than the group label it would replace. |
 | A cluster overview, a "Cluster issues" panel, a choice of landing surface (FEAT-9, FEAT-24, FEAT-26) | Superseded by the Applications mode, which is the "what is broken right now" screen and the landing surface, persisted in the workspace. Node warning conditions, the one part it does not cover, are on node detail. |
 | Structured (JSON) log rendering (FEAT-32) | Rejected by the owner on 2026-09-27: the services looked at do not log JSON. |
