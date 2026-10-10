@@ -68,6 +68,7 @@ public enum CommandId
     ToggleAdvancedView,
     ToggleSidebar,
     MaximizeInspector,
+    LeaveEditor,
     ToggleTheme,
     Preferences,
     ShortcutsWindow,

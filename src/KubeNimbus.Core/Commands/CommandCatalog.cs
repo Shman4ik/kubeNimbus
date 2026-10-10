@@ -545,6 +545,22 @@ public static class CommandCatalog
         },
         new()
         {
+            // The YAML editor indents on Tab and the exec terminal sends Tab to the shell
+            // (completion), so Tab can never leave either, and a keyboard-only user had no
+            // way out of them (ENG-4). Ctrl+Tab is the convention for leaving a control
+            // that takes Tab, and neither the editor nor a shell gives it a meaning. Literal
+            // Ctrl, for the exec pane's reason: Cmd+Tab on macOS is the app switcher.
+            Id = CommandId.LeaveEditor,
+            Title = "Move focus out of the YAML editor or the terminal",
+            Category = CommandCategory.View,
+            Scope = CommandScope.Editor,
+            IconKey = "ConsoleIconGeometry",
+            Chord = new(CommandKey.Tab, LiteralCtrl),
+            AltChord = new(CommandKey.Tab, LiteralCtrl | ChordModifiers.Shift),
+            Surfaces = SheetOnly,
+        },
+        new()
+        {
             Id = CommandId.ToggleTheme,
             Title = "Toggle light/dark theme",
             Category = CommandCategory.View,

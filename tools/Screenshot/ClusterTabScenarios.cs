@@ -2663,4 +2663,26 @@ internal static class ClusterTabScenarios
         detail.NodeShellNoticeIsError = error;
         return tab;
     }
+
+    /// <summary>
+    /// ENG-4 / ENG-54: a demo tab with two pods open in the dock, the first in front, for the
+    /// keyboard walk (KeyboardChecks.KeyboardWalk). Demo rather than fixture so that choosing a
+    /// kind from the keyboard repopulates the list from the dataset instead of starting a watch
+    /// against the offline client.
+    /// </summary>
+    public static ClusterTabViewModel DemoDockTabs()
+    {
+        var tab = DemoTab();
+        var pods = tab.Rows.Where(r => r.Name.StartsWith("payment-service", StringComparison.Ordinal)).Take(2).ToList();
+        foreach (var pod in pods)
+        {
+            tab.SelectedRow = pod;
+            tab.OpenSelectedCommand.Execute(null);
+        }
+
+        tab.SelectedRow = pods[0];
+        tab.SelectedInspectorTab = tab.InspectorTabs[0];
+        DrainDemoLogs(tab);
+        return tab;
+    }
 }

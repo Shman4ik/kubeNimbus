@@ -162,6 +162,7 @@ public partial class ClusterTabView : UserControl
         // below handled: a search box clearing itself, a menu closing and the terminal's
         // own Esc (vim) all get the key first — see OnViewKeyDown.
         AddHandler(KeyDownEvent, OnViewKeyDown, RoutingStrategies.Bubble);
+        AddHandler(KeyDownEvent, OnLeaveEditorKeyDown, RoutingStrategies.Tunnel);
 
         DataContextChanged += OnDataContextChanged;
     }
@@ -260,6 +261,7 @@ public partial class ClusterTabView : UserControl
         ApplySummaryColumns();
         ApplySidebarVisibility();
         ApplyColumnLayout();
+        PointSidebarTabStopAtSelectedKind();
     }
 
     /// <summary>
@@ -306,6 +308,21 @@ public partial class ClusterTabView : UserControl
             {
                 row.RefreshTimes();
             }
+
+            // The Helm list's Updated column and a release's history are ages too (FEAT-72).
+            var now = DateTimeOffset.UtcNow;
+            foreach (var release in vm.HelmReleases)
+            {
+                release.RefreshTimes(now);
+            }
+
+            foreach (var helm in vm.InspectorTabs.OfType<HelmReleaseTabViewModel>())
+            {
+                foreach (var revision in helm.History)
+                {
+                    revision.RefreshTimes(now);
+                }
+            }
         };
 
         return timer;
@@ -338,10 +355,17 @@ public partial class ClusterTabView : UserControl
             ApplyFleetColumn();
             ApplyColumnLayout();
         }
+        else if (e.PropertyName == nameof(ClusterTabViewModel.SelectedNamespaces))
+        {
+            // One namespace hides the Namespace column, a second brings it back.
+            ApplySummaryColumns();
+            ApplyColumnLayout();
+        }
         else if (e.PropertyName == nameof(ClusterTabViewModel.SelectedKind))
         {
             ApplyPrinterColumns();
             ApplySummaryColumns();
+            PointSidebarTabStopAtSelectedKind();
 
             // The kind's own remembered widths, and the sort the view model has just
             // restored for it — the two halves of one stored layout, applied from the
@@ -476,6 +500,16 @@ public partial class ClusterTabView : UserControl
         // last happened). Namespace and, in fleet mode, Cluster stay.
         var isEvents = Vm?.IsEventList == true;
 
+        // The Helm release list reads the same namespace choice (its synthetic kind is
+        // namespaced), so its Namespace column follows the same rule (FEAT-67).
+        foreach (var column in HelmGrid.Columns)
+        {
+            if (column.Tag as string == "namespace")
+            {
+                column.IsVisible = Vm?.IsNamespaceColumnShown ?? true;
+            }
+        }
+
         foreach (var column in FixedColumns)
         {
             // In the Events list the Namespace header has to hold its sort arrow at 1024px
@@ -493,10 +527,9 @@ public partial class ClusterTabView : UserControl
                 ResourceColumn.EventLastSeen or ResourceColumn.EventType or ResourceColumn.EventReason
                     or ResourceColumn.EventObject or ResourceColumn.EventCount or ResourceColumn.EventMessage => isEvents,
                 ResourceColumn.Name or ResourceColumn.Age => !isEvents,
-                // A node, a PV or a ClusterRole has no namespace, so the column was 130px
-                // of blank cells on exactly the kinds that list the most rows. Null (no
-                // kind yet) keeps it, which is the shape the list opens with.
-                ResourceColumn.Namespace => descriptor?.Namespaced != false,
+                // Only where it tells rows apart; the rule and its reasons are on the view
+                // model (FEAT-67), where the tests can reach it.
+                ResourceColumn.Namespace => Vm?.IsNamespaceColumnShown ?? true,
                 ResourceColumn.Ready => ResourceStatusSummary.ShowsReady(descriptor),
                 ResourceColumn.Restarts => ResourceStatusSummary.ShowsRestarts(descriptor),
                 ResourceColumn.Details => !hasPrinterColumns && ResourceStatusSummary.ShowsDetails(descriptor),
@@ -820,6 +853,143 @@ public partial class ClusterTabView : UserControl
         }
     }
 
+    // ------------------------------------------------------------- the keyboard
+    // ENG-4's keyboard-only walk. The sidebar is one Tab stop (TabNavigation="Once" in the
+    // XAML) that the arrow keys move inside, and the YAML editor and the exec terminal, which
+    // both keep Tab for themselves, are left with Ctrl+Tab / Ctrl+Shift+Tab. KeyboardChecks
+    // .KeyboardWalk in the screenshot harness walks the whole window with Tab and Shift+Tab
+    // and fails if a region cannot be reached, a stop draws no focus ring, or focus is trapped.
+
+    /// <summary>
+    /// The sidebar's focusable stops in reading order: the section headers and the kind
+    /// rows that are on screen (a collapsed section's rows and a filtered-out row are not).
+    /// </summary>
+    private List<Control> SidebarStops() =>
+        [.. SidebarItems.GetVisualDescendants().OfType<Control>()
+            .Where(c => c is ListBoxItem { DataContext: SidebarKindViewModel } or Border { DataContext: SidebarSectionViewModel }
+                        && c.Focusable && c.IsEffectivelyVisible)];
+
+    private void OnSidebarKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.KeyModifiers != KeyModifiers.None || e.Source is not Control source)
+        {
+            return;
+        }
+
+        var stops = SidebarStops();
+        var current = stops.FindIndex(s => s == source || s.IsVisualAncestorOf(source));
+        if (current < 0)
+        {
+            return;
+        }
+
+        var stop = stops[current];
+        var section = (stop as Border)?.DataContext as SidebarSectionViewModel;
+        int? move = e.Key switch
+        {
+            Key.Down => Math.Min(current + 1, stops.Count - 1),
+            Key.Up => Math.Max(current - 1, 0),
+            Key.Home => 0,
+            Key.End => stops.Count - 1,
+            _ => null,
+        };
+
+        if (move is { } target)
+        {
+            stops[target].Focus(NavigationMethod.Directional);
+            stops[target].BringIntoView();
+        }
+        else if (e.Key is Key.Enter or Key.Space && stop is ListBoxItem { DataContext: SidebarKindViewModel kind } && Vm is { } vm)
+        {
+            vm.SelectKindCommand.Execute(kind);
+        }
+        else if (section is not null && (e.Key is Key.Enter or Key.Space
+                     || (e.Key == Key.Right && !section.ShowKinds) || (e.Key == Key.Left && section.ShowKinds)))
+        {
+            section.ToggleExpandedCommand.Execute(null);
+        }
+        else
+        {
+            return;
+        }
+
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Tab into the sidebar lands on the selected kind, the way Tab into a list lands on its
+    /// selected row, rather than on whichever header happens to be first. Re-pointed whenever
+    /// the kind changes; the arrow keys move it in between, through the focus itself.
+    /// </summary>
+    private void PointSidebarTabStopAtSelectedKind()
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            // The kind's own row, not its copy in Recent above it: the last selected one.
+            if (SidebarStops().LastOrDefault(s => s is ListBoxItem { IsSelected: true }) is { } row)
+            {
+                KeyboardNavigation.SetTabOnceActiveElement(SidebarItems, row);
+            }
+        }, DispatcherPriority.Background);
+    }
+
+    /// <summary>
+    /// Ctrl+Tab and Ctrl+Shift+Tab out of a control that keeps Tab for itself. The YAML
+    /// editor indents with Tab and the exec terminal sends it to the shell for completion,
+    /// so plain Tab can never leave either, and a keyboard-only user had no way out of them
+    /// but a global shortcut. Tunnel, so it runs before either control sees the key.
+    /// </summary>
+    private void OnLeaveEditorKeyDown(object? sender, KeyEventArgs e)
+    {
+        var forward = CommandBindings.Matches(CommandId.LeaveEditor, e);
+        var back = !forward && CommandCatalog.Get(CommandId.LeaveEditor).AltChord is { } alt
+                   && e.Key == CommandBindings.ToKey(alt.Key) && e.KeyModifiers == CommandBindings.ToModifiers(alt.Modifiers);
+        if ((!forward && !back) || TabKeepingControl(e.Source) is not { } trap
+            || TopLevel.GetTopLevel(this)?.FocusManager is not { } focus)
+        {
+            return;
+        }
+
+        // Tab's own order, with the control and everything in it taken out of it for the one
+        // move. Stepping out a stop at a time does not work: the editor hands its focus straight
+        // back to its text area, so moving backwards from the text area landed on the editor
+        // and came back in.
+        var inside = trap.GetVisualDescendants().OfType<InputElement>().Prepend(trap)
+            .Where(element => element.Focusable && KeyboardNavigation.GetIsTabStop(element)).ToList();
+        foreach (var element in inside)
+        {
+            KeyboardNavigation.SetIsTabStop(element, false);
+        }
+
+        try
+        {
+            focus.TryMoveFocus(forward ? NavigationDirection.Next : NavigationDirection.Previous);
+        }
+        finally
+        {
+            foreach (var element in inside)
+            {
+                element.ClearValue(KeyboardNavigation.IsTabStopProperty);
+            }
+        }
+
+        e.Handled = true;
+    }
+
+    /// <summary>The YAML editor or exec terminal the key came from, if it came from one.</summary>
+    private static Control? TabKeepingControl(object? source)
+    {
+        for (var element = source as Visual; element is not null; element = element.GetVisualParent())
+        {
+            if (element is AvaloniaEdit.TextEditor or SvcSystems.UI.Terminal.TerminalControl)
+            {
+                return (Control)element;
+            }
+        }
+
+        return null;
+    }
+
     private void OnRowDoubleTapped(object? sender, TappedEventArgs e) => Vm?.OpenSelectedCommand.Execute(null);
 
     // Only a double-click on a row opens it: one on a header is two sort clicks, and would
@@ -1003,9 +1173,15 @@ public partial class ClusterTabView : UserControl
         return CommandBindings.Matches(CommandId.DeleteResource, e) ? vm.DeleteSelectedCommand : null;
     }
 
-    private void OnInspectorTabTapped(object? sender, TappedEventArgs e)
+    /// <summary>
+    /// The dock's tab strip chose a tab (a click, or the arrow keys). Only a tab is passed
+    /// on: the null the ListBox reports when the selected tab is closed is the list catching
+    /// up with the removal, and <c>CloseInspectorTab</c> picks the neighbour itself.
+    /// </summary>
+    private void OnInspectorTabSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (sender is Border { DataContext: InspectorTabViewModelBase tab } && Vm is { } vm)
+        if (sender is ListBox { SelectedItem: InspectorTabViewModelBase tab } && Vm is { } vm
+            && !ReferenceEquals(tab, vm.SelectedInspectorTab))
         {
             vm.SelectInspectorTabCommand.Execute(tab);
         }

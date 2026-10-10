@@ -1,10 +1,13 @@
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Input.Raw;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using KubeNimbus.App.Controls;
 using KubeNimbus.App.ViewModels;
 using KubeNimbus.App.Views;
 using SvcSystems.UI.Terminal;
@@ -314,6 +317,269 @@ internal static class KeyboardChecks
 
         Console.WriteLine("YAML editor apply key passed (Ctrl+S).");
     }
+
+    /// <summary>
+    /// ENG-4's keyboard-only walk, and ENG-54's dock tabs inside it. From the command bar's
+    /// first button, Tab has to come back round to it (no focus trap), passing the command
+    /// bar, the sidebar's kinds, the resource list, the dock's tabs and the open pane in that
+    /// order; Shift+Tab has to pass the same stops. Every stop draws a focus visual. The
+    /// sidebar's catalog is one stop, entered on the selected kind, and a log pane's lines are
+    /// at most one. Then the keys inside the two lists that are one stop: the arrow keys move
+    /// between dock tabs and bring one to the front, and between sidebar rows, where Enter or
+    /// Space opens a kind and Enter folds a section.
+    /// </summary>
+    internal static void KeyboardWalk(Window window)
+    {
+        var view = window.GetVisualDescendants().OfType<ClusterTabView>().First();
+        var vm = (ClusterTabViewModel)view.DataContext!;
+        var focus = TopLevel.GetTopLevel(window)!.FocusManager!;
+        var start = Named<Button>(window, "AppMenuButton");
+        var commandBar = Named<Control>(window, "CommandBar");
+        var sidebar = Named<ItemsControl>(view, "SidebarItems");
+        var grid = Named<DataGrid>(view, "ResourceGrid");
+        var strip = Named<ListBox>(view, "InspectorTabStrip");
+        var pane = view.GetVisualDescendants().OfType<ContentControl>()
+            .First(c => c is not ListBoxItem && c.Content is InspectorTabViewModelBase);
+        if (vm.InspectorTabs.Count < 2 || vm.SelectedKind is not { } kind)
+            throw new InvalidOperationException("The keyboard walk needs a selected kind and two dock tabs.");
+
+        // The demo's log lines arrive on a timer. Wait for the first one, so the log list's
+        // single stop is in every walk rather than in whichever runs the timer won.
+        for (var i = 0; i < 500 && !pane.GetVisualDescendants().OfType<LogLineText>().Any(l => l.IsEffectivelyVisible); i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(20);
+        }
+
+        if (!pane.GetVisualDescendants().OfType<LogLineText>().Any(l => l.IsEffectivelyVisible))
+            throw new InvalidOperationException("The front pod's log pane drew no line within 10 seconds, so its Tab stop cannot be checked.");
+
+        List<Control> Walk(RawInputModifiers modifiers, string keys)
+        {
+            start.Focus(NavigationMethod.Tab);
+            Dispatcher.UIThread.RunJobs();
+            var stops = new List<Control>();
+            for (var i = 0; i < 250; i++)
+            {
+                Press(window, Key.Tab, modifiers);
+                var focused = focus.GetFocusedElement() as Control
+                              ?? throw new InvalidOperationException(
+                                  $"{keys}: nothing had focus after {i + 1} presses; the stop before was {Describe(stops.LastOrDefault())}.");
+                if (focused == start)
+                    return stops;
+                stops.Add(focused);
+            }
+
+            throw new InvalidOperationException(
+                $"{keys} did not come back to the command bar within 250 presses, a focus trap. The last stops: {string.Join(", ", stops.TakeLast(4).Select(Describe))}.");
+        }
+
+        var forward = Walk(RawInputModifiers.None, "Tab");
+        var backward = Walk(RawInputModifiers.Shift, "Shift+Tab");
+
+        int Reached(Func<Control, bool> where, string region)
+        {
+            var index = forward.FindIndex(c => where(c));
+            return index >= 0
+                ? index
+                : throw new InvalidOperationException($"Tab never reached {region}. The stops: {string.Join(", ", forward.Select(Describe))}.");
+        }
+
+        int[] order =
+        [
+            Reached(c => commandBar.IsVisualAncestorOf(c), "the command bar"),
+            Reached(c => sidebar.IsVisualAncestorOf(c), "the sidebar's kinds"),
+            Reached(c => c == grid, "the resource list"),
+            Reached(c => strip.IsVisualAncestorOf(c), "the dock's tabs"),
+            Reached(c => pane.IsVisualAncestorOf(c), "the open pane"),
+        ];
+        if (!order.SequenceEqual(order.Order()))
+            throw new InvalidOperationException($"Tab reached the regions out of reading order: {string.Join(", ", order)}.");
+
+        // The pane is left out of the comparison: the demo's logs keep arriving, and a log
+        // pane's error and warning counts appear with their first line, between the walks.
+        var shell = forward.Where(c => !pane.IsVisualAncestorOf(c)).ToHashSet();
+        var shellBack = backward.Where(c => !pane.IsVisualAncestorOf(c)).ToList();
+        if (!shell.SetEquals(shellBack) || !backward.Any(pane.IsVisualAncestorOf))
+            throw new InvalidOperationException(
+                $"Shift+Tab passed different stops from Tab: only forward {string.Join(", ", shell.Except(shellBack).Select(Describe))}; "
+                + $"only backward {string.Join(", ", shellBack.Except(shell).Select(Describe))}.");
+
+        var sidebarStops = forward.Where(sidebar.IsVisualAncestorOf).ToList();
+        if (sidebarStops is not [ListBoxItem { DataContext: SidebarKindViewModel entered } sidebarStop])
+            throw new InvalidOperationException(
+                $"The sidebar's kinds should be one Tab stop and are {sidebarStops.Count}: {string.Join(", ", sidebarStops.Take(5).Select(Describe))}.");
+        if (entered.Descriptor != kind.Descriptor)
+            throw new InvalidOperationException($"Tab into the sidebar landed on {entered.DisplayName}, not on the selected kind, {kind.DisplayName}.");
+
+        // The log list is one stop, the list itself; no line is one. A line could be recycled
+        // under a new log line while it held the stop, which left focus on a hidden line.
+        // Nothing inside a row counts either: a JSON line's expander was a stop of its own.
+        var logList = pane.GetVisualDescendants().OfType<ItemsControl>().First(c => c.Name == "LogItems");
+        var lines = forward.Count(c => logList.IsVisualAncestorOf(c));
+        var logLists = forward.Count(c => c == logList);
+        if (lines != 0 || logLists != 1)
+            throw new InvalidOperationException($"The log pane should be one Tab stop, the list; it was {logLists} list stops and {lines} stops inside its rows.");
+
+        var tabStop = forward.First(strip.IsVisualAncestorOf);
+        if (tabStop is not ListBoxItem { DataContext: InspectorTabViewModelBase front } || front != vm.SelectedInspectorTab)
+            throw new InvalidOperationException($"Tab into the dock's tabs landed on {Describe(tabStop)}, not on the tab in front.");
+
+        var noRing = new List<string>();
+        foreach (var stop in forward)
+        {
+            stop.Focus(NavigationMethod.Tab);
+            Dispatcher.UIThread.RunJobs();
+            if (!HasFocusVisual(stop))
+                noRing.Add(Describe(stop));
+        }
+
+        if (noRing.Count > 0)
+            throw new InvalidOperationException($"Tab stops with no focus visual: {string.Join(", ", noRing)}.");
+
+        // The dock's tabs: the arrow keys move along the strip and bring that tab to the front.
+        tabStop.Focus(NavigationMethod.Tab);
+        Dispatcher.UIThread.RunJobs();
+        Press(window, Key.Right, RawInputModifiers.None);
+        if (vm.SelectedInspectorTab != vm.InspectorTabs[1])
+            throw new InvalidOperationException("Right on the front dock tab did not bring the next one to the front.");
+        Press(window, Key.Left, RawInputModifiers.None);
+        if (vm.SelectedInspectorTab != vm.InspectorTabs[0])
+            throw new InvalidOperationException("Left on the second dock tab did not bring the first one back.");
+
+        // The sidebar: Down to the next row, Enter opens its kind, Up and Space come back.
+        sidebarStop.Focus(NavigationMethod.Tab);
+        Dispatcher.UIThread.RunJobs();
+        Press(window, Key.Down, RawInputModifiers.None);
+        if (focus.GetFocusedElement() is not ListBoxItem { DataContext: SidebarKindViewModel next } || next.Descriptor == entered.Descriptor)
+            throw new InvalidOperationException($"Down in the sidebar moved focus to {Describe(focus.GetFocusedElement() as Control)}, not the next kind.");
+        Press(window, Key.Enter, RawInputModifiers.None);
+        if (vm.SelectedKind?.Descriptor != next.Descriptor)
+            throw new InvalidOperationException($"Enter on {next.DisplayName} in the sidebar did not open it.");
+        Press(window, Key.Up, RawInputModifiers.None);
+        Press(window, Key.Space, RawInputModifiers.None);
+        if (vm.SelectedKind?.Descriptor != kind.Descriptor)
+            throw new InvalidOperationException($"Up and Space in the sidebar did not go back to {kind.DisplayName}.");
+
+        // A section header: Home reaches the first one, Enter folds it and Enter unfolds it.
+        Press(window, Key.Home, RawInputModifiers.None);
+        if (focus.GetFocusedElement() is not Border { DataContext: SidebarSectionViewModel section })
+            throw new InvalidOperationException($"Home in the sidebar landed on {Describe(focus.GetFocusedElement() as Control)}, not the first section header.");
+        var expanded = section.ShowKinds;
+        Press(window, Key.Enter, RawInputModifiers.None);
+        var folded = section.ShowKinds;
+        Press(window, Key.Enter, RawInputModifiers.None);
+        if (folded == expanded || section.ShowKinds != expanded)
+            throw new InvalidOperationException($"Enter on the {section.Title} header did not fold and unfold it.");
+
+        // Leave the ring on the front dock tab for the PNG.
+        strip.ContainerFromIndex(0)!.Focus(NavigationMethod.Tab);
+        Dispatcher.UIThread.RunJobs();
+
+        Console.WriteLine($"Keyboard walk passed ({forward.Count} Tab stops each way, each with a focus visual; dock tab and sidebar keys).");
+    }
+
+    /// <summary>
+    /// ENG-4: the YAML editor and the exec terminal keep Tab, so Ctrl+Tab leaves them for the
+    /// next stop and Ctrl+Shift+Tab for the one before, and neither key reaches the text or
+    /// the shell.
+    /// </summary>
+    internal static void LeaveEditorKeys(Window window)
+    {
+        var focus = TopLevel.GetTopLevel(window)!.FocusManager!;
+        var editor = window.GetVisualDescendants().OfType<AvaloniaEdit.TextEditor>().FirstOrDefault();
+        Control trap = (Control?)editor ?? window.GetVisualDescendants().OfType<TerminalControl>().First();
+        Control inner = editor is not null ? editor.TextArea : trap;
+        var exec = editor is null ? (ExecTabViewModel)window.GetVisualDescendants().OfType<ExecView>().First().DataContext! : null;
+        var text = editor?.Text;
+
+        var sent = new List<byte>();
+        void OnInput(object? sender, TerminalUserInputEventArgs e) => sent.AddRange(e.Data.ToArray());
+        if (exec is not null)
+            exec.Terminal.UserInput += OnInput;
+        try
+        {
+            foreach (var (modifiers, keys) in new[]
+                     {
+                         (RawInputModifiers.Control, "Ctrl+Tab"),
+                         (RawInputModifiers.Control | RawInputModifiers.Shift, "Ctrl+Shift+Tab"),
+                     })
+            {
+                inner.Focus(NavigationMethod.Pointer);
+                Dispatcher.UIThread.RunJobs();
+                Press(window, Key.Tab, modifiers);
+                var now = focus.GetFocusedElement() as Control;
+                if (now is null || now == trap || trap.IsVisualAncestorOf(now))
+                    throw new InvalidOperationException($"{keys} in the {trap.GetType().Name} left focus on {Describe(now)}; it should leave the control.");
+            }
+        }
+        finally
+        {
+            if (exec is not null)
+                exec.Terminal.UserInput -= OnInput;
+        }
+
+        if (sent.Count > 0)
+            throw new InvalidOperationException($"Ctrl+Tab reached the pod as [{string.Join(" ", sent.Select(b => $"0x{b:X2}"))}].");
+        if (editor is not null && editor.Text != text)
+            throw new InvalidOperationException("Ctrl+Tab changed the YAML it was meant to leave.");
+
+        Console.WriteLine($"Leaving the {trap.GetType().Name} passed (Ctrl+Tab, Ctrl+Shift+Tab).");
+    }
+
+    /// <summary>
+    /// What the keyboard sees on a stop: the shared ring in the adorner layer (DESIGN.md rule
+    /// 20); a text box's own focused border and caret; the grid's focus rectangle on its
+    /// current cell; or, for the selected row of a list that holds the focus, the accent
+    /// selection that rule gives such a list instead. A strip (segmented, dock tabs) keeps its
+    /// wash whatever the focus, so it needs the ring.
+    /// </summary>
+    private static bool HasFocusVisual(Control stop)
+    {
+        if (AdornerLayer.GetAdornerLayer(stop) is { } layer
+            && layer.Children.Any(c => c is Nimbus.Ui.Controls.FocusRing && AdornerLayer.GetAdornedElement(c) == stop))
+            return true;
+
+        if (stop is TextBox { IsFocused: true })
+            return true;
+
+        if (stop is DataGrid grid)
+            return grid.GetVisualDescendants().OfType<Control>().Any(c => c.Name == "FocusVisual" && c.IsEffectivelyVisible);
+
+        return stop is ListBoxItem { IsSelected: true } item
+               && item.FindAncestorOfType<ListBox>() is { } list
+               && !list.Classes.Contains("segmented") && !list.Classes.Contains("strip") && !list.Classes.Contains("dockTabs");
+    }
+
+    private static T Named<T>(Visual root, string name) where T : Control =>
+        root.GetVisualDescendants().OfType<T>().FirstOrDefault(c => c.Name == name)
+        ?? throw new InvalidOperationException($"No {typeof(T).Name} named {name} on screen.");
+
+    private static void Press(Window window, Key key, RawInputModifiers modifiers)
+    {
+        var (physical, symbol) = key switch
+        {
+            Key.Tab => (PhysicalKey.Tab, "\t"),
+            Key.Enter => (PhysicalKey.Enter, "\r"),
+            Key.Space => (PhysicalKey.Space, " "),
+            Key.Up => (PhysicalKey.ArrowUp, (string?)null),
+            Key.Down => (PhysicalKey.ArrowDown, null),
+            Key.Left => (PhysicalKey.ArrowLeft, null),
+            Key.Right => (PhysicalKey.ArrowRight, null),
+            Key.Home => (PhysicalKey.Home, null),
+            _ => throw new ArgumentOutOfRangeException(nameof(key)),
+        };
+        window.KeyPress(key, modifiers, physical, symbol);
+        window.KeyRelease(key, modifiers, physical, symbol);
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    private static string Describe(Control? control) => control switch
+    {
+        null => "nothing",
+        { Name.Length: > 0 } => $"{control.GetType().Name} {control.Name}",
+        _ => $"{control.GetType().Name} '{Avalonia.Automation.AutomationProperties.GetName(control)}' ({control.DataContext?.GetType().Name})",
+    };
 
     private static void Expect(byte[] actual, byte[] expected, string gesture)
     {

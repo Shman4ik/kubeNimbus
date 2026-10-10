@@ -40,3 +40,12 @@ read-only: install/upgrade/rollback stays Helm's job.
 ## Sorting
 
 The list sorts by a header click (2026-10): ascending, descending, then its default order, kept across reloads for the tab's life. How each column compares, and why a header double-click opens nothing, is in [resource-grid-resize-sort](resource-grid-resize-sort.md), "The inspector grids sort too".
+
+## The Updated column is an age
+
+The release list's Updated column and a release's history read as an age ("3d", "5m"), through
+`RelativeTime.Compact` like the resource list's Age column, with the exact instant in local time
+on the tooltip and "—" for a revision Helm recorded no time for (FEAT-72,
+`HelmReleaseRowViewModel.UpdatedText`). It printed the `DateTimeOffset` itself, the widest thing
+the column could hold, and at 1280px that was cut in the middle of its offset. The ages move with
+the cluster tab's shared age clock; the sort stays on the instant. `HelmUpdatedAgeTests` pins it.

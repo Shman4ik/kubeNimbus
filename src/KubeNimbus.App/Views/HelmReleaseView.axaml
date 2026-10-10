@@ -109,10 +109,10 @@
                 </DataTemplate>
               </DataGridTemplateColumn.CellTemplate>
             </DataGridTemplateColumn>
-            <DataGridTemplateColumn Header="Updated" Width="Auto" MinWidth="150">
+            <DataGridTemplateColumn Header="Updated" Width="Auto" MinWidth="88">
               <DataGridTemplateColumn.CellTemplate>
                 <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
-                  <TextBlock Text="{Binding Updated}" Opacity="0.75" VerticalAlignment="Center" />
+                  <TextBlock Text="{Binding UpdatedText}" ToolTip.Tip="{Binding UpdatedTooltip}" Opacity="0.75" VerticalAlignment="Center" />
                 </DataTemplate>
               </DataGridTemplateColumn.CellTemplate>
             </DataGridTemplateColumn>

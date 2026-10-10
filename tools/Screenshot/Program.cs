@@ -408,6 +408,12 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("ux-exec-keys", () => HostInMainWindow(ClusterTabScenarios.Exec())),
     // B2-5: a paste is filtered, bracketed when the shell asked, and armed when it did not (KeyboardChecks.ExecPaste).
     ("ux-exec-paste", () => HostInMainWindow(ClusterTabScenarios.Exec())),
+    // ENG-4 / ENG-54: Tab and Shift+Tab round the whole window, a focus visual on every stop,
+    // the dock's tabs and the sidebar as one stop each, and Ctrl+Tab out of the YAML editor
+    // and the terminal (KeyboardChecks.KeyboardWalk, LeaveEditorKeys).
+    ("ux-keyboard-walk", () => HostInMainWindow(ClusterTabScenarios.DemoDockTabs(), height: 1000)),
+    ("ux-leave-yaml-editor", () => HostInMainWindow(ClusterTabScenarios.YamlEditor())),
+    ("ux-leave-exec-terminal", () => HostInMainWindow(ClusterTabScenarios.Exec())),
     ("cluster-tab-exec-paste-confirm", () => HostInMainWindow(ClusterTabScenarios.ExecPasteArmed())),
     // URLs and e-mail addresses in YAML are drawn as text, not AvaloniaEdit's blue links (EditorChecks).
     ("ux-yaml-editor-links", () => HostInMainWindow(ClusterTabScenarios.YamlEditor())),
@@ -538,6 +544,8 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
         LayoutChecks.GridReachesLastColumn(window);
     if (name == "ux-exec-keys") KeyboardChecks.ExecKeys(window);
     if (name == "ux-exec-paste") KeyboardChecks.ExecPaste(window);
+    if (name == "ux-keyboard-walk") KeyboardChecks.KeyboardWalk(window);
+    if (name is "ux-leave-yaml-editor" or "ux-leave-exec-terminal") KeyboardChecks.LeaveEditorKeys(window);
     if (name == "ux-log-search-keys") KeyboardChecks.LogSearchKeys(window);
     if (name == "ux-yaml-apply-key") KeyboardChecks.YamlApplyKey(window);
     if (name == "ux-yaml-editor-links") EditorChecks.YamlEditorLinks(window);

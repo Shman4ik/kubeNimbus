@@ -48,4 +48,11 @@ public abstract partial class InspectorTabViewModelBase : ObservableObject
 
     /// <summary>Cancels watches/sessions this tab owns (log follow, exec, port-forward). Called on close.</summary>
     public virtual Task OnClosingAsync() => Task.CompletedTask;
+
+    /// <summary>
+    /// The dock tab's accessible name: a list item names itself through its content's
+    /// <c>ToString()</c> (docs/engineering/accessible-names.md, rule 3), and without this a
+    /// screen reader read every dock tab as its view model's type name.
+    /// </summary>
+    public override string ToString() => Title;
 }

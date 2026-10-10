@@ -198,6 +198,11 @@ before changing a view.** Docs and code cite these numbers.
    selected (derived in `MarkSelectedKind`), synthetic Helm/Argo rows only with evidence.
 7. **The inspector docks along the bottom, full width**, so logs read on long lines. The dock
    states live in code-behind `ApplyDockState`, because a `GridSplitter` fights a binding.
+   Its tab strip is a `ListBox` the keyboard and UI Automation reach as tabs, its selection
+   pushed one way from `SelectedInspectorTab`, never bound two-way (ENG-54).
+7b. **Every region is reachable by Tab and Shift+Tab, every stop shows focus, nothing traps
+   it**: a list is one stop the arrow keys move inside (the sidebar, a log pane's list), and
+   Ctrl+Tab leaves the YAML editor and the terminal (`ux-keyboard-walk`, accessible-names).
 8. **A click target hit-tests across its whole area** (`Background="Transparent"` or taps on
    the items control), with `Cursor="Hand"` and a pressed *class*, never `Border:pressed`.
 8b. **A `ToggleButton` gets a two-way `IsChecked` OR a toggling `Command`, never both** — a
