@@ -26,8 +26,8 @@ updates cells in place and adds a line to the change log at the bottom; a cell w
 evidence is older than the last survey that touched its row says so.
 
 **kubeNimbus's column is taken from `CLAUDE.md`, `docs/engineering/` and `src/`**, not
-from memory; where a Ready/Inbox row in `docs/BACKLOG.md` would change a cell, its ID is
-named.
+from memory; where an open backlog issue would change a cell, its ID (or, for an issue
+filed after 2026-10-10, its number) is named.
 
 ## The matrix
 

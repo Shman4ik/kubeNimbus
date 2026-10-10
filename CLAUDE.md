@@ -750,7 +750,7 @@ Three rules about it:
    set states: the README hero in both themes, everything else half light and half dark.
    The Age column moving with the clock is not a UI change and is no reason to re-render.
    If a PR cannot render them (no Windows machine), it says so in its description and
-   leaves an Inbox row, like any other verification debt.
+   leaves a backlog issue, like any other verification debt.
 22. **Every tooltip answers the pointer, and the status line keeps its whole text in one**
    (DESIGN.md rule 21, 2026-10). A `TextBlock` or panel with no `Background` is not
    hit-testable, glyphs included, so a tooltip on one never opens: the pointer lands on
@@ -1349,7 +1349,7 @@ Public-facing docs, each with one job — don't duplicate content between them:
 | `CODE_OF_CONDUCT.md` | Contributor Covenant 2.1, unmodified apart from the contact address. |
 | `CLAUDE.md` (this file) | Whoever is changing the code. The engineering contract and the *why* behind every rule. |
 | `docs/product-loop/` | The release train's live state (`TRAIN.md`), product assessment, competitor matrix and per-release history. |
-| `docs/BACKLOG.md` | The long-lived evidence pool: owner-pinned Ready rows and the Inbox the release train mines — see below. |
+| `docs/BACKLOG.md` | How the backlog works. The backlog itself is GitHub issues labelled `roadmap` (since 2026-10-10): the labels, the lifecycle, where the old table rows went, and the proposals deliberately not taken. |
 | `docs/PRE-LAUNCH-CHECKLIST.md` | One-time: making the repo public, cutting the first release, and the Microsoft Store submission. Delete it once the launch is behind us. |
 | `docs/RELEASE-CHECKLIST.md` | Whoever cuts a release. What to walk before tagging (gates, the manual pass on the AOT build against the sandbox, media, ship), and a log of what each release's pass found. Same shape as pgNimbus's. |
 
@@ -1374,9 +1374,10 @@ agent prompt also says what ends its run — a message with no tool call is the
 agent's final report, so a mid-task status note that announces the next step
 stops the work there — and forbids self-started review rounds and extra scope.
 Outside the train,
-`kn-bundle` (Opus, high effort) builds a *bundle* of related backlog rows as one PR, for
-parallel runs where the owner wants fewer, larger PRs; bundles never edit `BACKLOG.md`,
-`CHANGELOG.md` or `status-history.md`, which the orchestrating session applies afterwards. Its files live
+`kn-bundle` (Opus, high effort) builds a *bundle* of related backlog issues as one PR, for
+parallel runs where the owner wants fewer, larger PRs; bundles never edit `CHANGELOG.md` or
+`status-history.md` and never file or close issues themselves, which the orchestrating session
+does afterwards from the PR body. Its files live
 in [`docs/product-loop/`](docs/product-loop/): `TRAIN.md` (the live state),
 `CURRENT_STATE.md`, `COMPETITOR_MATRIX.md`, and `history/<date>-v<version>/` for
 every shipped train.
@@ -1387,8 +1388,9 @@ never released. Five things about the train are load-bearing:
 1. **The train selects its own work; the owner steers rather than gates.** The old
    loop could only take items a human had put in Ready, which kept a person in the
    loop and also meant the queue ran dry whenever that person was busy. Now the
-   Ready table is a set of *forced candidates* (P0/P1 rows enter the plan unless they
-   are infeasible where the train runs), the Inbox is an evidence pool, and the
+   `ready` issues are a set of *forced candidates* (P0/P1 ones enter the plan unless they
+   are infeasible where the train runs), the other open backlog issues are an evidence
+   pool, and the
    owner's levers are `TRAIN.md`'s Config and Owner notes, applied at the start of
    every step: pin, veto, pause, or change the release mode.
 2. **State lives in `TRAIN.md` on the train branch, and every step pushes it.** A
@@ -1397,7 +1399,7 @@ never released. Five things about the train are load-bearing:
    `train/*` branch.
 3. **Verification debt is still an item, not a footnote.** Whatever the verifier
    reports as unverifiable in its environment — no live cluster, no Windows or macOS
-   box, no display — becomes its own Inbox row in the same step. This repo has
+   box, no display — becomes its own backlog issue in the same step. This repo has
    repeatedly lost track of exactly that, and the cost is on record: every release
    RID shipped a binary that could not start, because `ci.yml` published the AOT
    output and never launched it.

@@ -73,9 +73,13 @@ then researches only what changed since those reports.
 
 - `git log <last tag>..main`, `CHANGELOG.md` `[Unreleased]`, open GitHub issues and
   PRs (`gh issue list`, `gh pr list`), the last CI run on `main`.
-- `docs/BACKLOG.md`: the **Ready** table (owner-validated — every row is a candidate,
-  P0/P1 rows are forced into the plan unless infeasible here) and the **Inbox**
-  (evidence pool — mine it, do not re-research what it already cites).
+- The backlog, which is GitHub issues labelled `roadmap` (`docs/BACKLOG.md` explains the
+  labels): the **`ready`** ones (owner-validated — every one is a candidate, P0/P1 are
+  forced into the plan unless infeasible here) and the rest, the **Inbox** (evidence
+  pool — mine it, do not re-research what it already cites). `gh issue list --label
+  roadmap --state open --limit 300 --json number,title,labels` lists them; read the body
+  of the ones you score. If `TRAIN.md` has an `## Issues to file` section and this session
+  can create issues, file them first and remove the section.
 - `TODO`/`FIXME`/`HACK` added since the last tag (`git diff <tag> -G`).
 - A **friction walk**: render the screenshot harness for 6–8 core screens (rotate
   which ones between trains; always include the resource list and pod detail) and
@@ -95,8 +99,8 @@ find the report on disk.
 
 ## Phase SELECT — one step, ends with the brief
 
-Build a **fresh** candidate list from: this survey, the research delta, Ready rows,
-Inbox rows, carry-overs from the last train (not auto-included — they compete again),
+Build a **fresh** candidate list from: this survey, the research delta, `ready` issues,
+Inbox issues, carry-overs from the last train (not auto-included — they compete again),
 and any verification debt the environment can now pay. Score each 1–5:
 
 `Value = 0.20·Frequency + 0.20·TimeSaved + 0.15·Troubleshooting + 0.15·UX + 0.10·Reach + 0.10·Competitive + 0.10·Confidence`
@@ -157,7 +161,8 @@ comes first). Mark it `building`, commit that line.
 3. `VERDICT: FAIL` → the findings go back verbatim to the same implementer via
    `SendMessage`, then re-verify; increment `Rounds`. At `MAX_FIX_ROUNDS` still failing:
    `git revert` the item's commits, mark it `blocked` with the precise failing
-   finding, and move on. A train never stalls on one item.
+   finding (in `TRAIN.md`, and on its issue as the `blocked` label plus a comment
+   quoting the finding), and move on. A train never stalls on one item.
 4. `VERDICT: PASS` → mark `landed` with the commit sha; add the implementer's
    `Release note:` line under `## [Unreleased]` in `CHANGELOG.md` (you own that file
    during a train — implementers do not touch it, which is what keeps parallel items
@@ -166,8 +171,11 @@ comes first). Mark it `building`, commit that line.
    the session's GitHub tools; body from `.github/PULL_REQUEST_TEMPLATE.md`) so CI
    builds every later push — `ci.yml` builds branches only through their PR.
 5. Anything the verifier called unverifiable here, and anything out of scope the
-   implementer found, goes into the `docs/BACKLOG.md` Inbox as its own row. If the
-   item came from BACKLOG, mark that row `done <sha>`.
+   implementer found, becomes its own issue (`gh issue create`, labelled `roadmap`,
+   type, size and feasibility, never a priority — see `docs/BACKLOG.md`), or an entry
+   under `## Issues to file` in `TRAIN.md` if this session cannot create issues. If the
+   item came from an issue, add `Closes #N` to the train PR's body, so merging the
+   release closes it.
 
 `PARALLEL: 2` allows two items at once, only when their specs name disjoint files and
 neither touches `CLAUDE.md`'s shared sections; run the second implementer with
@@ -225,7 +233,7 @@ Record results in `docs/product-loop/history/<train>/verification.md`, then
    no approval (2026-09), only the required checks and resolved threads, and the
    `Release tags` ruleset allows creating a `v*` tag, never moving it. A cloud session's
    GitHub App token usually has neither (it already lacks `actions: write` — see
-   VER-1 in the backlog). If the merge or the tag push is refused, that is not a
+   VER-1 in the old backlog). If the merge or the tag push is refused, that is not a
    failure of the train: fall back to `pr` for this release, record the refusal in
    `TRAIN.md`, and hand the owner the two commands. Never work around a refusal.
 4. The Microsoft Store update stays manual: tell the owner the run id whose
