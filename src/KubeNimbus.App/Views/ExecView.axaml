@@ -40,12 +40,12 @@
        button are gone: the terminal takes keystrokes itself, so a second row spent
        retyping them into a TextBox was a row of dock height buying nothing. -->
   <Grid RowDefinitions="Auto,*" Margin="10,8,10,10" IsVisible="{Binding !IsDemo}">
-    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,8">
-      <Ellipse Grid.Column="0" Classes="statusDot" Classes.ok="{Binding IsConnected}" Classes.idle="{Binding !IsConnected}"
-               VerticalAlignment="Center" Margin="0,0,8,0" />
-      <!-- Hidden while the overlay below is showing the same sentence, larger and
-           unabbreviated. The dot still carries the state either way. -->
-      <TextBlock Grid.Column="1" Text="{Binding StatusMessage}" Opacity="0.75" FontSize="12" VerticalAlignment="Center"
+    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+      <!-- The state is this sentence ("Connected to app (/bin/sh)"); there is no dot beside
+           it, which would only say the same thing again to someone who knows the colour code
+           (UI rules 11 and 20, FEAT-73). Hidden while the overlay below is showing the same
+           sentence, larger and unabbreviated. -->
+      <TextBlock Grid.Column="0" Text="{Binding StatusMessage}" Opacity="0.75" FontSize="12" VerticalAlignment="Center"
                  IsVisible="{Binding !IsStatusOverlayVisible}"
                  TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding StatusMessage}" />
 
@@ -53,7 +53,7 @@
            image gave a connected-looking blank terminal with no way to try anything
            else. Empty means "try the usual shells for this pod's OS" — bash, sh, ash on
            Linux, powershell, cmd on a Windows node — and the placeholder says which. -->
-      <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
         <TextBox Text="{Binding ShellCommand}" Width="150" FontSize="11.5" PlaceholderText="{Binding ShellPlaceholder}"
                  Classes="mono"
                  ToolTip.Tip="{Binding ShellTip}" />

@@ -57,7 +57,18 @@ Seven things are load-bearing:
    Right-click opens a Copy/Paste/Select-all menu rather
    than `RightClickAction.CopyOrPaste`, whose paste-on-empty-selection is one stray
    click away from running the clipboard in someone's production container.
-5. **The pane is one row of chrome now** (UI rule 10): status dot, status, shell box,
+   **A copy trims what the program did not write** (#267). The control's selection is a
+   rectangle of cells, and its own `CopySelectionAsync` copied Select all as the whole screen
+   with every line padded with spaces to the terminal's width (137 columns in the QA run) and
+   the empty rows under the prompt as blank lines. Both Ctrl+Shift+C and the menu's Copy now
+   go through `ExecView.CopySelectionAsync`, which puts `ExecCopy.Trim(SelectedText)` on the
+   clipboard: each line's trailing spaces (and NUL cells) and the trailing blank lines go,
+   indentation and spaces inside a line stay, and so does the selection's line separator.
+   `ExecCopyTests` pins the trim; the harness's `ux-exec-copy` selects all on a rendered
+   pane, first checks that the control's own selection *is* padded (so the check cannot pass
+   by accident), then copies by key and by menu and reads the clipboard back. With the trim
+   made a no-op, both the tests and the check were confirmed red.
+5. **The pane is one row of chrome now** (UI rule 10): status, shell box,
    reconnect, "open this session in your terminal" (FEAT-17, see
    [machine-terminal](machine-terminal.md), "Handing a command to the terminal") — and the
    terminal. The input `TextBox`, its `^C`/`^D` chips and the

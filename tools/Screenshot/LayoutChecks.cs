@@ -1,8 +1,10 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Shapes;
 using Avalonia.Headless;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using KubeNimbus.App.ViewModels;
 using KubeNimbus.App.Views;
 
 namespace KubeNimbus.Screenshot;
@@ -168,6 +170,105 @@ internal static class LayoutChecks
         control.Name is { Length: > 0 } name ? name
         : ToolTip.GetTip(control) is string tip ? $"\"{tip}\""
         : control.GetType().Name;
+
+    /// <summary>
+    /// FEAT-77: the confirm strip reads as one element. The confirm button sits right after
+    /// the question's text rather than at the far edge of the window, it ends inside the
+    /// window, and a scale's replica box is the blank at the end of the sentence — just
+    /// after it and level with it — not a field with a label of its own.
+    /// </summary>
+    internal static void ActionStripReadsAsOneBlock(Window window)
+    {
+        var strip = window.GetVisualDescendants().OfType<RowActionStrip>().First();
+        var text = strip.FindControl<Control>("QuestionText")!;
+        var sentence = strip.FindControl<TextBlock>("ActionSentence")!;
+        var confirm = strip.FindControl<Button>("ConfirmButton")!;
+        var box = strip.FindControl<NumericUpDown>("ReplicaInput") is { IsEffectivelyVisible: true } b ? b : null;
+
+        // Where the ink ends, not where the controls' boxes end: a TextBlock stretches to its
+        // column, so its bounds say nothing about whether the words reach the buttons.
+        var textRight = text.GetVisualDescendants().OfType<TextBlock>()
+            .Where(t => t.IsEffectivelyVisible)
+            .Select(InkRight)
+            .Append(box is null ? 0 : RightEdge(box, window))
+            .Max();
+        var confirmLeft = confirm.TranslatePoint(default, window)?.X ?? double.NaN;
+        var gap = confirmLeft - textRight;
+        if (!confirm.IsEffectivelyVisible || gap is < 0 or > 32 || RightEdge(confirm, window) > window.Bounds.Width + 0.5)
+            throw new InvalidOperationException(
+                $"The strip's confirm starts {gap:0}px after its text (x={confirmLeft:0}, text ends at x={textRight:0}) "
+                + $"in a {window.Bounds.Width:0}px window; it should sit with the sentence it answers (FEAT-77).");
+
+        if (box is not null)
+        {
+            // The box is the sentence's blank: the word it completes ("to") sits just before it
+            // on the same line, and the pair ends the sentence. The docked box this replaced
+            // passed a looser check while "to" wrapped onto a line of its own under it.
+            var lead = strip.FindControl<TextBlock>("BlankLead")!;
+            var leadRight = (lead.TranslatePoint(default, window)?.X ?? double.NaN) + lead.TextLayout.Width;
+            var leadMiddle = lead.TranslatePoint(new Point(0, lead.Bounds.Height / 2), window)?.Y ?? double.NaN;
+            var boxLeft = box.TranslatePoint(default, window)?.X ?? double.NaN;
+            var boxTop = box.TranslatePoint(default, window)?.Y ?? double.NaN;
+            var boxGap = boxLeft - leadRight;
+            var sentenceBottom = (sentence.TranslatePoint(default, window)?.Y ?? double.NaN) + sentence.Bounds.Height;
+            var boxBottom = boxTop + box.Bounds.Height;
+            if (!lead.IsEffectivelyVisible || lead.Text != "to" || boxGap is < 0 or > 16
+                || leadMiddle < boxTop || leadMiddle > boxBottom || boxBottom > sentenceBottom + 0.5)
+                throw new InvalidOperationException(
+                    $"The replica box starts {boxGap:0}px after \"{lead.Text}\" (its middle at y={leadMiddle:0}, the box "
+                    + $"spanning y={boxTop:0}..{boxBottom:0}, the sentence ending at y={sentenceBottom:0}); it should follow "
+                    + "the word it completes on the same line, inside the sentence (FEAT-77).");
+        }
+        Console.WriteLine($"Action strip reads as one block at {window.Bounds.Width:0}px (confirm {gap:0}px after the text).");
+
+        double InkRight(TextBlock block) =>
+            (block.TranslatePoint(default, window)?.X ?? double.NaN) + block.Padding.Left + block.TextLayout.Width;
+    }
+
+    /// <summary>
+    /// FEAT-71: the cluster switcher draws a row's pin only where it is about to be used — the
+    /// selected row (the pointer is nowhere in a headless render) — and always on a pinned
+    /// row. A hidden pin is not hit-testable either, so a click on an empty-looking spot does
+    /// not pin. FEAT-73: no row draws an environment dot beside its pill.
+    /// </summary>
+    internal static void SwitcherPinsOnlyWhereUsed(Window window)
+    {
+        var list = window.GetVisualDescendants().OfType<ListBox>().First(l => l.Name == "SwitcherList");
+        var rows = list.GetVisualDescendants().OfType<ListBoxItem>().Where(i => i.IsEffectivelyVisible).ToList();
+        var problems = new List<string>();
+        var shownUnpinned = 0;
+        var hiddenUnpinned = 0;
+        foreach (var row in rows)
+        {
+            var item = (ClusterSwitcherItemViewModel)row.DataContext!;
+            var pin = row.GetVisualDescendants().OfType<Button>().First(b => b.Classes.Contains("switcherPin"));
+            var expected = item.IsPinned || row.IsSelected;
+            var shown = pin.Opacity > 0.5 && pin.IsHitTestVisible;
+            if (shown != expected)
+                problems.Add($"{item.Name}: pin {(shown ? "shown" : "hidden")} (pinned {item.IsPinned}, selected {row.IsSelected})");
+            if (!shown && (pin.Opacity > 0 || pin.IsHitTestVisible))
+                problems.Add($"{item.Name}: a hidden pin is still drawn or still takes clicks");
+            if (!item.IsPinned) _ = shown ? shownUnpinned++ : hiddenUnpinned++;
+            if (row.GetVisualDescendants().OfType<Ellipse>().Any(e => e.IsEffectivelyVisible))
+                problems.Add($"{item.Name}: an environment dot beside the pill");
+        }
+
+        if (hiddenUnpinned == 0)
+            problems.Add("no unpinned, unselected row was rendered, so nothing was checked");
+        if (problems.Count > 0)
+            throw new InvalidOperationException($"The switcher's pins (FEAT-71/73): {string.Join("; ", problems)}.");
+
+        Console.WriteLine($"Switcher pins: {rows.Count} rows, {hiddenUnpinned} unpinned pins hidden, {shownUnpinned} shown on the selected row.");
+    }
+
+    /// <summary>FEAT-73: the exec pane states its connection in words, with no status dot beside them.</summary>
+    internal static void ExecHasNoStatusDot(Window window)
+    {
+        var view = window.GetVisualDescendants().OfType<ExecView>().First();
+        if (view.GetVisualDescendants().OfType<Ellipse>().Any(e => e.Classes.Contains("statusDot") && e.IsEffectivelyVisible))
+            throw new InvalidOperationException("The exec pane draws a status dot beside its connection sentence (FEAT-73).");
+        Console.WriteLine("Exec pane has no status dot beside its sentence.");
+    }
 
     private static double RightEdge(Visual control, Visual root) =>
         control.TranslatePoint(new Point(control.Bounds.Width, 0), root)?.X ?? double.PositiveInfinity;

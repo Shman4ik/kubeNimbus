@@ -28,5 +28,9 @@ Two things not to get wrong when touching this:
   status, and they disagree exactly when it matters: on `cluster-tab-node-detail-cordoned`
   `DiskPressure  True` renders red while `Ready  True` renders green. Removing the dot
   there would delete the classification; removing the word would hide what the API said.
-  The two sites that *are* still this pattern — the exec pane's dot beside "Connected
-  to…" and the switcher's dot beside its environment pill — are `FEAT-73`.
+  The two other sites that were this pattern lost their dots in FEAT-73 (owner's call,
+  2026-10-10: keep the words): the exec pane's dot beside "Connected to app (/bin/sh)",
+  and the cluster switcher's environment dot, which sat 550px from the pill that names the
+  environment in words. The harness's `LayoutChecks.ExecHasNoStatusDot`
+  (`cluster-tab-exec`) and `SwitcherPinsOnlyWhereUsed` (`main-window-switcher`) fail if
+  either comes back.

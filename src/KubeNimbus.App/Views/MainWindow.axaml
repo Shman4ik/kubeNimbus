@@ -499,6 +499,24 @@
                    SelectedItem="{Binding Switcher.SelectedItem, Mode=TwoWay}"
                    Tapped="OnSwitcherListTapped"
                    Background="Transparent" BorderThickness="0">
+            <!-- The pin shows where it is about to be used and nowhere else (FEAT-71): on
+                 the row under the pointer, the selected row (which is where the arrow keys
+                 are), a pin that has keyboard focus itself, and always on a pinned row, whose
+                 filled pin is information. Seven always-drawn pins were seven controls for a
+                 rare action (UI rule 1); the palette and the context menu's Pin stay for
+                 anyone who has not found it. Hidden means not hit-testable as well as
+                 transparent, so a click on an empty-looking spot never pins; shown, the
+                 chip's own background keeps it hit-testable across its area (UI rule 8). -->
+            <ListBox.Styles>
+              <Style Selector="ListBoxItem Button.switcherPin">
+                <Setter Property="Opacity" Value="0" />
+                <Setter Property="IsHitTestVisible" Value="False" />
+              </Style>
+              <Style Selector="ListBoxItem:pointerover Button.switcherPin, ListBoxItem:selected Button.switcherPin, ListBoxItem Button.switcherPin:focus-visible, ListBoxItem Button.switcherPin.pinned">
+                <Setter Property="Opacity" Value="1" />
+                <Setter Property="IsHitTestVisible" Value="True" />
+              </Style>
+            </ListBox.Styles>
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:ClusterSwitcherItemViewModel">
                 <StackPanel>
@@ -509,10 +527,10 @@
                              IsVisible="{Binding HasSectionHeader}" />
 
                   <Border Classes="switcherRowBody">
+                    <!-- No environment dot before the name (FEAT-73): the pill at the row's
+                         end states the environment in words, and a dot 550px from it said
+                         the same thing again in a colour code. -->
                     <Grid ColumnDefinitions="Auto,*,Auto,Auto">
-                      <Ellipse Grid.Column="0" Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,10,0"
-                               Fill="{Binding Environment, Converter={x:Static conv:EnvironmentToBrushConverter.Instance}}" />
-
                       <StackPanel Grid.Column="1" VerticalAlignment="Center">
                         <TextBlock Text="{Binding Name}" FontSize="13" TextTrimming="CharacterEllipsis" />
                         <TextBlock Classes="paletteSubtitle" Text="{Binding Subtitle}" FontSize="11" Opacity="0.55" TextTrimming="CharacterEllipsis" />
@@ -529,7 +547,8 @@
                       <!-- Pin toggle. Pinning is what makes a 200-context kubeconfig
                            usable without typing: the four you actually work in sit at
                            the top, every session. -->
-                      <Button Grid.Column="3" Classes="chip" Padding="4" MinWidth="22" MinHeight="22"
+                      <Button Grid.Column="3" Classes="chip switcherPin" Classes.pinned="{Binding IsPinned}"
+                              Padding="4" MinWidth="22" MinHeight="22"
                               Click="OnSwitcherPinClick"
                               ToolTip.Tip="Pin to the top of the switcher">
                         <PathIcon Width="12" Height="12"
