@@ -65,9 +65,9 @@ public partial class WorkloadLogsView : UserControl
         LogSearchGestures.AttachProblemKeys(this, () => _vm?.Problems);
         LogSearchGestures.AttachReveal(LogItems, () => _vm?.IsLogFilterMode == true, line => _vm?.RevealLine(line));
 
-        // ENG-51: at a narrow window Range, Levels and the context chip move into the ⋯ menu.
+        // ENG-51: at a narrow window Range, Levels, the context chip and then Copy move into the ⋯ menu.
         LogBar = new LogBarOverflow(LogBarRow, leading: null, LogSearchBox, LogBarTools,
-            (RangeSlot, MenuRange), (LevelsSlot, MenuLevels), (ContextSlot, MenuContext));
+            (RangeSlot, MenuRange), (LevelsSlot, MenuLevels), (ContextSlot, MenuContext), (CopySlot, MenuCopy));
     }
 
     /// <summary>The log bar's narrow-window behaviour; internal for the screenshot harness's check.</summary>

@@ -191,10 +191,12 @@
              overflow menu. The bar used to carry all six beside Range, Follow, Previous and
              Levels, ten controls in a row of icons and words. CheckBoxes with a two-way
              IsChecked and no Command (UI rule 8b); Clear and Save close the menu as they run. -->
+        <Panel Name="CopySlot">
         <Button Classes="toolbar" Command="{Binding CopyLogsCommand}"
                 ToolTip.Tip="Copy the visible lines, pod-prefixed and with timestamps" Padding="6">
           <PathIcon Data="{StaticResource ContentCopyIconGeometry}" Width="13" Height="13" />
         </Button>
+        </Panel>
         <Button Name="LogMenuButton" Classes="toolbar" Padding="6" ToolTip.Tip="Display options, Clear and Save">
           <PathIcon Data="{StaticResource DotsHorizontalIconGeometry}" Width="13" Height="13" />
           <Button.Flyout>
@@ -242,6 +244,13 @@
                           IsEnabled="{Binding ShowLogTimestamps}" ToolTip.Tip="{Binding TimestampZoneTooltip}" />
                 <CheckBox IsChecked="{Binding WrapLogLines}" Content="Wrap long lines" />
                 <Separator Margin="0,4" Opacity="0.4" />
+                <Button Name="MenuCopy" Classes="linkRow" Command="{Binding CopyLogsCommand}" Click="OnLogMenuActionClick"
+                        IsVisible="False" ToolTip.Tip="Copy the visible lines, pod-prefixed and with timestamps">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <PathIcon Data="{StaticResource ContentCopyIconGeometry}" Width="13" Height="13" />
+                    <TextBlock Text="Copy the visible lines" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Button>
                 <Button Classes="linkRow" Command="{Binding ClearLogsCommand}" Click="OnLogMenuActionClick"
                         ToolTip.Tip="Clear the pane — every stream keeps running and new lines appear">
                   <StackPanel Orientation="Horizontal" Spacing="8">

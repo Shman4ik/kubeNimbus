@@ -12,10 +12,10 @@ namespace KubeNimbus.App.Views;
 /// <remarks>
 /// <para>
 /// What gives way, in order, is what is set once and then left alone: <b>Range</b>, then
-/// <b>Levels</b>, then the filter's <b>context</b> chip. Each moves into the <c>⋯</c> menu,
+/// <b>Levels</b>, then the filter's <b>context</b> chip, then <b>Copy</b>. Each moves into the <c>⋯</c> menu,
 /// where a copy of it waits hidden, and only as many move as the row needs. The search box,
-/// Follow, Previous (the CrashLoopBackOff gesture), the problem counts, Copy and the menu
-/// itself always stay. Once everything movable has moved, the search box narrows from 230px,
+/// Follow, Previous (the CrashLoopBackOff gesture), the problem counts and the menu itself
+/// always stay. Once everything movable has moved, the search box narrows from 230px,
 /// down to 160px, where it still holds a query beside its own buttons.
 /// </para>
 /// <para>

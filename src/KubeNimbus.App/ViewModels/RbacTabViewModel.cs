@@ -66,12 +66,15 @@ public sealed partial class RbacTabViewModel : InspectorTabViewModelBase
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsIdentityKnown), nameof(IdentityName), nameof(IdentityGroupsText),
-        nameof(IdentityTooltip), nameof(IdentityNote))]
+        nameof(IdentityTooltip), nameof(IdentityNote), nameof(ShowsIdentity))]
     private SelfSubjectIdentity? _identity;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IdentityNote))]
+    [NotifyPropertyChangedFor(nameof(IdentityNote), nameof(ShowsIdentity))]
     private bool _isIdentityPending;
+
+    /// <summary>The line is there once the server has been asked; never a bare "Signed in as".</summary>
+    public bool ShowsIdentity => Identity is not null || IsIdentityPending;
 
     /// <summary>The server named the user: the name line is shown; otherwise <see cref="IdentityNote"/> is.</summary>
     public bool IsIdentityKnown => Identity is { Outcome: SelfSubjectReviewOutcome.Answered, Username: not null };

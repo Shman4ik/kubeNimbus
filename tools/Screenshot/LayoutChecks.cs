@@ -138,7 +138,7 @@ internal static class LayoutChecks
 
             // Whatever left the bar is in the ⋯ menu instead, and nothing is in both places.
             var moved = new List<string>();
-            foreach (var (slotName, menuName) in new[] { ("RangeSlot", "MenuRange"), ("LevelsSlot", "MenuLevels"), ("ContextSlot", "MenuContext") })
+            foreach (var (slotName, menuName) in new[] { ("RangeSlot", "MenuRange"), ("LevelsSlot", "MenuLevels"), ("ContextSlot", "MenuContext"), ("CopySlot", "MenuCopy") })
             {
                 var slot = pane.FindControl<Control>(slotName) ?? throw new InvalidOperationException($"No {slotName}.");
                 var menu = pane.FindControl<Control>(menuName) ?? throw new InvalidOperationException($"No {menuName}.");

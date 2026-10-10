@@ -25,6 +25,17 @@ public class RbacWhoAmITests
     }
 
     [Test]
+    public async Task The_line_is_hidden_until_the_server_has_been_asked()
+    {
+        var pane = Pane(null);
+        await Assert.That(pane.ShowsIdentity).IsFalse();
+
+        pane.IsIdentityPending = true;
+        await Assert.That(pane.ShowsIdentity).IsTrue();
+        await Assert.That(pane.IdentityNote).IsEqualTo("Asking the server who you are…");
+    }
+
+    [Test]
     public async Task A_user_in_no_groups_says_so()
     {
         var pane = Pane(new SelfSubjectIdentity(SelfSubjectReviewOutcome.Answered, "admin", [], null));

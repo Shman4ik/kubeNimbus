@@ -236,6 +236,20 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("ux-log-bar-pod-1100", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetail(), height: 1000, width: 1100)),
     ("ux-log-bar-pod-grep-960", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetailGrep(), height: 1000, width: 960)),
     ("ux-log-bar-workload-960", () => HostInMainWindow(ClusterTabScenarios.DemoWorkloadLogsFind(), height: 1000, width: 960)),
+    // The same bars in a wide interface face. Linux CI draws in DejaVu Sans, which is wider
+    // than Segoe UI, and the first cut fitted Windows and overflowed there by 19px. Verdana is
+    // as wide on Windows; DejaVu Sans is named first so CI measures the face it ships with.
+    // The capture re-applies the faces before the next scenario.
+    ("ux-log-bar-pod-grep-960-wide-face", () =>
+    {
+        Avalonia.Application.Current!.Resources["ContentControlThemeFontFamily"] = new Avalonia.Media.FontFamily("DejaVu Sans, Verdana");
+        return HostInMainWindow(ClusterTabScenarios.DemoPodDetailGrep(), height: 1000, width: 960);
+    }),
+    ("ux-log-bar-workload-960-wide-face", () =>
+    {
+        Avalonia.Application.Current!.Resources["ContentControlThemeFontFamily"] = new Avalonia.Media.FontFamily("DejaVu Sans, Verdana");
+        return HostInMainWindow(ClusterTabScenarios.DemoWorkloadLogsFind(), height: 1000, width: 960);
+    }),
     // Both log panes scrolled to their end: the last line stays clear of the horizontal
     // scroll bar, which Fluent draws over the content (LayoutChecks.LogEndClearsScrollBar).
     ("ux-log-end-gap-pod", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetailSearch(query: ""))),
