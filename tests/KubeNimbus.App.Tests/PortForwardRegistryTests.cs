@@ -114,6 +114,120 @@ public class PortForwardRegistryTests
         await Assert.That(list.Registry.IsEmpty).IsTrue();
     }
 
+    /// <summary>
+    /// The stop is said even while another cluster's forward still runs: the status bar line
+    /// carries the notice beside the count, and so does its tooltip.
+    /// </summary>
+    [Test]
+    public async Task A_stop_notice_shows_beside_the_count_of_forwards_still_running()
+    {
+        var (tab, registry, pane) = Docked();
+        var other = new ClusterTabViewModel(new ClusterContext("other-cluster", "other", "default", "u", "/nonexistent/k.yaml"))
+        {
+            PortForwards = registry,
+        };
+        var survivor = new PortForwardTabViewModel(TestObjects.OfflineClient(), "shop", "web-1", 8080)
+        {
+            Owner = other,
+            Registry = registry,
+            ClusterLabel = "other-cluster",
+        };
+        await pane.StartCommand.ExecuteAsync(null);
+        await survivor.StartCommand.ExecuteAsync(null);
+        var raised = new List<string?>();
+        registry.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        await registry.StopForClusterAsync(tab);
+
+        await Assert.That(registry.StatusText)
+            .IsEqualTo("1 port-forward · Stopped 1 port-forward on test-cluster — its tab was closed.");
+        await Assert.That(registry.Summary).Contains("Stopped 1 port-forward on test-cluster");
+        await Assert.That(registry.Summary).Contains("shop/web-1:8080");
+        await Assert.That(raised).Contains(nameof(PortForwardRegistry.Summary));
+        await survivor.StopCommand.ExecuteAsync(null);
+    }
+
+    /// <summary>
+    /// A Service Start resolves over the network before it binds. A cluster tab closed in that
+    /// window cancels it, and the forward never binds or registers on the disposed client.
+    /// The "API server" here accepts the connection and never answers, so the Start is held
+    /// in flight until something cancels it.
+    /// </summary>
+    [Test]
+    [Timeout(30_000)]
+    public async Task Closing_the_cluster_tab_cancels_a_start_still_in_flight(CancellationToken ct)
+    {
+        var silent = new TcpListener(System.Net.IPAddress.Loopback, 0);
+        silent.Start();
+        var held = new List<TcpClient>();
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (true)
+                {
+                    held.Add(await silent.AcceptTcpClientAsync(ct));
+                }
+            }
+            catch (Exception)
+            {
+                // listener stopped
+            }
+        }, ct);
+
+        try
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "kubenimbus-app-tests", Guid.NewGuid().ToString("n"));
+            Directory.CreateDirectory(directory);
+            var path = Path.Combine(directory, "kubeconfig.yaml");
+            await File.WriteAllTextAsync(path, $$"""
+                apiVersion: v1
+                kind: Config
+                clusters:
+                  - name: silent
+                    cluster:
+                      server: http://127.0.0.1:{{((System.Net.IPEndPoint)silent.LocalEndpoint).Port}}
+                contexts:
+                  - name: silent
+                    context:
+                      cluster: silent
+                      user: silent
+                current-context: silent
+                users:
+                  - name: silent
+                    user:
+                      token: not-a-credential
+                """, ct);
+            using var client = ClusterClient.Connect(new ClusterContext("silent", "silent", null, "silent", path));
+            var tab = TestObjects.Tab();
+            var registry = new PortForwardRegistry();
+            var pane = PortForwardTabViewModel.ForService(
+                client, "shop", "shop-api", [new Core.Networking.ServicePortInfo("http", 80, "web", 0, "TCP", "")]);
+            pane.Owner = tab;
+            pane.Registry = registry;
+
+            var start = pane.StartCommand.ExecuteAsync(null);
+            await Task.Delay(300, ct);
+            await Assert.That(start.IsCompleted).IsFalse();
+
+            await registry.StopForClusterAsync(tab);
+            await start.WaitAsync(TimeSpan.FromSeconds(10), ct);
+
+            await Assert.That(pane.IsRunning).IsFalse();
+            await Assert.That(registry.IsEmpty).IsTrue();
+            await Assert.That(pane.StatusMessage).IsEqualTo("Stopped: the test-cluster tab was closed.");
+            await Assert.That(registry.Notice).IsEqualTo("Stopped 1 port-forward on test-cluster — its tab was closed.");
+        }
+        finally
+        {
+            silent.Stop();
+            foreach (var c in held)
+            {
+                c.Dispose();
+            }
+        }
+    }
+
     /// <summary>With no registry to list it (a pane built alone), closing still stops it — nothing would show it otherwise.</summary>
     [Test]
     public async Task Without_a_registry_closing_the_pane_stops_the_forward()

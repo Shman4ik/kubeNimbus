@@ -47,6 +47,15 @@ public sealed partial class PortForwardTabViewModel : InspectorTabViewModelBase
 
     private PortForwardSession? _session;
 
+    /// <summary>
+    /// Cancelled when the cluster tab closes while a Start is still in flight, and passed to
+    /// the session for its lifetime (hard rule 2). Null while nothing is starting or running.
+    /// </summary>
+    private CancellationTokenSource? _lifetime;
+
+    /// <summary>What the pane says when a Start was cancelled from outside.</summary>
+    private string? _cancelledStatus;
+
     public override string Key { get; }
 
     /// <summary>The declared ports (the pod's container ports, or the service's TCP ports), for the picker.</summary>
@@ -307,6 +316,10 @@ public sealed partial class PortForwardTabViewModel : InspectorTabViewModelBase
         }
 
         PortForwardSession? session = null;
+        var lifetime = new CancellationTokenSource();
+        _lifetime = lifetime;
+        _cancelledStatus = null;
+        Registry?.BeginStart(this);
         try
         {
             session = IsService
@@ -314,7 +327,11 @@ public sealed partial class PortForwardTabViewModel : InspectorTabViewModelBase
                 : _client.StartPortForward(_namespace, _name, PodPort, LocalPort);
             session.ConnectionFailed += ex => Dispatcher.UIThread.Post(() => OnConnectionFailed(ex));
             session.TargetChanged += (from, to) => Dispatcher.UIThread.Post(() => OnTargetChanged(from, to));
-            await session.StartAsync();
+            await session.StartAsync(lifetime.Token);
+
+            // The cluster tab may have closed after the listener bound: never register a
+            // session whose client is gone.
+            lifetime.Token.ThrowIfCancellationRequested();
             _session = session;
             LocalPort = session.LocalPort;
             ResolvedPod = session.ServiceName is not null && session.Target is { } target
@@ -327,8 +344,16 @@ public sealed partial class PortForwardTabViewModel : InspectorTabViewModelBase
             // header already carries pod:port, so the sentence restated both.
             StatusMessage = null;
         }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        {
+            await DisposeQuietlyAsync(session);
+            DropLifetime();
+            StatusIsError = false;
+            StatusMessage = _cancelledStatus ?? "Stopped.";
+        }
         catch (PortForwardException ex)
         {
+            DropLifetime();
             // Already a sentence: about the local port ("Local port 8080 is already in
             // use — choose a different local port"), or about the service ("None of the 2
             // endpoints of shop-api is ready…"). A raw SocketException here named neither
@@ -339,10 +364,28 @@ public sealed partial class PortForwardTabViewModel : InspectorTabViewModelBase
         }
         catch (Exception ex)
         {
+            DropLifetime();
             await DisposeQuietlyAsync(session);
             StatusMessage = $"Failed to start: {ex.Message}";
             StatusIsError = true;
         }
+        finally
+        {
+            Registry?.EndStart(this);
+        }
+    }
+
+    /// <summary>Cancels a Start in flight; the pane then says <paramref name="status"/>.</summary>
+    internal void CancelStart(string status)
+    {
+        _cancelledStatus = status;
+        _lifetime?.Cancel();
+    }
+
+    private void DropLifetime()
+    {
+        _lifetime?.Dispose();
+        _lifetime = null;
     }
 
     private static async Task DisposeQuietlyAsync(PortForwardSession? session)
@@ -392,6 +435,7 @@ public sealed partial class PortForwardTabViewModel : InspectorTabViewModelBase
             await session.DisposeAsync();
         }
 
+        DropLifetime();
         Registry?.Remove(this);
         IsRunning = false;
         ConnectionError = null;

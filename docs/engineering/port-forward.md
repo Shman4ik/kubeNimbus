@@ -35,7 +35,10 @@ listening on the machine. Now:
    client is disposed): the ones it started and any that tunnel through its client. A forward
    left on a disposed client would accept connections and fail every one. The status bar
    then says "Stopped N port-forwards on <cluster> — its tab was closed." for 15 seconds, or
-   until the list is opened or another forward starts or stops.
+   until the list is opened or another forward starts or stops — beside the count when other
+   clusters' forwards still run ("1 port-forward · Stopped …"), and in the tooltip. A Start still
+   in flight (a Service forward resolving over the network) is cancelled through its token and
+   never binds or registers on the disposed client.
 6. **The list** (palette "Port-forwards" while one runs, or the status-bar count) shows each
    forward's local address, what it reaches, its cluster and its last refused connection,
    with Open and Stop. It opens in the selected tab's dock and lists every cluster's forwards.

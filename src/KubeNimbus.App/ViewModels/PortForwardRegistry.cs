@@ -54,7 +54,11 @@ public sealed partial class PortForwardRegistry : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSomethingToShow))]
     [NotifyPropertyChangedFor(nameof(StatusText))]
+    [NotifyPropertyChangedFor(nameof(Summary))]
     private string? _notice;
+
+    /// <summary>Panes whose Start is still in flight — a Service forward resolves over the network before it binds.</summary>
+    private readonly HashSet<PortForwardTabViewModel> _starting = [];
 
     internal static readonly TimeSpan NoticeLifetime = TimeSpan.FromSeconds(15);
 
@@ -79,18 +83,37 @@ public sealed partial class PortForwardRegistry : ObservableObject
     /// <summary>Whether the status bar has something of the registry's to show.</summary>
     public bool HasSomethingToShow => Count > 0 || Notice is not null;
 
-    /// <summary>The status bar's line: "1 port-forward", or the last notice when none is running.</summary>
-    public string StatusText => Count switch
+    /// <summary>
+    /// The status bar's line: the count of running forwards, and the last notice beside it
+    /// while it lasts. The notice is shown with a count too: closing one cluster's tab while
+    /// another cluster's forward runs is exactly when "1 port-forward" alone would hide that
+    /// a forward was just stopped.
+    /// </summary>
+    public string StatusText
     {
-        0 => Notice ?? "",
-        1 => "1 port-forward",
-        var n => $"{n} port-forwards",
-    };
+        get
+        {
+            var count = Count switch
+            {
+                0 => "",
+                1 => "1 port-forward",
+                var n => $"{n} port-forwards",
+            };
+            return (count, Notice) switch
+            {
+                ({ Length: 0 }, var notice) => notice ?? "",
+                (_, null) => count,
+                (_, var notice) => $"{count} · {notice}",
+            };
+        }
+    }
 
-    /// <summary>One line per forward — the status bar item's tooltip.</summary>
-    public string Summary => Count == 0
-        ? Notice ?? "No port-forward is running."
-        : string.Join(Environment.NewLine, Forwards.Select(f => $"{f.LocalAddress} → {f.TargetDescription} · {f.ClusterLabel}"));
+    /// <summary>One line per forward, then the notice — the status bar item's tooltip.</summary>
+    public string Summary => string.Join(
+        Environment.NewLine,
+        Forwards.Select(f => $"{f.LocalAddress} → {f.TargetDescription} · {f.ClusterLabel}")
+            .Append(Notice ?? (Count == 0 ? "No port-forward is running." : null))
+            .OfType<string>());
 
     /// <summary>Brings a forward's cluster tab to the front; set by the shell.</summary>
     internal Action<ClusterTabViewModel>? SelectTab { get; set; }
@@ -103,6 +126,11 @@ public sealed partial class PortForwardRegistry : ObservableObject
             Forwards.Add(forward);
         }
     }
+
+    /// <summary>A pane's Start has begun; a cluster tab closing now cancels it (see <see cref="StopForClusterAsync"/>).</summary>
+    internal void BeginStart(PortForwardTabViewModel forward) => _starting.Add(forward);
+
+    internal void EndStart(PortForwardTabViewModel forward) => _starting.Remove(forward);
 
     internal void Remove(PortForwardTabViewModel forward)
     {
@@ -134,13 +162,27 @@ public sealed partial class PortForwardRegistry : ObservableObject
     public async Task<int> StopForClusterAsync(ClusterTabViewModel tab)
     {
         ArgumentNullException.ThrowIfNull(tab);
-        var doomed = Forwards
-            .Where(f => ReferenceEquals(f.Owner, tab) || (tab.Client is { } client && ReferenceEquals(f.Client, client)))
-            .ToList();
+        bool OnCluster(PortForwardTabViewModel f) =>
+            ReferenceEquals(f.Owner, tab) || (tab.Client is { } client && ReferenceEquals(f.Client, client));
+
+        var reason = $"Stopped: the {tab.Header} tab was closed.";
+
+        // A Start still in flight (a Service forward resolving over the network) is not in
+        // Forwards yet, and would otherwise bind and register after the client is disposed:
+        // a local port that fails every connection, listed with no tab behind it.
+        var cancelled = _starting.Where(OnCluster).ToList();
+        foreach (var starting in cancelled)
+        {
+            starting.CancelStart(reason);
+        }
+
+        var doomed = Forwards.Where(OnCluster).ToList();
         foreach (var forward in doomed)
         {
-            await forward.StopForwardingAsync($"Stopped: the {tab.Header} tab was closed.");
+            await forward.StopForwardingAsync(reason);
         }
+
+        doomed.AddRange(cancelled);
 
         if (doomed.Count > 0)
         {
