@@ -64,7 +64,14 @@ public partial class WorkloadLogsView : UserControl
         LogSearchGestures.AttachRuler(LogRuler, LogItems, LogScroll);
         LogSearchGestures.AttachProblemKeys(this, () => _vm?.Problems);
         LogSearchGestures.AttachReveal(LogItems, () => _vm?.IsLogFilterMode == true, line => _vm?.RevealLine(line));
+
+        // ENG-51: at a narrow window Range, Levels and the context chip move into the ⋯ menu.
+        LogBar = new LogBarOverflow(LogBarRow, leading: null, LogSearchBox, LogBarTools,
+            (RangeSlot, MenuRange), (LevelsSlot, MenuLevels), (ContextSlot, MenuContext));
     }
+
+    /// <summary>The log bar's narrow-window behaviour; internal for the screenshot harness's check.</summary>
+    internal LogBarOverflow LogBar { get; }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {

@@ -105,6 +105,70 @@ internal static class LayoutChecks
         Console.WriteLine($"Log pane's last line ends {gap:0}px above its bottom edge (scroll bar {bar:0}px).");
     }
 
+    /// <summary>
+    /// ENG-51: a log pane's bar keeps every one of its tools inside the pane at a narrow
+    /// window, and its search box wide enough to type in. Below about 1150px the right-hand
+    /// tools used to run off the pane's edge, the ⋯ menu (Clear, Save) first.
+    /// </summary>
+    internal static void LogBarFits(Window window)
+    {
+        var checkedBars = 0;
+        foreach (var bar in window.GetVisualDescendants().OfType<StackPanel>()
+                     .Where(p => p.Name == "LogBarTools" && p.IsEffectivelyVisible))
+        {
+            var pane = bar.GetVisualAncestors().OfType<UserControl>().First();
+            var paneRight = RightEdge(pane, window);
+            var limit = Math.Min(paneRight, window.Bounds.Width);
+            var problems = new List<string>();
+            foreach (var control in bar.Children.Where(c => c.IsVisible))
+            {
+                var right = RightEdge(control, window);
+                if (right > limit + 0.5)
+                    problems.Add($"{Describe(control)} ends at x={right:0}, past the pane's edge at {limit:0}");
+            }
+
+            var search = pane.FindControl<TextBox>("LogSearchBox")
+                ?? throw new InvalidOperationException("No LogSearchBox in a log pane.");
+            var searchRight = RightEdge(search, window);
+            var barLeft = bar.TranslatePoint(default, window)?.X ?? double.NaN;
+            if (search.Bounds.Width < MinLogSearchWidth - 0.5)
+                problems.Add($"the search box is {search.Bounds.Width:0}px, narrower than the {MinLogSearchWidth}px it needs to be typed in");
+            if (searchRight > barLeft + 0.5)
+                problems.Add($"the search box ends at x={searchRight:0}, under the tools that start at x={barLeft:0}");
+
+            // Whatever left the bar is in the ⋯ menu instead, and nothing is in both places.
+            var moved = new List<string>();
+            foreach (var (slotName, menuName) in new[] { ("RangeSlot", "MenuRange"), ("LevelsSlot", "MenuLevels"), ("ContextSlot", "MenuContext") })
+            {
+                var slot = pane.FindControl<Control>(slotName) ?? throw new InvalidOperationException($"No {slotName}.");
+                var menu = pane.FindControl<Control>(menuName) ?? throw new InvalidOperationException($"No {menuName}.");
+                if (slot.IsVisible == menu.IsVisible)
+                    problems.Add($"{slotName} and {menuName} are both {(slot.IsVisible ? "shown" : "hidden")}");
+                if (!slot.IsVisible) moved.Add(slotName.Replace("Slot", "", StringComparison.Ordinal));
+            }
+
+            if (problems.Count > 0)
+                throw new InvalidOperationException(
+                    $"{pane.GetType().Name}'s log bar does not fit a {window.Bounds.Width:0}px window (ENG-51): {string.Join("; ", problems)}.");
+
+            Console.WriteLine(
+                $"{pane.GetType().Name}'s log bar fits {window.Bounds.Width:0}px: search {search.Bounds.Width:0}px, tools end at {RightEdge(bar, window):0} of {limit:0}, "
+                + $"in the menu: {(moved.Count == 0 ? "nothing" : string.Join(", ", moved))}.");
+            checkedBars++;
+        }
+
+        if (checkedBars == 0)
+            throw new InvalidOperationException("No visible log bar, so nothing was checked.");
+    }
+
+    /// <summary>Room for the placeholder and a few typed characters beside the box's own buttons.</summary>
+    private const double MinLogSearchWidth = 160;
+
+    private static string Describe(Control control) =>
+        control.Name is { Length: > 0 } name ? name
+        : ToolTip.GetTip(control) is string tip ? $"\"{tip}\""
+        : control.GetType().Name;
+
     private static double RightEdge(Visual control, Visual root) =>
         control.TranslatePoint(new Point(control.Bounds.Width, 0), root)?.X ?? double.PositiveInfinity;
 }

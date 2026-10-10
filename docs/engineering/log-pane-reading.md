@@ -157,6 +157,25 @@ the three display toggles went in because they are set once and remembered (belo
 CheckBoxes with a two-way `IsChecked` and no Command (UI rule 8b), and Clear and Save close the
 menu as they run (`OnLogMenuActionClick`), which a `Flyout` does not do for a Button inside it.
 
+**At a narrow window the bar gives way rather than running off the pane (ENG-51).** Pod
+detail's bar shares its row with the five-tab strip, and below about 1150px the right-hand end
+— the `⋯` menu with Clear and Save first — was cut off. `Views/LogBarOverflow` now moves, in
+order and only as many as the row needs, **Range**, **Levels** and the filter's **context**
+chip into the top of the `⋯` menu, where a copy of each waits hidden; once all three have gone,
+the search box narrows from 230px towards 160px. Search, the problem counts, Follow, Previous
+(the CrashLoopBackOff gesture), Copy and the menu never move. Measured at the window's 960px
+minimum: pod detail's bar needed about 240px more than its row had; it now moves all three and
+the box is 174px; at 1100px only Range moves; the multi-pod pane fits at 960px with nothing
+moved. Each movable control sits in a `Panel` slot and the slot is what is hidden, because the
+controls carry visibility bindings of their own (the context chip only while filtering, Levels
+not on the Applications page) that a value set from code would replace. The harness's
+`ux-log-bar-*` scenarios (960px and 1100px, with the problem counts showing, and the grep
+shot with the context chip) run `LayoutChecks.LogBarFits`: every tool ends inside the pane, the
+box is at least 160px and clear of the tools, and each control is on the bar or in the menu,
+never both. Before the change the first of them failed with the search box overlapping the
+tools by 240px. Not checkable in the harness: the menu opened, with a Range combo box inside
+it (a popup inside a flyout).
+
 ## Local time, UTC one click away (FEAT-39)
 
 With timestamps on, lines print `2026-07-20 10:41:02.114` in this machine's local time, no

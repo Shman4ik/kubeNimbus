@@ -50,6 +50,30 @@ public class IdentityLiveTests
         await Assert.That(await narrow.Client.GetCurrentUsernameAsync(ct)).IsEqualTo(narrow.UserName);
     }
 
+    /// <summary>
+    /// FEAT-56: the access review's "Signed in as" line reads the groups too, and for a
+    /// ServiceAccount the API server's own are the ones RBAC bindings name it by.
+    /// </summary>
+    [Test]
+    [Timeout(120_000)]
+    public async Task The_access_review_reads_a_service_accounts_groups(CancellationToken ct)
+    {
+        using var client = await LiveCluster.ConnectAsync(ct);
+        using var narrow = await LiveCluster.CreateNarrowUserAsync(client, LiveCluster.Named("whoami-groups"), """
+            - apiGroups: [""]
+              resources: [pods]
+              verbs: [get]
+            """, ct);
+
+        var identity = await narrow.Client.ReviewSelfSubjectAsync(ct);
+
+        await Assert.That(identity.Outcome).IsEqualTo(SelfSubjectReviewOutcome.Answered);
+        await Assert.That(identity.Username).IsEqualTo(narrow.UserName);
+        await Assert.That(identity.Groups).Contains("system:serviceaccounts");
+        await Assert.That(identity.Groups).Contains($"system:serviceaccounts:{LiveCluster.Namespace}");
+        await Assert.That(identity.Groups).Contains("system:authenticated");
+    }
+
     [Test]
     [Timeout(60_000)]
     public async Task A_sync_records_the_user_as_its_initiator(CancellationToken ct)

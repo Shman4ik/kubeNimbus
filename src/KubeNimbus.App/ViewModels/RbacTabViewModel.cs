@@ -58,6 +58,52 @@ public sealed partial class RbacTabViewModel : InspectorTabViewModelBase
     [ObservableProperty]
     private bool _isEmpty;
 
+    // ---- "Signed in as" (SelfSubjectReview, kubectl auth whoami) ----------------------
+
+    /// <summary>
+    /// Who the API server says this connection is, or why it could not say; null until the
+    /// first answer. Shown above My permissions, because the rules there are this identity's.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsIdentityKnown), nameof(IdentityName), nameof(IdentityGroupsText),
+        nameof(IdentityTooltip), nameof(IdentityNote))]
+    private SelfSubjectIdentity? _identity;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IdentityNote))]
+    private bool _isIdentityPending;
+
+    /// <summary>The server named the user: the name line is shown; otherwise <see cref="IdentityNote"/> is.</summary>
+    public bool IsIdentityKnown => Identity is { Outcome: SelfSubjectReviewOutcome.Answered, Username: not null };
+
+    public string IdentityName => IsIdentityKnown ? InvisibleCharacters.Reveal(Identity!.Username!) : "";
+
+    /// <summary>" · groups a, b" after the name, or " · no groups": RBAC bindings name groups too.</summary>
+    public string IdentityGroupsText => !IsIdentityKnown
+        ? ""
+        : Identity!.Groups.Count == 0
+            ? " · no groups"
+            : $" · {(Identity.Groups.Count == 1 ? "group" : "groups")} {InvisibleCharacters.Reveal(string.Join(", ", Identity.Groups))}";
+
+    public string IdentityTooltip => !IsIdentityKnown
+        ? ""
+        : $"The API server authenticates this connection as {IdentityName}"
+          + (Identity!.Groups.Count == 0
+              ? ", in no groups."
+              : $", in {Identity.Groups.Count} {(Identity.Groups.Count == 1 ? "group" : "groups")}:\n{InvisibleCharacters.Reveal(string.Join("\n", Identity.Groups))}")
+          + "\nRBAC bindings name users and groups, and this is who they are matched against (kubectl auth whoami).";
+
+    /// <summary>The sentence shown in place of a name: still asking, or each way the server could not say.</summary>
+    public string IdentityNote => Identity switch
+    {
+        null => IsIdentityPending ? "Asking the server who you are…" : "",
+        { Outcome: SelfSubjectReviewOutcome.Answered } => "The server answered without naming a user.",
+        { Outcome: SelfSubjectReviewOutcome.NotServed } =>
+            "Not available on this server: it does not serve SelfSubjectReview, which needs Kubernetes 1.27 or later (the same call as kubectl auth whoami).",
+        { Outcome: SelfSubjectReviewOutcome.Refused } => $"The server refused to say who you are: {Identity.Detail}",
+        _ => $"Could not ask the server who you are: {Identity.Detail}",
+    };
+
     /// <summary>Which section is showing; the palette opens the tab straight onto "Who can…".</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowsReviewLoading))]
@@ -115,7 +161,11 @@ public sealed partial class RbacTabViewModel : InspectorTabViewModelBase
     [ObservableProperty]
     private string? _whoCanQueryText;
 
-    public RbacTabViewModel(ClusterClient client, string @namespace, SubjectRef? subject = null)
+    /// <param name="load">
+    /// False only for the screenshot harness, which sets the results itself: the review's own
+    /// load against its offline client would otherwise race the fixture.
+    /// </param>
+    public RbacTabViewModel(ClusterClient client, string @namespace, SubjectRef? subject = null, bool load = true)
         : base(subject is null ? $"Access/{@namespace}" : $"Access/{subject.Name}")
     {
         _client = client;
@@ -123,15 +173,56 @@ public sealed partial class RbacTabViewModel : InspectorTabViewModelBase
         Subject = subject;
         Key = subject is null ? $"rbac:{@namespace}" : $"rbac:{subject.Kind}/{subject.Namespace}/{subject.Name}";
 
-        _ = LoadAsync();
+        if (load)
+        {
+            _ = LoadAsync();
+        }
     }
 
     [RelayCommand]
     private async Task RefreshAsync() => await LoadAsync();
 
+    /// <summary>
+    /// The review's own load: the rules, the subject's bindings and who the server says this
+    /// connection is, side by side. The identity is asked on its own so that a refused rules
+    /// review still shows it — "everything is 403" is when it matters most.
+    /// </summary>
     private async Task LoadAsync()
     {
         IsLoading = true;
+        try
+        {
+            await Task.WhenAll(LoadRulesAsync(), LoadIdentityAsync());
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private async Task LoadIdentityAsync()
+    {
+        IsIdentityPending = true;
+        try
+        {
+            Identity = await _client.ReviewSelfSubjectAsync(_cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // tab closed mid-load
+        }
+        catch (ObjectDisposedException)
+        {
+            // the cluster tab closed under the pane
+        }
+        finally
+        {
+            IsIdentityPending = false;
+        }
+    }
+
+    private async Task LoadRulesAsync()
+    {
         ErrorMessage = null;
         try
         {
@@ -163,10 +254,6 @@ public sealed partial class RbacTabViewModel : InspectorTabViewModelBase
         catch (Exception ex)
         {
             ErrorMessage = $"Could not read access rules: {ex.Message}";
-        }
-        finally
-        {
-            IsLoading = false;
         }
     }
 

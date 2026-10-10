@@ -151,22 +151,77 @@ public partial class EventsLiveTests
         var count = int.Parse(Cell("Count"), CultureInfo.InvariantCulture);
         await Assert.That(Math.Abs(count - e.Occurrences())).IsLessThanOrEqualTo(1);
 
-        var kubectlAge = ParseHumanDuration(Cell("Last Seen"));
+        var lastSeen = Cell("Last Seen");
         var appAge = DateTimeOffset.UtcNow - e.LastSeen()!.Value;
-        await Assert.That((kubectlAge - appAge).Duration()).IsLessThanOrEqualTo(TimeSpan.FromMinutes(1) + TimeSpan.FromSeconds(5))
-            .Because($"kubectl LAST SEEN \"{Cell("Last Seen")}\" and the app's {appAge} should be the same time");
+        await Assert.That(KubectlAge.Agrees(lastSeen, appAge)).IsTrue()
+            .Because($"kubectl LAST SEEN \"{lastSeen}\" and the app's {appAge} should be the same time");
     }
+}
+
+/// <summary>
+/// kubectl's <c>duration.HumanDuration</c>, read back. It truncates, and to a unit that
+/// grows with the age: seconds below two minutes, then minutes, then whole hours from 8h to
+/// 48h ("40h"), whole days from 8 days. So "40h" is any age from 40h to just under 41h, and
+/// a comparison that allowed a minute either side failed for most of every hour once the
+/// sandbox's series event was that old (ENG-60). The tolerance is the unit kubectl printed.
+/// </summary>
+internal static partial class KubectlAge
+{
+    /// <summary>Clock skew between this machine and the API server, and the time between the two reads.</summary>
+    internal static readonly TimeSpan Slack = TimeSpan.FromSeconds(10);
 
     [GeneratedRegex(@"(\d+)([ydhms])")]
     private static partial Regex DurationPart();
 
-    private static TimeSpan ParseHumanDuration(string text) =>
-        DurationPart().Matches(text).Aggregate(TimeSpan.Zero, (sum, p) => sum + p.Groups[2].Value switch
-        {
-            "y" => TimeSpan.FromDays(365),
-            "d" => TimeSpan.FromDays(1),
-            "h" => TimeSpan.FromHours(1),
-            "m" => TimeSpan.FromMinutes(1),
-            _ => TimeSpan.FromSeconds(1),
-        } * int.Parse(p.Groups[1].Value, CultureInfo.InvariantCulture));
+    private static TimeSpan UnitOf(string unit) => unit switch
+    {
+        "y" => TimeSpan.FromDays(365),
+        "d" => TimeSpan.FromDays(1),
+        "h" => TimeSpan.FromHours(1),
+        "m" => TimeSpan.FromMinutes(1),
+        _ => TimeSpan.FromSeconds(1),
+    };
+
+    /// <summary>The age as printed: "3d2h" is 3 days and 2 hours.</summary>
+    internal static TimeSpan Parse(string text) =>
+        DurationPart().Matches(text).Aggregate(TimeSpan.Zero, (sum, p) =>
+            sum + UnitOf(p.Groups[2].Value) * int.Parse(p.Groups[1].Value, CultureInfo.InvariantCulture));
+
+    /// <summary>The smallest unit printed, which is how much a truncated reading can be short by.</summary>
+    internal static TimeSpan SmallestUnit(string text) =>
+        DurationPart().Matches(text).Select(p => UnitOf(p.Groups[2].Value)).DefaultIfEmpty(TimeSpan.FromSeconds(1)).Min();
+
+    /// <summary>
+    /// Whether an exact age reads as <paramref name="printed"/>: no less than what kubectl
+    /// printed, and short of it plus one of its smallest unit, give or take <see cref="Slack"/>.
+    /// </summary>
+    internal static bool Agrees(string printed, TimeSpan actual)
+    {
+        var floor = Parse(printed);
+        return actual >= floor - Slack && actual < floor + SmallestUnit(printed) + Slack;
+    }
+}
+
+/// <summary>The tolerance <see cref="KubectlAge"/> applies, pinned without a cluster.</summary>
+public class KubectlAgeTests
+{
+    [Test]
+    public async Task Whole_hours_between_8h_and_48h_cover_the_whole_hour()
+    {
+        await Assert.That(KubectlAge.Agrees("40h", TimeSpan.FromHours(40) + TimeSpan.FromMinutes(59))).IsTrue();
+        await Assert.That(KubectlAge.Agrees("40h", TimeSpan.FromHours(40))).IsTrue();
+        await Assert.That(KubectlAge.Agrees("40h", TimeSpan.FromHours(41) + TimeSpan.FromMinutes(1))).IsFalse();
+        await Assert.That(KubectlAge.Agrees("40h", TimeSpan.FromHours(39) + TimeSpan.FromMinutes(50))).IsFalse();
+    }
+
+    [Test]
+    public async Task Mixed_units_are_as_precise_as_their_smallest_part()
+    {
+        await Assert.That(KubectlAge.Agrees("3h12m", new TimeSpan(3, 12, 40))).IsTrue();
+        await Assert.That(KubectlAge.Agrees("3h12m", new TimeSpan(3, 14, 0))).IsFalse();
+        await Assert.That(KubectlAge.Agrees("5m3s", new TimeSpan(0, 5, 4))).IsTrue();
+        await Assert.That(KubectlAge.Agrees("5m3s", new TimeSpan(0, 5, 30))).IsFalse();
+        await Assert.That(KubectlAge.Agrees("10d", TimeSpan.FromDays(10.9))).IsTrue();
+        await Assert.That(KubectlAge.Agrees("10d", TimeSpan.FromDays(11.1))).IsFalse();
+    }
 }

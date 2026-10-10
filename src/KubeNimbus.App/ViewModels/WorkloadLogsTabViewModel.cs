@@ -127,6 +127,12 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
     /// </summary>
     private readonly int _maxLogLines = App.LoadSettings().LogBufferLines;
 
+    // The demo cluster's replay (RunDemoReplayAsync): every stream of the pane, one loop.
+    private readonly Lock _demoLock = new();
+    private readonly List<DemoReplay> _demoReplays = [];
+    private int _demoReplayOrder;
+    private bool _demoReplayRunning;
+
     private DispatcherTimer? _flushTimer;
     private DateTimeOffset? _primeUntil;
     private int _nextColourIndex;
@@ -719,34 +725,147 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
         catch (OperationCanceledException) { }
     }
 
-    /// <summary>The demo cluster's stand-in for a follow, through the same <see cref="Enqueue"/>.</summary>
+    /// <summary>
+    /// The demo cluster's stand-in for a follow, through the same <see cref="Enqueue"/>. The
+    /// source joins the pane's one replay (<see cref="RunDemoReplayAsync"/>) rather than
+    /// running a timer of its own.
+    /// </summary>
     private async Task ReplayDemoAsync(LogSourceViewModel source, CancellationToken token)
     {
         var lines = DemoLogs.For(source.PodName, source.ContainerName);
-        try
-        {
-            foreach (var line in lines)
-            {
-                await Task.Delay(DemoLogs.Interval, token);
-                Enqueue(line, source);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            return;
-        }
 
         // No lines at all is a container that never ran, and it is said from the pod the
         // way a live stream's ending is — "the sample stream has finished" over zero lines
         // was a chip saying "ended" beside a body that disagreed (ENG-45).
-        if (lines.Count == 0 && DemoData.Pods.FirstOrDefault(p => p.Name == source.PodName) is { } pod)
+        if (lines.Count == 0)
         {
-            var (text, _, notStarted) = LogStreamEnd.DescribePod(pod.Raw, source.ContainerName, atStart: null);
-            await EndSourceAsync(source, notStarted ? LogSourceState.NotStarted : LogSourceState.Ended, text, token);
+            var (text, state) = DemoData.Pods.FirstOrDefault(p => p.Name == source.PodName) is { } pod
+                && LogStreamEnd.DescribePod(pod.Raw, source.ContainerName, atStart: null) is var (said, _, notStarted)
+                    ? (said, notStarted ? LogSourceState.NotStarted : LogSourceState.Ended)
+                    : ("Demo cluster: the sample stream has finished.", LogSourceState.Ended);
+            await EndSourceAsync(source, state, text, token);
             return;
         }
 
-        await EndSourceAsync(source, LogSourceState.Ended, "Demo cluster: the sample stream has finished.", token);
+        bool start;
+        lock (_demoLock)
+        {
+            _demoReplays.RemoveAll(r => r.Source == source);
+            _demoReplays.Add(new DemoReplay(source, lines, token, _demoReplayOrder++));
+            start = !_demoReplayRunning;
+            _demoReplayRunning = true;
+        }
+
+        if (start)
+        {
+            await RunDemoReplayAsync();
+        }
+    }
+
+    /// <summary>
+    /// Every demo stream of this pane, replayed by one loop in the order the lines were
+    /// logged: each interval hands out as many lines as there are streams replaying (the rate
+    /// each stream used to have on a timer of its own), always the earliest line any of them
+    /// has left. ENG-53: with a timer per stream, which flush tick a line landed in decided
+    /// its place — the merge sorts within a tick, by design for a live tail — so the merged
+    /// panes came out in a different order on every run, in the demo and in every screenshot
+    /// of them. Lines that arrive already in time order come out the same however the ticks
+    /// fall. A live cluster is unchanged.
+    /// </summary>
+    private async Task RunDemoReplayAsync()
+    {
+        // Read once: closing the pane cancels and then disposes _cts.
+        var closing = _cts.Token;
+        try
+        {
+            while (true)
+            {
+                await Task.Delay(DemoLogs.Interval, closing);
+                IReadOnlyList<DemoReplay> finished;
+                lock (_demoLock)
+                {
+                    _demoReplays.RemoveAll(r => r.Token.IsCancellationRequested);
+                    if (_demoReplays.Count == 0)
+                    {
+                        _demoReplayRunning = false;
+                        return;
+                    }
+
+                    finished = ReplayTick(_demoReplays, Enqueue);
+                }
+
+                foreach (var done in finished)
+                {
+                    await EndSourceAsync(done.Source, LogSourceState.Ended, "Demo cluster: the sample stream has finished.", done.Token);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            lock (_demoLock)
+            {
+                _demoReplayRunning = false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// One interval of the demo replay: as many lines as there are streams replaying, each the
+    /// earliest any of them has left (two streams at the same instant in the order they
+    /// joined). Streams it empties are removed from <paramref name="replays"/> and returned.
+    /// </summary>
+    internal static IReadOnlyList<DemoReplay> ReplayTick(List<DemoReplay> replays, Action<string, LogSourceViewModel> emit)
+    {
+        var finished = new List<DemoReplay>();
+        for (var budget = replays.Count; budget > 0 && replays.Count > 0; budget--)
+        {
+            var next = replays.MinBy(r => (r.NextAt, r.Order))!;
+            emit(next.Take(), next.Source);
+            if (next.IsDone)
+            {
+                replays.Remove(next);
+                finished.Add(next);
+            }
+        }
+
+        return finished;
+    }
+
+    /// <summary>One demo stream's place in the pane's replay.</summary>
+    internal sealed class DemoReplay
+    {
+        private readonly IReadOnlyList<string> _lines;
+        private readonly DateTimeOffset[] _at;
+        private int _next;
+
+        public DemoReplay(LogSourceViewModel source, IReadOnlyList<string> lines, CancellationToken token, int order)
+        {
+            Source = source;
+            Token = token;
+            Order = order;
+            _lines = lines;
+
+            // A line with no timestamp keeps its place after the line before it, as the merge does.
+            _at = new DateTimeOffset[lines.Count];
+            var carried = DateTimeOffset.MinValue;
+            for (var i = 0; i < lines.Count; i++)
+            {
+                carried = new LogLineViewModel(lines[i], showTimestamp: false).At ?? carried;
+                _at[i] = carried;
+            }
+        }
+
+        public LogSourceViewModel Source { get; }
+
+        public CancellationToken Token { get; }
+
+        public int Order { get; }
+
+        public DateTimeOffset NextAt => _at[_next];
+
+        public bool IsDone => _next >= _lines.Count;
+
+        public string Take() => _lines[_next++];
     }
 
     private async Task EndSourceAsync(LogSourceViewModel source, LogSourceState state, string message, CancellationToken token) =>

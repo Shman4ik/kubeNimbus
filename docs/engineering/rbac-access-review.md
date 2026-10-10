@@ -48,6 +48,37 @@ questions three different ways, and the split matters:
   `WhoCanResult.IsPartial`, surfaced inline. A short list that doesn't say it's
   short is the failure mode this whole surface exists to avoid.
 
+## Who the server says you are (FEAT-56)
+
+My permissions opens on a **"Signed in as"** line: the username and groups the API server
+authenticates this connection as, from a `SelfSubjectReview` (`kubectl auth whoami`,
+`ClusterClient.ReviewSelfSubjectAsync`). It is the answer to "I connected but everything is
+403" — the server thinks I am `arn:aws:iam::…:role/dev`, in these groups — and no
+client-side reasoning can produce it, because only the authenticator knows what an exec
+plugin's token or an OIDC login turned into. Four things are deliberate:
+
+- **It is asked on its own, beside the rules review**, not after it: a refused or failed
+  `SelfSubjectRulesReview` still shows who you are, which is when it matters most.
+- **Each way it cannot answer is a sentence, not an error.** Neither v1 nor v1beta1 served (a
+  server older than 1.27) is "Not available on this server"; a refusal quotes the server's
+  own message; no answer says why. `SelfSubjectReviewOutcome` carries which.
+- **Groups are read here and nowhere else.** RBAC bindings name groups as well as users, so
+  the groups are half of the answer. They are shown in the pane, held while it is open and
+  never cached on the client or written anywhere; the Argo sync, which shares the request,
+  still sends the name alone. The UID and the extras are never read: extras carry
+  provider-specific identifiers (an access key id, a session name) nothing here needs. See
+  the remarks on `ClusterClient.Identity.cs`, and `PRIVACY.md`'s "What your cluster sees".
+- **It is asked afresh on every load**, never the sync's cached username, so Refresh after an
+  `aws sso login` as a different role shows the new identity.
+
+The demo cluster has no stand-in because it has no access review: the review is
+palette-gated on `IsDemo: false` (demo rule 5), and a canned identity would be exactly the
+invented fact demo rule 6 exists to prevent. `SelfSubjectReviewTests` (Core, over a scripted
+API server) and `RbacWhoAmITests` (App) pin it; the harness renders
+`cluster-tab-rbac-whoami` and `cluster-tab-rbac-whoami-not-served`.
+
+## Entry points
+
 Entry points are command-palette only (UI rule 1): "Access review — my
 permissions" always, "Access review — who can do X?" (opens the same tab
 straight onto its Who-can section via `RbacTabViewModel.WhoCanTabIndex`), plus a
