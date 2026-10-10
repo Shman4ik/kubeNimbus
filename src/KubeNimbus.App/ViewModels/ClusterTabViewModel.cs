@@ -199,7 +199,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// version). Anything else — connecting, a failure, a watch that ended, a connection
     /// warning — still gets the bar.
     /// </summary>
-    public bool IsStatusWorthShowing => Status != _routineStatus || ConnectionWarning is not null || IsTlsUnverified;
+    public bool IsStatusWorthShowing =>
+        Status != _routineStatus || ConnectionWarning is not null || IsTlsUnverified || IsPlainHttp;
 
     /// <summary>
     /// The connected cluster's entry sets <c>insecure-skip-tls-verify</c>: nothing checks
@@ -215,6 +216,29 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     /// <summary>What the status bar says while <see cref="IsTlsUnverified"/>.</summary>
     public const string TlsUnverifiedNotice = "TLS not verified: this cluster's kubeconfig sets insecure-skip-tls-verify.";
+
+    /// <summary>
+    /// The connected cluster's server is a plain <c>http://</c> URL (ENG-59): no TLS at all, so
+    /// the credential and every response are readable on the network path. Kept on screen the
+    /// way <see cref="IsTlsUnverified"/> is, in the same slot; where both would apply this is
+    /// the one shown, since with no TLS there is no certificate to skip checking.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsStatusWorthShowing))]
+    private bool _isPlainHttp;
+
+    /// <summary>What the status bar says while <see cref="IsPlainHttp"/>.</summary>
+    public const string PlainHttpNotice = "Not encrypted: this cluster's server is plain http://, so its traffic, credential included, is sent in the clear.";
+
+    /// <summary>
+    /// The two transport notices for a connected <paramref name="client"/>, or both off
+    /// without one. One place, so a connect and a reconnect cannot disagree about them.
+    /// </summary>
+    internal void ApplyTransportNotices(ClusterClient? client)
+    {
+        IsPlainHttp = client?.UsesPlainHttp ?? false;
+        IsTlsUnverified = client is { SkipsTlsVerification: true, UsesPlainHttp: false };
+    }
 
     partial void OnStatusChanged(string value) => OnPropertyChanged(nameof(IsStatusWorthShowing));
 
@@ -1548,7 +1572,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             Client = client;
             created = null;
             IsConnected = true;
-            IsTlsUnverified = client.SkipsTlsVerification;
+            ApplyTransportNotices(client);
             SetConnectedStatus(version.GitVersion);
 
             var sidebar = BuildSidebarAsync();
@@ -1583,7 +1607,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             // be the same sentence twice on one screen.
             Status = $"Connection failed ({ConnectionFailure.Report.StepPhrase}).";
             IsConnected = false;
-            IsTlsUnverified = false;
+            ApplyTransportNotices(null);
         }
         finally
         {
@@ -1633,7 +1657,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         {
             await client.RefreshCredentialsAsync(force: true);
             var version = await client.GetServerVersionAsync();
-            IsTlsUnverified = client.SkipsTlsVerification;
+            ApplyTransportNotices(client);
             Status = $"Connected — Kubernetes {version.GitVersion}. Credentials re-read from the kubeconfig.";
             Refresh();
         }

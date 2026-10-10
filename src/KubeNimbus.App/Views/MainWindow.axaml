@@ -366,11 +366,15 @@
                      IsVisible="{Binding SelectedTab, Converter={x:Static aconv:ObjectConverters.IsNull}}" />
           <TextBlock Grid.Column="1" Classes="statusText warn statusMessage" Text="{Binding SelectedTab.ConnectionWarning}"
                      IsVisible="{Binding SelectedTab.ConnectionWarning, Converter={x:Static aconv:ObjectConverters.IsNotNull}}" />
-          <!-- insecure-skip-tls-verify, for as long as the tab is connected: its own slot, so
-               a status line or a watch warning written later can never replace it. -->
+          <!-- insecure-skip-tls-verify, or a plain http:// server, for as long as the tab is
+               connected: its own slot, so a status line or a watch warning written later can
+               never replace it. At most one of the two is on (ApplyTransportNotices). -->
           <TextBlock Grid.Column="2" Classes="statusText warn statusMessage" Margin="12,0,0,0"
                      Text="{x:Static vm:ClusterTabViewModel.TlsUnverifiedNotice}"
                      IsVisible="{Binding SelectedTab.IsTlsUnverified, FallbackValue=False}" />
+          <TextBlock Grid.Column="2" Classes="statusText warn statusMessage" Margin="12,0,0,0"
+                     Text="{x:Static vm:ClusterTabViewModel.PlainHttpNotice}"
+                     IsVisible="{Binding SelectedTab.IsPlainHttp, FallbackValue=False}" />
         </Grid>
       </Border>
 

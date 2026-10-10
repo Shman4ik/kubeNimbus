@@ -108,7 +108,20 @@ public sealed record LabelSelector(IReadOnlyList<LabelRequirement> Requirements)
         _ => false,
     };
 
-    /// <summary>Parses either <c>spec.selector</c> shape; null when it carries no requirement.</summary>
+    /// <summary>
+    /// Parses either <c>spec.selector</c> shape; null when it carries no requirement, or when
+    /// any part of it cannot be read.
+    /// </summary>
+    /// <remarks>
+    /// <b>All of it or none of it (ENG-50).</b> A selector is the AND of its requirements, so
+    /// leaving out one this cannot read — an operator this build does not know, an
+    /// <c>In</c>/<c>NotIn</c> with no values, a <c>matchLabels</c> value that is not a string,
+    /// a field a <c>LabelSelector</c> does not have — <em>widens</em> it: the pane would tail
+    /// pods the workload does not own. This used to skip such an entry, contradicting its own
+    /// comment. Now the whole selector is refused, which is the direction the empty selector
+    /// already goes, and every caller already states a null (workload detail says the workload
+    /// has no usable pod selector; the logs actions are not offered).
+    /// </remarks>
     public static LabelSelector? Parse(JsonElement selector)
     {
         if (selector.ValueKind != JsonValueKind.Object)
@@ -117,24 +130,44 @@ public sealed record LabelSelector(IReadOnlyList<LabelRequirement> Requirements)
         }
 
         var requirements = new List<LabelRequirement>();
-        var isLabelSelectorObject = false;
+        var hasMatchLabels = selector.TryGetProperty("matchLabels", out var matchLabels);
+        var hasMatchExpressions = selector.TryGetProperty("matchExpressions", out var matchExpressions);
+        var isLabelSelectorObject = hasMatchLabels || hasMatchExpressions;
 
-        if (selector.TryGetProperty("matchLabels", out var matchLabels))
+        if (isLabelSelectorObject)
         {
-            isLabelSelectorObject = true;
-            ReadLabelMap(matchLabels, requirements);
+            foreach (var property in selector.EnumerateObject())
+            {
+                if (property.Name is not ("matchLabels" or "matchExpressions"))
+                {
+                    return null;
+                }
+            }
         }
 
-        if (selector.TryGetProperty("matchExpressions", out var matchExpressions)
-            && matchExpressions.ValueKind == JsonValueKind.Array)
+        if (hasMatchLabels && matchLabels.ValueKind != JsonValueKind.Null)
         {
-            isLabelSelectorObject = true;
+            if (matchLabels.ValueKind != JsonValueKind.Object || !ReadLabelMap(matchLabels, requirements))
+            {
+                return null;
+            }
+        }
+
+        if (hasMatchExpressions && matchExpressions.ValueKind != JsonValueKind.Null)
+        {
+            if (matchExpressions.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
             foreach (var expression in matchExpressions.EnumerateArray())
             {
-                if (ReadExpression(expression) is { } requirement)
+                if (ReadExpression(expression) is not { } requirement)
                 {
-                    requirements.Add(requirement);
+                    return null;
                 }
+
+                requirements.Add(requirement);
             }
         }
 
@@ -152,26 +185,26 @@ public sealed record LabelSelector(IReadOnlyList<LabelRequirement> Requirements)
                 }
             }
 
-            ReadLabelMap(selector, requirements);
+            _ = ReadLabelMap(selector, requirements);
         }
 
         return requirements.Count == 0 ? null : new LabelSelector(requirements);
     }
 
-    private static void ReadLabelMap(JsonElement map, List<LabelRequirement> into)
+    /// <summary>Reads a label map into requirements; false when a value is not a string.</summary>
+    private static bool ReadLabelMap(JsonElement map, List<LabelRequirement> into)
     {
-        if (map.ValueKind != JsonValueKind.Object)
-        {
-            return;
-        }
-
         foreach (var property in map.EnumerateObject())
         {
-            if (property.Value.ValueKind == JsonValueKind.String)
+            if (property.Value.ValueKind != JsonValueKind.String)
             {
-                into.Add(new LabelRequirement(property.Name, LabelOperator.In, [property.Value.GetString() ?? ""]));
+                return false;
             }
+
+            into.Add(new LabelRequirement(property.Name, LabelOperator.In, [property.Value.GetString() ?? ""]));
         }
+
+        return true;
     }
 
     private static LabelRequirement? ReadExpression(JsonElement expression)
@@ -195,7 +228,7 @@ public sealed record LabelSelector(IReadOnlyList<LabelRequirement> Requirements)
 
             // An operator this build does not know is not a requirement it may drop:
             // dropping it widens the selector, which is how a pane ends up tailing pods
-            // the workload does not own.
+            // the workload does not own — so the whole selector is refused (Parse).
             _ => (LabelOperator?)null,
         };
 
@@ -205,23 +238,32 @@ public sealed record LabelSelector(IReadOnlyList<LabelRequirement> Requirements)
         }
 
         var values = new List<string>();
-        if (expression.TryGetProperty("values", out var valuesElement) && valuesElement.ValueKind == JsonValueKind.Array)
+        if (expression.TryGetProperty("values", out var valuesElement) && valuesElement.ValueKind != JsonValueKind.Null)
         {
+            if (valuesElement.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
             foreach (var value in valuesElement.EnumerateArray())
             {
-                if (value.ValueKind == JsonValueKind.String)
+                // A value left out of a NotIn widens it as surely as a dropped requirement.
+                if (value.ValueKind != JsonValueKind.String)
                 {
-                    values.Add(value.GetString() ?? "");
+                    return null;
                 }
+
+                values.Add(value.GetString() ?? "");
             }
         }
 
-        // In/NotIn with no values is invalid per the API's own validation, and an
-        // In over nothing matches nothing — better to refuse the selector than to
-        // render a query the API server rejects.
-        return resolved is LabelOperator.In or LabelOperator.NotIn && values.Count == 0
-            ? null
-            : new LabelRequirement(key, resolved, values);
+        // The API's own validation: In/NotIn need values (an In over nothing matches nothing,
+        // and the API server rejects the query), Exists/DoesNotExist take none. Either way the
+        // expression does not say what it would mean, so it is not read as anything.
+        var wantsValues = resolved is LabelOperator.In or LabelOperator.NotIn;
+        return wantsValues == (values.Count > 0)
+            ? new LabelRequirement(key, resolved, values)
+            : null;
     }
 
     /// <summary>

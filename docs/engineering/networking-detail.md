@@ -129,10 +129,14 @@ logs, "every pod" is a failure (aptakube#227). For a NetworkPolicy, `podSelector
 every pod in the namespace; it is how "default deny" is written. So `NetworkPolicyRules`
 reads emptiness itself and never lets that null stand for it, and the Pods tab of a default
 deny lists the whole namespace. It also refuses a selector it cannot evaluate faithfully —
-an unknown operator, an `In` with no values — by **counting**: every `matchLabels` and
-`matchExpressions` entry must come back as a requirement, because `LabelSelector.Parse`
-skips an entry it does not understand, and a skipped requirement is a *wider* selector. An
-unreadable selector lists no pods and says so.
+an unknown operator, an `In` with no values, a non-string value, a field a `LabelSelector`
+does not have (the plain label map included) — because a skipped requirement is a *wider*
+selector. Since ENG-50 `LabelSelector.Parse` refuses such a selector whole, so
+`NetworkPolicyRules` decides only whether the selector declares anything (nothing is every
+pod) and trusts Parse's null after that. It used to count entries against requirements,
+because Parse skipped what it could not read; the count had a hole of its own
+(`matchLabels: "x"` counted as nothing declared and read as "all pods"). An unreadable
+selector lists no pods and says so.
 
 The Pods tab is one capped read with Refresh (500, stated when truncated), like node
 detail's: which pods a policy selects changes at the speed pods are created, and an empty

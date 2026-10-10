@@ -73,6 +73,14 @@ public sealed partial class ClusterClient : IDisposable
     /// </summary>
     public bool SkipsTlsVerification { get; private set; }
 
+    /// <summary>
+    /// Whether the cluster entry's server is a plain <c>http://</c> URL: no TLS at all, so the
+    /// credential and every response cross the network readable by anyone on the path (ENG-59).
+    /// Stated the way <see cref="SkipsTlsVerification"/> is, and where both are true this is
+    /// the one that applies — there is no certificate to skip checking.
+    /// </summary>
+    public bool UsesPlainHttp => string.Equals(_client.BaseUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase);
+
     private ClusterClient(ClusterContext context, ClientSetup setup)
     {
         Context = context;

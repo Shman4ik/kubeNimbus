@@ -195,6 +195,41 @@ public class LabelSelectorTests
     }
 
     /// <summary>
+    /// ENG-50: beside a requirement it <em>can</em> read, an unreadable one used to be
+    /// skipped, leaving <c>app=api</c> where the object said <c>app=api AND tier ?? x</c> —
+    /// a wider selector, so workload logs and workload detail tailed pods the workload does
+    /// not own. Every way an entry can be unreadable now refuses the whole selector.
+    /// </summary>
+    [Test]
+    [Arguments("""{ "key": "tier", "operator": "Gt", "values": ["3"] }""")]
+    [Arguments("""{ "key": "tier", "operator": "In", "values": [] }""")]
+    [Arguments("""{ "key": "tier", "operator": "NotIn" }""")]
+    [Arguments("""{ "key": "tier", "operator": "NotIn", "values": ["a", 7] }""")]
+    [Arguments("""{ "key": "tier", "operator": "NotIn", "values": "a" }""")]
+    [Arguments("""{ "key": "tier", "operator": "Exists", "values": ["a"] }""")]
+    [Arguments("""{ "operator": "Exists" }""")]
+    [Arguments("\"tier\"")]
+    public async Task An_unreadable_expression_beside_a_readable_one_refuses_the_whole_selector(string expression)
+    {
+        var workload = Workload($$"""
+            { "matchLabels": { "app": "api" }, "matchExpressions": [ {{expression}} ] }
+            """);
+
+        await Assert.That(LabelSelector.ForPodsOf(workload)).IsNull();
+    }
+
+    /// <summary>The same rule for the rest of a LabelSelector object: nothing in it may be skipped.</summary>
+    [Test]
+    [Arguments("""{ "matchLabels": { "app": "api", "tier": 3 } }""")]
+    [Arguments("""{ "matchLabels": { "app": "api" }, "matchExpressions": "tier" }""")]
+    [Arguments("""{ "matchLabels": "app=api", "matchExpressions": [ { "key": "tier", "operator": "Exists" } ] }""")]
+    [Arguments("""{ "matchLabels": { "app": "api" }, "matchFields": [ { "key": "x", "operator": "Exists" } ] }""")]
+    public async Task An_unreadable_part_of_a_label_selector_object_refuses_it(string selector)
+    {
+        await Assert.That(LabelSelector.ForPodsOf(Workload(selector))).IsNull();
+    }
+
+    /// <summary>
     /// A selector object whose values are not all strings is not the plain-map shape; it
     /// is a LabelSelector with fields this build does not understand, and guessing would
     /// produce a query for the wrong pods.

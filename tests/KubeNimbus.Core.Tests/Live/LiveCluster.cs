@@ -348,14 +348,17 @@ internal static class LiveCluster
     /// <summary>
     /// A client authenticated as a ServiceAccount of <see cref="Namespace"/> whose only
     /// rights are the ones <paramref name="rules"/> grants — the narrow-RBAC user the
-    /// backlog rows call "an impersonated user". A real token from the TokenRequest API
-    /// rather than an <c>Impersonate-User</c> header: the app has no impersonation
-    /// support to exercise, and a real identity is what the 403s it surfaces come from in
-    /// practice. The kubeconfig is a temp file this test wrote for itself, holding a
-    /// ten-minute token for a ServiceAccount that is deleted with the namespace.
+    /// backlog rows call "an impersonated user". A real token from the TokenRequest API,
+    /// because a real identity is what the 403s the app surfaces come from in practice. The
+    /// kubeconfig is a temp file this test wrote for itself, holding a ten-minute token for a
+    /// ServiceAccount that is deleted with the namespace.
     /// </summary>
+    /// <param name="actAs">
+    /// When set, the user entry carries <c>as:</c> with this name, so the client acts as that
+    /// identity through the kubeconfig's own impersonation (<c>ImpersonationLiveTests</c>).
+    /// </param>
     public static async Task<NarrowUser> CreateNarrowUserAsync(
-        ClusterClient admin, string name, string rules, CancellationToken ct)
+        ClusterClient admin, string name, string rules, CancellationToken ct, string? actAs = null)
     {
         await ApplyAsync(admin, ServiceAccounts, name, $$"""
             apiVersion: v1
@@ -404,7 +407,9 @@ internal static class LiveCluster
         var contextEntry = sandbox.Contexts.First(c => c.Name == admin.Context.Name);
         var cluster = sandbox.Clusters.First(c => c.Name == contextEntry.ContextDetails.Cluster).ClusterEndpoint;
 
-        var path = Path.Combine(Path.GetTempPath(), $"kubenimbus-live-{name}.yaml");
+        // A file per call: two tests may build the same user at once, with different `as:`.
+        var path = Path.Combine(Path.GetTempPath(), $"kubenimbus-live-{name}-{Guid.NewGuid():N}.yaml");
+        var actAsLine = actAs is null ? "" : $"\n      as: {actAs}";
         await File.WriteAllTextAsync(path, $$"""
             apiVersion: v1
             kind: Config
@@ -418,7 +423,7 @@ internal static class LiveCluster
             users:
               - name: {{name}}
                 user:
-                  token: {{token}}
+                  token: {{token}}{{actAsLine}}
             contexts:
               - name: {{name}}
                 context:

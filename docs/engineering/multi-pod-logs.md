@@ -38,10 +38,13 @@ Eight things are load-bearing.
    log stream against every pod in the namespace because an object happened to declare
    `selector: {}`. `ForPodsOf` returns null instead, the capability check reads that as
    "not offered", and the menu item is simply disabled. Aptakube shipped the other
-   behaviour and had to withdraw it (aptakube#227). An unknown `matchExpressions`
-   operator is refused for the same reason in miniature: dropping a requirement *widens*
-   a selector, so a selector whose only requirement is unreadable comes back null rather
-   than matching everything.
+   behaviour and had to withdraw it (aptakube#227). Anything in the selector that cannot
+   be read is refused for the same reason in miniature: dropping a requirement *widens* a
+   selector, so an unknown `matchExpressions` operator, an `In`/`NotIn` with no values, a
+   non-string value or a field a `LabelSelector` does not have makes the *whole* selector
+   null (ENG-50). It used to drop only that entry, so beside a readable requirement the
+   selector came back wider than the object said and the pane tailed pods the workload
+   does not own. Workload detail says "This workload has no usable pod selector." for it.
 3. **The per-pod line range shares the pane's buffer budget.** The default last-200
    range still asks for `clamp(bufferLines / podCount, 25, 200)` per pod. Last-1000
    uses the same per-pod share, up to 1000. This avoids an opening burst of N × 1000
