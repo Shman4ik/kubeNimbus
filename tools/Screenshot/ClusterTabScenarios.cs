@@ -1490,6 +1490,17 @@ internal static class ClusterTabScenarios
     }
 
     /// <summary>
+    /// A healthy tab whose cluster's server is a plain <c>http://</c> URL (ENG-59): the notice
+    /// keeps the status bar on screen, in the slot the TLS notice uses.
+    /// </summary>
+    public static ClusterTabViewModel PlainHttp()
+    {
+        var tab = BaseTab();
+        tab.IsPlainHttp = true;
+        return tab;
+    }
+
+    /// <summary>
     /// A connect that failed, as the content area states it. The report is written in
     /// rather than produced by a failing connect so the shot is the same on every machine
     /// (no temp paths, no developer home directory); its sentences are the ones

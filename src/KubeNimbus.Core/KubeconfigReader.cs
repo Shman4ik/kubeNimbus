@@ -31,8 +31,10 @@ namespace KubeNimbus.Core;
 /// <para>
 /// <b>What it reads is exactly what the library's model holds</b> — the same keys, the same
 /// types, unknown keys ignored — plus each cluster's <c>proxy-url</c>, which the model
-/// drops (see <see cref="KubeconfigProxy"/>), and each user's impersonation
-/// (see <see cref="KubeconfigImpersonation"/>). It is built on YamlDotNet's event parser, the
+/// drops (see <see cref="KubeconfigProxy"/>), each user's impersonation
+/// (see <see cref="KubeconfigImpersonation"/>) and each user's <c>tokenFile</c>, which the
+/// model has no field for either (see <see cref="KubeconfigTokenFile"/>). It is built on
+/// YamlDotNet's event parser, the
 /// lowest and most stable layer of that package, and never on its object deserializer,
 /// which is neither trim-safe nor needed for a schema this small.
 /// </para>
@@ -99,9 +101,12 @@ internal static class KubeconfigReader
         // context names (FirstOrDefault, OrdinalIgnoreCase), and the impersonation sent must
         // be the one of the entry whose credentials are used.
         var impersonations = new Dictionary<string, KubeconfigImpersonation>(StringComparer.OrdinalIgnoreCase);
+
+        // Same lookup rule as the impersonations, for the same reason.
+        var tokenFiles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (root is null)
         {
-            return new KubeconfigDocument(config, proxies, impersonations);
+            return new KubeconfigDocument(config, proxies, impersonations, tokenFiles);
         }
 
         var map = Expect<MapNode>(root, "the top level");
@@ -134,11 +139,15 @@ internal static class KubeconfigReader
                     && !impersonations.ContainsKey(name))
                 {
                     impersonations[name] = ReadImpersonation(credentials);
+                    if (Text(credentials, "tokenFile") is { } tokenFile && !string.IsNullOrWhiteSpace(tokenFile))
+                    {
+                        tokenFiles[name] = tokenFile.Trim();
+                    }
                 }
             }
         }
 
-        return new KubeconfigDocument(config, proxies, impersonations);
+        return new KubeconfigDocument(config, proxies, impersonations, tokenFiles);
     }
 
     /// <summary>
@@ -427,13 +436,21 @@ internal static class KubeconfigReader
 /// <summary>
 /// A parsed kubeconfig: the client library's model, and what that model drops or cannot
 /// hold — each cluster's <c>proxy-url</c>, by cluster name, and each user entry's
-/// impersonation in client-go's shape, by user name.
+/// impersonation in client-go's shape and its <c>tokenFile</c>, by user name.
 /// </summary>
 internal sealed record KubeconfigDocument(
     K8SConfiguration Configuration,
     IReadOnlyDictionary<string, string> ProxyUrls,
-    IReadOnlyDictionary<string, KubeconfigImpersonation> Impersonations)
+    IReadOnlyDictionary<string, KubeconfigImpersonation> Impersonations,
+    IReadOnlyDictionary<string, string> TokenFiles)
 {
+    /// <summary>
+    /// The <c>tokenFile</c> of user entry <paramref name="userName"/> as written (possibly
+    /// relative to the kubeconfig's folder), or null. The path only: the file is read when a
+    /// client is built, never here, and its content is never kept (hard rule 4).
+    /// </summary>
+    public string? TokenFileOf(string userName) => TokenFiles.TryGetValue(userName, out var path) ? path : null;
+
     /// <summary>The <c>proxy-url</c> of cluster <paramref name="clusterName"/>, or null.</summary>
     public string? ProxyUrl(string clusterName) => ProxyUrls.TryGetValue(clusterName, out var url) ? url : null;
 

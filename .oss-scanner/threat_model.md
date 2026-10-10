@@ -95,7 +95,8 @@ who opens it.
 - Exec-plugin auth running the command a kubeconfig names, and a kubeconfig folder added in Preferences trusting every
   file in it: both are documented and inherent to the format. How the command is *found* (`ExecPluginPath`) is in
   scope.
-- `insecure-skip-tls-verify: true` in a kubeconfig disables verification on purpose, as in `kubectl`.
+- `insecure-skip-tls-verify: true` in a kubeconfig disables verification on purpose, as in `kubectl`, and a plain
+  `http://` server is connected to, as in `kubectl`; the app states both in the status bar while connected.
 - What other objects carry in the clear (a Helm release's values, an Argo CD Application's inline values, a
   container's logs) is shown as `helm` and `kubectl` show it; Secret masking covers Secrets and references to them.
 - The cluster-wide "who can do X?" view is a labelled local scan of RBAC objects, not an authorization decision.

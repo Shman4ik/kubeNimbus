@@ -192,6 +192,114 @@ public class ApiServerTlsTests
         await Assert.That(server.Requests).IsEmpty();
     }
 
+    // ------------------------------------------------- a certificate-authority bundle (ENG-57)
+
+    /// <summary>
+    /// A bundle of several roots — what a cluster whose CA is being rotated carries — trusts
+    /// every one of them, whichever comes first. The library kept only the first, so a server
+    /// already presenting the second root was refused.
+    /// </summary>
+    [Test]
+    [Arguments(true)]
+    [Arguments(false)]
+    public async Task Every_root_in_a_certificate_authority_data_bundle_is_trusted(bool signerFirst)
+    {
+        using var signer = new TestPki("signing-ca");
+        using var other = new TestPki("other-ca");
+        using var server = new ScriptedApiServer(Version, signer.Issue(addresses: [IPAddress.Loopback]));
+        var bundle = signerFirst ? Bundle(signer, other) : Bundle(other, signer);
+        using var client = await ClusterClient.ConnectAsync(Context(Kubeconfig(server.Url, Base64(bundle))));
+
+        var version = await client.GetServerVersionAsync();
+
+        await Assert.That(version.GitVersion).IsEqualTo("v1.31.0");
+    }
+
+    /// <summary>The same through <c>certificate-authority</c>, a file path relative to the kubeconfig.</summary>
+    [Test]
+    public async Task Every_root_in_a_certificate_authority_file_is_trusted()
+    {
+        using var signer = new TestPki("signing-ca");
+        using var other = new TestPki("other-ca");
+        using var server = new ScriptedApiServer(Version, signer.Issue(addresses: [IPAddress.Loopback]));
+        var kubeconfig = Kubeconfig(server.Url, authorityData: null, clusterExtra: "certificate-authority: ca-bundle.crt");
+        await File.WriteAllTextAsync(Path.Combine(Path.GetDirectoryName(kubeconfig)!, "ca-bundle.crt"), Bundle(other, signer));
+        using var client = await ClusterClient.ConnectAsync(Context(kubeconfig));
+
+        await Assert.That((await client.GetServerVersionAsync()).GitVersion).IsEqualTo("v1.31.0");
+    }
+
+    /// <summary>A bundle still trusts nothing outside it.</summary>
+    [Test]
+    public async Task A_certificate_from_a_ca_outside_the_bundle_is_still_refused()
+    {
+        using var a = new TestPki("a-ca");
+        using var b = new TestPki("b-ca");
+        using var stranger = new TestPki("stranger-ca");
+        using var server = new ScriptedApiServer(Version, stranger.Issue(addresses: [IPAddress.Loopback]));
+        using var client = await ClusterClient.ConnectAsync(Context(Kubeconfig(server.Url, Base64(Bundle(a, b)))));
+
+        var failure = await Assert.ThrowsAsync<HttpRequestException>(() => client.GetServerVersionAsync());
+
+        await Assert.That(server.Requests).IsEmpty();
+        await Assert.That(ApiServerCertificateException.Find(failure)!.Problem).IsEqualTo(ApiServerCertificateProblem.Untrusted);
+    }
+
+    /// <summary>kubectl refuses a bundle with a block that does not parse; so does this, rather than trusting part of it.</summary>
+    [Test]
+    public async Task A_bundle_with_a_broken_certificate_fails_at_reading_the_kubeconfig()
+    {
+        using var a = new TestPki("a-ca");
+        var broken = a.Authority.ExportCertificatePem() + "\n-----BEGIN CERTIFICATE-----\nAAAAAAAA\n-----END CERTIFICATE-----\n";
+        var kubeconfig = Kubeconfig("https://127.0.0.1:1", Base64(broken));
+
+        var failure = await Assert.ThrowsAsync<KubeconfigSetupException>(() => ClusterClient.ConnectAsync(Context(kubeconfig)));
+
+        await Assert.That(failure!.Message).Contains("certificate-authority-data");
+    }
+
+    private static string Bundle(params TestPki[] authorities) =>
+        string.Concat(authorities.Select(a => a.Authority.ExportCertificatePem() + "\n"));
+
+    private static string Base64(string pem) => Convert.ToBase64String(System.Text.Encoding.ASCII.GetBytes(pem));
+
+    // ------------------------------------------------------------ plain http (ENG-59)
+
+    [Test]
+    public async Task A_plain_http_server_is_stated_by_the_client_and_in_the_report()
+    {
+        using var server = new ScriptedApiServer(Version);
+        using var client = await ClusterClient.ConnectAsync(Context(Kubeconfig(server.Url, authorityData: null)));
+
+        await Assert.That(client.UsesPlainHttp).IsTrue();
+        var report = await ConnectionReport.CreateAsync(client.Context, new TimeoutException());
+        await Assert.That(report.Facts.Single(f => f.Label == "TLS").Value).IsEqualTo(ConnectionReport.PlainHttpFact);
+    }
+
+    /// <summary>With no TLS there is no certificate to skip checking; the http fact is the one stated.</summary>
+    [Test]
+    public async Task A_plain_http_server_with_skip_verify_is_stated_as_plain_http()
+    {
+        using var server = new ScriptedApiServer(Version);
+        var kubeconfig = Kubeconfig(server.Url, authorityData: null, clusterExtra: "insecure-skip-tls-verify: true");
+
+        var report = await ConnectionReport.CreateAsync(Context(kubeconfig), new TimeoutException());
+
+        await Assert.That(report.Facts.Single(f => f.Label == "TLS").Value).IsEqualTo(ConnectionReport.PlainHttpFact);
+    }
+
+    [Test]
+    public async Task An_https_server_is_not_plain_http()
+    {
+        using var pki = new TestPki();
+        using var server = new ScriptedApiServer(Version, pki.Issue(addresses: [IPAddress.Loopback]));
+        using var client = await ClusterClient.ConnectAsync(Context(Kubeconfig(server.Url, pki.AuthorityData)));
+
+        await Assert.That(client.UsesPlainHttp).IsFalse();
+        var report = await ConnectionReport.CreateAsync(client.Context, new TimeoutException());
+        await Assert.That(report.Facts.Any(f => f.Label == "TLS")).IsFalse();
+    }
+
     // ------------------------------------------------------------ the decision itself
 
     [Test]

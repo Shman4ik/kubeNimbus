@@ -113,4 +113,23 @@ public class NetworkPolicyRulesTests
         await Assert.That(selector.IsEmpty).IsFalse();
         await Assert.That(selector.Matches(new Dictionary<string, string> { ["app"] = "web" })).IsFalse();
     }
+
+    /// <summary>
+    /// ENG-50 moved the guard into <see cref="LabelSelector.Parse"/>, and the count it
+    /// replaced had a hole: a <c>matchLabels</c> that is not a map counted as nothing
+    /// declared, so it read as "all pods" — the widest reading there is.
+    /// </summary>
+    [Test]
+    [Arguments("""{ "matchLabels": "app=web" }""")]
+    [Arguments("""{ "matchLabels": { "app": 1 } }""")]
+    [Arguments("""{ "matchExpressions": [ { "key": "tier", "operator": "NotIn", "values": [ 1 ] } ] }""")]
+    [Arguments("""{ "app": "web" }""")]
+    public async Task A_selector_that_declares_something_unreadable_is_never_every_pod(string json)
+    {
+        var selector = NetworkPolicyRules.ReadSelector(Json(json));
+
+        await Assert.That(selector.IsUnreadable).IsTrue();
+        await Assert.That(selector.IsEmpty).IsFalse();
+        await Assert.That(selector.Matches(new Dictionary<string, string> { ["app"] = "web" })).IsFalse();
+    }
 }

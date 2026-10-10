@@ -104,7 +104,12 @@ public static class ConnectionReport
             facts.Add(new ConnectionFact("Server", server ?? "(the cluster entry has no server)"));
             if (cluster?.ClusterEndpoint is { } endpoint)
             {
-                if (endpoint.SkipTlsVerify)
+                if (IsPlainHttp(server))
+                {
+                    // Before skip-verify: with no TLS there is no certificate to skip checking.
+                    facts.Add(new ConnectionFact("TLS", PlainHttpFact));
+                }
+                else if (endpoint.SkipTlsVerify)
                 {
                     facts.Add(new ConnectionFact("TLS", "not verified (insecure-skip-tls-verify)"));
                 }
@@ -115,7 +120,9 @@ public static class ConnectionReport
             }
 
             facts.Add(new ConnectionFact("User", user?.Name ?? "(the context names no user)"));
-            facts.Add(new ConnectionFact("Signs in with", SignIn(user, Path.GetDirectoryName(Path.GetFullPath(context.KubeconfigPath)))));
+            var kubeconfigDirectory = Path.GetDirectoryName(Path.GetFullPath(context.KubeconfigPath));
+            var tokenFile = Kubeconfig.ContextUser(config, context.Name) is { } entryName ? document.TokenFileOf(entryName) : null;
+            facts.Add(new ConnectionFact("Signs in with", SignIn(user, kubeconfigDirectory, tokenFile)));
 
             // Who the requests act as, when the entry impersonates: the identity, never a credential.
             if (Kubeconfig.ContextUser(config, context.Name) is { } userEntry && document.ImpersonationOf(userEntry) is { User.Length: > 0 } impersonation)
@@ -141,7 +148,7 @@ public static class ConnectionReport
     /// plugin, also where the command was found (or that it was not), because "not found"
     /// is the most common first-connect failure there is.
     /// </summary>
-    internal static string SignIn(k8s.KubeConfigModels.User? user, string? kubeconfigDirectory)
+    internal static string SignIn(k8s.KubeConfigModels.User? user, string? kubeconfigDirectory, string? tokenFile = null)
     {
         var credentials = user?.UserCredentials;
         if (credentials?.ExternalExecution is { } exec)
@@ -179,6 +186,13 @@ public static class ConnectionReport
                 : $"client certificate from {credentials.ClientCertificate}";
         }
 
+        if (tokenFile is not null)
+        {
+            // The path, never the content; whether it is there is what goes wrong with one.
+            var path = Kubeconfig.ResolveAgainstFile(tokenFile, kubeconfigDirectory);
+            return File.Exists(path) ? $"bearer token from the file {path}" : $"bearer token from the file {path} (no such file)";
+        }
+
         if (!string.IsNullOrEmpty(credentials.Token))
         {
             return "bearer token in the kubeconfig";
@@ -196,6 +210,13 @@ public static class ConnectionReport
 
         return "nothing — anonymous";
     }
+
+    /// <summary>The <c>TLS</c> fact of a cluster entry whose server is a plain <c>http://</c> URL.</summary>
+    public const string PlainHttpFact =
+        "none — the server is plain http://, so the credential and every response are sent unencrypted";
+
+    private static bool IsPlainHttp(string? server) =>
+        Uri.TryCreate(server?.Trim(), UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttp;
 
     /// <summary>The classification itself, pure so each branch can be asserted.</summary>
     internal static ConnectionFailureReport Explain(

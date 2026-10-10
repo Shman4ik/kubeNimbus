@@ -139,10 +139,12 @@ must be AOT/trimming-compatible from day one.
 - **The library's certificate validation callback is replaced, never trusted** (2026-10-07).
   Its check accepts any certificate the kubeconfig's CA signed for any host name, so
   `ClusterClient.Create` installs `ApiServerCertificateValidator` (kubectl's rules: the
-  kubeconfig's CA only, plus the host name or `tls-server-name`) on the HTTP handler and, through
+  kubeconfig's CA only — every root of a bundle, where the library kept the first — plus the host
+  name or `tls-server-name`) on the HTTP handler and, through
   `ApiServerWebSocketBuilder`, on exec and port-forward; `ApiServerTlsTests` are what pin it, and
   six of them go red if the replacement is removed. Kubeconfig impersonation (`as`, `as-groups`,
-  …) is sent by kubeNimbus too, because the library never sends it. The library is kept anyway:
+  …) is sent by kubeNimbus too, because the library never sends it, and a user's `tokenFile` is
+  read by kubeNimbus on every connect and refresh, because the library's model has no field for it. The library is kept anyway:
   it carries the authentication zoo (exec plugins and their refresh, OIDC, every key format),
   which is worth far more than one callback. Its typed API is no longer used anywhere — every
   kind, pods included, goes through the generic JSON watch — so a new feature does not start
@@ -724,7 +726,8 @@ Three rules about it:
    - The status bar read "Connected — Kubernetes v1.31.2" for the life of every healthy tab.
      It is shown only while `ClusterTabViewModel.IsStatusWorthShowing` — anything but that
      routine line (recorded where it is written, never matched by wording), a warning, or a
-     tab connected with `insecure-skip-tls-verify`, whose notice has a column of its own.
+     tab connected with `insecure-skip-tls-verify` or to a plain `http://` server, whose
+     notice has a column of its own.
    - A cluster-scoped kind kept the namespace picker on screen, disabled, still reading the
      last kind's namespace: "Nodes  payments" looks filtered. It says "Cluster-wide" instead.
    - The Applications list's group caption shows only when two groups are on screen, and its
@@ -825,7 +828,7 @@ Three rules about it:
 
 Each feature's design rules, and the incidents behind them, live in a page of their own under [`docs/engineering/`](docs/engineering/), so a session loads only the ones it touches. **Read the page for any feature you change before changing it**, and keep it current in the same PR — the same discipline as this file.
 
-- [Connecting: credential plugins, proxies, failures and reconnect](docs/engineering/connecting.md) — BuildClientSetupAsync as the one entry→client path, KubeconfigReader instead of the library's YAML loader (banned; it froze YamlDotNet), bare plugin commands found like a login shell would (never in the current directory), proxy-url on both transports, our own certificate check replacing the library's (host name, tls-server-name, skip-verify stated), impersonation headers, plugin stderr redacted, the failure view (step, cause, facts, no credential ever a fact), RefreshCredentialsAsync's in-place swap and 401-as-expiry, kubeconfig folders with rescan-on-focus (a folder's context is never opened on its own), AppDataDirectory (owner-only, atomic writes, a random per-process fallback).
+- [Connecting: credential plugins, proxies, failures and reconnect](docs/engineering/connecting.md) — BuildClientSetupAsync as the one entry→client path, KubeconfigReader instead of the library's YAML loader (banned; it froze YamlDotNet), bare plugin commands found like a login shell would (never in the current directory), proxy-url on both transports, our own certificate check replacing the library's (host name, tls-server-name, every root of a CA bundle, skip-verify and plain http:// stated), impersonation headers (live-checked against the sandbox), tokenFile read on every build, plugin stderr redacted, the failure view (step, cause, facts, no credential ever a fact), RefreshCredentialsAsync's in-place swap and 401-as-expiry, kubeconfig folders with rescan-on-focus (a folder's context is never opened on its own), AppDataDirectory (owner-only, atomic writes, a random per-process fallback).
 - [The Applications mode](docs/engineering/applications-mode.md) — The first screen: apps (Argo or bare workloads) with health and a reason from Core's deterministic rules, per-namespace fallback under narrow RBAC, its own namespace picker (one or several, namespaces from the rows, starts no watch) and maintained header sort, the application page (findings with quoted evidence, pods, linked resources, timeline, what changed, embedded logs), the kubelet's one-run-per-container log rule, DemoData.Now.
 - [Multi-pod logs (one workload, one stream)](docs/engineering/multi-pod-logs.md) — WorkloadLogsTabViewModel: selector-resolved pods, per-pod tail budget, 50-stream cap, two-stage timestamp merge; and what both log panes say when a follow ends (LogStreamEnd reads the pod).
 - [One click to logs from the row, and logs opened full-size](docs/engineering/row-logs-and-maximized.md) — The row's logs icon (hover/selected, IsVisible style, Shift+click), Shift+L, the "Open logs maximized" preference read by OpenLogsForAsync, Esc restore; L3's logs from every list that names a pod (OpenNamedLogs, RowLogsGesture, stated "gone").

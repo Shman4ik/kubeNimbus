@@ -109,33 +109,67 @@ public class ConnectionStateTests
     }
 
     /// <summary>
-    /// S1-2: a cluster entry with <c>insecure-skip-tls-verify</c> keeps the status bar on
-    /// screen, saying so, for as long as the tab is connected — the routine "Connected" line
-    /// that hides the bar on a verified tab must not hide this.
+    /// ENG-59: a plain <c>http://</c> server keeps the status bar on screen, saying so, for as
+    /// long as the tab is connected — the routine "Connected" line that hides the bar on a
+    /// verified tab must not hide this. With <c>insecure-skip-tls-verify</c> as well, the
+    /// http notice is the one stated: there is no certificate to skip checking.
     /// </summary>
     [Test]
-    public async Task A_tab_connected_without_tls_verification_keeps_saying_so()
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task A_tab_connected_over_plain_http_keeps_saying_so(bool insecureSkipTlsVerify)
     {
         TestObjects.RedirectStores();
         await using var server = new VersionOnlyServer();
-        var unverified = new ClusterTabViewModel(new ClusterContext("slow", "slow", null, "tester", server.Kubeconfig(insecureSkipTlsVerify: true)));
-        var verified = new ClusterTabViewModel(new ClusterContext("slow", "slow", null, "tester", server.Kubeconfig()));
+        var tab = new ClusterTabViewModel(new ClusterContext("slow", "slow", null, "tester", server.Kubeconfig(insecureSkipTlsVerify)));
 
-        _ = unverified.ConnectCommand.ExecuteAsync(null);
-        _ = verified.ConnectCommand.ExecuteAsync(null);
+        _ = tab.ConnectCommand.ExecuteAsync(null);
         var deadline = DateTime.UtcNow.AddSeconds(10);
-        while (!(unverified.IsConnected && verified.IsConnected) && DateTime.UtcNow < deadline)
+        while (!tab.IsConnected && DateTime.UtcNow < deadline)
         {
             await Task.Delay(20);
         }
 
-        await Assert.That(unverified.IsConnected).IsTrue();
+        await Assert.That(tab.IsConnected).IsTrue();
+        await Assert.That(tab.IsPlainHttp).IsTrue();
+        await Assert.That(tab.IsTlsUnverified).IsFalse();
+        await Assert.That(tab.IsStatusWorthShowing).IsTrue();
+    }
+
+    /// <summary>
+    /// S1-2: a cluster entry with <c>insecure-skip-tls-verify</c> over https keeps the status
+    /// bar on screen, saying so; a verified https tab lets the routine "Connected" line hide
+    /// it. The clients are built without a request (building one sends nothing), so no TLS
+    /// server is needed to read what the tab makes of them.
+    /// </summary>
+    [Test]
+    public async Task A_tab_without_tls_verification_keeps_saying_so_and_a_verified_one_does_not()
+    {
+        TestObjects.RedirectStores();
+        await using var server = new VersionOnlyServer();
+        using var unverifiedClient = await ClusterClient.ConnectAsync(
+            new ClusterContext("slow", "slow", null, "tester", server.Kubeconfig(insecureSkipTlsVerify: true, scheme: "https")));
+        using var verifiedClient = await ClusterClient.ConnectAsync(
+            new ClusterContext("slow", "slow", null, "tester", server.Kubeconfig(scheme: "https")));
+
+        var unverified = TestObjects.Tab();
+        unverified.SetConnectedStatus("v1.31.0");
+        unverified.ApplyTransportNotices(unverifiedClient);
+        var verified = TestObjects.Tab();
+        verified.SetConnectedStatus("v1.31.0");
+        verified.ApplyTransportNotices(verifiedClient);
+
         await Assert.That(unverified.IsTlsUnverified).IsTrue();
+        await Assert.That(unverified.IsPlainHttp).IsFalse();
         await Assert.That(unverified.IsStatusWorthShowing).IsTrue();
 
-        await Assert.That(verified.IsConnected).IsTrue();
         await Assert.That(verified.IsTlsUnverified).IsFalse();
+        await Assert.That(verified.IsPlainHttp).IsFalse();
         await Assert.That(verified.IsStatusWorthShowing).IsFalse();
+
+        // And a failed connect clears both.
+        unverified.ApplyTransportNotices(null);
+        await Assert.That(unverified.IsTlsUnverified).IsFalse();
     }
 
     [Test]
@@ -206,7 +240,8 @@ internal sealed class VersionOnlyServer : IAsyncDisposable
 
     private int Port => ((System.Net.IPEndPoint)_listener.LocalEndpoint).Port;
 
-    public string Kubeconfig(bool insecureSkipTlsVerify = false)
+    /// <param name="scheme">"https" names this server's port with a scheme it does not speak — for a client that is built and never used.</param>
+    public string Kubeconfig(bool insecureSkipTlsVerify = false, string scheme = "http")
     {
         var directory = Path.Combine(Path.GetTempPath(), "kubenimbus-app-tests", Guid.NewGuid().ToString("n"));
         Directory.CreateDirectory(directory);
@@ -217,7 +252,7 @@ internal sealed class VersionOnlyServer : IAsyncDisposable
             clusters:
               - name: slow
                 cluster:
-                  server: http://127.0.0.1:{Port}
+                  server: {scheme}://127.0.0.1:{Port}
                   insecure-skip-tls-verify: {(insecureSkipTlsVerify ? "true" : "false")}
             contexts:
               - name: slow

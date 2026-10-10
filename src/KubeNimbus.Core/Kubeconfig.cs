@@ -456,7 +456,10 @@ public static partial class Kubeconfig
     /// <item>the cluster's <c>proxy-url</c>, which the library's model drops, is taken from
     /// the same parse and validated before any plugin runs, so a typo in it does not cost an
     /// SSO prompt;</item>
-    /// <item>the configuration is built, which is where the plugin runs.</item>
+    /// <item>a user entry's <c>tokenFile</c>, which the model has no field for either, is read
+    /// into the in-memory model (<see cref="KubeconfigTokenFile"/>);</item>
+    /// <item>the configuration is built, which is where the plugin runs; then a
+    /// <c>certificate-authority(-data)</c> bundle is read whole (<see cref="ClusterCertificateAuthority"/>).</item>
     /// </list>
     /// Nothing read here is kept after the call beyond the configuration itself, and the
     /// whole thing re-runs on every connect and every credential refresh (hard rule 4).
@@ -491,7 +494,24 @@ public static partial class Kubeconfig
                 impersonation = null;
             }
 
+            // tokenFile, which the library's model has no field for: read now, on every build,
+            // into the in-memory model only (KubeconfigTokenFile).
+            if (userEntry is not null
+                && document.TokenFileOf(userEntry) is { } tokenFile
+                && user?.UserCredentials is { } credentials)
+            {
+                KubeconfigTokenFile.Apply(credentials, tokenFile, file.DirectoryName);
+            }
+
             var configuration = KubernetesClientConfiguration.BuildConfigFromConfigObject(config, context.Name);
+
+            // The library keeps only the first certificate of a CA bundle; kubectl trusts them all.
+            if (!configuration.SkipTlsVerify
+                && config.Clusters?.FirstOrDefault(c => c.Name == clusterName)?.ClusterEndpoint is { } endpoint
+                && ClusterCertificateAuthority.Read(endpoint, file.DirectoryName) is { } authorities)
+            {
+                configuration.SslCaCerts = authorities;
+            }
             if (proxy is not null)
             {
                 configuration.FirstMessageHandlerSetup = handler =>
@@ -503,6 +523,15 @@ public static partial class Kubeconfig
 
             return new ClientSetup(configuration, proxy, impersonation);
         });
+
+    /// <summary>
+    /// A path written in a kubeconfig, as client-go resolves it: as is when rooted, otherwise
+    /// against the folder of the kubeconfig that wrote it.
+    /// </summary>
+    internal static string ResolveAgainstFile(string path, string? kubeconfigDirectory) =>
+        Path.IsPathRooted(path) || string.IsNullOrEmpty(kubeconfigDirectory)
+            ? Path.GetFullPath(path)
+            : Path.GetFullPath(Path.Combine(kubeconfigDirectory, path));
 
     /// <summary>The user entry name a context names, or null.</summary>
     internal static string? ContextUser(K8SConfiguration config, string contextName) =>

@@ -50,7 +50,10 @@ host name, or for the cluster's `tls-server-name` when it sets one. kubeNimbus
 performs this check itself rather than relying on its Kubernetes client
 library's, for every request including exec and port-forward. A cluster entry
 with `insecure-skip-tls-verify: true` is not verified, as with `kubectl`, and
-the app says so for as long as such a cluster is connected.
+the app says so for as long as such a cluster is connected; so does a cluster
+whose server is a plain `http://` URL, whose traffic is not encrypted at all.
+Every certificate of a `certificate-authority` bundle is trusted, as `kubectl`
+trusts them, and none outside it.
 
 **Impersonation in the kubeconfig is honoured.** A user entry's `as`,
 `as-uid`, `as-groups` and `as-user-extra` are sent as `kubectl` sends them, so

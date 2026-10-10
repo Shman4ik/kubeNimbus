@@ -2,7 +2,8 @@
 
 Everything between a kubeconfig entry and a working `ClusterClient`, and what the app says
 when that does not work. Read this before changing `Kubeconfig.BuildClientSetupAsync`,
-`ClusterClient.Create`, `ApiServerCertificateValidator`, `ApiServerTransport`,
+`ClusterClient.Create`, `ApiServerCertificateValidator`, `ClusterCertificateAuthority`,
+`KubeconfigTokenFile`, `ApiServerTransport`,
 `ExecPluginPath`, `KubeconfigProxy`, `ClusterClient.RefreshCredentialsAsync`, the informer's
 401 branch, `ConnectionReport`, `ConnectionFailureView`, the kubeconfig folder search or the
 app-data paths. The research behind most of it is
@@ -21,9 +22,12 @@ proxy) does, on the thread pool, in this order:
    and sets `FileName` so relative certificate paths still resolve against the file;
 2. resolves an exec plugin's command (`ExecPluginPath`, below) on the parsed object;
 3. reads and validates the cluster's `proxy-url` (`KubeconfigProxy`, below) — *before* any
-   plugin runs, so a typo in the proxy does not cost an SSO prompt;
+   plugin runs, so a typo in the proxy does not cost an SSO prompt — and the user entry's
+   impersonation and `tokenFile` (below);
 4. builds the configuration with `BuildConfigFromConfigObject`, which is where the plugin
-   runs, inside `ExecCredentialCapture` so a failure is reported by what the plugin said.
+   runs, inside `ExecCredentialCapture` so a failure is reported by what the plugin said;
+5. replaces the configuration's CA with every certificate of a `certificate-authority(-data)`
+   bundle (`ClusterCertificateAuthority`, below).
 
 It used to be `BuildConfigFromConfigFileAsync`, which does steps 1 and 4 and nothing in
 between. There is no second path: the sync `BuildClientConfig` (tests and tooling only, never
@@ -123,8 +127,16 @@ which the handler's proxy never reaches.
 - Without `proxy-url` nothing changes: the ambient `HTTPS_PROXY` behaviour is untouched.
 
 Tested against a loopback stand-in that plays an HTTP proxy for a `.invalid` host (RFC 6761
-names resolve nowhere, so the request can only succeed through the proxy). SOCKS is not
-exercised end to end — no SOCKS stand-in exists in the tests.
+names resolve nowhere, so the request can only succeed through the proxy), and end to end by
+`ProxyLiveTests` (VER-45): a list, an exec and a port-forward against the sandbox, through both
+an HTTP `CONNECT` proxy and SOCKS5, played by `TunnelProxy`, an in-process stand-in that speaks
+both. The proxied client names the server `kubernetes.default.svc` — in the sandbox
+certificate's names, resolvable nowhere on the machine — and the stand-in sends every tunnel to
+the sandbox's real address, so a request that succeeds came through it; the test also checks
+the tunnel it recorded (the name asked for, bytes both ways). A name rather than `127.0.0.1`
+for a second reason: .NET never proxies a loopback destination, so a loopback API server would
+have tested nothing. With the proxy taken off the WebSocket builder, the exec and port-forward
+cases fail ("No such host is known"), which was checked.
 
 ## The API server's certificate is checked by kubeNimbus, not by the library (S1-1)
 
@@ -149,6 +161,16 @@ WebSocket transport, so exec and port-forward were affected too.
   certificates — never the system store — `RevocationMode.NoCheck` (kubectl does no
   revocation either), the serverAuth EKU in `ApplicationPolicy`, and the intermediates the
   server sent in `ExtraStore`. The chain is checked before the name, Go's order.
+- **Every certificate of a CA bundle is trusted (ENG-57).** The library loads only the first
+  certificate of the PEM it is given, so a bundle — the old and new root side by side while a
+  cluster's CA is rotated — trusted only whichever came first. `ClusterCertificateAuthority`
+  re-reads `certificate-authority-data` (or the `certificate-authority` file, relative to the
+  kubeconfig) block by block and replaces `SslCaCerts` before the client is built; kubectl's
+  `NewPoolFromBytes` does the same. A value that is not PEM leaves the library's result in
+  place. A bundle with a block that does not decode fails the connect at "Reading the
+  kubeconfig", as it fails kubectl, rather than trusting part of it —
+  `X509Certificate2Collection.ImportFromPem` was not used because it was seen to pass over such
+  a block. `ApiServerTlsTests` turns red in two cases with the replacement removed.
 - **Without one**, the TLS stack's own chain verdict against the system's trust stands, and
   only the name check is ours.
 - **`insecure-skip-tls-verify: true`** still accepts anything (the library's accept-all is left
@@ -158,6 +180,16 @@ WebSocket transport, so exec and port-forward were affected too.
   this connection is worth knowing", it is on screen in both modes, it costs nothing on a
   verified tab, and the notice has its own column so no later status or watch warning can
   replace it.
+- **A plain `http://` server is stated the same way (ENG-59).** No TLS at all means the
+  credential and every response cross the network readable, and nothing said so.
+  `ClusterClient.UsesPlainHttp` drives `ClusterTabViewModel.IsPlainHttp`, which keeps the status
+  bar on screen with its own notice in the same column, and the report's `TLS` fact reads
+  "none — the server is plain http://…". Where both apply (an `http://` server with
+  `insecure-skip-tls-verify`) only the http notice and fact are shown: there is no certificate
+  to skip checking. `ClusterTabViewModel.ApplyTransportNotices` sets both flags, on connect,
+  reconnect and failure, so the two cannot disagree. The http case is not refused: kubectl
+  connects too, and a local `kubectl proxy` on loopback is a legitimate use of it — which is
+  why the notice says the traffic is sent in the clear rather than that it crosses a network.
 
 **How it is installed, and why that way.** The library's `SocketsHttpHandler` is private. It
 is captured through `FirstMessageHandlerSetup` (chained after the proxy's setup), and the
@@ -223,8 +255,39 @@ kubeconfig" with a sentence that says why. So do groups, a UID or extras without
 client-go refuses too. Both checks run before any plugin, like the proxy's.
 
 `ImpersonationTests` checks the headers on the wire over both transports, that nothing is sent
-without `as`, both refusals and the report fact. Not run: a live check against a real API
-server's impersonation authorizer (the sandbox was not up when this was built).
+without `as`, both refusals and the report fact. `ImpersonationLiveTests` (VER-56) checks that a
+real API server acts on them: a ServiceAccount allowed to impersonate one narrow ServiceAccount
+(by `resourceNames`) is put in a kubeconfig with `as:`, and the SelfSubjectReview names the
+narrow one, a list the narrow one may make succeeds, and a list and an exec it may not make
+come back 403 naming it — while the same token without `as:` is allowed both (the control).
+Impersonating someone the token may not impersonate is refused outright. All three go red with
+the impersonation dropped in `BuildClientSetupCoreAsync`, which was checked. The app's own
+failure view for such a 403 is a desktop check, not run here.
+
+## `tokenFile` is read by kubeNimbus, because the library's model drops it (ENG-56)
+
+A user entry's `tokenFile` names a file holding the bearer token. The library's model has no
+field for it, so such a context connected with no credential at all (found in the 2026-10-07
+security audit). `KubeconfigReader` keeps the path beside the model
+(`KubeconfigDocument.TokenFileOf`, keyed like the impersonations), and `KubeconfigTokenFile`
+reads it into the in-memory model's `Token` inside `BuildClientSetupCoreAsync`, before any
+plugin runs:
+
+- **client-go's rules.** A relative path resolves against the kubeconfig's folder. The file
+  wins over an inline `token` whenever it can be read, and the inline token is the fallback
+  (client-go's `BearerTokenFile` precedence). The content is trimmed.
+- **Read on every build, kept nowhere.** Every connect and every credential refresh re-reads
+  it, so a token rotated on disk is picked up by the next refresh — a 401 triggers one through
+  the informer. client-go also re-reads the file about once a minute while connected; this does
+  not, and the 401 refresh is what covers the gap.
+- **A missing or empty file with no inline token fails the connect** at "Reading the
+  kubeconfig", naming the path. Connecting with no credential instead would hide the problem
+  behind a 401 or an anonymous identity.
+- The report's "Signs in with" fact reads "bearer token from the file <path>", with "(no such
+  file)" when it is missing; never the content.
+
+`KubeconfigTokenFileTests` pins each of these through the real connect path; five go red with
+the read removed.
 
 ## A plugin's stderr is redacted before it is shown (S1-6)
 

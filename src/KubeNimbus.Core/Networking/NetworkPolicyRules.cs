@@ -151,10 +151,10 @@ public static class NetworkPolicyRules
     }
 
     /// <summary>
-    /// Reads a selector with NetworkPolicy's meaning of empty. Unreadable is decided by
-    /// counting: every <c>matchLabels</c> entry and every <c>matchExpressions</c> entry must
-    /// come back as a requirement, because <see cref="LabelSelector.Parse"/> skips an entry
-    /// it does not understand, and a skipped requirement is a wider selector.
+    /// Reads a selector with NetworkPolicy's meaning of empty: a selector that declares
+    /// nothing is every pod, and one that declares something <see cref="LabelSelector.Parse"/>
+    /// refuses is unreadable. Parse refuses a selector whole rather than skipping the part it
+    /// cannot read (ENG-50), so its null is trusted here once emptiness has been ruled out.
     /// </summary>
     public static PolicySelector ReadSelector(JsonElement selector)
     {
@@ -163,34 +163,34 @@ public static class NetworkPolicyRules
             return new PolicySelector(IsEmpty: true, null, IsUnreadable: false);
         }
 
-        var declared = 0;
+        var declaresSomething = false;
         foreach (var property in selector.EnumerateObject())
         {
-            switch (property.Name)
+            if (property.Name is not ("matchLabels" or "matchExpressions"))
             {
-                case "matchLabels" when property.Value.ValueKind == JsonValueKind.Object:
-                    declared += property.Value.EnumerateObject().Count();
-                    break;
-                case "matchExpressions" when property.Value.ValueKind == JsonValueKind.Array:
-                    declared += property.Value.GetArrayLength();
-                    break;
-                case "matchLabels" or "matchExpressions":
-                    break;
-                default:
-                    // A field a LabelSelector does not have: not something to evaluate.
-                    return new PolicySelector(IsEmpty: false, null, IsUnreadable: true);
+                // A field a LabelSelector does not have — including the plain label map a
+                // Service uses, which Parse accepts and a NetworkPolicy does not: not
+                // something to evaluate.
+                return new PolicySelector(IsEmpty: false, null, IsUnreadable: true);
             }
+
+            declaresSomething |= property.Value.ValueKind switch
+            {
+                JsonValueKind.Null => false,
+                JsonValueKind.Object => property.Value.EnumerateObject().Any(),
+                JsonValueKind.Array => property.Value.GetArrayLength() > 0,
+                _ => true,
+            };
         }
 
-        if (declared == 0)
+        if (!declaresSomething)
         {
             return new PolicySelector(IsEmpty: true, null, IsUnreadable: false);
         }
 
-        var parsed = LabelSelector.Parse(selector);
-        return parsed is not null && parsed.Requirements.Count == declared
+        return LabelSelector.Parse(selector) is { } parsed
             ? new PolicySelector(IsEmpty: false, parsed, IsUnreadable: false)
-            : new PolicySelector(IsEmpty: false, parsed, IsUnreadable: true);
+            : new PolicySelector(IsEmpty: false, null, IsUnreadable: true);
     }
 
     private static NetworkPolicyRule ReadRule(JsonElement rule, string peersField, string policyNamespace)
