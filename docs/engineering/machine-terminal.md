@@ -173,7 +173,7 @@ another change's that round).
      `/bin/sh -c '"$0" "$@"; exec "${SHELL:-/bin/sh}"' <kubectl> <args…>`. The command comes
      from the shell's positional arguments, so no word of it is ever parsed by a shell, and
      the window holds a shell afterwards. tilix and lxterminal, whose `-e` takes one string,
-     are refused for a command rather than given a string built here; an emulator the table
+     are refused for a command rather than given a string built here, whether found by the probe or named as the preference; any other emulator the table
      does not know (the preference, `$TERMINAL`) is given xterm's `-e`.
 2. **Every name is checked before it reaches any of those** (`TerminalCommand`), although the
    API server validated each one: namespace and container as RFC 1123 labels, pod and node

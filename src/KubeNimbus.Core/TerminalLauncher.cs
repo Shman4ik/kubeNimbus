@@ -594,7 +594,14 @@ public static class TerminalLauncher
                 foreach (var (terminal, label) in preferences)
                 {
                     // An emulator the table does not know gets xterm's -e, the convention
-                    // Debian's x-terminal-emulator policy also requires.
+                    // Debian's x-terminal-emulator policy also requires; one known to take its
+                    // command as one string is refused here too, as it is on the probe list.
+                    if (wrapped is not null && TakesOneCommandString(terminal))
+                    {
+                        candidates.Add(PreferredCandidate(platform, terminal, label, []) with { Refusal = OneStringRefusal });
+                        continue;
+                    }
+
                     IReadOnlyList<string> arguments = wrapped is null ? [] : [.. LinuxCommandPrefix(terminal) ?? ["-e"], .. wrapped];
                     candidates.Add(PreferredCandidate(platform, terminal, label, arguments));
                 }
@@ -619,10 +626,7 @@ public static class TerminalLauncher
                     }
                     else
                     {
-                        candidates.Add(new TerminalCandidate(name, [], name)
-                        {
-                            Refusal = "takes its command as one string, which kubeNimbus does not build",
-                        });
+                        candidates.Add(new TerminalCandidate(name, [], name) { Refusal = OneStringRefusal });
                     }
                 }
 
@@ -653,6 +657,11 @@ public static class TerminalLauncher
         name = name[(name.LastIndexOf('/') + 1)..];
         return name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? name[..^4] : name;
     }
+
+    private const string OneStringRefusal = "takes its command as one string, which kubeNimbus does not build";
+
+    /// <summary>Emulators whose <c>-e</c> takes the whole command as one string, so an argument list cannot be handed to them.</summary>
+    private static bool TakesOneCommandString(string terminal) => ProgramName(terminal) is "tilix" or "lxterminal";
 
     private static bool IsWindowsTerminal(string terminal) =>
         ProgramName(terminal).ToLowerInvariant() is "wt" or "windowsterminal";

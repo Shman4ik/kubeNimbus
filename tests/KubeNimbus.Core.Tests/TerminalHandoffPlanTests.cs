@@ -142,6 +142,12 @@ public class TerminalHandoffPlanTests
         await Assert.That(command.Single(c => c.Label == "tilix").Refusal).IsNotNull();
         await Assert.That(command.Single(c => c.Label == "lxterminal").Refusal).IsNotNull();
         await Assert.That(plain.All(c => c.Refusal is null && c.Arguments.Count == 0)).IsTrue();
+
+        // Named as the preference, by name or path, it is refused the same way rather than given -e.
+        var preferred = Plan(TerminalHostPlatform.Linux, Exec, configured: "/usr/bin/tilix").Candidates[0];
+        await Assert.That(preferred.Label).IsEqualTo("Preferred terminal (/usr/bin/tilix)");
+        await Assert.That(preferred.Refusal).IsNotNull();
+        await Assert.That(Plan(TerminalHostPlatform.Linux, configured: "tilix").Candidates[0].Refusal).IsNull();
     }
 
     /// <summary>
