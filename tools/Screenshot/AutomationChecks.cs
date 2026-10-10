@@ -19,6 +19,22 @@ internal static class AutomationChecks
     private static int _visited;
     private static readonly Dictionary<string, (int Count, string Example)> Unnamed = [];
 
+    /// <summary>
+    /// Names that must be on a button in a scenario, written by hand because a name derived
+    /// from the content was not good enough on Windows: the port-forward pane's Stop button
+    /// read as &lt;unnamed&gt; in <c>qa-ui.ps1 dump</c> against a real build (#271), although its
+    /// headless peer said "Stop". A walk that only checks "has some name" cannot see that, so
+    /// these name the exact words, in the running state and the idle one.
+    /// </summary>
+    private static readonly Dictionary<string, string[]> RequiredButtonNames = new()
+    {
+        ["cluster-tab-port-forward"] = ["Stop forwarding"],
+        ["cluster-tab-port-forward-idle"] = ["Start forwarding"],
+        ["cluster-tab-port-forwards-list"] = ["Stop this forward", "Port-forwards"],
+    };
+
+    private static readonly Dictionary<string, HashSet<string>> ButtonNamesSeen = [];
+
     /// <summary>The control types a person or a screen reader operates, and so must be able to name.</summary>
     private static readonly HashSet<AutomationControlType> Operable =
     [
@@ -49,6 +65,11 @@ internal static class AutomationChecks
             // What a UIA client asks of every element it passes through.
             var accessibleName = peer.GetName();
             var controlType = peer.GetAutomationControlType();
+            if (controlType == AutomationControlType.Button && RequiredButtonNames.ContainsKey(scenario))
+            {
+                (ButtonNamesSeen.TryGetValue(scenario, out var seen) ? seen : ButtonNamesSeen[scenario] = []).Add(accessibleName);
+            }
+
             if (Environment.GetEnvironmentVariable("KN_PEERDEBUG") == "1" && controlType is AutomationControlType.ListItem or AutomationControlType.Button)
                 Console.WriteLine($"PEER {controlType} '{accessibleName}' [{peer.GetAutomationId()}] {peer.GetType().Name}");
             // The text box inside a number box is a template part of that control, which is named.
@@ -97,6 +118,18 @@ internal static class AutomationChecks
             throw new InvalidOperationException(
                 "Operable controls with no accessible name (a tooltip, AutomationProperties.Name or LabeledBy; see docs/engineering/accessible-names.md):"
                 + Environment.NewLine + string.Join(Environment.NewLine, Unnamed.Select(u => $"  {u.Key}: {u.Value.Example}")));
+        }
+
+        // Only for the scenarios this run rendered: a filtered run that skipped them proves nothing either way.
+        var missing = RequiredButtonNames
+            .Where(r => ButtonNamesSeen.ContainsKey(r.Key))
+            .SelectMany(r => r.Value.Where(n => !ButtonNamesSeen[r.Key].Contains(n)).Select(n => $"  {r.Key}: no button named \"{n}\""))
+            .ToList();
+        if (missing.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "Buttons missing the accessible name written for them (docs/engineering/accessible-names.md):"
+                + Environment.NewLine + string.Join(Environment.NewLine, missing));
         }
 
         if (Failures.Count > 0)

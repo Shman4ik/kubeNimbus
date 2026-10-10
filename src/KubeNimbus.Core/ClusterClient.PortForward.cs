@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Text;
 using k8s;
+using KubeNimbus.Core.Networking;
 
 namespace KubeNimbus.Core;
 
@@ -18,8 +19,54 @@ public sealed partial class ClusterClient
     /// websocket port-forward channel framing doesn't support per port), a
     /// fresh upstream websocket is opened per accepted local connection.
     /// </summary>
-    public PortForwardSession StartPortForward(string @namespace, string podName, int podPort, int localPort = 0) =>
-        new(this, @namespace, podName, podPort, localPort);
+    public PortForwardSession StartPortForward(string @namespace, string podName, int podPort, int localPort = 0)
+    {
+        var target = new PortForwardTarget(@namespace, podName, podPort);
+        return new PortForwardSession(this, localPort, target, serviceName: null, servicePort: null,
+            resolve: (_, _) => Task.FromResult(target));
+    }
+
+    /// <summary>
+    /// A forward of one Service port. The API has no port-forward endpoint for a Service,
+    /// so — like <c>kubectl port-forward svc/x</c> — one pod is picked on this side: a ready
+    /// endpoint from the service's EndpointSlices (<see cref="ServiceForwards"/>), with the
+    /// pod port the slice resolved the service port to. <see cref="PortForwardSession.StartAsync"/>
+    /// resolves before it binds, so a service with no ready pod refuses to start with the
+    /// reason rather than listening on a port that leads nowhere.
+    /// </summary>
+    /// <remarks>
+    /// Unlike kubectl, which forwards to the pod it picked until that pod goes and then
+    /// exits, a connection that fails makes the next one resolve again — so a forward
+    /// survives a rollout, and <see cref="PortForwardSession.TargetChanged"/> says when it
+    /// moved to another pod. A connection whose pod has gone (the websocket cannot be
+    /// opened) is retried once against the new pick, since nothing was sent yet.
+    /// </remarks>
+    public PortForwardSession StartServicePortForward(string @namespace, string serviceName, int servicePort, int localPort = 0) =>
+        new(this, localPort, initialTarget: null, serviceName, servicePort,
+            resolve: (current, ct) => ResolveServiceForwardAsync(@namespace, serviceName, servicePort, current?.PodName, ct));
+
+    /// <summary>One read of the Service and its EndpointSlices, resolved to a pod and port — or the reason there is none.</summary>
+    public async Task<ServiceForwardResolution> ResolveServiceForwardTargetAsync(
+        string @namespace, string serviceName, int servicePort, string? preferPod = null, CancellationToken cancellationToken = default)
+    {
+        var service = await ReadResourceAsync(ResourceDescriptor.Services, @namespace, serviceName, cancellationToken).ConfigureAwait(false);
+        IReadOnlyList<DynamicResource> slices = service is null
+            ? []
+            : await ListResourceOnceAsync(
+                ResourceDescriptor.EndpointSlices, @namespace, cancellationToken: cancellationToken,
+                labelSelector: ServiceBackends.SlicesOf(serviceName)).ConfigureAwait(false);
+        return ServiceForwards.Resolve(service, slices, servicePort, preferPod);
+    }
+
+    private async Task<PortForwardTarget> ResolveServiceForwardAsync(
+        string @namespace, string serviceName, int servicePort, string? preferPod, CancellationToken cancellationToken)
+    {
+        var resolution = await ResolveServiceForwardTargetAsync(@namespace, serviceName, servicePort, preferPod, cancellationToken)
+            .ConfigureAwait(false);
+        return resolution.Target is { } target
+            ? new PortForwardTarget(target.Namespace, target.PodName, target.PodPort)
+            : throw new PortForwardException(resolution.Problem ?? $"Service {serviceName} has no pod to forward to.");
+    }
 
     /// <summary>One port-forward websocket to the pod's port-forward subresource, single requested port.</summary>
     internal Task<WebSocket> OpenPortForwardWebSocketAsync(
@@ -33,14 +80,56 @@ public sealed partial class ClusterClient
             cancellationToken);
 }
 
+/// <summary>Where one forwarded connection goes: a pod and a port on it.</summary>
+public sealed record PortForwardTarget(string Namespace, string PodName, int PodPort);
+
 /// <summary>
-/// A running local-port → pod-port forward. <see cref="StartAsync"/> binds the
-/// listener; dispose (or cancel the token passed to StartAsync) to stop
-/// accepting and tear down any in-flight connections.
+/// A running local-port → pod-port forward, to one pod or to whichever ready pod a Service
+/// routes to. <see cref="StartAsync"/> binds the listener; dispose (or cancel the token
+/// passed to StartAsync) to stop accepting and tear down any in-flight connections.
 /// </summary>
-public sealed class PortForwardSession(ClusterClient client, string @namespace, string podName, int podPort, int requestedLocalPort)
-    : IAsyncDisposable
+public sealed class PortForwardSession : IAsyncDisposable
 {
+    private readonly ClusterClient _client;
+    private readonly int _requestedLocalPort;
+    private readonly Func<PortForwardTarget?, CancellationToken, Task<PortForwardTarget>> _resolve;
+    private readonly SemaphoreSlim _resolveGate = new(1, 1);
+    private PortForwardTarget? _target;
+
+    /// <summary>Set when a connection failed: the next one asks the Service again.</summary>
+    private volatile bool _resolveAgain;
+
+    internal PortForwardSession(
+        ClusterClient client,
+        int requestedLocalPort,
+        PortForwardTarget? initialTarget,
+        string? serviceName,
+        int? servicePort,
+        Func<PortForwardTarget?, CancellationToken, Task<PortForwardTarget>> resolve)
+    {
+        _client = client;
+        _requestedLocalPort = requestedLocalPort;
+        _target = initialTarget;
+        _resolve = resolve;
+        ServiceName = serviceName;
+        ServicePort = servicePort;
+    }
+
+    /// <summary>The Service this forward resolves through, or null for a forward to one pod.</summary>
+    public string? ServiceName { get; }
+
+    /// <summary>The service port forwarded, when <see cref="ServiceName"/> is set.</summary>
+    public int? ServicePort { get; }
+
+    /// <summary>The pod and port connections currently go to. Null until a Service forward has resolved.</summary>
+    public PortForwardTarget? Target => _target;
+
+    /// <summary>
+    /// Raised (off the UI thread) when a Service forward moved to another pod: the previous
+    /// target, then the new one. The pane says so, because "it forwards to the service" is
+    /// only true one pod at a time.
+    /// </summary>
+    public event Action<PortForwardTarget, PortForwardTarget>? TargetChanged;
     private const int BufferSize = 16 * 1024;
 
     /// <summary>Channel 0 of the V4 framing carries data for the first (here: only) requested port.</summary>
@@ -61,6 +150,7 @@ public sealed class PortForwardSession(ClusterClient client, string @namespace, 
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
     private Task? _acceptLoop;
+    private bool _started;
     private bool _disposed;
 
     public int LocalPort { get; private set; }
@@ -73,14 +163,20 @@ public sealed class PortForwardSession(ClusterClient client, string @namespace, 
     /// </summary>
     public event Action<Exception>? ConnectionFailed;
 
-    public Task StartAsync(CancellationToken cancellationToken = default)
+    public async Task StartAsync(CancellationToken cancellationToken = default)
     {
-        if (_cts is not null)
+        if (_cts is not null || _started)
         {
             throw new InvalidOperationException("This port-forward session has already been started.");
         }
 
-        var listener = new TcpListener(IPAddress.Loopback, requestedLocalPort);
+        _started = true;
+
+        // A Service forward resolves before it binds: a service with no ready pod refuses to
+        // start, with the reason, rather than listening on a port that leads nowhere.
+        await TargetAsync(afterFailure: false, cancellationToken).ConfigureAwait(false);
+
+        var listener = new TcpListener(IPAddress.Loopback, _requestedLocalPort);
         try
         {
             listener.Start();
@@ -92,8 +188,8 @@ public sealed class PortForwardSession(ClusterClient client, string @namespace, 
             listener.Stop();
             throw new PortForwardException(
                 ex.SocketErrorCode == SocketError.AddressAlreadyInUse
-                    ? $"Local port {requestedLocalPort} is already in use — choose a different local port."
-                    : $"Could not listen on local port {requestedLocalPort}: {ex.Message}",
+                    ? $"Local port {_requestedLocalPort} is already in use — choose a different local port."
+                    : $"Could not listen on local port {_requestedLocalPort}: {ex.Message}",
                 ex);
         }
 
@@ -103,7 +199,39 @@ public sealed class PortForwardSession(ClusterClient client, string @namespace, 
         LocalPort = ((IPEndPoint)listener.LocalEndpoint).Port;
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _acceptLoop = AcceptLoopAsync(_cts.Token);
-        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// The target for the next connection. A pod forward always answers its one pod; a
+    /// Service forward reuses the last pick until a connection has failed (or
+    /// <paramref name="afterFailure"/> forces it), then reads the Service and its slices
+    /// again, keeping the same pod while it is still ready.
+    /// </summary>
+    private async Task<PortForwardTarget> TargetAsync(bool afterFailure, CancellationToken ct)
+    {
+        await _resolveGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (_target is { } current && (ServiceName is null || (!afterFailure && !_resolveAgain)))
+            {
+                return current;
+            }
+
+            var previous = _target;
+            var next = await _resolve(previous, ct).ConfigureAwait(false);
+            _target = next;
+            _resolveAgain = false;
+            if (previous is not null && previous != next)
+            {
+                TargetChanged?.Invoke(previous, next);
+            }
+
+            return next;
+        }
+        finally
+        {
+            _resolveGate.Release();
+        }
     }
 
     private async Task AcceptLoopAsync(CancellationToken ct)
@@ -143,7 +271,7 @@ public sealed class PortForwardSession(ClusterClient client, string @namespace, 
         Exception? failure = null;
         try
         {
-            ws = await client.OpenPortForwardWebSocketAsync(@namespace, podName, podPort, linked.Token).ConfigureAwait(false);
+            ws = await OpenUpstreamAsync(linked.Token).ConfigureAwait(false);
             using var netStream = tcpClient.GetStream();
 
             var toUpstream = ObservePumpAsync(PumpTcpToWebSocketAsync(netStream, ws, linked.Token));
@@ -174,7 +302,37 @@ public sealed class PortForwardSession(ClusterClient client, string @namespace, 
 
         if (failure is not null and not OperationCanceledException)
         {
+            // The pod may have gone, stopped being ready, or be refusing the port: a
+            // Service forward asks the Service again before the next connection.
+            _resolveAgain = true;
             ConnectionFailed?.Invoke(failure);
+        }
+    }
+
+    /// <summary>
+    /// The upstream websocket for one accepted connection. For a Service forward, a pod that
+    /// cannot be reached at all (deleted, the websocket refused) is resolved again at once
+    /// and the connection retried once on the new pick — nothing has been sent yet, so the
+    /// local client never sees the hop.
+    /// </summary>
+    private async Task<WebSocket> OpenUpstreamAsync(CancellationToken ct)
+    {
+        var target = await TargetAsync(afterFailure: false, ct).ConfigureAwait(false);
+        try
+        {
+            return await _client.OpenPortForwardWebSocketAsync(target.Namespace, target.PodName, target.PodPort, ct)
+                .ConfigureAwait(false);
+        }
+        catch (Exception first) when (ServiceName is not null && first is not OperationCanceledException)
+        {
+            var retry = await TargetAsync(afterFailure: true, ct).ConfigureAwait(false);
+            if (retry == target)
+            {
+                throw;
+            }
+
+            return await _client.OpenPortForwardWebSocketAsync(retry.Namespace, retry.PodName, retry.PodPort, ct)
+                .ConfigureAwait(false);
         }
     }
 

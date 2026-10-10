@@ -74,7 +74,19 @@ Eight things are load-bearing:
    could not be read.
 7. **An edited selector restarts the pod watch.** The pane tracks the list's own row, like
    node detail, and re-derives the selector on every change to the Service object.
+   It also **watches its own Service**, field-selected by name, because the list drops a
+   deleted object's row and tells nobody: kn-qa found the pane still saying "2 pods match,
+   none is serving — the service has nowhere to send traffic" about a Service deleted
+   minutes earlier (#264). A Deleted frame, or a relist whose Synced arrives without the
+   object, withdraws the verdict and the backends, stops the pod and slice watches, and says
+   "This service was deleted" in the verdict bar, the chrome row and the Overview; a Service
+   created again under the name is read afresh. A watch that is refused (a role that may get
+   but not watch) changes nothing, since a refusal says nothing about existence.
+   ServicePaneDeleteAndForwardTests posts the frames; 
+et-service-deleted renders it.
 8. **A dual-stack pod is one row with two addresses**, not two backends.
+
+The chrome row's **Port-forward** button forwards a local port to the service, through one ready pod that the forward pane names — see [port-forward](port-forward.md). It is disabled for an ExternalName, a service with no TCP port and a deleted one.
 
 The backends list has L3's logs gestures (L, Shift+L, the row icon, "Logs" in the menu) on
 rows that name a pod, and Enter / double-click opens the pod — see

@@ -269,6 +269,7 @@ same PR.** Read only those pages. [The full index](docs/engineering/README.md) d
   [configmaps-and-secrets](docs/engineering/configmaps-and-secrets.md),
   [workload-actions](docs/engineering/workload-actions.md),
   [networking-detail](docs/engineering/networking-detail.md),
+  [port-forward](docs/engineering/port-forward.md),
   [node-operations](docs/engineering/node-operations.md),
   [exec-terminal](docs/engineering/exec-terminal.md),
   [apply-preview](docs/engineering/apply-preview.md),

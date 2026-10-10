@@ -12,16 +12,23 @@
        — and the headerless TabControl underneath, the pattern node detail uses. -->
   <Grid RowDefinitions="Auto,*" Margin="10,8,10,10">
 
-    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,0,0,8">
+    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="0,0,0,8">
       <ListBox Grid.Column="0" Classes="segmented" SelectedIndex="{Binding SelectedTabIndex}">
         <ListBoxItem Content="Backends" />
         <ListBoxItem Content="Overview" />
         <ListBoxItem Content="Events" />
       </ListBox>
 
+      <!-- Once the Service is deleted the summary is its last state, and says so (#264). -->
       <TextBlock Grid.Column="1" Text="{Binding SummaryText}" Opacity="0.6" FontSize="12"
                  VerticalAlignment="Center" Margin="12,0,0,0"
-                 TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SummaryText}" />
+                 TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SummaryTooltip}"
+                 IsVisible="{Binding !IsDeleted}" />
+      <TextBlock Grid.Column="1" Classes="statusText warn" FontSize="12"
+                 VerticalAlignment="Center" Margin="12,0,0,0"
+                 Text="{x:Static vm:ServiceDetailTabViewModel.DeletedHeadline}"
+                 TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SummaryTooltip}"
+                 IsVisible="{Binding IsDeleted}" />
 
       <TextBlock Grid.Column="2" Text="{Binding EventsCaption}" Opacity="0.6" FontSize="12"
                  VerticalAlignment="Center" Margin="8,0,8,0"
@@ -30,6 +37,16 @@
               ToolTip.Tip="Re-read the events about this service"
               IsVisible="{Binding SelectedTabIndex, Converter={x:Static conv:IndexEqualsConverter.Instance}, ConverterParameter=2}">
         <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="14" Height="14" />
+      </Button>
+      <!-- The service's own action, on every tab (FEAT-29): a forward to one ready pod behind
+           it, which the forward pane names. No ellipsis — it opens a form and forwards nothing
+           until that form's Start (UI rule 17). -->
+      <Button Grid.Column="4" Classes="toolbar" Padding="8,4" Margin="6,0,0,0" Command="{Binding PortForwardCommand}"
+              ToolTip.Tip="{Binding PortForwardTooltip}">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <PathIcon Data="{StaticResource SwapHorizontalIconGeometry}" Width="12" Height="12" />
+          <TextBlock Text="Port-forward" FontSize="12" />
+        </StackPanel>
       </Button>
     </Grid>
 
@@ -157,6 +174,13 @@
       <TabItem Header="Overview">
         <ScrollViewer>
           <StackPanel Spacing="8">
+            <Border Classes="infoBar warn" IsVisible="{Binding IsDeleted}">
+              <StackPanel Spacing="2">
+                <TextBlock Text="{x:Static vm:ServiceDetailTabViewModel.DeletedHeadline}" FontWeight="SemiBold" FontSize="12" />
+                <TextBlock Text="{Binding DeletedDetail}" FontSize="11.5" Opacity="0.75" TextWrapping="Wrap" />
+              </StackPanel>
+            </Border>
+
             <Border Classes="card" Padding="12,10">
               <StackPanel Spacing="4">
                 <TextBlock Classes="sectionHeader" Text="SERVICE" />

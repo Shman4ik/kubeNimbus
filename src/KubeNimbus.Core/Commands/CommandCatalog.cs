@@ -390,7 +390,16 @@ public static class CommandCatalog
             IconKey = "SwapHorizontalIconGeometry",
             Chord = new(CommandKey.F),
             Surfaces = PaletteAndSheet,
+        },        new()
+        {
+            // Every running forward, whichever tab started it — offered only while one runs.
+            Id = CommandId.PortForwards,
+            Title = "Port-forwards",
+            Category = CommandCategory.Pods,
+            IconKey = "SwapHorizontalIconGeometry",
+            Surfaces = PaletteOnly,
         },
+
         new()
         {
             Id = CommandId.ExecInterrupt,

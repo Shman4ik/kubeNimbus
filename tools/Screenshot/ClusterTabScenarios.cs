@@ -1,3 +1,4 @@
+using KubeNimbus.Core.Networking;
 using System.Text.Json;
 using Avalonia.Threading;
 using KubeNimbus.App;
@@ -2503,6 +2504,9 @@ internal static class ClusterTabScenarios
             client, "payments", row.Name,
             [new ContainerPort(8080, "http"), new ContainerPort(9090, "metrics")]) { IsPreview = false };
         pf.LocalPort = 54321;
+        // In the app every forward pane has the window's registry, which is what makes
+        // closing its tab keep it running — and the pane says so while it runs (FEAT-7).
+        pf.Registry = new PortForwardRegistry();
         pf.IsRunning = true;
         // Running: the status bar carries the local URL itself, so StatusMessage is
         // empty — matching what StartAsync leaves behind.
@@ -2511,6 +2515,63 @@ internal static class ClusterTabScenarios
         tab.InspectorTabs.Add(pf);
         tab.SelectedInspectorTab = pf;
         return tab;
+    }
+
+    /// <summary>
+    /// FEAT-29: a forward through a Service, naming the pod it reaches — after a connection
+    /// to the first pod failed and it moved to the other one, which it says.
+    /// </summary>
+    public static ClusterTabViewModel PortForwardService()
+    {
+        var tab = BaseTab();
+        var pf = PortForwardTabViewModel.ForService(
+            FixtureData.CreateOfflineClient(), "payments", "checkout",
+            [new ServicePortInfo("http", 80, "http", 0, "TCP", ""), new ServicePortInfo("metrics", 9100, "9090", 0, "TCP", "")]);
+        pf.IsPreview = false;
+        pf.LocalPort = 54400;
+        pf.Registry = new PortForwardRegistry();
+        pf.IsRunning = true;
+        pf.StatusMessage = null;
+        pf.ResolvedPod = "checkout-worker-7b4c6d8f5-h2x7d:8080";
+        pf.TargetNotice =
+            "Moved to pod checkout-worker-7b4c6d8f5-h2x7d: a connection to checkout-worker-5d8f7b9c4-qz9pl failed, "
+            + "and it is no longer a ready endpoint of the service.";
+
+        tab.InspectorTabs.Add(pf);
+        tab.SelectedInspectorTab = pf;
+        return tab;
+    }
+
+    /// <summary>
+    /// FEAT-7: the window's forwards, listed — one healthy, one whose last connection the
+    /// kubelet refused, one through a Service — with the status bar counting them. The
+    /// forwards are put in the shell's own registry by <paramref name="registry"/>, which
+    /// is the one the status bar reads; the pod forward's own tab has been closed.
+    /// </summary>
+    public static void PortForwardsList(ClusterTabViewModel tab, PortForwardRegistry registry)
+    {
+        PortForwardTabViewModel Running(PortForwardTabViewModel pf, int port, string cluster)
+        {
+            pf.Owner = tab;
+            pf.Registry = registry;
+            pf.ClusterLabel = cluster;
+            pf.LocalPort = port;
+            pf.IsRunning = true;
+            pf.StatusMessage = null;
+            registry.Add(pf);
+            return pf;
+        }
+
+        Running(new PortForwardTabViewModel(FixtureData.CreateOfflineClient(), "payments", "payment-api-6d9f8b7c5-x2k4q",
+            [new ContainerPort(8080, "http")]), 54321, "prod-payments");
+        var refused = Running(new PortForwardTabViewModel(FixtureData.CreateOfflineClient(), "payments", "ledger-api-5c7d9f8b6-m3n8p",
+            [new ContainerPort(9090, "metrics")]), 9090, "prod-payments");
+        refused.ConnectionError = "error forwarding port 9090 to pod ledger-api-5c7d9f8b6-m3n8p: connection refused";
+        var service = Running(PortForwardTabViewModel.ForService(FixtureData.CreateOfflineClient(), "payments", "checkout",
+            [new ServicePortInfo("http", 80, "http", 0, "TCP", "")]), 54400, "prod-payments");
+        service.ResolvedPod = "checkout-worker-7b4c6d8f5-h2x7d:8080";
+
+        tab.OpenPortForwardsCommand.Execute(null);
     }
 
     // ------------------------------------------------------------ L1: palette log rows
