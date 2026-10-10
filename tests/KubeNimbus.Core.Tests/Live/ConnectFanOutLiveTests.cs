@@ -24,8 +24,7 @@ public partial class ConnectFanOutLiveTests
     /// A kubeconfig whose user is an exec plugin (a script that counts its runs and prints a
     /// real ServiceAccount token): the connect's fan-out never runs the plugin beyond what
     /// <c>/version</c> did, a Reconnect (a forced credential refresh) costs no more than a
-    /// connect, and every connect costs the same. "Once per connect" does not hold: see the
-    /// assertion on <c>afterVersion</c>.
+    /// connect, and every connect costs the same: one run (#283).
     /// </summary>
     [Test]
     [Timeout(120_000)]
@@ -57,13 +56,11 @@ public partial class ConnectFanOutLiveTests
             // probe and the pod list together run the plugin no more times.
             await Assert.That(plugin.Runs).IsEqualTo(afterVersion);
 
-            // Observed on k3s v1.33.4 with KubernetesClient.Aot 19.0.2: the plugin runs
-            // TWICE per connect — once when the library builds the configuration, and again
-            // on /version, because the token provider it installs does not start from the
-            // credential the build already obtained. Pinned at its observed value so a
-            // change either way is noticed; filed for the backlog (see the PR).
+            // Once per connect (#283): the build runs it, and the token provider starts from
+            // that credential, so /version reuses it. It used to run twice — the library's
+            // provider started empty and ran the plugin again on the first request.
             await Assert.That(afterBuild).IsEqualTo(1);
-            await Assert.That(afterVersion).IsEqualTo(2);
+            await Assert.That(afterVersion).IsEqualTo(1);
             perConnect = afterVersion;
 
             // Reconnect (a forced re-read of the kubeconfig) runs it again, once per run of

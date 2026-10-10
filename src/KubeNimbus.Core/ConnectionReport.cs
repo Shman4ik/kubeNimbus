@@ -176,7 +176,7 @@ public static class ConnectionReport
 
         if (credentials is null)
         {
-            return "nothing — no user entry";
+            return user is null ? "nothing — no user entry" : EmptyUserEntry;
         }
 
         if (!string.IsNullOrEmpty(credentials.ClientCertificate) || !string.IsNullOrEmpty(credentials.ClientCertificateData))
@@ -208,8 +208,12 @@ public static class ConnectionReport
             return $"auth-provider \"{provider.Name}\"";
         }
 
-        return "nothing — anonymous";
+        // kubectl connects such an entry anonymously, and so does the app (#273).
+        return EmptyUserEntry;
     }
+
+    /// <summary>The "Signs in with" fact of a user entry with no credential in it.</summary>
+    public const string EmptyUserEntry = "no credential (the user entry is empty)";
 
     /// <summary>The <c>TLS</c> fact of a cluster entry whose server is a plain <c>http://</c> URL.</summary>
     public const string PlainHttpFact =

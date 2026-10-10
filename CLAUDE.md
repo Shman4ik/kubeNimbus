@@ -220,8 +220,9 @@ before changing a view.** Docs and code cite these numbers.
     the caption reserve follows `WindowDecorationMargin.Top`; Linux keeps system decorations.
     The harness cannot render any of it.
 13. **The list has its own search box. `Rows` stays the watch's list; the grid renders
-    `VisibleRows`** (`ClusterTabRowFilterTests`). It never matches status; no-match is its own
-    state; Unhealthy only is a second narrowing.
+    `VisibleRows`** (`ClusterTabRowFilterTests`). It matches only a kind's identity fields, a
+    per-kind table written once in [list-search](docs/engineering/list-search.md) and
+    `RowFilterFields`, never status; no-match is its own state; Unhealthy only is a second narrowing.
 14. **A `DataGridCell` has a gutter on both sides** (a right-aligned `—` beside `5d` read as a
     negative age), and the column minimums pay for it; check `cluster-tab-workloads-list` at 1280px.
 15. **The two apps' command bars read the same left to right** (☰, sidebar toggle, the app's
@@ -266,6 +267,7 @@ same PR.** Read only those pages. [The full index](docs/engineering/README.md) d
 - The resource list: [crd-printer-columns](docs/engineering/crd-printer-columns.md),
   [resource-grid-resize-sort](docs/engineering/resource-grid-resize-sort.md),
   [events-list](docs/engineering/events-list.md),
+  [list-search](docs/engineering/list-search.md),
   [unhealthy-only](docs/engineering/unhealthy-only.md),
   [datagrid-auto-columns](docs/engineering/datagrid-auto-columns.md),
   [status-dot](docs/engineering/status-dot.md).

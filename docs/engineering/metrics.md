@@ -17,6 +17,16 @@ container) and node usage. Three things are deliberate:
   point-in-time aggregate over a ~30s window with no watch endpoint, so there is
   nothing to stream; polling is scoped to the current list's `CancellationToken`
   so it dies with the watch when the kind/namespace changes.
+- **A row that arrives after a poll takes that poll's sample (ENG-55, #252).** The first poll
+  and the initial list race: when the poll won, it was applied to no rows and kept nowhere,
+  so every row read "—" until the next poll, up to an interval (15 s) later — measured in the
+  0.5.1 pre-release pass. `ClusterTabViewModel` keeps the last poll's samples
+  (`_lastUsage`, memory only), and a new row in `ApplyOne`/`ApplyFleetOne` takes its key's
+  sample before it is added, so a CPU-sorted list places it correctly too. `StopWatch` drops
+  them, so a sample never outlives the kind and namespaces it was read for, and a poll that
+  finishes after its watch was cancelled is neither applied nor kept.
+  `MetricsLastSampleTests` pins all three; the first goes red without the new-row step
+  (checked).
 
 Quantity strings (`"100m"`, `"128Mi"`, `"12345n"`, `"129e6"`) are parsed by
 `Quantity.cs` — a small AOT-safe reader, since `ResourceQuantity` from the k8s

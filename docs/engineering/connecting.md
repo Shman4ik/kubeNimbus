@@ -3,7 +3,7 @@
 Everything between a kubeconfig entry and a working `ClusterClient`, and what the app says
 when that does not work. Read this before changing `Kubeconfig.BuildClientSetupAsync`,
 `ClusterClient.Create`, `ApiServerCertificateValidator`, `ClusterCertificateAuthority`,
-`KubeconfigTokenFile`, `ApiServerTransport`,
+`KubeconfigTokenFile`, `TokenFileProvider`, `ExecCredentialProvider`, `ApiServerTransport`,
 `ExecPluginPath`, `KubeconfigProxy`, `ClusterClient.RefreshCredentialsAsync`, the informer's
 401 branch, `ConnectionReport`, `ConnectionFailureView`, the kubeconfig folder search or the
 app-data paths. The research behind most of it is
@@ -24,8 +24,11 @@ proxy) does, on the thread pool, in this order:
 3. reads and validates the cluster's `proxy-url` (`KubeconfigProxy`, below) — *before* any
    plugin runs, so a typo in the proxy does not cost an SSO prompt — and the user entry's
    impersonation and `tokenFile` (below);
-4. builds the configuration with `BuildConfigFromConfigObject`, which is where the plugin
-   runs, inside `ExecCredentialCapture` so a failure is reported by what the plugin said;
+4. runs an exec plugin once (`ExecCredentialProvider`, below), inside `ExecCredentialCapture`
+   so a failure is reported by what the plugin said, and writes its credential into the
+   in-memory model; clears the context's user when the entry carries no credential at all
+   (below); and builds the configuration with `BuildConfigFromConfigObject`, then gives it the
+   token provider the credential needs (a seeded exec provider, or `TokenFileProvider`);
 5. replaces the configuration's CA with every certificate of a `certificate-authority(-data)`
    bundle (`ClusterCertificateAuthority`, below).
 
@@ -285,8 +288,19 @@ plugin runs:
   (client-go's `BearerTokenFile` precedence). The content is trimmed.
 - **Read on every build, kept nowhere.** Every connect and every credential refresh re-reads
   it, so a token rotated on disk is picked up by the next refresh — a 401 triggers one through
-  the informer. client-go also re-reads the file about once a minute while connected; this does
-  not, and the 401 refresh is what covers the gap.
+  the informer.
+- **And about once a minute while connected (#262).** client-go re-reads the file through a
+  caching token source with a one-minute period, and a deployment that rotates the token
+  without revoking the old one never produces a 401, so the 401 refresh alone left a gap.
+  `TokenFileProvider` is installed as the configuration's token provider whenever the token
+  came from the file: each request asks it for the header, and it reads the file again when
+  the last read is a minute old. A read that fails or finds the file empty keeps the token it
+  had, as client-go's does (a file being rewritten is briefly empty). It is a provider and not
+  a timer calling `RefreshCredentialsAsync`, deliberately: a refresh builds a new client and
+  retires the old one, only four retired clients are kept, and a refresh every minute would
+  therefore close a log follow or exec session after four minutes. The provider changes the
+  next request's header and nothing else, and reads nothing while the tab is idle.
+  `TokenFileProviderTests` pins the period, the fallback and which entries get the provider.
 - **A missing or empty file with no inline token fails the connect** at "Reading the
   kubeconfig", naming the path. Connecting with no credential instead would hide the problem
   behind a 401 or an anonymous identity.
@@ -295,6 +309,18 @@ plugin runs:
 
 `KubeconfigTokenFileTests` pins each of these through the real connect path; five go red with
 the read removed.
+
+## An empty user entry connects anonymously (#273)
+
+A user entry with no credential in it — `user: {}`, or a `- name:` with no `user:` key — is
+what a context behind `kubectl proxy` or an authenticating proxy looks like, and kubectl
+sends its requests with no credential. The library refuses it ("User: none does not have
+appropriate auth credentials in kubeconfig"), so `BuildClientSetupCoreAsync` clears the
+context's user in the in-memory model when `Kubeconfig.HasNoCredential` says the entry carries
+no token, certificate, username, auth-provider or plugin. Impersonation fields are not a
+credential and are still sent. The failure view's "Signs in with" reads "no credential (the
+user entry is empty)" (`ConnectionReport.EmptyUserEntry`). `EmptyUserEntryTests` connects both
+shapes to a loopback server and checks that no `Authorization` header arrives.
 
 ## A plugin's stderr is redacted before it is shown (S1-6)
 
@@ -356,7 +382,18 @@ for the life of the tab.
   the last five seconds counts. Reconnect passes `force`.
 - **`ReconnectCommand`** retries a failed connect (keeping an existing client and refreshing
   it in place, so nothing holding it is orphaned), or on a connected tab refreshes, re-reads
-  `/version` and restarts the list. It is offered on the failure view, beside the list's
+  `/version` and restarts the list.
+- **A failed Reconnect is reported like a failed connect (#272).** Every step it runs —
+  reading the kubeconfig, building the client, reaching the server — is one the first connect
+  reports with the failure view, so `ShowReconnectFailureAsync` stops the list's watch, sets
+  `ConnectionFailure` and marks the tab disconnected: the view takes the list's place in the
+  Resources mode, and in the Applications mode too (`ShowsConnectionFailure` is no longer gated
+  on the page not having started, and the page's list hides behind it). It used to leave a
+  status line over stale rows whose watch went on retrying, and the explanation appeared only
+  once the tab was closed and reopened. Retry from there runs Reconnect again rather than a
+  first connect, which would re-apply the restored kind and namespace over the reader's. A
+  watch that drops on its own is not this: the informer retries it and the list keeps its
+  warning. `ConnectionStateTests.A_failed_reconnect_on_a_connected_tab_shows_the_failure_view_in_place_of_its_rows`. It is offered on the failure view, beside the list's
   warning when that warning is a lost or refused watch (`ConnectionWarningOffersReconnect`,
   reset whenever the warning changes so a later RBAC warning cannot inherit the button), in
   the ☰ menu, the macOS menu and the palette. Never on the demo cluster.
@@ -382,11 +419,22 @@ needs an elevated URL reservation to listen on 127.0.0.1.
 **Against the sandbox** (`Live/ConnectFanOutLiveTests`, VER-37, k3s v1.33.4): a plugin that
 prints a real ServiceAccount token, driven through connect's own order (`/version` alone,
 then discovery, namespaces and the metrics probe together, then the first pod list). The
-fan-out runs the plugin no more times than `/version` did, and a Reconnect costs no more than
-a connect. But the plugin runs **twice** per connect, not once: `KubernetesClient`'s
-`BuildConfigFromConfigObject` runs it to build the configuration, and the `ExecTokenProvider`
-it installs starts empty and runs it again on the first request. The test pins the observed
-count, so a fix (seeding the provider with the build's credential) has to change it. The same
+fan-out runs the plugin no more times than `/version` did, a Reconnect costs no more than a
+connect, and a connect runs it **once**.
+
+It used to run twice (#283): `KubernetesClient`'s `BuildConfigFromConfigObject` ran it to
+build the configuration, and the `ExecTokenProvider` it installs starts empty and ran it again
+on the first request — a second process, often a second network round trip, and for an
+interactive plugin a second prompt. `ExecCredentialProvider.RunInto` now runs the plugin
+itself before the build (`KubernetesClientConfiguration.ExecuteExternalCommand`, the library's
+own runner, so stderr capture and `interactiveMode` behave as before), writes the token or
+client certificate into the in-memory model as if the kubeconfig had carried it, takes the
+exec entry out of that model so the library does not run it, and installs
+`SeededExecTokenProvider`, which starts from that credential and runs the plugin again only
+within 30 seconds of its `expirationTimestamp`. A 401 still rebuilds the client and re-runs
+it. Hard rule 4 is unchanged: the credential lives where the library's provider kept it, in
+the client, and nowhere else. `ExecPluginAuthTests.One_connect_runs_the_plugin_once` goes red
+with the library left to run the plugin (checked); the expiry tests beside it still pass. The same
 class reads discovery of 44 groups through a loopback proxy that adds 100 ms per request:
 aggregated discovery is two requests in flight together, and the legacy path (the proxy asks
 the server for plain JSON) is 48 requests, at most 17 in flight, the bound plus `/api/v1`.

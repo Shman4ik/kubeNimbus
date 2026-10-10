@@ -185,6 +185,7 @@
                selection (UI rule 8: a handler on the template's panel fires on the text
                and nowhere else). -->
           <ListBox Grid.Row="1" Name="AppList" Classes="appList" Margin="4"
+                   IsVisible="{Binding !ShowsConnectionFailure}"
                    ItemsSource="{Binding VisibleRows}"
                    SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
                    Background="Transparent" BorderThickness="0"

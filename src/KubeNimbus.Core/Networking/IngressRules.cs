@@ -155,6 +155,24 @@ public static class IngressRules
     }
 
     /// <summary>
+    /// Every host an Ingress's rules name (<c>spec.rules[].host</c>), in order, without the
+    /// empty host of a catch-all rule. What the list search matches an Ingress on (FEAT-65).
+    /// </summary>
+    public static IReadOnlyList<string> RuleHosts(JsonElement spec)
+    {
+        var hosts = new List<string>();
+        foreach (var rule in J.Arr(spec, "rules"))
+        {
+            if (J.Str(rule, "host") is { Length: > 0 } host)
+            {
+                hosts.Add(host);
+            }
+        }
+
+        return hosts;
+    }
+
+    /// <summary>
     /// kubectl's Hosts column (<c>formatHosts</c>): up to three hosts, "+ N more...", and
     /// <c>*</c> when no rule names one.
     /// </summary>
