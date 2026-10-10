@@ -148,6 +148,14 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-exec-debug-container", () => HostInMainWindow(ClusterTabScenarios.ExecDebugContainer())),
     ("cluster-tab-port-forward", () => HostInMainWindow(ClusterTabScenarios.PortForward())),
     ("cluster-tab-port-forward-idle", () => HostInMainWindow(ClusterTabScenarios.PortForwardIdle())),
+    ("cluster-tab-port-forward-service", () => HostInMainWindow(ClusterTabScenarios.PortForwardService())),
+    ("cluster-tab-port-forwards-list", () =>
+    {
+        var tab = ClusterTabScenarios.WorkloadsList();
+        var window = (Window)HostInMainWindow(tab);
+        ClusterTabScenarios.PortForwardsList(tab, ((MainWindowViewModel)window.DataContext!).PortForwards);
+        return window;
+    }),
     ("cluster-tab-helm-releases", () => HostInMainWindow(ClusterTabScenarios.HelmReleases())),
     ("ux-helm-sort", () => HostInMainWindow(ClusterTabScenarios.HelmReleases())),
     ("cluster-tab-helm-release-detail", () => HostInMainWindow(ClusterTabScenarios.HelmReleaseDetail())),
@@ -294,6 +302,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("net-service-nothing-serving", () => HostInMainWindow(NetworkingScenarios.ServiceNothingServing(), height: 1000)),
     ("net-service-no-selector", () => HostInMainWindow(NetworkingScenarios.ServiceNoSelector(), height: 1000)),
     ("net-service-external-name", () => HostInMainWindow(NetworkingScenarios.ServiceExternalName(), height: 1000)),
+    ("net-service-deleted", () => HostInMainWindow(NetworkingScenarios.ServiceDeleted(), height: 1000)),
     ("net-ingress-list", () => HostInMainWindow(NetworkingScenarios.IngressList())),
     ("net-ingress-detail", () => HostInMainWindow(NetworkingScenarios.IngressDetail(), height: 1000)),
     ("net-netpol-list", () => HostInMainWindow(NetworkingScenarios.NetworkPolicyList())),

@@ -3588,7 +3588,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             return;
         }
 
-        AddInspectorTab(new PortForwardTabViewModel(client, row.Namespace, row.Name, DeclaredPortsOf(row)));
+        AddInspectorTab(AdoptForward(new PortForwardTabViewModel(client, row.Namespace, row.Name, DeclaredPortsOf(row)), row.ClusterName));
     }
 
     /// <summary>

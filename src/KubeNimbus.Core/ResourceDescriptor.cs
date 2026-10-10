@@ -185,6 +185,14 @@ public sealed record ResourceDescriptor(
         Group: "discovery.k8s.io", Version: "v1", Kind: "EndpointSlice", Plural: "endpointslices",
         SingularName: "endpointslice", Namespaced: true, ShortNames: [], Categories: []);
 
+    /// <summary>
+    /// Well-known descriptor for core/v1 Services — the Service pane's watch of its own
+    /// object and the Service port-forward's resolution.
+    /// </summary>
+    public static readonly ResourceDescriptor Services = new(
+        Group: "", Version: "v1", Kind: "Service", Plural: "services", SingularName: "service",
+        Namespaced: true, ShortNames: ["svc"], Categories: ["all"]);
+
     /// <summary>Well-known descriptor for core/v1 ConfigMaps — used by the env-var reveal path.</summary>
     public static readonly ResourceDescriptor ConfigMaps = new(
         Group: "", Version: "v1", Kind: "ConfigMap", Plural: "configmaps", SingularName: "configmap",

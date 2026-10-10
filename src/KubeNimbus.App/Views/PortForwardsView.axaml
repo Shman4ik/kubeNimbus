@@ -1,0 +1,69 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:KubeNimbus.App.ViewModels"
+             xmlns:conv="using:KubeNimbus.App.Converters"
+             x:Class="KubeNimbus.App.Views.PortForwardsView"
+             x:DataType="vm:PortForwardsTabViewModel">
+
+  <!-- Every running forward in the window (FEAT-7), one row each: what it reaches, on which
+       cluster, where it listens, and its last refused connection if it has one. No title
+       row — the dock tab already reads "Port-forwards" (UI rule 10). -->
+  <Grid RowDefinitions="Auto,*" Margin="14,12,14,12">
+
+    <!-- Nothing running is a state with a sentence, not a blank rectangle (UI rule 9). -->
+    <TextBlock Grid.Row="0" Classes="statusText dim" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left"
+               Text="{x:Static vm:PortForwardsTabViewModel.EmptyText}"
+               IsVisible="{Binding Registry.IsEmpty}" />
+
+    <ScrollViewer Grid.Row="1">
+      <ItemsControl ItemsSource="{Binding Registry.Forwards}">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <VirtualizingStackPanel />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:PortForwardTabViewModel">
+            <Border Classes="card" Padding="10,8" Margin="0,0,0,6">
+              <Grid ColumnDefinitions="Auto,*,Auto,Auto" RowDefinitions="Auto,Auto">
+                <Ellipse Grid.Row="0" Grid.Column="0" Classes="statusDot" VerticalAlignment="Center" Margin="0,0,10,0"
+                         Fill="{Binding Health, Converter={x:Static conv:HealthToBrushConverter.Instance}}" />
+
+                <StackPanel Grid.Row="0" Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <SelectableTextBlock Text="{Binding LocalAddress}" Classes="mono" FontSize="12.5" />
+                    <TextBlock Text="&#x2192;" Opacity="0.5" FontSize="12" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding TargetDescription}" FontSize="12.5" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding TargetDescription}" />
+                  </StackPanel>
+                  <TextBlock Text="{Binding ClusterLabel}" FontSize="11.5" Opacity="0.65" />
+                </StackPanel>
+
+                <Button Grid.Row="0" Grid.Column="2" Classes="toolbar" Padding="6" Margin="8,0,0,0"
+                        Command="{Binding $parent[ItemsControl].((vm:PortForwardsTabViewModel)DataContext).OpenCommand}"
+                        CommandParameter="{Binding}"
+                        ToolTip.Tip="Show this forward's pane">
+                  <PathIcon Data="{StaticResource OpenInNewIconGeometry}" Width="12" Height="12" />
+                </Button>
+                <!-- Fires on the click: a stopped forward starts again from its pane (UI rule 17). -->
+                <Button Grid.Row="0" Grid.Column="3" Padding="10,4" Margin="6,0,0,0"
+                        Command="{Binding $parent[ItemsControl].((vm:PortForwardsTabViewModel)DataContext).StopCommand}"
+                        CommandParameter="{Binding}"
+                        AutomationProperties.Name="Stop this forward">
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <PathIcon Data="{StaticResource StopIconGeometry}" Width="12" Height="12" />
+                    <TextBlock Text="Stop" />
+                  </StackPanel>
+                </Button>
+
+                <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" Text="{Binding ConnectionError}"
+                           Classes="statusText warn" TextWrapping="Wrap" Margin="0,4,0,0"
+                           IsVisible="{Binding HasConnectionError}" />
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+  </Grid>
+</UserControl>

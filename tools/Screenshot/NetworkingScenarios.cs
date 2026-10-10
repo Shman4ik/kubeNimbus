@@ -1,3 +1,4 @@
+using KubeNimbus.App.Demo;
 using KubeNimbus.App.ViewModels;
 using KubeNimbus.Core;
 
@@ -61,6 +62,24 @@ internal static class NetworkingScenarios
 
     /// <summary>ExternalName: a CNAME, no pods and no endpoints, and nothing to be ready.</summary>
     public static ClusterTabViewModel ServiceExternalName() => Open("", "Service", "payments-db");
+
+    /// <summary>
+    /// #264: the Service was deleted while its pane was open — no verdict about its pods, the
+    /// backends withdrawn, and the pane saying what happened. Posted through the pane's own
+    /// watch entry point, as the delete arrives on a real cluster.
+    /// </summary>
+    public static ClusterTabViewModel ServiceDeleted() =>
+        Open("", "Service", "checkout", pane =>
+        {
+            if (pane is ServiceDetailTabViewModel detail)
+            {
+                var service = DemoData.OfKind("Service").First(s => s.Name == "checkout" && s.Namespace == "payments");
+                detail.ApplyServiceEvent(ResourceEvent<DynamicResource>.Reset);
+                detail.ApplyServiceEvent(new ResourceEvent<DynamicResource>(ResourceEventType.Added, service));
+                detail.ApplyServiceEvent(ResourceEvent<DynamicResource>.Synced);
+                detail.ApplyServiceEvent(new ResourceEvent<DynamicResource>(ResourceEventType.Deleted, service));
+            }
+        });
 
     /// <summary>The Overview tab: addressing, selector, and port → target.</summary>
     public static ClusterTabViewModel ServiceOverview() =>

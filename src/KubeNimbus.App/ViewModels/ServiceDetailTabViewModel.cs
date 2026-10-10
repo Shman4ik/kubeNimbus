@@ -30,8 +30,10 @@ namespace KubeNimbus.App.ViewModels;
 /// exists to forbid, and on a distant cluster that window is seconds long.
 /// </para>
 /// <para>
-/// It tracks the list's own <see cref="ResourceRowViewModel"/>, like node detail, so an
-/// edit to the selector restarts the pod watch with the new one.
+/// It tracks the list's own <see cref="ResourceRowViewModel"/>, like node detail, <b>and</b>
+/// watches its own Service by name, so an edit to the selector restarts the pod watch with
+/// the new one, the pane stays current after the list has moved to another kind, and a
+/// deleted Service is stated as deleted rather than judged (#264).
 /// </para>
 /// </remarks>
 public sealed partial class ServiceDetailTabViewModel : InspectorTabViewModelBase
@@ -45,6 +47,14 @@ public sealed partial class ServiceDetailTabViewModel : InspectorTabViewModelBas
     /// <summary>Null on the demo cluster — see <see cref="InspectorTabViewModelBase.IsDemo"/>.</summary>
     private readonly ClusterClient? _client;
     private readonly ResourceRowViewModel _row;
+    private readonly Action<IReadOnlyList<ServicePortInfo>>? _openForward;
+
+    /// <summary>
+    /// The Service as last seen — from the list's row, and from this pane's own watch of the
+    /// object, which is what notices a delete (the list only drops the row) and keeps the
+    /// pane current after the list has moved on to another kind.
+    /// </summary>
+    private DynamicResource _service;
     private readonly Func<OwnerRef, string?, Task>? _openPod;
     private readonly OpenNamedLogs? _openLogs;
     private readonly CancellationTokenSource _cts = new();
@@ -63,20 +73,28 @@ public sealed partial class ServiceDetailTabViewModel : InspectorTabViewModelBas
         ResourceRowViewModel row,
         Func<OwnerRef, string?, Task>? openPod = null,
         string clusterName = "",
-        OpenNamedLogs? openLogs = null)
+        OpenNamedLogs? openLogs = null,
+        Action<IReadOnlyList<ServicePortInfo>>? openForward = null)
         : base(clusterName.Length == 0 ? $"Service/{row.Name}" : $"Service/{row.Name} · {clusterName}", isDemo: client is null)
     {
         ArgumentNullException.ThrowIfNull(row);
 
         _client = client;
         _row = row;
+        _service = row.Resource;
         _openPod = openPod;
         _openLogs = openLogs;
+        _openForward = openForward;
         ClusterName = clusterName;
         Key = KeyFor(clusterName, row.Namespace, row.Name);
 
         _row.PropertyChanged += OnRowChanged;
-        RefreshFromRow();
+        RefreshFrom(row.Resource);
+        if (client is not null)
+        {
+            _ = WatchServiceAsync(client, _cts.Token);
+        }
+
         _ = RefreshEventsAsync();
     }
 
@@ -115,15 +133,16 @@ public sealed partial class ServiceDetailTabViewModel : InspectorTabViewModelBas
     {
         if (e.PropertyName == nameof(ResourceRowViewModel.Resource))
         {
-            RefreshFromRow();
+            RefreshFrom(_row.Resource);
         }
     }
 
-    private void RefreshFromRow()
+    private void RefreshFrom(DynamicResource service)
     {
-        var service = _row.Resource;
+        _service = service;
         Shape = ServiceBackends.ShapeOf(service);
-        SummaryText = _row.Details;
+        SummaryText = ResourceStatusSummary.Summarize(service).Details;
+        OnPropertyChanged(nameof(SummaryTooltip));
 
         var rows = BuildOverviewRows(service);
         if (!rows.SequenceEqual(OverviewRows))
@@ -143,6 +162,7 @@ public sealed partial class ServiceDetailTabViewModel : InspectorTabViewModelBas
             OnPropertyChanged(nameof(HasNoPorts));
         }
 
+        PortForwardCommand.NotifyCanExecuteChanged();
         EnsureWatches();
         Rebuild();
     }
@@ -298,7 +318,7 @@ public sealed partial class ServiceDetailTabViewModel : InspectorTabViewModelBas
     /// </summary>
     private void EnsureWatches()
     {
-        var service = _row.Resource;
+        var service = _service;
         var shape = ServiceBackends.ShapeOf(service);
         var selector = shape == ServiceShape.Selector ? LabelSelector.ForPodsOf(service) : null;
         var query = selector?.ToQuery();
@@ -473,6 +493,21 @@ public sealed partial class ServiceDetailTabViewModel : InspectorTabViewModelBas
     /// </summary>
     private void Rebuild()
     {
+        if (IsDeleted)
+        {
+            // No verdict about a Service that does not exist (UI rule 18's other half: never
+            // state a fact the pane no longer has).
+            Backends.ReplaceAll([]);
+            OnPropertyChanged(nameof(HasBackends));
+            SelectedBackend = null;
+            ReadError = null;
+            IsLoading = false;
+            VerdictHeadline = DeletedHeadline;
+            VerdictDetail = DeletedDetail;
+            VerdictLevel = "warn";
+            return;
+        }
+
         var shape = Shape;
         var backends = shape == ServiceShape.ExternalName
             ? []
@@ -503,7 +538,7 @@ public sealed partial class ServiceDetailTabViewModel : InspectorTabViewModelBas
             return;
         }
 
-        var verdict = ServiceBackends.Verdict(_row.Resource, backends);
+        var verdict = ServiceBackends.Verdict(_service, backends);
         VerdictHeadline = verdict.Headline;
         VerdictDetail = verdict.Detail;
         VerdictLevel = verdict.Level switch
@@ -583,6 +618,160 @@ public sealed partial class ServiceDetailTabViewModel : InspectorTabViewModelBas
             new OwnerRef("v1", "Pod", name, backend.Uid, false), backend.Namespace ?? Namespace, maximized, _cts.Token);
     }
 
+    // ------------------------------------------------------- the service's own existence
+
+    /// <summary>
+    /// The Service was deleted while the pane was open (#264). The list drops a deleted
+    /// object's row and tells nobody, so the pane went on saying "2 pods match, none is
+    /// serving — the service has nowhere to send traffic" about a Service that no longer
+    /// existed: a verdict sent the reader to the pods. Now the pane watches its own object,
+    /// and a delete withdraws the verdict and the backends and says what happened.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SummaryTooltip))]
+    [NotifyCanExecuteChangedFor(nameof(PortForwardCommand))]
+    private bool _isDeleted;
+
+    /// <summary>What the pane says in place of a verdict once the Service is gone.</summary>
+    public const string DeletedHeadline = "This service was deleted";
+
+    public string DeletedDetail =>
+        $"{Namespace}/{ServiceName} was deleted while this pane was open. Nothing routes through it any more, so "
+        + "there is no verdict about its pods; the Overview shows it as it was last seen.";
+
+    /// <summary>The chrome row's tooltip: the summary, or that it is a deleted object's last state.</summary>
+    public string SummaryTooltip => IsDeleted ? $"Deleted — last seen as {SummaryText}" : SummaryText;
+
+    private bool _serviceSynced;
+    private bool _serviceSeen;
+
+    /// <summary>
+    /// The Service itself, field-selected by name: one object, so one small watch, and the
+    /// API server's own contract says a delete arrives as Deleted and a relist that no
+    /// longer finds it ends with nothing before its Synced.
+    /// </summary>
+    private async Task WatchServiceAsync(ClusterClient client, CancellationToken token)
+    {
+        try
+        {
+            await foreach (var batch in client.WatchResourceAsync(
+                               ResourceDescriptor.Services, Namespace,
+                               cancellationToken: token,
+                               fieldSelector: $"metadata.name={ServiceName}").InBatches(cancellationToken: token).ConfigureAwait(false))
+            {
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    if (!token.IsCancellationRequested)
+                    {
+                        foreach (var evt in batch)
+                        {
+                            ApplyServiceEvent(evt);
+                        }
+                    }
+                });
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
+        catch (Exception)
+        {
+            // Not being allowed to watch the one Service (a narrow role that can get but not
+            // watch) says nothing about whether it exists. The pane keeps following the
+            // list's row, as it did before it had a watch of its own.
+        }
+    }
+
+    /// <summary>One frame of the pane's watch of its own Service — the entry point the watch and the tests share.</summary>
+    internal void ApplyServiceEvent(ResourceEvent<DynamicResource> evt)
+    {
+        switch (evt.Type)
+        {
+            case ResourceEventType.Reset:
+                // A (re)list is starting: whether the Service exists is known at its Synced.
+                _serviceSynced = false;
+                _serviceSeen = false;
+                break;
+
+            case ResourceEventType.Synced:
+                _serviceSynced = true;
+                if (!_serviceSeen)
+                {
+                    MarkDeleted();
+                }
+
+                break;
+
+            case ResourceEventType.Added or ResourceEventType.Modified when evt.Resource is { } service
+                && string.Equals(service.Name, ServiceName, StringComparison.Ordinal):
+                _serviceSeen = true;
+                if (IsDeleted)
+                {
+                    // Created again under the same name: a new object, so every watch the
+                    // pane holds starts over against it.
+                    IsDeleted = false;
+                    _podsQuery = null;
+                    _podsSynced = false;
+                    _slicesStarted = false;
+                }
+
+                RefreshFrom(service);
+                break;
+
+            case ResourceEventType.Deleted when evt.Resource is { } gone
+                && string.Equals(gone.Name, ServiceName, StringComparison.Ordinal):
+                _serviceSeen = false;
+                if (_serviceSynced)
+                {
+                    MarkDeleted();
+                }
+
+                break;
+        }
+    }
+
+    /// <summary>Withdraws the verdict and the backends, stops reading pods and endpoints, and says the Service is gone.</summary>
+    private void MarkDeleted()
+    {
+        if (IsDeleted)
+        {
+            return;
+        }
+
+        IsDeleted = true;
+        _podsCts?.Cancel();
+        _podsCts?.Dispose();
+        _podsCts = null;
+        _slicesCts?.Cancel();
+        _slicesCts?.Dispose();
+        _slicesCts = null;
+        _pods.Clear();
+        _slices.Clear();
+        Rebuild();
+    }
+
+    // ----------------------------------------------------------------- port-forward
+
+    /// <summary>
+    /// Whether the service can be forwarded at all: it exists, it routes to pods (an
+    /// ExternalName is a DNS name), and it has a TCP port. A demo pane offers the button and
+    /// lands on the forward pane's own "not available here" state, as a demo pod does.
+    /// </summary>
+    private bool CanPortForward =>
+        _openForward is not null && !IsDeleted && Shape != ServiceShape.ExternalName
+        && Ports.Any(p => string.Equals(p.Protocol, "TCP", StringComparison.Ordinal));
+
+    public string PortForwardTooltip => Shape == ServiceShape.ExternalName
+        ? "An ExternalName service is a DNS name, with no pod to forward to"
+        : "Forward a local port to this service — to one ready pod behind it, which the forward names";
+
+    /// <summary>
+    /// Opens a forward pane for this Service (FEAT-29). It fires on the click: the pane is a
+    /// form, and nothing is forwarded until its Start.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanPortForward))]
+    private void PortForward() => _openForward?.Invoke([.. Ports]);
+
     // ----------------------------------------------------------------------- events
 
     public ObservableCollection<EventRowViewModel> Events { get; } = [];
@@ -624,7 +813,7 @@ public sealed partial class ServiceDetailTabViewModel : InspectorTabViewModelBas
         try
         {
             var events = _client is { } client
-                ? await client.GetEventsForAsync(_row.Resource, _cts.Token)
+                ? await client.GetEventsForAsync(_service, _cts.Token)
                 : [.. DemoData.Events
                     .Where(e => e.InvolvedObject() is { Kind: "Service" } involved
                         && string.Equals(involved.Name, ServiceName, StringComparison.Ordinal)

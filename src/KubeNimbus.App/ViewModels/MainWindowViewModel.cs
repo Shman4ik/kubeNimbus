@@ -21,6 +21,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<ClusterTabViewModel> Tabs { get; } = [];
 
+    /// <summary>
+    /// Every port-forward running in this window, whichever tab started it (FEAT-7). Handed
+    /// to every cluster tab as it enters the strip; its count is the status bar's.
+    /// </summary>
+    public PortForwardRegistry PortForwards { get; } = new();
+
     [ObservableProperty]
     private ClusterTabViewModel? _selectedTab;
 
@@ -430,6 +436,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 tab.AdvancedViewChanged = value => IsAdvancedView = value;
                 tab.IsSidebarVisible = IsSidebarVisible;
 
+                // A forward this tab starts is the window's, so it can outlive its pane.
+                tab.PortForwards = PortForwards;
+
                 // Value first, then the write-back, so stamping never round-trips
                 // through the shell — exactly as the advanced view above does it.
                 tab.SidebarWidth = SidebarWidth;
@@ -449,6 +458,13 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                     }
                 };
             }
+        };
+
+        // Reopening a forward brings its cluster tab to the front, in the mode its dock is in.
+        PortForwards.SelectTab = tab =>
+        {
+            SelectedTab = tab;
+            Mode = ShellMode.Resources;
         };
 
         Initialization = InitializeAsync();
@@ -1162,12 +1178,34 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>
+    /// The forwards list, in the selected tab's dock — the status bar's forward count and the
+    /// palette's "Port-forwards" entry both open it.
+    /// </summary>
+    [RelayCommand]
+    private void OpenPortForwards()
+    {
+        // Reading the notice is what it was for; with no tab left, the click dismisses it.
+        PortForwards.Notice = null;
+        if (SelectedTab is not { } tab)
+        {
+            return;
+        }
+
+        Mode = ShellMode.Resources;
+        tab.OpenPortForwardsCommand.Execute(null);
+    }
+
     [RelayCommand]
     private async Task CloseTabAsync(ClusterTabViewModel tab)
     {
         var index = Tabs.IndexOf(tab);
         Tabs.Remove(tab);
         RefreshFleetMembership();
+
+        // Before the client goes: a forward tunnels through it, and one left listening on a
+        // disposed client would accept connections and fail every one of them.
+        await PortForwards.StopForClusterAsync(tab);
         await tab.DisposeAsync();
         if (SelectedTab == tab)
         {
@@ -1334,6 +1372,17 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         yield return Catalog(CommandId.RescanKubeconfig, "Read $KUBECONFIG, ~/.kube/config and picked files and folders again",
             () => ReloadContextsCommand.Execute(null));
 
+        // Every running forward, wherever it was started — only while one runs, since a
+        // palette row that opens an empty list is a row that matched for nothing.
+        if (PortForwards.Count > 0)
+        {
+            yield return Catalog(
+                CommandId.PortForwards,
+                PortForwards.Count == 1
+                    ? "1 running — its cluster, target and local address; reopen or stop it"
+                    : $"{PortForwards.Count} running — each one's cluster, target and local address; reopen or stop them",
+                () => OpenPortForwardsCommand.Execute(null));
+        }
         foreach (var tab in Tabs)
         {
             yield return new PaletteItem(
@@ -1468,6 +1517,13 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                     "Node shell in my terminal", $"{row.Name} · kubectl debug node, host namespaces, / at /host",
                     "ConsoleIconGeometry",
                     () => _ = HandOffAsync(rowTab, () => TerminalHandoff.NodeShellCommand(node), TerminalHandoff.NodeShellLeftover));
+            }
+            else if (rowTab.IsServiceRowSelected)
+            {
+                // A Service forwards too (FEAT-29): to one ready pod behind it, which the
+                // pane names once it has picked it.
+                yield return Catalog(CommandId.PortForward, $"{where} · to a ready pod behind the service",
+                    () => rowTab.PortForwardSelectedServiceCommand.Execute(null));
             }
             else if (rowTab.SelectedEventPod is { } eventPod)
             {

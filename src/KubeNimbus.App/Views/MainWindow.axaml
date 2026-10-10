@@ -80,6 +80,9 @@
     <DataTemplate DataType="vm:PortForwardTabViewModel">
       <views:PortForwardView />
     </DataTemplate>
+    <DataTemplate DataType="vm:PortForwardsTabViewModel">
+      <views:PortForwardsView />
+    </DataTemplate>
   </Window.DataTemplates>
 
   <!-- RootLayout carries OffScreenMargin (see MainWindow.ApplyOffScreenMargin): a
@@ -355,13 +358,22 @@
       <!-- Only while there is something to say (ClusterTabViewModel.IsStatusWorthShowing):
            a healthy tab's "Connected — Kubernetes v…" is not worth a row. With no tab
            the shell's own status — the kubeconfig load result — always is. -->
-      <Border DockPanel.Dock="Bottom" Classes="statusBar"
-              IsVisible="{Binding SelectedTab.IsStatusWorthShowing, FallbackValue=True}">
-        <Grid ColumnDefinitions="*,Auto,Auto">
+      <Border DockPanel.Dock="Bottom" Classes="statusBar">
+        <!-- ...or while a port-forward is running (FEAT-7): a local port listening on a
+             cluster with no pane on screen is exactly what has to stay visible. -->
+        <Border.IsVisible>
+          <MultiBinding Converter="{x:Static BoolConverters.Or}">
+            <Binding Path="SelectedTab.IsStatusWorthShowing" FallbackValue="True" />
+            <Binding Path="PortForwards.HasSomethingToShow" />
+          </MultiBinding>
+        </Border.IsVisible>
+        <Grid ColumnDefinitions="*,Auto,Auto,Auto">
           <!-- With no tab open there is no SelectedTab.Status to show, and that is
                exactly when the shell's own status (kubeconfig load result) matters. -->
+          <!-- Gated on its own worth, not on the tab's existence: the bar may be open only for
+               the port-forward count, and then "Connected — Kubernetes v…" is still not news. -->
           <TextBlock Grid.Column="0" Classes="statusText statusMessage" Text="{Binding SelectedTab.Status}"
-                     IsVisible="{Binding SelectedTab, Converter={x:Static aconv:ObjectConverters.IsNotNull}}" />
+                     IsVisible="{Binding SelectedTab.IsStatusWorthShowing, FallbackValue=False}" />
           <TextBlock Grid.Column="0" Classes="statusText statusMessage" Text="{Binding Status}"
                      IsVisible="{Binding SelectedTab, Converter={x:Static aconv:ObjectConverters.IsNull}}" />
           <TextBlock Grid.Column="1" Classes="statusText warn statusMessage" Text="{Binding SelectedTab.ConnectionWarning}"
@@ -375,6 +387,19 @@
           <TextBlock Grid.Column="2" Classes="statusText warn statusMessage" Margin="12,0,0,0"
                      Text="{x:Static vm:ClusterTabViewModel.PlainHttpNotice}"
                      IsVisible="{Binding SelectedTab.IsPlainHttp, FallbackValue=False}" />
+          <!-- Running forwards, counted; a click lists them with Open and Stop. When none is
+               left it carries the last thing the registry did on its own (forwards stopped
+               because their cluster tab closed). -->
+          <Button Grid.Column="3" Name="PortForwardsStatusButton" Classes="toolbar" Padding="6,1" Margin="12,0,0,0"
+                  Command="{Binding OpenPortForwardsCommand}"
+                  IsVisible="{Binding PortForwards.HasSomethingToShow}"
+                  AutomationProperties.Name="Port-forwards"
+                  ToolTip.Tip="{Binding PortForwards.Summary}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <PathIcon Data="{StaticResource SwapHorizontalIconGeometry}" Width="12" Height="12" />
+              <TextBlock Classes="statusText" Text="{Binding PortForwards.StatusText}" />
+            </StackPanel>
+          </Button>
         </Grid>
       </Border>
 

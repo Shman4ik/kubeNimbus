@@ -49,6 +49,7 @@ public enum CommandId
     LogProblemStep,
     Exec,
     PortForward,
+    PortForwards,
     ExecInterrupt,
     ExecEndInput,
     ExecComplete,

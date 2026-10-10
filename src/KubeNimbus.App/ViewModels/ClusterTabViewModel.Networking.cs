@@ -26,7 +26,8 @@ public sealed partial class ClusterTabViewModel
             { Group: "", Kind: "Service" } => (
                 ServiceDetailTabViewModel.KeyFor(row.ClusterName, row.Namespace, row.Name),
                 new Lazy<InspectorTabViewModelBase>(() => new ServiceDetailTabViewModel(
-                    client, row, OpenObject, row.ClusterName, NamedLogsOpener(row.ClusterName, client)))),
+                    client, row, OpenObject, row.ClusterName, NamedLogsOpener(row.ClusterName, client),
+                    ports => PortForwardService(row.Namespace, row.Name, ports, row.ClusterName, client)))),
 
             { Group: "networking.k8s.io", Kind: "Ingress" } => (
                 IngressDetailTabViewModel.KeyFor(row.ClusterName, row.Namespace, row.Name),

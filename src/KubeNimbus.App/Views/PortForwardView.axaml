@@ -46,7 +46,7 @@
       <TextBlock Text="&#x2192;" FontSize="15" Opacity="0.4" VerticalAlignment="Bottom" Margin="0,0,0,6" />
 
       <StackPanel Spacing="4">
-        <TextBlock Name="PodPortLabel" Classes="fieldLabel" Text="Pod port" />
+        <TextBlock Name="PodPortLabel" Classes="fieldLabel" Text="{Binding RemotePortLabel}" />
         <StackPanel Orientation="Horizontal" Spacing="6">
           <!-- Read-only while running: the ports the forward was started with are what
                it is doing, and an editable box that changes nothing lies about that. -->
@@ -58,7 +58,7 @@
                pod that declares none: there is nothing to pick (UI rule 1). -->
           <ComboBox ItemsSource="{Binding AvailablePorts}" SelectedItem="{Binding SelectedPort}"
                     MinWidth="132" IsVisible="{Binding HasDeclaredPorts}" IsEnabled="{Binding CanEditPorts}"
-                    ToolTip.Tip="Ports this pod declares">
+                    ToolTip.Tip="{Binding PortsTooltip}">
             <ComboBox.ItemTemplate>
               <DataTemplate x:DataType="vm:ContainerPort">
                 <TextBlock Text="{Binding Display}" />
@@ -70,14 +70,19 @@
 
       <!-- One button, not a pair with one of them always dead: the forward is either
            running or it isn't, and the button is the thing that changes that. -->
+      <!-- Named by hand (#271): the Windows UIA provider reported the Stop button as
+           <unnamed> although its content reads "Stop", so both halves of the slot say
+           what they do in words a screen reader and qa-ui.ps1 can find. -->
       <Button Classes="accent" Command="{Binding StartCommand}" VerticalAlignment="Bottom"
+              AutomationProperties.Name="Start forwarding"
               IsVisible="{Binding !IsRunning}">
         <StackPanel Orientation="Horizontal" Spacing="6">
           <PathIcon Data="{StaticResource PlayIconGeometry}" Width="12" Height="12" />
           <TextBlock Text="Start" />
         </StackPanel>
       </Button>
-      <Button Command="{Binding StopCommand}" VerticalAlignment="Bottom" IsVisible="{Binding IsRunning}">
+      <Button Command="{Binding StopCommand}" VerticalAlignment="Bottom" IsVisible="{Binding IsRunning}"
+              AutomationProperties.Name="Stop forwarding">
         <StackPanel Orientation="Horizontal" Spacing="6">
           <PathIcon Data="{StaticResource StopIconGeometry}" Width="12" Height="12" />
           <TextBlock Text="Stop" />
@@ -93,7 +98,7 @@
          whose last connection the kubelet turned away. -->
     <Border Classes="infoBar" Classes.success="{Binding IsHealthy}" Classes.warn="{Binding HasConnectionError}"
             IsVisible="{Binding IsRunning}">
-      <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" RowDefinitions="Auto,Auto">
+      <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
         <Ellipse Grid.Row="0" Grid.Column="0" Classes="statusDot" VerticalAlignment="Center" Margin="0,0,8,0"
                  Fill="{Binding Health, Converter={x:Static conv:HealthToBrushConverter.Instance}}" />
         <TextBlock Grid.Row="0" Grid.Column="1" Text="Forwarding" FontSize="12" Opacity="0.7"
@@ -114,9 +119,30 @@
              connection refused"), which used to be dropped on the floor — leaving a
              forward that accepted connections and answered none of them, saying
              nothing. -->
-        <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="4" Text="{Binding ConnectionError}"
+        <TextBlock Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="4" Text="{Binding ConnectionError}"
                    Classes="statusText warn" TextWrapping="Wrap" Margin="0,6,0,0"
                    IsVisible="{Binding HasConnectionError}" />
+
+        <!-- A Service forward reaches one pod, and says which (FEAT-29): the API forwards
+             to a pod, never to a Service, so the pod is picked from the service's ready
+             endpoints and named here. -->
+        <StackPanel Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="4" Orientation="Horizontal" Spacing="8"
+                    Margin="0,4,0,0" IsVisible="{Binding HasResolvedPod}">
+          <TextBlock Text="to pod" FontSize="12" Opacity="0.7" VerticalAlignment="Center" />
+          <SelectableTextBlock Text="{Binding ResolvedPod}" Classes="mono" FontSize="12.5" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <!-- The pod it moved to, and why: a connection to the old one failed and it is no
+             longer a ready endpoint. Said, never done silently. -->
+        <TextBlock Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="4" Text="{Binding TargetNotice}"
+                   Classes="statusText" TextWrapping="Wrap" Margin="0,6,0,0"
+                   IsVisible="{Binding HasTargetNotice}" />
+
+        <!-- Said before the tab is closed, because keeping a local port open is the one
+             outcome nobody should discover afterwards (FEAT-7). -->
+        <TextBlock Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="4" Text="{Binding KeepsRunningHint}"
+                   Classes="statusText dim" TextWrapping="Wrap" Margin="0,6,0,0"
+                   IsVisible="{Binding HasKeepsRunningHint}" />
       </Grid>
     </Border>
 
