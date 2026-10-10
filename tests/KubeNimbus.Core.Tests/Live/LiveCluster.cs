@@ -13,8 +13,9 @@ namespace KubeNimbus.Core.Tests.Live;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Every mutation happens inside one namespace these tests create and delete
-/// themselves.</b> The sandbox is a shared cluster — other test runs, and people, use it
+/// <b>Every mutation happens inside one namespace this run creates and deletes
+/// itself</b> (<see cref="Namespace"/>, named after <see cref="RunId"/>), so two runs at
+/// once — two worktrees, two agents — never touch each other's objects. The sandbox is a shared cluster — other test runs, and people, use it
 /// at the same time — so nothing here may change an object it did not create. Reading
 /// the rest of the cluster (the demo namespaces, the CRD catalog, the node) is fine and
 /// several tests do. The one exception is named where it happens: cordoning the
@@ -22,9 +23,12 @@ namespace KubeNimbus.Core.Tests.Live;
 /// <c>NodeOperationsLiveTests</c>).
 /// </para>
 /// <para>
-/// <b>Object names carry a per-run suffix</b>, because a namespace left behind by a run
-/// that was killed is reused rather than waited on, and a fixed name would then collide
-/// with its own leftover.
+/// <b>A namespace a killed run left behind is swept by a later run</b>: every run's
+/// namespace carries <see cref="RunLabel"/>, and <see cref="EnsureNamespaceAsync"/>
+/// deletes any namespace with that label older than <see cref="AbandonedAfter"/>. The
+/// age is the guard: no run lasts anywhere near that long, so a namespace a live run is
+/// still using is never swept. Object names still carry the run id as well, which costs
+/// nothing and keeps them unique in cluster-scoped places (a temp kubeconfig, a CRD).
 /// </para>
 /// <para>
 /// <b>They skip, never pass, with no cluster</b> — through
@@ -33,8 +37,6 @@ namespace KubeNimbus.Core.Tests.Live;
 /// </remarks>
 internal static class LiveCluster
 {
-    /// <summary>The one namespace these tests may mutate.</summary>
-    public const string Namespace = "bundle-f";
 
     /// <summary>The field manager every apply in these tests uses, so their ownership is recognizable.</summary>
     public const string FieldManager = "kubenimbus-live-tests";
@@ -48,6 +50,23 @@ internal static class LiveCluster
 
     /// <summary>Distinguishes this run's objects from any a killed run left behind.</summary>
     public static readonly string RunId = Guid.NewGuid().ToString("N")[..6];
+
+    /// <summary>
+    /// The one namespace this run may mutate: <c>kn-live-&lt;run id&gt;</c>. It used to be a
+    /// single constant shared by every run, and a run's after-assembly cleanup then deleted
+    /// the namespace another run was still testing in (#261).
+    /// </summary>
+    public static readonly string Namespace = $"kn-live-{RunId}";
+
+    /// <summary>
+    /// The label every run's namespace carries, valued with its run id. A key of its own
+    /// rather than the older <c>app.kubernetes.io/part-of</c> label, so the sweep can never
+    /// reach a namespace made by a run of the old code, which reused one name for ever.
+    /// </summary>
+    public const string RunLabel = "kubenimbus.io/live-test-run";
+
+    /// <summary>How old a labelled namespace must be before another run treats it as abandoned.</summary>
+    public static readonly TimeSpan AbandonedAfter = TimeSpan.FromHours(2);
 
     private static readonly SemaphoreSlim NamespaceGate = new(1, 1);
     private static bool _namespaceReady;
@@ -114,6 +133,7 @@ internal static class LiveCluster
                           name: {{Namespace}}
                           labels:
                             app.kubernetes.io/part-of: kubenimbus-live-tests
+                            {{RunLabel}}: "{{RunId}}"
                         """,
                         FieldManager, cancellationToken: ct);
                     break;
@@ -132,6 +152,8 @@ internal static class LiveCluster
                 await Task.Delay(1000, ct);
             }
 
+            await SweepAbandonedNamespacesAsync(client, ct);
+
             // A pod cannot be created until the namespace's default ServiceAccount exists.
             await WaitUntilAsync(
                 async () => await client.ReadResourceAsync(ServiceAccounts, Namespace, "default", ct) is not null,
@@ -146,8 +168,32 @@ internal static class LiveCluster
     }
 
     /// <summary>
-    /// Deletes the namespace after the last test, when this run created or reused it.
-    /// Not awaited to completion: the next run waits out a Terminating namespace itself.
+    /// Deletes every namespace carrying <see cref="RunLabel"/> that is older than
+    /// <see cref="AbandonedAfter"/> and is not this run's: what a killed run (no
+    /// after-assembly hook) left behind. Best effort — another run sweeping the same one
+    /// at the same moment is fine, since a delete of what is already going is a success.
+    /// </summary>
+    private static async Task SweepAbandonedNamespacesAsync(ClusterClient client, CancellationToken ct)
+    {
+        var labelled = await client.ListResourceOnceAsync(
+            ResourceDescriptor.Namespaces, null, cancellationToken: ct,
+            labelSelector: new LabelSelector([new LabelRequirement(RunLabel, LabelOperator.Exists, [])]));
+        foreach (var ns in labelled)
+        {
+            if (IsAbandoned(ns.Name, ns.CreationTimestamp, DateTimeOffset.UtcNow))
+            {
+                await client.DeleteResourceAsync(ResourceDescriptor.Namespaces, null, ns.Name, ct);
+            }
+        }
+    }
+
+    /// <summary>The sweep's rule, separate so it can be tested without a cluster.</summary>
+    internal static bool IsAbandoned(string name, DateTimeOffset? created, DateTimeOffset now) =>
+        name != Namespace && created is { } at && now - at > AbandonedAfter;
+
+    /// <summary>
+    /// Deletes this run's namespace after the last test, and only it. Not awaited to
+    /// completion: a Terminating namespace is gone in seconds and nothing reuses its name.
     /// </summary>
     public static async Task DeleteNamespaceAsync()
     {

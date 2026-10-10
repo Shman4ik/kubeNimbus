@@ -40,10 +40,22 @@ not that the request was accepted — a restart patch with the wrong key is a 20
 nothing, and only watching the pods roll catches it. Four rules, because the sandbox is
 shared with other sessions running at the same time:
 
-- **Every mutation happens in the one namespace they create and delete themselves**
-  (`LiveCluster.Namespace`, removed by an `[After(Assembly)]` hook), with per-run object
-  names so a namespace a killed run left behind is reused rather than collided with.
+- **Every mutation happens in a namespace of the run's own** (`LiveCluster.Namespace`,
+  `kn-live-<run id>`, removed by an `[After(Assembly)]` hook), so two runs at once — two
+  worktrees, two agents — never touch each other's objects. It used to be one constant
+  shared by every run, and one run's cleanup deleted the namespace another was testing in
+  (#261). A run killed before its hook leaves its namespace behind; every run's namespace
+  carries the label `kubenimbus.io/live-test-run`, and each run deletes any namespace with
+  that label older than two hours (`LiveCluster.IsAbandoned`, pinned by
+  `LiveNamespaceSweepTests`). The age is the guard that keeps one run's sweep away from a
+  run still going, and the label key is new so the sweep can never reach a namespace made
+  by the old code. A test that needs a namespace-wide object (a `LimitRange`) makes a
+  second namespace with the same label and deletes it itself. Cluster-scoped objects (a
+  throwaway CRD) carry the run id in their name and group and are deleted in a `finally`.
   Reading the rest of the cluster — the demo namespaces, every CRD, the node — is fine.
+- **Third-party CRDs come from cert-manager**, installed by hand once from its pinned
+  release manifest (`scripts/README.md`), never by a test. The tests that need it
+  (`CertManager.RequireAsync`) skip with the reason when it is absent.
 - **The reference for "matches kubectl" is the API server's own `Table`** (`Accept:
   application/json;as=Table;v=v1;g=meta.k8s.io`, `LiveCluster.GetTableAsync`). It is what
   kubectl asks for and prints, so parity is checked with no kubectl binary on the machine.
@@ -62,7 +74,9 @@ beside it: a strict-validation refusal arrives as HTTP **500**, not 400/422
 object or array as JSON, and `\.` is how kubectl's JSONPath reaches a dotted key
 ([crd-printer-columns](crd-printer-columns.md)); and a follow opened
 between a container's creation and its start ends at once with no lines
-([multi-pod-logs](multi-pod-logs.md)).
+([multi-pod-logs](multi-pod-logs.md)). `ConnectFanOutLiveTests` found that an exec credential
+plugin runs **twice** per connect, not once ([connecting](connecting.md)); that one is recorded
+and not yet fixed.
 
 **Use the script** (`scripts/sandbox-up.ps1`, or `scripts/sandbox-up.sh` on
 Linux/macOS — Docker required). It starts single-node k3s in Docker, writes

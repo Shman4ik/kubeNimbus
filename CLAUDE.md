@@ -446,8 +446,9 @@ port-forward opens one websocket per local connection.
 
 Integration tests run against a real local cluster (`./.sandbox/kubeconfig.yaml` or
 `$KUBENIMBUS_TEST_KUBECONFIG`), gated on a reachability probe, and **a skipped test is
-reported as skipped**. The live tests share the sandbox with other sessions: they mutate only
-their own namespace and never drain the node. Start it with `./scripts/sandbox-up.ps1`
+reported as skipped**. The live tests share the sandbox with other sessions: each run mutates only
+a namespace of its own (`kn-live-<run id>`, labelled so a later run sweeps it if the run was
+killed) and never drains the node. Start it with `./scripts/sandbox-up.ps1`
 (`scripts/README.md`). Full text: [sandbox-cluster](docs/engineering/sandbox-cluster.md).
 
 ## Verification workflow

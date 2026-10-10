@@ -64,3 +64,11 @@ The three usage scenarios render **maximized** now. The per-container section si
 two full-width pod-total charts, so at the dock's default ~300px it was off screen — which
 is a small demonstration of the item's own complaint: numbers that exist and cannot be
 seen.
+
+**Against a real API server** (`Live/ContainerUsageLiveTests`, VER-55): a container declaring
+nothing, in a namespace with a `LimitRange`, is stored with the defaulted request and limit in its
+own `resources` (the `kubernetes.io/limit-ranger` annotation is the only trace), so the tab reads
+them with no special case; and a container holding 40 MiB in a memory-backed volume under a
+64 MiB limit reads, through `Quantity.ParseBytes` and `Quantity.Percent` over a real
+`metrics.k8s.io` sample, as about 64% of its limit. The card at the dock's default height is still
+a desktop check.

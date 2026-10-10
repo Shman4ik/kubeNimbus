@@ -194,3 +194,10 @@ opened. `ApplicationSupportTests` pins each case.
 ## Sorting
 
 The list sorts by a header click (2026-10): ascending, descending, then its default order, kept across reloads for the tab's life. How each column compares, and why a header double-click opens nothing, is in [resource-grid-resize-sort](resource-grid-resize-sort.md), "The inspector grids sort too".
+
+**The patches against a real API server** (`Live/OneClickActionsLiveTests`, VER-61): on a
+stand-in Application (the sandbox has Argo's CRDs and no controller, so nothing consumes what is
+written), Refresh writes `argocd.argoproj.io/refresh: normal` or `hard` and leaves the spec as it
+was; Sync writes `operation.sync.prune: false`, "Sync with prune…" `true`, both with the
+initiator the API server names; and a user allowed only to read gets the server's own 403
+sentence for both, with nothing written. What a running controller then does is not observed.

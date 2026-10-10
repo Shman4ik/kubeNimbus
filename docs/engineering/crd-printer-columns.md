@@ -129,3 +129,10 @@ factory Widget deliberately declaring **none**, which is the degradation path).
 and a right-to-left override in it reordered the cell — see
 [log-pane-reading](log-pane-reading.md), "Terminal colour codes are removed, not drawn", for
 the set and why the joiners are left alone.
+
+**A real third-party install** (VER-23): with cert-manager v1.21.2 on the sandbox,
+`PrinterColumnsLiveTests.Cert_managers_certificate_list_matches_kubectl_get_including_its_ready_condition`
+issues a self-signed Certificate and compares its list with the server's Table cell for cell:
+`.status.conditions[?(@.type == "Ready")].status` (spaces around `==`) reads `True` both ways,
+and the `priority: 1` Issuer and Status columns match. `Every_installed_crd_with_objects_matches_kubectl_get`
+then covers Certificates, CertificateRequests and Issuers as well.
