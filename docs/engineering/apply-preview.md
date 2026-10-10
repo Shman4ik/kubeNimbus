@@ -139,6 +139,16 @@ Thirteen things are load-bearing.
    with "the object has been modified" whatever `force` says. The live test waits for the object to settle
    for this reason. Reload, then apply again, is the way through.
 
+**The toolbar button says Review…, not Apply, while the preview is on (FEAT-69, the owner's
+wording, 2026-10-10).** It used to read `Apply`, 100px above the panel's own `Apply changes`,
+and the two did different things: the first asks the server, the second changes the object.
+So the toolbar's verb is `Review…` (the ellipsis is UI rule 17's "it asks"), and the panel
+keeps `Apply changes` / `Force apply`. With "Preview before applying" off the button applies
+directly and reads `Apply`. `YamlEditorTabViewModel.ApplyButtonLabel` follows the preference:
+read when the editor opens, refreshed by each press (which reads the setting anyway) and by
+the preferences page through `NotifyPreviewPreferenceChanged`, which each editor unsubscribes
+from when it closes. `YamlEditorApplyLabelTests` pins both labels and the live relabel.
+
 **Ctrl/Cmd+S is the Apply button.** `CommandId.ApplyYaml` was in the catalog, and so on the F1 sheet and the docs page, with no handler anywhere: the 0.5.1 pass pressed it and nothing happened. `YamlEditorView` handles it in the tunnel phase (the editor would otherwise get the key first) through `CommandBindings.Matches`, so it follows the Ctrl/Cmd preference, and it runs `ApplyCommand`, which keeps every rule above (the preview when the preference is on, disabled in the demo cluster). `ux-yaml-apply-key` in the screenshot harness presses it against a real window and was confirmed red with the handler removed.
 
 **The demo cluster is unchanged and needs no new refusal:** there is no `ClusterClient`,

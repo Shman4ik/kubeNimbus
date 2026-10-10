@@ -35,7 +35,7 @@ way in Preferences → General → Shortcut modifier.
 | Search the list from the rows | / | / |
 | Show only what is unhealthy (warnings and errors), with the rows focused; in a text box Ctrl+Z is Undo | Ctrl+Z | Ctrl+Z |
 | Refresh the list | Ctrl+R | Cmd+R |
-| Apply the edited YAML | Ctrl+S | Cmd+S |
+| Review, then apply, the edited YAML | Ctrl+S | Cmd+S |
 
 ## Pods
 

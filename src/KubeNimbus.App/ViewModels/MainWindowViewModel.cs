@@ -1263,6 +1263,26 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             run);
     }
 
+    /// <summary>
+    /// A palette hand-off to the machine's terminal (FEAT-17, FEAT-27), reported in the tab's
+    /// own terminal notice — the InfoBar "Open a terminal on this cluster" already uses, so
+    /// the palette adds no surface of its own.
+    /// </summary>
+    private static async Task HandOffAsync(ClusterTabViewModel tab, Func<TerminalCommand> build, string? openedSuffix = null)
+    {
+        tab.TerminalNotice = "Opening your terminal…";
+        tab.TerminalNoticeIsWarning = false;
+        tab.TerminalNoticeIsError = false;
+
+        var result = await TerminalHandoff.OpenAsync(tab.Context, build);
+        var (message, warning, error) = TerminalHandoff.Describe(result);
+        tab.TerminalNotice = result.Outcome == TerminalLaunchOutcome.Opened && openedSuffix is not null
+            ? message + openedSuffix
+            : message;
+        tab.TerminalNoticeIsWarning = warning;
+        tab.TerminalNoticeIsError = error;
+    }
+
     private IEnumerable<PaletteItem> BuildPaletteItems()
     {
         // The switcher, not the palette, is where a large context list is navigated:
@@ -1421,6 +1441,33 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
                 yield return Catalog(CommandId.PortForward, where,
                     () => rowTab.PortForwardSelectedCommand.Execute(null));
+
+                // FEAT-17: the same exec, in the machine's own terminal. Not in a fleet list,
+                // whose rows belong to other tabs' clusters and this tab's context would pin
+                // the wrong one; the exec pane offers it there.
+                if (!rowTab.IsFleetView)
+                {
+                    var pod = row;
+                    yield return new PaletteItem(
+                        "Exec in my terminal", $"{where} · kubectl exec -it, this cluster pinned", "OpenInNewIconGeometry",
+                        () => _ = HandOffAsync(rowTab, () => TerminalHandoff.ExecCommand(
+                            pod.Namespace, pod.Name, PodDetails.DefaultContainer(pod.Resource.Raw) ?? "",
+                            ExecShells.FromPod(pod.Resource.Raw), shell: null)));
+                }
+            }
+
+            // FEAT-27: the node shell, kubectl debug node/ in the machine's own terminal (the
+            // owner's call: no privileged pod made by this app). Fires on the click like
+            // node detail's button; not on a Windows node, and not in a fleet list.
+            if (!rowTab.IsFleetView
+                && rowTab.SelectedKind?.Descriptor is { } rowDescriptor && NodeActions.IsNodeKind(rowDescriptor)
+                && ExecShells.FromNode(row.Resource.Raw) != PodOperatingSystem.Windows)
+            {
+                var node = row.Name;
+                yield return new PaletteItem(
+                    "Node shell in my terminal", $"{row.Name} · kubectl debug node, host namespaces, / at /host",
+                    "ConsoleIconGeometry",
+                    () => _ = HandOffAsync(rowTab, () => TerminalHandoff.NodeShellCommand(node), TerminalHandoff.NodeShellLeftover));
             }
             else if (rowTab.SelectedEventPod is { } eventPod)
             {

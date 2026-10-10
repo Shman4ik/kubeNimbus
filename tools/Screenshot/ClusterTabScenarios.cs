@@ -2522,4 +2522,47 @@ internal static class ClusterTabScenarios
         tab.Status = "Not connected.";
         return tab;
     }
+
+    /// <summary>
+    /// FEAT-17: the exec pane after "Open this session in your terminal" opened one — the
+    /// notice laid over the top of the terminal, in the app's own words
+    /// (<see cref="TerminalHandoff.Describe"/>). Set from a result rather than launched: the
+    /// harness must never start a terminal.
+    /// </summary>
+    public static ClusterTabViewModel ExecHandoff()
+    {
+        var tab = Exec();
+        var exec = (ExecTabViewModel)tab.SelectedInspectorTab!;
+        var command = exec.BuildHandoffCommand();
+        var (message, warning, error) = TerminalHandoff.Describe(new TerminalLaunchResult(
+            TerminalLaunchOutcome.Opened, "PowerShell 7", @"C:\Program Files\kubectl\kubectl.exe",
+            @"C:\Users\dev\AppData\Roaming\kubeNimbus\terminal\context-4f21ab90c7d3.kubeconfig;C:\Users\dev\.kube\config",
+            tab.Context.Name, ["PowerShell 7"], null)
+        {
+            Command = command.Summary,
+        });
+        exec.HandoffNotice = message;
+        exec.HandoffNoticeIsWarning = warning;
+        exec.HandoffNoticeIsError = error;
+        return tab;
+    }
+
+    /// <summary>
+    /// FEAT-27: node detail's node shell when no kubectl could be found — the hand-off is a
+    /// kubectl command, so nothing opens and the InfoBar under the chrome row says why.
+    /// </summary>
+    public static ClusterTabViewModel NodeShellNoKubectl()
+    {
+        var tab = OpenNode("demo-worker-1", tabIndex: NodeDetailTabViewModel.OverviewTabIndex);
+        var detail = (NodeDetailTabViewModel)tab.SelectedInspectorTab!;
+        var (message, warning, error) = TerminalHandoff.Describe(new TerminalLaunchResult(
+            TerminalLaunchOutcome.NoKubectl, null, null, "", tab.Context.Name, [], null)
+        {
+            Command = TerminalHandoff.NodeShellCommand(detail.NodeName).Summary,
+        });
+        detail.NodeShellNotice = message;
+        detail.NodeShellNoticeIsWarning = warning;
+        detail.NodeShellNoticeIsError = error;
+        return tab;
+    }
 }

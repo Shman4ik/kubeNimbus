@@ -114,6 +114,22 @@
                             </ComboBox>
                         </Grid>
                     </Border>
+
+                    <!-- FEAT-19: for an emulator the built-in list does not know. Empty is
+                         automatic, which the placeholder says rather than a blank box. -->
+                    <TextBlock Classes="sectionHeader" Text="TERMINAL" Margin="4,10,4,4" />
+                    <Border Classes="card" Padding="14,12">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="2" Margin="0,0,16,0">
+                                <TextBlock Name="PreferredTerminalLabel" Classes="label" Text="Terminal" />
+                                <TextBlock Classes="hint" Text="{x:Static vm:PreferencesViewModel.PreferredTerminalHint}" />
+                            </StackPanel>
+                            <TextBox Grid.Column="1" Width="200" VerticalAlignment="Center" Classes="mono" FontSize="12"
+                                     PlaceholderText="Automatic"
+                                     AutomationProperties.LabeledBy="{Binding #PreferredTerminalLabel}"
+                                     Text="{Binding PreferredTerminal}" />
+                        </Grid>
+                    </Border>
                 </StackPanel>
             </ScrollViewer>
         </TabItem>

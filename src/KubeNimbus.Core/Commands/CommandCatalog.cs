@@ -583,7 +583,9 @@ public static class CommandCatalog
         new()
         {
             Id = CommandId.ApplyYaml,
-            Title = "Apply the edited YAML",
+            // The editor's button reads "Review…" while "Preview before applying" is on (the
+            // default) and "Apply" when it is off (FEAT-69); the key is that button either way.
+            Title = "Review, then apply, the edited YAML",
             Category = CommandCategory.Resources,
             Scope = CommandScope.Editor,
             IconKey = "ContentSaveIconGeometry",

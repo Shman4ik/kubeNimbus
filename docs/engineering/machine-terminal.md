@@ -49,12 +49,19 @@ Seven things are load-bearing:
    command line) and inside conhost where it is not — i.e. the item's stated fallback,
    reached by a different route. **macOS** writes a `.command` launcher script that
    exports `KUBECONFIG` and `exec "$SHELL" -l`, and opens *that* with
-   `open -a Terminal`. **Linux** is the only one where the obvious thing is also the
-   correct thing: `$TERMINAL`, then `xdg-terminal-exec`, then `x-terminal-emulator`,
-   then the emulators, each started with **no arguments** (which every one of them reads
-   as "open my default shell", and which is the only form needing no per-emulator flag
-   table) and inheriting the environment normally.
-5. **A missing `kubectl` warns; it never blocks.** Three reasons, and the third is the
+   `open -a <app>`: iTerm2, then Ghostty (`open -na Ghostty --args -e <script>`, because it
+   runs a script given to `-e`, not one it is asked to open), then Terminal (FEAT-19). An
+   application whose `.app` is in none of `/Applications`, `/Applications/Utilities`,
+   `/System/Applications(/Utilities)` and `~/Applications` is not tried, so a machine
+   without iTerm2 never reports a failed `open` as an opened terminal. **Linux** is the only
+   one where the obvious thing is also the correct thing: `$TERMINAL`, then
+   `xdg-terminal-exec`, then `x-terminal-emulator`, then the emulators, each started with
+   **no arguments** (which every one of them reads as "open my default shell", and which is
+   the only form needing no per-emulator flag table) and inheriting the environment
+   normally. A command is a different shape on all three; see "Handing a command to the
+   terminal" below.
+5. **A missing `kubectl` warns for a plain terminal; it blocks a hand-off.** For a plain
+   terminal there are three reasons to open it anyway, and the third is the
    strongest: the terminal is useful without it (`KUBECONFIG` is what helm, k9s, stern
    and kubectx read too); kubectl may be installed a minute later; and **our PATH is not
    the terminal's PATH** — a GUI launched from Explorer, the Dock or the Store inherits
@@ -62,7 +69,10 @@ Seven things are load-bearing:
    miss is weak evidence about the shell that is about to open. The probe therefore also
    looks in the login-shell directories (`/usr/local/bin`, `/opt/homebrew/bin`, …), and
    the message says the PATH may be shorter here than in your shell rather than
-   asserting kubectl is absent.
+   asserting kubectl is absent. A hand-off is the opposite case: the terminal is handed
+   *kubectl itself*, by the absolute path the probe found (rule 7), so with none found
+   nothing is written or started and the outcome (`TerminalLaunchOutcome.NoKubectl`) says
+   what would have run and where kubectl was looked for.
 6. **Every outcome lands in one dismissible `infoBar` above the list**
    (`ClusterTabViewModel.TerminalNotice`, UI rules 9 and 11), and it exists because this
    command's own feedback — a window — **opens in front of the app**. Success, opened-
@@ -123,7 +133,76 @@ terminal emulator in this container — see the pass note in Current status):
 - macOS's `exec "$SHELL" -l` re-runs the login profile, so a profile that exports
   `KUBECONFIG` itself wins over the launcher script. Unavoidable without giving up the
   login shell; stated here so it is not re-diagnosed from scratch.
-- **`FEAT-17` ("open this exec session in my terminal") is the seam left, not built.**
-  It wants `kubectl exec -it` as the command the terminal runs, which is a *fourth*
-  per-platform argument shape on top of the three above — do not bolt it onto the
-  no-arguments Linux path without re-reading rule 4 above.
+- The macOS probe (iTerm2, Ghostty, the preference as an app name) and every Linux
+  emulator's command flag are each emulator's documented form, unit-tested as plans and not
+  run here: there was no macOS box and no Linux desktop. Ghostty's `--args -e` in particular
+  depends on the Ghostty release.
+
+## Handing a command to the terminal (FEAT-17, FEAT-27)
+
+The exec pane's "Open this session in your terminal", node detail's node shell and their
+two palette rows ("Exec in my terminal" on a pod, "Node shell in my terminal" on a node)
+hand a `kubectl` command to the machine's terminal, with the context pinned exactly as for a
+plain terminal (rules 1–3). `TerminalCommand` (Core) is the command; `TerminalHandoff` (App)
+builds it per entry point and words the outcome; `TerminalLauncher.OpenAsync(context, command)`
+plans and starts it. The resource list's row menu does not have them yet (its files were
+another change's that round).
+
+1. **A command is a fourth argument shape on each platform, never the plain shape with
+   something bolted on** (the seam rule 4 warned about):
+   - **Windows:** PowerShell 7, then Windows PowerShell, each given
+     `-NoLogo -NoExit -EncodedCommand <base64 UTF-16LE>` whose script is
+     `& 'C:\…\kubectl.exe' 'exec' '-it' …` — every argument a single-quoted literal (quotes
+     doubled, the three typographic single quotes PowerShell also reads as one included).
+     The encoding leaves the real command line nothing but base64 for .NET's quoting and
+     PowerShell's parsing to agree on. `-NoExit` keeps the window open on whatever kubectl
+     printed, a refusal included, and leaves a prompt on the cluster. cmd.exe is not offered
+     for a command: its `/k` quoting rules do not round-trip an argument list. Verified on
+     Windows 11 against the sandbox with both PowerShells (a word with two spaces, single
+     quotes and `;` arrived in the container intact).
+   - **macOS:** the command goes into its own script, `run-<hash of context and
+     command>.command`, which exports `KUBECONFIG`, runs every word single-quoted, then
+     `exec "$SHELL" -l`, and **removes itself as it starts** (`rm -f "$0"`): it is read once,
+     so one is not left per command, while the overlay it names is kept like every overlay
+     (ENG-15). Opened by the same `open` candidates as a plain terminal.
+   - **Linux:** the per-emulator flag the plain shape avoided, from a deliberately narrow
+     table (`TerminalLauncher.LinuxCommandPrefix`: `--` for gnome-terminal and ptyxis, `-e`
+     for x-terminal-emulator, konsole, alacritty and xterm, `-x` for xfce4-terminal,
+     terminator and mate-terminal, `start --` for wezterm, nothing for
+     xdg-terminal-exec, kitty and foot), followed by
+     `/bin/sh -c '"$0" "$@"; exec "${SHELL:-/bin/sh}"' <kubectl> <args…>`. The command comes
+     from the shell's positional arguments, so no word of it is ever parsed by a shell, and
+     the window holds a shell afterwards. tilix and lxterminal, whose `-e` takes one string,
+     are refused for a command rather than given a string built here; an emulator the table
+     does not know (the preference, `$TERMINAL`) is given xterm's `-e`.
+2. **Every name is checked before it reaches any of those** (`TerminalCommand`), although the
+   API server validated each one: namespace and container as RFC 1123 labels, pod and node
+   as subdomains, the image in image-reference characters, a command word as printable ASCII
+   without `"`. A value that fails is refused with the reason, and nothing is started.
+   The check is what does not depend on a quoting rule being right; the quoting is there as
+   well.
+3. **What runs.** An exec runs the shell typed into the pane's box, else the one the session
+   found, else `cmd` on a Windows node and `/bin/sh -c 'if [ -x /bin/bash ]; then exec
+   /bin/bash; else exec /bin/sh; fi'` otherwise — one command, because a terminal can be
+   handed only one where the pane probes three. It execs into the container the pane is in,
+   a debug container included. A node shell is `kubectl debug node/<name> -it
+   --image=<DebugContainers.DefaultImage>`, the pane's pinned BusyBox; see
+   [node-operations](node-operations.md) for why it is a hand-off at all.
+4. **Every outcome is stated where the gesture was made**: an InfoBar laid over the top of
+   the exec pane's terminal (like the paste prompt, so the remote PTY is not resized), an
+   InfoBar under node detail's chrome row, and the tab's own terminal notice for the palette
+   rows. A fleet list does not offer the palette rows, because its rows belong to other tabs'
+   clusters and this tab's context would pin the wrong one.
+
+## The "Terminal" preference (FEAT-19)
+
+`AppSettings.PreferredTerminal` (Preferences → General → Terminal; empty is automatic) is
+tried before `$TERMINAL` and the probe list, and read from `settings.json` at each launch.
+It exists because the probe cannot know every emulator, and on Linux nothing in the app
+could set `$TERMINAL` for a GUI started from a launcher. It is one program, by name (searched
+on PATH, rule 7) or full path, with no arguments; on macOS it is an application name or a
+path to a `.app` (`iTerm2` is read as iTerm2's real bundle name, `iTerm`). On Windows it is a
+shell; for a hand-off only a PowerShell is handed the command, and **Windows Terminal is
+refused** with the reason (rule 4: its tab would be spawned by another process and not carry
+`KUBECONFIG`; making it the default terminal application is the way to get it).
+`Normalized` trims it and drops a value with a control character or past 1,024 characters.

@@ -58,7 +58,9 @@ Seven things are load-bearing:
    than `RightClickAction.CopyOrPaste`, whose paste-on-empty-selection is one stray
    click away from running the clipboard in someone's production container.
 5. **The pane is one row of chrome now** (UI rule 10): status dot, status, shell box,
-   reconnect — and the terminal. The input `TextBox`, its `^C`/`^D` chips and the
+   reconnect, "open this session in your terminal" (FEAT-17, see
+   [machine-terminal](machine-terminal.md), "Handing a command to the terminal") — and the
+   terminal. The input `TextBox`, its `^C`/`^D` chips and the
    Advanced-view-gated **Send** button are all gone, because a terminal that takes
    keystrokes makes a box you retype them into a row of dock height spent on nothing.
    That removes the exec pane from the Advanced view's list entirely; the F1 sheet is
@@ -229,6 +231,15 @@ case — and `cluster-tab-exec-fullscreen` shows it: the fixture emits the `ESC[
 itself the day this is fixed. There is no app-side hook (`ResolveColorBrush` is private
 and the render surface is a private nested class), so the fix is upstream or in a
 vendored copy.
+
+**The defect is accepted, deliberately (the owner's call on ENG-19, 2026-10-10): no
+upstream report and no vendored fork.** The reason is the one above, that nothing on this
+side can reach it; a fork would stop receiving the package's fixes the day it was made (see
+below), and a pane that renders every other colour, the alternate screen and the cursor
+correctly is worth more than a copy maintained for one attribute. The exec pane's
+"Open this session in your terminal" (FEAT-17) is the way to a terminal that draws reverse
+video, for the moments it matters. Revisit if the package releases a fix, or if it goes
+unmaintained for other reasons.
 
 **If it goes unmaintained** — v1.1.0, one maintainer, ~35 stars — the fallback is
 vendoring, and it is a real one rather than a comforting sentence: MIT, ~2 850 lines

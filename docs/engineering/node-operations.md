@@ -14,7 +14,7 @@ behind it and no way to act on what it said.
 
 Double-clicking a node opens the detail pane rather than its manifest (UI rule 2), and
 the three actions land on FEAT-1's shared action strip (UI rule 17) from the row context
-menu and the command palette. Nothing new is always visible. Cordon and uncordon fire on
+menu and the command palette. Nothing new for them is always visible (the node shell's icon, below, is a hand-off, not one of them). Cordon and uncordon fire on
 their click, since each takes the other back and neither touches a running pod; the strip
 is only their result line. The drain asks, with its plan (2026-10-07; both used to ask).
 
@@ -333,8 +333,34 @@ sentence tested its namespace for `null` where `ResourceRowViewModel.Namespace` 
 non-nullable string, so every cluster-scoped object read "`Node/demo-worker-1 in `". That
 second one is pre-existing and applied to deleting a PersistentVolume or a Namespace too.
 
-**Not shipped, deliberately:** node shell (that is `kubectl debug node/`, a different
-feature), `--disable-eviction`, a `--grace-period` control (the option exists in
+### Node shell: handed to your terminal, never made by the app (FEAT-27)
+
+The owner's decision (2026-10-10): **no privileged pod made by this app.** krew's
+node-shell, k9s (behind a per-cluster gate, default off), Aptakube and Lens all create a pod
+with the host's namespaces themselves; this app does not. Node detail's chrome row has one
+icon, and the palette a "Node shell in my terminal" row on a node, which hand
+`kubectl debug node/<name> -it --image=<image>` to the machine's own terminal with this
+cluster pinned (see [machine-terminal](machine-terminal.md), "Handing a command to the
+terminal"). kubectl then creates the pod — host PID, network and IPC namespaces, the node's
+filesystem at `/host` — and states any refusal (Pod Security, RBAC) in that window, which is
+where someone who chose to run it is looking. The image is the exec pane's pinned BusyBox
+(`DebugContainers.DefaultImage`), so the one image this app chooses for a user's cluster is
+chosen in one place.
+
+- **It fires on the click** (UI rule 17): nothing it starts is beyond a `kubectl delete pod`,
+  no running workload is touched, and the action is the user's own kubectl. The tooltip says
+  what it creates, and the notice that it opened says the `node-debugger-…` pod stays,
+  Completed, after the shell exits.
+- **Not on a Windows node**: kubectl's node debugging makes a Linux pod, so the icon and the
+  palette row are hidden there (`ExecShells.FromNode`).
+- **Not in a fleet list's palette**, whose rows belong to other tabs' clusters; node detail
+  opened from one uses that row's own cluster.
+- **The demo cluster refuses in place** with its usual sentence.
+- **Not run against the sandbox here:** the pod it creates is privileged and lands in the
+  context's namespace on the shared node, and the pinned image may not be on the node; the
+  argument shape was verified with an exec instead (same launcher, same PowerShell path).
+
+**Not shipped, deliberately:** `--disable-eviction`, a `--grace-period` control (the option exists in
 `DrainOptions` and nothing sets it — a pod's shutdown window is a property of the app, not
 of whoever is draining), multi-node drain, and node labels/taints editing. The YAML editor
 already reaches all of the last one.
