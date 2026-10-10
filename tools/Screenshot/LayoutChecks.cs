@@ -1,8 +1,10 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Shapes;
 using Avalonia.Headless;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using KubeNimbus.App.ViewModels;
 using KubeNimbus.App.Views;
 
 namespace KubeNimbus.Screenshot;
@@ -214,6 +216,51 @@ internal static class LayoutChecks
 
         double InkRight(TextBlock block) =>
             (block.TranslatePoint(default, window)?.X ?? double.NaN) + block.Padding.Left + block.TextLayout.Width;
+    }
+
+    /// <summary>
+    /// FEAT-71: the cluster switcher draws a row's pin only where it is about to be used — the
+    /// selected row (the pointer is nowhere in a headless render) — and always on a pinned
+    /// row. A hidden pin is not hit-testable either, so a click on an empty-looking spot does
+    /// not pin. FEAT-73: no row draws an environment dot beside its pill.
+    /// </summary>
+    internal static void SwitcherPinsOnlyWhereUsed(Window window)
+    {
+        var list = window.GetVisualDescendants().OfType<ListBox>().First(l => l.Name == "SwitcherList");
+        var rows = list.GetVisualDescendants().OfType<ListBoxItem>().Where(i => i.IsEffectivelyVisible).ToList();
+        var problems = new List<string>();
+        var shownUnpinned = 0;
+        var hiddenUnpinned = 0;
+        foreach (var row in rows)
+        {
+            var item = (ClusterSwitcherItemViewModel)row.DataContext!;
+            var pin = row.GetVisualDescendants().OfType<Button>().First(b => b.Classes.Contains("switcherPin"));
+            var expected = item.IsPinned || row.IsSelected;
+            var shown = pin.Opacity > 0.5 && pin.IsHitTestVisible;
+            if (shown != expected)
+                problems.Add($"{item.Name}: pin {(shown ? "shown" : "hidden")} (pinned {item.IsPinned}, selected {row.IsSelected})");
+            if (!shown && (pin.Opacity > 0 || pin.IsHitTestVisible))
+                problems.Add($"{item.Name}: a hidden pin is still drawn or still takes clicks");
+            if (!item.IsPinned) _ = shown ? shownUnpinned++ : hiddenUnpinned++;
+            if (row.GetVisualDescendants().OfType<Ellipse>().Any(e => e.IsEffectivelyVisible))
+                problems.Add($"{item.Name}: an environment dot beside the pill");
+        }
+
+        if (hiddenUnpinned == 0)
+            problems.Add("no unpinned, unselected row was rendered, so nothing was checked");
+        if (problems.Count > 0)
+            throw new InvalidOperationException($"The switcher's pins (FEAT-71/73): {string.Join("; ", problems)}.");
+
+        Console.WriteLine($"Switcher pins: {rows.Count} rows, {hiddenUnpinned} unpinned pins hidden, {shownUnpinned} shown on the selected row.");
+    }
+
+    /// <summary>FEAT-73: the exec pane states its connection in words, with no status dot beside them.</summary>
+    internal static void ExecHasNoStatusDot(Window window)
+    {
+        var view = window.GetVisualDescendants().OfType<ExecView>().First();
+        if (view.GetVisualDescendants().OfType<Ellipse>().Any(e => e.Classes.Contains("statusDot") && e.IsEffectivelyVisible))
+            throw new InvalidOperationException("The exec pane draws a status dot beside its connection sentence (FEAT-73).");
+        Console.WriteLine("Exec pane has no status dot beside its sentence.");
     }
 
     private static double RightEdge(Visual control, Visual root) =>

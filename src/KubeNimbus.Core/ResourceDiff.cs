@@ -145,7 +145,7 @@ public sealed class ResourceDiff
 
         if (element.ValueKind != JsonValueKind.Object)
         {
-            return YamlJson.ToYamlString(element);
+            return Lf(YamlJson.ToYamlString(element));
         }
 
         // Utf8JsonWriter + JsonElement.WriteTo copies every kept subtree verbatim, with no
@@ -180,8 +180,16 @@ public sealed class ResourceDiff
         }
 
         using var document = ClusterJson.Parse(buffer.WrittenMemory);
-        return YamlJson.ToYamlString(document.RootElement);
+        return Lf(YamlJson.ToYamlString(document.RootElement));
     }
+
+    /// <summary>
+    /// The diff's text is split on <c>\n</c> (TextDiff, the panel's line lists), and YamlDotNet ends
+    /// its lines with <see cref="Environment.NewLine"/>, which on Windows left a stray <c>\r</c> on every
+    /// line (#284). A raw carriage return inside a value never reaches here: the emitter writes
+    /// one in a string as the escape <c>\r</c>, so every <c>\r\n</c> in the output is a line end.
+    /// </summary>
+    private static string Lf(string yaml) => yaml.Replace("\r\n", "\n", StringComparison.Ordinal);
 
     private static void Compare(string path, JsonElement before, JsonElement after, List<ResourceChange> sink, ref int hidden)
     {

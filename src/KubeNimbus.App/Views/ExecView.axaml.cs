@@ -59,7 +59,7 @@ public partial class ExecView : UserControl
         switch (e.Key)
         {
             case Key.C:
-                _ = Terminal.CopySelectionAsync();
+                _ = CopySelectionAsync();
                 e.Handled = true;
                 return;
             case Key.V:
@@ -69,6 +69,29 @@ public partial class ExecView : UserControl
         }
     }
 
+    /// <summary>
+    /// Copies the selection with each line's trailing blank cells and the trailing blank lines
+    /// removed (<see cref="ExecCopy.Trim"/>, #267). Never the control's own
+    /// <c>CopySelectionAsync</c>, which copies the selected cells as they are: every line
+    /// padded with spaces to the terminal's width.
+    /// </summary>
+    private async Task CopySelectionAsync()
+    {
+        var text = ExecCopy.Trim(Terminal.SelectedText);
+        if (text.Length == 0 || TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard)
+        {
+            return;
+        }
+
+        try
+        {
+            await clipboard.SetTextAsync(text);
+        }
+        catch (Exception)
+        {
+            // A clipboard that cannot be written copies nothing; the selection is still there.
+        }
+    }
     /// <summary>
     /// Reads the clipboard and hands the text to <see cref="ExecTabViewModel.Paste"/>. Never
     /// the control's own <c>PasteFromClipboardAsync</c>, which sends the clipboard raw — no
@@ -118,7 +141,7 @@ public partial class ExecView : UserControl
         }
     }
 
-    private void OnCopyClick(object? sender, RoutedEventArgs e) => _ = Terminal.CopySelectionAsync();
+    private void OnCopyClick(object? sender, RoutedEventArgs e) => _ = CopySelectionAsync();
 
     private void OnPasteClick(object? sender, RoutedEventArgs e) => _ = PasteFromClipboardAsync();
 

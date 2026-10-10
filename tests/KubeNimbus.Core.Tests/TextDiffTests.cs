@@ -310,6 +310,30 @@ public class TextDiffTests
         await Assert.That(diff.Lines.Single(l => l.Kind == TextDiffKind.Added).Text).Contains("debug");
     }
 
+    /// <summary>
+    /// #284: the diff's text ends its lines with <c>\n</c> on every platform. YamlDotNet ends them
+    /// with <see cref="Environment.NewLine"/>, so on Windows every line split on <c>\n</c> kept a
+    /// stray <c>\r</c>. A carriage return inside a value is still there, as the value.
+    /// </summary>
+    [Test]
+    public async Task The_diffable_yaml_ends_its_lines_with_lf_and_keeps_a_carriage_return_inside_a_value()
+    {
+        var value = JsonDocument.Parse("""
+            {"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"web"},
+             "data":{"script":"line one\r\nline two\r\n","level":"info"}}
+            """).RootElement.Clone();
+
+        var text = ResourceDiff.ToDiffableYaml(value);
+
+        await Assert.That(text.Split('\n').Count(l => l.EndsWith('\r'))).IsEqualTo(0);
+        await Assert.That(text).Contains("level: info\n");
+        var back = YamlJson.ParseYamlToJson(text)!;
+        await Assert.That(back["data"]!["script"]!.GetValue<string>()).IsEqualTo("line one\r\nline two\r\n");
+        var list = ResourceDiff.ToDiffableYaml(JsonDocument.Parse("[1,2]").RootElement.Clone());
+        await Assert.That(list).StartsWith("- 1\n- 2\n");
+        await Assert.That(list).DoesNotContain("\r");
+    }
+
     /// <summary>A missing object is an empty document, which is what makes a create read as all-added.</summary>
     [Test]
     public async Task A_missing_object_renders_as_an_empty_document()

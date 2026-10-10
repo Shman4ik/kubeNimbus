@@ -2130,6 +2130,32 @@ internal static class ClusterTabScenarios
     }
 
     /// <summary>
+    /// Side by side, maximized (#284): the two columns at the full content width and height,
+    /// the combination the inline and split scenarios between them left unrendered.
+    /// </summary>
+    public static ClusterTabViewModel YamlEditorDiffSplitMaximized()
+    {
+        var tab = YamlEditorDiffSplit();
+        tab.IsInspectorMaximized = true;
+        return tab;
+    }
+
+    /// <summary>
+    /// The field-path list at the dock's default height (#284), where its rows and the
+    /// panel's footnote share about 300px with the editor.
+    /// </summary>
+    public static ClusterTabViewModel YamlEditorDiffFieldsDock()
+    {
+        var tab = YamlEditorDiffSplit();
+        if (tab.SelectedInspectorTab is YamlEditorTabViewModel yaml)
+        {
+            yaml.PreviewViewMode = YamlEditorTabViewModel.PreviewViewModeFields;
+        }
+
+        return tab;
+    }
+
+    /// <summary>
     /// The same panel when the server says the apply would change nothing — a distinct
     /// state, and the answer to "did my edit actually do anything" (UI rule 9).
     /// </summary>

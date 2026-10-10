@@ -79,6 +79,15 @@ Thirteen things are load-bearing.
    real object and changes on every apply, so a text diff over the raw documents would
    open on the one section nobody wants to read. What was removed is still counted and
    stated by rule 4's footnote, which is the half that keeps the omission honest.
+   The text ends its lines with `\n` on every platform (#284): YamlDotNet writes
+   `Environment.NewLine`, so on Windows every line split on `\n` kept a stray `\r`. A
+   carriage return inside a value is written by the emitter as an escape, never raw, so the
+   one replace is safe; `TextDiffTests` round-trips such a value, and the test was confirmed
+   red on Windows without the replace. The panel's screenshots cover inline maximized
+   (`cluster-tab-yaml-diff-preview`), split at the dock's height and maximized
+   (`cluster-tab-yaml-diff-split`, `-split-maximized`), and fields maximized and at the
+   dock's height (`cluster-tab-yaml-diff-fields`, `-fields-dock`); the last two pairs were
+   added for #284, so a layout regression in either combination is in front of a reviewer.
 9. **`TextDiff` is in Core, pure, and bounded on purpose.** Common prefix and suffix are
    trimmed first — two serializations of nearly the same object share almost everything —
    and only the middle goes through an LCS. The table is `(n+1) × (m+1)` ints, so it is
