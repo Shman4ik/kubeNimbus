@@ -50,6 +50,9 @@ are and what you could not find.
 - **Check whether kubeNimbus already has it before proposing it.** `CLAUDE.md`
   documents nearly every shipped surface; grep `src/` to confirm. A proposal for
   something that shipped six months ago costs the reader trust in the whole list.
+  Search the backlog too (`gh issue list --label roadmap --state all --search "<words>"`):
+  a proposal that is already an issue adds its new evidence to that issue's number, and
+  one closed as *not planned* needs an argument against the reason given there.
 - **Respect the stated non-goals** — cluster provisioning, in-cluster agents,
   telemetry, and long-range metrics history (that is Prometheus's job). If the
   evidence genuinely argues against one of them, say so as an explicit
@@ -83,6 +86,6 @@ record is wasted budget.
    `| <user outcome> | demand or marketing, with the link | S/M/L | does kubeNimbus have it? (file or "no") | notes: conflicts, non-goal tension |`.
    The orchestrator scores and selects; you only supply evidence.
 
-**You never edit app code, `docs/BACKLOG.md` or `TRAIN.md`, and never implement
-anything.** Selection belongs to the orchestrator, and the owner steers it through
+**You never edit app code or `TRAIN.md`, never create or change issues, and never
+implement anything.** Selection belongs to the orchestrator, and the owner steers it through
 `TRAIN.md`'s Owner notes.

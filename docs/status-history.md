@@ -2834,3 +2834,24 @@ both measure 14px. The published screenshots were re-rendered on Windows to chec
 panes in them are not scrolled to an end and render identically, and only the Age column had
 moved with the clock, so none was replaced. Not checked in the running app or on macOS and
 Linux, where the bar is drawn by the same Fluent template.
+
+### The backlog moved to GitHub issues (2026-10-10)
+
+`docs/BACKLOG.md` had grown to 527 lines and about 170 KB, which every train loaded to read a
+few rows. At the owner's request every open row became a GitHub issue: 104 of them, #154–#257,
+titled `<ID> · <item>` so the IDs this repository already cites still find their item, with the
+row's *done when*, signal and the file's notes about it in the body and a link to the row at
+`93d28da`. Labels follow pgNimbus's (`roadmap`, `P0`–`P3`, `size: S/M/L`) plus the old section
+(`verification`, `enhancement`, `distribution`, `engineering`), the old feasibility mark
+(`agent-ready`, `needs: cluster`, `needs: desktop`, `needs: Windows`, `needs: Mac`,
+`needs: human`) and the two statuses an issue's own state cannot carry (`ready`, `blocked`).
+Shipped and rejected rows were not migrated; `BACKLOG.md` now explains the labels and the
+lifecycle, links the file as it stood, and keeps the rejections that should not come back.
+The release-train skill, `kn-bundle` and `kn-researcher` read and write issues instead of the
+file, and a session that cannot create issues queues them under `## Issues to file` in
+`TRAIN.md`.
+
+One row needed a judgement call: FEAT-35's status read "rejected — … back to Inbox at P3",
+which is a bundle declining it rather than a rejection, so it was filed as open at P3 (#257).
+Whether a cloud session's GitHub token can create issues was not checked; the `TRAIN.md`
+fallback exists for the case where it cannot.

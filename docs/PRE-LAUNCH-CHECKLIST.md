@@ -36,13 +36,14 @@ The history becomes permanently public the moment the switch flips.
 - [x] **Package metadata in `Directory.Build.props`** — `Product`, `Authors`,
       `Copyright`, `RepositoryUrl`, `PackageLicenseExpression`. This is what
       shows in the shipped binary's file properties.
-- [ ] **Read `CLAUDE.md` and `docs/BACKLOG.md` once with public-reader
+- [ ] **Read `CLAUDE.md` and the backlog issues once with public-reader
       glasses.** Both are engineering notes rather than marketing, which is fine
       and is what pgNimbus does — but they name unverified paths and open
       defects openly, so skim for anything that reads worse out of context than
       it does in it. The 2026-10-05 pass closed the backlog's stale rows and
-      duplicate IDs (rows still open for work that had shipped); the read for tone
-      is still to do.
+      duplicate IDs (rows still open for work that had shipped), and on 2026-10-10
+      the open rows moved to GitHub issues (#154–#257), whose bodies are the rows'
+      text unchanged; the read for tone is still to do.
 
 ## Phase 2 — Quality gates
 
@@ -64,11 +65,13 @@ The history becomes permanently public the moment the switch flips.
       reproduces it), a PR template built from CLAUDE.md's rules.
 - [x] **Private vulnerability reporting** is enabled, so `SECURITY.md`'s link
       resolves.
-- [ ] **Curate 5–10 `good first issue` candidates** from `docs/BACKLOG.md`'s
-      Inbox. The label exists, but on 2026-10-05 the tracker held no issues at all,
-      open or closed, and an empty tracker at launch reads as "not really open to
-      contributors". The verification-debt rows are good candidates for anyone
-      with hardware this project has rarely run on (a Mac, an arm64 Linux box).
+- [ ] **Curate 5–10 `good first issue` candidates** from the backlog issues.
+      On 2026-10-05 the tracker held no issues at all, open or closed, and an empty
+      tracker at launch reads as "not really open to contributors"; since 2026-10-10
+      it holds the backlog (label `roadmap`), and what is left is choosing which
+      ones get the label. The `needs: Mac` and `needs: desktop` verification issues
+      are good candidates for anyone with hardware this project has rarely run on
+      (a Mac, an arm64 Linux box).
 - [ ] **Pin a roadmap** — an issue or a Discussion with the top of the backlog, so
       visitors can see where this is going. Discussions are enabled and empty.
 

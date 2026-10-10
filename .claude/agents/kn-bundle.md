@@ -30,8 +30,8 @@ of each item. Anything else you think is worth doing goes in the report.
 
 1. Read `CLAUDE.md` in full and every `docs/engineering/` page for a feature you touch
    (`CLAUDE.md` indexes them).
-2. For each item in your bundle, read its full row in `docs/BACKLOG.md` and check the
-   code: is it already done, superseded by the Applications mode, or not worth it for the
+2. For each item in your bundle, read its issue in full (`gh issue view <n>`; the labels
+   are explained in `docs/BACKLOG.md`) and check the code: is it already done, superseded by the Applications mode, or not worth it for the
    job "someone pinged me that service X is broken"? Drop such items and say why in the
    PR body. Skepticism is part of the job, not an afterthought.
    The owner's constraints: deterministic rules only (no LLM), no self-kept history on
@@ -41,9 +41,13 @@ of each item. Anything else you think is worth doing goes in the report.
 
 - Stay inside your bundle's files. If an item needs a file another bundle owns (listed in
   your prompt), make the smallest change there and name it in the PR body.
-- Do **not** edit `docs/BACKLOG.md`, `CHANGELOG.md` or `docs/status-history.md` — every
-  bundle would conflict there. Put the text for them in the PR body under
-  `## For BACKLOG / CHANGELOG / status-history`; the orchestrator applies it.
+- Do **not** edit `CHANGELOG.md` or `docs/status-history.md` — every bundle would
+  conflict there. Put the text for them in the PR body under
+  `## For CHANGELOG / status-history`; the orchestrator applies it.
+- Do **not** create, label or close issues yourself. The PR body carries `Closes #N` for
+  each item it finishes (merging closes them), and lists a dropped item with its reason
+  and any finding that deserves its own issue under `## For the backlog`; the
+  orchestrator files and closes from there.
 - **Do** update `CLAUDE.md` and the `docs/engineering/` pages for what you change, in
   the same PR.
 - Never touch `shared/nimbusUi`, `installer/`, or the MSIX identity.
