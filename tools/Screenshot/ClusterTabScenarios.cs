@@ -817,21 +817,51 @@ internal static class ClusterTabScenarios
     {
         var tab = DeploymentsTab();
         var action = ArmRowAction(tab, RowActionKind.Scale);
+        action.SetCurrentScale(4, 1);
         action.Replicas = 6;
-        action.CurrentScale = "1 running now";
         return tab;
     }
 
     /// <summary>
-    /// A slipped digit: 40 typed for a Deployment at 4. The question says "from 4 to 40" and
-    /// the strip says it is ten times the current count (B3-4), in the warn line.
+    /// A slipped digit: 40 typed for a Deployment at 4. The question says "from 4 replicas
+    /// (1 running) to [40]" and the strip says it is ten times the current count (B3-4), in
+    /// the warn line under the sentence.
     /// </summary>
     public static ClusterTabViewModel RowActionScaleJump()
     {
         var tab = DeploymentsTab();
         var action = ArmRowAction(tab, RowActionKind.Scale);
+        action.SetCurrentScale(4, 1);
         action.Replicas = 40;
-        action.CurrentScale = "1 running now";
+        return tab;
+    }
+
+    /// <summary>
+    /// The scale strip once the API server has answered: the sentence stays, the box is
+    /// read-only, and the result line leads with its check and carries Close (FEAT-77).
+    /// </summary>
+    public static ClusterTabViewModel RowActionScaled()
+    {
+        var tab = DeploymentsTab();
+        var action = ArmRowAction(tab, RowActionKind.Scale);
+        action.SetCurrentScale(4, 1);
+        action.Replicas = 6;
+        action.IsSuccess = true;
+        action.IsDone = true;
+        action.Message = "Scaled to 6. The list follows the rollout as the watch reports it.";
+        return tab;
+    }
+
+    /// <summary>
+    /// A request in flight: the moving bar leads the result line, the confirm and Cancel go
+    /// dead (the patch is already with the API server), and nothing claims a verdict yet.
+    /// </summary>
+    public static ClusterTabViewModel RowActionBusy()
+    {
+        var tab = DeploymentsTab();
+        var action = ArmRowAction(tab, RowActionKind.Restart);
+        action.IsBusy = true;
+        action.Message = "Restarting…";
         return tab;
     }
 
@@ -843,15 +873,16 @@ internal static class ClusterTabScenarios
     {
         var tab = DeploymentsTab();
         var action = ArmRowAction(tab, RowActionKind.Scale);
+        action.SetCurrentScale(4, 1);
         action.Replicas = 0;
-        action.CurrentScale = "1 running now";
         return tab;
     }
 
     /// <summary>
     /// Delete, armed on a production cluster: the strip names the cluster and says
-    /// "(production)", and its border takes the production colour (B3-1). On production this
-    /// is what a delete shows even with "Confirm before deleting" turned off.
+    /// "(production)", its border takes the production colour (B3-1), and the glyph and the
+    /// confirm are red (FEAT-77). On production this is what a delete shows even with
+    /// "Confirm before deleting" turned off.
     /// </summary>
     public static ClusterTabViewModel RowActionDeleteProduction()
     {
@@ -2090,6 +2121,32 @@ internal static class ClusterTabScenarios
     public static ClusterTabViewModel YamlEditorDiffFields()
     {
         var tab = YamlEditorDiffPreview();
+        if (tab.SelectedInspectorTab is YamlEditorTabViewModel yaml)
+        {
+            yaml.PreviewViewMode = YamlEditorTabViewModel.PreviewViewModeFields;
+        }
+
+        return tab;
+    }
+
+    /// <summary>
+    /// Side by side, maximized (#284): the two columns at the full content width and height,
+    /// the combination the inline and split scenarios between them left unrendered.
+    /// </summary>
+    public static ClusterTabViewModel YamlEditorDiffSplitMaximized()
+    {
+        var tab = YamlEditorDiffSplit();
+        tab.IsInspectorMaximized = true;
+        return tab;
+    }
+
+    /// <summary>
+    /// The field-path list at the dock's default height (#284), where its rows and the
+    /// panel's footnote share about 300px with the editor.
+    /// </summary>
+    public static ClusterTabViewModel YamlEditorDiffFieldsDock()
+    {
+        var tab = YamlEditorDiffSplit();
         if (tab.SelectedInspectorTab is YamlEditorTabViewModel yaml)
         {
             yaml.PreviewViewMode = YamlEditorTabViewModel.PreviewViewModeFields;

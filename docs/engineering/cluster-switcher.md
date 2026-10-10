@@ -25,6 +25,19 @@ Pins and recents persist in `WorkspaceSettings` (context **name** only — kubec
 merge semantics already make names unique, and the path would break the key when
 a file moves). Notes for anyone changing it:
 
+- **A row's pin is drawn only where it is about to be used** (FEAT-71, owner's call
+  2026-10-10): on the row under the pointer, on the selected row (where the arrow keys
+  are), on a pin that has keyboard focus, and always on a pinned row, whose filled pin is
+  information. Seven pins drawn on every row were seven always-visible controls for a rare
+  action (UI rule 1); the palette entry and the context menu's Pin are still there for
+  anyone who has not found it. A hidden pin is transparent *and* not hit-testable, so a
+  click on an empty-looking spot never pins; shown, the chip's own background keeps its
+  whole area clickable (UI rule 8), and its accessible name is still its tooltip. The rule
+  is four style selectors on the `SwitcherList`'s own `ListBox.Styles` in `MainWindow.axaml`.
+  The row has no environment dot either (FEAT-73): the pill at its end says the
+  environment in words. `LayoutChecks.SwitcherPinsOnlyWhereUsed` (`main-window-switcher`)
+  checks every rendered row and was confirmed red with the hiding style removed.
+
 - **The results list is flat, deliberately.** Section titles ride on the first
   row of each group (`ClusterSwitcherItemViewModel.SectionHeader`). A nested
   ItemsControl-of-ListBoxes gives every section its own selection, and they clear

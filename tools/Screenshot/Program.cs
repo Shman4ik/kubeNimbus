@@ -134,6 +134,9 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-yaml-diff-preview", () => HostInMainWindow(ClusterTabScenarios.YamlEditorDiffPreview())),
     ("cluster-tab-yaml-diff-split", () => HostInMainWindow(ClusterTabScenarios.YamlEditorDiffSplit())),
     ("cluster-tab-yaml-diff-fields", () => HostInMainWindow(ClusterTabScenarios.YamlEditorDiffFields())),
+    // The two view-mode × dock-state pairs the four above left out (#284).
+    ("cluster-tab-yaml-diff-split-maximized", () => HostInMainWindow(ClusterTabScenarios.YamlEditorDiffSplitMaximized())),
+    ("cluster-tab-yaml-diff-fields-dock", () => HostInMainWindow(ClusterTabScenarios.YamlEditorDiffFieldsDock())),
     ("cluster-tab-yaml-diff-no-change", () => HostInMainWindow(ClusterTabScenarios.YamlEditorDiffNoChange())),
     ("cluster-tab-yaml-validation-rejected", () => HostInMainWindow(ClusterTabScenarios.YamlEditorValidationRejected())),
     ("cluster-tab-yaml-conflict", () => HostInMainWindow(ClusterTabScenarios.YamlEditorConflict())),
@@ -202,6 +205,12 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-row-action-scale-jump", () => HostInMainWindow(ClusterTabScenarios.RowActionScaleJump())),
     ("cluster-tab-row-action-scale-zero-production",
         () => HostInMainWindow(ClusterTabScenarios.RowActionScaleZeroProduction())),
+    ("cluster-tab-row-action-scaled", () => HostInMainWindow(ClusterTabScenarios.RowActionScaled())),
+    ("cluster-tab-row-action-busy", () => HostInMainWindow(ClusterTabScenarios.RowActionBusy())),
+    // The window's minimum width: the sentence wraps beside its buttons instead of pushing
+    // them out of the card (FEAT-77), and the scale box stays at the sentence's end.
+    ("cluster-tab-row-action-scale-narrow", () => HostInMainWindow(ClusterTabScenarios.RowActionScale(), width: 960)),
+    ("cluster-tab-row-action-restart-narrow", () => HostInMainWindow(ClusterTabScenarios.RowActionRestart(), width: 960)),
     // "Open a terminal on this cluster" — the two outcomes the app has to state, since
     // the successful one opens a window in front of the app and needs no screenshot.
     ("cluster-tab-terminal-no-kubectl", () => HostInMainWindow(ClusterTabScenarios.TerminalNoKubectl())),
@@ -414,6 +423,8 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("ux-keyboard-walk", () => HostInMainWindow(ClusterTabScenarios.DemoDockTabs(), height: 1000)),
     ("ux-leave-yaml-editor", () => HostInMainWindow(ClusterTabScenarios.YamlEditor())),
     ("ux-leave-exec-terminal", () => HostInMainWindow(ClusterTabScenarios.Exec())),
+    // #267: a copy trims the blank cells at the end of each line (KeyboardChecks.ExecCopy).
+    ("ux-exec-copy", () => HostInMainWindow(ClusterTabScenarios.Exec())),
     ("cluster-tab-exec-paste-confirm", () => HostInMainWindow(ClusterTabScenarios.ExecPasteArmed())),
     // URLs and e-mail addresses in YAML are drawn as text, not AvaloniaEdit's blue links (EditorChecks).
     ("ux-yaml-editor-links", () => HostInMainWindow(ClusterTabScenarios.YamlEditor())),
@@ -539,6 +550,9 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     if (name is "cluster-tab-list-unhealthy-fleet-partial-narrow" or "cluster-tab-list-unhealthy-narrow")
         LayoutChecks.ListHeaderFits(window);
     if (name == "palette-logs-narrow") LayoutChecks.PaletteFollowsWindow(window);
+    if (name.StartsWith("cluster-tab-row-action-", StringComparison.Ordinal)
+        && name is not ("cluster-tab-row-action-scaled" or "cluster-tab-row-action-busy"))
+        LayoutChecks.ActionStripReadsAsOneBlock(window);
     if (name.StartsWith("cluster-tab-fleet-list", StringComparison.Ordinal)
         || name == "cluster-tab-list-unhealthy-fleet-partial-narrow")
         LayoutChecks.GridReachesLastColumn(window);
@@ -546,6 +560,9 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     if (name == "ux-exec-paste") KeyboardChecks.ExecPaste(window);
     if (name == "ux-keyboard-walk") KeyboardChecks.KeyboardWalk(window);
     if (name is "ux-leave-yaml-editor" or "ux-leave-exec-terminal") KeyboardChecks.LeaveEditorKeys(window);
+    if (name == "ux-exec-copy") KeyboardChecks.ExecCopy(window);
+    if (name == "cluster-tab-exec") LayoutChecks.ExecHasNoStatusDot(window);
+    if (name == "main-window-switcher") LayoutChecks.SwitcherPinsOnlyWhereUsed(window);
     if (name == "ux-log-search-keys") KeyboardChecks.LogSearchKeys(window);
     if (name == "ux-yaml-apply-key") KeyboardChecks.YamlApplyKey(window);
     if (name == "ux-yaml-editor-links") EditorChecks.YamlEditorLinks(window);

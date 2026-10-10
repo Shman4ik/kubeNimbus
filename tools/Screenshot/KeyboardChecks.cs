@@ -5,6 +5,7 @@ using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Input.Raw;
+using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using KubeNimbus.App.Controls;
@@ -218,6 +219,75 @@ internal static class KeyboardChecks
         }
 
         Console.WriteLine("Exec paste passed (controls dropped, bracketed when asked, multi-line armed until confirmed, Esc cancels).");
+    }
+
+    /// <summary>
+    /// #267: a copy from the exec pane carries what the program wrote, not the cells around
+    /// it. Select all, then the pane's real Ctrl+Shift+C, then the menu's Copy, and the
+    /// clipboard is read back: no line ends in a space and no blank line ends the text. The
+    /// terminal control's own copy pads every line to the terminal's width, so routing either
+    /// gesture back to it turns this red.
+    /// </summary>
+    internal static void ExecCopy(Window window)
+    {
+        var view = window.GetVisualDescendants().OfType<ExecView>().First();
+        var terminal = view.GetVisualDescendants().OfType<TerminalControl>().First();
+        var clipboard = TopLevel.GetTopLevel(view)?.Clipboard
+                        ?? throw new InvalidOperationException("The headless window has no clipboard to copy to.");
+
+        string? Read()
+        {
+            var read = clipboard.TryGetTextAsync();
+            while (!read.IsCompleted)
+            {
+                Dispatcher.UIThread.RunJobs();
+            }
+
+            return read.Result;
+        }
+
+        void Clear()
+        {
+            var write = clipboard.SetTextAsync("");
+            while (!write.IsCompleted)
+            {
+                Dispatcher.UIThread.RunJobs();
+            }
+        }
+
+        void Check(string? copied, string how)
+        {
+            if (string.IsNullOrEmpty(copied))
+                throw new InvalidOperationException($"{how} copied nothing.");
+            var lines = copied.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+            if (lines.Any(l => l.EndsWith(' ')) || lines[^1].Length == 0)
+                throw new InvalidOperationException(
+                    $"{how} copied padded text: {Escape(copied[..Math.Min(copied.Length, 160)])}…");
+
+        }
+
+        terminal.SelectAll();
+        Dispatcher.UIThread.RunJobs();
+        if (!terminal.SelectedText.Split('\n').Any(l => l.TrimEnd('\r').EndsWith(' ')))
+            throw new InvalidOperationException(
+                "The terminal's own selection is not padded, so this check would pass without the trim.");
+
+        Clear();
+        terminal.Focus();
+        Dispatcher.UIThread.RunJobs();
+        window.KeyPress(Key.C, RawInputModifiers.Control | RawInputModifiers.Shift, PhysicalKey.C, "C");
+        window.KeyRelease(Key.C, RawInputModifiers.Control | RawInputModifiers.Shift, PhysicalKey.C, "C");
+        Dispatcher.UIThread.RunJobs();
+        Check(Read(), "Ctrl+Shift+C");
+
+        Clear();
+        var menu = (ContextMenu)view.Resources["TerminalMenu"]!;
+        var copyItem = menu.Items.OfType<MenuItem>().First(m => (m.Header as string) == "Copy");
+        copyItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+        Check(Read(), "The menu's Copy");
+
+        Console.WriteLine("Exec copy passed (trailing blank cells and lines trimmed, by key and by menu).");
     }
 
     private static string Escape(string text) =>
