@@ -420,7 +420,11 @@
         <Setter Property="Focusable" Value="True" />
         <Setter Property="AutomationProperties.Name" Value="Log lines" />
     </Style>
-    <Style Selector="ItemsControl#LogItems SelectableTextBlock.logLine">
+    <!-- Nothing inside a row is a stop either: not the line, not a JSON line's expander, not
+         anything a row grows later. A realized row is recycled under the next log line, so a
+         stop inside one could vanish with the focus on it, and every JSON line on screen
+         added a stop of its own. -->
+    <Style Selector="ItemsControl#LogItems :is(InputElement)">
         <Setter Property="KeyboardNavigation.IsTabStop" Value="False" />
     </Style>
     <!-- A log row: a 2px bar on the left for an error or a warning, and a translucent wash

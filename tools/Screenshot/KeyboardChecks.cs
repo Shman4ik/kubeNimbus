@@ -414,10 +414,12 @@ internal static class KeyboardChecks
 
         // The log list is one stop, the list itself; no line is one. A line could be recycled
         // under a new log line while it held the stop, which left focus on a hidden line.
-        var lines = forward.Count(c => c is LogLineText);
-        var logLists = forward.Count(c => c is ItemsControl { Name: "LogItems" } && pane.IsVisualAncestorOf(c));
+        // Nothing inside a row counts either: a JSON line's expander was a stop of its own.
+        var logList = pane.GetVisualDescendants().OfType<ItemsControl>().First(c => c.Name == "LogItems");
+        var lines = forward.Count(c => logList.IsVisualAncestorOf(c));
+        var logLists = forward.Count(c => c == logList);
         if (lines != 0 || logLists != 1)
-            throw new InvalidOperationException($"The log pane should be one Tab stop, the list; it was {logLists} list stops and {lines} line stops.");
+            throw new InvalidOperationException($"The log pane should be one Tab stop, the list; it was {logLists} list stops and {lines} stops inside its rows.");
 
         var tabStop = forward.First(strip.IsVisualAncestorOf);
         if (tabStop is not ListBoxItem { DataContext: InspectorTabViewModelBase front } || front != vm.SelectedInspectorTab)
