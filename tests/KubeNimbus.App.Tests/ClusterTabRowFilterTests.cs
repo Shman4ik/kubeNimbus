@@ -385,4 +385,39 @@ public class ClusterTabRowFilterTests
         await Assert.That(tab.IsRowFiltering).IsFalse();
         await Assert.That(tab.RowFilterSummary).IsEqualTo("");
     }
+
+    /// <summary>
+    /// An Ingress's hosts are identity fields (FEAT-65), and unlike a name they change under
+    /// the object: a Modified that edits a host must move the row into or out of an active
+    /// search, not leave it where the old hosts put it until the query is retyped.
+    /// </summary>
+    [Test]
+    public async Task A_host_edit_moves_an_ingress_into_or_out_of_an_active_search()
+    {
+        var tab = TestObjects.Tab();
+        tab.Apply(TestObjects.Added(Ingress("storefront", "api.example.com")));
+        tab.Apply(TestObjects.Added(Ingress("checkout", "shop.example.com")));
+        tab.RowFilter = "shop";
+        await Assert.That(tab.VisibleNames()).IsEqualTo("checkout");
+
+        tab.Apply(TestObjects.Modified(Ingress("storefront", "shop.example.org")));
+        await Assert.That(tab.VisibleNames()).IsEqualTo("storefront, checkout");
+
+        tab.Apply(TestObjects.Modified(Ingress("checkout", "api.example.org")));
+        await Assert.That(tab.VisibleNames()).IsEqualTo("storefront");
+        await Assert.That(tab.RowNames()).IsEqualTo("storefront, checkout");
+    }
+
+    private static DynamicResource Ingress(string name, string host)
+    {
+        using var document = System.Text.Json.JsonDocument.Parse($$"""
+            {
+              "apiVersion": "networking.k8s.io/v1",
+              "kind": "Ingress",
+              "metadata": { "name": "{{name}}", "namespace": "payments", "uid": "{{name}}-uid" },
+              "spec": { "rules": [ { "host": "{{host}}" } ] }
+            }
+            """);
+        return new DynamicResource(document.RootElement.Clone());
+    }
 }

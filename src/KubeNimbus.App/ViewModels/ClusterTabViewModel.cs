@@ -726,9 +726,9 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// place (it never replaces it), so nothing reaches <see cref="OnRowsChanged"/> —
     /// and with unhealthy-only on, a Modified is precisely what changes whether the row
     /// belongs on screen: a pod going CrashLoopBackOff has to appear, and one that
-    /// recovers has to leave. The name search never needed this, because the fields it
-    /// matches do not change under an object; health is the first filter input that
-    /// does.
+    /// recovers has to leave. The text search needs it too: most identity fields (name,
+    /// namespace) never change under an object, but a kind's own ones can — an Ingress's
+    /// hosts (<see cref="RowFilterFields"/>) — so an edit can move a row in or out of a search.
     ///
     /// <para>
     /// The row is inserted where it would have been all along — the sort's position, or
@@ -738,7 +738,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// </summary>
     private void RefreshRowVisibility(ResourceRowViewModel row)
     {
-        if (!_healthFilterActive)
+        if (!_healthFilterActive && !IsRowFiltering)
         {
             RepositionRow(row);
             return;
