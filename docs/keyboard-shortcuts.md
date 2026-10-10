@@ -67,6 +67,7 @@ way in Preferences → General → Shortcut modifier.
 | Show every resource kind in the sidebar, or only the everyday ones | The eye-plus icon, top of the sidebar | The eye-plus icon, top of the sidebar |
 | Show or hide the resource sidebar | Ctrl+B | Cmd+B |
 | Maximize the inspector over the list | The inspector's expand icon; Esc restores | The inspector's expand icon; Esc restores |
+| Move focus out of the YAML editor or the terminal | Ctrl+Tab / Ctrl+Shift+Tab | Ctrl+Tab / Ctrl+Shift+Tab |
 | Preferences… | Ctrl+, | Cmd+, |
 | Show this cheat sheet | F1 | F1 |
 

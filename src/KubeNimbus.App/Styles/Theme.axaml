@@ -1,7 +1,8 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:chrome="using:Avalonia.Controls.Chrome"
-        xmlns:controls="using:KubeNimbus.App.Controls">
+        xmlns:controls="using:KubeNimbus.App.Controls"
+        xmlns:nimbus="using:Nimbus.Ui.Controls">
 
     <!--
         kubeNimbus's own styles. Everything both Nimbus apps share — the palette,
@@ -198,14 +199,50 @@
     <Style Selector="Grid.dockHeader">
         <Setter Property="Background" Value="{StaticResource CardBackgroundBrush}" />
     </Style>
+    <!-- The strip is a ListBox (ENG-54) drawn as the Border tabs it replaced: the item and
+         its presenter stay transparent and Border.dockTab inside carries hover and the
+         active fill, so the shared list rules (the accent slab of a focused list's selected
+         row, DESIGN.md rule 20) never reach a tab. What the keyboard gets instead is the
+         shared focus ring, which the shared ListBoxItem style switches off for rows: a tab
+         strip's selected item means "the one showing", not "the one the keys act on", so
+         without a ring a focused strip looked exactly like an unfocused one. -->
+    <Style Selector="ListBox.dockTabs">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
+        <Setter Property="ItemsPanel">
+            <ItemsPanelTemplate>
+                <WrapPanel Orientation="Horizontal" />
+            </ItemsPanelTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="ListBox.dockTabs ListBoxItem">
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Margin" Value="2" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="AutomationProperties.ControlTypeOverride" Value="TabItem" />
+        <Setter Property="FocusAdorner">
+            <FocusAdornerTemplate>
+                <nimbus:FocusRing />
+            </FocusAdornerTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="ListBox.dockTabs ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+    </Style>
     <Style Selector="Border.dockTab">
         <Setter Property="CornerRadius" Value="6" />
         <Setter Property="Padding" Value="10,4" />
-        <Setter Property="Cursor" Value="Hand" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Background" Value="Transparent" />
     </Style>
-    <Style Selector="Border.dockTab:pointerover">
+    <Style Selector="ListBox.dockTabs ListBoxItem:pointerover Border.dockTab">
         <Setter Property="Background" Value="{StaticResource HoverBackgroundBrush}" />
     </Style>
     <Style Selector="Border.dockTab.active">
@@ -270,6 +307,14 @@
         <Setter Property="MinHeight" Value="0" />
         <Setter Property="FontSize" Value="12.5" />
         <Setter Property="Cursor" Value="Hand" />
+        <!-- A strip keeps the same light wash focused or not (below), so the shared rule's
+             "the focused list's selection is the focus" does not hold here: without the ring a
+             segment the keyboard had reached looked like every other selected one (ENG-4). -->
+        <Setter Property="FocusAdorner">
+            <FocusAdornerTemplate>
+                <nimbus:FocusRing />
+            </FocusAdornerTemplate>
+        </Setter>
     </Style>
     <Style Selector="ListBox.segmented ListBoxItem:pointerover /template/ ContentPresenter">
         <Setter Property="Background" Value="{StaticResource HoverBackgroundBrush}" />
@@ -361,6 +406,15 @@
     </Style>
     <Style Selector="SelectableTextBlock.logLine">
         <Setter Property="controls:LogLineText.PrefixBrush" Value="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+    </Style>
+
+    <!-- Each log line is a SelectableTextBlock, so each was a Tab stop of its own: a keyboard
+         walk through either log pane crossed every line on screen, sixty of them in a
+         maximized pane, before it got back to the command bar (ENG-4). One stop for the whole
+         list keeps a line reachable for a keyboard copy and costs one key. Set here rather
+         than in the two views because both name the list LogItems and both need it. -->
+    <Style Selector="ItemsControl#LogItems">
+        <Setter Property="KeyboardNavigation.TabNavigation" Value="Once" />
     </Style>
 
     <!-- A log row: a 2px bar on the left for an error or a warning, and a translucent wash
@@ -620,6 +674,15 @@
         <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
         <Setter Property="Padding" Value="8,6" />
         <Setter Property="Margin" Value="0,1" />
+        <!-- The ring back (ENG-4). The shared ListBoxItem style removes it because a focused
+             list shows its focus as the accent selection, but these rows sit in an
+             ItemsControl, not a ListBox: no list ever holds the focus, so a row reached by
+             the keyboard looked exactly like one that was not. -->
+        <Setter Property="FocusAdorner">
+            <FocusAdornerTemplate>
+                <nimbus:FocusRing />
+            </FocusAdornerTemplate>
+        </Setter>
     </Style>
     <Style Selector="ListBoxItem.navRow:pointerover /template/ ContentPresenter">
         <Setter Property="Background" Value="{StaticResource HoverBackgroundBrush}" />

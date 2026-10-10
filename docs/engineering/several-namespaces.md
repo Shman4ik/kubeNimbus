@@ -71,6 +71,23 @@ each of them and not the cluster.
 - **The metrics poll asks once per chosen namespace**, the way the watch reads them.
 - **The demo cluster** pours each chosen namespace's objects into the list.
 
+## The Namespace column
+
+The resource list draws its Namespace column only where it tells rows apart:
+`ClusterTabViewModel.IsNamespaceColumnShown`, re-read by `ClusterTabView.ApplySummaryColumns`
+whenever the kind or `SelectedNamespaces` changes.
+
+- **All namespaces, or several**: shown. That is what the column is for.
+- **Exactly one**: hidden. Every row is in it, and the column printed the picker's own value
+  down the list. A fleet list in one namespace hides it too: the namespace is read on every
+  cluster, so its rows are still all in that one, and the Cluster column tells them apart.
+- **A cluster-scoped kind**: hidden, as before. No kind yet keeps it, the shape the list opens
+  with.
+
+A sort on the Namespace column stays in force while the column is hidden; with one namespace
+every row compares equal on it and the sort's own tie-break decides. `NamespaceColumnTests` pins the rule (confirmed red with the one-namespace case
+removed). The Helm release list's own Namespace column is a separate grid and still shows.
+
 ## What is kept
 
 `workspace.json` keeps every chosen namespace in `TabSnapshot.Namespaces` beside

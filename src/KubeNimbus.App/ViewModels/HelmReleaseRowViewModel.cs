@@ -26,7 +26,27 @@ public sealed partial class HelmReleaseRowViewModel : ObservableObject
 
     public string Description => Release.Description;
 
+    /// <summary>The instant itself, which the Updated column sorts on (never on <see cref="UpdatedText"/>).</summary>
     public DateTimeOffset? Updated => Release.Updated;
+
+    /// <summary>
+    /// The Updated column's text: an age ("5m", "3d"), the way the resource list's Age column
+    /// reads, through the same <see cref="RelativeTime.Compact"/>. It used to print the
+    /// <c>DateTimeOffset</c> itself, the widest thing the column could hold, which at 1280px
+    /// was cut in the middle of its offset ("07/20/2026 08:41:02 +00:", FEAT-72). "—" says Helm
+    /// recorded no time for the revision. Recomputed by <see cref="RefreshTimes"/> off the
+    /// cluster tab's shared clock, since an age changes with nothing else changing.
+    /// </summary>
+    [ObservableProperty]
+    private string _updatedText = "";
+
+    /// <summary>The exact instant, local time, on the cell's tooltip — as Age's "Created …" is.</summary>
+    public string UpdatedTooltip => Updated is { } at
+        ? $"Updated {at.ToLocalTime():yyyy-MM-dd HH:mm:ss}"
+        : "Helm recorded no time for this revision";
+
+    public void RefreshTimes(DateTimeOffset now) =>
+        UpdatedText = Updated is { } at ? RelativeTime.Compact(now - at) : "—";
 
     /// <summary>Maps Helm's release status onto the shell's statusDot/pill vocabulary.</summary>
     public string StatusHealth => Release.Status switch
@@ -43,5 +63,9 @@ public sealed partial class HelmReleaseRowViewModel : ObservableObject
     [ObservableProperty]
     private bool _isSelected;
 
-    public HelmReleaseRowViewModel(HelmRelease release) => Release = release;
+    public HelmReleaseRowViewModel(HelmRelease release)
+    {
+        Release = release;
+        RefreshTimes(DateTimeOffset.UtcNow);
+    }
 }

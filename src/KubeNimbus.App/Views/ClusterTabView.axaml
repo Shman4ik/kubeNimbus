@@ -58,11 +58,18 @@
       </Grid>
 
       <ScrollViewer Grid.Row="1">
-        <ItemsControl ItemsSource="{Binding SidebarSections}">
+        <!-- One Tab stop for the whole catalog, entered on the selected kind; the arrow keys
+             move between headers and rows, Enter or Space opens a kind or folds a section, and
+             Left / Right fold and unfold (ENG-4). Every row used to be a Tab stop of its own,
+             so a keyboard walk crossed 35 to 100 rows to reach the list, and the section
+             headers were not reachable at all. See OnSidebarKeyDown. -->
+        <ItemsControl Name="SidebarItems" ItemsSource="{Binding SidebarSections}"
+                      KeyboardNavigation.TabNavigation="Once" KeyDown="OnSidebarKeyDown">
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:SidebarSectionViewModel">
               <StackPanel Margin="0,0,0,8" IsVisible="{Binding IsSectionVisible}">
-                <Border Classes="sectionHeaderRow" Tapped="OnSidebarSectionTapped">
+                <Border Classes="sectionHeaderRow" Tapped="OnSidebarSectionTapped" Focusable="True"
+                        AutomationProperties.Name="{Binding Title}">
                   <Grid ColumnDefinitions="Auto,*,Auto">
                     <PathIcon Grid.Column="0" Data="{StaticResource ChevronRightIconGeometry}" Width="10" Height="10"
                               Opacity="0.5" Margin="0,0,4,0" VerticalAlignment="Center"
@@ -111,6 +118,7 @@
          filter box too narrow to type in, or the resource list too narrow to read;
          ClusterTabView.axaml.cs persists where it ends up. -->
     <GridSplitter Grid.Column="1" Name="SidebarSplitter" Classes="sidebar" Width="8"
+                  AutomationProperties.Name="Resize the sidebar"
                   ResizeDirection="Columns" ResizeBehavior="PreviousAndNext"
                   DragCompleted="OnSidebarSplitterDragCompleted" />
 
@@ -1030,10 +1038,10 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Updated" Width="Auto" MinWidth="150" Tag="updated" CanUserSort="True">
+              <DataGridTemplateColumn Header="Updated" Width="Auto" MinWidth="88" Tag="updated" CanUserSort="True">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:HelmReleaseRowViewModel">
-                    <TextBlock Text="{Binding Updated}" Opacity="0.75" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding UpdatedText}" ToolTip.Tip="{Binding UpdatedTooltip}" Opacity="0.75" VerticalAlignment="Center" />
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
@@ -1241,21 +1249,31 @@
 
         <!-- Drag handle between the list and the bottom dock. -->
         <GridSplitter Grid.Row="2" Name="DockSplitter" Classes="dock" Height="7"
+                      AutomationProperties.Name="Resize the inspector"
                       ResizeDirection="Rows" IsVisible="False" />
 
         <!-- Bottom inspector dock (Lens-style). -->
         <Border Grid.Row="3" Name="DockRegion" Classes="card" Padding="0" IsVisible="False">
           <Grid RowDefinitions="Auto,*">
             <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Classes="dockHeader">
-              <ItemsControl Grid.Column="0" ItemsSource="{Binding InspectorTabs}" Margin="4">
-                <ItemsControl.ItemsPanel>
-                  <ItemsPanelTemplate>
-                    <WrapPanel Orientation="Horizontal" />
-                  </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
+              <!-- A ListBox, not an ItemsControl of Borders with a Tapped handler (ENG-54): each
+                   tab is a container the keyboard can reach (Tab lands on the open one, the
+                   arrow keys move between them) and UI Automation reads as a tab named by
+                   its title (InspectorTabViewModelBase.ToString). The selection is pushed one
+                   way from SelectedInspectorTab and read back in OnInspectorTabSelectionChanged,
+                   never bound two-way: closing the selected tab removes it from the list, the
+                   ListBox answers with a null selection, and a two-way binding would write that
+                   null back before CloseInspectorTab could pick the neighbour (the DataGrid
+                   version of this is ENG-43). -->
+              <ListBox Grid.Column="0" Name="InspectorTabStrip" Classes="dockTabs" Margin="4"
+                       ItemsSource="{Binding InspectorTabs}"
+                       SelectedItem="{Binding SelectedInspectorTab, Mode=OneWay}"
+                       SelectionChanged="OnInspectorTabSelectionChanged"
+                       AutomationProperties.Name="Inspector tabs"
+                       AutomationProperties.ControlTypeOverride="Tab">
+                <ListBox.ItemTemplate>
                   <DataTemplate x:DataType="vm:InspectorTabViewModelBase">
-                    <Border Classes="dockTab" Classes.active="{Binding IsActive}" Margin="2" Tapped="OnInspectorTabTapped">
+                    <Border Classes="dockTab" Classes.active="{Binding IsActive}">
                       <StackPanel Orientation="Horizontal" Spacing="6">
                         <!-- Trimmed: a generated pod name ("Pod/payment-service-report-generator
                              -7f9c8d6bcd-x7k2m") is 50 characters of which the last few are the
@@ -1266,7 +1284,9 @@
                         <TextBlock Text="{Binding Title}" FontSize="12" VerticalAlignment="Center"
                                    MaxWidth="240" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}"
                                    Opacity="{Binding IsPreview, Converter={x:Static conv:PreviewToOpacityConverter.Instance}}" />
-                        <Button Classes="chip" Padding="0" MinWidth="14" MinHeight="14"
+                        <!-- Not a Tab stop: Shift+Tab into the strip landed on it rather than on
+                             the tab, so the strip was two stops one way and one the other. -->
+                        <Button Classes="chip" Padding="0" MinWidth="14" MinHeight="14" IsTabStop="False"
                                 ToolTip.Tip="Close tab" AutomationProperties.Name="{Binding Title, StringFormat='Close {0}'}"
                                 Command="{Binding $parent[UserControl].((vm:ClusterTabViewModel)DataContext).CloseInspectorTabCommand}"
                                 CommandParameter="{Binding}">
@@ -1275,8 +1295,8 @@
                       </StackPanel>
                     </Border>
                   </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
+                </ListBox.ItemTemplate>
+              </ListBox>
               <Button Grid.Column="1" Classes="toolbar" Margin="0,4,4,0"
                       Command="{Binding ToggleInspectorMaximizedCommand}"
                       ToolTip.Tip="{Binding IsInspectorMaximized, Converter={x:Static conv:MaximizedToTooltipConverter.Instance}}"
