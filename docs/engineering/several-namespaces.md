@@ -86,7 +86,8 @@ whenever the kind or `SelectedNamespaces` changes.
 
 A sort on the Namespace column stays in force while the column is hidden; with one namespace
 every row compares equal on it and the sort's own tie-break decides. `NamespaceColumnTests` pins the rule (confirmed red with the one-namespace case
-removed). The Helm release list's own Namespace column is a separate grid and still shows.
+removed). The Helm release list is a grid of its own and follows the same rule, since it reads the same
+choice (its synthetic kind is namespaced); a release's history has no Namespace column.
 
 ## What is kept
 

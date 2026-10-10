@@ -343,6 +343,17 @@ internal static class KeyboardChecks
         if (vm.InspectorTabs.Count < 2 || vm.SelectedKind is not { } kind)
             throw new InvalidOperationException("The keyboard walk needs a selected kind and two dock tabs.");
 
+        // The demo's log lines arrive on a timer. Wait for the first one, so the log list's
+        // single stop is in every walk rather than in whichever runs the timer won.
+        for (var i = 0; i < 500 && !pane.GetVisualDescendants().OfType<LogLineText>().Any(l => l.IsEffectivelyVisible); i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(20);
+        }
+
+        if (!pane.GetVisualDescendants().OfType<LogLineText>().Any(l => l.IsEffectivelyVisible))
+            throw new InvalidOperationException("The front pod's log pane drew no line within 10 seconds, so its Tab stop cannot be checked.");
+
         List<Control> Walk(RawInputModifiers modifiers, string keys)
         {
             start.Focus(NavigationMethod.Tab);
@@ -401,8 +412,12 @@ internal static class KeyboardChecks
         if (entered.Descriptor != kind.Descriptor)
             throw new InvalidOperationException($"Tab into the sidebar landed on {entered.DisplayName}, not on the selected kind, {kind.DisplayName}.");
 
-        if (forward.Count(c => c is LogLineText) is var lines and > 1)
-            throw new InvalidOperationException($"The log pane's lines are {lines} Tab stops; they are one.");
+        // The log list is one stop, the list itself; no line is one. A line could be recycled
+        // under a new log line while it held the stop, which left focus on a hidden line.
+        var lines = forward.Count(c => c is LogLineText);
+        var logLists = forward.Count(c => c is ItemsControl { Name: "LogItems" } && pane.IsVisualAncestorOf(c));
+        if (lines != 0 || logLists != 1)
+            throw new InvalidOperationException($"The log pane should be one Tab stop, the list; it was {logLists} list stops and {lines} line stops.");
 
         var tabStop = forward.First(strip.IsVisualAncestorOf);
         if (tabStop is not ListBoxItem { DataContext: InspectorTabViewModelBase front } || front != vm.SelectedInspectorTab)

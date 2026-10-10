@@ -500,6 +500,16 @@ public partial class ClusterTabView : UserControl
         // last happened). Namespace and, in fleet mode, Cluster stay.
         var isEvents = Vm?.IsEventList == true;
 
+        // The Helm release list reads the same namespace choice (its synthetic kind is
+        // namespaced), so its Namespace column follows the same rule (FEAT-67).
+        foreach (var column in HelmGrid.Columns)
+        {
+            if (column.Tag as string == "namespace")
+            {
+                column.IsVisible = Vm?.IsNamespaceColumnShown ?? true;
+            }
+        }
+
         foreach (var column in FixedColumns)
         {
             // In the Events list the Namespace header has to hold its sort arrow at 1024px

@@ -410,13 +410,19 @@
 
     <!-- Each log line is a SelectableTextBlock, so each was a Tab stop of its own: a keyboard
          walk through either log pane crossed every line on screen, sixty of them in a
-         maximized pane, before it got back to the command bar (ENG-4). One stop for the whole
-         list keeps a line reachable for a keyboard copy and costs one key. Set here rather
-         than in the two views because both name the list LogItems and both need it. -->
+         maximized pane, before it got back to the command bar (ENG-4). The list itself is the
+         one stop now, with the shared ring around it, and the lines are not stops (a click
+         still selects text in one). Not a line as the stop: the list virtualizes, so the line
+         Tab last landed on can be recycled under a new log line, and focus then sat on a
+         hidden line with no ring. Set here rather than in the two views because both name
+         the list LogItems and both need it. -->
     <Style Selector="ItemsControl#LogItems">
-        <Setter Property="KeyboardNavigation.TabNavigation" Value="Once" />
+        <Setter Property="Focusable" Value="True" />
+        <Setter Property="AutomationProperties.Name" Value="Log lines" />
     </Style>
-
+    <Style Selector="ItemsControl#LogItems SelectableTextBlock.logLine">
+        <Setter Property="KeyboardNavigation.IsTabStop" Value="False" />
+    </Style>
     <!-- A log row: a 2px bar on the left for an error or a warning, and a translucent wash
          for an error only, nothing at all for anything else, so
          the eye lands on the rows that matter and the rest reads as plain text. The wash is
