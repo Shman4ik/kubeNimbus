@@ -47,11 +47,13 @@
     Bring up a bare cluster, apply no demo workloads.
 
 .PARAMETER Wsl
-    Run every docker command through `wsl.exe docker ...` instead of a native
+    Run every docker command through `wsl.exe --exec docker ...` instead of a native
     Windows docker.exe — for Docker Engine installed inside a WSL2 distro per
     https://learn.microsoft.com/windows/wsl/tutorials/wsl-containers, with no
     Docker Desktop involved. Host-path arguments (the manifests dir) are
-    translated to their /mnt/... form via `wsl wslpath -u` first.
+    translated to their /mnt/... form via `wsl --exec wslpath -u` first. `--exec`
+    keeps the Linux shell out of it: without it bash eats the backslashes of a
+    Windows path, and `X:\source\...` arrives as `X:source...`.
 
 .PARAMETER WslDistribution
     WSL distro to target (passed as `wsl -d <name>`). Only meaningful with
@@ -99,19 +101,19 @@ if ($Wsl) {
     # near the external process's stdin unless it's forwarded explicitly.
     function docker {
         if ($WslDistribution) {
-            $input | & wsl.exe -d $WslDistribution docker @args
+            $input | & wsl.exe -d $WslDistribution --exec docker @args
         }
         else {
-            $input | & wsl.exe docker @args
+            $input | & wsl.exe --exec docker @args
         }
     }
 }
 
 function ConvertTo-DockerHostPath([string] $WindowsPath) {
     if (-not $Wsl) { return $WindowsPath }
-    $wslPathArgs = @('wslpath', '-u', $WindowsPath)
+    $wslPathArgs = @('--exec', 'wslpath', '-u', $WindowsPath)
     if ($WslDistribution) { $wslPathArgs = @('-d', $WslDistribution) + $wslPathArgs }
-    $translated = (& wsl.exe @wslPathArgs).Trim()
+    $translated = "$(& wsl.exe @wslPathArgs)".Trim()
     if ($LASTEXITCODE -ne 0 -or -not $translated) {
         throw "wsl wslpath -u '$WindowsPath' failed to translate the manifests path."
     }
