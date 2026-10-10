@@ -201,17 +201,24 @@ internal static class LayoutChecks
 
         if (box is not null)
         {
+            // The box is the sentence's blank: the word it completes ("to") sits just before it
+            // on the same line, and the pair ends the sentence. The docked box this replaced
+            // passed a looser check while "to" wrapped onto a line of its own under it.
+            var lead = strip.FindControl<TextBlock>("BlankLead")!;
+            var leadRight = (lead.TranslatePoint(default, window)?.X ?? double.NaN) + lead.TextLayout.Width;
+            var leadMiddle = lead.TranslatePoint(new Point(0, lead.Bounds.Height / 2), window)?.Y ?? double.NaN;
             var boxLeft = box.TranslatePoint(default, window)?.X ?? double.NaN;
-            var boxGap = boxLeft - InkRight(sentence);
-            var boxMiddle = box.TranslatePoint(new Point(0, box.Bounds.Height / 2), window)?.Y ?? double.NaN;
-            var sentenceTop = sentence.TranslatePoint(default, window)?.Y ?? double.NaN;
-            var sentenceBottom = sentenceTop + sentence.Bounds.Height;
-            if (boxGap is < 0 or > 16 || boxMiddle < sentenceTop || boxMiddle > sentenceBottom)
+            var boxTop = box.TranslatePoint(default, window)?.Y ?? double.NaN;
+            var boxGap = boxLeft - leadRight;
+            var sentenceBottom = (sentence.TranslatePoint(default, window)?.Y ?? double.NaN) + sentence.Bounds.Height;
+            var boxBottom = boxTop + box.Bounds.Height;
+            if (!lead.IsEffectivelyVisible || lead.Text != "to" || boxGap is < 0 or > 16
+                || leadMiddle < boxTop || leadMiddle > boxBottom || boxBottom > sentenceBottom + 0.5)
                 throw new InvalidOperationException(
-                    $"The replica box starts {boxGap:0}px after the sentence, centred at y={boxMiddle:0} against a sentence "
-                    + $"spanning y={sentenceTop:0}..{sentenceBottom:0}; it should be the sentence's blank (FEAT-77).");
+                    $"The replica box starts {boxGap:0}px after \"{lead.Text}\" (its middle at y={leadMiddle:0}, the box "
+                    + $"spanning y={boxTop:0}..{boxBottom:0}, the sentence ending at y={sentenceBottom:0}); it should follow "
+                    + "the word it completes on the same line, inside the sentence (FEAT-77).");
         }
-
         Console.WriteLine($"Action strip reads as one block at {window.Bounds.Width:0}px (confirm {gap:0}px after the text).");
 
         double InkRight(TextBlock block) =>

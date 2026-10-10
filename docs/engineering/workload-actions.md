@@ -131,7 +131,12 @@ answer beside it, the same shape for every action it hosts:
   above. The box has no label of its own because the sentence is its label; UI rule 11's
   label-above-the-input is about a form field whose label sat in an `Auto` column with no gap,
   and this box keeps a 10px margin from the words. `AutomationProperties.Name` says "Replicas"
-  for a screen reader.
+  for a screen reader. The box is an inline of the sentence (`InlineUIContainer`), drawn
+  together with the word "to" as one unit (`SuffixBeforeBlank` is the sentence without that
+  word). The first cut docked the box beside the sentence, and on a production cluster with a
+  long name the sentence wrapped and left "to" alone on its second line under a box centred
+  beside both, so it read "(1 running) [6]" over "to". Now a wrap moves the word and the box
+  together.
 - **The buttons sit with the text, not across the window.** The sentence column is capped at
   900px and left-aligned, so a short sentence keeps Scale / Cancel right after it, and a long
   one wraps beside them rather than pushing them out of the card (the window's minimum width
@@ -146,8 +151,9 @@ answer beside it, the same shape for every action it hosts:
 
 `LayoutChecks.ActionStripReadsAsOneBlock` asserts the layout half on every armed
 `cluster-tab-row-action-*` scenario (the two narrow ones at 960px included): the confirm starts
-within 32px of where the text's ink ends, and a scale's box starts within 16px of the sentence
-and level with it. It measures the laid-out text, not the `TextBlock`'s bounds, because a
+within 32px of where the text's ink ends, and a scale's box starts within 16px after the word
+"to", level with it and inside the sentence. Splitting the word and the box into two inlines,
+so they could wrap apart, was confirmed red. It measures the laid-out text, not the `TextBlock`'s bounds, because a
 `TextBlock` stretches to its column: the first version of the check measured bounds and passed
 a strip whose buttons had been moved back to the far edge. `RowActionSentenceTests` pins the
 sentence. The work was built on 2026-10-05 (commit 9a7c077, never pushed) and landed with the

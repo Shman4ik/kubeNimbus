@@ -294,6 +294,14 @@ public sealed partial class RowActionViewModel : ObservableObject
         _ => "",
     };
 
+    /// <summary>
+    /// <see cref="HeadlineSuffix"/> as the strip draws it: for a scale, without its last word,
+    /// "to", which the view draws together with the replica box as one unit so that a wrap can
+    /// never leave the box on one line and the word it completes on another (FEAT-77).
+    /// </summary>
+    public string SuffixBeforeBlank => IsScale && HeadlineSuffix.EndsWith(" to", StringComparison.Ordinal)
+        ? HeadlineSuffix[..^3]
+        : HeadlineSuffix;
     /// <summary>The sentence the strip leads with, as plain text: verb, object, cluster, and for a scale the starting count.</summary>
     public string Headline => $"{Verb} {TargetKind} {TargetName}{TargetPlace}{HeadlineSuffix}";
 
@@ -526,6 +534,7 @@ public sealed partial class RowActionViewModel : ObservableObject
     {
         _fromReplicas = value;
         OnPropertyChanged(nameof(HeadlineSuffix));
+        OnPropertyChanged(nameof(SuffixBeforeBlank));
         OnPropertyChanged(nameof(Headline));
         OnPropertyChanged(nameof(Question));
         OnPropertyChanged(nameof(ScaleWarning));

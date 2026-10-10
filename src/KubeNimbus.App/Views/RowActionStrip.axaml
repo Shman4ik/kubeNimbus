@@ -49,7 +49,6 @@
     </Style>
     <Style Selector="TextBlock.actionSentence">
       <Setter Property="FontSize" Value="13" />
-      <Setter Property="LineHeight" Value="20" />
     </Style>
     <Style Selector="ProgressBar.actionBusy">
       <Setter Property="Width" Value="28" />
@@ -91,17 +90,18 @@
                  sentence is its label (AutomationProperties.Name says "Replicas" for a
                  screen reader). Rule 11's label-above-the-input is for a form field; this
                  is not one, and the 10px margin is the gap whose absence that rule was
-                 about. -->
-            <DockPanel>
-              <NumericUpDown Name="ReplicaInput" DockPanel.Dock="Right" Margin="10,0,0,0"
-                             VerticalAlignment="Center" IsVisible="{Binding IsScale}"
+                 about. The box is an inline in the sentence, not docked beside it: docked,
+                 a sentence that wrapped (a long cluster name) left "to" alone on its second
+                 line with the box centred beside both, reading "(1 running) [6]" over "to".
+                 Inline, and drawn together with "to" as one unit, it always follows the word it
+                 completes; a wrap moves both. -->
+            <TextBlock Name="ActionSentence" Classes="actionSentence" TextWrapping="Wrap" VerticalAlignment="Center"><Run Text="{Binding Verb}" FontWeight="SemiBold" /><Run Text=" " /><Run Text="{Binding TargetKind}" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" /><Run Text=" " /><Run Text="{Binding TargetName}" FontWeight="SemiBold" /><Run Text="{Binding TargetPlace}" /><Run Text="{Binding SuffixBeforeBlank}" /><InlineUIContainer BaselineAlignment="Center"><StackPanel Orientation="Horizontal" Spacing="10" Margin="4,2,0,2" IsVisible="{Binding IsScale}"><TextBlock Name="BlankLead" Classes="actionSentence" Text="to" VerticalAlignment="Center" /><NumericUpDown Name="ReplicaInput"
+                             VerticalAlignment="Center"
                              AutomationProperties.Name="Replicas"
                              Value="{Binding Replicas}" Minimum="0"
                              Maximum="{x:Static vm:RowActionViewModel.MaxReplicas}"
                              Increment="1" FormatString="0" MinWidth="110"
-                             IsEnabled="{Binding IsEditable}" />
-              <TextBlock Name="ActionSentence" Classes="actionSentence" TextWrapping="Wrap" VerticalAlignment="Center"><Run Text="{Binding Verb}" FontWeight="SemiBold" /><Run Text=" " /><Run Text="{Binding TargetKind}" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" /><Run Text=" " /><Run Text="{Binding TargetName}" FontWeight="SemiBold" /><Run Text="{Binding TargetPlace}" /><Run Text="{Binding HeadlineSuffix}" /></TextBlock>
-            </DockPanel>
+                             IsEnabled="{Binding IsEditable}" /></StackPanel></InlineUIContainer></TextBlock>
 
             <TextBlock Classes="statusText dim" Text="{Binding Consequence}" TextWrapping="Wrap"
                        IsVisible="{Binding HasConsequence}" />
