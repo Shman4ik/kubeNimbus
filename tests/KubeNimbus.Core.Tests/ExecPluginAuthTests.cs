@@ -31,6 +31,24 @@ public class ExecPluginAuthTests
     }
 
     [Test]
+    public async Task One_connect_runs_the_plugin_once()
+    {
+        // #283: the library ran it to build the configuration and again on the first request,
+        // because the token provider it installs starts empty. The build's credential now
+        // seeds the provider, so the first request reuses it.
+        using var server = new ScriptedApiServer(AcceptAnyPluginToken);
+        var plugin = TokenPlugin.Write(FarFuture);
+        using var client = await ClusterClient.ConnectAsync(Context(Kubeconfig(server.Url, plugin.Path)));
+
+        await Assert.That(plugin.Runs).IsEqualTo(1);
+        await client.GetServerVersionAsync();
+        await client.GetServerVersionAsync();
+
+        await Assert.That(plugin.Runs).IsEqualTo(1);
+        await Assert.That(server.Requests.Select(r => r.Authorization).Distinct().Single()).IsEqualTo("Bearer tok-1");
+    }
+
+    [Test]
     public async Task An_expired_token_is_refreshed_by_running_the_plugin_again()
     {
         // expirationTimestamp in the past: the library's token provider must treat every

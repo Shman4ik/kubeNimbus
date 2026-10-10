@@ -296,6 +296,7 @@ public sealed partial class ResourceRowViewModel : ObservableObject
         _lastRestartAt = summary.LastRestartAt;
         HasLogs = LogTarget.CanOpen(resource);
         UpdateEventCells(resource);
+        FilterFields = RowFilterFields.KindFields(resource);
         RefreshPrinterCells();
         RefreshTimes();
     }
@@ -392,40 +393,15 @@ public sealed partial class ResourceRowViewModel : ObservableObject
     }
 
     /// <summary>
-    /// The list's name filter: case-insensitive substring over the fields that
-    /// <em>identify</em> the object — name, namespace, and the cluster in fleet mode.
-    /// Deliberately not the status: "Running" matches most of a healthy list, and what
-    /// people type into a search box is a name they half-remember. Namespace is in
-    /// because "All namespaces" is the default and "demo-shop" is how you narrow it
-    /// without leaving the list.
-    ///
-    /// <para>
-    /// A CRD's printer cells are out for the same reason the status is. They are the
-    /// same *kind* of content — "True", "Ready", "1.15.2", a replica count — so
-    /// including them would make one-letter queries match most of a list, and would
-    /// change what the box matches from kind to kind, which is worse than either
-    /// answer on its own. The identity fields are the ones that mean the same thing
-    /// everywhere.
-    /// </para>
-    ///
-    /// <para>
-    /// <b>An Event is the exception, and for the same reason, not against it.</b> An
-    /// Event's own name is a generated "&lt;object&gt;.&lt;hex&gt;" that nobody types; what
-    /// identifies an event to the person looking for it is what happened (Reason), to
-    /// what (Object) and the sentence it logged (Message) — "BackOff", "checkout-worker",
-    /// "Insufficient cpu". So for Event rows those three are matched as well: they
-    /// identify an event the way a name identifies a pod. Type is still not matched —
-    /// "Normal" would match most of the list, which is the status argument again.
-    /// </para>
+    /// The list's search: a case-insensitive substring over the fields that <em>identify</em>
+    /// the object — name, namespace, the cluster in fleet mode, and the few fields a kind adds
+    /// (an Event's reason, object and message; an Ingress's hosts). Never a status. The table
+    /// and its reasons are <see cref="RowFilterFields"/>, the one place the rule is written.
     /// </summary>
-    public bool Matches(string query) =>
-        Name.Contains(query, StringComparison.OrdinalIgnoreCase)
-        || Namespace.Contains(query, StringComparison.OrdinalIgnoreCase)
-        || (ClusterName.Length > 0 && ClusterName.Contains(query, StringComparison.OrdinalIgnoreCase))
-        || (IsEvent
-            && (EventReason.Contains(query, StringComparison.OrdinalIgnoreCase)
-                || EventObject.Contains(query, StringComparison.OrdinalIgnoreCase)
-                || EventMessageTooltip.Contains(query, StringComparison.OrdinalIgnoreCase)));
+    public bool Matches(string query) => RowFilterFields.Matches(this, query);
+
+    /// <summary>The identity fields this row's kind adds to the search (<see cref="RowFilterFields.KindFields"/>).</summary>
+    internal IReadOnlyList<string> FilterFields { get; private set; } = [];
 
     /// <summary>
     /// Recomputes the two cells whose text is a function of wall-clock rather than of

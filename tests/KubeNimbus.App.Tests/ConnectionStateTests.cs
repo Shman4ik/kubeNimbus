@@ -63,6 +63,43 @@ public class ConnectionStateTests
     }
 
     /// <summary>
+    /// #272: a Reconnect that fails on a tab that was connected is reported like a first
+    /// connect that fails — the failure view takes the list's place, in both modes — rather
+    /// than as a status line over stale rows whose watch goes on retrying. Retrying from there
+    /// goes through Reconnect again, not through a first connect that would re-apply the
+    /// restored kind and namespace.
+    /// </summary>
+    [Test]
+    public async Task A_failed_reconnect_on_a_connected_tab_shows_the_failure_view_in_place_of_its_rows()
+    {
+        TestObjects.RedirectStores();
+        var context = new ClusterContext("refused", "refused", null, "tester", RefusedKubeconfig());
+        var tab = new ClusterTabViewModel(context);
+        tab.Client = await ClusterClient.ConnectAsync(context);
+        tab.IsConnected = true;
+        tab.Apply(TestObjects.Added(TestObjects.Pod("payments", "checkout-0")));
+        tab.Applications.HasStarted = true;
+        await Assert.That(tab.Applications.ShowsConnectionFailure).IsFalse();
+
+        await tab.ReconnectCommand.ExecuteAsync(null);
+
+        await Assert.That(tab.HasConnectionFailure).IsTrue();
+        await Assert.That(tab.ConnectionFailure!.Report.Step).IsEqualTo(ConnectionReport.ReachingServer);
+        await Assert.That(tab.ConnectionFailure.Facts.Single(f => f.Label == "Signs in with").Value).IsEqualTo("bearer token in the kubeconfig");
+        await Assert.That(tab.IsConnected).IsFalse();
+        await Assert.That(tab.Status).StartsWith("Reconnect failed");
+        await Assert.That(tab.Applications.ShowsConnectionFailure).IsTrue();
+
+        // Retry is Reconnect again, and a second failure replaces the first.
+        var first = tab.ConnectionFailure;
+        await first.RetryCommand.ExecuteAsync(null);
+        await Assert.That(tab.ConnectionFailure).IsNotNull();
+        await Assert.That(ReferenceEquals(tab.ConnectionFailure, first)).IsFalse();
+        await Assert.That(tab.Status).StartsWith("Reconnect failed");
+        await Assert.That(tab.Client).IsNotNull();
+    }
+
+    /// <summary>
     /// The tab is connected once <c>/version</c> answers and still connecting while
     /// discovery runs, and the Applications reads start in that gap. On an EKS cluster signed
     /// in through AWS SSO the gap was seconds, and the page drew three states in one cell:

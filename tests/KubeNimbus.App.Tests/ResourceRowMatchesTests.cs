@@ -112,4 +112,53 @@ public class ResourceRowMatchesTests
         await Assert.That(pod.Matches("BackOff")).IsFalse();
         await Assert.That(pod.EventReason).IsEqualTo("");
     }
+
+    /// <summary>
+    /// FEAT-65: an Ingress is known by its hostname, so every <c>spec.rules[].host</c>
+    /// identifies it — "which Ingress serves shop.example.com?" is the question the search
+    /// answers. Its status (the load balancer's address) and its class stay out.
+    /// </summary>
+    [Test]
+    public async Task An_ingress_matches_every_host_its_rules_name_and_not_its_address_or_class()
+    {
+        var row = new ResourceRowViewModel(Parse("""
+            {
+              "apiVersion": "networking.k8s.io/v1",
+              "kind": "Ingress",
+              "metadata": { "name": "storefront", "namespace": "payments", "uid": "i1" },
+              "spec": {
+                "ingressClassName": "traefik",
+                "rules": [
+                  { "host": "shop.example.com", "http": { "paths": [] } },
+                  { "host": "api.example.com" },
+                  { "http": { "paths": [] } }
+                ],
+                "tls": [ { "hosts": [ "tls-only.example.com" ] } ]
+              },
+              "status": { "loadBalancer": { "ingress": [ { "ip": "10.43.0.7" } ] } }
+            }
+            """));
+
+        await Assert.That(row.Matches("SHOP.example")).IsTrue();
+        await Assert.That(row.Matches("api.example.com")).IsTrue();
+        await Assert.That(row.Matches("10.43.0.7")).IsFalse();
+        await Assert.That(row.Matches("traefik")).IsFalse();
+        await Assert.That(row.Matches("tls-only")).IsFalse();
+    }
+
+    /// <summary>The table is per kind: another kind with a <c>spec.rules[].host</c> does not borrow the Ingress's row.</summary>
+    [Test]
+    public async Task Only_an_ingress_matches_on_rule_hosts()
+    {
+        var row = new ResourceRowViewModel(Parse("""
+            {
+              "apiVersion": "example.com/v1",
+              "kind": "Ingress",
+              "metadata": { "name": "lookalike", "namespace": "payments", "uid": "c1" },
+              "spec": { "rules": [ { "host": "shop.example.com" } ] }
+            }
+            """));
+
+        await Assert.That(row.Matches("shop.example.com")).IsFalse();
+    }
 }

@@ -496,14 +496,38 @@ public static partial class Kubeconfig
 
             // tokenFile, which the library's model has no field for: read now, on every build,
             // into the in-memory model only (KubeconfigTokenFile).
+            string? tokenFilePath = null;
             if (userEntry is not null
                 && document.TokenFileOf(userEntry) is { } tokenFile
                 && user?.UserCredentials is { } credentials)
             {
-                KubeconfigTokenFile.Apply(credentials, tokenFile, file.DirectoryName);
+                tokenFilePath = KubeconfigTokenFile.Apply(credentials, tokenFile, file.DirectoryName);
+            }
+
+            // The plugin runs here, once, and its credential seeds the client's token
+            // provider; the library would run it again on the first request (#283).
+            var execProvider = user?.UserCredentials is { ExternalExecution: not null } execCredentials
+                ? ExecCredentialProvider.RunInto(execCredentials)
+                : null;
+
+            // An entry with no credential in it (`user: {}`) connects anonymously, as kubectl
+            // does; the library refuses it as a user with no credentials (#273).
+            if (user is not null && HasNoCredential(user.UserCredentials)
+                && config.Contexts?.FirstOrDefault(c => c.Name == context.Name)?.ContextDetails is { } details)
+            {
+                details.User = null;
             }
 
             var configuration = KubernetesClientConfiguration.BuildConfigFromConfigObject(config, context.Name);
+            if (execProvider is not null)
+            {
+                configuration.TokenProvider = execProvider;
+            }
+            else if (tokenFilePath is not null && user?.UserCredentials?.Token is { Length: > 0 } fileToken)
+            {
+                // Re-read about once a minute while connected, as client-go does (#262).
+                configuration.TokenProvider = new TokenFileProvider(tokenFilePath, fileToken);
+            }
 
             // The library keeps only the first certificate of a CA bundle; kubectl trusts them all.
             if (!configuration.SkipTlsVerify
@@ -532,6 +556,24 @@ public static partial class Kubeconfig
         Path.IsPathRooted(path) || string.IsNullOrEmpty(kubeconfigDirectory)
             ? Path.GetFullPath(path)
             : Path.GetFullPath(Path.Combine(kubeconfigDirectory, path));
+
+    /// <summary>
+    /// Whether a user entry carries nothing to sign in with: no token, certificate, username,
+    /// auth-provider or exec plugin (<c>user: {}</c>, or a <c>user:</c> key missing). kubectl
+    /// sends such requests with no credential; the library refuses the entry. Impersonation
+    /// fields are not a credential — they say who to act as, and are sent either way.
+    /// </summary>
+    internal static bool HasNoCredential(UserCredentials? credentials) =>
+        credentials is null
+        || (string.IsNullOrEmpty(credentials.Token)
+            && string.IsNullOrEmpty(credentials.ClientCertificateData)
+            && string.IsNullOrEmpty(credentials.ClientCertificate)
+            && string.IsNullOrEmpty(credentials.ClientKeyData)
+            && string.IsNullOrEmpty(credentials.ClientKey)
+            && string.IsNullOrEmpty(credentials.UserName)
+            && string.IsNullOrEmpty(credentials.Password)
+            && credentials.AuthProvider is null
+            && credentials.ExternalExecution is null);
 
     /// <summary>The user entry name a context names, or null.</summary>
     internal static string? ContextUser(K8SConfiguration config, string contextName) =>

@@ -143,8 +143,12 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
     /// </summary>
     public bool IsDisconnected => !_tab.IsConnected && !_tab.IsConnecting && !HasStarted && !_tab.HasConnectionFailure;
 
-    /// <summary>The tab's connect failed: the page shows the same failure view the Resources list does.</summary>
-    public bool ShowsConnectionFailure => _tab.HasConnectionFailure && !_tab.IsConnecting && !HasStarted;
+    /// <summary>
+    /// The tab's connect failed: the page shows the same failure view the Resources list does.
+    /// That includes a failed reconnect of a tab whose reads had started (#272), which is
+    /// why this is not gated on <see cref="HasStarted"/> alone: the list it covers is stale.
+    /// </summary>
+    public bool ShowsConnectionFailure => _tab.HasConnectionFailure && !_tab.IsConnecting && (!HasStarted || !_tab.IsConnected);
 
     private void TryStart()
     {

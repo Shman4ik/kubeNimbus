@@ -1644,7 +1644,10 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             return;
         }
 
-        if (Client is not { } client || !IsConnected)
+        // A tab whose view was set up by a connect that succeeded, and whose reconnect then
+        // failed, retries through this path again rather than through ConnectAsync, which would
+        // re-apply the restored kind and namespace over the ones the reader had moved to.
+        if (Client is not { } client || (!IsConnected && !_reconnectFailed))
         {
             await ConnectAsync();
             return;
@@ -1657,21 +1660,43 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         {
             await client.RefreshCredentialsAsync(force: true);
             var version = await client.GetServerVersionAsync();
+            _reconnectFailed = false;
+            ConnectionFailure = null;
+            IsConnected = true;
             ApplyTransportNotices(client);
             Status = $"Connected — Kubernetes {version.GitVersion}. Credentials re-read from the kubeconfig.";
             Refresh();
         }
         catch (Exception ex)
         {
-            var report = await ConnectionReport.CreateAsync(Context, ex);
-            Status = $"Reconnect failed ({report.StepPhrase}).";
-            ConnectionWarning = $"Reconnect failed: {report.Headline} {report.Detail}";
-            ConnectionWarningOffersReconnect = true;
+            await ShowReconnectFailureAsync(ex);
         }
         finally
         {
             IsConnecting = false;
         }
+    }
+
+    // Set while the failure view stands for a reconnect of a tab that had connected (#272).
+    private bool _reconnectFailed;
+
+    /// <summary>
+    /// A reconnect that failed (#272). Every step it runs — reading the kubeconfig, building
+    /// the client, reaching the server — is one the first connect reports with the failure
+    /// view, so it is reported the same way: the list's watch stops and the view takes the
+    /// list's place. Before, the tab kept its old rows under a "Watch connection lost"
+    /// warning that the informer went on retrying, and the explanation only appeared once
+    /// the tab was closed and opened again. A watch that drops on its own is not this: the
+    /// informer retries it, and the list keeps its warning (UI rule 9).
+    /// </summary>
+    internal async Task ShowReconnectFailureAsync(Exception ex)
+    {
+        StopWatch();
+        _reconnectFailed = true;
+        ConnectionFailure = new ConnectionFailureViewModel(await ConnectionReport.CreateAsync(Context, ex), this);
+        Status = $"Reconnect failed ({ConnectionFailure.Report.StepPhrase}).";
+        IsConnected = false;
+        ApplyTransportNotices(null);
     }
 
     /// <summary>
@@ -2626,6 +2651,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// <summary>Cancels the current list watch (and the metrics poll riding on its token).</summary>
     private void StopWatch()
     {
+        _lastUsage = null;
         _watchCts?.Cancel();
         _watchCts?.Dispose();
         _watchCts = null;
@@ -3186,7 +3212,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                         return;
                     }
 
-                    await Dispatcher.UIThread.InvokeAsync(() => ApplyUsage(byKey));
+                    await Dispatcher.UIThread.InvokeAsync(() => ApplyUsage(byKey, token));
                     await timer.WaitForNextTickAsync(token);
                 }
             }
@@ -3197,9 +3223,33 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }, token);
     }
 
-    /// <summary>Pushes one poll's samples onto the matching rows; rows with no sample fall back to "—".</summary>
-    private void ApplyUsage(Dictionary<string, (long? Cpu, long? Memory)> byKey)
+    /// <summary>
+    /// The last poll of the list's current watch, kept so a row that arrives after it takes
+    /// its sample at once (ENG-55, #252) instead of reading "—" until the next poll, up to a
+    /// poll interval later. Memory only, and dropped with the watch: <see cref="StopWatch"/>
+    /// clears it, so a sample never outlives the kind and namespaces it was read for.
+    /// </summary>
+    private Dictionary<string, (long? Cpu, long? Memory)>? _lastUsage;
+
+    /// <summary>A new row takes the last poll's sample for its key, when that poll had one.</summary>
+    private void ApplyLastUsage(string key, ResourceRowViewModel row)
     {
+        if (_lastUsage is { } usage && usage.TryGetValue(key, out var sample))
+        {
+            row.ApplyUsage(sample.Cpu, sample.Memory);
+        }
+    }
+
+    /// <summary>Pushes one poll's samples onto the matching rows; rows with no sample fall back to "—".</summary>
+    internal void ApplyUsage(Dictionary<string, (long? Cpu, long? Memory)> byKey, CancellationToken token = default)
+    {
+        // A poll that finished after its watch was replaced belongs to a list no longer on screen.
+        if (token.IsCancellationRequested)
+        {
+            return;
+        }
+
+        _lastUsage = byKey;
         foreach (var (key, row) in _rowsByKey)
         {
             if (byKey.TryGetValue(key, out var sample))
@@ -3352,6 +3402,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                     var row = new ResourceRowViewModel(resource);
                     row.SetPrinterColumns(VisiblePrinterColumns);
                     _rowsByKey[resource.Key] = row;
+                    ApplyLastUsage(resource.Key, row);
                     AddRow(row);
                 }
 
@@ -3444,6 +3495,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                     var row = new ResourceRowViewModel(added, cluster);
                     row.SetPrinterColumns(VisiblePrinterColumns);
                     _rowsByKey[addedKey] = row;
+                    ApplyLastUsage(addedKey, row);
                     AddRow(row);
                 }
 
