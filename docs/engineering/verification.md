@@ -265,6 +265,16 @@ the Release/AOT build.
 
 ### Checking the running app (`kn-qa`, Windows)
 
+**Since 2026-10-10 this runs only inside the owner's Hyper-V QA VM, never on the owner's own
+desktop.** During the backlog sweep that month (#259), `kn-qa` runs drove the owner's real
+desktop: the app launched there, the pointer and keyboard moved, and checks pressed Win+V,
+Win+K and Snap Layouts and opened terminals and a browser. The owner decided that desktop
+checks belong in a VM with Claude running inside it. The VM sets `KUBENIMBUS_QA_VM=1`;
+`qa-app.ps1` and `qa-ui.ps1` refuse to start without it (`qa-app.ps1 -Stop` still works
+anywhere), and `qa-ui.ps1 screenshot` captures one element cropped to its bounds, because a
+run that read full 3840×1600 screenshots cost 316k tokens. Outside the VM, a desktop check is
+written into the PR body as a numbered check for the VM.
+
 The screenshot harness renders views bound to fixtures and the view-model tests drive
 view models; neither exercises real input, a real window or a real API server's timing.
 Those halves are most of the backlog's verification debt ("driven by a real mouse",

@@ -17,6 +17,13 @@
       check is about real input (a DataGrid double-click, a context menu, a key gesture),
       which is exactly what the pattern actions cannot prove.
 
+    Runs only inside the owner's Hyper-V QA VM (KUBENIMBUS_QA_VM=1), never on the owner's
+    own desktop; see qa-app.ps1.
+
+    `screenshot` captures one element, cropped to its bounds, so a check reads the region
+    it is about and not a whole window. -WholeWindow captures the app's window instead;
+    it never captures the desktop.
+
     Element selection (every command that targets one element):
       -Id <AutomationId>   exact x:Name / AutomationId
       -Name <text>         exact accessible name
@@ -31,7 +38,7 @@
     ./scripts/qa-ui.ps1 wait -Match "Crash-looping" -Timeout 20
     ./scripts/qa-ui.ps1 double-click -Match "crashloop-" -Type DataItem
     ./scripts/qa-ui.ps1 keys -Keys "{ESC}"
-    ./scripts/qa-ui.ps1 screenshot -Out $env:TEMP/qa/step1.png
+    ./scripts/qa-ui.ps1 screenshot -Id RowFilterBox -Out $env:TEMP/qa/step1.png
 #>
 [CmdletBinding()]
 param(
@@ -48,10 +55,14 @@ param(
     [string]$Keys,
     [string]$Out,
     [int]$Timeout = 10,
-    [int]$Max = 400
+    [int]$Max = 400,
+    [switch]$WholeWindow
 )
 
 $ErrorActionPreference = 'Stop'
+if ($env:KUBENIMBUS_QA_VM -ne '1') {
+    throw "Refusing: this machine is not marked as the QA VM (KUBENIMBUS_QA_VM is not '1'). See qa-app.ps1."
+}
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Windows.Forms, System.Drawing
 Add-Type -Namespace QaNative -Name Win32 -MemberDefinition @'
 [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
@@ -260,8 +271,13 @@ switch ($Command) {
     }
     'screenshot' {
         if (-not $Out) { throw 'Pass -Out <file.png>.' }
+        if (-not $WholeWindow -and -not ($Id -or $Name -or $Match)) {
+            throw 'Name the element to capture (-Id, -Name or -Match), or pass -WholeWindow.'
+        }
+        $target = if ($WholeWindow) { $null } else { Get-Target }
         Show-Window
-        $r = (Get-Window).Current.BoundingRectangle
+        $r = if ($target) { $target.Current.BoundingRectangle } else { (Get-Window).Current.BoundingRectangle }
+        if ($r.IsEmpty -or $r.Width -lt 1 -or $r.Height -lt 1) { throw 'The element has no bounds on screen.' }
         $bitmap = New-Object System.Drawing.Bitmap ([int]$r.Width), ([int]$r.Height)
         $g = [System.Drawing.Graphics]::FromImage($bitmap)
         $g.CopyFromScreen([int]$r.X, [int]$r.Y, 0, 0, $bitmap.Size)

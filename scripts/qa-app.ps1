@@ -1,11 +1,17 @@
 <#
 .SYNOPSIS
-    Starts (or stops) a Debug build of kubeNimbus for an agent to drive: isolated
-    profile, sandbox cluster only, one instance at a time.
+    Starts (or stops) a Debug build of kubeNimbus for an agent to drive: inside the
+    QA VM only, isolated profile, sandbox cluster only, one instance at a time.
 
 .DESCRIPTION
-    The kn-qa agent checks the running app through the Avalonia DevTools MCP. Three
-    things make that safe to hand to a cheap model, and this script is where they hold:
+    The kn-qa agent checks the running app through Windows UI Automation (qa-ui.ps1).
+    Four things make that safe to hand to a cheap model, and this script is where they hold:
+
+    - The QA VM only. Real mouse and keyboard input takes over whatever desktop the app
+      runs on, so desktop checks run only inside the owner's Hyper-V QA VM, never on the
+      owner's own desktop (owner's decision, 2026-10-10, #259). The VM sets the
+      environment variable KUBENIMBUS_QA_VM=1; anywhere else this script refuses to
+      start, and a desktop check is written into the PR body for the VM instead.
 
     - Isolation. KUBENIMBUS_PROFILE_DIR points the app at a fresh settings/workspace
       directory and restricts the kubeconfig search to $KUBECONFIG alone, so the
@@ -33,6 +39,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
 $repo = (git rev-parse --show-toplevel).Trim()
 $stateDir = Join-Path ([IO.Path]::GetTempPath()) 'kubenimbus-qa'
 $pidFile = Join-Path $stateDir 'app.pid'
@@ -58,6 +65,13 @@ if ($Stop) {
         'No QA instance is running.'
     }
     return
+}
+
+# Stopping is allowed anywhere; starting only in the QA VM.
+if ($env:KUBENIMBUS_QA_VM -ne '1') {
+    throw ("Refusing: this machine is not marked as the QA VM (KUBENIMBUS_QA_VM is not '1'). " +
+        "Desktop checks run only inside the owner's Hyper-V QA VM, never on the owner's own " +
+        "desktop. List the check in the PR body for the VM instead.")
 }
 
 $running = Get-RunningQaApp
@@ -101,4 +115,4 @@ $process = Start-Process -FilePath $exe -PassThru
 "Started kubeNimbus (pid $($process.Id))"
 "  profile:    $profileDir"
 "  kubeconfig: $($env:KUBECONFIG)"
-"Attach with the Avalonia DevTools MCP (attach-to-app). Stop with ./scripts/qa-app.ps1 -Stop"
+"Drive it with ./scripts/qa-ui.ps1. Stop with ./scripts/qa-app.ps1 -Stop"

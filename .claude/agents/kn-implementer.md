@@ -22,10 +22,12 @@ beyond the spec go in the report's out-of-scope list.
 
 ## Before you write anything
 
-1. Read `CLAUDE.md` in full, plus every `docs/engineering/` page for a feature
-   the item touches (`CLAUDE.md` indexes them). It is the engineering contract, and most of it is a
-   list of bugs that already shipped once. The rules that break silently and are
-   therefore worth re-reading for any UI change: rule 8 (hit-testing on a null
+1. `CLAUDE.md` is already in your context — it is the engineering contract — so do not
+   read it again. Read the `docs/engineering/` page of each feature the item touches
+   (`CLAUDE.md`'s index names them), and only those; every file you read is paid for again
+   on every later tool call, so `Grep` first and `Read` the part you need. For a UI change,
+   read the full text of these rules in `docs/engineering/ui-rules.md`, because they break
+   silently: rule 8 (hit-testing on a null
    background), **rule 8b** (a `ToggleButton` with both `IsChecked` and a
    `Command` is a guaranteed no-op — this shipped three times), rule 9 (every
    state gets a visual), rule 10 (two rows of chrome max in an inspector), rule
@@ -64,9 +66,12 @@ Run, in this order, and paste the real output (not a summary) into your report:
 ```bash
 dotnet build KubeNimbus.slnx
 ./scripts/test.sh                                                  # ./scripts/test.ps1 on Windows
-dotnet run --project tools/Screenshot -- /tmp/kn-shots            # add a scenario filter if the item is UI-local
-dotnet publish src/KubeNimbus.App -c Release -r linux-x64 -p:PublishAot=true -o /tmp/kn-aot
+dotnet run --project tools/Screenshot -- /tmp/kn-shots <scenario filter>   # the scenarios you touched
 ```
+
+CI runs the whole harness, the NativeAOT publish and the launch check on the train PR once
+the orchestrator pushes, and the verifier reads them from there; don't render every scenario
+or publish yourself unless a rule below asks for it.
 
 - Only a check that exercised the change counts. A command that failed to start, a
   syntax-only check, or a test run that reported zero tests is not a check. The test
@@ -77,26 +82,35 @@ dotnet publish src/KubeNimbus.App -c Release -r linux-x64 -p:PublishAot=true -o 
   item as done.
 - The screenshot harness is the only XAML smoke test there is. A build that
   compiles can still die on a stale `avares://` URI or an unresolved
-  `DataTemplate`. Run it for every UI change, both themes.
+  `DataTemplate`. Render the scenarios you touched for every UI change, both themes, and
+  read the PNGs cropped to the region you changed.
 - A UI change also re-renders the **published** screenshots it affects — the README's
   `design/screenshots/` and the Store's `design/store/screenshots/` — and commits them with
   the item (CLAUDE.md UI rule 21; each directory's README maps file to scenario and theme).
   Only on Windows: in a Linux container, report it as unverifiable instead.
-- The AOT publish is required for any new package, any new binding, anything
-  touching serialization. Known-acceptable warnings: `Avalonia.Controls.DataGrid`
+- The AOT publish (`dotnet publish src/KubeNimbus.App -c Release -r linux-x64
+  -p:PublishAot=true -o /tmp/kn-aot`) is required locally for any new package, any new
+  binding, anything touching serialization. Known-acceptable warnings: `Avalonia.Controls.DataGrid`
   IL2104/IL3053. **Any other new trim/AOT warning is a failure.**
 - If the SDK is missing, Ubuntu's own archive has it:
   `apt-get install -y dotnet-sdk-10.0 dotnet-sdk-aot-10.0` (move blocked PPAs in
   `/etc/apt/sources.list.d/` aside first). Do not use the dotnet-install script —
   every host it uses is blocked here.
+- **Never start the desktop app or drive its UI** — no `dotnet run --project
+  src/KubeNimbus.App`, no `scripts/qa-app.ps1`/`qa-ui.ps1`, no `kn-qa`, no computer-use, no
+  real mouse or keyboard input. Desktop checks run only inside the owner's Hyper-V QA VM,
+  never on the owner's desktop: list each one in your report as a numbered check with its
+  expected result, under "could not verify".
 - A live cluster (`./scripts/sandbox-up.sh`) is worth trying and often blocked by
   egress policy. If it does not come up, say that plainly rather than claiming
   cluster-backed verification you did not do.
 
 ## Docs are part of the change, not a follow-up
 
-- `CLAUDE.md` or the feature's `docs/engineering/` page: if you broke, added or learned a rule, edit it there in the same
-  change. Add the *evidence* — the concrete failure — not just the rule.
+- The feature's `docs/engineering/` page: if you broke, added or learned a rule, edit it
+  there in the same change, with the *evidence* — the concrete failure — not just the rule.
+  `CLAUDE.md` gets one line only when a rule itself is added or changed; it is loaded into
+  every session, so its evidence stays on the page.
 - `docs/status-history.md`: a new pass entry, if you are recording one.
 - `CHANGELOG.md`: **do not edit it.** During a train the orchestrator owns it, so
   that items built in parallel never conflict there. Put one line in your report

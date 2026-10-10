@@ -83,8 +83,8 @@ then researches only what changed since those reports.
 - `TODO`/`FIXME`/`HACK` added since the last tag (`git diff <tag> -G`).
 - A **friction walk**: render the screenshot harness for 6–8 core screens (rotate
   which ones between trains; always include the resource list and pod detail) and
-  count, for each job above, the interactions it takes today. Look at the PNGs; a
-  friction claim made from code alone is a guess.
+  count, for each job above, the interactions it takes today. Look at the PNGs, cropped
+  to the region in question; a friction claim made from code alone is a guess.
 - Performance baseline, measured, not remembered: publish NativeAOT, run
   `--smoke-test` 3× and take the median time-to-first-frame, record the executable
   size. These go in `TRAIN.md` and are what HARDEN compares against.
@@ -155,21 +155,26 @@ comes first). Mark it `building`, commit that line.
    names no blocker, `SendMessage` the same implementer naming those lines ("Acceptance
    lines 3 and 4 are still open. Continue with them; if one is blocked, say what blocks
    it."). At most two such continuations per round, then treat the item as failing.
-2. **Verify** — spawn `kn-verifier` (`run_in_background: false`) with the same spec
-   text, the implementer's report **verbatim**, and `git show --stat` of the item's
-   commits. Never your opinion of the work.
+2. **Push, then verify.** Push the train branch, so CI builds the item's commit. On the
+   train's first push, open the train PR as a draft titled `Release train vX.Y.Z`
+   (`gh pr create --draft --base main`, or the session's GitHub tools; body from
+   `.github/PULL_REQUEST_TEMPLATE.md`) — `ci.yml` builds branches only through their PR.
+   Then spawn `kn-verifier` (`run_in_background: false`) with the same spec text, the
+   implementer's report **verbatim**, `git show --stat` of the item's commits, the PR
+   number and the commit sha. Never your opinion of the work. The verifier reads the
+   build, the test suites, the harness and the AOT publish from that PR's CI rather than
+   running them again (#259: verifiers that re-ran all of CI were a large share of a
+   sweep's tokens), and re-runs only targeted tests, the live tests and the touched
+   scenarios.
 3. `VERDICT: FAIL` → the findings go back verbatim to the same implementer via
    `SendMessage`, then re-verify; increment `Rounds`. At `MAX_FIX_ROUNDS` still failing:
    `git revert` the item's commits, mark it `blocked` with the precise failing
    finding (in `TRAIN.md`, and on its issue as the `blocked` label plus a comment
-   quoting the finding), and move on. A train never stalls on one item.
+   quoting the finding), push the revert, and move on. A train never stalls on one item.
 4. `VERDICT: PASS` → mark `landed` with the commit sha; add the implementer's
    `Release note:` line under `## [Unreleased]` in `CHANGELOG.md` (you own that file
    during a train — implementers do not touch it, which is what keeps parallel items
-   conflict-free); push the branch. After the **first** landed item, open the train PR
-   as a draft titled `Release train vX.Y.Z` (`gh pr create --draft --base main`, or
-   the session's GitHub tools; body from `.github/PULL_REQUEST_TEMPLATE.md`) so CI
-   builds every later push — `ci.yml` builds branches only through their PR.
+   conflict-free); push the branch.
 5. Anything the verifier called unverifiable here, and anything out of scope the
    implementer found, becomes its own issue (`gh issue create`, labelled `roadmap`,
    type, size and feasibility, never a priority — see `docs/BACKLOG.md`), or an entry
@@ -189,14 +194,17 @@ pull the top `reserve` item instead of hardening early.
 
 ## Phase HARDEN — one step
 
-1. **Regression sweep** on the train branch head: full build; both TUnit suites
-   (report succeeded / failed / **skipped** — skipped cluster tests are not
-   cluster-backed verification); the full screenshot harness; NativeAOT publish for
-   the local RID with no new trim/AOT warnings beyond the known DataGrid pair; and
-   `--smoke-test` 3×. With the sandbox up, the Core integration tests must run
-   un-skipped.
-2. **Performance gate**: median time-to-first-frame and executable size against the
-   SURVEY baseline. More than 10% worse on either is a finding: find the item
+1. **Regression sweep** on the train branch head. Take from the train PR's CI on that
+   head commit what it already runs — the build, both TUnit suites (report succeeded /
+   failed / **skipped**; skipped cluster tests are not cluster-backed verification), the
+   full screenshot harness with the stress mode, and the linux-x64 NativeAOT publish with
+   its launch checks and no new trim/AOT warnings beyond the known DataGrid pair — and
+   read a failed job's log rather than re-running it. Run locally only what CI cannot:
+   with the sandbox up, the Core integration tests un-skipped (CI has no cluster), and the
+   publish for the performance gate below.
+2. **Performance gate**: publish NativeAOT for the local RID, run `--smoke-test` 3×, and
+   compare the median time-to-first-frame and the executable size against the SURVEY
+   baseline. More than 10% worse on either is a finding: find the item
    responsible and fix it, or revert it, or write the justification into the
    release notes' engineering section. Never ship an unexplained regression.
 3. **Polish + cohesion pass** — one `kn-implementer` run given every screen the train
@@ -282,6 +290,13 @@ a queue; the repo and the market have both moved.
   `tests/<Project>/bin/Debug/net10.0/<Project>.exe` directly (local SDK quirk), and
   NativeAOT needs the vcvars recipe in `CLAUDE.md`. Either way, scratch output goes
   to a temp directory, never into the repo.
+- **Never on the owner's desktop.** No step starts the desktop app, drives it through UI
+  Automation or `kn-qa`, or sends real mouse or keyboard input on the owner's machine:
+  desktop checks run only inside the owner's Hyper-V QA VM (`KUBENIMBUS_QA_VM=1`). Anywhere
+  else they become numbered checks in the train PR's body and a `needs: desktop` issue.
+- **Tokens.** `CLAUDE.md` is already loaded in every agent; never tell one to read it, and
+  name the `docs/engineering/` pages an item touches in its brief so that the agent reads
+  only those.
 
 ## Step report — at most six lines
 

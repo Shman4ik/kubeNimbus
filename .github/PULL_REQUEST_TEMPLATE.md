@@ -31,8 +31,9 @@ Anything left unverified:
 
 ## Checklist
 
-- [ ] [CLAUDE.md](../CLAUDE.md) updated if this changes anything it describes
-      — it's the contract, not a record of the past
+- [ ] [CLAUDE.md](../CLAUDE.md) updated if this changes a rule it states (one line),
+      and the feature's `docs/engineering/` page if it changes what the page
+      describes, with the evidence — the contract, not a record of the past
 - [ ] **Touches `shared/nimbusUi`?** Then the change is pgNimbus's too: push
       the subtree up (`git subtree push --prefix shared/nimbusUi …`), open the
       matching pgNimbus PR, and link it here. A shared change that lands in one
