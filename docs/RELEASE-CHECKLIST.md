@@ -21,8 +21,9 @@ rest; a release cut by hand, outside a train, walks all of it.
 
 Most of the manual pass can be handed to Claude Code: "go through
 docs/RELEASE-CHECKLIST.md for vX.Y.Z". The scripted steps (test runs, the hygiene
-sweep, release-note drafting) suit a Sonnet subagent; the click-through suits `kn-qa`
-for the checks that have a plain expected state, and a model that can look at the
+sweep, release-note drafting) suit a Sonnet subagent; the click-through suits `kn-qa`,
+run inside the owner's Hyper-V QA VM and never on the owner's own desktop, for the checks
+that have a plain expected state, and a model that can look at the
 window for everything that needs visual judgement.
 
 ---
@@ -183,7 +184,8 @@ Walk each flow; the expected result is what "pass" means. Mutations happen in th
 | 27 | **The round trip, as the editor does it**: open an existing object from the list (E) and change one value without retyping the manifest, for a ConfigMap, a Deployment and a Widget; preview, Apply, then reload and Force apply | The object opens with the server's own fields in it (`managedFields`, `uid`, `status`) and each of the three paths still goes through; the list shows the new value. Flow 15 is the ConfigMap half of this. Apply on an opened object was broken in 0.5.0 and nothing caught it, because the live tests only ever applied manifests they had written themselves, and those never carry the server's own fields. A pass that applies text it typed is not this check. `ApplyLiveTests.An_object_read_back_from_the_server_can_be_previewed_applied_and_force_applied` is its automated half |
 | 28 | Preferences, Appearance: Interface font System, then Inter; Code font (pick an installed one, then back to the built-in one) | Every open view changes at once, the log, YAML and exec panes included. **On a Mac**, System is San Francisco (a Finder window beside it has the same letters) and its spacing at 13px is neither cramped nor loose (`NimbusFonts.MacSystemLetterSpacing`); the CPU and memory columns' digits stay one per column. Code text is JetBrains Mono and `->>` stays three characters. `FontChecks` (`ux-font-settings`) is the automated half; how San Francisco looks is the part only a Mac shows |
 
-Driving it with Claude Code: `scripts/qa-app.ps1` and `kn-qa` do the same isolation for
+Driving it with Claude Code (inside the QA VM only, where `KUBENIMBUS_QA_VM=1`; the
+scripts refuse elsewhere): `scripts/qa-app.ps1` and `kn-qa` do the same isolation for
 a Debug build and are the cheap way through the flows with a plain expected state; the
 AOT build is then driven by hand or with computer-use for the rest. With computer-use,
 grant the exe by its **full path**, type in chunks of 15 characters or fewer (longer

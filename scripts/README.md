@@ -163,13 +163,18 @@ at revision 1. The synthetic `checkout` release exists purely to give the
 history view several revisions to page through; it is a storage record only,
 nothing is installed by it and no Helm binary is involved.
 
-## Checking the running app (Windows)
+## Checking the running app (Windows, QA VM only)
+
+Both scripts run only inside the owner's Hyper-V QA VM, which sets `KUBENIMBUS_QA_VM=1`, and
+refuse anywhere else: real input takes over the desktop it runs on, and the owner's own
+desktop is not a test machine (2026-10-10, #259). `qa-app.ps1 -Stop` works anywhere.
 
 `qa-app.ps1` starts a Debug build on an isolated profile (`KUBENIMBUS_PROFILE_DIR`) against
 the local sandbox only — it refuses a kubeconfig whose server is not loopback — and
 `qa-app.ps1 -Stop` ends it. `qa-ui.ps1` then reads and drives the window through Windows UI
 Automation (`dump`, `find`, `wait`, `invoke`, `set-text`, `click`, `double-click`, `keys`,
-`screenshot`); the header of the script lists every command. The `kn-qa` agent uses both.
+`screenshot`, which captures one element cropped to its bounds); the header of the script
+lists every command. The `kn-qa` agent uses both.
 One instance at a time. `click`, `double-click`, `right-click` and `keys` move the real
 pointer and keyboard. See CLAUDE.md, "Checking the running app".
 
