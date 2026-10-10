@@ -399,7 +399,7 @@ which now have a page of their own in this directory.
    - **Fires on the click:** cordon and uncordon (no running pod is touched, and each takes
      the other back), suspend (running Jobs carry on, and resume takes it back), Argo's sync
      without prune (it applies what Git already declares) and refresh (nothing on the
-     cluster changes). `RowActionViewModel.FiresOnClick` is the list and
+     cluster changes). Handing kubectl exec or a node shell to your own terminal fires on the click too: it is the user's own kubectl, and what it creates a delete takes back. `RowActionViewModel.FiresOnClick` is the list and
      `RowActionClickRuleTests` pins it kind by kind; `RunNow` sends the action and hides the
      question and the prompt row, so the strip is the in-flight line, then the outcome and
      Close. A refusal is that outcome too, since there is no prompt to go back to; trying

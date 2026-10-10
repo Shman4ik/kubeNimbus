@@ -150,7 +150,21 @@ ReplicaSet and one on the new — and their canned streams interleave by timesta
 what the pane renders offline is a rolling deployment read as one stream. The pods are
 found through the same `LabelSelector.Matches` a live cluster's query is rendered from,
 and every line goes through the same merge, buffer and filter. Nothing about this pane is
-demo-unavailable. A demo pod whose canned stream is empty (the unschedulable
+demo-unavailable.
+
+**The demo replays its streams in the order they were logged (ENG-53).** Each demo stream used
+to replay on a timer of its own, so which flush tick a line landed in — and therefore, by point
+5, its place in the pane — depended on how the timers fell, and every merged pane
+(`cluster-tab-workload-logs*`, `applications-page-crashloop-merged`, `applications-page-rollout`,
+`ux-logs-palette`) rendered differently on every run. Now one loop per pane
+(`RunDemoReplayAsync`) replays every stream: each interval hands out as many lines as there are
+streams replaying, the rate each had on its own timer, always the earliest line any of them has
+left (two at the same instant in the order the streams joined, `ReplayTick`). Lines that arrive
+in time order come out the same however the ticks fall, so the pane, and its screenshots, are
+deterministic. That holds only while every canned stream is in time order itself;
+`DemoReplayOrderTests` checks that for every demo container, and that the merged pane is
+identical whether it is flushed every interval, every few or once. A live cluster is unchanged:
+point 5's reasons for not holding lines back still apply there. A demo pod whose canned stream is empty (the unschedulable
 `fraud-detector`) ends through `LogStreamEnd.DescribePod` on its own dataset object, the
 sentence a live cluster's pane reads from the pod — it used to end "the sample stream has
 finished" over zero lines, a chip reading "ended" beside a body that disagreed (ENG-45).

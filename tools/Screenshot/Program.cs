@@ -153,6 +153,11 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-helm-release-detail", () => HostInMainWindow(ClusterTabScenarios.HelmReleaseDetail())),
     ("cluster-tab-rbac-who-can", () => HostInMainWindow(ClusterTabScenarios.RbacWhoCan(), height: 1000)),
     ("cluster-tab-rbac-who-can-empty", () => HostInMainWindow(ClusterTabScenarios.RbacWhoCan(empty: true))),
+    // "Signed in as" above My permissions (FEAT-56): the name and groups the server reports,
+    // and the stated state of a server older than 1.27, which cannot say.
+    ("cluster-tab-rbac-whoami", () => HostInMainWindow(ClusterTabScenarios.RbacMyPermissions())),
+    ("cluster-tab-rbac-whoami-not-served", () => HostInMainWindow(ClusterTabScenarios.RbacMyPermissions(
+        SelfSubjectIdentity.Unknown(SelfSubjectReviewOutcome.NotServed, null)))),
     ("cluster-tab-list-filtered", () => HostInMainWindow(ClusterTabScenarios.FilteredList())),
     // A list the reader has re-cut: the Name column dragged wider (the audit's own
     // complaint — two pods of one ReplicaSet rendering identically because the ellipsis
@@ -224,6 +229,27 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // The log viewer pass: regex filter with context, a pin, the error jump; a JSON line opened.
     ("cluster-tab-demo-pod-detail-grep", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetailGrep(), height: 1000)),
     ("cluster-tab-demo-pod-detail-json", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetailJson(), height: 1000)),
+    // ENG-51: both log bars at the window's minimum width and just under where they used to
+    // overflow, with the error/warning counts showing and, in the grep shot, the filter's
+    // context chip too — the widest the bar gets (LayoutChecks.LogBarFits).
+    ("ux-log-bar-pod-960", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetail(), height: 1000, width: 960)),
+    ("ux-log-bar-pod-1100", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetail(), height: 1000, width: 1100)),
+    ("ux-log-bar-pod-grep-960", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetailGrep(), height: 1000, width: 960)),
+    ("ux-log-bar-workload-960", () => HostInMainWindow(ClusterTabScenarios.DemoWorkloadLogsFind(), height: 1000, width: 960)),
+    // The same bars in a wide interface face. Linux CI draws in DejaVu Sans, which is wider
+    // than Segoe UI, and the first cut fitted Windows and overflowed there by 19px. Verdana is
+    // as wide on Windows; DejaVu Sans is named first so CI measures the face it ships with.
+    // The capture re-applies the faces before the next scenario.
+    ("ux-log-bar-pod-grep-960-wide-face", () =>
+    {
+        Avalonia.Application.Current!.Resources["ContentControlThemeFontFamily"] = new Avalonia.Media.FontFamily("DejaVu Sans, Verdana");
+        return HostInMainWindow(ClusterTabScenarios.DemoPodDetailGrep(), height: 1000, width: 960);
+    }),
+    ("ux-log-bar-workload-960-wide-face", () =>
+    {
+        Avalonia.Application.Current!.Resources["ContentControlThemeFontFamily"] = new Avalonia.Media.FontFamily("DejaVu Sans, Verdana");
+        return HostInMainWindow(ClusterTabScenarios.DemoWorkloadLogsFind(), height: 1000, width: 960);
+    }),
     // Both log panes scrolled to their end: the last line stays clear of the horizontal
     // scroll bar, which Fluent draws over the content (LayoutChecks.LogEndClearsScrollBar).
     ("ux-log-end-gap-pod", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetailSearch(query: ""))),
@@ -412,6 +438,10 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("store-cluster-switcher", () => BuildSwitcherContent(width: 1920, height: 1080)),
     ("store-exec-terminal", () => HostInMainWindow(ClusterTabScenarios.ExecFullScreenMaximized(), width: 1920, height: 1080)),
     ("store-rbac-who-can", () => HostInMainWindow(ClusterTabScenarios.RbacWhoCan(), width: 1920, height: 1080)),
+    // FEAT-17 / FEAT-27: the hand-off to the machine's terminal, opened from the exec pane, and
+    // node detail's node shell refused for want of kubectl.
+    ("cluster-tab-exec-handoff", () => HostInMainWindow(ClusterTabScenarios.ExecHandoff())),
+    ("cluster-tab-node-shell-no-kubectl", () => HostInMainWindow(ClusterTabScenarios.NodeShellNoKubectl(), height: 1000)),
 };
 
 foreach (var (name, build) in scenarios)
@@ -522,6 +552,9 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
 
     // After the settle, so every line has arrived before the pane is scrolled to its end.
     if (name.StartsWith("ux-log-end-gap", StringComparison.Ordinal)) LayoutChecks.LogEndClearsScrollBar(window);
+
+    // After the settle too: the error and warning counts join the log bar once lines arrive.
+    if (name.StartsWith("ux-log-bar-", StringComparison.Ordinal)) LayoutChecks.LogBarFits(window);
 
     // Every scenario, once: the pointer over each tooltip has to reach its element
     // (DESIGN.md rule 21). Reported together after the last scenario.

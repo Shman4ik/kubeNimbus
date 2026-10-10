@@ -225,8 +225,9 @@ before changing a view.** Docs and code cite these numbers.
 16b. **A panel you open, use and dismiss is an `OverlayPanel`**, bound two-way to `Is…Open` with
     no closing command; it takes focus and gives it back. The palette and switcher are not ones.
 17. **An action that destroys, disrupts or cannot be taken back arms the `RowActionStrip`;
-    one that can be taken back fires on the click** (`RowActionViewModel.FiresOnClick`). An
-    ellipsis means it asks; the strip names the cluster; production deletes always ask.
+    one that can be taken back fires on the click** (`RowActionViewModel.FiresOnClick`;
+    handing kubectl exec or a node shell to your own terminal is one). An ellipsis means it
+    asks; the strip names the cluster; production deletes always ask.
 18. **While waiting, say so; never show a verdict not yet had**: `Reset` means started,
     `Synced` (or the first row) ends loading, every wait ends even on error
     (`ClusterTabLoadingStateTests`). Reason about a second of latency.

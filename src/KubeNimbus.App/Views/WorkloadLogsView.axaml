@@ -58,7 +58,7 @@
 
     <!-- Search + display toggles. The search finds by default and filters with the funnel
          chip on — the same box, the same keys, as pod detail's pane. -->
-    <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+    <Grid Name="LogBarRow" Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
       <TextBox Name="LogSearchBox" Grid.Column="0" Classes="filterbox" MaxWidth="400" HorizontalAlignment="Left" MinWidth="230"
                Text="{Binding LogSearchText}" PlaceholderText="Search logs…">
         <TextBox.InnerLeftContent>
@@ -92,11 +92,14 @@
         </TextBox.InnerRightContent>
       </TextBox>
 
-      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+      <StackPanel Name="LogBarTools" Grid.Column="1" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
         <!-- Context around each match, grep -C. Only while the search filters: in find mode
              every line is already on screen. -->
         <!-- A chip rather than a combo box: the row already holds the search box and the
              problem counts, and a caption of "±2" says as much as "±2 lines" did. -->
+        <!-- The three slots (context, Range, Levels) are what LogBarOverflow hides at a
+             narrow window; the copies in the ⋯ menu then show (ENG-51). -->
+        <Panel Name="ContextSlot">
         <Button Classes="chip" Padding="7,3" FontSize="11" Margin="0,0,4,0" IsVisible="{Binding IsLogFilterMode}"
                 Classes.accentText="{Binding LogContextLines, Converter={x:Static conv:CountToBoolConverter.Instance}}"
                 ToolTip.Tip="Lines to keep around each match while filtering, like grep -C">
@@ -119,6 +122,7 @@
             </Flyout>
           </Button.Flyout>
         </Button>
+        </Panel>
         <!-- The problems among the shown lines, and the jump between them (LogProblems).
              Each count is only there when it is not zero. -->
         <Button Classes="chip logProblem error" Command="{Binding Problems.PreviousErrorCommand}"
@@ -142,6 +146,7 @@
                       IsChecked="{Binding ShowErrorsOnly}" IsVisible="{Binding IsEmbedded}"
                       ToolTip.Tip="Show only the lines coloured as errors; every line stays buffered"
                       Content="Errors only" />
+        <Panel Name="RangeSlot">
         <ComboBox Width="132" MinHeight="27" FontSize="11" Margin="0,0,4,0"
                   ItemsSource="{Binding LogRanges}" SelectedItem="{Binding SelectedLogRange}"
                   IsEnabled="{Binding !IsDemo}"
@@ -152,6 +157,7 @@
             </DataTemplate>
           </ComboBox.ItemTemplate>
         </ComboBox>
+        </Panel>
         <ToggleButton Classes="chip" Padding="6" IsChecked="{Binding IsFollowing}"
                       ToolTip.Tip="Follow every pod (cancels all streams when toggled off)">
           <PathIcon Data="{StaticResource PlayIconGeometry}" Width="12" Height="12" />
@@ -159,6 +165,7 @@
         <!-- Levels (FEAT-36). Not offered where the pane is embedded: the application page's
              Errors only is the narrowing there, and two severity controls side by side
              would be two answers to one question. -->
+        <Panel Name="LevelsSlot">
         <Button Classes="chip" Padding="7,3" FontSize="11" Classes.accentText="{Binding Levels.IsFiltering}"
                 IsVisible="{Binding !IsEmbedded}"
                 ToolTip.Tip="Which severities to show. Lines with no level keyword are always shown.">
@@ -178,25 +185,72 @@
             </Flyout>
           </Button.Flyout>
         </Button>
+        </Panel>
         <!-- Copy stays on the bar: it is the one gesture for getting a log into a bug report.
              The rest — the three remembered display toggles, Clear and Save — are in the
              overflow menu. The bar used to carry all six beside Range, Follow, Previous and
              Levels, ten controls in a row of icons and words. CheckBoxes with a two-way
              IsChecked and no Command (UI rule 8b); Clear and Save close the menu as they run. -->
+        <Panel Name="CopySlot">
         <Button Classes="toolbar" Command="{Binding CopyLogsCommand}"
                 ToolTip.Tip="Copy the visible lines, pod-prefixed and with timestamps" Padding="6">
           <PathIcon Data="{StaticResource ContentCopyIconGeometry}" Width="13" Height="13" />
         </Button>
+        </Panel>
         <Button Name="LogMenuButton" Classes="toolbar" Padding="6" ToolTip.Tip="Display options, Clear and Save">
           <PathIcon Data="{StaticResource DotsHorizontalIconGeometry}" Width="13" Height="13" />
           <Button.Flyout>
             <Flyout Placement="BottomEdgeAlignedRight">
               <StackPanel Spacing="2" MinWidth="200">
+                <!-- What the bar had no room for at this width (LogBarOverflow): hidden until then. -->
+                <StackPanel Name="MenuRange" Spacing="4" Margin="0,0,0,8" IsVisible="False">
+                  <TextBlock Text="Range" FontSize="11" Opacity="0.6" />
+                  <ComboBox HorizontalAlignment="Stretch" MinHeight="27" FontSize="11"
+                            ItemsSource="{Binding LogRanges}" SelectedItem="{Binding SelectedLogRange}"
+                            IsEnabled="{Binding !IsDemo}"
+                            ToolTip.Tip="Log range (unavailable for canned demo streams)">
+                    <ComboBox.ItemTemplate>
+                      <DataTemplate x:DataType="vm:LogRange">
+                        <TextBlock Text="{Binding Label}" />
+                      </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                  </ComboBox>
+                </StackPanel>
+                <Panel Name="MenuLevels" IsVisible="False">
+                  <StackPanel Spacing="2" Margin="0,0,0,8" IsVisible="{Binding !IsEmbedded}">
+                    <TextBlock Text="Levels — lines with no level keyword are always shown" FontSize="11" Opacity="0.6"
+                               TextWrapping="Wrap" MaxWidth="220" HorizontalAlignment="Left" />
+                    <CheckBox IsChecked="{Binding Levels.ShowError}" Content="Error" />
+                    <CheckBox IsChecked="{Binding Levels.ShowWarn}" Content="Warn" />
+                    <CheckBox IsChecked="{Binding Levels.ShowInfo}" Content="Info" />
+                  </StackPanel>
+                </Panel>
+                <Panel Name="MenuContext" IsVisible="False">
+                  <StackPanel Spacing="4" Margin="0,0,0,8" IsVisible="{Binding IsLogFilterMode}">
+                    <TextBlock Text="Context around each match" FontSize="11" Opacity="0.6" />
+                    <ComboBox HorizontalAlignment="Stretch" MinHeight="27" FontSize="11"
+                              ItemsSource="{Binding LogContextChoices}" SelectedItem="{Binding LogContextLines}"
+                              ToolTip.Tip="Lines to keep around each match while filtering, like grep -C">
+                      <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="sys:Int32">
+                          <TextBlock Text="{Binding Converter={x:Static conv:LogContextLabelConverter.Instance}}" />
+                        </DataTemplate>
+                      </ComboBox.ItemTemplate>
+                    </ComboBox>
+                  </StackPanel>
+                </Panel>
                 <CheckBox IsChecked="{Binding ShowLogTimestamps}" Content="Timestamps" ToolTip.Tip="Show timestamps (local time) — the merge orders on these, so they are how an out-of-order line is spotted" />
                 <CheckBox IsChecked="{Binding UseUtcTimestamps}" Content="In UTC" Margin="24,0,0,0"
                           IsEnabled="{Binding ShowLogTimestamps}" ToolTip.Tip="{Binding TimestampZoneTooltip}" />
                 <CheckBox IsChecked="{Binding WrapLogLines}" Content="Wrap long lines" />
                 <Separator Margin="0,4" Opacity="0.4" />
+                <Button Name="MenuCopy" Classes="linkRow" Command="{Binding CopyLogsCommand}" Click="OnLogMenuActionClick"
+                        IsVisible="False" ToolTip.Tip="Copy the visible lines, pod-prefixed and with timestamps">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <PathIcon Data="{StaticResource ContentCopyIconGeometry}" Width="13" Height="13" />
+                    <TextBlock Text="Copy the visible lines" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Button>
                 <Button Classes="linkRow" Command="{Binding ClearLogsCommand}" Click="OnLogMenuActionClick"
                         ToolTip.Tip="Clear the pane — every stream keeps running and new lines appear">
                   <StackPanel Orientation="Horizontal" Spacing="8">

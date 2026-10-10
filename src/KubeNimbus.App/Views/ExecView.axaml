@@ -60,6 +60,12 @@
         <Button Classes="toolbar" Padding="6" Command="{Binding ReconnectCommand}" ToolTip.Tip="Reconnect with this shell">
           <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="14" Height="14" />
         </Button>
+        <!-- FEAT-17: the same container in the machine's own terminal, through kubectl exec
+             with this cluster pinned. One icon on the existing row, not a row of its own. -->
+        <Button Classes="toolbar" Padding="6" Command="{Binding OpenInMyTerminalCommand}"
+                ToolTip.Tip="Open this session in your terminal (kubectl exec -it, this cluster pinned)">
+          <PathIcon Data="{StaticResource OpenInNewIconGeometry}" Width="14" Height="14" />
+        </Button>
       </StackPanel>
     </Grid>
 
@@ -125,6 +131,27 @@
                     Command="{Binding CancelPasteCommand}" Click="OnPasteStripButtonClick"
                     ToolTip.Tip="Send nothing (Esc)" />
           </Grid>
+        </Border>
+
+        <!-- What the hand-off to the machine's terminal came to (FEAT-17). Over the top of
+             the terminal like the paste prompt, on an opaque card because the terminal is
+             black in both themes, and only while it has something to say. -->
+        <Border Classes="overlayCard" IsVisible="{Binding HasHandoffNotice}" VerticalAlignment="Top"
+                HorizontalAlignment="Stretch" Margin="10" Padding="0">
+          <Border Classes="infoBar" Margin="0"
+                  Classes.warn="{Binding HandoffNoticeIsWarning}"
+                  Classes.error="{Binding HandoffNoticeIsError}">
+            <DockPanel>
+              <PathIcon DockPanel.Dock="Left" Data="{StaticResource OpenInNewIconGeometry}" Width="12" Height="12"
+                        VerticalAlignment="Top" Margin="0,2,8,0" />
+              <Button DockPanel.Dock="Right" Classes="chip" Padding="0" MinWidth="18" MinHeight="18"
+                      Margin="8,0,0,0" VerticalAlignment="Top"
+                      Command="{Binding DismissHandoffNoticeCommand}" ToolTip.Tip="Dismiss">
+                <PathIcon Data="{StaticResource CloseIconGeometry}" Width="9" Height="9" />
+              </Button>
+              <SelectableTextBlock Text="{Binding HandoffNotice}" TextWrapping="Wrap" FontSize="12" />
+            </DockPanel>
+          </Border>
         </Border>
       </Panel>
     </Border>

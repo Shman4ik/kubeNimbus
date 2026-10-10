@@ -92,6 +92,33 @@ public class AppSettingsTests
         await Assert.That(new AppSettings { CodeFont = written }.Normalized().CodeFont).IsEqualTo(expected);
     }
 
+    // ------------------------------------------------------------ preferred terminal
+
+    /// <summary>
+    /// FEAT-19. Blank is automatic; a value is trimmed and kept; one with a control character
+    /// in it, or longer than any path, is not a program anyone typed and is dropped before it
+    /// can reach a process start.
+    /// </summary>
+    [Test]
+    [Arguments(null, null)]
+    [Arguments("   ", null)]
+    [Arguments(" kitty ", "kitty")]
+    [Arguments("/opt/term/bin/term", "/opt/term/bin/term")]
+    [Arguments("kitty\n--hold", null)]
+    [Arguments("ki\u0000tty", null)]
+    public async Task The_preferred_terminal_is_trimmed_and_a_control_character_drops_it(string? written, string? expected)
+    {
+        await Assert.That(new AppSettings { PreferredTerminal = written }.Normalized().PreferredTerminal).IsEqualTo(expected);
+    }
+
+    [Test]
+    public async Task A_preferred_terminal_longer_than_any_path_is_dropped()
+    {
+        var settings = new AppSettings { PreferredTerminal = new string('a', AppSettings.MaxPreferredTerminalLength + 1) };
+        await Assert.That(settings.Normalized().PreferredTerminal).IsNull();
+        await Assert.That(new AppSettings().PreferredTerminal).IsNull();
+    }
+
     // ---------------------------------------------------------------- sidebar width
 
     [Test]

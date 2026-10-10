@@ -65,7 +65,12 @@
               ToolTip.Tip="Reload from server (discards unapplied edits)" Padding="6">
         <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="14" Height="14" />
       </Button>
-      <Button Grid.Column="5" Classes="accent" Content="Apply" Command="{Binding ApplyCommand}"
+      <!-- "Review…" while the preview preference is on (it runs the server-side dry run; the
+           panel's Apply changes / Force apply is what changes anything), "Apply" when it is
+           off and the button applies directly (FEAT-69). Two buttons both reading Apply,
+           100px apart and doing different things, is what this replaced. -->
+      <Button Grid.Column="5" Classes="accent" Content="{Binding ApplyButtonLabel}" Command="{Binding ApplyCommand}"
+              ToolTip.Tip="{Binding ApplyButtonTip}"
               IsEnabled="{Binding !IsBusy}" Margin="8,0,0,0" />
     </Grid>
 

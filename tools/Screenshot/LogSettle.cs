@@ -14,10 +14,12 @@ namespace KubeNimbus.Screenshot;
 /// different (cluster-tab-demo-pod-detail by up to 2 426 pixels).
 ///
 /// <para>
-/// A finished stream is fully deterministic for one stream. It is not for a pane that
-/// merges several (workload logs, the Applications page's merged view): that merge sorts
-/// only within a flush tick by design, so which tick a replayed line lands in still
-/// decides its place. That ordering belongs to the log panes and is left alone here.
+/// A finished stream is fully deterministic for one stream, and since ENG-53 for a pane that
+/// merges several too (workload logs, the Applications page's merged view): the merge sorts
+/// only within a flush tick by design, so the demo now replays every stream of a pane in the
+/// order its lines were logged, and which tick a line lands in no longer decides its place.
+/// That is the pane's own doing (<c>WorkloadLogsTabViewModel.RunDemoReplayAsync</c>); waiting
+/// for every source to end is all this needs to do.
 /// </para>
 /// </summary>
 internal static class LogSettle

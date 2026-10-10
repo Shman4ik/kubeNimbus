@@ -58,7 +58,9 @@ Seven things are load-bearing:
    than `RightClickAction.CopyOrPaste`, whose paste-on-empty-selection is one stray
    click away from running the clipboard in someone's production container.
 5. **The pane is one row of chrome now** (UI rule 10): status dot, status, shell box,
-   reconnect — and the terminal. The input `TextBox`, its `^C`/`^D` chips and the
+   reconnect, "open this session in your terminal" (FEAT-17, see
+   [machine-terminal](machine-terminal.md), "Handing a command to the terminal") — and the
+   terminal. The input `TextBox`, its `^C`/`^D` chips and the
    Advanced-view-gated **Send** button are all gone, because a terminal that takes
    keystrokes makes a box you retype them into a row of dock height spent on nothing.
    That removes the exec pane from the Advanced view's list entirely; the F1 sheet is
@@ -214,23 +216,25 @@ container added before the pin (`busybox:1.37`) is not reused by a later click, 
 one from the pinned image; the pod carries both until it is recreated, as with any image
 change.
 
-**A defect in the dependency, found here and not fixed here.** Reverse video with
-*default* colours does not invert. `TerminalControlModel.CreateStyleKey` swaps the
-foreground and background when `IsInverse()`, but the swapped values are the sentinels
-256/257 ("default fg"/"default bg"), and `TerminalControl.ResolveColorBrush` resolves
-either sentinel by the `isForeground` flag alone — so both halves land back where they
-started and `ESC[7m` renders as ordinary text. Measured, not inferred: on defaults it
-resolves to `fg=palette[15] bg=palette[0]`, which is exactly what un-inverted text
-resolves to, while the same `ESC[7m` after an explicit `ESC[37;40m` resolves to
-`fg=palette[0] bg=palette[7]` and does invert. So it is `top`'s header, `less`'s prompt,
-vim's status line and mc's menu bar that render unhighlighted — the whole default-colour
-case — and `cluster-tab-exec-fullscreen` shows it: the fixture emits the `ESC[7m` real
-`top` emits, deliberately, so the screenshot tells the truth and starts drawing a band by
-itself the day this is fixed. There is no app-side hook (`ResolveColorBrush` is private
-and the render surface is a private nested class), so the fix is upstream or in a
-vendored copy.
+**A defect in the dependency, found here and since fixed upstream.** Reverse video with
+*default* colours did not invert in `SvcSystems.UI.Terminal` 1.1.x.
+`TerminalControlModel.CreateStyleKey` swapped the foreground and background when
+`IsInverse()`, but the swapped values were the sentinels 256/257 ("default fg"/"default bg"),
+and `TerminalControl.ResolveColorBrush` resolved either sentinel by the `isForeground` flag
+alone, so both halves landed back where they started and `ESC[7m` rendered as ordinary text:
+`top`'s header, `less`'s prompt, vim's status line and mc's menu bar, the whole default-colour
+case. There was no app-side hook (`ResolveColorBrush` was private), so it was left for upstream
+or a vendored copy and filed as ENG-19. **It no longer reproduces on 2.0.0 and later** (the
+package update of 2026-09-28; the app is on 2.1.0): the `cluster-tab-exec-fullscreen` fixture
+emits the same `ESC[7m` real `top` emits, as it always has, and its header now renders as an
+inverted band in both themes, where the FEAT-10 render of the same fixture on 1.1.x showed
+plain text. Nothing in this repo changed for that, which is the reason the fixture was written
+to emit the real sequence rather than to hide the defect: it started drawing the band by
+itself. ENG-19 (#240, "report it upstream") was closed as no longer reproducing. If a later
+version regresses it, that screenshot (and the README's `exec-terminal.dark.png`) is where it
+shows.
 
-**If it goes unmaintained** — v1.1.0, one maintainer, ~35 stars — the fallback is
+**If it goes unmaintained** — one maintainer, ~35 stars — the fallback is
 vendoring, and it is a real one rather than a comforting sentence: MIT, ~2 850 lines
 across ten files, with the emulation proper in XTerm.NET underneath.
 `shared/nimbusUi` is where it would go, since "a terminal control" can be described

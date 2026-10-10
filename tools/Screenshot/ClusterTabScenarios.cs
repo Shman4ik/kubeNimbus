@@ -477,11 +477,17 @@ internal static class ClusterTabScenarios
             return;
         }
 
-        for (var i = 0; i < 800 && logs.LogLines.Count < 22; i++)
+        // Until every replayed stream has ended (ENG-53), not until some number of lines has
+        // arrived: a search set after the drain lands on the newest match there is, so a drain
+        // that stopped part-way through the replay put "14 of 17" in one run and "15 of 17"
+        // in the next.
+        for (var i = 0; i < 800 && logs.Sources.Any(s => s.State is LogSourceState.Starting or LogSourceState.Streaming); i++)
         {
             Dispatcher.UIThread.RunJobs();
             Thread.Sleep(10);
         }
+
+        Dispatcher.UIThread.RunJobs();
     }
 
     /// <summary>Pumps the dispatcher until the demo log replay has produced something to render.</summary>
@@ -1963,6 +1969,37 @@ internal static class ClusterTabScenarios
         ];
     }
 
+    /// <summary>
+    /// My permissions under its "Signed in as" line (FEAT-56): the name and groups the API
+    /// server reports (an EKS role, the case behind "I connected but everything is 403"), or,
+    /// with <paramref name="identity"/> given, one of the ways it could not say. The review
+    /// itself needs a real cluster, so the fixture sets what <c>LoadAsync</c> would.
+    /// </summary>
+    public static ClusterTabViewModel RbacMyPermissions(SelfSubjectIdentity? identity = null)
+    {
+        var tab = BaseTab();
+        var rbacTab = new RbacTabViewModel(FixtureData.CreateOfflineClient(), "payments", load: false)
+        {
+            IsPreview = false,
+            Identity = identity ?? new SelfSubjectIdentity(
+                SelfSubjectReviewOutcome.Answered,
+                "arn:aws:iam::111122223333:role/payments-dev",
+                ["payments-oncall", "system:authenticated"],
+                Detail: null),
+        };
+
+        rbacTab.MyRules.Add(new PolicyRule(["get", "list", "watch"], [""], ["pods", "pods/log", "services", "configmaps"], [], []));
+        rbacTab.MyRules.Add(new PolicyRule(["get", "list", "watch"], ["apps"], ["deployments", "replicasets", "statefulsets"], [], []));
+        rbacTab.MyRules.Add(new PolicyRule(["create"], [""], ["pods/exec"], [], []));
+        rbacTab.MyRules.Add(new PolicyRule(["patch"], ["apps"], ["deployments"], ["checkout-worker"], []));
+        rbacTab.MyRules.Add(new PolicyRule(["create"], ["authorization.k8s.io"], ["selfsubjectaccessreviews", "selfsubjectrulesreviews"], [], []));
+        rbacTab.MyRules.Add(new PolicyRule(["get"], [], [], [], ["/healthz", "/version"]));
+
+        tab.InspectorTabs.Add(rbacTab);
+        tab.SelectedInspectorTab = rbacTab;
+        return tab;
+    }
+
     public static ClusterTabViewModel YamlEditor()
     {
         var tab = BaseTab();
@@ -2258,11 +2295,11 @@ internal static class ClusterTabScenarios
     /// at addressed positions — which the ANSI-stripping pane this replaced could not
     /// render at all (it printed the escape codes' remains as unspooling text).
     /// <para>
-    /// The <c>ESC[7m</c> header renders <b>unhighlighted</b>, and that is not a mistake
-    /// in the fixture: reverse video with default colours is a defect in the terminal
-    /// control (CLAUDE.md, "The exec terminal"). Emitting what real <c>top</c> emits
-    /// keeps the screenshot honest, and it will start drawing a band by itself the day
-    /// that is fixed.
+    /// The <c>ESC[7m</c> header is emitted with default colours, exactly as real <c>top</c>
+    /// emits it. On SvcSystems.UI.Terminal 1.1.x that drew as plain text (ENG-19); since
+    /// 2.0.0 it draws the inverted band, which this fixture showed by itself the day the
+    /// package was updated. If a later version regresses it, this screenshot is where it
+    /// shows (docs/engineering/exec-terminal.md).
     /// </para>
     /// </summary>
     public static ClusterTabViewModel ExecFullScreen() => BuildExec(
@@ -2520,6 +2557,49 @@ internal static class ClusterTabScenarios
         var tab = BaseTab();
         tab.IsConnected = false;
         tab.Status = "Not connected.";
+        return tab;
+    }
+
+    /// <summary>
+    /// FEAT-17: the exec pane after "Open this session in your terminal" opened one — the
+    /// notice laid over the top of the terminal, in the app's own words
+    /// (<see cref="TerminalHandoff.Describe"/>). Set from a result rather than launched: the
+    /// harness must never start a terminal.
+    /// </summary>
+    public static ClusterTabViewModel ExecHandoff()
+    {
+        var tab = Exec();
+        var exec = (ExecTabViewModel)tab.SelectedInspectorTab!;
+        var command = exec.BuildHandoffCommand();
+        var (message, warning, error) = TerminalHandoff.Describe(new TerminalLaunchResult(
+            TerminalLaunchOutcome.Opened, "PowerShell 7", @"C:\Program Files\kubectl\kubectl.exe",
+            @"C:\Users\dev\AppData\Roaming\kubeNimbus\terminal\context-4f21ab90c7d3.kubeconfig;C:\Users\dev\.kube\config",
+            tab.Context.Name, ["PowerShell 7"], null)
+        {
+            Command = command.Summary,
+        });
+        exec.HandoffNotice = message;
+        exec.HandoffNoticeIsWarning = warning;
+        exec.HandoffNoticeIsError = error;
+        return tab;
+    }
+
+    /// <summary>
+    /// FEAT-27: node detail's node shell when no kubectl could be found — the hand-off is a
+    /// kubectl command, so nothing opens and the InfoBar under the chrome row says why.
+    /// </summary>
+    public static ClusterTabViewModel NodeShellNoKubectl()
+    {
+        var tab = OpenNode("demo-worker-1", tabIndex: NodeDetailTabViewModel.OverviewTabIndex);
+        var detail = (NodeDetailTabViewModel)tab.SelectedInspectorTab!;
+        var (message, warning, error) = TerminalHandoff.Describe(new TerminalLaunchResult(
+            TerminalLaunchOutcome.NoKubectl, null, null, "", tab.Context.Name, [], null)
+        {
+            Command = TerminalHandoff.NodeShellCommand(detail.NodeName).Summary,
+        });
+        detail.NodeShellNotice = message;
+        detail.NodeShellNoticeIsWarning = warning;
+        detail.NodeShellNoticeIsError = error;
         return tab;
     }
 }

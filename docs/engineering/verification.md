@@ -386,14 +386,17 @@ directory itself was one fixed name under `%TEMP%`, so two harness runs at once 
 worktrees, two agents — wrote each other's `settings.json` mid-render; measured, that
 alone made 189 of 272 PNGs differ between two runs (sidebar sections expanded in one and
 collapsed in the other). Each run now gets its own directory and removes it at the end.
-**What remains:** panes
-that merge several replayed streams (`cluster-tab-workload-logs*`,
-`applications-page-crashloop-merged`, `applications-page-rollout`, and `ux-logs-palette`, which ends
-on a workload's logs) still order lines by
-which flush tick they arrived in — the log panes' documented design for a live tail — so
-those PNGs can differ between runs; a byte diff that flags only them is not a regression.
-Measured after the fix: two sequential runs of one build differ in 4 of 272 PNGs, all of
-them that class.
+**The merged log panes were the last of them (ENG-53).** Panes that merge several replayed
+streams (`cluster-tab-workload-logs*`, `applications-page-crashloop-merged`,
+`applications-page-rollout`, and `ux-logs-palette`, which ends on a workload's logs) ordered
+lines by which flush tick they arrived in, so those PNGs differed between runs. The demo now
+replays every stream of a pane from one loop in the order the lines were logged
+([multi-pod-logs](multi-pod-logs.md)), and `DrainWorkloadLogs` waits for every
+stream to end before a scenario sets its search, which had landed on whichever match was newest
+part-way through. Measured: two full runs of one build, back to back, matched in all 418 PNGs, and three
+filtered runs of the workload-log scenarios matched each other byte for byte. What still moves
+is the clock: the demo's Age column and a restart's "71d ago" are relative to now, so a byte diff
+across a day boundary flags them, which is not a regression.
 
 When Docker is available (unlike this session — `docker version` succeeds but
 `dockerd` isn't running here), prefer driving the harness against a real

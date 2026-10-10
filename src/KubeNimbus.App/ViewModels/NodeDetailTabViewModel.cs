@@ -32,6 +32,11 @@ namespace KubeNimbus.App.ViewModels;
 /// running, and no new always-visible control in a pane that already has a full chrome
 /// row (UI rules 1 and 10).
 /// </para>
+/// <para>
+/// The one exception is the node shell (FEAT-27), and it is not a mutation this pane makes: it
+/// hands <c>kubectl debug node/</c> to the machine's own terminal, so its control is a single
+/// icon on the chrome row and its outcome an InfoBar under it while there is one to report.
+/// </para>
 /// </remarks>
 public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
 {
@@ -116,6 +121,53 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
 
     /// <summary>Cluster this node came from in an aggregated fleet list; empty otherwise.</summary>
     public string ClusterName { get; }
+
+    // ------------------------------------------------------------ node shell (FEAT-27)
+
+    /// <summary>
+    /// Whether the node shell is offered: on every node but a Windows one, whose host
+    /// kubectl's node debugging does not reach (the pod it makes is a Linux one).
+    /// </summary>
+    public bool CanOfferNodeShell => ExecShells.FromNode(_row.Resource.Raw) != PodOperatingSystem.Windows;
+
+    /// <summary>What the last node shell hand-off came to, or null when there is nothing to say.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasNodeShellNotice))]
+    private string? _nodeShellNotice;
+
+    [ObservableProperty]
+    private bool _nodeShellNoticeIsWarning;
+
+    [ObservableProperty]
+    private bool _nodeShellNoticeIsError;
+
+    public bool HasNodeShellNotice => NodeShellNotice is not null;
+
+    /// <summary>
+    /// The node shell, the owner's way (2026-10-10): no privileged pod made by this app, but
+    /// <c>kubectl debug node/&lt;name&gt; -it --image=…</c> handed to the machine's own terminal
+    /// with this cluster pinned. kubectl creates the pod (host PID, network and IPC namespaces,
+    /// the node's filesystem at <c>/host</c>), so a Pod Security or RBAC refusal is kubectl's
+    /// sentence in that window. Fires on the click (UI rule 17): nothing it starts is beyond a
+    /// delete, and the notice says the pod stays. The demo cluster refuses in place.
+    /// </summary>
+    [RelayCommand]
+    private async Task OpenNodeShellAsync()
+    {
+        NodeShellNotice = "Opening your terminal…";
+        NodeShellNoticeIsWarning = false;
+        NodeShellNoticeIsError = false;
+
+        var context = _client?.Context ?? ClusterContext.Demo;
+        var result = await TerminalHandoff.OpenAsync(context, () => TerminalHandoff.NodeShellCommand(NodeName));
+        var (message, warning, error) = TerminalHandoff.Describe(result);
+        NodeShellNotice = result.Outcome == TerminalLaunchOutcome.Opened ? message + TerminalHandoff.NodeShellLeftover : message;
+        NodeShellNoticeIsWarning = warning;
+        NodeShellNoticeIsError = error;
+    }
+
+    [RelayCommand]
+    private void DismissNodeShellNotice() => NodeShellNotice = null;
 
     /// <summary>
     /// Overview = 0, Pods = 1, Events = 2, Usage = 3 (the constants above). Bound by both

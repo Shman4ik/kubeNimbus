@@ -14,7 +14,7 @@ There are **two** persisted files and the split is not arbitrary:
   is *preferences* — what you chose once and expect to still be true next launch:
   theme, hotkey scheme, interface and code fonts, advanced view, sidebar visibility and expanded sections,
   picked kubeconfig paths, log scrollback, metrics poll interval, delete confirmation,
-  apply preview, open logs maximized, open applications with one click, and the log panes' display toggles (timestamps,
+  apply preview, open logs maximized, open applications with one click, the preferred terminal, and the log panes' display toggles (timestamps,
   UTC, wrap). Those three are written by the panes themselves, not the preferences page,
   and nothing that changes *which* log lines are read — Previous, the search, the levels —
   is persisted at all; see [log-pane-reading](log-pane-reading.md).

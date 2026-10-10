@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Effective 7 October 2026. This policy covers kubeNimbus, the desktop Kubernetes
+Effective 10 October 2026. This policy covers kubeNimbus, the desktop Kubernetes
 client, in every form it is distributed: the Microsoft Store package, the installers
 and archives on the GitHub Releases page, and builds made from this repository.
 
@@ -30,7 +30,7 @@ When a kubeconfig names a credential program (for example `aws eks get-token`,
 `kubectl` does, and the program may contact its own sign-in service. That contact is made
 by the program your kubeconfig names, under that provider's own privacy terms. kubeNimbus
 keeps the token such a program returns in memory for that connection and does not write it
-anywhere. When you ask for a terminal on a cluster, kubeNimbus starts your system terminal.
+anywhere. When you ask for a terminal on a cluster, kubeNimbus starts your system terminal, or the one you named in Preferences. When you open an exec session or a node shell in your terminal, that terminal runs `kubectl` from your machine, which talks to the cluster with your kubeconfig as it always does; a node shell is `kubectl debug node`, which creates a pod on that node.
 
 ## Where the app connects
 
@@ -72,6 +72,10 @@ makes that request, not kubeNimbus:
   (kubeNimbus)`), or `kubeNimbus` alone when the cluster cannot say, as the operation's
   initiator on the Application. Nothing else from the answer (groups, IDs) is used, and the
   answer is kept only in memory for that connection.
+- When you open the access review, the same `SelfSubjectReview` again, each time the review
+  loads, so that it can show who the cluster says you are: your username and your groups. It
+  is shown in that pane and nowhere else, kept only while the pane is open, and never
+  written to disk. The IDs and any other details in the answer are not read.
 
 ## What the app stores
 
@@ -93,10 +97,10 @@ run to the next there.
 
 | File | What it holds | Encrypted |
 | --- | --- | --- |
-| `settings.json` | Your preferences: theme, keyboard scheme, interface and code fonts, whether the advanced view and the sidebar are on, which sidebar sections are open, sidebar width, log buffer size, metrics refresh interval, whether to confirm deletes and preview applies, whether logs open full-size, whether one click opens an application, log display options (timestamps, UTC, line wrap), and the paths of the kubeconfig files or folders you added. | No |
+| `settings.json` | Your preferences: theme, keyboard scheme, interface and code fonts, whether the advanced view and the sidebar are on, which sidebar sections are open, sidebar width, log buffer size, metrics refresh interval, whether to confirm deletes and preview applies, whether logs open full-size, whether one click opens an application, log display options (timestamps, UTC, line wrap), the terminal you named, if any, and the paths of the kubeconfig files or folders you added. | No |
 | `workspace.json` | What the window looked like: your open tabs (context name, kubeconfig path, the kind and the namespace or namespaces showing), pinned and recent contexts, environment labels you corrected, recent namespaces and kinds per cluster, column layouts per kind, and which mode the window was in. Names and paths only. | No |
 | `discovery/*.json` (cache folder) | Which resource kinds a cluster serves (kind, API group, version, verbs), so the next connect is faster. The file name is a hash of the server address, context, user name and kubeconfig path. Refreshed after six hours or a server upgrade. | No |
-| `terminal/` | Only if you open a terminal on a cluster: a small kubeconfig holding one context **name**, and on macOS a launcher script holding file paths. No cluster address, user or credential. | No |
+| `terminal/` | Only if you open a terminal on a cluster: a small kubeconfig holding one context **name**, and on macOS a launcher script holding file paths (for an exec session or node shell, the script also holds the `kubectl` command and deletes itself when the terminal starts it). No cluster address, user or credential. | No |
 
 None of these files contains a password, token, certificate or other credential. The app
 never copies credentials out of your kubeconfig, which stays where it is. On macOS and Linux
