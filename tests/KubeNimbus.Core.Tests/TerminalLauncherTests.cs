@@ -314,11 +314,15 @@ public class TerminalLauncherTests
         var plan = Plan(TerminalHostPlatform.MacOs);
 
         await Assert.That(plan.LauncherScriptPath).IsNotNull();
-        await Assert.That(plan.Candidates).Count().IsEqualTo(1);
+        // FEAT-19: iTerm2 and Ghostty are tried first (TerminalHandoffPlanTests), Terminal.app last;
+        // every one of them through the script.
+        var terminal = plan.Candidates[^1];
+        await Assert.That(terminal.Label).IsEqualTo("Terminal");
+        await Assert.That(plan.Candidates.All(c => c.Arguments[^1] == plan.LauncherScriptPath)).IsTrue();
         // By full path (B4-1): a bare "open" would be looked for in the current directory first.
-        await Assert.That(plan.Candidates[0].Executable).IsEqualTo("/usr/bin/open");
-        await Assert.That(plan.Candidates[0].Source).IsEqualTo(TerminalExecutableSource.Absolute);
-        await Assert.That(plan.Candidates[0].Arguments)
+        await Assert.That(terminal.Executable).IsEqualTo("/usr/bin/open");
+        await Assert.That(terminal.Source).IsEqualTo(TerminalExecutableSource.Absolute);
+        await Assert.That(terminal.Arguments)
             .IsEquivalentTo(new[] { "-a", "Terminal", plan.LauncherScriptPath! });
 
         var script = plan.LauncherScriptContent!;

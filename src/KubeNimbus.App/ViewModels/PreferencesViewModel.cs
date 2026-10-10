@@ -3,6 +3,7 @@ using System.ComponentModel;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using KubeNimbus.Core;
 using KubeNimbus.Core.Settings;
 using Nimbus.Ui.Fonts;
 
@@ -129,6 +130,7 @@ public sealed partial class PreferencesViewModel : ObservableObject
         _previewApplies = settings.PreviewApplies;
         _openLogsMaximized = settings.OpenLogsMaximized;
         _openApplicationsOnSingleClick = settings.OpenApplicationsOnSingleClick;
+        _preferredTerminal = settings.PreferredTerminal ?? "";
         _interfaceFontIndex = App.InterfaceFontFromString(settings.InterfaceFont) == InterfaceFont.System ? 0 : 1;
         SetCodeFonts([], settings.CodeFont);
         _ = LoadInstalledCodeFontsAsync();
@@ -326,8 +328,39 @@ public sealed partial class PreferencesViewModel : ObservableObject
     partial void OnConfirmDeletesChanged(bool value) =>
         App.Update(s => s with { ConfirmDeletes = value });
 
-    partial void OnPreviewAppliesChanged(bool value) =>
+    partial void OnPreviewAppliesChanged(bool value)
+    {
         App.Update(s => s with { PreviewApplies = value });
+
+        // An open YAML editor's button reads "Review…" or "Apply" by this setting (FEAT-69).
+        YamlEditorTabViewModel.NotifyPreviewPreferenceChanged();
+    }
+
+    /// <summary>
+    /// The "Terminal" preference (FEAT-19): empty is automatic. Written as it is typed, like
+    /// every setting here; <see cref="AppSettings.Normalized"/> trims it and drops a value no
+    /// one could have meant.
+    /// </summary>
+    [ObservableProperty]
+    private string _preferredTerminal = "";
+
+    partial void OnPreferredTerminalChanged(string value) =>
+        App.Update(s => s with { PreferredTerminal = value });
+
+    /// <summary>What the terminal preference means on this platform, for the card's explanation.</summary>
+    public static string PreferredTerminalHint => TerminalLauncher.CurrentPlatform switch
+    {
+        TerminalHostPlatform.Windows =>
+            "A shell to open instead of PowerShell 7 — a name on PATH (nu.exe) or a full path. Opening a session or a node shell "
+            + "in it needs PowerShell; Windows Terminal is used wherever it is the default terminal application, and cannot be named "
+            + "here, because it opens tabs from a process that does not carry the cluster.",
+        TerminalHostPlatform.MacOs =>
+            "An application to open instead of iTerm2, Ghostty or Terminal, by name (WezTerm) or as a full path to the .app. Empty "
+            + "tries those three in that order.",
+        _ =>
+            "A terminal to open before $TERMINAL and the usual emulators — a name on PATH or a full path, no arguments. A session or "
+            + "a node shell is passed to it after -e, unless it is one kubeNimbus knows.",
+    };
 
     partial void OnOpenLogsMaximizedChanged(bool value) =>
         App.Update(s => s with { OpenLogsMaximized = value });

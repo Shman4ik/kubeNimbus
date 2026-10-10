@@ -769,6 +769,64 @@ public sealed partial class ExecTabViewModel : InspectorTabViewModelBase
     [RelayCommand]
     private void CancelPaste() => PendingPaste = null;
 
+    // ------------------------------------------- the same session, in the machine's terminal
+
+    /// <summary>
+    /// What the last "open in my terminal" came to, or null when there is nothing to say. Laid
+    /// over the top of the terminal like the paste prompt, for the same reasons: it is present
+    /// only while it reports (UI rule 1), and a row docked above would resize the remote PTY.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasHandoffNotice))]
+    private string? _handoffNotice;
+
+    [ObservableProperty]
+    private bool _handoffNoticeIsWarning;
+
+    [ObservableProperty]
+    private bool _handoffNoticeIsError;
+
+    public bool HasHandoffNotice => HandoffNotice is not null;
+
+    /// <summary>
+    /// The <c>kubectl exec -it</c> the hand-off runs for this pane (FEAT-17): the container the
+    /// session is in (a debug container once there is one), and the shell typed into the box,
+    /// else the one this session found, else <see cref="TerminalCommand.ShellFor"/>'s default
+    /// for the pod's OS. Separate from the launch so a test can read it without starting a
+    /// terminal.
+    /// </summary>
+    internal TerminalCommand BuildHandoffCommand()
+    {
+        var shell = !string.IsNullOrWhiteSpace(ShellCommand) ? ShellCommand : ActiveShell;
+        return TerminalHandoff.ExecCommand(
+            _namespace, _podName, _execContainer, _operatingSystem ?? PodOperatingSystem.Unknown, shell);
+    }
+
+    /// <summary>
+    /// "Your terminal is not my terminal": the same container, opened by kubectl in the
+    /// machine's own terminal, with this cluster pinned the way "Open a terminal on this
+    /// cluster" pins it. Fires on the click: an exec changes nothing on the cluster, and the
+    /// session here is left as it is.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(IsLive))]
+    private async Task OpenInMyTerminalAsync()
+    {
+        if (_client is not { } client)
+        {
+            return;
+        }
+
+        HandoffNotice = "Opening your terminal…";
+        HandoffNoticeIsWarning = false;
+        HandoffNoticeIsError = false;
+
+        var result = await TerminalHandoff.OpenAsync(client.Context, BuildHandoffCommand);
+        (HandoffNotice, HandoffNoticeIsWarning, HandoffNoticeIsError) = TerminalHandoff.Describe(result);
+    }
+
+    [RelayCommand]
+    private void DismissHandoffNotice() => HandoffNotice = null;
+
     /// <summary>
     /// The emulator's own geometry, reported after every layout change. Core has had
     /// <c>ResizeAsync</c> since exec shipped and for a long time nothing called it, so

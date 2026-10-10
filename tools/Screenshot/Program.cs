@@ -412,6 +412,10 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("store-cluster-switcher", () => BuildSwitcherContent(width: 1920, height: 1080)),
     ("store-exec-terminal", () => HostInMainWindow(ClusterTabScenarios.ExecFullScreenMaximized(), width: 1920, height: 1080)),
     ("store-rbac-who-can", () => HostInMainWindow(ClusterTabScenarios.RbacWhoCan(), width: 1920, height: 1080)),
+    // FEAT-17 / FEAT-27: the hand-off to the machine's terminal, opened from the exec pane, and
+    // node detail's node shell refused for want of kubectl.
+    ("cluster-tab-exec-handoff", () => HostInMainWindow(ClusterTabScenarios.ExecHandoff())),
+    ("cluster-tab-node-shell-no-kubectl", () => HostInMainWindow(ClusterTabScenarios.NodeShellNoKubectl(), height: 1000)),
 };
 
 foreach (var (name, build) in scenarios)

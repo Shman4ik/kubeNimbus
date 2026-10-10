@@ -9,6 +9,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KubeNimbus.Core;
+using KubeNimbus.Core.Commands;
 
 namespace KubeNimbus.App.ViewModels;
 
@@ -232,6 +233,9 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
         }
 
         RefreshCertificates(DateTimeOffset.UtcNow);
+
+        _previewsApplies = App.LoadSettings().PreviewApplies;
+        PreviewPreferenceChanged += OnPreviewPreferenceChanged;
     }
 
     partial void OnYamlTextChanged(string value)
@@ -645,7 +649,9 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
     [RelayCommand(CanExecute = nameof(IsLive))]
     private async Task ApplyAsync()
     {
-        if (App.LoadSettings().PreviewApplies)
+        var preview = App.LoadSettings().PreviewApplies;
+        PreviewsApplies = preview;
+        if (preview)
         {
             await PreviewCoreAsync(force: false);
             return;
@@ -653,6 +659,44 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
 
         await ApplyCoreAsync(force: false);
     }
+
+    // ---------------------------------------------------- what the toolbar button says
+
+    /// <summary>
+    /// Whether "Preview before applying" was on when this editor last looked. Drives the
+    /// toolbar button's label only; <see cref="ApplyAsync"/> still reads the setting at the
+    /// press, and refreshes this from what it read.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ApplyButtonLabel), nameof(ApplyButtonTip))]
+    private bool _previewsApplies;
+
+    /// <summary>
+    /// FEAT-69, the owner's wording (2026-10-10). With the preview on, the toolbar button runs
+    /// the server-side dry run and the panel's own <c>Apply changes</c> / <c>Force apply</c> is
+    /// what changes anything — so the toolbar's verb is <c>Review…</c>, the ellipsis saying it
+    /// asks (UI rule 17). Two buttons both called Apply, 100px apart and doing different things,
+    /// is what this replaced. With the preview off the button applies directly and says so.
+    /// </summary>
+    public string ApplyButtonLabel => PreviewsApplies ? "Review…" : "Apply";
+
+    public string ApplyButtonTip => PreviewsApplies
+        ? "Ask the server what applying this would change, and show the difference before anything changes" + ApplyShortcut
+        : "Apply this YAML to the cluster now — \"Preview before applying\" is off in Preferences" + ApplyShortcut;
+
+    /// <summary>
+    /// Raised by the preferences page when "Preview before applying" changes, so an editor
+    /// already open relabels its button. Static because the page knows no editors; each editor
+    /// unsubscribes when it closes, so the event does not keep a closed one alive.
+    /// </summary>
+    internal static event Action? PreviewPreferenceChanged;
+
+    internal static void NotifyPreviewPreferenceChanged() => PreviewPreferenceChanged?.Invoke();
+
+    private static string ApplyShortcut =>
+        CommandCatalog.Get(CommandId.ApplyYaml).ShortcutLabel(Hotkeys.PrimaryLabel) is { } keys ? $" ({keys})" : "";
+
+    private void OnPreviewPreferenceChanged() => PreviewsApplies = App.LoadSettings().PreviewApplies;
 
     /// <summary>
     /// Take the conflicted fields from their current owner. Previewed like any other
@@ -980,6 +1024,7 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
 
     public override Task OnClosingAsync()
     {
+        PreviewPreferenceChanged -= OnPreviewPreferenceChanged;
         _revealTimer?.Stop();
         return Task.CompletedTask;
     }

@@ -245,6 +245,21 @@ public sealed record AppSettings
     /// </summary>
     public bool LogShowTimestamps { get; set; }
 
+    /// <summary>
+    /// The terminal "Open a terminal on this cluster" and the exec and node-shell hand-offs open
+    /// (FEAT-19), tried before <c>$TERMINAL</c> and the built-in probe list. Null (the default)
+    /// is automatic. On Linux and Windows it is one program, by name (looked for on PATH) or by
+    /// full path, with no arguments; on macOS it is an application name (<c>iTerm</c>,
+    /// <c>Ghostty</c>, or any other <c>open -a</c> accepts).
+    ///
+    /// <para>
+    /// It exists because the probe list cannot know every emulator, and on Linux nothing in the
+    /// app could set <c>$TERMINAL</c> for a GUI started from a launcher. Read by
+    /// <c>TerminalLauncher</c> at each launch, not cached. A path, never a credential.
+    /// </para>
+    /// </summary>
+    public string? PreferredTerminal { get; set; }
+
     /// <summary>Whether the log panes wrap long lines. See <see cref="LogShowTimestamps"/>.</summary>
     public bool LogWrapLines { get; set; }
 
@@ -280,6 +295,13 @@ public sealed record AppSettings
         // selection for both. Anything else is a family name and is kept as written: one
         // that does not resolve falls back to the bundled face at draw time.
         CodeFont = string.IsNullOrWhiteSpace(CodeFont) ? null : CodeFont.Trim(),
+        // Blank is automatic. A value with a control character in it, or longer than any path,
+        // is not a program anyone typed and is dropped rather than handed to a process start.
+        PreferredTerminal = string.IsNullOrWhiteSpace(PreferredTerminal)
+                            || PreferredTerminal.Length > MaxPreferredTerminalLength
+                            || PreferredTerminal.Any(char.IsControl)
+            ? null
+            : PreferredTerminal.Trim(),
         ExpandedSidebarSections = ExpandedSidebarSections ?? [],
         KubeconfigPaths = KubeconfigPaths ?? [],
         SidebarWidth = double.IsFinite(SidebarWidth)
@@ -325,6 +347,9 @@ public sealed record AppSettings
 
     /// <summary>Wider than this and the resource list is the panel, not the sidebar.</summary>
     public const double MaxSidebarWidth = 520;
+
+    /// <summary>Longer than this and <see cref="PreferredTerminal"/> is not a program name or a path.</summary>
+    public const int MaxPreferredTerminalLength = 1024;
 
     /// <summary>Below this the pane cannot hold one screen of a chatty container.</summary>
     public const int MinLogBufferLines = 200;

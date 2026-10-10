@@ -15,7 +15,8 @@
        the pattern pod detail, Helm and the access review all use. -->
   <Grid RowDefinitions="Auto,*" Margin="10,8,10,10">
 
-    <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto" Margin="0,0,0,8">
+    <StackPanel Grid.Row="0">
+    <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto" Margin="0,0,0,8">
       <ListBox Grid.Column="0" Classes="segmented" SelectedIndex="{Binding SelectedTabIndex}">
         <ListBoxItem Content="Overview" />
         <ListBoxItem Content="Pods" />
@@ -53,7 +54,36 @@
               IsVisible="{Binding SelectedTabIndex, Converter={x:Static conv:IndexEqualsConverter.Instance}, ConverterParameter=2}">
         <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="14" Height="14" />
       </Button>
+
+      <!-- FEAT-27, the owner's call: no privileged pod made by this app. kubectl debug
+           node/<name> runs in the machine's own terminal, which states any refusal itself.
+           Fires on the click (UI rule 17): it starts nothing on the node that a delete does
+           not take back, and the tooltip says what it creates. Not offered on a Windows
+           node, which kubectl's node debugging does not reach. -->
+      <Button Grid.Column="6" Classes="toolbar" Padding="6" Margin="4,0,0,0"
+              Command="{Binding OpenNodeShellCommand}" IsVisible="{Binding CanOfferNodeShell}"
+              ToolTip.Tip="Open a node shell in your terminal: kubectl debug node, which creates a pod on this node with its host namespaces and its filesystem at /host">
+        <PathIcon Data="{StaticResource ConsoleIconGeometry}" Width="14" Height="14" />
+      </Button>
     </Grid>
+
+    <!-- What the node shell hand-off came to: present only while it reports (UI rule 1),
+         an InfoBar with its severity as a class (UI rule 11). -->
+    <Border Classes="infoBar" Margin="0,0,0,8" IsVisible="{Binding HasNodeShellNotice}"
+            Classes.warn="{Binding NodeShellNoticeIsWarning}"
+            Classes.error="{Binding NodeShellNoticeIsError}">
+      <DockPanel>
+        <PathIcon DockPanel.Dock="Left" Data="{StaticResource ConsoleIconGeometry}" Width="12" Height="12"
+                  VerticalAlignment="Top" Margin="0,2,8,0" />
+        <Button DockPanel.Dock="Right" Classes="chip" Padding="0" MinWidth="18" MinHeight="18"
+                Margin="8,0,0,0" VerticalAlignment="Top"
+                Command="{Binding DismissNodeShellNoticeCommand}" ToolTip.Tip="Dismiss">
+          <PathIcon Data="{StaticResource CloseIconGeometry}" Width="9" Height="9" />
+        </Button>
+        <SelectableTextBlock Text="{Binding NodeShellNotice}" TextWrapping="Wrap" FontSize="12" />
+      </DockPanel>
+    </Border>
+    </StackPanel>
 
     <TabControl Grid.Row="1" Classes="headerless" SelectedIndex="{Binding SelectedTabIndex}">
 

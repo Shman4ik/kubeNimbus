@@ -2258,11 +2258,11 @@ internal static class ClusterTabScenarios
     /// at addressed positions — which the ANSI-stripping pane this replaced could not
     /// render at all (it printed the escape codes' remains as unspooling text).
     /// <para>
-    /// The <c>ESC[7m</c> header renders <b>unhighlighted</b>, and that is not a mistake
-    /// in the fixture: reverse video with default colours is a defect in the terminal
-    /// control (CLAUDE.md, "The exec terminal"). Emitting what real <c>top</c> emits
-    /// keeps the screenshot honest, and it will start drawing a band by itself the day
-    /// that is fixed.
+    /// The <c>ESC[7m</c> header is emitted with default colours, exactly as real <c>top</c>
+    /// emits it. On SvcSystems.UI.Terminal 1.1.x that drew as plain text (ENG-19); since
+    /// 2.0.0 it draws the inverted band, which this fixture showed by itself the day the
+    /// package was updated. If a later version regresses it, this screenshot is where it
+    /// shows (docs/engineering/exec-terminal.md).
     /// </para>
     /// </summary>
     public static ClusterTabViewModel ExecFullScreen() => BuildExec(
@@ -2520,6 +2520,49 @@ internal static class ClusterTabScenarios
         var tab = BaseTab();
         tab.IsConnected = false;
         tab.Status = "Not connected.";
+        return tab;
+    }
+
+    /// <summary>
+    /// FEAT-17: the exec pane after "Open this session in your terminal" opened one — the
+    /// notice laid over the top of the terminal, in the app's own words
+    /// (<see cref="TerminalHandoff.Describe"/>). Set from a result rather than launched: the
+    /// harness must never start a terminal.
+    /// </summary>
+    public static ClusterTabViewModel ExecHandoff()
+    {
+        var tab = Exec();
+        var exec = (ExecTabViewModel)tab.SelectedInspectorTab!;
+        var command = exec.BuildHandoffCommand();
+        var (message, warning, error) = TerminalHandoff.Describe(new TerminalLaunchResult(
+            TerminalLaunchOutcome.Opened, "PowerShell 7", @"C:\Program Files\kubectl\kubectl.exe",
+            @"C:\Users\dev\AppData\Roaming\kubeNimbus\terminal\context-4f21ab90c7d3.kubeconfig;C:\Users\dev\.kube\config",
+            tab.Context.Name, ["PowerShell 7"], null)
+        {
+            Command = command.Summary,
+        });
+        exec.HandoffNotice = message;
+        exec.HandoffNoticeIsWarning = warning;
+        exec.HandoffNoticeIsError = error;
+        return tab;
+    }
+
+    /// <summary>
+    /// FEAT-27: node detail's node shell when no kubectl could be found — the hand-off is a
+    /// kubectl command, so nothing opens and the InfoBar under the chrome row says why.
+    /// </summary>
+    public static ClusterTabViewModel NodeShellNoKubectl()
+    {
+        var tab = OpenNode("demo-worker-1", tabIndex: NodeDetailTabViewModel.OverviewTabIndex);
+        var detail = (NodeDetailTabViewModel)tab.SelectedInspectorTab!;
+        var (message, warning, error) = TerminalHandoff.Describe(new TerminalLaunchResult(
+            TerminalLaunchOutcome.NoKubectl, null, null, "", tab.Context.Name, [], null)
+        {
+            Command = TerminalHandoff.NodeShellCommand(detail.NodeName).Summary,
+        });
+        detail.NodeShellNotice = message;
+        detail.NodeShellNoticeIsWarning = warning;
+        detail.NodeShellNoticeIsError = error;
         return tab;
     }
 }
