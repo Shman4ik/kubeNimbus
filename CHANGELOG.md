@@ -35,8 +35,42 @@ it as the GitHub Release body, so headings must match tags exactly
   revision, status or update time; Argo applications by sync or health, worst first. The Helm
   browser now opens in namespace and name order.
 
+- **Port-forwards outlive their tab.** A running forward keeps listening when its tab is
+  closed; the status bar counts running forwards, and a Port-forwards list (from the status bar
+  or the palette) reopens or stops each one. Closing a cluster tab stops that cluster's forwards
+  and says so.
+- **Port-forward a Service.** From the Service pane or the palette, to a ready pod behind it that
+  the pane names; when that pod goes, the next connection moves to another ready pod and the pane
+  says so.
+- **Open an exec session in your own terminal.** The exec pane's new icon and an "Exec in my
+  terminal" palette row run `kubectl exec -it` there, with the cluster pinned. If kubectl cannot
+  be found, nothing opens and the app says why.
+- **Node shell in your terminal.** Node detail's console icon and a "Node shell in my terminal"
+  palette row run `kubectl debug node/<name>` in your own terminal. kubeNimbus never creates the
+  privileged pod itself.
+- **A "Terminal" preference** (Preferences → General) for an emulator kubeNimbus does not know.
+  On macOS, kubeNimbus now tries iTerm2 and Ghostty before Terminal.
+- **Who am I on this cluster.** The access review's "Signed in as" line shows your username and
+  groups as the cluster sees them (what `kubectl auth whoami` asks); a server that cannot say,
+  such as one before Kubernetes 1.27, gets a sentence saying so.
+- **Keyboard: Ctrl+Tab and Ctrl+Shift+Tab** move focus out of the YAML editor and the exec
+  terminal, which keep Tab for indenting and shell completion.
+
 ### Changed
 
+- The inspector dock's tabs can be reached with the keyboard (Tab lands on the front tab,
+  Left/Right switch) and are read as tabs by screen readers.
+- The sidebar is one Tab stop: the arrow keys move through its kinds and section headers, Enter
+  or Space opens a kind or folds a section, and the focused row shows a focus ring. A log pane is
+  one Tab stop too, instead of one per line.
+- The Helm release list's Updated column shows an age ("3d") with the exact time on its tooltip;
+  it used to print a timestamp that was cut off.
+- The Namespace column (resource list and Helm releases) shows only when it tells rows apart:
+  with several namespaces or all of them chosen.
+- The YAML editor's toolbar button reads "Review…" while "Preview before applying" is on, so it
+  no longer shares the word Apply with the preview's own "Apply changes".
+- In a narrow window the log panes' toolbars move Range, Levels, the filter's context chip and
+  Copy into the ⋯ menu, then narrow the search box, instead of running off the pane.
 - **Actions that can be taken back no longer ask first.** Argo CD's Sync and Refresh, Cordon,
   Uncordon and Suspend now act on the click, and the strip above the list shows what was sent,
   the result or the server's refusal. Sync used to open a strip with a second Sync button in it.
@@ -56,9 +90,26 @@ it as the GitHub Release body, so headings must match tags exactly
   Applications | Resources switch among them) drew it white on their pale selection colour.
 - The last line of a log is no longer half hidden under the horizontal scroll bar. Both log
   panes now always leave a gap below the end of the log, which is where Follow keeps you.
+- A kubeconfig user that names a `tokenFile` now signs in with it. The file is re-read on every
+  connect and reconnect, a relative path is read from the kubeconfig's folder, and a missing file
+  is reported by name. Before, such a context connected with no credential.
+- A `certificate-authority` bundle with several roots trusts all of them, as kubectl does. Before,
+  only the first was trusted, so a cluster mid-way through a CA rotation could be refused.
+- Workload logs and workload detail no longer widen a pod selector they cannot fully read (an
+  unknown `matchExpressions` operator, an `In` with no values); such a selector is refused, and
+  the pane says the workload has no usable pod selector.
+- The Service pane no longer keeps judging a Service that was deleted while it was open; it says
+  the Service was deleted and withdraws its verdict.
+- Event messages in the detail panes' Events tabs no longer end with a blank line after a
+  probe's output.
+- The demo cluster's merged log panes read in the same order every time.
+- The port-forward pane's Start and Stop buttons have accessible names.
 
 ### Security
 
+- A cluster whose server is a plain `http://` URL keeps a notice in the status bar while
+  connected ("Not encrypted"), and the connection report says so: its traffic, credential
+  included, is sent in the clear.
 - The API server's certificate is now verified the way kubectl verifies it — against the
   kubeconfig's certificate-authority only, and for the server's host name or the cluster's
   `tls-server-name` — on every request, including exec and port-forward. Previously a

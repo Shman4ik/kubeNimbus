@@ -2855,3 +2855,54 @@ One row needed a judgement call: FEAT-35's status read "rejected — … back to
 which is a bundle declining it rather than a rejection, so it was filed as open at P3 (#257).
 Whether a cloud session's GitHub token can create issues was not checked; the `TRAIN.md`
 fallback exists for the case where it cannot.
+
+### Backlog sweep, wave 1 (2026-10-10)
+
+An orchestrated sweep of the open `roadmap` issues (tracking #259): five triage agents sorted
+the 104 issues, the owner decided twelve design and policy questions (recorded on each issue),
+and `kn-bundle` agents built bundles in their own worktrees, each checked by `kn-verifier`.
+Seven PRs merged:
+
+- **#260, connection and TLS** — `tokenFile` (ENG-56), every root of a CA bundle (ENG-57), the
+  plain-`http://` notice (ENG-59), a selector refused whole rather than widened (ENG-50), and the
+  live impersonation (VER-56) and proxy (VER-45, HTTP CONNECT and SOCKS5 through an in-process
+  stand-in) tests. Mutation-checked (2, 5, 9, 3 live and 4 live tests red). Found:
+  `X509Certificate2Collection.ImportFromPem` skips an undecodable block, so the bundle is read
+  block by block; .NET never proxies a loopback destination, so a proxy test against
+  `127.0.0.1` tests nothing. Its five desktop checks passed in the running app.
+- **#274, terminal hand-off** — exec and node shells handed to the user's terminal
+  (FEAT-17 from the pane and palette, FEAT-27 the owner's way: no in-app privileged pod), a
+  preferred-terminal setting and iTerm2/Ghostty on macOS (FEAT-19, Mac half unverified), and
+  "Review…" (FEAT-69). ENG-19 closed: the verifier rendered the fixture and the reverse-video
+  defect no longer reproduces since SvcSystems.UI.Terminal 2.0.0 (the first draft had recorded
+  it as accepted). The PowerShell hand-off ran through pwsh 7 and 5.1 into a sandbox pod.
+- **#276, logs, events and who-am-I** — trimmed event messages (ENG-49), the log bar's overflow
+  menu (ENG-51), a deterministic demo log merge (ENG-53: two full harness runs, 418 PNGs
+  byte-identical), the events live-test tolerance (ENG-60), and "Signed in as" from a
+  `SelfSubjectReview` (FEAT-56). The first cut fit Segoe UI and overflowed by 19px in CI's
+  DejaVu Sans; Copy now moves too, and wide-face scenarios pin it on Windows.
+- **#275, port-forwards** — a per-window registry that outlives the tab (FEAT-7), Service
+  forwards that name the pod and move on when it goes (FEAT-29), a deleted Service stated (#264),
+  named Start/Stop (#271). The verifier found a Start/close race (a forward could bind after its
+  cluster's tab closed); Starts in flight are now cancelled with the tab.
+- **#263, dock tabs and the keyboard** — dock tabs as a ListBox (ENG-54), a keyboard-only walk
+  slice of ENG-4 (one sidebar stop, one log stop, Ctrl+Tab out of editors, focus rings
+  everywhere; `ux-keyboard-walk`, stable over 64 runs after two fix rounds caught a recycled log
+  line and a JSON expander as stops), Helm ages (FEAT-72), the Namespace column (FEAT-67).
+- **#282, live checks** — a namespace per test run with an age sweep (#261), and the cluster
+  halves of VER-61, VER-55, VER-34, VER-37 and VER-23 against k3s v1.33.4 with cert-manager
+  v1.21.2 (installed by hand, digest-checked). Found: an exec credential plugin runs twice per
+  connect (#283).
+- **#277** (a separate session) cut CLAUDE.md to rules only and moved desktop checks into the
+  owner's QA VM.
+
+Desktop checks: kn-qa run 1 on main closed VER-4, VER-58, VER-21 and VER-33 and filed #264–#271;
+run 2 passed #260's five checks. Runs then moved off the owner's desktop (#277) until the owner
+handed the machine over again.
+
+What it cost, and what changed because of it: about 4M tokens in a few hours, mostly CLAUDE.md
+(163 KB) re-sent on every tool call of every agent, three Opus bundles at once, and verifiers
+re-running what CI runs; #277 is the response. Two process notes: bundles writing PR bodies
+to the same scratch file name overwrote each other's, and a merged PR made every open one
+rebase, so merges went one at a time with a rebase between.
+
