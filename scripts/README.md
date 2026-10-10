@@ -73,7 +73,7 @@ starts from scratch.
 | `-Force` / `--force` | off | let `-InstallKubeconfig` replace an existing `~/.kube/config` (backed up first) |
 | `-Recreate` / `--recreate` | off | delete an existing container first |
 | `-SkipApps` / `--skip-apps` | off | bare cluster, no demo workloads |
-| `-Wsl` (`sandbox-up.ps1`/`sandbox-down.ps1` only) | off | route every docker call through `wsl.exe docker ...` instead of a native Windows docker.exe |
+| `-Wsl` (`sandbox-up.ps1`/`sandbox-down.ps1` only) | off | route every docker call through `wsl.exe --exec docker ...` instead of a native Windows docker.exe |
 | `-WslDistribution` | WSL default | which distro `-Wsl` targets (`wsl -d <name>`) |
 
 ## Docker without Docker Desktop (WSL2)
@@ -96,7 +96,7 @@ Two ways to drive it from there:
   runs on the Windows side, pointed at `.sandbox/kubeconfig.yaml` (WSL2 forwards
   `localhost:6550` to Windows automatically).
 - **From Windows pwsh**: `./scripts/sandbox-up.ps1 -Wsl` shells every docker
-  command out to `wsl.exe docker ...`, so the rest of the workflow — the
+  command out to `wsl.exe --exec docker ...`, so the rest of the workflow — the
   kubeconfig path, `$env:KUBECONFIG`, `dotnet run` — is unchanged. Pass
   `-WslDistribution <name>` if it isn't your default distro. Tear down the same
   way: `./scripts/sandbox-down.ps1 -Wsl`.

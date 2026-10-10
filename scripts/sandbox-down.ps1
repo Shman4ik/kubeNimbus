@@ -11,7 +11,7 @@
     points at a cluster that no longer exists).
 
 .PARAMETER Wsl
-    Route docker through `wsl.exe docker ...` — pass this if the sandbox was
+    Route docker through `wsl.exe --exec docker ...` — pass this if the sandbox was
     brought up with sandbox-up.ps1 -Wsl.
 
 .PARAMETER WslDistribution
@@ -35,8 +35,8 @@ if (-not $Kubeconfig) { $Kubeconfig = Join-Path $repoRoot '.sandbox/kubeconfig.y
 
 if ($Wsl) {
     function docker {
-        if ($WslDistribution) { & wsl.exe -d $WslDistribution docker @args }
-        else { & wsl.exe docker @args }
+        if ($WslDistribution) { & wsl.exe -d $WslDistribution --exec docker @args }
+        else { & wsl.exe --exec docker @args }
     }
 }
 
