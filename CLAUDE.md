@@ -333,6 +333,9 @@ do but not what it collects, stores or shares. Four rules keep that from happeni
    privacy URL — so it is reviewed like code. Nothing uploads it; pasting it into Partner Center is a
    manual step, like the screenshots.
 
+Store hero art and the trailer are generated from committed screenshots and demo recordings;
+their sources, checks and Partner Center fields are in [`design/store/README.md`](design/store/README.md).
+
 ## Settings, and what belongs in which file
 
 `settings.json` (`AppSettings`, Core) is *preferences*; `workspace.json` (`WorkspaceStore`,
@@ -398,6 +401,9 @@ security model), `PRIVACY.md` (the privacy policy), `CHANGELOG.md` (release hist
 the release workflow), `CODE_OF_CONDUCT.md`, this file (changing the code),
 `docs/product-loop/` (the train), `docs/BACKLOG.md` (how the issue backlog works),
 `docs/PRE-LAUNCH-CHECKLIST.md`, `docs/RELEASE-CHECKLIST.md`.
+
+Repository support links in `README.md` and `.github/FUNDING.yml` use the same
+Buy Me a Coffee account as pgNimbus; keep them aligned so both projects support the same author.
 
 ## The release train
 

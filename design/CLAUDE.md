@@ -28,6 +28,9 @@ mark's geometry was derived. Four rules matter here:
    light field, and a dark twin that no longer matched it path for path.
    Deriving the file from the drawing is what makes its claims checkable.
 
+   The Store hero and trailer are also generated from committed sources; their
+   generators and upload fields are in [`store/README.md`](store/README.md).
+
 2. **One mark at every size, the same as pgNimbus.** Every icon, 16px
    included, is a render of `logo.svg`. There used to be a hand-drawn 24px mark
    (`logo-small.af`), a generated 16px one (`logo-micro`), dark and plated

@@ -46,6 +46,13 @@ scripts/demo/record/make-gif.sh "$TEMP/kn-demo/out/applications.mp4" design/scre
 
 ## Why there is no cold-start GIF
 
+The existing three GIFs also feed the Microsoft Store trailer, built without
+launching the app by `scripts/windows/make-store-trailer.ps1`. See
+[`design/store/README.md`](../../../design/store/README.md) for the output,
+source resolution and upload fields. Any new recording, including a higher-resolution
+replacement, must run inside the owner's QA VM; the current assembly reuses the
+committed recordings and requires no desktop input.
+
 pgNimbus has one. Here the same recording shows about a second from launch to a drawn window
 (`--smoke-test` measures 1.1 s wall on this Windows machine, process start and exit included),
 far from the ~150 ms the README quotes for linux-x64. The GIF would contradict the claim it
