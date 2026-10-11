@@ -53,7 +53,7 @@ public enum ArgoHealthState
 /// byte-for-byte, with no cluster needed.
 /// </para>
 /// </summary>
-public static class ArgoCd
+public static partial class ArgoCd
 {
     /// <summary>The API group every Argo project uses — CD, Rollouts and Workflows alike.</summary>
     public const string Group = "argoproj.io";
@@ -171,8 +171,17 @@ public static class ArgoCd
     /// (<see cref="ClusterClient.GetCurrentUsernameAsync"/>); <see cref="InitiatorFor"/> turns
     /// it into the initiator Argo records.
     /// </para>
+    /// <para>
+    /// <paramref name="syncPolicy"/> is the Application's own <c>spec.syncPolicy</c>, and its
+    /// <c>syncOptions</c> and <c>retry</c> are copied into the operation, because the
+    /// controller reads them <em>only</em> from the operation. Argo's API server does the same
+    /// copy when somebody presses Sync in its UI (<c>server/application/application.go</c>,
+    /// <c>Sync</c>); without it, an Application that says <c>CreateNamespace=true</c> or
+    /// <c>ServerSideApply=true</c> was synced from here without either — observed against
+    /// Argo CD v3.5.4, where the sync failed with "namespaces … not found" (VER-15).
+    /// </para>
     /// </remarks>
-    public static string SyncPatch(bool prune, string? username = null)
+    public static string SyncPatch(bool prune, string? username = null, JsonElement syncPolicy = default)
     {
         var buffer = new ArrayBufferWriter<byte>(256);
         using (var writer = new Utf8JsonWriter(buffer))
@@ -188,8 +197,29 @@ public static class ArgoCd
             writer.WriteString("value", "Sync requested from kubeNimbus");
             writer.WriteEndObject();
             writer.WriteEndArray();
+            if (Object(syncPolicy, "retry") is { ValueKind: JsonValueKind.Object } retry)
+            {
+                writer.WritePropertyName("retry");
+                retry.WriteTo(writer);
+            }
+
             writer.WriteStartObject("sync");
             writer.WriteBoolean("prune", prune);
+            var options = Array(syncPolicy, "syncOptions")
+                .Where(o => o.ValueKind == JsonValueKind.String)
+                .Select(o => o.GetString()!)
+                .ToList();
+            if (options.Count > 0)
+            {
+                writer.WriteStartArray("syncOptions");
+                foreach (var option in options)
+                {
+                    writer.WriteStringValue(option);
+                }
+
+                writer.WriteEndArray();
+            }
+
             writer.WriteStartObject("syncStrategy");
             writer.WriteStartObject("hook");
             writer.WriteEndObject();
@@ -200,6 +230,42 @@ public static class ArgoCd
         }
 
         return Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
+
+    /// <summary>The Application's <c>spec.syncPolicy</c>, or an undefined element when it has none.</summary>
+    public static JsonElement SyncPolicyOf(DynamicResource application)
+    {
+        ArgumentNullException.ThrowIfNull(application);
+        return Object(Object(application.Raw, "spec"), "syncPolicy");
+    }
+
+    /// <summary>
+    /// Stops a sync in flight: a JSON patch (RFC 6902) of the <em>object</em> — not of a
+    /// <c>/status</c> subresource, which Argo's Application CRD does not declare (a patch to
+    /// it is a 404) — that sets <c>status.operationState.phase</c> to <c>Terminating</c>.
+    /// That is exactly the field Argo's own API server writes for Terminate in its UI and
+    /// <c>argocd app terminate-op</c> (<c>TerminateOperation</c>, an Update of the whole
+    /// Application); the application controller sees the phase, stops the sync and records
+    /// it as <c>Failed</c> with "Operation terminated".
+    /// </summary>
+    /// <remarks>
+    /// The first operation is a <c>test</c> that the phase is still <c>Running</c>, so the
+    /// patch is conditional the way Argo's server check is (it refuses when no operation is in
+    /// progress): if the sync finished between the click and the request, the API server
+    /// rejects the whole patch with 422 and nothing is written, rather than a finished
+    /// operation being stamped Terminating.
+    /// </remarks>
+    public const string TerminatePatch =
+        """[{"op":"test","path":"/status/operationState/phase","value":"Running"},{"op":"replace","path":"/status/operationState/phase","value":"Terminating"}]""";
+
+    /// <summary>Whether a terminate is offered for this kind: the same patch verb on the same kind as a sync.</summary>
+    public static bool SupportsTerminate(ResourceDescriptor descriptor) => SupportsSync(descriptor);
+
+    /// <summary>The phase of the Application's current or last operation, read off the raw object.</summary>
+    public static string OperationPhaseOf(DynamicResource application)
+    {
+        ArgumentNullException.ThrowIfNull(application);
+        return String(Object(Object(application.Raw, "status"), "operationState"), "phase") ?? "";
     }
 
     // ----------------------------------------------------------------- parsing
@@ -247,7 +313,7 @@ public static class ArgoCd
         // both, and the count is carried so the pane can say "+2 more sources" rather than
         // silently showing one of three.
         var sources = Array(spec, "sources");
-        var source = spec.TryGetProperty("source", out var s) && s.ValueKind == JsonValueKind.Object
+        var source = Object(spec, "source") is { ValueKind: JsonValueKind.Object } s
             ? s
             : sources.Count > 0 ? sources[0] : default;
 
@@ -429,6 +495,13 @@ public sealed record ArgoApplication(
     /// <summary>True while Argo is running a sync on this Application right now.</summary>
     public bool IsOperationRunning => OperationPhase is "Running" or "Terminating";
 
+    /// <summary>
+    /// Whether there is a sync to stop: the phase is <c>Running</c>. Not while it is already
+    /// <c>Terminating</c> — asking twice changes nothing — and never on a finished one, which
+    /// the terminate patch's own <c>test</c> would refuse anyway.
+    /// </summary>
+    public bool CanTerminate => OperationPhase == "Running";
+
     /// <summary>The short commit Argo last reconciled, which is what a revision column shows.</summary>
     public string ShortRevision => Revision.Length > 7 ? Revision[..7] : Revision;
 
@@ -479,10 +552,17 @@ public sealed record ArgoCondition(string Type, string Message, DateTimeOffset? 
     /// opposite default from pod detail's, and deliberately, because Argo raises a condition
     /// to <em>report a fault</em> where Kubernetes uses them for ordinary state.
     /// </summary>
-    public bool IsProblem =>
+    public bool IsProblem => Problem ?? (
         Type.EndsWith("Error", StringComparison.Ordinal)
         || Type.Contains("Failed", StringComparison.Ordinal)
-        || Type == "OrphanedResourceWarning";
+        || Type == "OrphanedResourceWarning");
+
+    /// <summary>
+    /// Set where the condition's own <c>status</c> decides, as on an ApplicationSet: its
+    /// conditions are ordinary Kubernetes ones, <c>ErrorOccurred: False</c> on a healthy set,
+    /// so the type alone would call every healthy ApplicationSet broken.
+    /// </summary>
+    public bool? Problem { get; init; }
 }
 
 /// <summary>One object Argo manages as part of an Application, with its own sync and health.</summary>

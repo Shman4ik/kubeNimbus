@@ -125,6 +125,36 @@ starts from scratch.
 | `-Wsl` (`sandbox-up.ps1`/`sandbox-down.ps1` only) | off | route every docker call through `wsl.exe --exec docker ...` instead of a native Windows docker.exe |
 | `-WslDistribution` | WSL default | which distro `-Wsl` targets (`wsl -d <name>`) |
 
+## A real Argo CD for the Argo live tests (optional)
+
+`Live/ArgoLiveTests` drive a real Argo CD controller: a sync that runs and names its
+initiator, a refresh whose annotation the controller clears, a deny window blocking a manual
+sync, prune deleting a resource that left Git, terminate stopping a sync in flight, the 403 a
+read-only user gets, and "Open in Argo CD" with applications in any namespace. They need a
+**second** sandbox, never the shared one (the demo manifests' stand-in Argo CRDs claim the same
+names), and skip with the reason without it:
+
+```powershell
+./scripts/sandbox-up.ps1 -Name kubenimbus-argo -Port 6551 -SkipApps -Kubeconfig .sandbox/argo-kubeconfig.yaml
+./scripts/argo-sandbox-up.ps1                     # refuses the shared kubenimbus-sandbox
+./scripts/sandbox-down.ps1 -Name kubenimbus-argo  # when done
+```
+
+`argo-sandbox-up.ps1` downloads `install.yaml` of **Argo CD v3.5.4** from the release tag and
+refuses it unless its SHA-256 is
+`1feb02cc7bacf3a379da58b0ca8c6f07d18288cd04d531dabd08816375e5e010`, rewrites the two images it
+runs to their digests (`quay.io/argoproj/argocd:v3.5.4@sha256:49dff794…0b77b`,
+`public.ecr.aws/docker/library/redis:8.2.3-alpine@sha256:08ad0b1d…e679ba`; the full digests are
+in the script) and drops the Dex Deployment, which nothing here needs. It then turns on
+applications in any namespace for `argo-tenant` (`application.namespaces` in
+`argocd-cmd-params-cm`, plus the cluster role argocd-server needs for it), sets `argocd-cm`
+`data.url` to `https://argocd.sandbox.test`, adds an AppProject `tenant` whose
+`sourceNamespaces` names `argo-tenant`, and starts a Git server inside the cluster from the
+argocd image Argo already pulled (`git daemon`, serving `git://argo-git.argocd/demo.git`:
+`app/` at tags `with-removed` and `without-removed`, and a `slow/` path whose PreSync hook
+sleeps ten minutes, for terminate). No other image is pulled. The tests find the kubeconfig at
+`.sandbox/argo-kubeconfig.yaml` or `$KUBENIMBUS_ARGO_KUBECONFIG`.
+
 ## cert-manager for the live tests (by hand, optional)
 
 A few live tests need CRDs and a mutating admission webhook this repository did not write
@@ -215,9 +245,8 @@ surfaces non-empty — that's the selection criterion.
 
 The Argo pair is a *shape*, not an installation: nothing reconciles those Applications, so
 a sync writes `operation` and no controller picks it up, and a refresh annotation stays
-where it is put. To test against real Argo CD, **delete both CRDs first** — they claim the
-same names — and then install it the usual way (`kubectl create namespace argocd &&
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml`).
+where it is put. To test against real Argo CD, use a second sandbox and
+`argo-sandbox-up.ps1` (above) rather than installing over these CRDs, which claim the same names.
 
 Metrics come free: k3s ships metrics-server, so `metrics.k8s.io` is live and the
 CPU/Memory columns, usage sparklines and the Usage tab populate on their own. To

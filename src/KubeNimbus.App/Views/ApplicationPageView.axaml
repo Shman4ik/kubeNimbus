@@ -49,7 +49,7 @@
                (and with it its accessible name) here, or a screen reader reads "button". -->
           <SplitButton.Styles>
             <Style Selector="SplitButton /template/ Button#PART_SecondaryButton">
-              <Setter Property="ToolTip.Tip" Value="More sync options: sync with prune" />
+              <Setter Property="ToolTip.Tip" Value="More sync options: sync with prune, terminate a running sync" />
             </Style>
           </SplitButton.Styles>
           <SplitButton.Flyout>
@@ -58,6 +58,13 @@
                         ToolTip.Tip="Also delete the resources Git no longer declares. Asks first.">
                 <MenuItem.Icon>
                   <PathIcon Data="{StaticResource SyncIconGeometry}" Width="13" Height="13" />
+                </MenuItem.Icon>
+              </MenuItem>
+              <!-- Enabled only while Argo reports the sync Running (#193). -->
+              <MenuItem Header="Terminate sync…" Command="{Binding TerminateSyncCommand}"
+                        ToolTip.Tip="Stop the sync Argo is running, where it is. Asks first.">
+                <MenuItem.Icon>
+                  <PathIcon Data="{StaticResource StopIconGeometry}" Width="13" Height="13" />
                 </MenuItem.Icon>
               </MenuItem>
             </MenuFlyout>

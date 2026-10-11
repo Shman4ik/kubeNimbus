@@ -623,6 +623,15 @@ public partial class ClusterTabView : UserControl
                 column.IsVisible = visible;
             }
         }
+
+        // The Argo dashboard's fleet list (#195) has the same column.
+        foreach (var column in ArgoGrid.Columns)
+        {
+            if (column.Tag is ArgoApplicationComparer.Cluster)
+            {
+                column.IsVisible = visible;
+            }
+        }
     }
 
     // ------------------------------------------------------------------ the grid

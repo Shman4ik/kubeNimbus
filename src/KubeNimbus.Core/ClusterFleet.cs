@@ -21,6 +21,30 @@ public sealed record FleetMember(
 /// </remarks>
 public sealed record FleetTarget(FleetMember Member, ResourceDescriptor Descriptor);
 
+/// <summary>One Application in a fleet read, with the cluster it is on and that cluster's own descriptor for the kind.</summary>
+public sealed record ArgoFleetApplication(string ClusterName, ResourceDescriptor Descriptor, ArgoApplication Application);
+
+/// <summary>
+/// What a fleet read of Argo CD Applications found: the Applications, how many members serve
+/// the kind out of how many were asked, and the members that could not be read.
+/// </summary>
+public sealed record ArgoFleetRead(
+    IReadOnlyList<ArgoFleetApplication> Applications,
+    int Serving,
+    int Members,
+    IReadOnlyList<(string Cluster, Exception Error)> Failed)
+{
+    /// <summary>
+    /// The seven counts summed across the fleet (owner decision, 2026-10-10, #195): an
+    /// Application is one Application whichever cluster it is on, so the totals are the same
+    /// numbers the per-cluster dashboard shows, added up.
+    /// </summary>
+    public ArgoSummary Counts => ArgoSummary.Of(Applications.Select(a => a.Application));
+
+    /// <summary>"2 of 3 clusters run Argo CD" — stated, because partial is normal in a fleet.</summary>
+    public string Summary => $"{Serving} of {Members} clusters run Argo CD";
+}
+
 /// <summary>An aggregated watch event, tagged with the cluster it came from.</summary>
 public sealed record FleetResourceEvent(string ClusterName, ResourceEvent<DynamicResource> Event);
 
@@ -82,6 +106,47 @@ public static class ClusterFleet
         }
 
         return targets;
+    }
+
+    /// <summary>
+    /// Every Argo CD Application on every member that serves the kind, read once and in
+    /// parallel — the fleet half of the Argo dashboard, which is a read rather than a watch on
+    /// one cluster too. Each member resolves its own descriptor (<see cref="ResolveAsync"/>),
+    /// and a member that cannot be read is reported in <see cref="ArgoFleetRead.Failed"/> while
+    /// the rest are returned: partial is the normal state of a fleet, and the caller says so.
+    /// </summary>
+    public static async Task<ArgoFleetRead> ListArgoApplicationsAsync(
+        IReadOnlyList<FleetMember> members, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(members);
+
+        var failed = new List<(string Cluster, Exception Error)>();
+        var targets = await ResolveAsync(
+            members, ArgoCd.Group, "Application",
+            (member, ex) => { lock (failed) failed.Add((member.ClusterName, ex)); },
+            cancellationToken).ConfigureAwait(false);
+
+        var reads = await Task.WhenAll(targets.Select(async target =>
+        {
+            try
+            {
+                var applications = await target.Member.Client
+                    .ListArgoApplicationsAsync(target.Descriptor, cancellationToken: cancellationToken)
+                    .ConfigureAwait(false);
+                return applications.Select(a => new ArgoFleetApplication(target.Member.ClusterName, target.Descriptor, a)).ToList();
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                lock (failed)
+                {
+                    failed.Add((target.Member.ClusterName, ex));
+                }
+
+                return [];
+            }
+        })).ConfigureAwait(false);
+
+        return new ArgoFleetRead([.. reads.SelectMany(r => r)], targets.Count, members.Count, failed);
     }
 
     /// <summary>

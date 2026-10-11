@@ -50,7 +50,12 @@ its width the squeeze falls on CPU and Memory and the list fits 1280px, and narr
 that the grid scrolls sideways, which `LayoutChecks.GridReachesLastColumn` asserts), and
 the toggle only appears with more than one cluster connected
 — a fleet of one is the tab you are already looking at (UI rule 1). The command
-palette carries the same toggle. `MainWindowViewModel` owns the member list and
+palette carries the same toggle. The Argo CD dashboard takes the same toggle since #195: one
+merged list with a Cluster column and the seven counts summed across the clusters, read once
+per member through `ClusterFleet.ListArgoApplicationsAsync` rather than watched (the dashboard
+is a read on one cluster too); [argo-cd](argo-cd.md), "The dashboard across the fleet", has the
+detail, including why a fleet row's actions take the member's client from the shell's member
+list rather than from the fleet watch's targets. `MainWindowViewModel` owns the member list and
 makes cluster names unique (two tabs on one context would otherwise merge into
 one apparent cluster) and re-fans active aggregated watches when a tab opens or
 closes, so no tab keeps watching a disposed client.

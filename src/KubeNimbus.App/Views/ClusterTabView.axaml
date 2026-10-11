@@ -540,6 +540,13 @@
                     <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
+                <MenuItem Header="Terminate sync…" Command="{Binding TerminateArgoSyncCommand}"
+                          IsVisible="{Binding CanSyncSelectedArgoApplication}"
+                          ToolTip.Tip="Stop the sync Argo is running, where it is. Only while one is running; asks first.">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource StopIconGeometry}" Width="13" Height="13" />
+                  </MenuItem.Icon>
+                </MenuItem>
                 <!-- FEAT-47: the other end of a PV/PVC binding, named in the header so the
                      item says what it opens. Present only on a bound claim or volume. -->
                 <MenuItem Header="{Binding BoundObjectLabel}" Command="{Binding OpenBoundObjectCommand}"
@@ -1160,12 +1167,28 @@
                       <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="13" Height="13" />
                     </MenuItem.Icon>
                   </MenuItem>
+                  <MenuItem Header="Terminate sync…" Command="{Binding TerminateArgoSyncCommand}"
+                            ToolTip.Tip="Stop the sync Argo is running, where it is. Only while one is running; asks first.">
+                    <MenuItem.Icon>
+                      <PathIcon Data="{StaticResource StopIconGeometry}" Width="13" Height="13" />
+                    </MenuItem.Icon>
+                  </MenuItem>
                   <Separator />
                   <MenuItem Header="Open" Command="{Binding OpenArgoApplicationCommand}"
                             ToolTip.Tip="Managed resources, conditions and deployment history" />
                 </MenuFlyout>
               </DataGrid.ContextFlyout>
               <DataGrid.Columns>
+                <!-- Shown only in the fleet list (#195), from code-behind like the resource
+                     list's Cluster column, and at the same 120px. -->
+                <DataGridTemplateColumn Header="Cluster" Width="120" MinWidth="96" Tag="cluster" CanUserSort="True" IsVisible="False">
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate x:DataType="vm:ArgoApplicationRowViewModel">
+                      <TextBlock Text="{Binding ClusterName}" TextTrimming="CharacterEllipsis"
+                                 ToolTip.Tip="{Binding ClusterName}" VerticalAlignment="Center" />
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
                 <DataGridTemplateColumn Header="Application" Width="2*" MinWidth="150" Tag="name" CanUserSort="True">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate x:DataType="vm:ArgoApplicationRowViewModel">

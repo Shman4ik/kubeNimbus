@@ -335,6 +335,12 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("ux-argo-sort", () => HostInMainWindow(ClusterTabScenarios.ArgoDashboard())),
     ("cluster-tab-argo-sync-unavailable", () => HostInMainWindow(ClusterTabScenarios.ArgoSyncUnavailable())),
     ("cluster-tab-argo-sync-prune", () => HostInMainWindow(ClusterTabScenarios.ArgoSyncPrune())),
+    // Bundle K: terminate (#193), the ApplicationSet and AppProject panes (#194), the fleet list (#195).
+    ("cluster-tab-argo-terminate", () => HostInMainWindow(ArgoScenarios.Terminate())),
+    ("cluster-tab-argo-applicationset-detail", () => HostInMainWindow(ArgoScenarios.ApplicationSetDetail(), height: 1000)),
+    ("cluster-tab-argo-applicationset-overview", () => HostInMainWindow(ArgoScenarios.ApplicationSetDetail(0), height: 1000)),
+    ("cluster-tab-argo-appproject-detail", () => HostInMainWindow(ArgoScenarios.ProjectDetail(), height: 1000)),
+    ("cluster-tab-argo-fleet", () => HostInMainWindow(ArgoScenarios.Fleet())),
     // L1 — the palette's log rows. On the demo cluster, which is the one place the rows
     // come from a real listing (the dataset) rather than a fixture; the states a sandbox
     // cannot produce on demand (in flight, refused, capped, a fleet) are written in

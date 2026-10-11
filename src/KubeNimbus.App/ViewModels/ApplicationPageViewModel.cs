@@ -410,6 +410,15 @@ public sealed partial class ApplicationPageViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanSync))]
     private void SyncWithPrune() => ArmSync(RowActionKind.ArgoSyncPrune);
 
+    /// <summary>
+    /// Only while Argo reports the sync Running: the same strip that started a sync is where
+    /// it is stopped (#193). It asks first, since what was applied stays applied.
+    /// </summary>
+    public bool CanTerminateSync => CanSync && Entry.Argo is { CanTerminate: true };
+
+    [RelayCommand(CanExecute = nameof(CanTerminateSync))]
+    private void TerminateSync() => ArmSync(RowActionKind.ArgoTerminate);
+
     private void ArmSync(RowActionKind kind)
     {
         if (Entry.Argo is { } argo && ArgoDescriptor() is { } d)
@@ -566,6 +575,7 @@ public sealed partial class ApplicationPageViewModel : ObservableObject
         RestartCommand.NotifyCanExecuteChanged();
         SyncCommand.NotifyCanExecuteChanged();
         SyncWithPruneCommand.NotifyCanExecuteChanged();
+        TerminateSyncCommand.NotifyCanExecuteChanged();
         EditYamlCommand.NotifyCanExecuteChanged();
         UpdateLogState();
     }

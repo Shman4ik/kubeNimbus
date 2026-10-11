@@ -1,0 +1,136 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:KubeNimbus.App.ViewModels"
+             xmlns:core="using:KubeNimbus.Core"
+             xmlns:sys="using:System"
+             xmlns:conv="using:KubeNimbus.App.Converters"
+             xmlns:aconv="using:Avalonia.Data.Converters"
+             x:Class="KubeNimbus.App.Views.ArgoProjectView"
+             x:DataType="vm:ArgoProjectTabViewModel">
+
+  <UserControl.Resources>
+    <!-- One string per line: a repository, a namespace, a group/kind. Selectable, because the
+         next thing anyone does with an allowed repository URL is paste it somewhere. -->
+    <DataTemplate x:Key="ProjectLine" x:DataType="sys:String">
+      <SelectableTextBlock Text="{Binding}" FontSize="12" Classes="mono" TextWrapping="Wrap" Margin="0,1" />
+    </DataTemplate>
+  </UserControl.Resources>
+
+  <!-- One row of chrome (UI rule 10): the project's description and reload. The pane is a
+       single scroll of five short sections rather than tabs: a project is read top to bottom,
+       and each section is a few lines. -->
+  <Grid RowDefinitions="Auto,*" Margin="10,8,10,10">
+
+    <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,6">
+      <TextBlock Grid.Column="0" Classes="statusText dim" VerticalAlignment="Center"
+                 Text="{Binding Project.Description}" TextTrimming="CharacterEllipsis"
+                 ToolTip.Tip="{Binding Project.Description}" IsVisible="{Binding HasDescription}" />
+      <TextBlock Grid.Column="1" Text="Loading…" Opacity="0.55" FontSize="12" VerticalAlignment="Center"
+                 Margin="0,0,8,0" IsVisible="{Binding IsLoading}" />
+      <Button Grid.Column="2" Classes="toolbar" Command="{Binding ReloadCommand}" Padding="6"
+              IsEnabled="{Binding !IsDemo}" ToolTip.Tip="Re-read this AppProject from the cluster">
+        <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="14" Height="14" />
+      </Button>
+    </Grid>
+
+    <Border Grid.Row="1" Classes="infoBar error" VerticalAlignment="Top"
+            IsVisible="{Binding ErrorMessage, Converter={x:Static aconv:ObjectConverters.IsNotNull}}">
+      <TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap" FontSize="12" />
+    </Border>
+
+    <ScrollViewer Grid.Row="1" IsVisible="{Binding ErrorMessage, Converter={x:Static aconv:ObjectConverters.IsNull}}">
+      <StackPanel Spacing="8">
+
+        <!-- Where its Applications may come from, and which namespaces may hold them. -->
+        <Border Classes="card" Padding="12,10">
+          <StackPanel Spacing="6">
+            <TextBlock Classes="sectionHeader" Text="SOURCE REPOSITORIES" />
+            <TextBlock Classes="statusText dim" TextWrapping="Wrap" Text="{Binding Project.SourceReposRule}"
+                       IsVisible="{Binding Project.SourceReposRule, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}" />
+            <ItemsControl ItemsSource="{Binding Project.SourceRepos}" ItemTemplate="{StaticResource ProjectLine}" />
+            <TextBlock Classes="sectionHeader" Text="APPLICATION NAMESPACES" Margin="0,6,0,0" />
+            <TextBlock Classes="statusText dim" TextWrapping="Wrap" Text="{Binding Project.SourceNamespacesRule}"
+                       IsVisible="{Binding Project.SourceNamespacesRule, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}" />
+            <ItemsControl ItemsSource="{Binding Project.SourceNamespaces}" ItemTemplate="{StaticResource ProjectLine}" />
+          </StackPanel>
+        </Border>
+
+        <Border Classes="card" Padding="12,10">
+          <StackPanel Spacing="6">
+            <TextBlock Classes="sectionHeader" Text="DESTINATIONS" />
+            <TextBlock Classes="statusText dim" TextWrapping="Wrap" Text="{Binding Project.DestinationsRule}"
+                       IsVisible="{Binding Project.DestinationsRule, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}" />
+            <ItemsControl ItemsSource="{Binding Project.Destinations}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="core:ArgoDestination">
+                  <SelectableTextBlock Text="{Binding Text}" FontSize="12" Classes="mono" TextWrapping="Wrap" Margin="0,1" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+
+        <!-- Which kinds. The empty-list rules are Argo's (IsGroupKindNamePermitted) and are
+             the part a reader of the YAML gets wrong: an empty cluster allow list allows
+             nothing, an absent namespaced one allows everything. -->
+        <Border Classes="card" Padding="12,10">
+          <StackPanel Spacing="6">
+            <TextBlock Classes="sectionHeader" Text="CLUSTER-SCOPED KINDS" />
+            <TextBlock Classes="statusText dim" TextWrapping="Wrap" Text="{Binding Project.ClusterKindsRule}"
+                       IsVisible="{Binding Project.ClusterKindsRule, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}" />
+            <ItemsControl ItemsSource="{Binding Project.ClusterResourceAllow}" ItemTemplate="{StaticResource ProjectLine}" />
+            <TextBlock Classes="fieldLabel" Text="Denied" IsVisible="{Binding HasClusterDeny}" />
+            <ItemsControl ItemsSource="{Binding Project.ClusterResourceDeny}" ItemTemplate="{StaticResource ProjectLine}" />
+
+            <TextBlock Classes="sectionHeader" Text="NAMESPACED KINDS" Margin="0,6,0,0" />
+            <TextBlock Classes="statusText dim" TextWrapping="Wrap" Text="{Binding Project.NamespacedKindsRule}"
+                       IsVisible="{Binding Project.NamespacedKindsRule, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}" />
+            <ItemsControl ItemsSource="{Binding Project.NamespaceResourceAllow}" ItemTemplate="{StaticResource ProjectLine}"
+                          IsVisible="{Binding HasNamespaceAllow}" />
+            <TextBlock Classes="fieldLabel" Text="Denied" IsVisible="{Binding HasNamespaceDeny}" />
+            <ItemsControl ItemsSource="{Binding Project.NamespaceResourceDeny}" ItemTemplate="{StaticResource ProjectLine}" />
+          </StackPanel>
+        </Border>
+
+        <!-- Sync windows say what they do to a manual sync, because a sync from kubeNimbus is
+             one (argo-cd.md, "what authorises it"). -->
+        <Border Classes="card" Padding="12,10">
+          <StackPanel Spacing="6">
+            <TextBlock Classes="sectionHeader" Text="SYNC WINDOWS" />
+            <TextBlock Classes="statusText dim" Text="None: Applications may sync at any time." IsVisible="{Binding !HasSyncWindows}" />
+            <ItemsControl ItemsSource="{Binding Project.SyncWindows}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="core:ArgoSyncWindow">
+                  <StackPanel Margin="0,0,0,10">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <Ellipse Classes="statusDot" VerticalAlignment="Center" Classes.warn="{Binding IsDeny}" Classes.ok="{Binding !IsDeny}" />
+                      <SelectableTextBlock Text="{Binding When}" FontSize="12.5" Classes="mono" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding Scope}" Classes="statusText dim" FontSize="11.5" TextWrapping="Wrap" />
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+
+        <Border Classes="card" Padding="12,10">
+          <StackPanel Spacing="6">
+            <TextBlock Classes="sectionHeader" Text="ROLES" />
+            <TextBlock Classes="statusText dim" Text="None." IsVisible="{Binding !HasRoles}" />
+            <ItemsControl ItemsSource="{Binding Project.Roles}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="core:ArgoProjectRole">
+                  <StackPanel Margin="0,0,0,10">
+                    <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Summary}" Classes="statusText dim" FontSize="11.5" TextWrapping="Wrap" />
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+    </ScrollViewer>
+  </Grid>
+</UserControl>

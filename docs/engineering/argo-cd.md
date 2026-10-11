@@ -89,9 +89,117 @@ Nine things are load-bearing.
    deletes and where it comes back from. It used to be a checkbox on the sync's strip; with
    the sync firing on its click there is no strip to hold it, and a checkbox whose unticked
    state is a one-click action is a confirm for nothing. Refresh changes nothing on the
-   cluster and fires on its click too. Terminating a running sync is **not** shipped: it
-   means writing `status.operationState.phase`, which is a status-subresource patch and its
-   own item.
+   cluster and fires on its click too. Terminate sync… (#193) asks, like prune: it stops Argo
+   partway, and what was applied stays applied — see "Terminating a sync" below.
+
+## A sync carries the Application's own sync options
+
+**Found by the first live run against a real controller (2026-10-11, Argo CD v3.5.4).** The
+controller reads `syncOptions` and `retry` *only* from the operation (`controller/sync.go`:
+`syncOp.SyncOptions.HasOption("CreateNamespace=true")` and the rest), and Argo's API server
+copies them there from `spec.syncPolicy` whenever somebody presses Sync in its UI
+(`server/application/application.go`, `Sync`). kubeNimbus wrote an operation without them, so
+an Application that says `CreateNamespace=true` failed its sync from here with `namespaces
+"…" not found`, and one that says `ServerSideApply=true`, `PruneLast=true` or `Replace=true`
+was synced without it, silently. `ClusterClient.SyncArgoApplicationAsync` now reads the
+Application first and `ArgoCd.SyncPatch` copies `spec.syncPolicy.syncOptions` into
+`operation.sync.syncOptions` and `spec.syncPolicy.retry` into `operation.retry`, byte for byte
+as Argo does. An account that may patch but not read Applications still gets its sync, without
+the options it could not see. `ArgoTerminateAndSyncOptionsTests` pins the patch and the read;
+`ArgoLiveTests` syncs a `CreateNamespace=true` Application on the real controller (mutation
+check: with the copy removed, both the unit test and the live test fail, the live one with
+phase `Failed`).
+
+## Terminating a sync
+
+**The patch goes to the object, not to `/status`** (#193, settled against Argo CD v3.5.4 on
+2026-10-11). Argo's Application CRD declares no subresources, so
+`PATCH …/applications/<name>/status` is a 404 from the real API server. What Argo's own
+Terminate button and `argocd app terminate-op` do is `TerminateOperation` in
+`server/application/application.go`: refuse when `operation` or `status.operationState` is
+nil, set `status.operationState.phase = Terminating`, and `Update` the whole Application (no
+subresource), retrying on conflict. The application controller sees the phase, stops the sync,
+deletes hooks still running, and records the operation `Failed`, "Operation terminated".
+
+kubeNimbus sends `ArgoCd.TerminatePatch`, an RFC 6902 JSON patch of the object: a `test` that
+`/status/operationState/phase` is still `Running`, then a `replace` with `Terminating`. The
+`test` is Argo's server-side check made atomic: a sync that finished between the click and the
+request makes the API server refuse the whole patch with 422 and write nothing, which
+`TerminateArgoOperationAsync` returns as false and the strip says as "No sync is running on … any
+more — it finished before the request arrived. Nothing was changed." A merge patch could not be
+conditional, and one sent after the sync finished would stamp a finished operation Terminating.
+
+Where: "Terminate sync…" on the Applications page's Sync arrow (the same strip that started the
+sync), in both Argo row menus and in the palette, enabled only while the phase is `Running`
+(`ArgoApplication.CanTerminate`). It arms the confirm (UI rule 17), whose sentence says what
+stays applied; it is not red, because nothing is deleted. Like sync, what authorises it is
+Kubernetes RBAC `patch` on the Application, not Argo's `applications, sync` role.
+
+## ApplicationSet and AppProject panes
+
+**Double-click opens a pane for each of Argo's three kinds** (#194), from the ordinary
+resource list: an Application opens the dashboard's own pane (it used to open its YAML, which
+stays in the context menu), an ApplicationSet and an AppProject their own. `ArgoDetailFor`
+(`ClusterTabViewModel.Argo.cs`) routes them by group and kind, beside `NetworkingDetailFor`.
+
+- **ApplicationSet** (`ArgoCd.ReadApplicationSet`, `ArgoApplicationSetView`): Overview names
+  each generator by what it iterates (`List · 2 elements`, `Git directories · apps/* · repo @
+  rev`, `Matrix of git and clusters`, an unknown type by its own name), the template's
+  Application name pattern, project, source and destination, the set's own health (Argo 3.x),
+  and what `applicationsSync` and `preserveResourcesOnDeletion` do in words. Applications lists
+  what it generated from its own `status.resources` (Argo 2.6+), worst first, each with its sync
+  and health pills; on open and Reload the pane lists Applications in the set's namespace and
+  lays their live state over the status, adding any Application the set owns by UID that the
+  status does not list (an older Argo). When that read is refused the list says the pills are
+  from the set's status. **An ApplicationSet's conditions are read by their `status`**:
+  `ErrorOccurred: False` is the healthy state, so the Application pane's type-suffix rule would
+  have shown every healthy set with a red condition (`ArgoCondition.Problem`).
+- **AppProject** (`ArgoCd.ReadProject`, `ArgoProjectView`): one scroll of five short cards —
+  source repositories (a `!` entry is a deny pattern) and Application namespaces, destinations,
+  cluster-scoped and namespaced kinds, sync windows, roles. **Each empty list says what Argo
+  makes of it**, from `IsGroupKindNamePermitted`, `IsSourcePermitted` and
+  `IsDestinationPermitted` at v3.5.4: no source repository or destination means none is
+  allowed; an empty cluster-kind allow list allows no cluster-scoped kind; an absent namespaced
+  allow list allows every namespaced kind and a present but empty one allows none. A sync window
+  says what it does to a manual sync — the kind kubeNimbus sends — from `SyncWindows.CanSync`.
+
+Both are read-only with a Reload, like the Application pane. The demo cluster ships one of each
+(`Demo/Fixtures/argo-objects.json`); `ArgoCdObjectsTests` and `ArgoPanesAndTerminateTests` pin
+them, and the harness renders `cluster-tab-argo-applicationset-*` and
+`cluster-tab-argo-appproject-detail`.
+
+## The dashboard across the fleet
+
+**One merged list with a Cluster column, the counts summed** (owner decision on #195,
+2026-10-10). The fleet toggle, hidden on the dashboard before, shows there with more than one
+cluster connected. `ClusterFleet.ListArgoApplicationsAsync` resolves the Application kind on
+each member's own discovery, reads every member in parallel and returns an `ArgoFleetRead`; the
+seven counts are `ArgoSummary` over all of them, the header says "n of m clusters run Argo CD",
+and a member that could not be read is named in the inline warning while the rest show. The
+dashboard stays a read, not a watch, so the toggle and a cluster tab opening or closing re-read
+it. **A fleet row acts on its own cluster**: `ClientForArgoRow` takes the member's client from
+the shell's member list, and a row whose cluster has left the fleet gets no client rather than
+this tab's (which would sync a namesake on the wrong cluster); the detail pane opens on the same
+client. Rows with the same `namespace/name` on two clusters order by cluster, so they no longer
+swap on a reload.
+
+## A real Argo CD in a sandbox
+
+`scripts/argo-sandbox-up.ps1` installs Argo CD **v3.5.4** into a second, throwaway sandbox
+(`sandbox-up.ps1 -Name kubenimbus-argo -Port 6551 -SkipApps`): `install.yaml` from the release
+tag, SHA-256 `1feb02cc7bacf3a379da58b0ca8c6f07d18288cd04d531dabd08816375e5e010`, images pinned
+by digest, no Dex, applications in any namespace on for `argo-tenant`, and a `git daemon` from
+the argocd image serving the test repository. `scripts/README.md` has the detail.
+`Live/ArgoLiveTests` run against it and skip everywhere else, CI included:
+
+| Test | What a real controller was observed to do |
+|---|---|
+| sync, initiator, prune | ran the sync from kubeNimbus to `Succeeded`, recorded `operation.initiatedBy.username` = `"<user> (kubeNimbus)"` with the API server's username, created the `CreateNamespace=true` destination; after the Application moved to the commit that deleted `removed.yaml`, a sync without prune left that ConfigMap and a sync with prune deleted it, keeping the one still in Git |
+| refresh | cleared `argocd.argoproj.io/refresh` after re-comparing |
+| deny window | held a manual sync under a deny window with `manualSync: false`, its operation message saying it is "blocked by sync window", and applied nothing |
+| 403 | refused sync and terminate from a user with only get/list/watch, with the API server's own sentence (`cannot patch resource "applications"`), and nothing was written |
+| terminate | `/status` patch is a 404; the object patch stopped a sync waiting on its PreSync hook, ended `Failed` / "Operation terminated", and never applied what came after the hook; a second terminate found nothing running (422) |
+| Open in Argo CD | wrote `status.controllerNamespace: argocd` on a tenant Application in `argo-tenant`, which links to `https://argocd.sandbox.test/applications/argo-tenant/<name>`; left alone an Application in an unwatched namespace whose author wrote its own namespace into that field beside an `argocd-cm` of their own, which gets no link |
 
 ## Who a sync says it came from, and what authorises it
 
@@ -200,4 +308,5 @@ stand-in Application (the sandbox has Argo's CRDs and no controller, so nothing 
 written), Refresh writes `argocd.argoproj.io/refresh: normal` or `hard` and leaves the spec as it
 was; Sync writes `operation.sync.prune: false`, "Sync with prune…" `true`, both with the
 initiator the API server names; and a user allowed only to read gets the server's own 403
-sentence for both, with nothing written. What a running controller then does is not observed.
+sentence for both, with nothing written. What a running controller then does is observed by
+`Live/ArgoLiveTests` against a real Argo CD (see "A real Argo CD in a sandbox").
