@@ -12,6 +12,8 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-11
+
 ### Added
 
 - **Several namespaces at once, in both lists.** In either namespace picker a click still
@@ -55,6 +57,34 @@ it as the GitHub Release body, so headings must match tags exactly
   such as one before Kubernetes 1.27, gets a sentence saying so.
 - **Keyboard: Ctrl+Tab and Ctrl+Shift+Tab** move focus out of the YAML editor and the exec
   terminal, which keep Tab for indenting and shell completion.
+- **Delete several resources at once.** Select rows in the resource list (Shift+click,
+  Ctrl+click or Cmd+click on macOS, Shift+arrows) and delete them with one confirm that names
+  the count and the cluster. Each object is deleted by its own request, a Stop button ends the
+  run, and an object the server refuses is listed with the server's reason while the rest are
+  deleted.
+- **Choose the resource list's columns.** Right-click a column header to hide or show columns
+  for that kind, or to reset them. The choice is remembered per kind.
+- **New resource from YAML.** "New resource from YAML…" in the ☰ menu and the palette opens an
+  empty editor: paste or type a manifest and apply it through the same preview as any edit. The
+  namespace defaults to the list's.
+- **A capacity strip above the Nodes list**: how many nodes there are and how many are ready,
+  and CPU and memory used (from metrics-server) and requested, each against what the nodes can
+  allocate. It needs no Prometheus, and a part the cluster does not let you read says so in
+  place instead of showing zero.
+- **Terminate a running Argo CD sync** from the places a sync starts: the arrow beside Sync on
+  the Applications page, the Argo CD row menus and the palette. It asks first.
+- **ApplicationSet and AppProject panes.** An ApplicationSet shows its generators, its template
+  and the Applications it generated, with their live sync and health. An AppProject shows its
+  allowed repositories, destinations and kinds, its sync windows and roles, and says what an
+  empty list means. An Argo CD Application on the ordinary resource list now opens its Argo CD
+  pane on double-click.
+- **The Argo CD dashboard across the fleet.** "All clusters" merges every connected cluster's
+  Applications into one list with a Cluster column, and sums the counts.
+- **F and the row menu's Port-forward work on a Service row**, as the Service pane's button
+  does.
+- **Conditions say how long they have held.** Pod, node and workload conditions show an age
+  (`6d`), with the exact time on hover.
+- **The list search finds an Ingress by any host its rules serve.**
 
 ### Changed
 
@@ -77,6 +107,19 @@ it as the GitHub Release body, so headings must match tags exactly
   Actions that delete, disrupt or cannot be undone still ask: Delete, Drain, Restart, a
   CronJob's Run now and Resume, and Argo CD's new **Sync with prune…**, which replaces the
   prune checkbox. On the Applications page it is on the arrow beside Sync.
+- **The confirm strip reads as one sentence with its answer beside it**: the action's glyph,
+  "Scale Deployment checkout-worker in payments on prod-eu from 4 replicas (1 running) to 6",
+  the consequence under it, and the buttons right after the text instead of at the window's
+  edge. Delete, drain and sync with prune get a red glyph and a red confirm button.
+- The cluster switcher draws a row's pin only on hover, on the selected row and on a pinned
+  row. Its environment dot is gone (the PROD and STAGING pills stay), and so is the exec pane's
+  status dot beside "Connected to …".
+- The sidebar's sections no longer draw a kind icon before each name. Only the Recent section,
+  which mixes sections, keeps them.
+- The YAML editor hides `metadata.managedFields`, as `kubectl get -o yaml` does; a "Managed
+  fields" chip shows them. Applying is unaffected.
+- A kubeconfig `tokenFile` is re-read about once a minute while connected, as client-go does,
+  so a rotated token is picked up before the server refuses the old one.
 
 ### Fixed
 
@@ -104,15 +147,42 @@ it as the GitHub Release body, so headings must match tags exactly
   probe's output.
 - The demo cluster's merged log panes read in the same order every time.
 - The port-forward pane's Start and Stop buttons have accessible names.
+- A kubeconfig user signed in through a credential plugin (`aws eks get-token`,
+  `gke-gcloud-auth-plugin`, `kubelogin`) ran the plugin twice on every connect; it now runs
+  once.
+- A context whose user entry is empty (`user: {}`) connects without a credential, as kubectl
+  does, instead of failing.
+- A Reconnect that fails on a connected tab shows the connection failure view (the step, the
+  cause and the facts) in place of the old list, instead of a line in the status bar. The
+  Applications mode's watches stop with it, and changing kind or namespace behind the failure
+  view no longer starts a watch against the failed connection.
+- A row added after the first metrics poll shows its CPU and memory right away, instead of a
+  dash for up to 15 seconds.
+- Argo CD syncs started from kubeNimbus now carry the Application's own sync options (such as
+  `CreateNamespace=true` or `ServerSideApply=true`) and retry policy, as Argo CD's own UI does.
+  They used to be left out, and Argo CD applies them only when the sync operation names them.
+- The log panes' ⋯ menu Copy, Clear and Save work. Copy used to put nothing on the clipboard.
+- Ctrl+Shift+C in the exec pane copies the selection when typed on a real keyboard; pressing
+  Ctrl and Shift used to clear the selection first. Copying from the exec terminal no longer
+  pads every line with spaces to the terminal's width or adds the empty rows under the prompt.
+- When the preferred terminal is refused or missing and another one opens instead, the app
+  names the preferred terminal it passed over and says why.
+- The log Range tooltip no longer mentions the demo on a real cluster.
+- The inspector dock's tab strip stays on one row however many tabs are open, and scrolls
+  sideways instead of wrapping. Moving along its tabs with the arrow keys keeps the focus ring
+  on the tab reached, and dragging the dock's splitter no longer takes keyboard focus away from
+  the exec terminal.
+- The word "to" before the scale strip's replica box sits on the number's baseline.
+- The YAML editor and the apply preview's diff use LF line ends on Windows too.
 
 ### Security
 
 - A cluster whose server is a plain `http://` URL keeps a notice in the status bar while
   connected ("Not encrypted"), and the connection report says so: its traffic, credential
   included, is sent in the clear.
-- The API server's certificate is now verified the way kubectl verifies it — against the
-  kubeconfig's certificate-authority only, and for the server's host name or the cluster's
-  `tls-server-name` — on every request, including exec and port-forward. Previously a
+- The API server's certificate is now verified the way kubectl verifies it, on every request,
+  exec and port-forward included: against the kubeconfig's certificate-authority only, and for
+  the server's host name or the cluster's `tls-server-name`. Previously a
   certificate signed by the cluster's CA was accepted for any host name.
 - Kubeconfig impersonation (`as`, `as-uid`, `as-groups`, `as-user-extra`) is now sent with
   every request, so the app acts as the identity the context names, as kubectl does. An entry
@@ -1026,7 +1096,8 @@ First public release. Everything below is new.
 - Usage history is session-scoped and bounded at 30 minutes by design. Long-range
   metrics history is a non-goal — that's Prometheus's job.
 
-[Unreleased]: https://github.com/Shman4ik/kubeNimbus/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/Shman4ik/kubeNimbus/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.7.0
 [0.6.0]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.4.0
