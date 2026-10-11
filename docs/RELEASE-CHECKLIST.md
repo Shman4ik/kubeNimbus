@@ -215,9 +215,12 @@ in the log. Escape sent by computer-use does not reach the app either; the harne
 
 ## 5. Ship
 
-- [ ] Merge the release PR, then tag its merge commit and push the tag:
+- [ ] Merge the release PR, then tag its merge commit and push the tag. Tags are
+      immutable (the `Release tags` ruleset), so a wrong one cannot be undone: take the
+      SHA from `gh pr view <n> --json mergeCommit`, check it is `origin/main` after a
+      fetch, and do not tag an `origin/main` read before the merge landed (v0.5.0 once was):
       ```bash
-      git tag -a vX.Y.Z -m "kubeNimbus vX.Y.Z"
+      git tag -a vX.Y.Z <sha> -m "kubeNimbus vX.Y.Z"
       git push origin vX.Y.Z
       ```
 - [ ] Watch `release.yml` (`gh run watch`). Every RID's binary is launched before it
