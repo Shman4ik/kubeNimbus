@@ -225,6 +225,43 @@ public class RowLogsTests
         await Assert.That(tab.IsInspectorMaximized).IsTrue();
     }
 
+    /// <summary>
+    /// The 0.7.0 QA run's G1 surprise: with "All namespaces" chosen and a Deployment of one
+    /// name in two namespaces, "Logs (all pods)" on one of them must tail that one's pods, in
+    /// its namespace, and never its namesake's. Driven through the menu item's own command on
+    /// the selected row.
+    /// </summary>
+    [Test]
+    public async Task Logs_all_pods_follows_the_rows_namespace_not_a_namesake()
+    {
+        var tab = DemoTab();
+        tab.SelectKindCommand.Execute(tab.SidebarSections
+            .Where(s => s.Title != SidebarGrouping.RecentSection)
+            .SelectMany(s => s.Kinds)
+            .First(k => k.Descriptor is { Group: "apps", Kind: "Deployment" }));
+        tab.SelectedNamespace = ClusterTabViewModel.AllNamespaces;
+        var original = Demo.DemoData.Deployments[0];
+        var twinJson = System.Text.Json.Nodes.JsonNode.Parse(original.Raw.GetRawText())!;
+        twinJson["metadata"]!["namespace"] = "qa-twin";
+        twinJson["metadata"]!["uid"] = "qa-twin-uid";
+        var twin = Parse(twinJson.ToJsonString());
+
+        tab.SelectedRow = new ResourceRowViewModel(twin);
+        tab.OpenWorkloadLogsCommand.Execute(null);
+
+        var twinPane = (WorkloadLogsTabViewModel)tab.SelectedInspectorTab!;
+        await Assert.That(twinPane.WorkloadNamespace).IsEqualTo("qa-twin");
+        await Assert.That(twinPane.Sources).IsEmpty();
+
+        tab.SelectedRow = new ResourceRowViewModel(original);
+        tab.OpenWorkloadLogsCommand.Execute(null);
+
+        var originalPane = (WorkloadLogsTabViewModel)tab.SelectedInspectorTab!;
+        await Assert.That(originalPane).IsNotSameReferenceAs(twinPane);
+        await Assert.That(originalPane.WorkloadNamespace).IsEqualTo(original.Namespace);
+        await Assert.That(originalPane.Sources).IsNotEmpty();
+    }
+
     [Test]
     public async Task Shift_L_is_unavailable_without_a_row_that_has_logs()
     {

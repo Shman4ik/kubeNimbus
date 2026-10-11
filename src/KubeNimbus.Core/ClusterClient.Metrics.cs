@@ -79,7 +79,7 @@ public sealed partial class ClusterClient
             return null;
         }
 
-        EnsureMetricsSuccess(response);
+        await EnsureMetricsSuccessAsync(response, cancellationToken).ConfigureAwait(false);
         var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         using var doc = await ClusterJson.ParseAsync(stream, cancellationToken).ConfigureAwait(false);
         return ReadPodMetrics(doc.RootElement);
@@ -105,6 +105,35 @@ public sealed partial class ClusterClient
     }
 
     /// <summary>
+    /// One poll of node usage, classified the way the Nodes list's capacity strip words it:
+    /// read, refused (a 403, with the server's own sentence) or unavailable (no metrics API,
+    /// or one registered but not serving). Anything else — a timeout, a 500, throttling — is
+    /// thrown, because it says nothing lasting about the cluster and the poll retries it.
+    /// </summary>
+    /// <remarks>
+    /// The 403 is the case that matters (#206, the 0.7.0 QA finding M-4): the poll used to
+    /// note it and then report the empty result as a successful read, so the strip said
+    /// "no node has reported usage yet" — a verdict it did not have — instead of "usage not
+    /// permitted". Classifying here makes the refusal a value the poll hands on, not a side
+    /// effect its next line can overwrite, and lets a live test read the same value.
+    /// </remarks>
+    public async Task<NodeUsageRead> ReadNodeUsageAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return new NodeUsageRead(NodeUsageOutcome.Read, await GetNodeMetricsAsync(cancellationToken).ConfigureAwait(false), null);
+        }
+        catch (MetricsUnavailableException ex)
+        {
+            return new NodeUsageRead(NodeUsageOutcome.Unavailable, [], ex.Message);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Forbidden)
+        {
+            return new NodeUsageRead(NodeUsageOutcome.Refused, [], (ex as KubernetesApiException)?.ServerMessage ?? ex.Message);
+        }
+    }
+
+    /// <summary>
     /// Usage for one node, or null when metrics-server has not scraped it yet (a node
     /// that just joined, or one whose kubelet stopped answering).
     /// </summary>
@@ -122,7 +151,7 @@ public sealed partial class ClusterClient
             return null;
         }
 
-        EnsureMetricsSuccess(response);
+        await EnsureMetricsSuccessAsync(response, cancellationToken).ConfigureAwait(false);
         var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         using var doc = await ClusterJson.ParseAsync(stream, cancellationToken).ConfigureAwait(false);
         var usage = ReadUsage(doc.RootElement);
@@ -138,7 +167,7 @@ public sealed partial class ClusterClient
     {
         using var response = await SendRequestAsync(
             HttpMethod.Get, path, content: null, HttpCompletionOption.ResponseContentRead, ct).ConfigureAwait(false);
-        EnsureMetricsSuccess(response);
+        await EnsureMetricsSuccessAsync(response, ct).ConfigureAwait(false);
         var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
         return await ClusterJson.ParseAsync(stream, ct).ConfigureAwait(false);
     }
@@ -146,9 +175,12 @@ public sealed partial class ClusterClient
     /// <summary>
     /// A registered-but-broken metrics API answers 503 (no backing endpoints)
     /// — that's "unavailable", not a crash, so it maps to the same exception as
-    /// a cluster with no metrics API at all.
+    /// a cluster with no metrics API at all. Any other failure is a
+    /// <see cref="KubernetesApiException"/>, so a 403 carries the server's sentence
+    /// ("… cannot list resource "nodes" in API group "metrics.k8s.io" …") rather than
+    /// .NET's "Response status code does not indicate success".
     /// </summary>
-    private static void EnsureMetricsSuccess(HttpResponseMessage response)
+    private static async Task EnsureMetricsSuccessAsync(HttpResponseMessage response, CancellationToken ct)
     {
         if (response.StatusCode is System.Net.HttpStatusCode.ServiceUnavailable
             or System.Net.HttpStatusCode.NotFound)
@@ -157,7 +189,7 @@ public sealed partial class ClusterClient
                 $"The metrics API is registered but not serving ({(int)response.StatusCode}); is metrics-server healthy?");
         }
 
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
     }
 
     private static PodMetrics ReadPodMetrics(JsonElement item)
@@ -229,6 +261,23 @@ public sealed record PodMetrics(string? Namespace, string Name, IReadOnlyList<Co
         return any ? total : null;
     }
 }
+
+/// <summary>How one poll of node usage ended; see <see cref="ClusterClient.ReadNodeUsageAsync"/>.</summary>
+public enum NodeUsageOutcome
+{
+    /// <summary>metrics.k8s.io answered; the list may still be empty (a node not yet scraped).</summary>
+    Read,
+
+    /// <summary>The metrics API is there and refused this user (403).</summary>
+    Refused,
+
+    /// <summary>No metrics API, or one registered and not serving.</summary>
+    Unavailable,
+}
+
+/// <summary>One poll of node usage: what it measured, or why it measured nothing.</summary>
+/// <param name="Reason">The server's sentence for a refusal, the app's for an absent API; null when read.</param>
+public sealed record NodeUsageRead(NodeUsageOutcome Outcome, IReadOnlyList<NodeMetrics> Nodes, string? Reason);
 
 /// <summary>Measured usage of one node.</summary>
 public sealed record NodeMetrics(string Name, long? CpuNanocores, long? MemoryBytes);
