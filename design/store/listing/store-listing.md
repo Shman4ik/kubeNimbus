@@ -10,9 +10,10 @@ Product ID `9MZ3C28M65PB`. Field limits are Partner Center's own: What's new 1,5
 description 10,000, short description 1,000, 20 product features of 200 characters each, 7 search
 terms. Every fenced block below is pasted as it stands.
 
-**Written for 0.6.0, which carries everything since 0.4.0.** The Store carries 0.3.x; 0.4.0 was submitted and
-failed certification on policy 10.5.1 (below), so this package carries everything since. Keep
-this file's date in step with the release it describes.
+**Written for 0.7.0.** "What's new" describes the changes since 0.6.0; the rest of the listing
+describes the whole app. (0.4.0 was submitted and failed certification on policy 10.5.1, below,
+which is why 0.6.0's text carried everything since 0.4.0.) Keep this file's date in step with the
+release it describes.
 
 ## Privacy policy URL
 
@@ -41,13 +42,15 @@ data-collection answers stay as they are (no data is collected).
 ## What's new in this version
 
 ```text
-0.6: Apply works on an object opened in the YAML editor and Ctrl+S applies. Exec can start a debug container in an image with no shell. Tooltips open everywhere, big lists and logs stay responsive, and the look is denser and quieter, shared with pgNimbus.
+0.7: Work on several things at once. Choose several namespaces in either list, select several resources and delete them with one confirm, and pick the columns each kind shows. Paste a manifest into "New resource from YAML". Port-forwards keep running after their dock tab closes, and a Service can be forwarded to a ready pod behind it.
 
-A cluster now opens on Applications: every Argo CD application, and every workload no application tracks, with its health and a one-line reason read from the cluster ("Crash-looping (exit 1) · 2 pods not created: namespace quota"). Enter opens a page with the facts behind the verdict, the pods, what the app is wired to, a timeline of the last hour and the crashing pod's last log lines. The full explorer is one click away as Resources.
+Argo CD: terminate a running sync, open ApplicationSets and AppProjects, and see every connected cluster's applications in one dashboard. Syncs now carry the application's own sync options.
 
-Logs got a proper viewer: search with match highlighting, regular expressions, exclusions, context lines, an Error/Warn/Info filter, error and warning counts with a jump to the latest error, JSON lines opened into their fields, and a choice of range. Open any pod's logs from the row, from a node or event that names it, or with Ctrl+Shift+L.
+Also new: a capacity strip above the Nodes list (CPU and memory used and requested, no Prometheus needed), how long each condition has held, sorting by any column in the Applications list, pod lists, Helm releases and Argo CD, exec and node shells in your own terminal, and "Signed in as" in the access review.
 
-Also new: Service, Ingress and NetworkPolicy panes that say in a sentence whether traffic can reach the pods; an Events list that reads like kubectl get events; an "unhealthy only" filter on every list; richer node detail; resizable, sortable columns; a clear reason when a cluster cannot be reached; and support for cluster proxies and kubeconfig folders.
+Safer connections: the API server's certificate is checked for its host name as kubectl does, kubeconfig impersonation and token files are honoured, and a delete on a production cluster always asks. Actions you can take back, such as Sync or Cordon, now act on the click.
+
+Fixed: a sign-in plugin runs once per connect instead of twice, copying from the exec terminal and the log menu works, the last log line clears the scroll bar, and the keyboard reaches every part of the window.
 ```
 
 ## Short description
@@ -73,7 +76,7 @@ What it does
 • A real terminal for exec: vi, top and mc draw properly, and Ctrl+C reaches the container.
 • Port-forward, with the local address one click from being opened.
 • YAML editing with server-side apply, strict field validation and a dry-run preview that asks the API server what a change would do before it does it.
-• Scale, rollout restart, delete, cordon and drain. Each one is armed and named before it fires, never on the click that started it.
+• Scale, rollout restart, delete, cordon and drain. A restart, a drain and a delete are armed and named before they fire, and a delete on a production cluster always asks; elsewhere you can turn the delete confirm off. Scale asks for the new count first.
 • Service, Ingress and NetworkPolicy panes that state, in words, whether traffic can reach the pods.
 • Node detail with allocatable-versus-requested headroom, events and measured usage.
 • Helm releases read straight off the cluster, no Helm binary needed. Argo CD sync and refresh, with no second sign-in.
@@ -100,7 +103,7 @@ Live pod logs: search, regex, level filters, error jump
 All of a workload's pods in one merged log stream
 A real terminal in the container (vi, top and mc work)
 YAML editing with server-side apply and dry-run preview
-Scale, restart, delete, cordon and drain, always confirmed
+Scale, restart, delete and drain; production deletes always ask
 Service, Ingress and NetworkPolicy panes in plain words
 Argo CD sync and Helm releases, read from the cluster
 RBAC access review: what can I do, who can do X

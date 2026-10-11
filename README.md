@@ -271,8 +271,8 @@ dashboard over every Application: the cluster-wide counts, a list ordered by wha
 needs attention, and sync status and health as two separate pills, because an
 Application can be perfectly synced and still degraded. Open one for its source,
 destination, managed resources, conditions and deployment history — and **Sync**
-or **Refresh from Git** it from the row, with an explicit confirm and prune off
-by default. It reads and writes Argo's own custom resources over the Kubernetes
+or **Refresh from Git** it from the row, each on the click; **Sync with prune…**,
+which deletes what Git no longer declares, asks first. It reads and writes Argo's own custom resources over the Kubernetes
 connection you already have: no Argo API server, no URL to paste, no `argocd`
 binary, no second login.
 

@@ -2906,3 +2906,79 @@ re-running what CI runs; #277 is the response. Two process notes: bundles writin
 to the same scratch file name overwrote each other's, and a merged PR made every open one
 rebase, so merges went one at a time with a rebase between.
 
+
+### Backlog sweep, wave 2, and the 0.7.0 release PR (2026-10-11)
+
+The second wave of the sweep (tracking #259) merged eight PRs, each built by `kn-bundle` in its
+own worktree and checked by `kn-verifier`. With wave 1 and the security audit they make up 0.7.0.
+Every suite count below is `scripts/test.ps1` against the shared k3s sandbox, so the live tests
+ran; the two Core skips in each are the Linux and macOS file-mode tests.
+
+- **#286, the confirm strip and small UI trims.** The confirm strip reads as one sentence with its
+  buttons beside it (FEAT-77, rebuilt from the never-pushed `9a7c077` and reconciled with
+  security block 3's strip rules), the switcher's pin shows only where it is used and its
+  environment dot is gone (FEAT-71, FEAT-73), exec copy is trimmed (#267) and the diff text is LF
+  (#284). Core 979 passed and 2 skipped, App 608; the harness filters for row actions, the diff
+  panel, exec and the switcher passed, and three mutation checks went red (the pin style,
+  `ExecCopy.Trim`, the LF replace).
+- **#292, connect and list.** One credential plugin run per connect (#283, the double run that
+  #282's live tests found), `user: {}` connects without a credential (#273), a failed Reconnect
+  shows the failure view (#272), a late row gets its metrics at once (#252), `tokenFile` is re-read
+  about once a minute (#262), and the list search matches an Ingress's hosts (#211). Core 1001
+  passed and 2 skipped, App 605; `ConnectFanOutLiveTests` now asserts one plugin run per connect.
+  Mutation-checked: #283, #252, #272, #211.
+- **#295, copy, terminals and the QA tooling.** The log menu's Copy, Clear and Save (#288),
+  Ctrl+Shift+C in exec on a real keyboard (#265: `SvcSystems.UI.Terminal` clears the selection on
+  every key-down, the modifiers' own included), the passed-over preferred terminal named and the
+  Range tooltip's demo wording (#290), the isolated QA profile covering overlays and the discovery
+  cache (#289), `test.ps1`'s message on a failed run (#278) and `qa-ui.ps1`'s popups, resize and
+  retry (#291). Core 1004 passed and 2 skipped, App 624. Mutation-checked: `ux-log-menu-copy-pod`,
+  `ux-exec-copy-keys` and the isolated-profile test.
+- **#296, the dock and the sidebar.** Dock tabs on one row (#269) with the focus ring kept on
+  arrow keys (#293), the splitter no longer taking focus from the terminal (#266), F on a Service
+  row (#280), condition ages (#268), and kind glyphs only in Recent (#213, #244). Core 1002 passed
+  and 2 skipped, App 629. #293 and #266 were mutation-checked.
+- **#299, several rows at once.** Bulk delete (FEAT-6), the column chooser (FEAT-13) and New
+  resource from YAML (FEAT-12). 36 new unit and stub-server tests (four mutation-checked), two
+  live tests of namespace defaulting, and the `ux-bulk-delete` and `ux-column-chooser` checks.
+  App 642; Core 1019 passed, 2 skipped and 1 failed, the failure being
+  `WorkloadLogsLiveTests`' rollout case, which this PR does not touch and which passed alone.
+- **#302, Argo CD.** Terminate a running sync (#193: a JSON patch of the object guarded by a
+  `test` of the phase, since `/status` is a 404 on Argo's CRD), ApplicationSet and AppProject
+  panes (#194), the fleet dashboard (#195), and syncs that carry the Application's own
+  `syncOptions` and `retry`. `scripts/argo-sandbox-up.ps1` installs a real **Argo CD v3.5.4**
+  (install.yaml checked by SHA-256, images by digest), and the six `ArgoLiveTests` passed against
+  it: sync with its initiator, a deny window, refresh, prune, a 403 for a user without patch,
+  terminate, and Open in Argo CD with applications in any namespace. Core 1027 passed and 2
+  skipped, App 632.
+- **#304, docs and tooling, nothing user-visible.** A draft comparison page (`docs/comparison.md`,
+  unpublished and unlinked) and `scripts/measure-startup.ps1`, which CI's linux-x64 AOT job runs
+  into its job summary. win-x64 NativeAOT at `f9b118f`: 347 ms median and 374 ms p90 to first
+  frame over 20 runs. The head-to-head against KubeUI and FreeLens was not re-run.
+- **#307, leftovers.** The Nodes capacity strip (the #206 slice), a failed reconnect stopping the
+  Applications watches too (#294), LF in the YAML editor (#287), `metadata.managedFields` hidden
+  behind a chip (#270), and the stub servers' port and token isolation behind the intermittent
+  tests (#279). Core 1019 passed and 2 skipped, App 636; the capacity sums and both narrow-RBAC
+  403 shapes against k3s (requested CPU equal to `kubectl describe node`), and an apply of the
+  hidden text that keeps every field manager. Mutation-checked: #294, #206, #270, #287.
+
+The release PR moves `VersionPrefix` to 0.7.0, closes the CHANGELOG section (the developer-only
+items of #295 and #304 are left out of it), rewrites the Store listing's What's new, fixes the
+competitor matrix's install cell (the Store build, the zip instead of the MSI), and drops the
+cordon from the listing's "always confirmed" line, which rule 17's revision had made untrue. Its
+own run of `scripts/test.ps1` on the release branch: Core 1062 total, 1053 passed, 8 skipped (the
+two file-mode tests and the six Argo live tests, which need `.sandbox/argo-kubeconfig.yaml`) and
+1 failed, `WorkloadLogsLiveTests.A_rollout_restart_reads_as_one_stream_across_old_and_new_pods`
+again, which passed when run alone straight after; App 671 passed. So #279 did not remove that
+test's intermittent failure; #311 tracks what is left of #279. Rendering every published
+screenshot one scenario per process found seven that differed from `main`
+(`pod-detail`, `fleet-list`, `workloads-list` and `cluster-switcher` in `design/screenshots/`;
+`03-pod-detail`, `05-fleet-list` and `06-cluster-switcher` in the Store set), and in each the
+only change is the Age column moving on by a day with the wall clock; they are re-rendered.
+
+Not verified, and waiting for the QA VM run before the tag: every PR's desktop checks (8 in #286,
+6 in #292, 10 in #295, 7 in #296, 17 in #299, 9 in #302, 10 in #307), which need real hover,
+focus, pointer drags, a real clipboard and real keyboard input; a real cloud credential plugin
+and a live token-file rotation; a narrow-RBAC ServiceAccount through the UI; macOS Cmd+click and
+Cmd+A; Argo CD's own web UI; the NativeAOT publish, which is left to the release PR's CI and to
+`release.yml`.
