@@ -280,6 +280,23 @@ check: the publish succeeds with the same two DataGrid warnings and the check ex
 66 with the historical stack trace. Revert afterwards. Doing this again is cheap and
 is the only thing that distinguishes this from a step that always passes.
 
+**When the check hangs instead of exiting, get a native stack with cdb.**
+`dotnet-stack` and `dotnet-dump` do not work on NativeAOT. Install WinDbg
+(`winget install Microsoft.WinDbg`; `cdb.exe` is in its `amd64` folder under
+`C:\Program Files\WindowsApps\Microsoft.WinDbg_*`), start the published exe with
+`Start-Process -PassThru`, wait for the hang, then:
+
+```powershell
+cdb -p <pid> -y "srv*C:\symcache*https://msdl.microsoft.com/download/symbols;<publish dir>" -c ".reload; ~*k 60; qd"
+```
+
+The exe's own PDB names the managed frames (`kubeNimbus!KubeNimbus_Core_...`). If a
+stack shows a wait but no thread doing the work, instrument without changing the
+timing: record timestamps and thread ids into locals and print them from a
+background thread a few seconds later. Console writes on the UI thread hid the
+2026-09 restore hang (sync-over-async kubeconfig loading on the UI thread, fixed in
+#94).
+
 ### NativeAOT publish needs the MSVC toolchain (Windows)
 
 The ILCompiler links with `link.exe` and locates it via `vswhere.exe`. On this
