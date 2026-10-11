@@ -3268,6 +3268,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 {
                     var byKey = new Dictionary<string, (long? Cpu, long? Memory)>(StringComparer.Ordinal);
                     var unavailable = 0;
+                    string? refused = null;
 
                     // One request per cluster in scope (exactly one outside fleet mode).
                     // Keys are cluster-qualified the same way the rows are, so a pod
@@ -3289,9 +3290,25 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                             }
                             else
                             {
-                                foreach (var m in await client.GetNodeMetricsAsync(token))
+                                var read = await client.ReadNodeUsageAsync(token);
+                                switch (read.Outcome)
                                 {
-                                    byKey[ResourceRowViewModel.KeyFor(clusterName, $"/{m.Name}")] = (m.CpuNanocores, m.MemoryBytes);
+                                    case NodeUsageOutcome.Unavailable:
+                                        unavailable++;
+                                        break;
+                                    case NodeUsageOutcome.Refused:
+                                        // Narrow RBAC: the metrics API is there and this user may not
+                                        // read node usage. The capacity strip says so (#206) with the
+                                        // server's sentence; the columns keep their dashes.
+                                        refused ??= read.Reason;
+                                        break;
+                                    default:
+                                        foreach (var m in read.Nodes)
+                                        {
+                                            byKey[ResourceRowViewModel.KeyFor(clusterName, $"/{m.Name}")] = (m.CpuNanocores, m.MemoryBytes);
+                                        }
+
+                                        break;
                                 }
                             }
                         }
@@ -3300,15 +3317,6 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                             // Registered but not serving (metrics-server down), or absent
                             // entirely on this cluster.
                             unavailable++;
-                        }
-                        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Forbidden
-                                                              && !pods && !token.IsCancellationRequested)
-                        {
-                            // Narrow RBAC: the metrics API is there and this user may not read
-                            // node usage. The capacity strip says so (#206); the columns keep
-                            // their dashes, as for any other failed poll.
-                            var reason = (ex as KubernetesApiException)?.ServerMessage ?? ex.Message;
-                            Dispatcher.UIThread.Post(() => SetCapacityUsage(CapacityUsageState.Refused, reason));
                         }
                         catch (Exception) when (!token.IsCancellationRequested)
                         {
@@ -3330,7 +3338,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                         return;
                     }
 
-                    await Dispatcher.UIThread.InvokeAsync(() => ApplyUsage(byKey, token));
+                    await Dispatcher.UIThread.InvokeAsync(() => ApplyUsage(byKey, token, refused));
                     await timer.WaitForNextTickAsync(token);
                 }
             }
@@ -3359,7 +3367,13 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     }
 
     /// <summary>Pushes one poll's samples onto the matching rows; rows with no sample fall back to "—".</summary>
-    internal void ApplyUsage(Dictionary<string, (long? Cpu, long? Memory)> byKey, CancellationToken token = default)
+    /// <param name="refused">
+    /// The server's sentence when this poll's node-usage read was refused (403). The poll's
+    /// empty result is then not a measurement, and the capacity strip says "usage not
+    /// permitted" rather than "no node has reported usage yet" (0.7.0 QA finding M-4).
+    /// </param>
+    internal void ApplyUsage(
+        Dictionary<string, (long? Cpu, long? Memory)> byKey, CancellationToken token = default, string? refused = null)
     {
         // A poll that finished after its watch was replaced belongs to a list no longer on screen.
         if (token.IsCancellationRequested)
@@ -3368,7 +3382,13 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
 
         _lastUsage = byKey;
-        _capacityUsage = _capacityActive ? CapacityUsageState.Available : _capacityUsage;
+        if (_capacityActive)
+        {
+            (_capacityUsage, _capacityUsageReason) = refused is null
+                ? (CapacityUsageState.Available, null)
+                : (CapacityUsageState.Refused, refused);
+        }
+
         foreach (var (key, row) in _rowsByKey)
         {
             if (byKey.TryGetValue(key, out var sample))

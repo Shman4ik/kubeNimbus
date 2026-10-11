@@ -76,5 +76,17 @@ public class ClusterCapacityLiveTests
 
         await Assert.That(metrics is HttpRequestException { StatusCode: HttpStatusCode.Forbidden }).IsTrue()
             .Because(metrics?.ToString() ?? "no exception");
+
+        // And what the poll actually hands the strip (0.7.0 QA finding M-4): a refusal carrying
+        // the server's own sentence, never a read with no node in it — which the strip words as
+        // "no node has reported usage yet", a verdict it does not have.
+        var read = await narrow.Client.ReadNodeUsageAsync(ct);
+        await Assert.That(read.Outcome).IsEqualTo(NodeUsageOutcome.Refused);
+        await Assert.That(read.Nodes).IsEmpty();
+        await Assert.That(read.Reason).Contains("cannot list resource \"nodes\" in API group \"metrics.k8s.io\"");
+
+        // The same client's admin twin reads real usage through the same call.
+        var adminRead = await admin.ReadNodeUsageAsync(ct);
+        await Assert.That(adminRead.Outcome).IsEqualTo(NodeUsageOutcome.Read);
     }
 }

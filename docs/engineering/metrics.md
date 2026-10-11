@@ -32,6 +32,18 @@ container) and node usage. Three things are deliberate:
   readable, the "no metrics API" path says so, and a 403 on node metrics is reported to the strip
   as refused rather than swallowed as transient (the columns keep their dashes). See
   [node operations](node-operations.md#the-capacity-strip-above-the-nodes-list-feat-25-206).
+  The refusal travels *with* the poll's result, never beside it: `ClusterClient.ReadNodeUsageAsync`
+  classifies one read as `Read`, `Refused` (with the server's sentence) or `Unavailable`, and
+  the poll hands the refusal to `ApplyUsage(byKey, token, refused)`. In 0.7.0 as first built the
+  poll posted "refused" to the strip and then applied its own empty result as a successful
+  read, which overwrote it, so under a 403 the strip said "no node has reported usage yet" with
+  metrics-server's "answered with no node in it" as the reason — a verdict it did not have
+  (UI rule 20; the 0.7.0 QA run's M-4). The metrics calls also lost the server's sentence,
+  because `EnsureMetricsSuccess` used `EnsureSuccessStatusCode`; every non-503/404 failure is
+  now a `KubernetesApiException`. `CapacityStripTests.A_refused_poll_says_usage_not_permitted_not_that_no_node_reported`
+  goes red when `ApplyUsage` ignores the refusal, and `ClusterCapacityLiveTests` reads a real
+  403 through `ReadNodeUsageAsync` as a narrow user and goes red without the server's sentence
+  (both checked).
 
 Quantity strings (`"100m"`, `"128Mi"`, `"12345n"`, `"129e6"`) are parsed by
 `Quantity.cs` — a small AOT-safe reader, since `ResourceQuantity` from the k8s

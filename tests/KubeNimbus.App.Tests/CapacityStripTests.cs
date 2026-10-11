@@ -97,6 +97,35 @@ public class CapacityStripTests
         await Assert.That(strip.Summary!.Cpu.Requested).IsNull();
     }
 
+    /// <summary>
+    /// The 0.7.0 QA finding M-4: a poll whose node-usage read was refused hands the strip an
+    /// empty sample set, and that empty set is not a measurement. The strip used to take it as
+    /// one and say "no node has reported usage yet" under a 403, with metrics-server's
+    /// "answered with no node in it" as the reason; it must say "usage not permitted" with
+    /// the server's sentence, through the same entry point the poll uses.
+    /// </summary>
+    [Test]
+    public async Task A_refused_poll_says_usage_not_permitted_not_that_no_node_reported()
+    {
+        var tab = DemoTab();
+        Select(tab, "", "Node");
+        const string reason = "nodes.metrics.k8s.io is forbidden: User \"system:serviceaccount:kn-live:viewer\" cannot list resource \"nodes\" in API group \"metrics.k8s.io\" at the cluster scope";
+
+        tab.ApplyUsage([], refused: reason);
+
+        var strip = tab.Capacity;
+        await Assert.That(strip.CpuUsedText).IsEqualTo(CapacityStripViewModel.UsageRefused);
+        await Assert.That(strip.MemoryUsedText).IsEqualTo(CapacityStripViewModel.UsageRefused);
+        await Assert.That(strip.IsUsageStated).IsTrue();
+        await Assert.That(strip.UsageTip).Contains(reason);
+        await Assert.That(strip.Summary!.Cpu.Used).IsNull();
+
+        // The refusal is this poll's answer, not a latch: a later poll that reads (the user was
+        // granted access) is worded from what it read.
+        tab.ApplyUsage([]);
+        await Assert.That(strip.CpuUsedText).IsEqualTo(CapacityStripViewModel.UsageNoneYet);
+    }
+
     [Test]
     public async Task A_failed_re_read_keeps_the_last_good_requests()
     {

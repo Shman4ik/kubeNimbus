@@ -1236,12 +1236,14 @@ internal static class ClusterTabScenarios
     /// <summary>
     /// FEAT-25 (#206) under narrow RBAC: the user may list nodes but not read node metrics or
     /// list pods in every namespace. The node count stays; each refused half says so, with the
-    /// API server's sentence on hover.
+    /// API server's sentence on hover. The usage half goes through the metrics poll's own entry
+    /// point (a poll whose node read was refused, so it carries no samples and the columns read
+    /// "—"), which is where the 0.7.0 QA run found it saying "no node has reported usage yet".
     /// </summary>
     public static ClusterTabViewModel NodeCapacityNarrowRbac()
     {
         var tab = NodeTab();
-        tab.SetCapacityUsage(CapacityUsageState.Refused,
+        tab.ApplyUsage([], refused:
             "nodes.metrics.k8s.io is forbidden: User \"system:serviceaccount:team-a:viewer\" cannot list resource \"nodes\" in API group \"metrics.k8s.io\" at the cluster scope");
         tab.ApplyCapacityPods(null, CapacityPodsState.Refused,
             "pods is forbidden: User \"system:serviceaccount:team-a:viewer\" cannot list resource \"pods\" in API group \"\" at the cluster scope");
