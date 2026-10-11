@@ -47,6 +47,9 @@ public static class DemoData
     private static readonly JsonDocument CertificatesDoc = Load("certificates.json");
     private static readonly JsonDocument NodesDoc = Load("nodes.json");
     private static readonly JsonDocument ArgoApplicationsDoc = Load("argo-applications.json");
+
+    /// <summary>One ApplicationSet and one AppProject, so their panes (#194) open on the demo too (demo rule 4).</summary>
+    private static readonly JsonDocument ArgoObjectsDoc = Load("argo-objects.json");
     private static readonly JsonDocument WorkloadsDoc = Load("workloads.json");
     private static readonly JsonDocument NetworkingDoc = Load("networking.json");
 
@@ -242,6 +245,12 @@ public static class DemoData
     /// <summary>The raw Application objects, for the ordinary Applications list and the YAML editor.</summary>
     public static IReadOnlyList<DynamicResource> ArgoApplicationObjects { get; } =
         [.. ArgoApplicationsDoc.RootElement.EnumerateArray().Select(e => new DynamicResource(e))];
+
+    /// <summary>The ApplicationSet and AppProject objects, for the ordinary lists of those kinds.</summary>
+    public static IReadOnlyList<DynamicResource> ArgoObjectsOfKind(string kind) =>
+        [.. ArgoObjectsDoc.RootElement.EnumerateArray()
+            .Where(e => e.TryGetProperty("kind", out var k) && k.GetString() == kind)
+            .Select(e => new DynamicResource(e))];
 
     public static readonly string[] Namespaces = ["argocd", "default", "kube-system", "monitoring", "payments"];
 
@@ -515,6 +524,7 @@ public static class DemoData
             { Group: "", Kind: "Node" } => Nodes,
             { Group: "cert-manager.io", Kind: "Certificate" } => Certificates,
             { Group: "argoproj.io", Kind: "Application" } => ArgoApplicationObjects,
+            { Group: "argoproj.io", Kind: "ApplicationSet" or "AppProject" } => ArgoObjectsOfKind(descriptor.Kind),
             { Group: "apps" or "batch" or "autoscaling" or "policy" or "networking.k8s.io", Kind: var kind } => OfKind(kind),
             { Group: "", Kind: "Service" or "Endpoints" } => OfKind(descriptor.Kind),
             { Group: "discovery.k8s.io", Kind: "EndpointSlice" } => OfKind("EndpointSlice"),

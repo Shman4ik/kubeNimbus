@@ -74,6 +74,12 @@
     <DataTemplate DataType="vm:ArgoApplicationTabViewModel">
       <views:ArgoApplicationView />
     </DataTemplate>
+    <DataTemplate DataType="vm:ArgoApplicationSetTabViewModel">
+      <views:ArgoApplicationSetView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:ArgoProjectTabViewModel">
+      <views:ArgoProjectView />
+    </DataTemplate>
     <DataTemplate DataType="vm:ExecTabViewModel">
       <views:ExecView />
     </DataTemplate>

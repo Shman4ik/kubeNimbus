@@ -79,13 +79,24 @@ public sealed class ArgoApplicationComparer(string column, bool descending) : IC
     public const string Destination = "destination";
     public const string Source = "source";
     public const string Policy = "policy";
+    public const string Cluster = "cluster";
 
     /// <summary>Most urgent first, then by key: the order the dashboard opens in.</summary>
     public static IComparer<ArgoApplicationRowViewModel> ByRank { get; } =
         Comparer<ArgoApplicationRowViewModel>.Create((x, y) =>
             ArgoApplicationRowViewModel.Rank(x).CompareTo(ArgoApplicationRowViewModel.Rank(y)) is var rank and not 0
                 ? rank
-                : string.CompareOrdinal(x.Application.Key, y.Application.Key));
+                : TieBreak(x, y));
+
+    /// <summary>
+    /// The key, then the cluster: in the fleet list the same argocd/checkout is on every
+    /// cluster, and without the cluster two of them would compare equal and swap places on
+    /// every reload.
+    /// </summary>
+    private static int TieBreak(ArgoApplicationRowViewModel x, ArgoApplicationRowViewModel y) =>
+        string.CompareOrdinal(x.Application.Key, y.Application.Key) is var key and not 0
+            ? key
+            : string.CompareOrdinal(x.ClusterName, y.ClusterName);
 
     public int Compare(ArgoApplicationRowViewModel? x, ArgoApplicationRowViewModel? y)
     {
@@ -109,6 +120,7 @@ public sealed class ArgoApplicationComparer(string column, bool descending) : IC
             Destination => ListSort.Text(x.Destination, y.Destination),
             Source => ListSort.Text(x.SourceSummary, y.SourceSummary),
             Policy => ListSort.Text(x.SyncPolicy, y.SyncPolicy),
+            Cluster => ListSort.Text(x.ClusterName, y.ClusterName),
             _ => 0,
         };
 
@@ -117,7 +129,7 @@ public sealed class ArgoApplicationComparer(string column, bool descending) : IC
             result = -result;
         }
 
-        return result != 0 ? result : string.CompareOrdinal(x.Application.Key, y.Application.Key);
+        return result != 0 ? result : TieBreak(x, y);
     }
 
     private static int SyncRank(ArgoSyncState sync) => sync switch

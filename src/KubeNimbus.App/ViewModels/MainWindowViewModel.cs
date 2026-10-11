@@ -1676,6 +1676,14 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             yield return new PaletteItem(
                 "Argo CD: refresh from Git", $"{argoWhere} · re-compare, change nothing", "RefreshIconGeometry",
                 () => argoTab.RefreshArgoApplicationCommand.Execute(null));
+
+            // Only while a sync is running: a palette match that refuses to run is worse than none.
+            if (argoTab.CanTerminateSelectedArgoSync)
+            {
+                yield return new PaletteItem(
+                    "Argo CD: terminate sync…", $"{argoWhere} · stop the running sync where it is", "StopIconGeometry",
+                    () => argoTab.TerminateArgoSyncCommand.Execute(null));
+            }
         }
 
         // IsDemo excluded: the access review is three real API-server calls

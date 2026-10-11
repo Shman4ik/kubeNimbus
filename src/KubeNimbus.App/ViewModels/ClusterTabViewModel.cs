@@ -1026,6 +1026,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [NotifyCanExecuteChangedFor(nameof(SyncArgoApplicationCommand))]
     [NotifyCanExecuteChangedFor(nameof(SyncArgoApplicationWithPruneCommand))]
     [NotifyCanExecuteChangedFor(nameof(RefreshArgoApplicationCommand))]
+    [NotifyPropertyChangedFor(nameof(CanTerminateSelectedArgoSync))]
+    [NotifyCanExecuteChangedFor(nameof(TerminateArgoSyncCommand))]
     private ResourceRowViewModel? _selectedRow;
 
     /// <summary>
@@ -1310,15 +1312,16 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     private bool _isFleetView;
 
     /// <summary>
-    /// Hidden for Helm (releases aren't an API kind, so there's nothing to fan out)
-    /// and for the Argo dashboard. It used to also require the advanced view, with a
+    /// Hidden for Helm (releases aren't an API kind, so there's nothing to fan out). The
+    /// Argo dashboard has it since #195: one merged list with a Cluster column and the counts
+    /// summed. It used to also require the advanced view, with a
     /// carve-out so that turning the switch off could not strand a tab in fleet mode
     /// with no control to leave it; the switch is the sidebar's alone now, so both the
     /// gate and the carve-out are gone and the toggle appears exactly when aggregating
     /// would show something a single tab does not.
     /// </summary>
     public bool IsFleetToggleVisible =>
-        IsFleetViewAvailable && !IsHelmView && !IsArgoView;
+        IsFleetViewAvailable && !IsHelmView;
 
     partial void OnIsHelmViewChanged(bool value)
     {
@@ -1367,7 +1370,23 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         // it has to survive the advanced view being switched off mid-aggregation.
         OnPropertyChanged(nameof(IsFleetToggleVisible));
         FleetSummary = null;
-        RestartWatch();
+        ReloadForFleetChange();
+    }
+
+    /// <summary>
+    /// The Argo dashboard is a read, not a watch, so a fleet change re-reads it; everything
+    /// else re-fans its watch.
+    /// </summary>
+    private void ReloadForFleetChange()
+    {
+        if (IsArgoView)
+        {
+            _ = ReloadArgoAsync();
+        }
+        else
+        {
+            RestartWatch();
+        }
     }
 
     /// <summary>
@@ -1379,7 +1398,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     {
         if (IsFleetView)
         {
-            RestartWatch();
+            ReloadForFleetChange();
         }
     }
 
@@ -1422,6 +1441,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [NotifyCanExecuteChangedFor(nameof(SyncArgoApplicationWithPruneCommand))]
     [NotifyCanExecuteChangedFor(nameof(RefreshArgoApplicationCommand))]
     [NotifyCanExecuteChangedFor(nameof(OpenArgoApplicationCommand))]
+    [NotifyPropertyChangedFor(nameof(CanTerminateSelectedArgoSync))]
+    [NotifyCanExecuteChangedFor(nameof(TerminateArgoSyncCommand))]
     private ArgoApplicationRowViewModel? _selectedArgoApplication;
 
     [ObservableProperty]
@@ -2333,33 +2354,52 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         IsArgoLoading = true;
         IsArgoEmpty = false;
-        var previous = SelectedArgoApplication?.Application.Key;
+        var previous = SelectedArgoApplication is { } selected ? (selected.ClusterName, selected.Application.Key) : default;
         ArgoApplications.Clear();
         try
         {
-            var applications = Client is null
-                ? Demo.DemoData.ArgoApplications
-                : await Client.ListArgoApplicationsAsync(descriptor);
+            IReadOnlyList<ArgoApplicationRowViewModel> rows;
+            if (IsFleetView && FleetMembersProvider?.Invoke() is { Count: > 0 } members)
+            {
+                // One merged list with a Cluster column, the counts summed across the fleet
+                // (owner decision on #195). Each row carries its own cluster's descriptor and
+                // reaches its own cluster's client through ClientForCluster.
+                var read = await ClusterFleet.ListArgoApplicationsAsync(members);
+                rows = [.. read.Applications.Select(a => new ArgoApplicationRowViewModel(a.Application, a.Descriptor, a.ClusterName))];
+                ArgoCounts = read.Counts;
+                FleetSummary = read.Summary;
+                ConnectionWarning = read.Failed.Count == 0
+                    ? null
+                    : $"Could not read Argo CD Applications on {string.Join(", ", read.Failed.Select(f => f.Cluster))}: "
+                      + read.Failed[0].Error.Message;
+            }
+            else
+            {
+                if (ConnectionWarning?.StartsWith("Could not read Argo CD Applications", StringComparison.Ordinal) == true)
+                {
+                    ConnectionWarning = null;
+                }
 
-            // No cluster name: the dashboard is this tab's own cluster. The fleet toggle is
-            // hidden here for the same reason it is hidden in the Helm browser — aggregating
-            // GitOps state across clusters is a different (and much bigger) question than
-            // aggregating one kind's rows.
+                var applications = Client is null
+                    ? Demo.DemoData.ArgoApplications
+                    : await Client.ListArgoApplicationsAsync(descriptor);
+
+                // No cluster name: the dashboard is this tab's own cluster.
+                rows = [.. applications.Select(a => new ArgoApplicationRowViewModel(a, descriptor))];
+                ArgoCounts = ArgoSummary.Of(applications);
+            }
+
             // In the order the header sort names, which is most urgent first until a header
             // is clicked.
-            foreach (var row in applications
-                .Select(a => new ArgoApplicationRowViewModel(a, descriptor))
-                .Order(ArgoSort.Comparer))
+            foreach (var row in rows.Order(ArgoSort.Comparer))
             {
                 ArgoApplications.Add(row);
             }
 
-            ArgoCounts = ArgoSummary.Of(applications);
-
             // A refresh must not move the selection: somebody reading one Application's
             // detail while the list reloads has not asked to be moved to the worst one.
             SelectedArgoApplication =
-                ArgoApplications.FirstOrDefault(a => a.Application.Key == previous)
+                ArgoApplications.FirstOrDefault(a => (a.ClusterName, a.Application.Key) == previous)
                 ?? ArgoApplications.FirstOrDefault();
         }
         catch (Exception ex)
@@ -2375,6 +2415,17 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     }
 
     private bool HasSelectedArgoApplication => SelectedArgoApplication is not null;
+
+    /// <summary>
+    /// The client of the cluster an Argo row came from. The dashboard's fleet list is a read,
+    /// not the fleet watch, so <see cref="ClientForCluster"/>'s targets do not know its
+    /// clusters; the shell's members do. A row whose cluster has left the fleet since gets
+    /// null — never this tab's own client, which would sync somebody else's namesake.
+    /// </summary>
+    private ClusterClient? ClientForArgoRow(ArgoApplicationRowViewModel row) =>
+        row.ClusterName.Length == 0
+            ? Client
+            : FleetMembersProvider?.Invoke().FirstOrDefault(m => m.ClusterName == row.ClusterName)?.Client;
 
     /// <summary>Double-click / Enter on an Application row: opens its resources, conditions and history.</summary>
     [RelayCommand(CanExecute = nameof(HasSelectedArgoApplication))]
@@ -2395,7 +2446,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         AddInspectorTab(
             new ArgoApplicationTabViewModel(
-                Client,
+                ClientForArgoRow(row),
                 row.Descriptor,
                 row.Application,
                 (owner, namespaceHint) => OpenOwnerAsync(owner, namespaceHint, row.ClusterName),
@@ -2416,7 +2467,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         if (IsArgoView)
         {
             return SelectedArgoApplication is { } row
-                ? (ClientForCluster(row.ClusterName), row.Descriptor, row.Namespace, row.Name, row.ClusterName)
+                ? (ClientForArgoRow(row), row.Descriptor, row.Namespace, row.Name, row.ClusterName)
                 : null;
         }
 
@@ -2457,6 +2508,22 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     [RelayCommand(CanExecute = nameof(CanSyncSelectedArgoApplication))]
     private void RefreshArgoApplication() => ArmArgoAction(RowActionKind.ArgoRefresh);
+
+    /// <summary>
+    /// Whether the selected Application has a sync to stop: its operation phase is Running,
+    /// read from the dashboard row or from the ordinary list's object. The phase can move on
+    /// before the click lands; the terminate patch tests it again on the server, and the strip
+    /// says so when the sync had already finished.
+    /// </summary>
+    public bool CanTerminateSelectedArgoSync =>
+        ArgoActionTarget() is not null
+        && (IsArgoView
+            ? SelectedArgoApplication?.Application.CanTerminate == true
+            : SelectedRow is { } row && ArgoCd.OperationPhaseOf(row.Resource) == "Running");
+
+    /// <summary>Terminate the running sync. It stops Argo partway, so it asks first (UI rule 17).</summary>
+    [RelayCommand(CanExecute = nameof(CanTerminateSelectedArgoSync))]
+    private void TerminateArgoSync() => ArmArgoAction(RowActionKind.ArgoTerminate);
 
     private void ArmArgoAction(RowActionKind kind)
     {
@@ -4156,7 +4223,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         // Services, Ingresses and NetworkPolicies open their own panes for the same reason:
         // "why is traffic not reaching my pods" is answered by what they select and route to,
         // not by their manifest. See docs/engineering/networking-detail.md.
-        if (NetworkingDetailFor(descriptor, row, client) is { } networking)
+        // Argo CD's kinds the same way (#194): see ClusterTabViewModel.Argo.cs.
+        if ((NetworkingDetailFor(descriptor, row, client) ?? ArgoDetailFor(descriptor, row, client)) is { } networking)
         {
             if (InspectorTabs.FirstOrDefault(t => t.Key == networking.Key) is { } openedNetworking)
             {

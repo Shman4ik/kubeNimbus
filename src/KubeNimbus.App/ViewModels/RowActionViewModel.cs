@@ -39,6 +39,12 @@ public enum RowActionKind
     /// <summary>Ask Argo CD to re-compare an Application against Git, changing nothing.</summary>
     ArgoRefresh,
 
+    /// <summary>
+    /// Stop the sync Argo CD is running on an Application, where it is. It asks first: what
+    /// was applied stays applied and the rest is not, which no click takes back.
+    /// </summary>
+    ArgoTerminate,
+
     /// <summary>Create a Job from a CronJob's template now (<c>kubectl create job --from=cronjob/…</c>).</summary>
     Trigger,
 
@@ -439,6 +445,7 @@ public sealed partial class RowActionViewModel : ObservableObject
         RowActionKind.Drain => "Drain",
         RowActionKind.ArgoSync or RowActionKind.ArgoSyncPrune => "Sync",
         RowActionKind.ArgoRefresh => "Refresh",
+        RowActionKind.ArgoTerminate => "Stop syncing",
         RowActionKind.Trigger => "Run",
         RowActionKind.Suspend => "Suspend",
         RowActionKind.Resume => "Resume",
@@ -507,6 +514,11 @@ public sealed partial class RowActionViewModel : ObservableObject
         RowActionKind.ArgoRefresh =>
             "Argo re-compares it against Git. Nothing on the cluster changes — this only updates what Argo "
             + "thinks the difference is.",
+        // Observed against Argo CD v3.5.4: the operation ends Failed, "Operation terminated",
+        // and a PreSync hook Job still running was deleted.
+        RowActionKind.ArgoTerminate =>
+            "Argo terminates the sync where it is and records it as Failed. What it already applied stays applied, the rest "
+            + "is not, and running hooks are stopped — sync again to finish.",
         // The run is a Job owned by the CronJob, like a scheduled one: its history limits
         // clean it up and deleting the CronJob deletes it. What it is not is scheduled —
         // the CronJob controller does not put a Job it did not create on its active list,
@@ -552,6 +564,7 @@ public sealed partial class RowActionViewModel : ObservableObject
         RowActionKind.Drain => "DrainIconGeometry",
         RowActionKind.ArgoSync or RowActionKind.ArgoSyncPrune => "SyncIconGeometry",
         RowActionKind.ArgoRefresh => "RefreshIconGeometry",
+        RowActionKind.ArgoTerminate => "StopIconGeometry",
         RowActionKind.Trigger or RowActionKind.Resume => "PlayIconGeometry",
         RowActionKind.Suspend => "PauseIconGeometry",
         _ => "DeleteIconGeometry",
@@ -567,6 +580,7 @@ public sealed partial class RowActionViewModel : ObservableObject
         RowActionKind.ArgoSync => "Sync",
         RowActionKind.ArgoSyncPrune => "Sync and prune",
         RowActionKind.ArgoRefresh => "Refresh",
+        RowActionKind.ArgoTerminate => "Stop syncing",
         RowActionKind.Trigger => "Run now",
         RowActionKind.Suspend => "Suspend",
         RowActionKind.Resume => "Resume",
@@ -1082,6 +1096,7 @@ public sealed partial class RowActionViewModel : ObservableObject
             RowActionKind.ArgoSync => $"Asking Argo to sync {Target}…",
             RowActionKind.ArgoSyncPrune => "Asking Argo to sync and prune…",
             RowActionKind.ArgoRefresh => $"Asking Argo to refresh {Target}…",
+            RowActionKind.ArgoTerminate => "Asking Argo to terminate the sync…",
             RowActionKind.Trigger => "Creating the Job…",
             RowActionKind.Suspend => $"Suspending {Target}…",
             RowActionKind.Resume => "Resuming…",
@@ -1139,6 +1154,17 @@ public sealed partial class RowActionViewModel : ObservableObject
                     Message =
                         $"Refresh of {Target} requested. Argo clears the annotation once it has re-compared, so "
                         + "there is nothing on the object to watch — the sync status updates when it is done.";
+                    break;
+
+                // Terminate is a request too, and conditional: the patch tests that the sync is
+                // still Running, so one that finished in the meantime is a refusal that wrote
+                // nothing, said as what happened rather than as an error.
+                case RowActionKind.ArgoTerminate:
+                    Message = await client.TerminateArgoOperationAsync(_descriptor, _namespace, _name)
+                        ? $"Terminate of the sync on {Target} requested. Argo records it as Failed, \"Operation "
+                          + "terminated\", once it has stopped."
+                        : $"No sync is running on {Target} any more — it finished before the request arrived. "
+                          + "Nothing was changed.";
                     break;
 
                 // The Job's name is the server's (generateName), so it is only known from

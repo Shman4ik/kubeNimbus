@@ -81,19 +81,74 @@ public sealed partial class ClusterClient
         bool prune = false,
         CancellationToken cancellationToken = default)
     {
+        ResourceDescriptor.RequireName(name);
         var username = await GetCurrentUsernameAsync(cancellationToken).ConfigureAwait(false);
-        await PatchArgoApplicationAsync(descriptor, @namespace, name, ArgoCd.SyncPatch(prune, username), cancellationToken)
+
+        // The Application's own sync options and retry go into the operation, as Argo's API
+        // server copies them (see ArgoCd.SyncPatch). Read fresh rather than taken from the
+        // row, which can be minutes old on the dashboard. A missing object is left to the
+        // patch, whose 404 is the message the strip then prints.
+        // An account allowed to patch but not to read Applications still gets its sync, as
+        // before this read existed, only without the options it could not see.
+        DynamicResource? current;
+        try
+        {
+            current = await ReadResourceAsync(descriptor, @namespace, name, cancellationToken).ConfigureAwait(false);
+        }
+        catch (KubernetesApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Forbidden)
+        {
+            current = null;
+        }
+
+        var policy = current is null ? default : ArgoCd.SyncPolicyOf(current);
+        await PatchArgoApplicationAsync(descriptor, @namespace, name, ArgoCd.SyncPatch(prune, username, policy), cancellationToken)
             .ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Stops the sync Argo is running on this Application — its Terminate button and
+    /// <c>argocd app terminate-op</c>. True when the request was accepted; false when there
+    /// was no sync running any more (it finished between the click and the request), which
+    /// the patch's own <c>test</c> operation makes the API server refuse with 422 and write
+    /// nothing. Like a sync, accepted means asked: the controller stops the operation and
+    /// records it as Failed, "Operation terminated", seconds later.
+    /// </summary>
+    /// <remarks>
+    /// The patch goes to the object, never to <c>/status</c>: Argo's Application CRD declares
+    /// no status subresource, so <c>…/applications/x/status</c> is a 404 (observed against
+    /// Argo CD v3.5.4), and the API server lets an ordinary patch write <c>status</c>. See
+    /// <see cref="ArgoCd.TerminatePatch"/>.
+    /// </remarks>
+    public async Task<bool> TerminateArgoOperationAsync(
+        ResourceDescriptor descriptor,
+        string? @namespace,
+        string name,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await PatchArgoApplicationAsync(
+                descriptor, @namespace, name, ArgoCd.TerminatePatch, cancellationToken, JsonPatchContentType)
+                .ConfigureAwait(false);
+            return true;
+        }
+        catch (KubernetesApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.UnprocessableEntity)
+        {
+            return false;
+        }
+    }
+
+    private const string JsonPatchContentType = "application/json-patch+json";
+
     private async Task PatchArgoApplicationAsync(
-        ResourceDescriptor descriptor, string? @namespace, string name, string body, CancellationToken ct)
+        ResourceDescriptor descriptor, string? @namespace, string name, string body, CancellationToken ct,
+        string contentType = MergePatchContentType)
     {
         ResourceDescriptor.RequireName(name);
-        // RFC 7386, the same content type the workload actions use and for the same reason:
-        // a strategic merge patch is a 415 on a custom resource, and every object touched
-        // here is one.
-        using var content = new StringContent(body, Encoding.UTF8, MergePatchContentType);
+        // RFC 7386 by default, the same content type the workload actions use and for the
+        // same reason: a strategic merge patch is a 415 on a custom resource, and every
+        // object touched here is one. Terminate alone is RFC 6902, for its test operation.
+        using var content = new StringContent(body, Encoding.UTF8, contentType);
         using var response = await SendRequestAsync(
             HttpMethod.Patch,
             descriptor.ItemPath(@namespace, name),

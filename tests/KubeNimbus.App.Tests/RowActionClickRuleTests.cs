@@ -30,6 +30,7 @@ public class RowActionClickRuleTests
     [Arguments(RowActionKind.Drain)]
     [Arguments(RowActionKind.Restart)]
     [Arguments(RowActionKind.ArgoSyncPrune)]
+    [Arguments(RowActionKind.ArgoTerminate)]
     [Arguments(RowActionKind.Trigger)]
     [Arguments(RowActionKind.Resume)]
     [Arguments(RowActionKind.Scale)]

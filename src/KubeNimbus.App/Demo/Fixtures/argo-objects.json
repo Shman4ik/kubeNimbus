@@ -1,0 +1,119 @@
+[
+  {
+    "apiVersion": "argoproj.io/v1alpha1",
+    "kind": "ApplicationSet",
+    "metadata": {
+      "name": "payments-services",
+      "namespace": "argocd",
+      "uid": "6b1f0d2e-demo-appset",
+      "creationTimestamp": "2026-05-12T09:30:00Z"
+    },
+    "spec": {
+      "goTemplate": true,
+      "generators": [
+        {
+          "git": {
+            "repoURL": "https://github.com/example-org/platform-manifests.git",
+            "revision": "main",
+            "directories": [
+              { "path": "apps/*/overlays/prod" },
+              { "path": "apps/monitoring/*", "exclude": true }
+            ]
+          }
+        }
+      ],
+      "template": {
+        "metadata": { "name": "{{index .path.segments 1}}" },
+        "spec": {
+          "project": "payments",
+          "source": {
+            "repoURL": "https://github.com/example-org/platform-manifests.git",
+            "path": "{{.path.path}}",
+            "targetRevision": "main"
+          },
+          "destination": { "server": "https://kubernetes.default.svc", "namespace": "payments" },
+          "syncPolicy": { "automated": { "prune": true, "selfHeal": true } }
+        }
+      },
+      "syncPolicy": { "applicationsSync": "create-update", "preserveResourcesOnDeletion": true }
+    },
+    "status": {
+      "conditions": [
+        {
+          "type": "ErrorOccurred",
+          "status": "False",
+          "reason": "ApplicationSetUpToDate",
+          "message": "All applications have been generated successfully",
+          "lastTransitionTime": "2026-07-28T17:02:11Z"
+        },
+        {
+          "type": "ParametersGenerated",
+          "status": "True",
+          "reason": "ParametersGenerated",
+          "message": "Successfully generated parameters for all Applications",
+          "lastTransitionTime": "2026-07-28T17:02:11Z"
+        },
+        {
+          "type": "ResourcesUpToDate",
+          "status": "True",
+          "reason": "ApplicationSetUpToDate",
+          "message": "All applications have been generated successfully",
+          "lastTransitionTime": "2026-07-28T17:02:11Z"
+        }
+      ],
+      "health": { "status": "Healthy", "message": "All applications have been generated successfully" },
+      "resources": [
+        { "group": "argoproj.io", "version": "v1alpha1", "kind": "Application", "namespace": "argocd", "name": "checkout", "status": "Synced", "health": { "status": "Healthy" } },
+        { "group": "argoproj.io", "version": "v1alpha1", "kind": "Application", "namespace": "argocd", "name": "fraud-detector", "status": "Synced", "health": { "status": "Degraded" } },
+        { "group": "argoproj.io", "version": "v1alpha1", "kind": "Application", "namespace": "argocd", "name": "ledger-api", "status": "OutOfSync", "health": { "status": "Healthy" } },
+        { "group": "argoproj.io", "version": "v1alpha1", "kind": "Application", "namespace": "argocd", "name": "notification-dispatcher", "status": "OutOfSync", "health": { "status": "Progressing" } },
+        { "group": "argoproj.io", "version": "v1alpha1", "kind": "Application", "namespace": "argocd", "name": "settlement-batch", "status": "OutOfSync", "health": { "status": "Missing" } }
+      ],
+      "resourcesCount": 5
+    }
+  },
+  {
+    "apiVersion": "argoproj.io/v1alpha1",
+    "kind": "AppProject",
+    "metadata": {
+      "name": "payments",
+      "namespace": "argocd",
+      "creationTimestamp": "2026-04-02T08:00:00Z"
+    },
+    "spec": {
+      "description": "Payments team services, deployed from the platform manifests",
+      "sourceRepos": [
+        "https://github.com/example-org/platform-manifests.git",
+        "!https://github.com/example-org/platform-secrets.git"
+      ],
+      "destinations": [
+        { "server": "https://kubernetes.default.svc", "namespace": "payments" },
+        { "server": "https://kubernetes.default.svc", "namespace": "payments-*" }
+      ],
+      "sourceNamespaces": [ "payments" ],
+      "clusterResourceWhitelist": [ { "group": "", "kind": "Namespace" } ],
+      "namespaceResourceBlacklist": [ { "group": "", "kind": "ResourceQuota" }, { "group": "", "kind": "LimitRange" } ],
+      "syncWindows": [
+        { "kind": "deny", "schedule": "0 22 * * 5", "duration": "56h", "applications": [ "*" ], "manualSync": true, "timeZone": "Europe/Berlin" },
+        { "kind": "allow", "schedule": "0 6 * * 1-5", "duration": "14h", "namespaces": [ "payments" ] }
+      ],
+      "roles": [
+        {
+          "name": "deployer",
+          "description": "CI pipeline",
+          "policies": [
+            "p, proj:payments:deployer, applications, sync, payments/*, allow",
+            "p, proj:payments:deployer, applications, get, payments/*, allow"
+          ],
+          "groups": [ "payments-ci" ]
+        },
+        {
+          "name": "oncall",
+          "description": "Reads Applications",
+          "policies": [ "p, proj:payments:oncall, applications, get, payments/*, allow" ],
+          "groups": [ "payments-oncall" ]
+        }
+      ]
+    }
+  }
+]
