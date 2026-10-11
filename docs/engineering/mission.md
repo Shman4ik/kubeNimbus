@@ -51,6 +51,18 @@ above and not a contradiction of it: the head-to-head figure comes from a
 cross-app harness that polls for a **mapped window**, the only thing both apps
 could be measured on identically, and it therefore reads high for kubeNimbus —
 the comparison is deliberately the less flattering of the two. Both numbers are
-recorded in `docs/research/2026-08-17-kubeui-positioning.md`. NativeAOT publish
+recorded in `docs/research/2026-08-17-kubeui-positioning.md`.
+
+**kubeNimbus's half is now repeatable (2026-10-11, #234).** `scripts/measure-startup.ps1`
+times N `--smoke-test` launches of a published binary on an empty isolated profile and
+reports median and p90 of first frame (in app and from process start) and, on Linux with
+`xdotool`, of first mapped window — the metric above. CI's linux-x64 AOT job writes it to
+its job summary on every PR that can change the binary. First run here: win-x64 NativeAOT,
+Ryzen 9 5900X, 20 runs, **347 ms median / 374 ms p90** to first frame in app, 368 / 398 ms
+from process start — Windows, so not comparable with the Linux 103–108 ms. The KubeUI half
+was **not** re-run: no competitor binary is downloaded on the development machine (owner,
+2026-10-10). The draft comparison page built on these numbers is `docs/comparison.md`.
+
+NativeAOT publish
 is the *shipping* configuration, not an afterthought — every dependency choice
 must be AOT/trimming-compatible from day one.

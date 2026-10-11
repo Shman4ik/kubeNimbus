@@ -36,6 +36,55 @@ dotnet publish src/KubeNimbus.App -c Release -r linux-x64 -p:PublishAot=true -o 
 ./scripts/linux/build-packages.sh publish/app 0.0.0-dev linux-x64 dist
 ```
 
+## Measuring startup
+
+`measure-startup.ps1` (PowerShell 7, Windows, Linux and macOS) times **kubeNimbus's own
+startup** and nothing else (#234). It launches a built binary N times with
+`--smoke-test`, which starts the real app, waits for a composited frame and exits on its
+own, so it needs no cluster, no input and no window anyone looks at. It prints median,
+p90, min and max, plus every run, for:
+
+- **first frame (in app)** — the number `--smoke-test` prints, from `Main` to the first
+  composited frame;
+- **first frame (wall)** — from process start, as the script sees it, to that line
+  arriving: the in-app number plus loading the process and the runtime;
+- **window mapped (wall)** — Linux with `xdotool` only: process start to the first visible
+  X11 window, polled every 20 ms. This is the weaker metric the
+  [2026-08-17 KubeUI comparison](../docs/research/2026-08-17-kubeui-positioning.md) used,
+  because it is the one another app can be measured on identically.
+
+The default scenario (`-Scenario empty`) runs each launch on a fresh isolated profile
+(`KUBENIMBUS_PROFILE_DIR`) with an empty `KUBECONFIG`, so it neither reads nor changes the
+settings, workspace or kubeconfig of whoever runs it. `-Scenario unreachable-cluster`
+restores a cluster nothing listens on instead and also reports when the failed connect has
+been shown. On Linux with no `DISPLAY` the script starts one Xvfb for the whole series.
+
+```powershell
+# NativeAOT is the shipping configuration; time that, not a Debug build.
+dotnet publish src/KubeNimbus.App -c Release -r win-x64 -p:PublishAot=true -o publish/app   # MSVC env on Windows: see CLAUDE.md
+./scripts/measure-startup.ps1 -Runs 20            # defaults to publish/app/kubeNimbus(.exe)
+./scripts/measure-startup.ps1 -Runs 10 -Markdown  # for a PR body or a job summary
+```
+
+CI's `NativeAOT publish (linux-x64)` job runs it (10 runs, under Xvfb, with `xdotool`) after
+the launch check and writes the table to the job summary. It is informational: shared
+runners are noisy, so no budget is enforced and the step cannot fail the job.
+
+**What it does not measure.** Cold start: the first `-Warmup` launch (default 1) is reported
+separately and left out of the statistics, but even that one reads a page cache warmed by
+the publish, so it is not a first launch after a reboot. And **no other app**: the
+head-to-head against KubeUI and FreeLens that #234 asked for was **not run**, because the
+owner's rule is that no competitor binary is downloaded on the development machine, and
+nothing in CI downloads one. The only head-to-head numbers are the August 2026 ones in the
+research above, measured once.
+
+First numbers (2026-10-11, commit `f9b118f`, win-x64 NativeAOT, Windows 11 Pro 10.0.26340,
+AMD Ryzen 9 5900X, 24 logical CPUs, 20 runs after 1 warm-up, `-Scenario empty`): first frame
+**347 ms median, 374 ms p90** in app; **368 ms median, 398 ms p90** from process start
+(warm-up: 516 / 591 ms). With `-Scenario unreachable-cluster`, 10 runs: first frame
+361 / 376 ms in app, failed connect shown 2441 / 2461 ms (median / p90), which includes the connect attempt
+to a closed loopback port and its failure (where those two seconds go was not broken down).
+
 ## Sandbox scripts
 
 One command to get a throwaway Kubernetes cluster, pre-loaded with demo
