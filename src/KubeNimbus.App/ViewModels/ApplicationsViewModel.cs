@@ -174,6 +174,45 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
     }
 
     /// <summary>
+    /// Stops every read this mode runs, after a failed reconnect (#294): the client they read
+    /// through just failed and the failure view covers the list, so hard rule 2 wants them
+    /// stopped rather than retrying behind it. What they had read goes with them, so the list
+    /// a later start builds is read afresh, never the old one under a new connection. The
+    /// mode stays wanted: the connection change a successful Reconnect makes starts it again
+    /// through <see cref="TryStart"/>.
+    /// </summary>
+    internal void Suspend()
+    {
+        if (!HasStarted || _tab.IsDemo)
+        {
+            return;
+        }
+
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = null;
+        foreach (var scope in _scopes.Values)
+        {
+            scope.Dispose();
+        }
+
+        _scopes.Clear();
+        _pending.Clear();
+        _kinds.Clear();
+        _objects.Clear();
+        _clockTimer?.Stop();
+        _clockTimer = null;
+        _readingCatalog = false;
+        ConnectionWarning = null;
+        RebuildNow();
+        HasStarted = false;
+        RefreshStates();
+    }
+
+    /// <summary>True while this mode's reads run — what the tests read.</summary>
+    internal bool IsReading => _cts is not null;
+
+    /// <summary>
     /// The catalog is being read and no watch has started yet. Nothing is pending in that
     /// gap, so without this the list read as empty — "No applications found" — for as long
     /// as discovery took, which on a distant cluster is seconds (UI rule 18).

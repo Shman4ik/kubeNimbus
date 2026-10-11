@@ -1221,6 +1221,34 @@ internal static class ClusterTabScenarios
     public static ClusterTabViewModel NodeList() => NodeTab();
 
     /// <summary>
+    /// FEAT-25 (#206) on a cluster without metrics-server: the CPU and Memory columns are gone,
+    /// the capacity strip's usage half says why in place, and the requests half — read from the
+    /// pods, which need no metrics — stays.
+    /// </summary>
+    public static ClusterTabViewModel NodeCapacityNoMetrics()
+    {
+        var tab = NodeTab();
+        tab.AreMetricsVisible = false;
+        tab.SetCapacityUsage(CapacityUsageState.NoMetricsApi);
+        return tab;
+    }
+
+    /// <summary>
+    /// FEAT-25 (#206) under narrow RBAC: the user may list nodes but not read node metrics or
+    /// list pods in every namespace. The node count stays; each refused half says so, with the
+    /// API server's sentence on hover.
+    /// </summary>
+    public static ClusterTabViewModel NodeCapacityNarrowRbac()
+    {
+        var tab = NodeTab();
+        tab.SetCapacityUsage(CapacityUsageState.Refused,
+            "nodes.metrics.k8s.io is forbidden: User \"system:serviceaccount:team-a:viewer\" cannot list resource \"nodes\" in API group \"metrics.k8s.io\" at the cluster scope");
+        tab.ApplyCapacityPods(null, CapacityPodsState.Refused,
+            "pods is forbidden: User \"system:serviceaccount:team-a:viewer\" cannot list resource \"pods\" in API group \"\" at the cluster scope");
+        return tab;
+    }
+
+    /// <summary>
     /// Node detail's Overview: allocatable vs requested with a bar per resource,
     /// conditions, taints and the kubelet block. The headroom figures are the production
     /// arithmetic over the demo pods actually placed on this node — including the
@@ -2039,6 +2067,58 @@ internal static class ClusterTabScenarios
         {
             IsPreview = false,
         };
+
+        tab.InspectorTabs.Add(yamlTab);
+        tab.SelectedInspectorTab = yamlTab;
+        return tab;
+    }
+
+    /// <summary>
+    /// #270: an object as the server returns it, <c>metadata.managedFields</c> and all. The
+    /// editor opens with the field out of the text and the "Managed fields" chip offered;
+    /// <paramref name="shown"/> is the chip pressed, the field back where the server put it.
+    /// </summary>
+    public static ClusterTabViewModel YamlEditorManagedFields(bool shown)
+    {
+        var tab = BaseTab();
+        var deployment = FixtureData.Deployments.First(d => d.Name == "checkout-worker");
+        const string managedFields = """
+            - manager: kubectl-client-side-apply
+              operation: Update
+              apiVersion: apps/v1
+              time: "2026-09-14T08:02:11Z"
+              fieldsType: FieldsV1
+              fieldsV1:
+                f:metadata:
+                  f:labels:
+                    .: {}
+                    f:app: {}
+                f:spec:
+                  f:replicas: {}
+                  f:template:
+                    f:spec:
+                      f:containers:
+                        k:{"name":"worker"}:
+                          f:image: {}
+            - manager: kube-controller-manager
+              operation: Update
+              apiVersion: apps/v1
+              subresource: status
+              time: "2026-10-02T16:40:55Z"
+              fieldsType: FieldsV1
+              fieldsV1:
+                f:status:
+                  f:availableReplicas: {}
+                  f:conditions:
+                    k:{"type":"Available"}:
+                      f:lastUpdateTime: {}
+            """;
+        ManagedFieldsText.TryShow(deployment.ToYaml(), new ManagedFieldsBlock(managedFields + "\n", 4), out var serverYaml);
+        var yamlTab = new YamlEditorTabViewModel(FixtureData.CreateOfflineClient(), DeploymentDescriptor, "payments", "checkout-worker", serverYaml)
+        {
+            IsPreview = false,
+        };
+        yamlTab.ShowManagedFields = shown;
 
         tab.InspectorTabs.Add(yamlTab);
         tab.SelectedInspectorTab = yamlTab;

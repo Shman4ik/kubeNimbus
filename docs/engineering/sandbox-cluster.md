@@ -51,7 +51,10 @@ shared with other sessions running at the same time:
   run still going, and the label key is new so the sweep can never reach a namespace made
   by the old code. A test that needs a namespace-wide object (a `LimitRange`) makes a
   second namespace with the same label and deletes it itself. Cluster-scoped objects (a
-  throwaway CRD) carry the run id in their name and group and are deleted in a `finally`.
+  throwaway CRD) carry the run id in their name and group, are deleted in a `finally`, and
+  carry the same label with the run id as its value, so a run killed before its `finally`
+  leaves nothing the sweep cannot find: `LiveCluster.SweepAbandonedCrdsAsync` deletes a labelled
+  CRD older than two hours whose label is not this run's (#279).
   Reading the rest of the cluster — the demo namespaces, every CRD, the node — is fine.
 - **Third-party CRDs come from cert-manager**, installed by hand once from its pinned
   release manifest (`scripts/README.md`), never by a test. The tests that need it

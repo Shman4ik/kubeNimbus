@@ -121,4 +121,23 @@ public class YamlJsonTests
         await Assert.That(container["args"]![1]!.GetValueKind()).IsEqualTo(JsonValueKind.String);
         await Assert.That(container["args"]![1]!.GetValue<string>()).IsEqualTo("8080");
     }
+
+    /// <summary>
+    /// #287: the editor's text ends its lines with <c>\n</c> on every platform. YamlDotNet ends
+    /// them with <see cref="Environment.NewLine"/>, so on Windows each line carried a <c>\r</c>
+    /// that Linux and macOS never saw. The value with a line break in it is there to show the
+    /// emitter's block scalars come out with the same line ends as the rest of the text.
+    /// </summary>
+    [Test]
+    public async Task The_yaml_text_ends_its_lines_with_a_line_feed_on_every_platform()
+    {
+        const string json = """{"metadata":{"name":"web","annotations":{"note":"first\r\nsecond"}},"data":{"a":"1"}}""";
+
+        using var document = JsonDocument.Parse(json);
+        var yaml = YamlJson.ToYamlString(document.RootElement);
+
+        await Assert.That(yaml).DoesNotContain("\r");
+        await Assert.That(yaml.Split('\n').Length).IsGreaterThan(4);
+        await Assert.That(YamlJson.ParseYamlToJson(yaml)!["metadata"]!["name"]!.GetValue<string>()).IsEqualTo("web");
+    }
 }

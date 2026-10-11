@@ -100,6 +100,58 @@ public class ConnectionStateTests
     }
 
     /// <summary>
+    /// #294: a failed reconnect stops every watch the tab owns — the list's and the
+    /// Applications mode's — and a kind change or a refresh behind the failure view starts
+    /// nothing against the client that just failed. The Reconnect that succeeds starts both
+    /// again. The server answers <c>/version</c> and holds everything else open, so a watch
+    /// that starts stays started and nothing here depends on timing.
+    /// </summary>
+    [Test]
+    public async Task A_failed_reconnect_stops_both_modes_and_a_successful_one_starts_them_again()
+    {
+        TestObjects.RedirectStores();
+        await using var server = new VersionOnlyServer();
+        var context = new ClusterContext("slow", "slow", null, "tester", server.Kubeconfig());
+        var tab = new ClusterTabViewModel(context);
+        tab.Client = await ClusterClient.ConnectAsync(context);
+        tab.IsConnected = true;
+        tab.Applications.Activate();
+        tab.SelectKindCommand.Execute(new SidebarKindViewModel(TestObjects.PodDescriptor, "workload"));
+        try
+        {
+            await Assert.That(tab.HasListWatch).IsTrue();
+            await Assert.That(tab.Applications.IsReading).IsTrue();
+
+            await tab.ShowReconnectFailureAsync(new HttpRequestException("No connection could be made"));
+
+            await Assert.That(tab.HasListWatch).IsFalse();
+            await Assert.That(tab.Applications.IsReading).IsFalse();
+            await Assert.That(tab.Applications.HasStarted).IsFalse();
+            await Assert.That(tab.Applications.ShowsConnectionFailure).IsTrue();
+
+            // Behind the failure view: a kind change and a refresh start nothing.
+            tab.SelectKindCommand.Execute(new SidebarKindViewModel(TestObjects.NodeDescriptor, "cluster"));
+            tab.RefreshCommand.Execute(null);
+            await Assert.That(tab.HasListWatch).IsFalse();
+            await Assert.That(tab.IsListLoading).IsFalse();
+            await Assert.That(tab.Applications.IsReading).IsFalse();
+
+            await tab.ReconnectCommand.ExecuteAsync(null);
+
+            await Assert.That(tab.HasConnectionFailure).IsFalse();
+            await Assert.That(tab.IsConnected).IsTrue();
+            await Assert.That(tab.HasListWatch).IsTrue();
+            await Assert.That(tab.IsListLoading).IsTrue();
+            await Assert.That(tab.Applications.IsReading).IsTrue();
+            await Assert.That(tab.Applications.ShowsConnectionFailure).IsFalse();
+        }
+        finally
+        {
+            await tab.Applications.DisposeAsync();
+        }
+    }
+
+    /// <summary>
     /// The tab is connected once <c>/version</c> answers and still connecting while
     /// discovery runs, and the Applications reads start in that gap. On an EKS cluster signed
     /// in through AWS SSO the gap was seconds, and the page drew three states in one cell:

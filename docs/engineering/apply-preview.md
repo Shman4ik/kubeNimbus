@@ -79,11 +79,17 @@ Thirteen things are load-bearing.
    real object and changes on every apply, so a text diff over the raw documents would
    open on the one section nobody wants to read. What was removed is still counted and
    stated by rule 4's footnote, which is the half that keeps the omission honest.
-   The text ends its lines with `\n` on every platform (#284): YamlDotNet writes
-   `Environment.NewLine`, so on Windows every line split on `\n` kept a stray `\r`. A
-   carriage return inside a value is written by the emitter as an escape, never raw, so the
-   one replace is safe; `TextDiffTests` round-trips such a value, and the test was confirmed
-   red on Windows without the replace. The panel's screenshots cover inline maximized
+   The text ends its lines with `\n` on every platform (#284, #287): YamlDotNet writes
+   `Environment.NewLine`, so on Windows every line split on `\n` kept a stray `\r`. The
+   replace lives in `YamlJson.ToYamlString` itself since #287, so the editor's text is LF too,
+   not only the diff's (#284 had fixed the diff path alone). A line break inside a value is
+   written as a block scalar, and any YAML parser normalizes a block scalar's line breaks to
+   `\n` (YAML 1.2, 5.4), so the replace changes no value: a value's `\r\n` never came back
+   from the text as one on any platform, before or after. (That last part is a loss of its
+   own — a ConfigMap value with CRLF line ends, opened and applied, comes back LF — and is
+   listed for the backlog rather than fixed here.) `TextDiffTests` round-trips such a value
+   (#284); `YamlJsonTests.The_yaml_text_ends_its_lines_with_a_line_feed_on_every_platform` pins
+   the editor's text and was confirmed red on Windows with the replace taken out. The panel's screenshots cover inline maximized
    (`cluster-tab-yaml-diff-preview`), split at the dock's height and maximized
    (`cluster-tab-yaml-diff-split`, `-split-maximized`), and fields maximized and at the
    dock's height (`cluster-tab-yaml-diff-fields`, `-fields-dock`); the last two pairs were
@@ -126,7 +132,8 @@ Thirteen things are load-bearing.
    separate the two tints.
 
 13. **What is sent is the editor's text minus `metadata.managedFields`, and nothing else is
-   removed.** The editor opens an object exactly as the server returned it, so its text carries
+   removed.** Since #270 the editor does not show the field at all by default (rule 14); the
+   removal below stays, for the text a reader asked to see it in. The editor opens an object exactly as the server returned it, so its text carries
    every server-written field, and a real API server refuses an apply patch that carries
    `managedFields`: `metadata.managedFields must be nil` (HTTP 400, on the dry run and on the real
    apply alike). Apply on an opened ConfigMap was therefore broken outright, and none of the
@@ -148,6 +155,27 @@ Thirteen things are load-bearing.
    with "the object has been modified" whatever `force` says. The live test waits for the object to settle
    for this reason. Reload, then apply again, is the way through.
 
+14. **`metadata.managedFields` is out of the editor's text by default (#270, the owner's
+   decision of 2026-10-11).** On a Deployment it is a couple of hundred lines (`f:lastUpdateTime:
+   {}`, `k:{"type":"Progressing"}` …) at the top of `metadata`, above every field the editor is
+   opened to change, and `kubectl get -o yaml` and `kubectl edit` have hidden it by default
+   since 1.21. `ManagedFieldsText` (Core) takes it out of the server's YAML on open, reload and
+   after an apply, and keeps the block to put back at the same position; the **Managed fields**
+   chip in the editor's header row shows it, and is present only when the object has the field
+   (UI rule 1: it is the one place that says something was left out of the text, UI rule 20).
+   It is a view toggle inside one pane, like Reveal values beside it, not a preference, so it
+   persists nothing and `PRIVACY.md` is unchanged. Moving the field in or out is not an edit
+   (`IsDirty` is kept) and keeps an edit made meanwhile; over text that no longer reads as one
+   YAML document the chip stays as it was and says why. The work is on YamlDotNet's node tree,
+   so only the key directly under the top-level `metadata` of a single document is touched —
+   a ConfigMap holding a manifest keeps its own `managedFields` key. Nothing an apply sends
+   changes: rule 13 already removed the field from every body, and a server-side apply without
+   it leaves the server's record in place (`ApplyLiveTests` now applies the hidden text and
+   checks every manager the object had is still listed afterwards, on k3s, for a Deployment, a
+   ConfigMap and a custom resource). `ManagedFieldsTextTests` (Core) pins hide-then-show giving
+   back the server's text byte for byte, a nested key left alone and unreadable text left as it
+   is; `YamlEditorManagedFieldsTests` (App) pins the editor's half, and went red with the text
+   returned unhidden. Screenshots: `cluster-tab-yaml-managed-fields-hidden`, `-shown`.
 **The toolbar button says Review…, not Apply, while the preview is on (FEAT-69, the owner's
 wording, 2026-10-10).** It used to read `Apply`, 100px above the panel's own `Apply changes`,
 and the two did different things: the first asks the server, the second changes the object.

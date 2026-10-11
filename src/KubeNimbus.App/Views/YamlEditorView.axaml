@@ -45,10 +45,20 @@
            never both: OnClick() flips IsChecked before the Command runs, so a command
            that also flips it cancels the click out. The work happens in the view
            model's OnIsSecretValuesRevealedChanged hook. -->
-      <ToggleButton Grid.Column="2" Classes="chip" Padding="7,3" FontSize="11" Margin="0,0,4,0"
-                    IsVisible="{Binding CanRevealValues}" IsChecked="{Binding IsSecretValuesRevealed}"
-                    ToolTip.Tip="Decode and show this object's base64 values (masked by default, decoded locally)"
-                    Content="Reveal values" />
+      <!-- #270: metadata.managedFields is hidden from the text by default, as kubectl hides
+           it, and this chip puts it back. Present only when the object has the field, so the
+           chip is the one place that says something was left out of the text (UI rule 20);
+           a two-way IsChecked and no command (UI rule 8b). -->
+      <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" Margin="0,0,4,0">
+        <ToggleButton Classes="chip" Padding="7,3" FontSize="11"
+                      IsVisible="{Binding HasManagedFields}" IsChecked="{Binding ShowManagedFields}"
+                      ToolTip.Tip="Show metadata.managedFields, the server's record of which manager owns which field. Never sent on apply."
+                      Content="Managed fields" />
+        <ToggleButton Classes="chip" Padding="7,3" FontSize="11"
+                      IsVisible="{Binding CanRevealValues}" IsChecked="{Binding IsSecretValuesRevealed}"
+                      ToolTip.Tip="Decode and show this object's base64 values (masked by default, decoded locally)"
+                      Content="Reveal values" />
+      </StackPanel>
       <!-- Delete is the destructive one, so it looks it (the soft danger button) and
            sits away from Apply, across Reload: it used to be a grey filled button right
            beside the primary one, which is where a hurried click lands. It still only

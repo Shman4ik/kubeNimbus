@@ -211,7 +211,9 @@ public class ApplyLiveTests
         await Assert.That(opened).Contains("creationTimestamp:");
         await Assert.That(opened).Contains("resourceVersion:");
 
-        var edited = ReplaceFirst(opened, firstEdit.Item1, firstEdit.Item2);
+        // The editor hides metadata.managedFields since #270, so what it sends is the edit
+        // without them.
+        await Assert.That(ManagedFieldsText.TryHide(ReplaceFirst(opened, firstEdit.Item1, firstEdit.Item2), out var edited, out _)).IsTrue();
 
         // The preview is a dry run: it names the change and writes nothing.
         var preview = await client.PreviewApplyAsync(
@@ -224,6 +226,15 @@ public class ApplyLiveTests
         var applied = await client.ApplyYamlAsync(
             descriptor, LiveCluster.Namespace, name, edited, LiveCluster.FieldManager, cancellationToken: ct);
         await Assert.That(applied.ToYaml()).Contains(firstEdit.Item2);
+
+        // An apply that carries no managedFields leaves the server's record in place — every
+        // manager the object had before is still there (#270): the field is the server's to
+        // keep, not the editor's.
+        static IEnumerable<string?> Managers(DynamicResource o) =>
+            o.Raw.GetProperty("metadata").GetProperty("managedFields").EnumerateArray().Select(m => m.GetProperty("manager").GetString());
+        var record = applied.Raw.GetProperty("metadata").GetProperty("managedFields");
+        await Assert.That(Managers(live).Except(Managers(applied)).Any()).IsFalse();
+        await Assert.That(record.EnumerateArray().Any(m => m.GetProperty("manager").GetString() == LiveCluster.FieldManager)).IsTrue();
 
         // And so does a force-apply of the next edit, read back again like the editor's reload.
         // A controller writes a Deployment's status after any change to it, which moves the

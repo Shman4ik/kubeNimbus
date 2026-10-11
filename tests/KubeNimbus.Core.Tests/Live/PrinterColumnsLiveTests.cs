@@ -179,10 +179,18 @@ public partial class PrinterColumnsLiveTests
         foreach (var obj in objects)
         {
             var key = $"{(descriptor.Namespaced ? obj.Namespace : "")}/{obj.Name}";
-            var row = table.Rows.FirstOrDefault(r => r.Key == key || r.Key == $"?/{obj.Name}").Cells;
+            var (_, row, tableVersion) = table.Rows.FirstOrDefault(r => r.Key == key || r.Key == $"?/{obj.Name}");
             if (row is null)
             {
                 // Created or deleted between the two reads.
+                continue;
+            }
+
+            // Changed between the two reads: the Table and the list are two requests, and an
+            // object a controller writes between them (cert-manager updating a Certificate's
+            // status) is a newer object, not a disagreement between the app and kubectl (#279).
+            if (tableVersion is not null && tableVersion != obj.ResourceVersion)
+            {
                 continue;
             }
 

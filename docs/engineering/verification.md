@@ -133,6 +133,48 @@ suite reports zero tests (the runner's exit code 8) — unless a filter was pass
 only "every suite ran nothing" fails. Runner arguments pass through
 (`-RunnerArgs '--treenode-filter','/*/*/DemoRowsTests/*'`, or after `--` in bash).
 
+### Tests that failed once under shared load (#279)
+
+The 2026-10 backlog sweep ran a worktree's suite per bundle on one machine at once, and a
+handful of tests failed one run in a few dozen and passed alone. A test like that costs a
+re-run and teaches people to re-run red tests, so each was traced to a cause:
+
+- **The `HttpListener` stub servers** (`ApplyPreviewHttpTests.StubApiServer`,
+  `DiscoveryHttpTests.SlowDiscoveryServer`, `NodeWatchHttpTests.ConcurrentStubServer`, the
+  fan-out test's proxy). An `HttpListener` cannot be asked for port 0, so each probed a free
+  port with a `TcpListener`, closed the probe and registered that port, which anyone could take
+  in between — two test processes choosing the same port was the reported failure.
+  `LoopbackHttpListener.Start` registers and, when the registration is refused, retries on a new
+  port with a new listener. Second, a port is reused once its stub is gone, and a client of an
+  earlier stub (a watch retrying, a request in flight, from this process or another) could reach
+  the next stub on it and be counted as that test's own request — which a test that counts its
+  requests (`Requests.Single()`, `Requests.Count == 2`, `watches == 1`) reads as a failure. Each
+  stub now writes a bearer token of its own into its kubeconfig and answers anything else 401
+  without recording it (`LoopbackHttpListener.IsFor`). This is the explanation for
+  `CronJobActionsTests.Suspending_patches_the_cronjob_with_a_merge_patch`, the two
+  `ApplyPreviewHttpTests`, the two `DiscoveryHttpTests` and
+  `A_watch_frame_over_the_cap_ends_the_stream_with_a_stated_error_and_a_relist`, all of which use
+  one of these stubs; the failures themselves were not reproduced here, so it is the likely
+  cause rather than a proven one.
+- **`PrinterColumnsLiveTests`** compared the API server's `Table` with a list read a moment
+  later; a Certificate cert-manager updated between the two reads looked like a disagreement.
+  A row whose `resourceVersion` differs between the two reads is skipped, as a newer object.
+- **`WorkloadLogsLiveTests`' rollout case** followed a pod's log again only on the pod's next
+  Modified event, the pane's own retry. Under load the log request is slower than the
+  container's start, the refusal ("waiting to start") comes back after the pod's last Modified
+  event, and nothing brings the pod round again: it reads as a pod that never logged. The test
+  now re-checks the pod after a refusal and follows it again if it is running. The pane has the
+  same race (`WorkloadLogsTabViewModel.StartStream`'s Failed path) and is listed for the backlog.
+- **`EventFieldsTests.Both_event_groups_read_the_same_against_a_real_server`** was already
+  fixed by #261 (only an event at the same `resourceVersion` in both reads is compared).
+- **`ConnectFanOutLiveTests`** left its throwaway CRDs unlabelled, so a killed run's CRDs were
+  found by nothing; they carry `kubenimbus.io/live-test-run` now and the sweep removes one older
+  than two hours that is not this run's ([sandbox-cluster](sandbox-cluster.md)). Its temp folders
+  holding a short-lived token are deleted when the test ends.
+- **Not traced:** one failure of `ApplyLiveTests…(deployment)`. The likely cause is the one its
+  own comment names — a controller's status write after the settle wait moving
+  `resourceVersion` — but nothing here showed it.
+
 ### The launch check (`--smoke-test`)
 
 **A publish that emits no warnings is not a binary that starts, and this repo has

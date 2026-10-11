@@ -300,6 +300,8 @@ internal static class LayoutChecks
 
         if (hiddenUnpinned == 0)
             problems.Add("no unpinned, unselected row was rendered, so nothing was checked");
+        if (shownUnpinned == 0)
+            problems.Add("no selected, unpinned row was rendered, so the pin that shows on selection was not checked (#287)");
         if (problems.Count > 0)
             throw new InvalidOperationException($"The switcher's pins (FEAT-71/73): {string.Join("; ", problems)}.");
 
