@@ -42,12 +42,30 @@ public static class AppDataDirectory
     /// <summary>The app's own name as a directory, shared by every store.</summary>
     public const string AppFolderName = "kubeNimbus";
 
+    /// <summary>
+    /// An isolated profile: when set, <see cref="Roaming"/> and <see cref="Local"/> both answer
+    /// this directory, so every file the app writes for itself (settings, workspace, terminal
+    /// overlays and hand-off scripts, the discovery cache) lands in it and nothing reaches the
+    /// user's own app data. Set from <c>KUBENIMBUS_PROFILE_DIR</c> at startup
+    /// (<c>Program.ApplyIsolatedProfile</c>), for <c>scripts/qa-app.ps1</c>. It used to cover
+    /// only the settings and workspace stores, and a QA run's "Open a terminal on this
+    /// cluster" wrote its overlay into the developer's real <c>%APPDATA%\kubeNimbus\terminal</c>
+    /// (#289). A relative value is made absolute against the current directory once, here.
+    /// </summary>
+    public static string? ProfileOverride
+    {
+        get => _profileOverride;
+        set => _profileOverride = string.IsNullOrWhiteSpace(value) ? null : Path.GetFullPath(value);
+    }
+
+    private static string? _profileOverride;
+
     /// <summary>Preferences, the workspace and the terminal overlays: <c>%APPDATA%</c>, <c>~/.config</c>.</summary>
-    public static string Roaming => Path.Combine(
+    public static string Roaming => ProfileOverride ?? Path.Combine(
         Resolve(Environment.SpecialFolder.ApplicationData, "XDG_CONFIG_HOME", ".config"), AppFolderName);
 
     /// <summary>Caches: <c>%LOCALAPPDATA%</c>, <c>~/.local/share</c>.</summary>
-    public static string Local => Path.Combine(
+    public static string Local => ProfileOverride ?? Path.Combine(
         Resolve(Environment.SpecialFolder.LocalApplicationData, "XDG_DATA_HOME", Path.Combine(".local", "share")), AppFolderName);
 
     private static string Resolve(Environment.SpecialFolder folder, string xdgVariable, string xdgDefault)

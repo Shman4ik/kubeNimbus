@@ -99,6 +99,78 @@ public class AppDataDirectoryTests
         await Assert.That(Path.IsPathFullyQualified(TerminalLauncher.StateDirectory) || TerminalLauncher.DirectoryOverride is not null).IsTrue();
     }
 
+    /// <summary>
+    /// #289: with an isolated profile (<c>KUBENIMBUS_PROFILE_DIR</c>, what qa-app.ps1 sets),
+    /// "Open a terminal on this cluster" wrote its overlay kubeconfig into the developer's
+    /// real <c>%APPDATA%\kubeNimbus\terminal</c>, because only the two stores followed the
+    /// override. Everything under the app-data directories follows it now: the terminal's
+    /// overlay and hand-off files are written inside the profile and nowhere else, and the
+    /// discovery cache's directory (<see cref="AppDataDirectory.Local"/>) is the profile too.
+    /// Nothing is started: the lookup resolves no terminal.
+    /// </summary>
+    [Test]
+    [NotInParallel(nameof(TerminalLauncher.DirectoryOverride))]
+    public async Task An_isolated_profile_holds_every_file_the_app_writes_for_itself()
+    {
+        var realRoaming = AppDataDirectory.Roaming;
+        var realLocal = AppDataDirectory.Local;
+        var profile = Directory.CreateTempSubdirectory("kubenimbus-profile").FullName;
+        var outside = Directory.CreateTempSubdirectory("kubenimbus-profile-outside").FullName;
+        var userKubeconfig = Path.Combine(outside, "kubeconfig");
+        var contextName = "qa-" + Guid.NewGuid().ToString("n");
+
+        var previousTerminal = TerminalLauncher.DirectoryOverride;
+        TerminalLauncher.DirectoryOverride = null;
+        AppDataDirectory.ProfileOverride = profile;
+        TerminalLauncher.KubectlProbeOverride.Value = () => Path.Combine(outside, "kubectl");
+        TerminalLauncher.LookupOverride.Value = new TerminalLookup("", null, Path.Combine(outside, "no-system32"), OperatingSystem.IsWindows())
+        {
+            ApplicationDirectories = [],
+        };
+        try
+        {
+            await Assert.That(AppDataDirectory.Roaming).IsEqualTo(profile);
+            await Assert.That(AppDataDirectory.Local).IsEqualTo(profile);
+            await Assert.That(TerminalLauncher.StateDirectory).IsEqualTo(Path.Combine(profile, "terminal"));
+
+            var context = new ClusterContext(contextName, "payments", "default", "dev", userKubeconfig);
+            var command = TerminalCommand.Exec("payments", "api-0", "app", TerminalCommand.ShellFor(PodOperatingSystem.Unknown, null));
+            var result = await TerminalLauncher.OpenAsync(context, command);
+
+            await Assert.That(result.Outcome).IsEqualTo(TerminalLaunchOutcome.NoTerminal);
+
+            // The overlay was written, inside the profile.
+            var written = Directory.GetFiles(profile, "*", SearchOption.AllDirectories);
+            await Assert.That(written.Length).IsGreaterThan(0);
+
+            // Every path KUBECONFIG names is the overlay in the profile or the user's own file.
+            foreach (var path in result.KubeconfigValue.Split(Path.PathSeparator))
+            {
+                await Assert.That(path == userKubeconfig || path.StartsWith(profile + Path.DirectorySeparatorChar, StringComparison.Ordinal)).IsTrue();
+            }
+
+            // And nothing landed in the real app-data directories, nor beside the user's kubeconfig.
+            foreach (var real in new[] { realRoaming, realLocal })
+            {
+                var terminal = Path.Combine(real, "terminal");
+                var leaked = Directory.Exists(terminal)
+                    && Directory.EnumerateFiles(terminal).Any(f => written.Any(w => Path.GetFileName(w) == Path.GetFileName(f)));
+                await Assert.That(leaked).IsFalse();
+            }
+
+            await Assert.That(Directory.GetFiles(outside, "*", SearchOption.AllDirectories)).IsEmpty();
+        }
+        finally
+        {
+            AppDataDirectory.ProfileOverride = null;
+            TerminalLauncher.DirectoryOverride = previousTerminal;
+            TerminalLauncher.KubectlProbeOverride.Value = null;
+            TerminalLauncher.LookupOverride.Value = null;
+        }
+
+        await Assert.That(AppDataDirectory.Roaming).IsEqualTo(realRoaming);
+    }
+
     // ------------------------------------------------- S1-4: private and atomic writes
 
     [Test]
