@@ -195,6 +195,9 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
 
     public IReadOnlyList<LogRange> LogRanges => LogRange.Choices;
 
+    /// <summary>The Range combo's tooltip, which mentions the demo only on the demo cluster (#290).</summary>
+    public string LogRangeTooltip => LogRange.Tooltip(IsDemo);
+
     [ObservableProperty]
     private LogRange _selectedLogRange = LogRange.Last200;
 
@@ -1978,8 +1981,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         await writer.WriteAsync(VisibleLogText());
     }
 
-    private static Window? GetMainWindow() =>
-        Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop ? desktop.MainWindow : null;
+    private static Window? GetMainWindow() => MainWindowAccess.Current;
 
     /// <summary>
     /// Both buttons need a container. Without a CanExecute they were enabled with

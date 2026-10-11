@@ -68,6 +68,17 @@ Seven things are load-bearing:
    pane, first checks that the control's own selection *is* padded (so the check cannot pass
    by accident), then copies by key and by menu and reads the clipboard back. With the trim
    made a no-op, both the tests and the check were confirmed red.
+   **A modifier key-down stops in the Tunnel handler** (#265). The control's `OnKeyDown` clears
+   the selection first thing, for every key, and a keyboard sends Ctrl and Shift as key-downs of
+   their own before the C, so with real input the selection was empty by the time Ctrl+Shift+C
+   reached the copy: QA saw the clipboard unchanged after Select all (read in
+   `SvcSystems.UI.Terminal` 2.1.0's `TerminalControl.OnKeyDown`). A modifier alone sends no bytes,
+   so `ExecView` marks its key-down handled and the control never sees it. `ux-exec-copy` sends C
+   with the modifiers already down and stayed green through it; `ux-exec-copy-keys` presses Ctrl,
+   Shift and C in turn after Select all and after a pointer drag across the first rows, and reads
+   the clipboard back. Without the modifier stop it reports "copied nothing; the selection holds
+   184". The pointer drag selects in the harness, so the drag half of the QA report is left to
+   the desktop check rather than treated as a defect.
 5. **The pane is one row of chrome now** (UI rule 10): status, shell box,
    reconnect, "open this session in your terminal" (FEAT-17, see
    [machine-terminal](machine-terminal.md), "Handing a command to the terminal") — and the

@@ -260,6 +260,9 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
 
     public IReadOnlyList<LogRange> LogRanges => LogRange.Choices;
 
+    /// <summary>The Range combo's tooltip, which mentions the demo only on the demo cluster (#290).</summary>
+    public string LogRangeTooltip => LogRange.Tooltip(IsDemo);
+
     [ObservableProperty]
     private LogRange _selectedLogRange = LogRange.Last200;
 
@@ -1641,8 +1644,7 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
         await writer.WriteAsync(VisibleLogText());
     }
 
-    private static Window? GetMainWindow() =>
-        Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop ? desktop.MainWindow : null;
+    private static Window? GetMainWindow() => MainWindowAccess.Current;
 
     private static string FirstLine(string message)
     {

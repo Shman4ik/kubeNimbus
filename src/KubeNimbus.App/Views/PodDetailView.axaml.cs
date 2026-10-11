@@ -154,5 +154,9 @@ public partial class PodDetailView : UserControl
     // Clear and Save in the log overflow menu run their Command; this closes the menu
     // behind them, which a Flyout does not do on its own for a Button inside it.
     private void OnLogMenuActionClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
-        LogMenuButton.Flyout?.Hide();
+        // Posted, not called: hiding the flyout takes its content out of the logical tree, and the
+        // Button reads its Command only after this Click handler returns. Hidden here, the item's
+        // {Binding …Command} had already lost its DataContext and nothing ran — the menu's Copy
+        // wrote nothing to the clipboard (#288), and Clear and Save did nothing either.
+        Dispatcher.UIThread.Post(() => LogMenuButton.Flyout?.Hide());
 }

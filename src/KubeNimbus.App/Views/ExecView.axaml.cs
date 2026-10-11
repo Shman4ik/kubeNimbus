@@ -51,6 +51,17 @@ public partial class ExecView : UserControl
 
     private void OnTerminalKeyDown(object? sender, KeyEventArgs e)
     {
+        // A modifier on its own stops here. The control clears its selection at the top of its
+        // OnKeyDown for every key, and a keyboard sends Ctrl and Shift as key-downs of their own
+        // before the C of Ctrl+Shift+C, so the selection was gone by the time the copy below ran
+        // and nothing reached the clipboard (#265). A modifier sends no bytes to the shell, so
+        // the control loses nothing by not seeing it.
+        if (IsModifierKey(e.Key))
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (!e.KeyModifiers.HasFlag(KeyModifiers.Control) || !e.KeyModifiers.HasFlag(KeyModifiers.Shift))
         {
             return;
@@ -68,6 +79,9 @@ public partial class ExecView : UserControl
                 return;
         }
     }
+
+    internal static bool IsModifierKey(Key key) => key is Key.LeftCtrl or Key.RightCtrl or Key.LeftShift or Key.RightShift
+        or Key.LeftAlt or Key.RightAlt or Key.LWin or Key.RWin;
 
     /// <summary>
     /// Copies the selection with each line's trailing blank cells and the trailing blank lines
