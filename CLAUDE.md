@@ -484,7 +484,9 @@ publish/app/kubeNimbus --smoke-test        # Linux: wrap in xvfb-run -a
 - **The stress mode's budgets are counts**; a list bound to cluster data virtualizes and is
   rebuilt with one notification.
 - **`kn-qa` runs only in the owner's QA VM** (`KUBENIMBUS_QA_VM=1`), never on the owner's
-  desktop.
+  desktop. A full run is preflight, seed, one agent per batch of `docs/qa/desktop-checks.md`
+  (the checks live there, never in a prompt), verdicts through `qa-result.ps1`, then
+  `qa-report.ps1` ([desktop-qa](docs/engineering/desktop-qa.md)).
 
 ### NativeAOT publish needs the MSVC toolchain (Windows)
 

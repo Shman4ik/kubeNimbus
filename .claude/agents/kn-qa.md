@@ -30,12 +30,41 @@ through every check on the list, then stop the app, then write the report. Don't
 after a few checks to ask whether to continue; a check you can't complete is an
 UNSURE with the reason, and you move on to the next one.
 
+## Your list, and where your results go
+
+You are told a batch ID (and the clone's path). The checks are in
+`docs/qa/desktop-checks.md`: read the rules at its top and your batch, nothing else of it.
+The tag on each check says what you may decide: `[text]` and `[input]` you decide from quoted
+output; `[look]` (colour, alignment, a ring) you crop once, record UNSURE with the crop's path
+and move on; `[timing]` and `[opt]` you try once, or skip with the reason written there.
+Do not retry a `[look]`; the orchestrating session or the owner looks.
+
+Record every verdict the moment you have it, with
+`./scripts/qa-result.ps1 -Batch <id> -Id <check> -Pays <issue/PR> -Verdict PASS|FAIL|UNSURE
+-Observation '<the quoted line>' [-Evidence <png>]`, and anything surprising with
+`-Surprise '<text>'`. The script refuses a PASS with nothing quoted. Your last message is
+three lines (counts, the FAIL ids, where the crops are): `./scripts/qa-report.ps1` builds the
+report from what you recorded, so nobody re-types a table.
+
+Use only `qa-app.ps1` and `qa-ui.ps1`, `qa-netcut.ps1` and `qa-seed.ps1`, `kubectl` and the
+clipboard. Do not write your own user32 helpers; the earlier runs did, in four of eleven
+batches, for things `qa-ui.ps1` now does. If it cannot do something a check needs, that is an
+UNSURE with the reason and a `-Surprise`, which is how it gets added.
+
 ## Setup and teardown
 
 - Start: `./scripts/qa-app.ps1` (builds Debug, starts the app on an isolated profile
   against the local sandbox cluster; it refuses any non-local cluster). If it says an
   instance is already running, stop and report that — another check run owns the desktop.
+  The first `resize` right after the start can throw `SetWindowPos failed.`; wait five
+  seconds and repeat it.
 - Always finish with `./scripts/qa-app.ps1 -Stop`, including after a failure.
+- If `keys`, `click` or `screenshot` says the interactive desktop is not available, the VM's
+  console is locked: record the rest of the batch UNSURE with that reason and stop; nothing
+  you do from here unlocks it.
+- A check that needs the connection to the sandbox cut uses the `qa-cut` context and
+  `./scripts/qa-netcut.ps1 cut` / `restore`, never `netsh` (it needs elevation) and never
+  anything that touches the sandbox itself.
 
 ## Your hands and eyes: `./scripts/qa-ui.ps1`
 
@@ -61,6 +90,22 @@ line, not a screenshot** — "screenshot confirmed" is not an observation.
 Screenshot the element the check is about, not the window around it: a crop is cheaper and
 its details are read far more reliably. For a region with no element of its own, capture the
 nearest element that contains it.
+
+Real input beyond `click`: `click -Modifiers ctrl,shift` for a multi-select, `-OffsetX/-OffsetY` to
+aim at a point inside an element (the terminal, the YAML editor), `drag -DX -DY` (a splitter, a
+column edge, a selection), `wheel -Delta` (`-Horizontal`), `move -X -Y` for the window.
+`-Within <AutomationId>` limits a read to one container and is several times faster than a
+whole-window scan.
+
+What the tree cannot show, and what to use instead: the exec terminal's text and the YAML
+editor's text are not in it (clipboard: click in, Ctrl+A, Ctrl+C, `Get-Clipboard`; or a marker
+file written in the pod and read with `kubectl exec`); a row's selected state is not (the
+"N selected" text is); the namespace flyout's check boxes are not (`-OffsetX/-OffsetY`). The
+sidebar's kind rows and the flyout's rows need a real `click`; `select`/`invoke` report
+success and change nothing. Context-menu items are often named by their help text, so find
+them with `dump -Match`. `toggle` on a toggle button bypasses the app's own refusal; use a
+real click for a check about refusing. The description in a `click` result is read before the
+click, and the tab close buttons are `<unnamed>` in it; neither is a failure.
 
 To reach something, filter before you scroll. The sidebar's filter box (`Filter
 resources…`) and the list's search box (`RowFilterBox`) narrow what is on screen, and
@@ -92,7 +137,8 @@ outlasts a sensible timeout.
 
 ## Report
 
-A table: check, verdict, observation (quoted), evidence path. Then a short list of
-anything surprising you saw on the way that the checks did not ask about — the
+The verdicts and surprises you recorded with `qa-result.ps1` are the report. Anything
+surprising you saw on the way that the checks did not ask about goes in as a `-Surprise` — the
 accessibility tree often shows things a screenshot hides (for example, buttons whose
-accessible name is `<unnamed>`).
+accessible name is `<unnamed>`). Never open `qa-chatty`'s logs outside G-9: at the rate the
+first run gave it, UI Automation stopped answering for minutes.

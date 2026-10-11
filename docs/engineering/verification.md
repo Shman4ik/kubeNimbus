@@ -342,17 +342,26 @@ state — work a cheap model can do. So there is a third kind of check:
   OS input and move the user's pointer, so they are for checks that are *about* real
   input. The DevTools MCP would do this too, but it is not available on every
   subscription, and UIA needs nothing but Windows. Three gaps QA run 4 filled with
-  hand-written user32 calls are in the script since #291: `click` judges an element in a
-  popup (the log pane's ⋯ menu, a combo's drop-down) by the popup's own bounds rather than
-  refusing it as outside the main window; `resize -Width -Height` sets the window's outer
-  size in screen pixels for the narrow-width checks; and every UIA read is retried once on
-  the "Unexpected HRESULT" a streaming log provokes.
+  hand-written user32 calls are in the script since #291: `click` accepts an element in a
+  popup (the log pane's ⋯ menu, a combo's drop-down) that hangs past the main window's
+  edge; `resize -Width -Height` sets the window's outer size in screen pixels for the
+  narrow-width checks; and every UIA read is retried once on the "Unexpected HRESULT" a
+  streaming log provokes. The popup test of #291 did not work (UIA gives a popup no node of
+  its own); a point is now judged by which window Windows says is there. The 0.7.0 run added
+  `click -Modifiers`, `-OffsetX/-OffsetY`, `drag`, `wheel`, `move` and `-Within`, and a loud
+  error when the VM's console is locked and input would be dropped silently.
 - `kn-qa` (`.claude/agents/kn-qa.md`, Sonnet) takes a list of checks and returns PASS /
   FAIL / UNSURE, quoting what it observed. No Edit or Write tool, same reason as
   `kn-verifier`. Sonnet rather than Haiku by the owner's call: a false PASS is the one
   failure this agent must not have, and its cost outweighs the price difference. UNSURE
   is still the honest answer for anything that needs visual judgement; the orchestrating
   session looks at those itself.
+
+A full pre-release run is `scripts/qa-preflight.ps1`, `scripts/qa-seed.ps1`, one `kn-qa` per
+batch of [`docs/qa/desktop-checks.md`](../qa/desktop-checks.md), each recording its verdicts
+with `scripts/qa-result.ps1`, and `scripts/qa-report.ps1`; `scripts/qa-netcut.ps1` cuts and
+restores the connection for the dropped-watch checks without elevation. What the first full
+run cost and the rules that came out of it: [desktop-qa](desktop-qa.md).
 
 One instance at a time — one desktop, one pointer — so QA runs are never parallel, and
 they do not run in CI or the cloud (no desktop there). The accessibility tree is a

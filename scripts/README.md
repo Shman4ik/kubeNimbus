@@ -271,8 +271,22 @@ the local sandbox only — it refuses a kubeconfig whose server is not loopback 
 Automation (`dump`, `find`, `wait`, `invoke`, `set-text`, `click`, `double-click`, `keys`,
 `screenshot`, which captures one element cropped to its bounds); the header of the script
 lists every command. The `kn-qa` agent uses both.
-One instance at a time. `click`, `double-click`, `right-click` and `keys` move the real
-pointer and keyboard. See CLAUDE.md, "Checking the running app".
+One instance at a time. `click` (with `-Modifiers` and `-OffsetX/-OffsetY`), `double-click`,
+`right-click`, `drag`, `wheel` and `keys` move the real pointer and keyboard. See CLAUDE.md,
+"Checking the running app".
+
+A full pre-release run, from [`docs/qa/desktop-checks.md`](../docs/qa/desktop-checks.md), also uses:
+
+- `qa-preflight.ps1` — ten seconds, reads only: the QA flag, `kubectl`, the kubeconfig and the
+  sandbox port, whether the console is locked, the display scaling. Exit 1 if it cannot start.
+- `qa-seed.ps1` — `qa-shop` (a copy of the shop with its HPA pinned), the `qa-*` workloads,
+  the narrow-RBAC ServiceAccount and the contexts `qa-prod`, `qa-limited` and `qa-cut`.
+  Idempotent; `-Reset` undoes what a batch changed; `-Down` removes it.
+- `qa-netcut.ps1 start|cut|restore|stop` — a loopback forwarder (127.0.0.1:6560 to the
+  sandbox) that the `qa-cut` context points at; cutting it drops the app's connection with no
+  elevation and no touch on the sandbox.
+- `qa-result.ps1` and `qa-report.ps1` — an agent records each verdict as it reaches it (a PASS
+  must quote what it saw); the report, counts and failures are built from those records.
 
 ## Caveats
 

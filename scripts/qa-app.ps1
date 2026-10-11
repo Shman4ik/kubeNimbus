@@ -108,6 +108,11 @@ if (-not (Test-Path $exe)) { throw "No build at $exe." }
 $profileDir = Join-Path $stateDir ("profile-" + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 $env:KUBENIMBUS_PROFILE_DIR = $profileDir
 $env:KUBECONFIG = (Resolve-Path $Kubeconfig).Path
+# The app and every terminal it opens inherit this PATH. A session started before kubectl was
+# installed has no kubectl on it, and the 0.7.0 run's terminal checks answered "kubectl was
+# not found on this app's PATH" for that reason alone. Take the machine's and the user's
+# current PATH, as a new shell would.
+$env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + $env:Path
 $process = Start-Process -FilePath $exe -PassThru
 @{ Pid = $process.Id; Profile = $profileDir; Kubeconfig = $env:KUBECONFIG; Exe = $exe } |
     ConvertTo-Json | Set-Content $pidFile

@@ -26,8 +26,25 @@
     clamps to its own MinWidth.
 
     Elements in a popup (the log pane's ⋯ menu, a combo's drop-down, a context menu) are
-    their own top-level window and may hang past the main window's edge; `click` checks
-    them against the popup's bounds, not the main window's.
+    their own native window and may hang past the main window's edge. UI Automation does
+    not give them a node of their own (their parent is the main window), so a real click is
+    judged by asking Windows which window is at the point it would land on: it must be one
+    of this app's own windows. That also refuses a click that another application's window
+    would take.
+
+    More real input, for checks that need it and have no element to target:
+    - `click`/`double-click`/`right-click` take `-Modifiers ctrl,shift,alt` (held for the
+      click: Shift+click and Ctrl+click on a list) and `-OffsetX/-OffsetY` (a point
+      measured from the element's top-left instead of its centre: the terminal and the
+      YAML editor have no children to aim at, so name the pane that holds them).
+    - `drag -DX <px> -DY <px>` presses on the element (or its offset point), moves in
+      steps and releases: a column edge, the DockSplitter, a text selection.
+    - `wheel -Delta <notches>` turns the mouse wheel over the element (positive up);
+      `-Horizontal` for the horizontal wheel.
+    - `move -X <px> -Y <px>` puts the window's top-left there without resizing it.
+    Real input needs an unlocked interactive desktop. When the VM's console is on the lock
+    screen the OS drops the input and screenshots fail without a word, so those commands
+    check first and say so.
 
     UI Automation reads sometimes throw "Unexpected HRESULT" while the tree changes under
     them (a streaming log); every read is retried once on that error.
@@ -42,6 +59,8 @@
       -Match <text>        name contains text (case-insensitive)
       -Type <ControlType>  Button, Text, ListItem, Edit, DataItem, ... (narrows the above)
       -Index <n>           the n-th match (0-based), default 0
+      -Within <AutomationId>  search only inside that container (ResourceGrid, PaletteList,
+                           InspectorTabStrip, …): much faster than a whole-window scan
 
 .EXAMPLE
     ./scripts/qa-ui.ps1 dump -Match crashloop
@@ -57,11 +76,12 @@
 param(
     [Parameter(Position = 0, Mandatory)]
     [ValidateSet('dump', 'find', 'invoke', 'select', 'toggle', 'set-text', 'click', 'double-click',
-        'right-click', 'keys', 'wait', 'wait-gone', 'screenshot', 'window', 'resize')]
+        'right-click', 'drag', 'wheel', 'keys', 'wait', 'wait-gone', 'screenshot', 'window', 'resize', 'move')]
     [string]$Command,
     [string]$Id,
     [string]$Name,
     [string]$Match,
+    [string]$Within,
     [string]$Type,
     [int]$Index = 0,
     [string]$Text,
@@ -71,6 +91,15 @@ param(
     [int]$Max = 400,
     [int]$Width,
     [int]$Height,
+    [int]$X,
+    [int]$Y,
+    [int]$DX,
+    [int]$DY,
+    [int]$Delta,
+    [int]$OffsetX = [int]::MinValue,
+    [int]$OffsetY = [int]::MinValue,
+    [string]$Modifiers,
+    [switch]$Horizontal,
     [switch]$WholeWindow
 )
 
@@ -85,6 +114,12 @@ Add-Type -Namespace QaNative -Name Win32 -MemberDefinition @'
 [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
 [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);
 [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+[DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
+[DllImport("user32.dll")] public static extern uint MapVirtualKey(uint code, uint mapType);
+// POINT is passed by value as one 64-bit register on x64: y in the high half, x in the low.
+[DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(long point);
+[DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr hWnd, uint flags);
+[DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
 '@
 
 $A = [System.Windows.Automation.AutomationElement]
@@ -148,9 +183,19 @@ function Format-Element($element, [int]$number) {
 
 function Get-Matches {
     $window = Get-Window
+    $scope = $window
+    if ($Within) {
+        # A scan of the whole window walks every row of every grid and the sidebar's hundred
+        # kinds: 2.8 s for a `dump -Type ListItem` in the QA VM against 0.7 s inside
+        # SidebarItems (of which about half a second is starting pwsh). The container is
+        # found by the provider's own search, not by walking the tree here.
+        $byId = New-Object System.Windows.Automation.PropertyCondition($A::AutomationIdProperty, $Within)
+        $scope = Invoke-UiaRead { $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $byId) }
+        if (-not $scope) { return }
+    }
     $all = Invoke-UiaRead {
         # Read every element's name inside the retry too: the throw can come from either.
-        $found = $window.FindAll([System.Windows.Automation.TreeScope]::Descendants,
+        $found = $scope.FindAll([System.Windows.Automation.TreeScope]::Descendants,
             [System.Windows.Automation.Condition]::TrueCondition)
         foreach ($f in $found) { $null = $f.Current.Name }
         , @($found)
@@ -172,33 +217,36 @@ function Get-Target {
     Show-Element $found[$Index]
 }
 
-# The top-level surface an element is drawn on: the main window, or the popup (its own
-# HWND) that holds it. A menu or drop-down can hang past the main window's bottom edge, so
-# it is judged by the popup's bounds. Falls back to the main window.
-function Get-Surface($element, $window) {
-    $mainHandle = $window.Current.NativeWindowHandle
-    $walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
-    $node = $element
-    $root = [System.Windows.Automation.AutomationElement]::RootElement
-    while ($node -and -not [System.Windows.Automation.Automation]::Compare($node, $window) -and
-        -not [System.Windows.Automation.Automation]::Compare($node, $root)) {
-        $handle = $node.Current.NativeWindowHandle
-        if ($handle -ne 0 -and $handle -ne $mainHandle) { return $node }
-        $node = $walker.GetParent($node)
-    }
-    $window
+# Whether a real click at a screen point would land on one of this app's own windows.
+# A popup (the log pane's ⋯ menu, a combo's drop-down, a context menu) is a native window
+# of its own that can hang past the main window's edge, but UI Automation gives it no node
+# of its own: its items are children of the main window (found out in the 0.7.0 QA run,
+# where the earlier walk up to "the popup's HWND" never found one and refused a menu item
+# that was plainly on screen). So the main window's bounds cannot judge them, and Windows
+# is asked who is at the point instead. A point over the desktop or another application's
+# window is refused, which also catches an app that something else has covered.
+function Test-LandsOnApp([double]$x, [double]$y) {
+    $low = [BitConverter]::ToUInt32([BitConverter]::GetBytes([int]$x), 0)
+    $point = ([long][int]$y -shl 32) -bor [long]$low
+    $hwnd = [QaNative.Win32]::WindowFromPoint($point)
+    if ($hwnd -eq [IntPtr]::Zero) { return $false }
+    $top = [QaNative.Win32]::GetAncestor($hwnd, 2)   # GA_ROOT
+    if ($top -eq [IntPtr]::Zero) { $top = $hwnd }
+    $owner = [uint32]0
+    [QaNative.Win32]::GetWindowThreadProcessId($top, [ref]$owner) | Out-Null
+    $owner -eq $appPid
 }
 
 # An element scrolled out of its list is in the tree but has no usable bounds and cannot
 # be clicked. Scroll it into view first when its container supports that. (Items inside a
 # collapsed sidebar section are not realized at all — use a filter box to reach those.)
-function Test-InWindow($element) {
+function Test-InWindow($element, [double]$px = [double]::NaN, [double]$py = [double]::NaN) {
     $r = $element.Current.BoundingRectangle
     if ($r.IsEmpty) { return $false }
-    $x = $r.X + $r.Width / 2; $y = $r.Y + $r.Height / 2
+    $x = if ([double]::IsNaN($px)) { $r.X + $r.Width / 2 } else { $px }
+    $y = if ([double]::IsNaN($py)) { $r.Y + $r.Height / 2 } else { $py }
     $window = Get-Window
-    $w = (Get-Surface $element $window).Current.BoundingRectangle
-    if ($x -lt $w.Left -or $x -gt $w.Right -or $y -lt $w.Top -or $y -gt $w.Bottom) { return $false }
+    if (-not (Test-LandsOnApp $x $y)) { return $false }
 
     # Also inside the viewport of every scrolling ancestor: an item can be within the
     # window yet clipped by the sidebar's or a list's scroll viewer. AutomationElements
@@ -229,26 +277,96 @@ function Show-Element($element) {
     $element
 }
 
+# While the VM's console sits on the lock screen the OS accepts real input and screen
+# captures and does nothing with them: SendKeys throws "The operation completed
+# successfully", CopyFromScreen "The handle is invalid", and a click reports success. The
+# 0.7.0 run lost most of a batch to that. Say so instead.
+function Assert-InputDesktop {
+    try {
+        $bitmap = New-Object System.Drawing.Bitmap 1, 1
+        $g = [System.Drawing.Graphics]::FromImage($bitmap)
+        $g.CopyFromScreen(0, 0, 0, 0, $bitmap.Size)
+        $g.Dispose(); $bitmap.Dispose()
+    } catch {
+        throw 'The interactive desktop is not available (the console is locked or disconnected): real input and screenshots would silently do nothing. Ask the owner to unlock the VM, and turn off its lock screen timeout.'
+    }
+}
+
 function Show-Window {
+    Assert-InputDesktop
     $hwnd = [IntPtr](Get-Process -Id $appPid).MainWindowHandle
     [QaNative.Win32]::ShowWindow($hwnd, 9) | Out-Null   # SW_RESTORE
     [QaNative.Win32]::SetForegroundWindow($hwnd) | Out-Null
     Start-Sleep -Milliseconds 200
 }
 
-function Send-Click($element, [int]$count, [bool]$right) {
-    Show-Window
+# Where a real click lands: the element's centre, or -OffsetX/-OffsetY from its top-left
+# (either one alone keeps the other at the centre).
+function Get-ClickPoint($element) {
     $r = $element.Current.BoundingRectangle
-    if (-not (Test-InWindow $element)) {
-        throw "The element is outside its window or popup ($($r.X),$($r.Y)) — a real click would land elsewhere. Filter the list to bring it into view."
+    $ox = if ($OffsetX -ne [int]::MinValue) { $OffsetX } else { $r.Width / 2 }
+    $oy = if ($OffsetY -ne [int]::MinValue) { $OffsetY } else { $r.Height / 2 }
+    [int]($r.X + $ox), [int]($r.Y + $oy)
+}
+
+# Holds or releases -Modifiers (ctrl, shift, alt) with real key events; scan codes are sent
+# because a console or terminal reads those and ignores a bare virtual key.
+function Set-Modifiers([bool]$down) {
+    if (-not $Modifiers) { return }
+    $map = @{ ctrl = 0x11; shift = 0x10; alt = 0x12 }
+    foreach ($m in ($Modifiers -split ',' | ForEach-Object { $_.Trim().ToLowerInvariant() } | Where-Object { $_ })) {
+        if (-not $map.ContainsKey($m)) { throw "Unknown modifier '$m'; use ctrl, shift or alt." }
+        $vk = [byte]$map[$m]
+        $scan = [byte][QaNative.Win32]::MapVirtualKey([uint32]$vk, 0)
+        [QaNative.Win32]::keybd_event($vk, $scan, $(if ($down) { 0 } else { 2 }), [UIntPtr]::Zero)
     }
-    [QaNative.Win32]::SetCursorPos([int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2)) | Out-Null
+}
+
+function Move-PointerTo($element) {
+    Show-Window
+    $px, $py = Get-ClickPoint $element
+    if (-not (Test-InWindow $element $px $py)) {
+        $r = $element.Current.BoundingRectangle
+        throw "The point ($px,$py) is not on one of the app's windows (element at $($r.X),$($r.Y)) — a real click would land elsewhere. Filter the list to bring it into view."
+    }
+    [QaNative.Win32]::SetCursorPos($px, $py) | Out-Null
+    $px, $py
+}
+
+function Send-Click($element, [int]$count, [bool]$right) {
+    $null = Move-PointerTo $element
     $down, $up = if ($right) { 0x0008, 0x0010 } else { 0x0002, 0x0004 }
-    for ($i = 0; $i -lt $count; $i++) {
-        [QaNative.Win32]::mouse_event($down, 0, 0, 0, [UIntPtr]::Zero)
-        [QaNative.Win32]::mouse_event($up, 0, 0, 0, [UIntPtr]::Zero)
-        Start-Sleep -Milliseconds 60
-    }
+    Set-Modifiers $true
+    try {
+        for ($i = 0; $i -lt $count; $i++) {
+            [QaNative.Win32]::mouse_event($down, 0, 0, 0, [UIntPtr]::Zero)
+            [QaNative.Win32]::mouse_event($up, 0, 0, 0, [UIntPtr]::Zero)
+            Start-Sleep -Milliseconds 60
+        }
+    } finally { Set-Modifiers $false }
+}
+
+# Press, move in ten steps, release: enough for a column edge, a splitter or a selection.
+function Send-Drag($element, [int]$dx, [int]$dy) {
+    $px, $py = Move-PointerTo $element
+    Set-Modifiers $true
+    try {
+        [QaNative.Win32]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
+        Start-Sleep -Milliseconds 80
+        for ($i = 1; $i -le 10; $i++) {
+            [QaNative.Win32]::SetCursorPos([int]($px + $dx * $i / 10), [int]($py + $dy * $i / 10)) | Out-Null
+            Start-Sleep -Milliseconds 30
+        }
+        [QaNative.Win32]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
+    } finally { Set-Modifiers $false }
+}
+
+function Send-Wheel($element, [int]$notches, [bool]$horizontal) {
+    $null = Move-PointerTo $element
+    $flag = if ($horizontal) { 0x01000 } else { 0x0800 }   # MOUSEEVENTF_HWHEEL / _WHEEL
+    $data = [BitConverter]::ToUInt32([BitConverter]::GetBytes([int]($notches * 120)), 0)
+    [QaNative.Win32]::mouse_event($flag, 0, 0, $data, [UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 100
 }
 
 switch ($Command) {
@@ -298,9 +416,29 @@ switch ($Command) {
         $e.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($Text)
         "text set: $(Format-Element $e 0)"
     }
-    'click' { $e = Get-Target; Send-Click $e 1 $false; "clicked (real mouse): $(Format-Element $e 0)" }
-    'double-click' { $e = Get-Target; Send-Click $e 2 $false; "double-clicked (real mouse): $(Format-Element $e 0)" }
-    'right-click' { $e = Get-Target; Send-Click $e 1 $true; "right-clicked (real mouse): $(Format-Element $e 0)" }
+    # The element is described before the input is sent: the click usually closes or
+    # rebuilds what it hit, and a description read afterwards shows a half-gone element
+    # ("disabled, offscreen") that sent several 0.7.0 runs looking for a failure.
+    'click' { $e = Get-Target; $before = Format-Element $e 0; Send-Click $e 1 $false; "clicked (real mouse): $before" }
+    'double-click' { $e = Get-Target; $before = Format-Element $e 0; Send-Click $e 2 $false; "double-clicked (real mouse): $before" }
+    'right-click' { $e = Get-Target; $before = Format-Element $e 0; Send-Click $e 1 $true; "right-clicked (real mouse): $before" }
+    'drag' {
+        if (-not ($PSBoundParameters.ContainsKey('DX') -or $PSBoundParameters.ContainsKey('DY'))) { throw 'Pass -DX and/or -DY, the distance to drag in screen pixels.' }
+        $e = Get-Target; $before = Format-Element $e 0; Send-Drag $e $DX $DY; "dragged by $DX,$DY (real mouse): $before"
+    }
+    'wheel' {
+        if ($Delta -eq 0) { throw 'Pass -Delta, the wheel notches (positive up/left, negative down/right).' }
+        $e = Get-Target; $before = Format-Element $e 0; Send-Wheel $e $Delta $Horizontal.IsPresent; "wheel $Delta (real mouse): $before"
+    }
+    'move' {
+        if (-not ($PSBoundParameters.ContainsKey('X') -and $PSBoundParameters.ContainsKey('Y'))) { throw 'Pass -X and -Y in screen pixels.' }
+        $hwnd = [IntPtr](Get-Process -Id $appPid).MainWindowHandle
+        [QaNative.Win32]::ShowWindow($hwnd, 9) | Out-Null
+        # SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE
+        if (-not [QaNative.Win32]::SetWindowPos($hwnd, [IntPtr]::Zero, $X, $Y, 0, 0, 0x0001 -bor 0x0004 -bor 0x0010)) { throw 'SetWindowPos failed.' }
+        Start-Sleep -Milliseconds 300
+        "moved: $(Format-Element (Get-Window) 0)"
+    }
     'resize' {
         if ($Width -le 0 -or $Height -le 0) { throw 'Pass -Width and -Height in screen pixels.' }
         $hwnd = [IntPtr](Get-Process -Id $appPid).MainWindowHandle

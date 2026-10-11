@@ -62,4 +62,5 @@ its page.
 - [The AOT watch/log implementation, discovery, apply, exec and port-forward](aot-watch-and-discovery.md) — the hand-rolled watch, exec-plugin failures, JSON depth and line caps, 401 refresh, batching, discovery and its cache.
 - [Sandbox cluster bootstrap](sandbox-cluster.md) — the reachability gate, skipped-not-passed, the live tests' four rules, the sandbox scripts and manifests.
 - [Verification workflow](verification.md) — the commands and their traps, view-model tests, the launch check, the MSVC recipe, kn-qa, the screenshot harness, the stress mode.
+- [Desktop QA](desktop-qa.md) — a full pre-release run in the QA VM: what the 0.7.0 run cost and why, the preflight, seed, netcut and report scripts, the six rules.
 - [Repository layout](repository-layout.md) — the OSS Scanner image and the public docs table.
