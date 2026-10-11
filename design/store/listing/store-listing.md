@@ -42,7 +42,7 @@ data-collection answers stay as they are (no data is collected).
 ## What's new in this version
 
 ```text
-0.7: Work on several things at once. Choose several namespaces in either list, select several resources and delete them with one confirm, and pick the columns each kind shows. Paste a manifest into "New resource from YAML". Port-forwards keep running after their tab closes, and a Service can be forwarded to a ready pod behind it.
+0.7: Work on several things at once. Choose several namespaces in either list, select several resources and delete them with one confirm, and pick the columns each kind shows. Paste a manifest into "New resource from YAML". Port-forwards keep running after their dock tab closes, and a Service can be forwarded to a ready pod behind it.
 
 Argo CD: terminate a running sync, open ApplicationSets and AppProjects, and see every connected cluster's applications in one dashboard. Syncs now carry the application's own sync options.
 
@@ -76,7 +76,7 @@ What it does
 • A real terminal for exec: vi, top and mc draw properly, and Ctrl+C reaches the container.
 • Port-forward, with the local address one click from being opened.
 • YAML editing with server-side apply, strict field validation and a dry-run preview that asks the API server what a change would do before it does it.
-• Scale, rollout restart, delete, cordon and drain. Whatever deletes, disrupts or cannot be undone is armed and named before it fires, never on the click that started it.
+• Scale, rollout restart, delete, cordon and drain. A restart, a drain and a delete are armed and named before they fire, and a delete on a production cluster always asks; elsewhere you can turn the delete confirm off. Scale asks for the new count first.
 • Service, Ingress and NetworkPolicy panes that state, in words, whether traffic can reach the pods.
 • Node detail with allocatable-versus-requested headroom, events and measured usage.
 • Helm releases read straight off the cluster, no Helm binary needed. Argo CD sync and refresh, with no second sign-in.
@@ -103,7 +103,7 @@ Live pod logs: search, regex, level filters, error jump
 All of a workload's pods in one merged log stream
 A real terminal in the container (vi, top and mc work)
 YAML editing with server-side apply and dry-run preview
-Scale, restart, delete and drain, always confirmed
+Scale, restart, delete and drain; production deletes always ask
 Service, Ingress and NetworkPolicy panes in plain words
 Argo CD sync and Helm releases, read from the cluster
 RBAC access review: what can I do, who can do X

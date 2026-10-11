@@ -36,10 +36,9 @@ it as the GitHub Release body, so headings must match tags exactly
 - **The Helm release browser and the Argo CD dashboard sort by any column.** Helm releases by
   revision, status or update time; Argo applications by sync or health, worst first. The Helm
   browser now opens in namespace and name order.
-
-- **Port-forwards outlive their tab.** A running forward keeps listening when its tab is
-  closed; the status bar counts running forwards, and a Port-forwards list (from the status bar
-  or the palette) reopens or stops each one. Closing a cluster tab stops that cluster's forwards
+- **Port-forwards outlive their dock tab.** A running forward keeps listening when its dock
+  tab is closed; the status bar counts running forwards, and a Port-forwards list (from the
+  status bar or the palette) reopens or stops each one. Closing a cluster tab stops that cluster's forwards
   and says so.
 - **Port-forward a Service.** From the Service pane or the palette, to a ready pod behind it that
   the pane names; when that pod goes, the next connection moves to another ready pod and the pane
@@ -172,7 +171,6 @@ it as the GitHub Release body, so headings must match tags exactly
   sideways instead of wrapping. Moving along its tabs with the arrow keys keeps the focus ring
   on the tab reached, and dragging the dock's splitter no longer takes keyboard focus away from
   the exec terminal.
-- The word "to" before the scale strip's replica box sits on the number's baseline.
 - The YAML editor and the apply preview's diff use LF line ends on Windows too.
 
 ### Security
