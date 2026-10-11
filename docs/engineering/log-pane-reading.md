@@ -154,8 +154,18 @@ Wrap, Clear and Save — is in the `⋯` menu beside Copy, in both panes. The ba
 ten in one row of mixed icons and words, which read as noise at the moment someone is scanning
 it for Previous. Copy stays out because it is the one gesture that gets a log into a bug report;
 the three display toggles went in because they are set once and remembered (below). They are
-CheckBoxes with a two-way `IsChecked` and no Command (UI rule 8b), and Clear and Save close the
-menu as they run (`OnLogMenuActionClick`), which a `Flyout` does not do for a Button inside it.
+CheckBoxes with a two-way `IsChecked` and no Command (UI rule 8b), and Copy, Clear and Save close
+the menu as they run (`OnLogMenuActionClick`), which a `Flyout` does not do for a Button inside it.
+**The hide is posted, never called in the Click handler** (#288). Hiding a flyout takes its
+content out of the logical tree, and a `Button` reads its `Command` only after its `Click` event
+has run; hidden synchronously, the item's `{Binding CopyLogsCommand}` had already lost its
+DataContext, so the menu's Copy wrote nothing to the clipboard (and Clear and Save did nothing).
+The harness's `ux-log-menu-copy-pod` opens ⋯ with a click at 960px, clicks Copy on the popup and
+compares the clipboard with what the bar's Copy writes; with the hide made synchronous again it
+reports "The ⋯ menu's Copy wrote nothing to the clipboard". The log view models reach the window
+through `MainWindowAccess`, whose `Override` is how the harness, which cannot replace the
+application lifetime, gives them one. The Range combo's tooltip mentions the demo only on the demo
+cluster (`LogRange.Tooltip`, #290), where it is disabled; on a real cluster it says what the range is.
 
 **At a narrow window the bar gives way rather than running off the pane (ENG-51).** Pod
 detail's bar shares its row with the five-tab strip, and below about 1150px the right-hand end

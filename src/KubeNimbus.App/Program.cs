@@ -36,8 +36,8 @@ internal static class Program
     internal const string ProfileVariable = "KUBENIMBUS_PROFILE_DIR";
 
     /// <summary>
-    /// With <c>KUBENIMBUS_PROFILE_DIR</c> set, the app reads and writes its settings and
-    /// workspace in that directory, and searches <em>only</em> the files named in
+    /// With <c>KUBENIMBUS_PROFILE_DIR</c> set, the app reads and writes its settings,
+    /// workspace, terminal overlays and discovery cache in that directory, and searches <em>only</em> the files named in
     /// <c>$KUBECONFIG</c> — never <c>~/.kube/config</c>. It exists for agents driving a
     /// running build (<c>scripts/qa-app.ps1</c>, the <c>kn-qa</c> agent): without it a
     /// launched Debug build restores the developer's own tabs and lists their real
@@ -54,8 +54,12 @@ internal static class Program
         }
 
         Directory.CreateDirectory(directory);
-        AppSettingsStore.DirectoryOverride = directory;
-        WorkspaceStore.DirectoryOverride = directory;
+
+        // Every file under the app-data directories follows, not only the two stores:
+        // the terminal overlays and hand-off scripts, and the discovery cache (#289).
+        AppDataDirectory.ProfileOverride = directory;
+        AppSettingsStore.DirectoryOverride = AppDataDirectory.ProfileOverride;
+        WorkspaceStore.DirectoryOverride = AppDataDirectory.ProfileOverride;
         Kubeconfig.EnvironmentSearchOverride =
             (Environment.GetEnvironmentVariable("KUBECONFIG") ?? "")
             .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);

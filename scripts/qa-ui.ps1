@@ -20,6 +20,18 @@
     Runs only inside the owner's Hyper-V QA VM (KUBENIMBUS_QA_VM=1), never on the owner's
     own desktop; see qa-app.ps1.
 
+    `resize -Width <px> -Height <px>` restores the window and sets its outer size in screen
+    pixels (what Windows reports, so at 150% scaling a 960-DIP window is 1440 wide). It
+    prints the bounds UI Automation reads back afterwards, which is what to check: the app
+    clamps to its own MinWidth.
+
+    Elements in a popup (the log pane's ⋯ menu, a combo's drop-down, a context menu) are
+    their own top-level window and may hang past the main window's edge; `click` checks
+    them against the popup's bounds, not the main window's.
+
+    UI Automation reads sometimes throw "Unexpected HRESULT" while the tree changes under
+    them (a streaming log); every read is retried once on that error.
+
     `screenshot` captures one element, cropped to its bounds, so a check reads the region
     it is about and not a whole window. -WholeWindow captures the app's window instead;
     it never captures the desktop.
@@ -38,13 +50,14 @@
     ./scripts/qa-ui.ps1 wait -Match "Crash-looping" -Timeout 20
     ./scripts/qa-ui.ps1 double-click -Match "crashloop-" -Type DataItem
     ./scripts/qa-ui.ps1 keys -Keys "{ESC}"
+    ./scripts/qa-ui.ps1 resize -Width 960 -Height 720
     ./scripts/qa-ui.ps1 screenshot -Id RowFilterBox -Out $env:TEMP/qa/step1.png
 #>
 [CmdletBinding()]
 param(
     [Parameter(Position = 0, Mandatory)]
     [ValidateSet('dump', 'find', 'invoke', 'select', 'toggle', 'set-text', 'click', 'double-click',
-        'right-click', 'keys', 'wait', 'wait-gone', 'screenshot', 'window')]
+        'right-click', 'keys', 'wait', 'wait-gone', 'screenshot', 'window', 'resize')]
     [string]$Command,
     [string]$Id,
     [string]$Name,
@@ -56,6 +69,8 @@ param(
     [string]$Out,
     [int]$Timeout = 10,
     [int]$Max = 400,
+    [int]$Width,
+    [int]$Height,
     [switch]$WholeWindow
 )
 
@@ -69,6 +84,7 @@ Add-Type -Namespace QaNative -Name Win32 -MemberDefinition @'
 [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
 [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);
+[DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
 '@
 
 $A = [System.Windows.Automation.AutomationElement]
@@ -76,9 +92,26 @@ $pidFile = Join-Path ([IO.Path]::GetTempPath()) 'kubenimbus-qa/app.pid'
 if (-not (Test-Path $pidFile)) { throw 'No QA instance. Start one: ./scripts/qa-app.ps1' }
 $appPid = [int](Get-Content $pidFile -Raw | ConvertFrom-Json).Pid
 
+# A UIA read can throw "Unexpected HRESULT" (a COMException, or an
+# ElementNotAvailableException) while the tree changes under it, typically while a log
+# streams. One retry after a short pause has been enough; a second failure is real.
+function Invoke-UiaRead([scriptblock]$read) {
+    try { & $read }
+    catch {
+        $ex = $_.Exception
+        $transient = $ex -is [System.Runtime.InteropServices.COMException] -or
+            $ex -is [System.Windows.Automation.ElementNotAvailableException] -or
+            $ex.Message -like '*Unexpected HRESULT*' -or
+            ($ex.InnerException -and $ex.InnerException.Message -like '*Unexpected HRESULT*')
+        if (-not $transient) { throw }
+        Start-Sleep -Milliseconds 250
+        & $read
+    }
+}
+
 function Get-Window {
     $cond = New-Object System.Windows.Automation.PropertyCondition($A::ProcessIdProperty, $appPid)
-    $window = $A::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Children, $cond)
+    $window = Invoke-UiaRead { $A::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Children, $cond) }
     if (-not $window) { throw "kubeNimbus (pid $appPid) has no window. Is it still running?" }
     $window
 }
@@ -114,8 +147,14 @@ function Format-Element($element, [int]$number) {
 }
 
 function Get-Matches {
-    $all = (Get-Window).FindAll([System.Windows.Automation.TreeScope]::Descendants,
-        [System.Windows.Automation.Condition]::TrueCondition)
+    $window = Get-Window
+    $all = Invoke-UiaRead {
+        # Read every element's name inside the retry too: the throw can come from either.
+        $found = $window.FindAll([System.Windows.Automation.TreeScope]::Descendants,
+            [System.Windows.Automation.Condition]::TrueCondition)
+        foreach ($f in $found) { $null = $f.Current.Name }
+        , @($found)
+    }
     foreach ($e in $all) {
         $c = $e.Current
         if ($Id -and $c.AutomationId -ne $Id) { continue }
@@ -133,6 +172,23 @@ function Get-Target {
     Show-Element $found[$Index]
 }
 
+# The top-level surface an element is drawn on: the main window, or the popup (its own
+# HWND) that holds it. A menu or drop-down can hang past the main window's bottom edge, so
+# it is judged by the popup's bounds. Falls back to the main window.
+function Get-Surface($element, $window) {
+    $mainHandle = $window.Current.NativeWindowHandle
+    $walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+    $node = $element
+    $root = [System.Windows.Automation.AutomationElement]::RootElement
+    while ($node -and -not [System.Windows.Automation.Automation]::Compare($node, $window) -and
+        -not [System.Windows.Automation.Automation]::Compare($node, $root)) {
+        $handle = $node.Current.NativeWindowHandle
+        if ($handle -ne 0 -and $handle -ne $mainHandle) { return $node }
+        $node = $walker.GetParent($node)
+    }
+    $window
+}
+
 # An element scrolled out of its list is in the tree but has no usable bounds and cannot
 # be clicked. Scroll it into view first when its container supports that. (Items inside a
 # collapsed sidebar section are not realized at all — use a filter box to reach those.)
@@ -141,7 +197,7 @@ function Test-InWindow($element) {
     if ($r.IsEmpty) { return $false }
     $x = $r.X + $r.Width / 2; $y = $r.Y + $r.Height / 2
     $window = Get-Window
-    $w = $window.Current.BoundingRectangle
+    $w = (Get-Surface $element $window).Current.BoundingRectangle
     if ($x -lt $w.Left -or $x -gt $w.Right -or $y -lt $w.Top -or $y -gt $w.Bottom) { return $false }
 
     # Also inside the viewport of every scrolling ancestor: an item can be within the
@@ -184,7 +240,7 @@ function Send-Click($element, [int]$count, [bool]$right) {
     Show-Window
     $r = $element.Current.BoundingRectangle
     if (-not (Test-InWindow $element)) {
-        throw "The element is outside the window ($($r.X),$($r.Y)) — a real click would land elsewhere. Filter the list to bring it into view."
+        throw "The element is outside its window or popup ($($r.X),$($r.Y)) — a real click would land elsewhere. Filter the list to bring it into view."
     }
     [QaNative.Win32]::SetCursorPos([int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2)) | Out-Null
     $down, $up = if ($right) { 0x0008, 0x0010 } else { 0x0002, 0x0004 }
@@ -245,6 +301,17 @@ switch ($Command) {
     'click' { $e = Get-Target; Send-Click $e 1 $false; "clicked (real mouse): $(Format-Element $e 0)" }
     'double-click' { $e = Get-Target; Send-Click $e 2 $false; "double-clicked (real mouse): $(Format-Element $e 0)" }
     'right-click' { $e = Get-Target; Send-Click $e 1 $true; "right-clicked (real mouse): $(Format-Element $e 0)" }
+    'resize' {
+        if ($Width -le 0 -or $Height -le 0) { throw 'Pass -Width and -Height in screen pixels.' }
+        $hwnd = [IntPtr](Get-Process -Id $appPid).MainWindowHandle
+        [QaNative.Win32]::ShowWindow($hwnd, 9) | Out-Null   # SW_RESTORE: a maximized window keeps its size
+        # SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE
+        if (-not [QaNative.Win32]::SetWindowPos($hwnd, [IntPtr]::Zero, 0, 0, $Width, $Height, 0x0002 -bor 0x0004 -bor 0x0010)) {
+            throw 'SetWindowPos failed.'
+        }
+        Start-Sleep -Milliseconds 300
+        "resized: $(Format-Element (Get-Window) 0)"
+    }
     'keys' {
         if (-not $Keys) { throw 'Pass -Keys in SendKeys syntax: {ENTER}, {ESC}, ^k, +l, l.' }
         Show-Window

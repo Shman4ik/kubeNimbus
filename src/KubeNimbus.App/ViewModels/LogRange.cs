@@ -13,6 +13,16 @@ public sealed record LogRange(string Label, int? TailLines = null, int? SinceSec
     public static IReadOnlyList<LogRange> Choices { get; } =
         [Last200, Last1000, FiveMinutes, OneHour, OneDay, Everything];
 
+    /// <summary>
+    /// The Range combo's tooltip. The demo is mentioned only on the demo cluster, where the
+    /// combo is disabled because its streams are canned; on a real cluster it is enabled and the
+    /// demo has nothing to do with it (#290 — it used to say "unavailable for canned demo streams"
+    /// everywhere).
+    /// </summary>
+    public static string Tooltip(bool isDemo) => isDemo
+        ? "Log range (unavailable for canned demo streams)"
+        : "How far back the log is read: a number of lines, a time window, or everything the node kept";
+
     /// <summary>Multi-pod backfill shares one pane cap; each pod gets its share of a line range.</summary>
     public int? TailForPod(int bufferLines, int podCount) => TailLines is { } requested
         ? Math.Min(requested, Math.Max(WorkloadLogsTabViewModel.MinPerPodTailLines, bufferLines / Math.Max(1, podCount)))

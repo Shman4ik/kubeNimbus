@@ -87,6 +87,26 @@ public class TerminalHandoffPlanTests
         await Assert.That(candidates[0].ResolvedPath).IsNull();
         await Assert.That(TerminalLauncher.TriedLabels(candidates)[0]).Contains("default terminal application");
     }
+    /// <summary>
+    /// #290: a refused or missing preference is marked as the preference and has a reason the
+    /// launch reports beside the fallback that opened — the setting and <c>$TERMINAL</c> both,
+    /// and nothing that was only on the built-in list.
+    /// </summary>
+    [Test]
+    public async Task APassedOverPreferenceIsMarkedAndHasItsReason()
+    {
+        var lookup = new TerminalLookup("", null, null, Windows: true);
+        var candidates = TerminalLauncher.Plan(
+            TerminalHostPlatform.Windows, "c", Home, State, preferredTerminal: "alacritty",
+            configuredTerminal: "wt", lookup: lookup).Candidates;
+
+        await Assert.That(candidates[0].IsPreference).IsTrue();
+        await Assert.That(TerminalLauncher.PassedOverReason(candidates[0])).Contains("default terminal application");
+        await Assert.That(candidates[1].IsPreference).IsTrue();
+        await Assert.That(candidates[1].Label).IsEqualTo("$TERMINAL (alacritty)");
+        await Assert.That(TerminalLauncher.PassedOverReason(candidates[1])).IsEqualTo("not found");
+        await Assert.That(candidates.Skip(2).Any(c => c.IsPreference)).IsFalse();
+    }
 
     /// <summary>
     /// A preferred shell that is PowerShell gets the command; any other is refused for a

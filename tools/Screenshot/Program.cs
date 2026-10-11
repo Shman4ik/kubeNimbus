@@ -425,6 +425,10 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("ux-leave-exec-terminal", () => HostInMainWindow(ClusterTabScenarios.Exec())),
     // #267: a copy trims the blank cells at the end of each line (KeyboardChecks.ExecCopy).
     ("ux-exec-copy", () => HostInMainWindow(ClusterTabScenarios.Exec())),
+    // #265: Ctrl+Shift+C pressed as a keyboard sends it, after Select all and after a drag (ClipboardChecks).
+    ("ux-exec-copy-keys", () => HostInMainWindow(ClusterTabScenarios.Exec())),
+    // #288: the log pane's ⋯ menu Copy, at the width that moves Copy into the menu (ClipboardChecks).
+    ("ux-log-menu-copy-pod", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetail(), height: 1000, width: 960)),
     ("cluster-tab-exec-paste-confirm", () => HostInMainWindow(ClusterTabScenarios.ExecPasteArmed())),
     // URLs and e-mail addresses in YAML are drawn as text, not AvaloniaEdit's blue links (EditorChecks).
     ("ux-yaml-editor-links", () => HostInMainWindow(ClusterTabScenarios.YamlEditor())),
@@ -561,6 +565,7 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     if (name == "ux-keyboard-walk") KeyboardChecks.KeyboardWalk(window);
     if (name is "ux-leave-yaml-editor" or "ux-leave-exec-terminal") KeyboardChecks.LeaveEditorKeys(window);
     if (name == "ux-exec-copy") KeyboardChecks.ExecCopy(window);
+    if (name == "ux-exec-copy-keys") ClipboardChecks.ExecCopyRealKeys(window);
     if (name == "cluster-tab-exec") LayoutChecks.ExecHasNoStatusDot(window);
     if (name == "main-window-switcher") LayoutChecks.SwitcherPinsOnlyWhereUsed(window);
     if (name == "ux-log-search-keys") KeyboardChecks.LogSearchKeys(window);
@@ -589,6 +594,9 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
 
     // After the settle too: the error and warning counts join the log bar once lines arrive.
     if (name.StartsWith("ux-log-bar-", StringComparison.Ordinal)) LayoutChecks.LogBarFits(window);
+
+    // After the settle as well: Copy moves into the ⋯ menu only once the counts have widened the bar.
+    if (name == "ux-log-menu-copy-pod") ClipboardChecks.LogMenuCopy(window);
 
     // Every scenario, once: the pointer over each tooltip has to reach its element
     // (DESIGN.md rule 21). Reported together after the last scenario.

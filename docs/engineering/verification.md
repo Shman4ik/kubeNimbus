@@ -283,8 +283,13 @@ state — work a cheap model can do. So there is a third kind of check:
 
 - `scripts/qa-app.ps1` starts a Debug build on an **isolated profile** and against the
   local sandbox only, and `-Stop` ends it. `KUBENIMBUS_PROFILE_DIR` (read in
-  `Program.ApplyIsolatedProfile`) points settings and workspace at a fresh directory
-  and restricts the kubeconfig search to `$KUBECONFIG` alone. Without it a launched
+  `Program.ApplyIsolatedProfile`) points every file the app writes for itself at a fresh
+  directory — settings, workspace, the terminal overlays and hand-off scripts, the discovery
+  cache, through `AppDataDirectory.ProfileOverride` — and restricts the kubeconfig search to
+  `$KUBECONFIG` alone. It used to cover only the settings and workspace stores, and a QA
+  run's "Open a terminal on this cluster" wrote its overlay into the developer's real
+  `%APPDATA%\kubeNimbus\terminal` (#289; `AppDataDirectoryTests` sets the override, opens a
+  terminal hand-off and finds every written file inside it). Without it a launched
   Debug build restores the developer's own tabs and lists their real contexts, and an
   automated check that presses Delete or Drain would press it wherever the developer
   last was. The script also refuses any kubeconfig whose `server:` is not loopback.
@@ -294,7 +299,12 @@ state — work a cheap model can do. So there is a third kind of check:
   `set-text`) do not touch the mouse; `click`/`double-click`/`right-click`/`keys` are real
   OS input and move the user's pointer, so they are for checks that are *about* real
   input. The DevTools MCP would do this too, but it is not available on every
-  subscription, and UIA needs nothing but Windows.
+  subscription, and UIA needs nothing but Windows. Three gaps QA run 4 filled with
+  hand-written user32 calls are in the script since #291: `click` judges an element in a
+  popup (the log pane's ⋯ menu, a combo's drop-down) by the popup's own bounds rather than
+  refusing it as outside the main window; `resize -Width -Height` sets the window's outer
+  size in screen pixels for the narrow-width checks; and every UIA read is retried once on
+  the "Unexpected HRESULT" a streaming log provokes.
 - `kn-qa` (`.claude/agents/kn-qa.md`, Sonnet) takes a list of checks and returns PASS /
   FAIL / UNSURE, quoting what it observed. No Edit or Write tool, same reason as
   `kn-verifier`. Sonnet rather than Haiku by the owner's call: a false PASS is the one

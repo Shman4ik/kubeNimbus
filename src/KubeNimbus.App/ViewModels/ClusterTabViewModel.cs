@@ -3760,14 +3760,30 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 $"Opened {result.TerminalLabel} on {result.ContextName}, but kubectl was not found on this app's "
                 + "PATH. KUBECONFIG and the context are set either way, so kubectl, helm, k9s and anything else "
                 + "that reads a kubeconfig will use this cluster — a GUI often sees a shorter PATH than your "
-                + "shell does, so it may well be there.",
+                + "shell does, so it may well be there."
+                + PassedOverSentence(result),
                 true, false),
 
             _ => (
                 $"Opened {result.TerminalLabel} on {result.ContextName}. KUBECONFIG={result.KubeconfigValue} — "
-                + "your own kubeconfig is merged in unchanged, the context is pinned in the first file.",
-                false, false),
+                + "your own kubeconfig is merged in unchanged, the context is pinned in the first file."
+                + PassedOverSentence(result),
+                result.PassedOver.Count > 0, false),
         };
+    }
+
+    /// <summary>
+    /// The preferred terminal that was not used, and why, after a fallback opened (#290). The
+    /// preferences page says Windows Terminal is refused with its reason; without this sentence
+    /// the default PowerShell opened and the notice said nothing about the preference at all.
+    /// Empty when the preference opened or none was set.
+    /// </summary>
+    public static string PassedOverSentence(TerminalLaunchResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        return result.PassedOver.Count == 0
+            ? ""
+            : $" Your preferred terminal was not used — {string.Join("; ", result.PassedOver)}.";
     }
 
     /// <summary>

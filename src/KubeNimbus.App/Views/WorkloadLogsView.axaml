@@ -150,7 +150,7 @@
         <ComboBox Width="132" MinHeight="27" FontSize="11" Margin="0,0,4,0"
                   ItemsSource="{Binding LogRanges}" SelectedItem="{Binding SelectedLogRange}"
                   IsEnabled="{Binding !IsDemo}"
-                  ToolTip.Tip="Log range (unavailable for canned demo streams)">
+                  ToolTip.Tip="{Binding LogRangeTooltip}">
           <ComboBox.ItemTemplate>
             <DataTemplate x:DataType="vm:LogRange">
               <TextBlock Text="{Binding Label}" />
@@ -208,7 +208,7 @@
                   <ComboBox HorizontalAlignment="Stretch" MinHeight="27" FontSize="11"
                             ItemsSource="{Binding LogRanges}" SelectedItem="{Binding SelectedLogRange}"
                             IsEnabled="{Binding !IsDemo}"
-                            ToolTip.Tip="Log range (unavailable for canned demo streams)">
+                            ToolTip.Tip="{Binding LogRangeTooltip}">
                     <ComboBox.ItemTemplate>
                       <DataTemplate x:DataType="vm:LogRange">
                         <TextBlock Text="{Binding Label}" />

@@ -38,6 +38,41 @@ public class ClusterTabTerminalTests
     }
 
     /// <summary>
+    /// #290: someone who set the Terminal preference to <c>wt</c> saw PowerShell open and a
+    /// notice that said nothing about the preference. The notice now names the preference and
+    /// the reason it was refused, as a warning, on the plain terminal and on a hand-off alike.
+    /// </summary>
+    [Test]
+    public async Task APassedOverPreferenceIsNamedWithItsReason()
+    {
+        const string refused = "Preferred terminal (wt): Windows Terminal opens its tabs from a process of its own";
+        var result = Result(TerminalLaunchOutcome.Opened, terminal: "Windows PowerShell") with { PassedOver = [refused] };
+
+        var (message, warning, error) = ClusterTabViewModel.DescribeTerminalLaunch(result);
+        await Assert.That(message).StartsWith("Opened Windows PowerShell on payments-prod.");
+        await Assert.That(message).Contains(refused);
+        await Assert.That(warning).IsTrue();
+        await Assert.That(error).IsFalse();
+
+        var (handoff, handoffWarning, _) = TerminalHandoff.Describe(result with { Command = "kubectl exec -it api-0 -- sh" });
+        await Assert.That(handoff).Contains(refused);
+        await Assert.That(handoffWarning).IsTrue();
+
+        var (plain, _, _) = ClusterTabViewModel.DescribeTerminalLaunch(Result(TerminalLaunchOutcome.Opened));
+        await Assert.That(plain).DoesNotContain("preferred");
+    }
+
+    /// <summary>
+    /// #290: the log pane's Range tooltip mentions the demo only on the demo cluster, where the
+    /// combo is disabled; on a real cluster it is enabled and the demo has nothing to do with it.
+    /// </summary>
+    [Test]
+    public async Task TheRangeTooltipMentionsTheDemoOnlyOnTheDemo()
+    {
+        await Assert.That(LogRange.Tooltip(isDemo: true)).Contains("demo");
+        await Assert.That(LogRange.Tooltip(isDemo: false)).DoesNotContain("demo");
+    }
+    /// <summary>
     /// The item's own acceptance criterion: it says so when kubectl is missing. A
     /// warning, not an error — the terminal did open, KUBECONFIG is set, and everything
     /// else that reads a kubeconfig works — and it says why the probe may be wrong,

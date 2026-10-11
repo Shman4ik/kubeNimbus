@@ -60,6 +60,13 @@ public sealed record TerminalCandidate(
     /// be handed a command as an argument list. Listed with its reason when nothing opens.
     /// </summary>
     public string? Refusal { get; init; }
+
+    /// <summary>
+    /// The "Terminal" preference or <c>$TERMINAL</c>: what the person asked for. When one of these
+    /// is passed over and something else opens, the notice says which and why (#290), because
+    /// someone who typed <c>wt</c> otherwise sees PowerShell open and never learns the reason.
+    /// </summary>
+    public bool IsPreference { get; init; }
 }
 
 /// <summary>
@@ -137,6 +144,14 @@ public sealed record TerminalLaunchResult(
 
     /// <summary>The command handed to the terminal, as a person would type it; null for a plain terminal.</summary>
     public string? Command { get; init; }
+
+    /// <summary>
+    /// The preferred terminals (the setting, <c>$TERMINAL</c>) that were not used, each as
+    /// "<c>label</c>: reason", in the order they were tried. Filled when something else opened,
+    /// so the notice can name a refused or missing preference beside the terminal that did
+    /// open (#290); empty otherwise, since a failure already lists everything it tried.
+    /// </summary>
+    public IReadOnlyList<string> PassedOver { get; init; } = [];
 }
 
 /// <summary>
@@ -634,8 +649,19 @@ public static class TerminalLauncher
             }
         }
 
-        return candidates;
+        // Marked here, once, rather than at each of the three platforms' constructions: a
+        // preference's label ("Preferred terminal (wt)", "$TERMINAL (kitty)") is never a
+        // built-in candidate's.
+        return [.. candidates.Select(c => preferences.Exists(p => p.Label == c.Label) ? c with { IsPreference = true } : c)];
     }
+
+    /// <summary>
+    /// Why <paramref name="candidate"/>, a preference, was not the terminal that opened, when the
+    /// rules or the lookup decided it: its refusal, or "not found". Null for one that resolved,
+    /// whose reason is only known once it has been started.
+    /// </summary>
+    internal static string? PassedOverReason(TerminalCandidate candidate) =>
+        candidate.Refusal ?? (candidate.ResolvedPath is null ? "not found" : null);
 
     /// <summary>
     /// The preference or <c>$TERMINAL</c> as a candidate. A value with a directory in it is a
@@ -1015,6 +1041,7 @@ public static class TerminalLauncher
         }
 
         string? lastError = null;
+        var passedOver = new List<string>();
 
         foreach (var candidate in plan.Candidates)
         {
@@ -1022,6 +1049,11 @@ public static class TerminalLauncher
 
             if (candidate.ResolvedPath is not { } executable)
             {
+                if (candidate.IsPreference)
+                {
+                    passedOver.Add($"{candidate.Label}: {PassedOverReason(candidate)}");
+                }
+
                 continue;
             }
 
@@ -1049,6 +1081,11 @@ public static class TerminalLauncher
                 using var process = Process.Start(info);
                 if (process is null)
                 {
+                    if (candidate.IsPreference)
+                    {
+                        passedOver.Add($"{candidate.Label}: it did not start");
+                    }
+
                     continue;
                 }
 
@@ -1057,6 +1094,11 @@ public static class TerminalLauncher
                 if (process.WaitForExit(StartupGrace) && process.ExitCode != 0)
                 {
                     lastError = $"{candidate.Label} exited immediately (code {process.ExitCode}).";
+                    if (candidate.IsPreference)
+                    {
+                        passedOver.Add($"{candidate.Label}: it exited immediately (code {process.ExitCode})");
+                    }
+
                     continue;
                 }
 
@@ -1065,6 +1107,7 @@ public static class TerminalLauncher
                     tried, null)
                 {
                     Command = command?.Summary,
+                    PassedOver = passedOver,
                 };
             }
             catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException
@@ -1072,6 +1115,10 @@ public static class TerminalLauncher
             {
                 // Not installed, not executable, or not startable from here. Next.
                 lastError = ex.Message;
+                if (candidate.IsPreference)
+                {
+                    passedOver.Add($"{candidate.Label}: {ex.Message.TrimEnd('.')}");
+                }
             }
         }
 
