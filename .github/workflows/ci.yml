@@ -99,11 +99,12 @@ jobs:
           code="$code$(printf '%s\n' "$files" | grep -E '^docs/keyboard-shortcuts\.md$' || true)"
 
           # What can change the trimmed/AOT-compiled app: its own source, the
-          # shared UI library, build-wide props, the SDK pin, and this workflow.
+          # shared UI library, build-wide props, the SDK pin, and this workflow —
+          # plus the startup-timing script that job runs, so an edit to it is run.
           # Tests and the screenshot harness are not in the published binary.
           # Read from $code, so a doc under src/ or shared/ skips it too.
           aot=$(printf '%s\n' "$code" \
-            | grep -E '^(src/|shared/|Directory\.[^/]*$|global\.json$|nuget\.config$|\.github/workflows/ci\.yml$)' \
+            | grep -E '^(src/|shared/|Directory\.[^/]*$|global\.json$|nuget\.config$|\.github/workflows/ci\.yml$|scripts/measure-startup\.ps1$)' \
             || true)
 
           echo "code=$([ -n "$code" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
@@ -292,7 +293,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y clang zlib1g-dev \
-            xvfb libice6 libsm6 libx11-6 libxcursor1 libxext6 libxi6 libxrandr2
+            xvfb libice6 libsm6 libx11-6 libxcursor1 libxext6 libxi6 libxrandr2 xdotool
 
       # Not the shipping binary (that's win-x64), but it runs the same
       # IL-trimming/AOT analysis, so a new non-trim-safe dependency or
@@ -326,3 +327,16 @@ jobs:
         run: |
           xvfb-run -a --server-args="-screen 0 1280x800x24" ./publish/app/kubeNimbus --smoke-test
           xvfb-run -a --server-args="-screen 0 1280x800x24" ./publish/app/kubeNimbus --smoke-test=unreachable-cluster
+
+      # kubeNimbus's own startup, timed (#234): ten launches of the binary above on an
+      # empty isolated profile, median and p90 of first frame and (through xdotool, the
+      # package added above) first mapped window, written to the job summary. It is a
+      # record, not a gate — a shared runner's numbers move with its neighbours, so no
+      # budget is enforced and a failure here never reds the PR; the launch check above
+      # is what fails a binary that does not start. Nothing is uploaded, so it costs no
+      # artifact storage. See scripts/README.md, "Measuring startup".
+      - name: Startup timing (linux-x64, informational)
+        timeout-minutes: 5
+        continue-on-error: true
+        shell: pwsh
+        run: ./scripts/measure-startup.ps1 -Binary publish/app/kubeNimbus -Runs 10 -Markdown >> $env:GITHUB_STEP_SUMMARY

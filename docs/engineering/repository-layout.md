@@ -30,5 +30,6 @@ Public-facing docs, each with one job — don't duplicate content between them:
 | `CLAUDE.md` (this file) | Whoever is changing the code. The engineering contract and the *why* behind every rule. |
 | `docs/product-loop/` | The release train's live state (`TRAIN.md`), product assessment, competitor matrix and per-release history. |
 | `docs/BACKLOG.md` | How the backlog works. The backlog itself is GitHub issues labelled `roadmap` (since 2026-10-10): the labels, the lifecycle, where the old table rows went, and the proposals deliberately not taken. |
+| `docs/comparison.md` | **DRAFT, unpublished** (#230): someone comparing kubeNimbus with Lens, FreeLens, Aptakube, Headlamp, k9s, KubeUI and Seabird. Every competitor claim has a source and an "as of" date, every kubeNimbus claim names a file here. Linking it from the README is the owner's call. `docs/product-loop/COMPETITOR_MATRIX.md` stays the internal, job-by-job version. |
 | `docs/PRE-LAUNCH-CHECKLIST.md` | One-time: making the repo public, cutting the first release, and the Microsoft Store submission. Delete it once the launch is behind us. |
 | `docs/RELEASE-CHECKLIST.md` | Whoever cuts a release. What to walk before tagging (gates, the manual pass on the AOT build against the sandbox, media, ship), and a log of what each release's pass found. Same shape as pgNimbus's. |
