@@ -39,7 +39,10 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 # Exit code 8 is the runner's "zero tests ran". With no arguments every suite must
 # run something; with a filter, one suite matching nothing is expected, but all of
-# them matching nothing is a filter that selects nothing, and fails.
+# them matching nothing is a filter that selects nothing, and fails. A suite counts
+# as having run on any other exit code, failures included: "ran nothing" is said
+# only when every suite reported zero tests, because a run whose tests failed is
+# not a discovery problem and must not send the reader looking for one (#278).
 $failed = $false
 $ran = $false
 foreach ($suite in 'KubeNimbus.Core.Tests', 'KubeNimbus.App.Tests') {
@@ -55,8 +58,10 @@ foreach ($suite in 'KubeNimbus.Core.Tests', 'KubeNimbus.App.Tests') {
             $failed = $true
         }
     }
-    elseif ($code -ne 0) { $failed = $true }
-    else { $ran = $true }
+    else {
+        $ran = $true
+        if ($code -ne 0) { $failed = $true }
+    }
 }
 
 if (-not $ran) {
