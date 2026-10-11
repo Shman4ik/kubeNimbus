@@ -604,6 +604,25 @@ public static class CommandCatalog
             IconKey = "RefreshIconGeometry",
             Chord = new(CommandKey.R, Cmd),
             Surfaces = Everywhere,
+        },        new()
+        {
+            // FEAT-12: an empty YAML editor, applied through the same preview as any edit.
+            // The ☰ menu carries it too (UI rule 15); it has no gesture of its own.
+            Id = CommandId.NewYaml,
+            Title = "New resource from YAML…",
+            Category = CommandCategory.Resources,
+            IconKey = "CodeBracesIconGeometry",
+            Surfaces = PaletteOnly,
+        },
+        new()
+        {
+            // FEAT-13: the column chooser's way back, for the list on screen. The chooser
+            // itself is a right click on a column header.
+            Id = CommandId.ResetListColumns,
+            Title = "Reset the list's columns",
+            Category = CommandCategory.Resources,
+            IconKey = "RefreshIconGeometry",
+            Surfaces = PaletteOnly,
         },
         new()
         {

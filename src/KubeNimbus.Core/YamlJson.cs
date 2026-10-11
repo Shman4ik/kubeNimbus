@@ -27,6 +27,18 @@ public static class YamlJson
         return ToJson(stream.Documents[0].RootNode);
     }
 
+    /// <summary>
+    /// How many documents the text holds — a <c>---</c>-separated stream counts each one.
+    /// <see cref="ParseYamlToJson"/> reads only the first, so a caller that must not drop the
+    /// rest silently asks this first.
+    /// </summary>
+    public static int CountDocuments(string yaml)
+    {
+        var stream = new YamlStream();
+        stream.Load(new StringReader(yaml));
+        return stream.Documents.Count(d => d.RootNode is not YamlScalarNode { Value: null or "" });
+    }
+
     /// <summary>Renders a JSON element as YAML text.</summary>
     public static string ToYamlString(JsonElement element)
     {

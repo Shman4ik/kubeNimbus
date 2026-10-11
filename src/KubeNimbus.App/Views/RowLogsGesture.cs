@@ -80,6 +80,16 @@ internal sealed class RowLogsGesture
         {
             if (element is DataGridRow row)
             {
+                // A right click inside a multi-row selection is about the selection (FEAT-6):
+                // its menu's Delete deletes all of them, as in every file manager. Handled, so
+                // the grid's own press handling does not collapse the selection to this row;
+                // the context menu opens on the release regardless.
+                if (grid.SelectedItems.Count > 1 && grid.SelectedItems.Contains(row.DataContext))
+                {
+                    e.Handled = true;
+                    return;
+                }
+
                 grid.SelectedItem = row.DataContext;
                 return;
             }
@@ -104,6 +114,11 @@ internal sealed class RowLogsGesture
             if (row.IsEffectivelyVisible && row.TranslatePoint(default, grid) is { } top
                 && y >= top.Y && y < top.Y + row.Bounds.Height)
             {
+                if (grid.SelectedItems.Count > 1 && grid.SelectedItems.Contains(row.DataContext))
+                {
+                    return;
+                }
+
                 grid.SelectedItem = row.DataContext;
                 return;
             }

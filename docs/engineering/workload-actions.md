@@ -223,3 +223,47 @@ line saying nothing was sent, run-now and resume with their confirm disabled.
 patch lands, a watch of the namespace's CronJobs reports each change as a Modified event, the
 server's Table (what `kubectl get cronjobs` prints) reads `True` then `False` under SUSPEND, and a
 read-only user gets the server's own 403 sentence with the CronJob unchanged.
+
+## Several rows: extended selection and one Delete (FEAT-6)
+
+The resource list takes an extended selection (click, Shift+click, Ctrl/Cmd+click, Shift+arrows,
+Ctrl/Cmd+A), the header row says **"3 selected"** while more than one row is, and Delete — the
+key or the row menu — arms **one** strip for all of them. Six things are
+load-bearing.
+
+1. **One sentence, the count and the cluster in it**: "Delete 8 Pods in payments on prod-eu
+   (production)", with the names listed under it (`RowActionViewModel.BulkItems`), so nobody
+   confirms a number they cannot read. Several namespaces read "in 3 namespaces"; a fleet
+   selection across clusters reads "on 2 clusters", and then each name carries its cluster.
+2. **The confirm rule is the single delete's** (`NeedsConfirm`): "Confirm before deleting" read
+   at the press, and **production always asks** — any selected row on a production cluster makes
+   the whole strip a production one.
+3. **One request per object, never a deletecollection.** A narrow-RBAC reader may delete some
+   of the selection and not the rest, and that is the case this is built for: every allowed
+   delete goes through, each refused one keeps the API server's own sentence beside its name (a
+   403 names the subject, the verb and the resource), and the result line counts both — "Deleted
+   6 of 8 Pods. 2 refused — each one's reason is in the list below." — never "Delete failed"
+   over a run that mostly went through, and never a silent partial.
+   `BulkDeleteTests.A_refusal_among_successes_is_reported_per_object_and_does_not_stop_the_rest`
+   replays a real 403 Status body through a real `ClusterClient` (`StubApiServer`); it was
+   confirmed red with the loop stopping at the first refusal.
+4. **It runs one object at a time, with Stop.** Stop replaces Cancel while the loop runs, like
+   a drain's, because "Cancel" over deletes already sent would read as undo. Stop ends the run
+   after the request in flight; that request's row says the server may or may not have acted on
+   it, and the result line counts what is left ("Stopped. 3 of 8 Pods deleted, 5 left."). The
+   strip cannot be dismissed while it runs, and closing the tab cancels it (`CancelDrain`).
+5. **The targets are captured when the strip is armed** (`BulkTarget`: the row's own client
+   and descriptor), so moving the selection while the strip is open cannot re-aim it.
+6. **A right click inside a multi-row selection keeps it** (`RowLogsGesture`): the row menu's
+   Delete is then about all of them, as in every file manager. The press is marked handled so
+   the grid does not collapse the selection to the row under the pointer; the menu still opens
+   on the release. `ux-bulk-delete` in the screenshot harness selects three rows by click and
+   Shift+click, right-clicks the middle one, checks the selection held and the menu opened, then
+   presses Delete and checks one strip was armed for three; it was confirmed red with the guard
+   removed.
+
+Every other row action (logs, exec, scale, restart, the node and CronJob actions) still acts on
+the current row, `SelectedRow`, which the grid's `SelectedItem` stays bound to. **Not built:**
+bulk restart, scale or any other bulk action, and keeping a multi-row selection through a
+re-sort that replaces the list (a metrics poll on a list sorted by CPU puts back only the
+current row).

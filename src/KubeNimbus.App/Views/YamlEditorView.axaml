@@ -92,6 +92,13 @@
           <TextBlock Text="{x:Static vm:YamlEditorTabViewModel.DemoNotice}" TextWrapping="Wrap" />
         </DockPanel>
       </Border>
+      <!-- New YAML… (FEAT-12): an empty editor is otherwise a blank rectangle (UI rule 9),
+           and where a manifest without a namespace lands is a fact nobody could guess. An
+           InfoBar (UI rule 11) in the same row as the demo notice, gone after the first apply. -->
+      <Border DockPanel.Dock="Top" Classes="infoBar" Margin="0,0,0,8"
+              IsVisible="{Binding NewDocumentNotice, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
+        <TextBlock Text="{Binding NewDocumentNotice}" TextWrapping="Wrap" FontSize="12" />
+      </Border>
       <Border Classes="card" Padding="0">
         <ae:TextEditor Name="Editor" ShowLineNumbers="True" Classes="mono" FontSize="12"
                        IsReadOnly="{Binding IsEditorReadOnly}" Margin="4" />

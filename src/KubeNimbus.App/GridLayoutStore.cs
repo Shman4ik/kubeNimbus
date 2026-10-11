@@ -20,19 +20,35 @@ public sealed record GridColumnWidth(string Unit, double Value)
 }
 
 /// <summary>
-/// How one kind's list is laid out: what each column was dragged to, and which column
-/// it is sorted by. Both are per kind — a Pod list and a ConfigMap list have different
-/// columns and answer different questions, so a width chosen for one says nothing about
-/// the other.
+/// How one kind's list is laid out: what each column was dragged to, which column it is
+/// sorted by, and which columns the reader has hidden. All three are per kind — a Pod
+/// list and a ConfigMap list have different columns and answer different questions, so a
+/// choice made for one says nothing about the other.
 /// </summary>
+/// <param name="HiddenColumns">
+/// The ids (<see cref="ViewModels.ResourceColumn"/>, or <c>crd:&lt;name&gt;</c> for a CRD
+/// printer column) the reader turned off through the column chooser (FEAT-13). A list of
+/// what was hidden rather than of what is shown, so a column a later build adds to the
+/// kind appears by default instead of being hidden by a file written before it existed.
+/// Null in a file from an older build.
+/// </param>
 public sealed record GridLayout(
     Dictionary<string, GridColumnWidth>? ColumnWidths = null,
     string? SortColumn = null,
-    bool SortDescending = false)
+    bool SortDescending = false,
+    List<string>? HiddenColumns = null)
 {
     public static GridLayout Empty { get; } = new();
 
     public IReadOnlyDictionary<string, GridColumnWidth> Widths => ColumnWidths ?? [];
+
+    public IReadOnlyList<string> Hidden => HiddenColumns ?? [];
+
+    /// <summary>True when nothing here is a choice anybody made, so the kind can drop out of the file.</summary>
+    public bool IsDefault =>
+        SortColumn is null
+        && (ColumnWidths is null || ColumnWidths.Count == 0)
+        && (HiddenColumns is null || HiddenColumns.Count == 0);
 }
 
 /// <summary>
@@ -91,8 +107,9 @@ public static class GridLayoutStore
 
         // A layout that is back to its defaults is removed rather than stored as an
         // empty record: the file is a list of the choices somebody made, and a kind
-        // whose sort was cleared and whose columns were never dragged has made none.
-        if (updated.SortColumn is null && (updated.ColumnWidths is null || updated.ColumnWidths.Count == 0))
+        // whose sort was cleared, whose columns were never dragged and none of whose
+        // columns is hidden has made none.
+        if (updated.IsDefault)
         {
             layouts.Remove(kindKey);
         }

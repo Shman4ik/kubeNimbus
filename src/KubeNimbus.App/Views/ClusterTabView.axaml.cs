@@ -150,6 +150,9 @@ public partial class ClusterTabView : UserControl
         // see it, so this has to run in the Tunnel phase to win.
         ResourceGrid.AddHandler(KeyDownEvent, OnGridKeyDown, RoutingStrategies.Tunnel);
 
+        // A right click on a column header is the column chooser (FEAT-13), not the row menu.
+        ResourceGrid.AddHandler(ContextRequestedEvent, OnGridContextRequested, RoutingStrategies.Tunnel);
+
         // A Button's Click carries no modifiers, and the row's logs icon needs Shift. The
         // release is what raises Click, so the modifiers are read off it on the way down
         // (Tunnel runs before the button's own class handler) — see OnRowLogsClick. Shared
@@ -382,6 +385,11 @@ public partial class ClusterTabView : UserControl
             // The kind's own remembered widths, and the sort the view model has just
             // restored for it — the two halves of one stored layout, applied from the
             // one notification that says which kind is in front of the reader.
+            ApplyColumnLayout();
+        }
+        else if (e.PropertyName == ClusterTabViewModel.ColumnLayoutChangedProperty)
+        {
+            // The chooser hid or showed a column, or reset the kind's columns.
             ApplyColumnLayout();
         }
         else if (e.PropertyName == nameof(ClusterTabViewModel.IsSidebarVisible))
@@ -776,6 +784,8 @@ public partial class ClusterTabView : UserControl
     /// </summary>
     private void ApplyColumnLayout()
     {
+        ApplyHiddenColumns();
+
         var widths = Vm?.GridLayoutKey is { } key ? GridLayoutStore.Load(key).Widths : null;
 
         foreach (var column in ResourceGrid.Columns)
@@ -794,6 +804,139 @@ public partial class ClusterTabView : UserControl
 
         ApplySortIndicator();
     }
+
+    // ------------------------------------------------------------ the column chooser
+    // FEAT-13. The kind decides which columns exist; the reader decides which of those to
+    // hide, per kind, remembered beside the widths and the sort (GridLayout.HiddenColumns).
+    // Reached by a right click on any column header — no always-visible control (UI rule 1).
+
+    /// <summary>
+    /// The columns the selected kind shows before the reader's choice is applied, in grid
+    /// order, with the label each one's header prints: exactly what the chooser offers.
+    /// Rebuilt by <see cref="ApplyHiddenColumns"/> on every layout pass.
+    /// </summary>
+    private readonly List<(string Id, string Label)> _chooserColumns = [];
+
+    /// <summary>
+    /// Re-runs every visibility pass, records what the kind shows, then hides what the
+    /// reader hid. The passes run here, every time, because each of them sets
+    /// <c>IsVisible</c> outright: a column the reader just un-hid has to be shown by the pass
+    /// that owns it, and one that the kind stopped showing must not reappear in the chooser.
+    /// They are all cheap and idempotent; printer columns go before the summary pass, which
+    /// reads them.
+    /// </summary>
+    private void ApplyHiddenColumns()
+    {
+        ApplyMetricsColumns();
+        ApplyFleetColumn();
+        ApplyPrinterColumns();
+        ApplySummaryColumns();
+
+        _chooserColumns.Clear();
+        var hidden = Vm?.HiddenColumns;
+        foreach (var column in ResourceGrid.Columns)
+        {
+            if (!column.IsVisible || ColumnId(column) is not { } id || id == ResourceColumn.Health
+                || !_labels.TryGetValue(column, out var label) || label.Length == 0)
+            {
+                continue;
+            }
+
+            _chooserColumns.Add((id, label));
+            if (hidden is not null && hidden.Contains(id) && !ClusterTabViewModel.IsColumnAlwaysShown(id))
+            {
+                column.IsVisible = false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// A right click on a column header opens the chooser instead of the row menu. Tunnel, so
+    /// it runs before the grid's own handling opens its <c>ContextFlyout</c> — that menu is
+    /// about a row, and a click on a header is not about any row.
+    /// </summary>
+    private void OnGridContextRequested(object? sender, ContextRequestedEventArgs e)
+    {
+        if (Vm is not { GridLayoutKey: not null } || HeaderUnder(e.Source) is not { } header)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        OpenColumnChooser = BuildColumnChooser();
+        OpenColumnChooser.ShowAt(header);
+    }
+
+    /// <summary>The chooser last opened from a header — what the screenshot harness drives.</summary>
+    internal MenuFlyout? OpenColumnChooser { get; private set; }
+
+    private Control? HeaderUnder(object? source)
+    {
+        for (var element = source as Visual; element is not null && !ReferenceEquals(element, ResourceGrid);
+             element = element.GetVisualParent())
+        {
+            if (element is DataGridColumnHeader header)
+            {
+                return header;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// One checkable row per column the kind shows, the identity column checked and
+    /// disabled (it cannot be hidden), then Reset columns.
+    /// </summary>
+    internal MenuFlyout BuildColumnChooser()
+    {
+        var flyout = new MenuFlyout();
+        if (Vm is not { } vm)
+        {
+            return flyout;
+        }
+
+        foreach (var (id, label) in _chooserColumns)
+        {
+            var locked = ClusterTabViewModel.IsColumnAlwaysShown(id);
+            var item = new MenuItem
+            {
+                Header = label,
+                ToggleType = MenuItemToggleType.CheckBox,
+                IsChecked = !vm.HiddenColumns.Contains(id),
+                IsEnabled = !locked,
+                Tag = id,
+            };
+            if (locked)
+            {
+                ToolTip.SetTip(item, "Every row is identified by this column, so it stays.");
+                ToolTip.SetShowOnDisabled(item, true);
+            }
+
+            item.Click += (_, _) => vm.SetColumnHidden(id, !vm.HiddenColumns.Contains(id));
+            flyout.Items.Add(item);
+        }
+
+        flyout.Items.Add(new Separator());
+        var reset = new MenuItem
+        {
+            Header = "Reset columns",
+            IsEnabled = vm.HasCustomColumns,
+        };
+        ToolTip.SetTip(reset, "Show every column this kind has, at the widths the list starts with. The sort is kept.");
+        ToolTip.SetShowOnDisabled(reset, true);
+        reset.Click += (_, _) => vm.ResetColumns();
+        flyout.Items.Add(reset);
+        return flyout;
+    }
+
+    /// <summary>
+    /// The whole selection, handed to the view model on every change (FEAT-6). The grid's
+    /// <c>SelectedItems</c> is a plain list rather than a bindable property, so this is the
+    /// one way it reaches the view model; <c>SelectedItem</c> stays bound as the current row.
+    /// </summary>
+    private void OnGridSelectionChanged(object? sender, SelectionChangedEventArgs e) =>
+        Vm?.SetSelectedRows([.. ResourceGrid.SelectedItems.OfType<ResourceRowViewModel>()]);
 
     private void OnInspectorTabsChanged(object? sender, NotifyCollectionChangedEventArgs e) => ApplyDockState();
 

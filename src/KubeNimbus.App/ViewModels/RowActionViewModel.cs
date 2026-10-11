@@ -118,9 +118,11 @@ public sealed partial class RowActionViewModel : ObservableObject
         int? replicas = null,
         ResourceDescriptor? podDescriptor = null,
         ResourceDescriptor? jobDescriptor = null,
-        ClusterEnvironment environment = ClusterEnvironment.Unknown)
+        ClusterEnvironment environment = ClusterEnvironment.Unknown,
+        IReadOnlyList<BulkTarget>? bulk = null)
     {
         Kind = kind;
+        _bulk = bulk is { Count: > 1 } ? bulk : null;
         _client = client;
         _descriptor = descriptor;
         _podDescriptor = podDescriptor;
@@ -151,6 +153,171 @@ public sealed partial class RowActionViewModel : ObservableObject
         TargetKind = descriptor.Kind;
         TargetName = name;
         TargetPlace = $"{where}{cluster}";
+
+        if (_bulk is { } targets)
+        {
+            // FEAT-6: one sentence for the whole selection, naming the count and the
+            // cluster exactly as a single delete names its object — "Delete 8 Pods in
+            // payments on prod-eu (production)". The names themselves are the list under
+            // the sentence (BulkItems), so nobody confirms a number they cannot read.
+            var namespaces = targets.Select(t => t.Namespace ?? "").Distinct(StringComparer.Ordinal).ToList();
+            var bulkWhere = namespaces switch
+            {
+                [""] => "",
+                [var one] => $" in {one}",
+                _ => $" in {namespaces.Count(n => n.Length > 0)} namespaces",
+            };
+            var clusters = targets.Select(t => t.ClusterName).Distinct(StringComparer.Ordinal).ToList();
+            var bulkCluster = clusters switch
+            {
+                [""] => production,
+                [var one] => $" on {one}{production}",
+                _ => $" on {clusters.Count} clusters{production}",
+            };
+            var plural = targets.Count == 1 ? descriptor.Kind : SidebarKindViewModel.Pluralize(descriptor);
+            if (plural == descriptor.Kind && targets.Count != 1)
+            {
+                // A descriptor built by hand carries no plural; the Kind with an "s" reads
+                // better than "8 Pod", and it is only ever the sentence's noun.
+                plural = descriptor.Kind + "s";
+            }
+
+            Target = $"{targets.Count} {plural}{bulkWhere}{bulkCluster}";
+            TargetKind = targets.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            TargetName = plural;
+            TargetPlace = $"{bulkWhere}{bulkCluster}";
+            foreach (var target in targets)
+            {
+                BulkItems.Add(new BulkItemViewModel(target, showCluster: clusters.Count > 1));
+            }
+        }
+    }
+
+    // ------------------------------------------------------------- bulk delete
+    //
+    // FEAT-6. A delete of several selected rows is still one strip, one question and one
+    // confirm (UI rule 17), with the count and the cluster in the sentence. It is not one
+    // request: each object is its own DELETE, so a narrow-RBAC reader who may delete some of
+    // them and not others gets every allowed delete and, beside each refused one, the API
+    // server's own reason — never a silent partial, and never "Delete failed" over a run that
+    // mostly went through. It runs one object at a time with a Stop, like a drain, because a
+    // long selection on a slow API server is minutes and the honest control then is Stop.
+
+    /// <summary>The objects a bulk delete acts on, captured when it was armed; null for a single-object action.</summary>
+    private readonly IReadOnlyList<BulkTarget>? _bulk;
+
+    private CancellationTokenSource? _bulkCts;
+
+    /// <summary>True when this strip deletes more than one object.</summary>
+    public bool IsBulk => _bulk is not null;
+
+    /// <summary>How many objects the strip acts on: the selection's count for a bulk delete, else one.</summary>
+    public int TargetCount => _bulk?.Count ?? 1;
+
+    /// <summary>One row per object of a bulk delete: its name before the confirm, its outcome after.</summary>
+    public ObservableCollection<BulkItemViewModel> BulkItems { get; } = [];
+
+    /// <summary>True while a bulk delete's loop is running, which is when Stop replaces Cancel.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(StopBulkCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ConfirmCommand))]
+    [NotifyPropertyChangedFor(nameof(CanDismiss))]
+    [NotifyPropertyChangedFor(nameof(IsPromptVisible))]
+    [NotifyPropertyChangedFor(nameof(IsWorking))]
+    private bool _isDeletingMany;
+
+    /// <summary>Stops a running bulk delete after the request in flight; what was deleted stays deleted.</summary>
+    [RelayCommand(CanExecute = nameof(IsDeletingMany))]
+    private void StopBulk() => _bulkCts?.Cancel();
+
+    private async Task RunBulkDeleteAsync()
+    {
+        using var cts = new CancellationTokenSource();
+        _bulkCts = cts;
+        IsDeletingMany = true;
+        IsError = false;
+        IsSuccess = false;
+
+        var deleted = 0;
+        var refused = 0;
+        var stopped = false;
+        try
+        {
+            for (var i = 0; i < BulkItems.Count; i++)
+            {
+                var item = BulkItems[i];
+                if (cts.IsCancellationRequested)
+                {
+                    stopped = true;
+                    break;
+                }
+
+                Message = $"Deleting {i + 1} of {BulkItems.Count}: {item.Key}…";
+                item.MarkDeleting();
+                if (item.Target.Client is not { } client)
+                {
+                    item.MarkRefused("Nothing was sent: the demo cluster has no API server.");
+                    refused++;
+                    continue;
+                }
+
+                try
+                {
+                    await client.DeleteResourceAsync(item.Target.Descriptor, item.Target.Namespace, item.Target.Name, cts.Token);
+                    item.MarkDeleted();
+                    deleted++;
+                }
+                catch (OperationCanceledException) when (cts.IsCancellationRequested)
+                {
+                    // The request in flight was abandoned. Whether the server acted on it is
+                    // not known here, and the row says exactly that rather than guessing.
+                    item.MarkUnknown();
+                    stopped = true;
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    // The API server's own sentence — on a 403 it names the subject, the verb
+                    // and the resource, which is the whole diagnosis.
+                    item.MarkRefused(FirstLine(ex.Message));
+                    refused++;
+                }
+            }
+        }
+        finally
+        {
+            IsDeletingMany = false;
+            _bulkCts = null;
+        }
+
+        Message = BulkSummary(deleted, refused, BulkItems.Count, TargetName, stopped);
+        IsSuccess = deleted == BulkItems.Count;
+        IsError = !IsSuccess;
+        IsDone = true;
+    }
+
+    /// <summary>
+    /// The result line of a bulk delete. Every outcome is counted out loud: a partial run
+    /// that read as "Deleted" would be the silent partial this exists to prevent.
+    /// </summary>
+    internal static string BulkSummary(int deleted, int refused, int total, string plural, bool stopped)
+    {
+        var notTried = total - deleted - refused;
+        if (stopped)
+        {
+            return $"Stopped. {deleted} of {total} {plural} deleted"
+                + (refused > 0 ? $", {refused} refused" : "")
+                + $", {notTried} left. Select what is still listed and delete again to finish.";
+        }
+
+        if (refused == 0)
+        {
+            return $"Deleted {deleted} {plural}.";
+        }
+
+        return deleted == 0
+            ? $"Nothing was deleted: the server refused all {total}. Each one's reason is in the list below."
+            : $"Deleted {deleted} of {total} {plural}. {refused} refused — each one's reason is in the list below.";
     }
 
     public RowActionKind Kind { get; }
@@ -354,6 +521,8 @@ public sealed partial class RowActionViewModel : ObservableObject
         RowActionKind.Resume =>
             "Its schedule applies again — and a run it missed while suspended can start straight away, "
             + "unless startingDeadlineSeconds has passed.",
+        _ when IsBulk =>
+            "This cannot be undone. Each one is its own request, so one the server refuses does not stop the others.",
         _ => "This cannot be undone.",
     };
 
@@ -603,7 +772,7 @@ public sealed partial class RowActionViewModel : ObservableObject
     /// Stop instead: dismissing a strip whose eviction loop kept running would leave a
     /// mutating action with no surface at all.
     /// </summary>
-    public bool CanDismiss => !IsDraining;
+    public bool CanDismiss => !IsDraining && !IsDeletingMany;
 
     /// <summary>
     /// Whether the confirm/cancel pair is on screen at all. A running drain takes their
@@ -612,7 +781,7 @@ public sealed partial class RowActionViewModel : ObservableObject
     /// rendering of this had Stop drawn over the confirm, which the screenshot caught.
     /// An action that fired on its click never had a prompt, so it never shows one.
     /// </summary>
-    public bool IsPromptVisible => !FiredOnClick && !IsDone && !IsDraining;
+    public bool IsPromptVisible => !FiredOnClick && !IsDone && !IsDraining && !IsDeletingMany;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ConfirmCommand))]
@@ -624,7 +793,7 @@ public sealed partial class RowActionViewModel : ObservableObject
     /// True while something is in flight — a request, a read, or a running drain — which is
     /// when the result line leads with a moving bar rather than a verdict (UI rule 18).
     /// </summary>
-    public bool IsWorking => IsBusy || IsDraining;
+    public bool IsWorking => IsBusy || IsDraining || IsDeletingMany;
 
     /// <summary>True once the action has an answer and nothing is left to ask: it succeeded,
     /// or it fired on its click and failed. The strip stops being a prompt and becomes its
@@ -661,6 +830,7 @@ public sealed partial class RowActionViewModel : ObservableObject
         // it runs, but the command must refuse on its own: a hidden button is a layout
         // fact, and a second eviction loop over the same node is not recoverable.
         && !IsDraining
+        && !IsDeletingMany
         && (!IsScale || Replicas is not null)
         // A run-now creates a Job, and without this cluster's Job kind there is nowhere to.
         && (Kind != RowActionKind.Trigger || _jobDescriptor is not null)
@@ -891,6 +1061,13 @@ public sealed partial class RowActionViewModel : ObservableObject
             return;
         }
 
+        if (IsBulk)
+        {
+            // Several objects: one request each, its own Stop and its own per-object result.
+            await RunBulkDeleteAsync();
+            return;
+        }
+
         IsBusy = true;
         IsError = false;
         IsSuccess = false;
@@ -1013,7 +1190,7 @@ public sealed partial class RowActionViewModel : ObservableObject
     [RelayCommand]
     private void Dismiss()
     {
-        if (IsDraining)
+        if (IsDraining || IsDeletingMany)
         {
             // Belt and braces: the button is hidden while a drain runs, and the palette
             // cannot reach this. A dismissed strip over a live eviction loop is the one
@@ -1033,7 +1210,11 @@ public sealed partial class RowActionViewModel : ObservableObject
     private void StopDrain() => _drainCts?.Cancel();
 
     /// <summary>Cancels a drain this strip owns when the tab or the app is going away.</summary>
-    public void CancelDrain() => _drainCts?.Cancel();
+    public void CancelDrain()
+    {
+        _drainCts?.Cancel();
+        _bulkCts?.Cancel();
+    }
 
     /// <summary>API-server messages run to several lines; an inline strip gets the first one.</summary>
     private static string FirstLine(string message)
@@ -1074,5 +1255,58 @@ public sealed partial class DrainStepViewModel(string podKey) : ObservableObject
     {
         Stage = stage;
         Detail = message;
+    }
+}
+
+/// <summary>
+/// One object of a bulk delete, captured when the strip was armed: its own client and
+/// descriptor (its own cluster's, in an aggregated fleet list), namespace and name. Captured
+/// rather than read from the selection at confirm time, so moving the selection while the
+/// strip is open cannot re-aim it — the list under the sentence is what is deleted.
+/// </summary>
+public sealed record BulkTarget(
+    ClusterClient? Client, ResourceDescriptor Descriptor, string? Namespace, string Name, string ClusterName = "");
+
+/// <summary>One row of a bulk delete's list: the object, and what happened to it.</summary>
+public sealed partial class BulkItemViewModel(BulkTarget target, bool showCluster = false) : ObservableObject
+{
+    public BulkTarget Target { get; } = target;
+
+    /// <summary>namespace/name, plus the cluster when the selection spans several (a fleet list).</summary>
+    public string Key { get; } =
+        (string.IsNullOrEmpty(target.Namespace) ? target.Name : $"{target.Namespace}/{target.Name}")
+        + (showCluster && target.ClusterName.Length > 0 ? $" · {target.ClusterName}" : "");
+
+    [ObservableProperty]
+    private string _detail = "";
+
+    [ObservableProperty]
+    private bool _isDone;
+
+    [ObservableProperty]
+    private bool _isFailed;
+
+    /// <summary>The request was abandoned by Stop; the server may or may not have acted on it.</summary>
+    [ObservableProperty]
+    private bool _isUncertain;
+
+    internal void MarkDeleting() => Detail = "Deleting…";
+
+    internal void MarkDeleted()
+    {
+        IsDone = true;
+        Detail = "Deleted";
+    }
+
+    internal void MarkRefused(string reason)
+    {
+        IsFailed = true;
+        Detail = reason;
+    }
+
+    internal void MarkUnknown()
+    {
+        IsUncertain = true;
+        Detail = "Stopped while its request was in flight — check whether it is still listed";
     }
 }

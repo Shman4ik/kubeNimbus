@@ -1364,6 +1364,27 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 () => reconnectTab.ReconnectCommand.Execute(null));
         }
 
+        // New YAML… (FEAT-12), where there is an API server to create on: the ☰ menu's
+        // row, here too (UI rule 15). Not on the demo cluster — a row that refuses is worse
+        // than no row.
+        if (SelectedTab is { CanCreateFromYaml: true } yamlTab)
+        {
+            yield return Catalog(
+                CommandId.NewYaml,
+                $"Paste or type a manifest and apply it to {yamlTab.Header} — namespace {yamlTab.NewObjectNamespace} unless it names one",
+                () => yamlTab.NewYamlCommand.Execute(null));
+        }
+
+        // The column chooser's way back (FEAT-13), only where the list on screen has a
+        // choice to undo.
+        if (SelectedTab is { IsResourceListVisible: true, HasCustomColumns: true } columnsTab)
+        {
+            yield return Catalog(
+                CommandId.ResetListColumns,
+                $"Show every column {columnsTab.SelectedKind?.DisplayName} has, at the starting widths",
+                columnsTab.ResetColumns);
+        }
+
         // The ☰ menu's kubeconfig rows, so the palette carries the same commands (UI rule 15).
         yield return Catalog(CommandId.OpenKubeconfigFile, "Add a kubeconfig file's clusters — only its path is kept",
             () => OpenKubeconfigFileCommand.Execute(null));

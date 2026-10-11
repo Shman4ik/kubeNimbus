@@ -225,7 +225,7 @@ public sealed partial class SidebarKindViewModel(ResourceDescriptor descriptor, 
     /// row in the Cluster section, beside the real one and indistinguishable from it.
     /// One letter of slack is what y→ies ("Policy"/"policies") needs.
     /// </summary>
-    private static string Pluralize(ResourceDescriptor descriptor)
+    internal static string Pluralize(ResourceDescriptor descriptor)
     {
         var kind = descriptor.Kind;
         var plural = descriptor.Plural;

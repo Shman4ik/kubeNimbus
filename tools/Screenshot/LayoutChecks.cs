@@ -179,6 +179,11 @@ internal static class LayoutChecks
     /// </summary>
     internal static void ActionStripReadsAsOneBlock(Window window)
     {
+        // A strip with a list under its sentence (a bulk delete's names) realizes the list
+        // after the first pass and lays out again; measure what is drawn, not the pass before.
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        Dispatcher.UIThread.RunJobs();
         var strip = window.GetVisualDescendants().OfType<RowActionStrip>().First();
         var text = strip.FindControl<Control>("QuestionText")!;
         var sentence = strip.FindControl<TextBlock>("ActionSentence")!;

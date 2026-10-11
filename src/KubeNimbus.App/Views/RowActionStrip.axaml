@@ -224,6 +224,39 @@
           </Grid>
         </Border>
 
+        <!-- A bulk delete (FEAT-6): the names under the sentence before the confirm, so the
+             count in it is never a number nobody can read, and each one's outcome after —
+             deleted, or the API server's own refusal beside it (a 403 names the verb and the
+             resource). Height-capped like the drain's list. While it runs, Stop takes the
+             confirm's place: "Cancel" over a loop that is already deleting would read as undo. -->
+        <StackPanel Spacing="6" IsVisible="{Binding IsBulk}">
+          <Button HorizontalAlignment="Left" Classes="danger" Content="Stop deleting"
+                  Command="{Binding StopBulkCommand}" IsVisible="{Binding IsDeletingMany}" />
+          <ScrollViewer MaxHeight="150">
+            <ItemsControl Name="BulkItemList" ItemsSource="{Binding BulkItems}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:BulkItemViewModel">
+                  <!-- The name gets what it needs up to 480px: pod names share long prefixes
+                       (payment-service-report-generator-7f9c…), and a fixed 260 cut every one of
+                       them before the part that tells them apart. -->
+                  <Grid ColumnDefinitions="Auto,Auto,*" Margin="0,1">
+                    <Ellipse Grid.Column="0" Classes="statusDot" Width="8" Height="8"
+                             VerticalAlignment="Center" Margin="0,0,8,0"
+                             Classes.ok="{Binding IsDone}"
+                             Classes.warn="{Binding IsUncertain}"
+                             Classes.error="{Binding IsFailed}" />
+                    <TextBlock Grid.Column="1" Text="{Binding Key}" FontSize="11.5" MaxWidth="480"
+                               Classes="mono"
+                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Key}" />
+                    <TextBlock Grid.Column="2" Text="{Binding Detail}" FontSize="11.5" Opacity="0.75" Margin="12,0,0,0"
+                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Detail}" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </StackPanel>
+
         <!-- The drain's own progress, one row per pod. Height-capped and
              scrollable: this strip sits above the list it is about, and a
              hundred-pod node must not push the list off screen. -->

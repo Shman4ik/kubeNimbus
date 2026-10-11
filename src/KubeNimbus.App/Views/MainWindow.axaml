@@ -149,6 +149,11 @@
                     <!-- Re-read the kubeconfig and re-run the credential plugin without
                          closing the tab: the way back after `aws sso login`. -->
                     <MenuItem Header="Reconnect" Command="{Binding SelectedTab.ReconnectCommand}" />
+                    <!-- FEAT-12: an empty YAML editor in the dock, applied through the same
+                         preview as any edit. Here and in the palette (UI rule 15), with no
+                         always-visible button (UI rule 1); disabled on the demo cluster and
+                         before a connect, where there is no API server to create on. -->
+                    <MenuItem Header="New resource from YAML…" Command="{Binding SelectedTab.NewYamlCommand}" />
                     <MenuItem Header="Close cluster tab" Command="{Binding CloseTabCommand}"
                               CommandParameter="{Binding SelectedTab}" />
                     <Separator />
