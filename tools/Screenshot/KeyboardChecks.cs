@@ -80,6 +80,43 @@ internal static class KeyboardChecks
     /// The bytes are read off the view model's own terminal model, i.e. exactly what
     /// <c>ExecTabViewModel</c> forwards to the pod's stdin.
     /// </summary>
+    /// <summary>
+    /// #266: a drag of the dock's splitter gives keyboard focus back to the exec terminal that
+    /// had it, so the next key reaches the shell instead of going nowhere. A press, a move of
+    /// 40px up and a release, as the mouse does it.
+    /// </summary>
+    internal static void DockSplitterKeepsFocus(Window window)
+    {
+        var terminal = window.GetVisualDescendants().OfType<ExecView>().First()
+            .GetVisualDescendants().OfType<TerminalControl>().First();
+        var splitter = window.GetVisualDescendants().OfType<GridSplitter>().First(s => s.Name == "DockSplitter");
+        var focus = window.FocusManager!;
+
+        terminal.Focus();
+        Dispatcher.UIThread.RunJobs();
+        if (focus.GetFocusedElement() != terminal)
+            throw new InvalidOperationException("The exec terminal did not take focus before the splitter drag.");
+
+        var height = splitter.Bounds.Height;
+        var start = splitter.TranslatePoint(new Point(splitter.Bounds.Width / 2, height / 2), window)
+                    ?? throw new InvalidOperationException("The dock splitter is not on screen.");
+        var end = start - new Vector(0, 40);
+        var dock = window.GetVisualDescendants().OfType<Border>().First(b => b.Name == "DockRegion").Bounds.Height;
+        window.MouseDown(start, MouseButton.Left);
+        window.MouseMove(start - new Vector(0, 10));
+        window.MouseMove(end);
+        window.MouseUp(end, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+
+        var grown = window.GetVisualDescendants().OfType<Border>().First(b => b.Name == "DockRegion").Bounds.Height - dock;
+        if (grown < 20)
+            throw new InvalidOperationException($"The splitter drag did not resize the dock (it grew {grown:0}px); the check moved nothing.");
+        if (focus.GetFocusedElement() != terminal)
+            throw new InvalidOperationException(
+                $"After a splitter drag focus is on {Describe(focus.GetFocusedElement() as Control)}, not the exec terminal that had it (#266).");
+        Console.WriteLine($"Splitter drag (dock grew {grown:0}px) gave focus back to the exec terminal.");
+    }
+
     internal static void ExecKeys(Window window)
     {
         var view = window.GetVisualDescendants().OfType<ExecView>().First();
@@ -513,9 +550,17 @@ internal static class KeyboardChecks
         Press(window, Key.Right, RawInputModifiers.None);
         if (vm.SelectedInspectorTab != vm.InspectorTabs[1])
             throw new InvalidOperationException("Right on the front dock tab did not bring the next one to the front.");
+        // #293: the tab the arrow reached is keyboard focus and draws the ring. ListBox's own
+        // arrow handling focused it with no navigation method, so the ring went with the move.
+        if (focus.GetFocusedElement() is not ListBoxItem { DataContext: InspectorTabViewModelBase reached } movedTo
+            || reached != vm.InspectorTabs[1] || !HasFocusVisual(movedTo))
+            throw new InvalidOperationException(
+                $"Right on the dock's tabs left focus on {Describe(focus.GetFocusedElement() as Control)} with no focus ring (#293).");
         Press(window, Key.Left, RawInputModifiers.None);
         if (vm.SelectedInspectorTab != vm.InspectorTabs[0])
             throw new InvalidOperationException("Left on the second dock tab did not bring the first one back.");
+        if (focus.GetFocusedElement() is not ListBoxItem back || !HasFocusVisual(back))
+            throw new InvalidOperationException("Left on the dock's tabs left the first tab with no focus ring (#293).");
 
         // The sidebar: Down to the next row, Enter opens its kind, Up and Space come back.
         sidebarStop.Focus(NavigationMethod.Tab);

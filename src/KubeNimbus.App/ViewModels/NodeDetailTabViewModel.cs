@@ -1077,11 +1077,13 @@ public sealed partial class NodePodViewModel : ObservableObject
 /// </summary>
 public sealed class NodeConditionViewModel
 {
-    public NodeConditionViewModel(NodeCondition condition)
+    public NodeConditionViewModel(NodeCondition condition, DateTimeOffset? now = null)
     {
         ArgumentNullException.ThrowIfNull(condition);
 
         Condition = condition;
+        Age = ConditionSince.Age(condition.LastTransition, now ?? DateTimeOffset.UtcNow);
+        AgeTooltip = ConditionSince.Tooltip(condition.LastTransition);
         Health = condition switch
         {
             { IsUnknown: true } => ResourceHealth.Warn,
@@ -1091,6 +1093,12 @@ public sealed class NodeConditionViewModel
     }
 
     public NodeCondition Condition { get; }
+
+    /// <summary>How long ago the condition last changed ("6d"; ConditionSince), empty when unknown.</summary>
+    public string Age { get; }
+
+    /// <summary>The exact instant of that change, or null when the server sent none.</summary>
+    public string? AgeTooltip { get; }
 
     public string Type => Condition.Type;
 

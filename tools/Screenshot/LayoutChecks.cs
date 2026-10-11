@@ -218,11 +218,51 @@ internal static class LayoutChecks
                     $"The replica box starts {boxGap:0}px after \"{lead.Text}\" (its middle at y={leadMiddle:0}, the box "
                     + $"spanning y={boxTop:0}..{boxBottom:0}, the sentence ending at y={sentenceBottom:0}); it should follow "
                     + "the word it completes on the same line, inside the sentence (FEAT-77).");
+
+            // #293: "to" stands on the baseline of the number it introduces, not centred beside it.
+            var number = box.GetVisualDescendants().OfType<Avalonia.Controls.Presenters.TextPresenter>().First();
+            var numberBaseline = number.TranslatePoint(new Point(0, number.TextLayout.TextLines[0].Baseline), window)?.Y ?? double.NaN;
+            var leadBaseline = lead.TranslatePoint(new Point(0, lead.Padding.Top + lead.TextLayout.TextLines[0].Baseline), window)?.Y ?? double.NaN;
+            if (!(Math.Abs(numberBaseline - leadBaseline) <= 0.5))
+                throw new InvalidOperationException(
+                    $"\"to\" stands on y={leadBaseline:0.0} and the replica box's number on y={numberBaseline:0.0}; they should share a baseline (#293).");
         }
         Console.WriteLine($"Action strip reads as one block at {window.Bounds.Width:0}px (confirm {gap:0}px after the text).");
 
         double InkRight(TextBlock block) =>
             (block.TranslatePoint(default, window)?.X ?? double.NaN) + block.Padding.Left + block.TextLayout.Width;
+    }
+
+    /// <summary>
+    /// #269: the dock's tab strip is one row however many tabs are open — every tab at the
+    /// same height, the strip no taller than one tab plus its margins — and bringing the last
+    /// tab to the front scrolls it into the strip's view.
+    /// </summary>
+    internal static void DockTabsOneRow(Window window)
+    {
+        var strip = window.GetVisualDescendants().OfType<ListBox>().First(l => l.Name == "InspectorTabStrip");
+        var vm = (ClusterTabViewModel)strip.DataContext!;
+        var tabs = strip.GetVisualDescendants().OfType<ListBoxItem>().ToList();
+        if (tabs.Count != vm.InspectorTabs.Count || tabs.Count < 10)
+            throw new InvalidOperationException($"The scenario should have ten dock tabs and the strip shows {tabs.Count}.");
+
+        var tops = tabs.Select(t => Math.Round(t.TranslatePoint(default, strip)?.Y ?? double.NaN, 1)).Distinct().ToList();
+        var tallest = tabs.Max(t => t.Bounds.Height + t.Margin.Top + t.Margin.Bottom);
+        if (tops.Count != 1 || strip.Bounds.Height > tallest + 0.5)
+            throw new InvalidOperationException(
+                $"The dock's tab strip is {strip.Bounds.Height:0}px tall for {tabs.Count} tabs on {tops.Count} rows; it should be one row of {tallest:0}px (#269).");
+
+        // The current harness renders at the first tab; the last one must be reachable too.
+        vm.SelectedInspectorTab = vm.InspectorTabs[^1];
+        Dispatcher.UIThread.RunJobs();
+        var last = (ListBoxItem)strip.ContainerFromIndex(vm.InspectorTabs.Count - 1)!;
+        var left = last.TranslatePoint(default, strip)?.X ?? double.NaN;
+        if (left < 0 || left + last.Bounds.Width > strip.Bounds.Width + 0.5)
+            throw new InvalidOperationException(
+                $"The last dock tab, brought to the front, sits at x={left:0}..{left + last.Bounds.Width:0} outside the {strip.Bounds.Width:0}px strip (#269).");
+        vm.SelectedInspectorTab = vm.InspectorTabs[0];
+        Dispatcher.UIThread.RunJobs();
+        Console.WriteLine($"Dock tab strip: {tabs.Count} tabs on one {strip.Bounds.Height:0}px row; the last scrolls into view.");
     }
 
     /// <summary>

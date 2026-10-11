@@ -170,6 +170,16 @@ public sealed partial class SidebarKindViewModel(ResourceDescriptor descriptor, 
     public bool IsRecentEntry { get; init; }
 
     /// <summary>
+    /// Whether the row draws its kind glyph. Only the Recent section's copies do (#213):
+    /// in every other section the glyph is the same on every row, directly under a header
+    /// that already names the section, so it told the reader nothing and cost the width
+    /// that truncates long kind names. Recent mixes sections, so there the glyph is the
+    /// one thing that says where a row came from. The command palette keeps its glyph for
+    /// the same reason, and does not read this.
+    /// </summary>
+    public bool ShowIcon => IsRecentEntry;
+
+    /// <summary>
     /// Matches the sidebar filter against the display name, the API group and the
     /// server's short names. Group matters because two sections routinely show
     /// same-named kinds (Backup from velero.io and from postgresql.cnpg.io) and the

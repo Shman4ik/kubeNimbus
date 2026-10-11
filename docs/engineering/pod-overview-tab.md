@@ -48,6 +48,14 @@ Eight things are load-bearing.
    a false reassurance is the wrong way to be wrong for the one person reading this pane
    *because* something is wrong. `PodCondition.IsProblem` is therefore `bool?`, and an
    `Unknown` status is the same third answer.
+4b. **Each condition says since when (#268).** "Not Ready for 6d" and "for 20s" are
+   different problems, and `kubectl describe` prints the time. Every row shows its
+   `lastTransitionTime` as an age in the list's Age format (`RelativeTime.Compact`, through
+   `ConditionSince`), with the exact local instant on the tooltip ("Last transition
+   2026-10-04 21:01:54"). The node Overview's Conditions card and the workload pane's
+   Conditions tab (a Since column) do the same. A condition the server sent no time for shows
+   an empty cell and no tooltip, never a guess (UI rule 20). `ConditionSinceTests` pins the
+   three views; the age is computed when the row is built, as the list's Age is.
 5. **The QoS class is read, never derived.** It is a pure function of the containers'
    requests and limits and could be recomputed, but the API server has already computed it
    and the eviction path uses *its* value; a local one that disagreed would be worse than

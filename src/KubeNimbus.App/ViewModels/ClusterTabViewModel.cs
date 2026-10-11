@@ -3626,11 +3626,21 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         AddInspectorTab(new ExecTabViewModel(client, row.Namespace, row.Name, FirstContainerOf(row)));
     }
 
-    [RelayCommand(CanExecute = nameof(IsPodRowSelected))]
+    [RelayCommand(CanExecute = nameof(CanPortForwardSelected))]
     private void PortForwardSelected()
     {
         if (SelectedRow is not { } row)
         {
+            return;
+        }
+
+        if (IsServiceRowSelected)
+        {
+            if (CanPortForwardSelected)
+            {
+                PortForwardSelectedService();
+            }
+
             return;
         }
 

@@ -104,6 +104,14 @@
           <DataGrid.Columns>
             <DataGridTextColumn Header="Condition" Binding="{Binding Type}" Width="150"/>
             <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="80"/>
+            <!-- How long the condition has held (#268), the exact instant on the tooltip. -->
+            <DataGridTemplateColumn Header="Since" Width="80">
+              <DataGridTemplateColumn.CellTemplate>
+                <DataTemplate x:DataType="vm:WorkloadCondition">
+                  <TextBlock Text="{Binding Age}" ToolTip.Tip="{Binding AgeTooltip}" VerticalAlignment="Center" />
+                </DataTemplate>
+              </DataGridTemplateColumn.CellTemplate>
+            </DataGridTemplateColumn>
             <DataGridTextColumn Header="Reason" Binding="{Binding Reason}" Width="220"/>
             <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="*"/>
           </DataGrid.Columns>

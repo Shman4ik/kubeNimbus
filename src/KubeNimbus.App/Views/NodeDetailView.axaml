@@ -181,14 +181,17 @@
                 <ItemsControl ItemsSource="{Binding Conditions}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:NodeConditionViewModel">
-                      <Grid ColumnDefinitions="Auto,150,Auto,*" Margin="0,2">
+                      <!-- The fourth column is how long the condition has held (#268). -->
+                      <Grid ColumnDefinitions="Auto,150,Auto,44,*" Margin="0,2">
                         <Ellipse Grid.Column="0" Classes="statusDot" Width="8" Height="8"
                                  VerticalAlignment="Center" Margin="0,0,8,0"
                                  Fill="{Binding Health, Converter={x:Static conv:HealthToBrushConverter.Instance}}" />
                         <TextBlock Grid.Column="1" Text="{Binding Type}" FontSize="12" VerticalAlignment="Center" />
                         <TextBlock Grid.Column="2" Text="{Binding Status}" FontSize="12" Opacity="0.7"
                                    MinWidth="56" VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="3" FontSize="12" Opacity="0.75" VerticalAlignment="Center"
+                        <TextBlock Grid.Column="3" Text="{Binding Age}" FontSize="12" Opacity="0.7" VerticalAlignment="Center"
+                                   ToolTip.Tip="{Binding AgeTooltip}" />
+                        <TextBlock Grid.Column="4" FontSize="12" Opacity="0.75" VerticalAlignment="Center"
                                    TextTrimming="CharacterEllipsis" Text="{Binding Message}"
                                    ToolTip.Tip="{Binding Message}" />
                       </Grid>

@@ -199,8 +199,6 @@ internal static class ClusterTabScenarios
             // A selected pod, so the Pods shot shows the row's logs icon (L3) — drawn on
             // the selected and the hovered row only, like the resource list's own.
             detail.SelectedPod = detail.Pods.FirstOrDefault();
-            detail.Conditions.Add(new("Available", "True", "MinimumReplicasAvailable", "Deployment has minimum availability."));
-            detail.Conditions.Add(new("Progressing", "True", "NewReplicaSetAvailable", "ReplicaSet has successfully progressed."));
             using var document = JsonDocument.Parse("""
                 {"apiVersion":"v1","kind":"Event","metadata":{"name":"workload-event","namespace":"payments"},
                 "type":"Normal","reason":"ScalingReplicaSet","message":"Scaled up replica set to 3","count":1,
@@ -2727,10 +2725,12 @@ internal static class ClusterTabScenarios
     /// kind from the keyboard repopulates the list from the dataset instead of starting a watch
     /// against the offline client.
     /// </summary>
-    public static ClusterTabViewModel DemoDockTabs()
+    public static ClusterTabViewModel DemoDockTabs(int count = 2)
     {
         var tab = DemoTab();
-        var pods = tab.Rows.Where(r => r.Name.StartsWith("payment-service", StringComparison.Ordinal)).Take(2).ToList();
+        var pods = (count <= 2
+            ? tab.Rows.Where(r => r.Name.StartsWith("payment-service", StringComparison.Ordinal))
+            : tab.Rows).Take(count).ToList();
         foreach (var pod in pods)
         {
             tab.SelectedRow = pod;

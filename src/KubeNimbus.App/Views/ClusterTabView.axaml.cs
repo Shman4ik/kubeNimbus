@@ -164,6 +164,18 @@ public partial class ClusterTabView : UserControl
         AddHandler(KeyDownEvent, OnViewKeyDown, RoutingStrategies.Bubble);
         AddHandler(KeyDownEvent, OnLeaveEditorKeyDown, RoutingStrategies.Tunnel);
 
+        // The dock's tab strip moves with the arrow keys itself (#293): ListBox's own handler
+        // focuses the next tab with no navigation method, which Avalonia does not count as
+        // keyboard focus, so the tab the keys had reached drew no focus ring.
+        InspectorTabStrip.AddHandler(KeyDownEvent, OnInspectorTabStripKeyDown, RoutingStrategies.Tunnel);
+
+        // A drag of the dock's splitter gives focus back to whatever had it (#266): the
+        // splitter takes focus on the press, and the exec terminal it was taken from read
+        // as a hung session until clicked. Tunnel and handledEventsToo, so the focus is
+        // read before the press moves it.
+        DockSplitter.AddHandler(PointerPressedEvent, OnDockSplitterPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
+        DockSplitter.DragCompleted += OnDockSplitterDragCompleted;
+
         DataContextChanged += OnDataContextChanged;
     }
 
@@ -1184,6 +1196,66 @@ public partial class ClusterTabView : UserControl
             && !ReferenceEquals(tab, vm.SelectedInspectorTab))
         {
             vm.SelectInspectorTabCommand.Execute(tab);
+        }
+    }
+
+    /// <summary>
+    /// Left/Right (and Up/Down), Home and End along the dock's tab strip: brings that tab to
+    /// the front and focuses it as keyboard focus, so it draws the focus ring (#293), and
+    /// scrolls it into the one-row strip (#269). ListBox's own handling moved the same way but
+    /// focused with no navigation method, which leaves <c>:focus-visible</c> off.
+    /// </summary>
+    private void OnInspectorTabStripKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.KeyModifiers != KeyModifiers.None || Vm is not { } vm || vm.InspectorTabs.Count == 0
+            || e.Source is not Visual source
+            || source.FindAncestorOfType<ListBoxItem>(includeSelf: true) is not { } from)
+        {
+            return;
+        }
+
+        var count = vm.InspectorTabs.Count;
+        var current = InspectorTabStrip.IndexFromContainer(from);
+        int? target = e.Key switch
+        {
+            Key.Left or Key.Up => Math.Max(current - 1, 0),
+            Key.Right or Key.Down => Math.Min(current + 1, count - 1),
+            Key.Home => 0,
+            Key.End => count - 1,
+            _ => null,
+        };
+
+        if (target is not { } index || current < 0)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        vm.SelectInspectorTabCommand.Execute(vm.InspectorTabs[index]);
+        if (InspectorTabStrip.ContainerFromIndex(index) is { } container)
+        {
+            container.Focus(NavigationMethod.Directional);
+            container.BringIntoView();
+        }
+    }
+
+    /// <summary>What held keyboard focus when the dock's splitter was pressed (#266).</summary>
+    private IInputElement? _focusBeforeSplitter;
+
+    private void OnDockSplitterPressed(object? sender, PointerPressedEventArgs e)
+    {
+        var focused = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement();
+        _focusBeforeSplitter = ReferenceEquals(focused, DockSplitter) ? null : focused;
+    }
+
+    private void OnDockSplitterDragCompleted(object? sender, Avalonia.Input.VectorEventArgs e)
+    {
+        var previous = _focusBeforeSplitter;
+        _focusBeforeSplitter = null;
+        if (previous is InputElement { IsEffectivelyVisible: true, IsEffectivelyEnabled: true } element
+            && TopLevel.GetTopLevel(element) is not null)
+        {
+            element.Focus();
         }
     }
 }
