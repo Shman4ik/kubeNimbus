@@ -191,6 +191,44 @@ Tab indices are Overview = 0, Pods = 1, Events = 2, Usage = 3
 screenshot scenarios select stay put. `NodeDetailTests` (App) pins the System rows, the
 events filter and ordering, the empty-events state, the history seed and the gap.
 
+### The capacity strip above the Nodes list (FEAT-25, #206)
+
+One line in a card under the Nodes list's header: how many nodes and how many are not Ready,
+then CPU and memory each as *measured* of allocatable and *requested* of allocatable — the
+Usage tab's and the Overview's figures, summed over the cluster (`ClusterCapacity`, Core). It is
+the one competitive wedge the backlog research found: the Lens lineage's overview is blank
+without Prometheus, and this needs nothing but the API server, degrading part by part.
+
+- **Every part the cluster does not let it read says so in its own place.** No metrics API (or
+  one registered and not serving): "usage needs metrics-server", and the list's CPU/Memory
+  columns go as before. A 403 on node metrics (narrow RBAC): "usage not permitted", with the
+  API server's sentence on hover; the columns keep their dashes, as for any failed poll. A 403
+  on the cluster-wide pod list: "requests not permitted", the same way, and no re-asking. While
+  the first answer is on its way, "reading…" (UI rule 18). None of them is ever a zero:
+  `ClusterCapacity` returns null for what it could not read, and `ClusterCapacityTests` pins it
+  (confirmed red with a zero in place of the null). An empty or refused node list has no strip,
+  because the list below already says so (UI rule 20).
+- **Node half and usage half come from the list itself**: the rows of the Nodes watch and the
+  samples its metrics poll already writes on them, so the strip costs one read of its own —
+  every pod in the cluster, for the requests — when the list opens and once a minute after
+  (`CapacityPodsInterval`), on the list's token, so it stops with the list. A minute rather than
+  the poll's 15 s because a cluster-wide pod list is the largest read the app makes and requests
+  move when pods are scheduled, not by the second. A failed re-read keeps the last good figure.
+- **The sums are the node pane's arithmetic.** Allocatable, not capacity; requests by the
+  scheduler's formula (`NodeResources.EffectiveRequest`) over non-terminal pods bound to a listed
+  node, so a pending pod is not counted, as `kubectl describe node` would not. Usage is compared
+  with the allocatable of the nodes that reported a sample, and the sentence says "on 2 of 3
+  nodes" when not every node did, so a node metrics-server has not scraped yet does not make the
+  cluster look emptier. Against the sandbox (k3s v1.33, one node) the strip's requested CPU,
+  330m, is what `kubectl describe node` prints under Allocated resources
+  (`Live/ClusterCapacityLiveTests`, which also shows the two 403s are what the strip catches).
+- **Not built, deliberately:** limits (the node pane has them per node; a cluster sum of
+  overcommit says little), history (`UsageHistory` is per row and the strip draws no chart), and
+  the fleet view (the strip is per cluster; it is hidden while the list aggregates several).
+- Screenshots: `cluster-tab-node-list` (full), `cluster-tab-node-capacity-no-metrics`,
+  `cluster-tab-node-capacity-narrow-rbac`. The demo cluster drives it through production code:
+  its nodes, the usage `DemoUsage` seeds and its pods (demo rule 4).
+
 ### Cordon, and the one honest exception to "capability from discovery"
 
 Cordon is a one-field merge patch of `spec.unschedulable`, structurally identical to

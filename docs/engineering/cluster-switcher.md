@@ -36,7 +36,12 @@ a file moves). Notes for anyone changing it:
   is four style selectors on the `SwitcherList`'s own `ListBox.Styles` in `MainWindow.axaml`.
   The row has no environment dot either (FEAT-73): the pill at its end says the
   environment in words. `LayoutChecks.SwitcherPinsOnlyWhereUsed` (`main-window-switcher`)
-  checks every rendered row and was confirmed red with the hiding style removed.
+  checks every rendered row and was confirmed red with the hiding style removed. Its fixture
+  selects an unpinned row (#287), so the shot carries all three states — pinned, unpinned and
+  hidden, unpinned and shown because selected — and the check fails when no selected,
+  unpinned row was rendered: until then the selected row was also pinned, and the state the
+  rule exists for was never drawn. The README's and the Store's switcher images were
+  re-rendered for it.
 
 - **The results list is flat, deliberately.** Section titles ride on the first
   row of each group (`ClusterSwitcherItemViewModel.SectionHeader`). A nested

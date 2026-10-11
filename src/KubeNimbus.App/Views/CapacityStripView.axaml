@@ -1,0 +1,36 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:KubeNimbus.App.ViewModels"
+             x:Class="KubeNimbus.App.Views.CapacityStripView"
+             x:DataType="vm:CapacityStripViewModel">
+
+  <!-- FEAT-25 (#206): the cluster's capacity above the Nodes list, one row of text in a card
+       of its own (the Argo dashboard's summary sits above its grid the same way). A part the
+       cluster does not let it read is a dim sentence in that part's place, with the reason
+       on hover — never a zero and never a blank (UI rules 9 and 20). A WrapPanel, so at a
+       narrow window the resources go to a second line rather than off the card's edge. -->
+  <Border Classes="card" Padding="12,8" Margin="0,0,0,8" IsVisible="{Binding IsVisible}">
+    <WrapPanel Orientation="Horizontal">
+      <TextBlock Classes="statusText" Classes.warn="{Binding HasNotReady}" Text="{Binding NodesText}"
+                 Margin="0,2,28,2" VerticalAlignment="Center" />
+
+      <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2,28,2">
+        <TextBlock Classes="statusText" Text="CPU" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <TextBlock Classes="statusText" Classes.dim="{Binding IsUsageStated}" Text="{Binding CpuUsedText}"
+                   ToolTip.Tip="{Binding UsageTip}" VerticalAlignment="Center" />
+        <TextBlock Classes="statusText dim" Text="·" VerticalAlignment="Center" />
+        <TextBlock Classes="statusText" Classes.dim="{Binding IsRequestsStated}" Text="{Binding CpuRequestedText}"
+                   ToolTip.Tip="{Binding RequestsTip}" VerticalAlignment="Center" />
+      </StackPanel>
+
+      <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2,0,2">
+        <TextBlock Classes="statusText" Text="Memory" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <TextBlock Classes="statusText" Classes.dim="{Binding IsUsageStated}" Text="{Binding MemoryUsedText}"
+                   ToolTip.Tip="{Binding UsageTip}" VerticalAlignment="Center" />
+        <TextBlock Classes="statusText dim" Text="·" VerticalAlignment="Center" />
+        <TextBlock Classes="statusText" Classes.dim="{Binding IsRequestsStated}" Text="{Binding MemoryRequestedText}"
+                   ToolTip.Tip="{Binding RequestsTip}" VerticalAlignment="Center" />
+      </StackPanel>
+    </WrapPanel>
+  </Border>
+</UserControl>

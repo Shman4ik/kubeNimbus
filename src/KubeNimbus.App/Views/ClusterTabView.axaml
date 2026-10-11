@@ -222,7 +222,11 @@
           <RowDefinition Height="0" MinHeight="0" />
         </Grid.RowDefinitions>
 
-        <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto" Margin="0,0,0,10">
+        <!-- Row 0 is the header and, above the Nodes list only, the capacity strip under it
+             (FEAT-25, #206). A StackPanel rather than another grid row: the rows' indices
+             are what ApplyDockState addresses. -->
+        <StackPanel Grid.Row="0">
+        <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto" Margin="0,0,0,10">
           <!-- The same title size as the Applications mode's "Applications", so the two
                modes read as one app. -->
           <TextBlock Grid.Column="0" Text="{Binding SelectedKind.DisplayName}" FontWeight="SemiBold" FontSize="20" VerticalAlignment="Center" />
@@ -375,6 +379,8 @@
             <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="14" Height="14" />
           </Button>
         </Grid>
+        <views:CapacityStripView DataContext="{Binding Capacity}" />
+        </StackPanel>
 
         <!-- The card behind the list and the Helm browser, the same one the Applications
              list sits in. ClipToBounds, because maximizing the dock sets this row to zero

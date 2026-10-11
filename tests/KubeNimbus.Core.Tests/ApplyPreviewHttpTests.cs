@@ -395,7 +395,7 @@ public class ApplyPreviewHttpTests
     /// </summary>
     internal sealed class StubApiServer : IDisposable
     {
-        private readonly HttpListener _listener = new();
+        private readonly HttpListener _listener;
         private readonly Dictionary<string, List<(HttpStatusCode Status, string Body)>> _responses = new(StringComparer.Ordinal);
         private readonly Dictionary<string, int> _served = new(StringComparer.Ordinal);
         private readonly List<StubRequest> _requests = [];
@@ -407,11 +407,12 @@ public class ApplyPreviewHttpTests
         public TaskCompletionSource<bool>? ReleaseResponse { get; set; }
         public TaskCompletionSource<bool>? ReleaseBody { get; set; }
 
+        // Each stub's own token, so a request meant for another stub is told apart (#279).
+        private readonly string _token = LoopbackHttpListener.NewToken();
+
         public StubApiServer()
         {
-            var port = FreePort();
-            _listener.Prefixes.Add($"http://127.0.0.1:{port}/");
-            _listener.Start();
+            _listener = LoopbackHttpListener.Start(out var port);
             _pump = Task.Run(PumpAsync);
 
             _directory = Directory.CreateTempSubdirectory("kubenimbus-stub-api").FullName;
@@ -431,9 +432,8 @@ public class ApplyPreviewHttpTests
                 users:
                 - name: stub
                   user:
-                    # Not a credential: the stand-in never checks it. The Kubernetes
-                    # client refuses to build a config for a user with no auth at all.
-                    token: stub-token
+                    # Not a credential: it only tells this stub's requests from strays.
+                    token: {{_token}}
                 """);
         }
 
@@ -488,6 +488,11 @@ public class ApplyPreviewHttpTests
                     return;
                 }
 
+                if (!LoopbackHttpListener.IsFor(context, _token))
+                {
+                    continue;
+                }
+
                 using var reader = new StreamReader(context.Request.InputStream, Encoding.UTF8);
                 var body = await reader.ReadToEndAsync();
                 var path = context.Request.Url!.AbsolutePath;
@@ -527,14 +532,6 @@ public class ApplyPreviewHttpTests
             }
         }
 
-        private static int FreePort()
-        {
-            using var probe = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
-            probe.Start();
-            var port = ((IPEndPoint)probe.LocalEndpoint).Port;
-            probe.Stop();
-            return port;
-        }
 
         public void Dispose()
         {

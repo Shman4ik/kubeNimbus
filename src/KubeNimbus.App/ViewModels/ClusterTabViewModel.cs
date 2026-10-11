@@ -942,6 +942,10 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             : _healthFilterActive
                 ? $"{VisibleRows.Count} of {Rows.Count} unhealthy"
                 : $"{VisibleRows.Count} of {Rows.Count}";
+
+        // Every change to the rows passes through here, so the capacity strip over the Nodes
+        // list follows them without a hook of its own (#206).
+        RefreshCapacity();
     }
 
     /// <summary>
@@ -1739,6 +1743,12 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         Status = $"Reconnect failed ({ConnectionFailure.Report.StepPhrase}).";
         IsConnected = false;
         ApplyTransportNotices(null);
+
+        // The Applications mode's watches go too (#294): the client they read through just
+        // failed, and the failure view covers their rows. They start again from the
+        // connection change a successful Reconnect makes (ApplicationsViewModel.TryStart).
+        // After IsConnected is false, or the connection change would start them again here.
+        Applications.Suspend();
     }
 
     /// <summary>
@@ -2736,10 +2746,15 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
     }
 
+    /// <summary>A list watch is running (its token is live) — what the tests read.</summary>
+    internal bool HasListWatch => _watchCts is not null;
+
     /// <summary>Cancels the current list watch (and the metrics poll riding on its token).</summary>
     private void StopWatch()
     {
         _lastUsage = null;
+        _capacityActive = false;
+        Capacity.Hide();
         _watchCts?.Cancel();
         _watchCts?.Dispose();
         _watchCts = null;
@@ -2759,10 +2774,13 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         Rows.Clear();
         _rowsByKey.Clear();
         _fleetTargets.Clear();
-        IsListLoading = (Client is not null || IsDemo) && SelectedKind is not null;
+        IsListLoading = (Client is not null || IsDemo) && SelectedKind is not null && !_reconnectFailed;
         RecomputeListEmpty();
 
-        if ((Client is null && !IsDemo) || SelectedKind is null)
+        // After a failed reconnect the failure view stands in the list's place, and the client
+        // is the one that just failed: a kind or namespace change made behind it starts nothing
+        // (#294). The Reconnect that succeeds clears the flag and restarts the list itself.
+        if ((Client is null && !IsDemo) || SelectedKind is null || _reconnectFailed)
         {
             AreMetricsVisible = false;
             PrinterColumns = [];
@@ -2783,6 +2801,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             // other tab with no client. Rows come from the shipped dataset; no watch,
             // no metrics poll, no socket.
             PopulateDemoRows(descriptor, namespaces);
+            StartCapacity(null, CancellationToken.None);
             return;
         }
 
@@ -2809,6 +2828,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
 
         AreMetricsVisible = _metricsApiAvailable && IsMeteredKind(descriptor);
+        StartCapacity(client, token);
 
         if (namespaces.Count > 1)
         {
@@ -3281,6 +3301,15 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                             // entirely on this cluster.
                             unavailable++;
                         }
+                        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Forbidden
+                                                              && !pods && !token.IsCancellationRequested)
+                        {
+                            // Narrow RBAC: the metrics API is there and this user may not read
+                            // node usage. The capacity strip says so (#206); the columns keep
+                            // their dashes, as for any other failed poll.
+                            var reason = (ex as KubernetesApiException)?.ServerMessage ?? ex.Message;
+                            Dispatcher.UIThread.Post(() => SetCapacityUsage(CapacityUsageState.Refused, reason));
+                        }
                         catch (Exception) when (!token.IsCancellationRequested)
                         {
                             // Transient (throttling, a restarting metrics-server):
@@ -3296,6 +3325,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                         {
                             _metricsApiAvailable = false;
                             AreMetricsVisible = false;
+                            SetCapacityUsage(CapacityUsageState.NoMetricsApi);
                         });
                         return;
                     }
@@ -3338,6 +3368,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
 
         _lastUsage = byKey;
+        _capacityUsage = _capacityActive ? CapacityUsageState.Available : _capacityUsage;
         foreach (var (key, row) in _rowsByKey)
         {
             if (byKey.TryGetValue(key, out var sample))
@@ -3359,6 +3390,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         {
             ResortVisibleRows();
         }
+
+        RefreshCapacity();
     }
 
     /// <summary>

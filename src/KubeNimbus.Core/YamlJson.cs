@@ -39,14 +39,24 @@ public static class YamlJson
         return stream.Documents.Count(d => d.RootNode is not YamlScalarNode { Value: null or "" });
     }
 
-    /// <summary>Renders a JSON element as YAML text.</summary>
-    public static string ToYamlString(JsonElement element)
+    /// <summary>Renders a JSON element as YAML text, with <c>\n</c> line ends on every platform.</summary>
+    /// <remarks>
+    /// YamlDotNet ends its lines with <see cref="Environment.NewLine"/>, so on Windows every line
+    /// of the editor's text carried a stray <c>\r</c> that Linux and macOS never saw, and anything
+    /// that split or compared that text on <c>\n</c> behaved differently per platform (#284, #287).
+    /// Replacing every <c>\r\n</c> changes no value: a line break inside a block scalar is
+    /// normalized to <c>\n</c> by any YAML parser (YAML 1.2, 5.4), this one included, so a value's
+    /// <c>\r\n</c> never came back from the text as one on any platform.
+    /// </remarks>
+    public static string ToYamlString(JsonElement element) => Save(new YamlDocument(ToYaml(element)));
+
+    /// <summary>Writes one YAML document as text, with <c>\n</c> line ends (see <see cref="ToYamlString"/>).</summary>
+    internal static string Save(YamlDocument document)
     {
-        var yamlDoc = new YamlDocument(ToYaml(element));
-        var stream = new YamlStream(yamlDoc);
+        var stream = new YamlStream(document);
         using var writer = new StringWriter();
         stream.Save(writer, assignAnchors: false);
-        return writer.ToString();
+        return writer.ToString().Replace("\r\n", "\n", StringComparison.Ordinal);
     }
 
     private static JsonNode? ToJson(YamlNode node) => node switch

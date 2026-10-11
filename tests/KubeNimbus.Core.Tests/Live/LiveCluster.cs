@@ -153,6 +153,7 @@ internal static class LiveCluster
             }
 
             await SweepAbandonedNamespacesAsync(client, ct);
+            await SweepAbandonedCrdsAsync(client, ct);
 
             // A pod cannot be created until the namespace's default ServiceAccount exists.
             await WaitUntilAsync(
@@ -183,6 +184,30 @@ internal static class LiveCluster
             if (IsAbandoned(ns.Name, ns.CreationTimestamp, DateTimeOffset.UtcNow))
             {
                 await client.DeleteResourceAsync(ResourceDescriptor.Namespaces, null, ns.Name, ct);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The same sweep for the cluster-scoped objects a run creates outside its namespace — the
+    /// throwaway CRDs of <c>ConnectFanOutLiveTests</c>, which a killed run left behind with
+    /// nothing to find them by (#279). They carry <see cref="RunLabel"/> with their run's id,
+    /// and one that is not this run's and is older than <see cref="AbandonedAfter"/> goes.
+    /// </summary>
+    private static async Task SweepAbandonedCrdsAsync(ClusterClient client, CancellationToken ct)
+    {
+        var crds = new ResourceDescriptor(
+            "apiextensions.k8s.io", "v1", "CustomResourceDefinition", "customresourcedefinitions",
+            "customresourcedefinition", false, ["crd"], []);
+        var labelled = await client.ListResourceOnceAsync(
+            crds, null, cancellationToken: ct,
+            labelSelector: new LabelSelector([new LabelRequirement(RunLabel, LabelOperator.Exists, [])]));
+        foreach (var crd in labelled)
+        {
+            if (crd.Labels.GetValueOrDefault(RunLabel) != RunId
+                && crd.CreationTimestamp is { } at && DateTimeOffset.UtcNow - at > AbandonedAfter)
+            {
+                await client.DeleteResourceAsync(crds, null, crd.Name, ct);
             }
         }
     }
@@ -531,7 +556,7 @@ internal sealed class ServerTable : IDisposable
     private ServerTable(
         JsonDocument document,
         IReadOnlyList<(string Name, string Type, int Priority)> columns,
-        IReadOnlyList<(string Key, JsonElement[] Cells)> rows)
+        IReadOnlyList<(string Key, JsonElement[] Cells, string? ResourceVersion)> rows)
     {
         _document = document;
         Columns = columns;
@@ -540,8 +565,11 @@ internal sealed class ServerTable : IDisposable
 
     public IReadOnlyList<(string Name, string Type, int Priority)> Columns { get; }
 
-    /// <summary>Each row's cells, keyed <c>namespace/name</c> from the row's own object metadata.</summary>
-    public IReadOnlyList<(string Key, JsonElement[] Cells)> Rows { get; }
+    /// <summary>
+    /// Each row's cells, keyed <c>namespace/name</c> from the row's own object metadata, with the
+    /// object's <c>resourceVersion</c> when the server included it (it does by default).
+    /// </summary>
+    public IReadOnlyList<(string Key, JsonElement[] Cells, string? ResourceVersion)> Rows { get; }
 
     public int IndexOf(string column) =>
         Columns.Select((c, i) => (c, i)).First(x => x.c.Name == column).i;
@@ -559,7 +587,7 @@ internal sealed class ServerTable : IDisposable
                 c.GetProperty("type").GetString() ?? "",
                 c.TryGetProperty("priority", out var p) && p.ValueKind == JsonValueKind.Number ? p.GetInt32() : 0))
             .ToList();
-        var rows = new List<(string, JsonElement[])>();
+        var rows = new List<(string, JsonElement[], string?)>();
         if (root.TryGetProperty("rows", out var rowsElement) && rowsElement.ValueKind == JsonValueKind.Array)
         {
             foreach (var row in rowsElement.EnumerateArray())
@@ -568,7 +596,9 @@ internal sealed class ServerTable : IDisposable
                 var key = row.TryGetProperty("object", out var obj) && obj.TryGetProperty("metadata", out var meta)
                     ? $"{(meta.TryGetProperty("namespace", out var ns) ? ns.GetString() : "")}/{meta.GetProperty("name").GetString()}"
                     : $"?/{cells[0].GetString()}";
-                rows.Add((key, cells));
+                var resourceVersion = row.TryGetProperty("object", out var o) && o.TryGetProperty("metadata", out var m)
+                    && m.TryGetProperty("resourceVersion", out var rv) ? rv.GetString() : null;
+                rows.Add((key, cells, resourceVersion));
             }
         }
 

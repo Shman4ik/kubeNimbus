@@ -393,7 +393,18 @@ for the life of the tab.
   once the tab was closed and reopened. Retry from there runs Reconnect again rather than a
   first connect, which would re-apply the restored kind and namespace over the reader's. A
   watch that drops on its own is not this: the informer retries it and the list keeps its
-  warning. `ConnectionStateTests.A_failed_reconnect_on_a_connected_tab_shows_the_failure_view_in_place_of_its_rows`. It is offered on the failure view, beside the list's
+  warning. `ConnectionStateTests.A_failed_reconnect_on_a_connected_tab_shows_the_failure_view_in_place_of_its_rows`.
+  **Every watch the tab owns stops with it, and nothing starts behind the view (#294).** The
+  Applications mode keeps watches of its own; `ApplicationsViewModel.Suspend` cancels them,
+  drops what they had read and clears `HasStarted`, after `IsConnected` goes false (before it,
+  the connection change would start them again on the spot). A kind or namespace change, or a
+  refresh, made while the failure view stands goes through `RestartWatch`, which now starts
+  nothing while `_reconnectFailed` is set — before, it started a watch against the client that
+  had just failed and loaded rows hidden behind the view. The Reconnect that succeeds clears the
+  flag and restarts the list, and its `IsConnected` change starts the Applications reads again
+  through `TryStart`. `ConnectionStateTests.A_failed_reconnect_stops_both_modes_and_a_successful_one_starts_them_again`
+  drives both directions against a server that answers `/version` and holds the rest open, and
+  went red with either the guard or the `Suspend` call taken out. It is offered on the failure view, beside the list's
   warning when that warning is a lost or refused watch (`ConnectionWarningOffersReconnect`,
   reset whenever the warning changes so a later RBAC warning cannot inherit the button), in
   the ☰ menu, the macOS menu and the palette. Never on the demo cluster.

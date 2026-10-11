@@ -116,7 +116,31 @@ public class WorkloadLogsLiveTests
                 }
                 catch (Exception ex)
                 {
-                    return $"threw {ex.GetType().Name}: {ex.Message}";
+                    // The refusal can come back after the pod's last Modified event: under load
+                    // the log request is slower than the container's start, and the pod reports
+                    // Running and Ready while the request that will be refused is still in
+                    // flight. Nothing then brings it round to Follow again, and the pod reads as
+                    // one that never logged (#279, the failure seen under shared load). So a
+                    // refusal is checked against the pod as it is now, the same check the
+                    // empty-early-end retry below makes.
+                    var refusal = $"threw {ex.GetType().Name}: {ex.Message}";
+                    try
+                    {
+                        await Task.Delay(1000, paneCts.Token);
+                        var afterRefusal = await client.ReadResourceAsync(ResourceDescriptor.Pods, LiveCluster.Namespace, p, paneCts.Token);
+                        if (afterRefusal is null
+                            || PodDetails.ContainerRunOf(afterRefusal.Raw, "app") is not { State: ContainerRunState.Running })
+                        {
+                            return refusal;
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return refusal;
+                    }
+
+                    refusals.Add(refusal);
+                    continue;
                 }
 
                 if (queue.Count > before || wasRunning)

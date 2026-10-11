@@ -300,7 +300,7 @@ public class NodeWatchHttpTests
     /// </summary>
     internal sealed class ConcurrentStubServer : IAsyncDisposable
     {
-        private readonly HttpListener _listener = new();
+        private readonly HttpListener _listener;
         private readonly CancellationTokenSource _closing = new();
         private readonly ConcurrentQueue<Request> _requests = new();
         private readonly ConcurrentBag<Task> _handlers = [];
@@ -308,18 +308,14 @@ public class NodeWatchHttpTests
         private readonly string _directory;
         private readonly Task _pump;
 
+        // Each stub's own token, so a request meant for another stub is told apart (#279).
+        private readonly string _token = LoopbackHttpListener.NewToken();
+
         public ConcurrentStubServer(Func<Request, Responder, Task> handle)
         {
             _handle = handle;
-            using (var probe = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0))
-            {
-                probe.Start();
-                Port = ((IPEndPoint)probe.LocalEndpoint).Port;
-                probe.Stop();
-            }
-
-            _listener.Prefixes.Add($"http://127.0.0.1:{Port}/");
-            _listener.Start();
+            _listener = LoopbackHttpListener.Start(out var port);
+            Port = port;
             _pump = Task.Run(PumpAsync);
 
             _directory = Directory.CreateTempSubdirectory("kubenimbus-stub-watch").FullName;
@@ -339,8 +335,8 @@ public class NodeWatchHttpTests
                 users:
                 - name: stub
                   user:
-                    # Not a credential: the stand-in never checks it.
-                    token: stub-token
+                    # Not a credential: it only tells this stub's requests from strays.
+                    token: {{_token}}
                 """);
         }
 
@@ -364,6 +360,11 @@ public class NodeWatchHttpTests
                 catch (Exception)
                 {
                     return;
+                }
+
+                if (!LoopbackHttpListener.IsFor(context, _token))
+                {
+                    continue;
                 }
 
                 var request = new Request(

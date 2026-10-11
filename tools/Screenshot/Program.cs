@@ -131,6 +131,9 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-yaml-editor", () => HostInMainWindow(ClusterTabScenarios.YamlEditor())),
     ("cluster-tab-yaml-delete-production", () => HostInMainWindow(ClusterTabScenarios.YamlEditorDeleteProduction())),
     ("cluster-tab-yaml-editor-maximized", () => HostInMainWindow(ClusterTabScenarios.YamlEditorMaximized())),
+    // #270: metadata.managedFields out of the text by default, and back with the chip pressed.
+    ("cluster-tab-yaml-managed-fields-hidden", () => HostInMainWindow(ClusterTabScenarios.YamlEditorManagedFields(shown: false))),
+    ("cluster-tab-yaml-managed-fields-shown", () => HostInMainWindow(ClusterTabScenarios.YamlEditorManagedFields(shown: true))),
     ("cluster-tab-yaml-diff-preview", () => HostInMainWindow(ClusterTabScenarios.YamlEditorDiffPreview())),
     ("cluster-tab-yaml-diff-split", () => HostInMainWindow(ClusterTabScenarios.YamlEditorDiffSplit())),
     ("cluster-tab-yaml-diff-fields", () => HostInMainWindow(ClusterTabScenarios.YamlEditorDiffFields())),
@@ -296,6 +299,10 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // for real (no API server to evict through) and are written in, exactly as the
     // scale/exec/YAML fixtures are.
     ("cluster-tab-node-list", () => HostInMainWindow(ClusterTabScenarios.NodeList())),
+    // FEAT-25 (#206): the capacity strip above the Nodes list — full in the shot above, and
+    // here without metrics-server and under narrow RBAC, each refused half saying so in place.
+    ("cluster-tab-node-capacity-no-metrics", () => HostInMainWindow(ClusterTabScenarios.NodeCapacityNoMetrics())),
+    ("cluster-tab-node-capacity-narrow-rbac", () => HostInMainWindow(ClusterTabScenarios.NodeCapacityNarrowRbac())),
     ("cluster-tab-node-detail", () => HostInMainWindow(ClusterTabScenarios.NodeDetail(), height: 1000)),
     ("cluster-tab-node-detail-pods", () => HostInMainWindow(ClusterTabScenarios.NodeDetailPods(), height: 1000)),
     ("ux-node-pods-sort", () => HostInMainWindow(ClusterTabScenarios.NodeDetailPods(), height: 1000)),
@@ -798,6 +805,14 @@ static Control BuildSwitcherContent(string? query = null, int width = 1280, int 
     if (query is not null)
     {
         vm.Switcher.Query = query;
+    }
+    else
+    {
+        // The selected row is an unpinned one (#287), so the shot carries all three pin
+        // states FEAT-71 draws: pinned, unpinned and hidden, unpinned and shown because
+        // the row is selected. LayoutChecks.SwitcherPinsOnlyWhereUsed needs the third.
+        vm.Switcher.SelectedItem = vm.Switcher.Ordered.FirstOrDefault(i => !i.IsPinned && !i.IsCurrent)
+            ?? vm.Switcher.SelectedItem;
     }
 
     return window;

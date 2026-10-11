@@ -118,7 +118,7 @@ public class DiscoveryHttpTests
     {
         private static readonly TimeSpan Latency = TimeSpan.FromMilliseconds(60);
 
-        private readonly HttpListener _listener = new();
+        private readonly HttpListener _listener;
         private readonly int _groupCount;
         private readonly int? _failingGroup;
         private readonly bool _aggregated;
@@ -129,15 +129,16 @@ public class DiscoveryHttpTests
         private int _inFlight;
         private int _maxInFlight;
 
+        // Each stub's own token, so a request meant for another stub is told apart (#279).
+        private readonly string _token = LoopbackHttpListener.NewToken();
+
         public SlowDiscoveryServer(int groupCount, int? failingGroup, bool aggregated = false)
         {
             _groupCount = groupCount;
             _aggregated = aggregated;
             _failingGroup = failingGroup;
 
-            var port = FreePort();
-            _listener.Prefixes.Add($"http://127.0.0.1:{port}/");
-            _listener.Start();
+            _listener = LoopbackHttpListener.Start(out var port);
             _pump = Task.Run(PumpAsync);
 
             _directory = Directory.CreateTempSubdirectory("kubenimbus-stub-discovery").FullName;
@@ -157,8 +158,8 @@ public class DiscoveryHttpTests
                 users:
                 - name: stub
                   user:
-                    # Not a credential: the stand-in never checks it.
-                    token: stub-token
+                    # Not a credential: it only tells this stub's requests from strays.
+                    token: {{_token}}
                 """);
         }
 
@@ -185,6 +186,11 @@ public class DiscoveryHttpTests
                 catch (Exception)
                 {
                     return;
+                }
+
+                if (!LoopbackHttpListener.IsFor(context, _token))
+                {
+                    continue;
                 }
 
                 // Not awaited: each request is answered on its own, so overlap is
@@ -275,14 +281,6 @@ public class DiscoveryHttpTests
             ]}
             """;
 
-        private static int FreePort()
-        {
-            using var probe = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
-            probe.Start();
-            var port = ((IPEndPoint)probe.LocalEndpoint).Port;
-            probe.Stop();
-            return port;
-        }
 
         public void Dispose()
         {

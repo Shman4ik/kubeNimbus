@@ -222,7 +222,7 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
         _descriptor = descriptor;
         _namespace = @namespace;
         _name = name;
-        _yamlText = initialYaml;
+        _yamlText = ForEditor(initialYaml);
         ClusterName = clusterName;
         Key = KeyFor(clusterName, descriptor, @namespace, name);
 
@@ -276,6 +276,89 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
             RefreshCertificates(DateTimeOffset.UtcNow);
         };
         return timer;
+    }
+
+    // ------------------------------------------------------------ managed fields
+    //
+    // #270, the owner's decision of 2026-10-11: metadata.managedFields is hidden from the text by
+    // default, as kubectl get -o yaml and kubectl edit hide it, and one chip shows it. Nothing an
+    // apply sends changes either way — ClusterClient.ApplyBody removes the field from every body.
+
+    /// <summary>The block taken out of the text the editor shows, kept to put back on request; null when none is hidden.</summary>
+    private ManagedFieldsBlock? _hiddenManagedFields;
+
+    /// <summary>Set while a refused toggle is put back, so the put-back does not toggle again.</summary>
+    private bool _revertingManagedFieldsToggle;
+
+    /// <summary>
+    /// The object as the server returned it carries <c>metadata.managedFields</c>, so the chip
+    /// that shows or hides it is offered. An object without the field (a demo object, a new
+    /// document) has nothing to toggle, and the chip stays away (UI rule 1).
+    /// </summary>
+    [ObservableProperty]
+    private bool _hasManagedFields;
+
+    /// <summary>
+    /// Show <c>metadata.managedFields</c> in the text. Off on every newly opened tab, and not a
+    /// preference: it is a view toggle inside one pane, like Reveal values beside it.
+    /// </summary>
+    [ObservableProperty]
+    private bool _showManagedFields;
+
+    /// <summary>The server's YAML as this tab shows it: without <c>metadata.managedFields</c> unless they are asked for.</summary>
+    private string ForEditor(string serverYaml)
+    {
+        if (ShowManagedFields)
+        {
+            _hiddenManagedFields = null;
+            HasManagedFields = ManagedFieldsText.TryHide(serverYaml, out _, out _);
+            return serverYaml;
+        }
+
+        if (ManagedFieldsText.TryHide(serverYaml, out var hidden, out var removed))
+        {
+            _hiddenManagedFields = removed;
+            HasManagedFields = true;
+            return hidden;
+        }
+
+        _hiddenManagedFields = null;
+        HasManagedFields = false;
+        return serverYaml;
+    }
+
+    partial void OnShowManagedFieldsChanged(bool value)
+    {
+        if (_revertingManagedFieldsToggle)
+        {
+            return;
+        }
+
+        var text = YamlText;
+        ManagedFieldsBlock? hidden = null;
+        var changed = value
+            ? _hiddenManagedFields is { } block && ManagedFieldsText.TryShow(YamlText, block, out text)
+            : ManagedFieldsText.TryHide(YamlText, out text, out hidden);
+        if (!changed)
+        {
+            // The text above no longer reads as one YAML document (or the field was edited out),
+            // so there is nothing this toggle can move without guessing. Say so, and leave the
+            // chip as it was rather than checked over a document that does not match it.
+            StatusMessage = value
+                ? "The managed fields can be shown again once the text above reads as one YAML document."
+                : "The managed fields can be hidden once the text above reads as one YAML document.";
+            _revertingManagedFieldsToggle = true;
+            ShowManagedFields = !value;
+            _revertingManagedFieldsToggle = false;
+            return;
+        }
+
+        // Moving the server's bookkeeping in or out is not an edit, and must not mark a clean
+        // tab dirty — a dirty tab is one whose Reload discards something.
+        var wasDirty = IsDirty;
+        _hiddenManagedFields = hidden;
+        YamlText = text;
+        IsDirty = wasDirty;
     }
 
     // ------------------------------------------------------------ certificates
@@ -822,7 +905,7 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
         try
         {
             var applied = await _client.ApplyYamlAsync(_descriptor, _namespace, _name, YamlText, FieldManager, force);
-            YamlText = applied.ToYaml();
+            YamlText = ForEditor(applied.ToYaml());
             IsDirty = false;
             StaleNotice = null;
             StatusMessage = $"Applied at {DateTimeOffset.Now:T}.{LooseValidationSuffix}";
@@ -875,7 +958,7 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
                 return;
             }
 
-            YamlText = current.ToYaml();
+            YamlText = ForEditor(current.ToYaml());
             IsDirty = false;
             IsDeleted = false;
             StaleNotice = null;
@@ -921,7 +1004,7 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
                 return;
             }
 
-            YamlText = current.ToYaml();
+            YamlText = ForEditor(current.ToYaml());
             IsDirty = false;
         }
         catch (Exception ex)

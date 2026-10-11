@@ -37,7 +37,7 @@ public partial class ConnectFanOutLiveTests
               verbs: [get, list, watch]
             """, ct);
         var text = await File.ReadAllTextAsync(narrow.KubeconfigPath, ct);
-        var plugin = CountingPlugin.Write(TokenLine().Match(text).Groups[1].Value);
+        using var plugin = CountingPlugin.Write(TokenLine().Match(text).Groups[1].Value);
         var path = Path.Combine(Path.GetDirectoryName(plugin.Path)!, "kubeconfig.yaml");
         await File.WriteAllTextAsync(path, TokenLine().Replace(text,
             $"exec:\n        apiVersion: client.authentication.k8s.io/v1\n        interactiveMode: Never\n        command: '{plugin.Path.Replace("'", "''")}'"), ct);
@@ -119,7 +119,11 @@ public partial class ConnectFanOutLiveTests
             foreach (var legacy in new[] { false, true })
             {
                 using var proxy = new ObservingProxy(upstream, legacy);
-                var path = Path.Combine(Directory.CreateTempSubdirectory("kubenimbus-live-proxy").FullName, "kubeconfig.yaml");
+
+                // The kubeconfig holds the narrow user's token, short-lived but real: it goes
+                // when the iteration does, not when the temp folder is next cleaned (#279).
+                using var proxyDirectory = new TempDirectory("kubenimbus-live-proxy");
+                var path = Path.Combine(proxyDirectory.Path, "kubeconfig.yaml");
                 await File.WriteAllTextAsync(path, ServerLine().Replace(
                     CaLine().Replace(text, ""), $"server: {proxy.Url}"), ct);
                 using var client = await ClusterClient.ConnectAsync(
@@ -183,6 +187,7 @@ public partial class ConnectFanOutLiveTests
           name: probes.{{group}}
           labels:
             app.kubernetes.io/part-of: kubenimbus-live-tests
+            {{LiveCluster.RunLabel}}: "{{LiveCluster.RunId}}"
         spec:
           group: {{group}}
           scope: Namespaced
@@ -204,10 +209,15 @@ public partial class ConnectFanOutLiveTests
     [GeneratedRegex(@"\n\s*(certificate-authority-data|insecure-skip-tls-verify):[^\n]*")]
     private static partial Regex CaLine();
 
-    /// <summary>A plugin that counts its runs in a file and prints a fixed, real token.</summary>
-    private sealed record CountingPlugin(string Path, string Counter)
+    /// <summary>
+    /// A plugin that counts its runs in a file and prints a fixed, real token. Disposing it
+    /// deletes its folder, which holds that token and the kubeconfig beside it (#279).
+    /// </summary>
+    private sealed record CountingPlugin(string Path, string Counter) : IDisposable
     {
         public int Runs => File.ReadAllLines(Counter).Length;
+
+        public void Dispose() => TempDirectory.TryDelete(System.IO.Path.GetDirectoryName(Path)!);
 
         public static CountingPlugin Write(string token)
         {
@@ -240,7 +250,7 @@ public partial class ConnectFanOutLiveTests
     /// </summary>
     private sealed class ObservingProxy : IDisposable
     {
-        private readonly HttpListener _listener = new();
+        private readonly HttpListener _listener;
         private readonly HttpClient _upstream;
         private readonly Uri _target;
         private readonly bool _legacy;
@@ -258,13 +268,8 @@ public partial class ConnectFanOutLiveTests
                 SslOptions = { RemoteCertificateValidationCallback = (_, _, _, _) => true },
                 MaxConnectionsPerServer = 64,
             });
-            using var probe = new TcpListener(IPAddress.Loopback, 0);
-            probe.Start();
-            var port = ((IPEndPoint)probe.LocalEndpoint).Port;
-            probe.Stop();
+            _listener = LoopbackHttpListener.Start(out var port);
             Url = $"http://127.0.0.1:{port}";
-            _listener.Prefixes.Add($"{Url}/");
-            _listener.Start();
             _ = Task.Run(PumpAsync);
         }
 
@@ -341,6 +346,29 @@ public partial class ConnectFanOutLiveTests
         {
             _listener.Close();
             _upstream.Dispose();
+        }
+    }
+}
+
+/// <summary>A folder under the temp directory that is deleted, best effort, on dispose.</summary>
+internal sealed class TempDirectory(string prefix) : IDisposable
+{
+    public string Path { get; } = Directory.CreateTempSubdirectory(prefix).FullName;
+
+    public void Dispose() => TryDelete(Path);
+
+    public static void TryDelete(string path)
+    {
+        try
+        {
+            Directory.Delete(path, recursive: true);
+        }
+        catch (IOException)
+        {
+            // a file still open (a plugin process exiting); the temp cleaner gets it
+        }
+        catch (UnauthorizedAccessException)
+        {
         }
     }
 }

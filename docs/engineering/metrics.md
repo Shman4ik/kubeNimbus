@@ -28,6 +28,11 @@ container) and node usage. Three things are deliberate:
   `MetricsLastSampleTests` pins all three; the first goes red without the new-row step
   (checked).
 
+- **The Nodes list's poll also feeds the capacity strip (#206)**: a successful poll marks usage
+  readable, the "no metrics API" path says so, and a 403 on node metrics is reported to the strip
+  as refused rather than swallowed as transient (the columns keep their dashes). See
+  [node operations](node-operations.md#the-capacity-strip-above-the-nodes-list-feat-25-206).
+
 Quantity strings (`"100m"`, `"128Mi"`, `"12345n"`, `"129e6"`) are parsed by
 `Quantity.cs` — a small AOT-safe reader, since `ResourceQuantity` from the k8s
 client only covers typed models and metrics/CRD objects arrive as raw JSON.
