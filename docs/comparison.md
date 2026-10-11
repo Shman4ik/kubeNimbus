@@ -110,10 +110,12 @@ ships today (`docs/engineering/metrics.md`):
   read from the node and its pods (`src/KubeNimbus.App/Views/NodeDetailView.axaml`).
 - **No metrics-server, no error**: when the API is absent or unhealthy, the columns are
   hidden rather than filled with dashes or an error (`MetricsUnavailableException`).
-
-**Pending, not shipped:** a cluster-wide capacity strip on the Nodes list (#206) is being
-built. Until it merges, kubeNimbus has no single cluster-total view, and this page must not
-claim one.
+- **A capacity strip above the Nodes list** (#206, on `main` as of 2026-10-11): the node
+  count and how many are NotReady, CPU and memory used against allocatable (from
+  metrics-server), and CPU and memory requested against allocatable. A part the cluster does
+  not let it read says so in place instead of showing zero
+  (`src/KubeNimbus.App/Views/CapacityStripView.axaml`, sums in
+  `src/KubeNimbus.Core/ClusterCapacity.cs`).
 
 This differentiates against Lens and FreeLens only. **Aptakube** reads metrics-server as
 well as Prometheus (its [README](https://github.com/aptakube/aptakube) and landing page,
