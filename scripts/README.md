@@ -14,6 +14,8 @@ or `scripts/test.sh -- --treenode-filter '/*/*/DemoRowsTests/*'`. The rest is th
 | `design/make-masters.ps1` | `design/masters/**` from `design/logo*.svg` (needs Inkscape) |
 | `windows/make-app-icons.ps1` | `src/KubeNimbus.App/Assets/**` — `app.ico`, window icons, MSIX tiles |
 | `windows/make-store-logos.ps1` | `design/store/**` — Partner Center listing images |
+| `windows/make-store-hero.ps1` | `design/store/SuperHeroArt-16x9-1920x1080.png` — pgNimbus's hero layout with the Applications screenshot |
+| `windows/make-store-trailer.ps1` | `design/store/trailer/**` — feature trailer and thumbnail from the committed demo GIFs; needs ffmpeg |
 
 ## Packaging scripts
 

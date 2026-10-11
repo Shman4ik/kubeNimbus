@@ -8,8 +8,9 @@
 <h1 align="center">kubeNimbus</h1>
 
 <p align="center">
-  A fast, open-source Kubernetes desktop client.<br>
-  The Kubernetes sibling of <a href="https://github.com/Shman4ik/pgNimbus">pgNimbus</a>, and an alternative to Lens.
+  <b>A fast Kubernetes desktop client that talks to your clusters and nothing else.</b><br>
+  Find the unhealthy app, see why, and open its logs. No telemetry, no account, no subscription.<br>
+  Free and open source, from the same family as <a href="https://github.com/Shman4ik/pgNimbus">pgNimbus</a>.
 </p>
 
 <p align="center">
@@ -17,20 +18,37 @@
   <a href="https://github.com/Shman4ik/kubeNimbus/releases/latest"><img src="https://img.shields.io/github/v/release/Shman4ik/kubeNimbus?include_prereleases&sort=semver" alt="Latest release"></a>
   <a href="https://apps.microsoft.com/detail/9MZ3C28M65PB"><img src="https://img.shields.io/badge/Microsoft%20Store-install-0078D4?logo=windows" alt="Microsoft Store"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT licensed"></a>
-  <img src="https://img.shields.io/badge/.NET-10-512BD4" alt=".NET 10">
+  <img src="https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet" alt=".NET 10">
+  <img src="https://img.shields.io/badge/Avalonia-12-8B44AC" alt="Avalonia 12">
   <img src="https://img.shields.io/badge/NativeAOT-shipping%20config-success" alt="NativeAOT">
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Platforms: Windows, macOS and Linux">
+  <a href="https://buymeacoffee.com/shman4ik"><img src=".github/assets/bmc-badge.svg" alt="Buy me a coffee"></a>
+</p>
+
+<p align="center">
+  <a href="#download">Download</a> ·
+  <a href="#screenshots">Screenshots</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#what-it-does">Features</a> ·
+  <a href="docs/keyboard-shortcuts.md">Keyboard shortcuts</a> ·
+  <a href="#roadmap">Roadmap</a> ·
+  <a href="#support">Support</a>
 </p>
 
 ---
 
-> **Why another one?** The 2026 Kubernetes GUI market is thin in one specific
-> place. Lens is subscription-gated for commercial use and heavy Electron;
-> OpenLens is dead; FreeLens is still Electron, and so is Headlamp's desktop
-> app; Aptakube is polished but closed and paid; k9s is a keyboard TUI.
-> [KubeUI](https://github.com/IvanJosipovic/KubeUI) is the closest thing to
-> kubeNimbus — also MIT, also Avalonia — and is the comparison worth making:
-> kubeNimbus is NativeAOT, opens in ~150 ms rather than ~650 ms, ships a ~62 MB
-> payload rather than 382 MiB, and sends no telemetry at all.
+## Why kubeNimbus?
+
+- **Start with what needs attention.** Applications opens on unhealthy workloads,
+  with a one-line reason from the cluster's own status. Open an app for the
+  findings, events and crashing pod's logs; switch to Resources for any kind,
+  including CRDs.
+- **A native app, ready to run.** Self-contained NativeAOT builds for Windows,
+  macOS and Linux, with no .NET runtime to install. Live lists use watches, and
+  logs stream as they arrive.
+- **Your clusters stay yours.** No telemetry, account or in-cluster agent.
+  Credentials stay in your kubeconfig chain. MIT licensed, including commercial
+  use, with no subscription or seat limit.
 
 ## Screenshots
 
@@ -62,6 +80,15 @@
 
 <sub>Rendered from the repo's own headless harness (`tools/Screenshot`) against
 fixture data — real views, synthetic clusters.</sub>
+
+## See it in action
+
+| Find the unhealthy app and see why | Jump to workload logs with Ctrl/Cmd+K |
+|---|---|
+| ![Opening an unhealthy application to read its findings and the crashing pod's logs](design/screenshots/applications-demo.gif) | ![Finding workload logs in the command palette, then searching the merged stream](design/screenshots/palette-logs-demo.gif) |
+
+Recorded from the native Windows app on the built-in demo cluster. Demo cluster
+labels identify the sample data; no real cluster or credentials are involved.
 
 ## Download
 
@@ -184,7 +211,20 @@ gh attestation verify <file> --repo Shman4ik/kubeNimbus
 The binaries are not code-signed yet; see [SECURITY.md](SECURITY.md#release-integrity).
 </details>
 
-Then point it at a cluster — kubeNimbus reads your `$KUBECONFIG` chain and
+## Quick start
+
+1. Install from the [Microsoft Store](https://apps.microsoft.com/detail/9MZ3C28M65PB)
+   on Windows, or download your platform's package from
+   [Releases](https://github.com/Shman4ik/kubeNimbus/releases/latest).
+2. Launch kubeNimbus and open a context from your kubeconfig, or choose
+   **Explore demo cluster** to try it without a cluster or credentials.
+3. Open an app in **Applications** to see its health, findings and logs, or
+   switch to **Resources** to browse individual Kubernetes objects.
+4. Use <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>P</kbd> to switch clusters,
+   <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>K</kbd> to find a command, and
+   <kbd>F1</kbd> for the shortcut cheat sheet.
+
+kubeNimbus reads your `$KUBECONFIG` chain and
 `~/.kube/config` and lists what it finds. If neither turns anything up, the
 first screen has an **Open kubeconfig file…** button: pick the file and it's
 added — or **Add folder…**, and every kubeconfig in that folder is read,
@@ -293,6 +333,18 @@ themes.
 Full detail, including *why* each piece is built the way it is, lives in
 [CLAUDE.md](CLAUDE.md). Release history is in [CHANGELOG.md](CHANGELOG.md).
 
+## Roadmap
+
+Planned work is tracked as
+[GitHub issues labelled `roadmap`](https://github.com/Shman4ik/kubeNimbus/issues?q=is%3Aissue%20is%3Aopen%20label%3Aroadmap).
+The backlog is a direction, not a release-date promise; [CHANGELOG.md](CHANGELOG.md)
+records what has shipped.
+
+Have a bug to report or a feature to propose? Use the
+[issue templates](https://github.com/Shman4ik/kubeNimbus/issues/new/choose).
+For usage questions and ideas, join the
+[Discussions](https://github.com/Shman4ik/kubeNimbus/discussions).
+
 ## Privacy
 
 kubeNimbus has no telemetry, no account and no update check, and it talks only to the
@@ -399,6 +451,15 @@ not the issue tracker — see [SECURITY.md](SECURITY.md).
 
 By participating you agree to the
 [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Support
+
+kubeNimbus is free and MIT licensed. If it saves you time at work or you enjoy
+using it, you can support development with a coffee:
+
+<a href="https://buymeacoffee.com/shman4ik"><img src=".github/assets/bmc-button.svg" alt="Buy me a coffee" height="50"></a>
+
+A star, a bug report or a recommendation to a colleague helps too.
 
 ## License
 

@@ -33,3 +33,18 @@ Public-facing docs, each with one job — don't duplicate content between them:
 | `docs/comparison.md` | **DRAFT, unpublished** (#230): someone comparing kubeNimbus with Lens, FreeLens, Aptakube, Headlamp, k9s, KubeUI and Seabird. Every competitor claim has a source and an "as of" date, every kubeNimbus claim names a file here. Linking it from the README is the owner's call. `docs/product-loop/COMPETITOR_MATRIX.md` stays the internal, job-by-job version. |
 | `docs/PRE-LAUNCH-CHECKLIST.md` | One-time: making the repo public, cutting the first release, and the Microsoft Store submission. Delete it once the launch is behind us. |
 | `docs/RELEASE-CHECKLIST.md` | Whoever cuts a release. What to walk before tagging (gates, the manual pass on the AOT build against the sandbox, media, ship), and a log of what each release's pass found. Same shape as pgNimbus's. |
+
+## GitHub presentation and support
+
+The README introduces the app, shows screenshots, and links directly to downloads,
+the quick start, keyboard shortcuts, the issue-based roadmap and support. Its coffee
+badge and support button link to `https://buymeacoffee.com/shman4ik`, the same account
+used by pgNimbus. `.github/FUNDING.yml` declares that account for GitHub's Sponsor
+button; keep it aligned with both README links.
+
+The two coffee images in `.github/assets/` are copied from pgNimbus's
+`website/assets/bmc-badge.svg` and `website/assets/bmc-button.svg`. They are stored
+locally so README rendering does not depend on the donation service's widget script.
+These are repository presentation assets, separate from the app's logo masters and
+published UI screenshots under `design/`. They do not add a network destination or
+donation control to the desktop app.

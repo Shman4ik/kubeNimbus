@@ -15,6 +15,17 @@ describes the whole app. (0.4.0 was submitted and failed certification on policy
 which is why 0.6.0's text carried everything since 0.4.0.) Keep this file's date in step with the
 release it describes.
 
+## Product name
+
+The reserved Store name is selected for both English and English (United States):
+
+```text
+kubeNimbus - Kubernetes Client
+```
+
+This is the Store display name, matching pgNimbus's descriptive title style.
+The package identity and the app's own name remain kubeNimbus.
+
 ## Privacy policy URL
 
 Partner Center → Properties → Privacy policy URL:
@@ -56,36 +67,45 @@ Fixed: a sign-in plugin runs once per connect instead of twice, copying from the
 ## Short description
 
 ```text
-A fast, free, open-source Kubernetes desktop client. Opens on a health view of your applications, follows pod logs, opens a real terminal in containers and edits YAML safely. Native, opens in about 150 ms, no telemetry, no account.
+A fast, free, open-source Kubernetes (K8s) GUI client for Windows. Find unhealthy applications, follow pod logs, open container terminals and edit YAML. Native, with no telemetry, no account and no subscription.
 ```
 
 ## Description
 
 ```text
-kubeNimbus is a desktop client for Kubernetes, built as a native application rather than a packaged web browser. It starts in about 150 milliseconds, ships as a self-contained program with no runtime to install, and sends no telemetry of any kind.
+kubeNimbus is a fast, free Kubernetes desktop client for Windows. Find the unhealthy application, see why it is failing, and open the logs you need, all in one native app. No telemetry, no account, no subscription.
 
-It opens on the question you usually have in a hurry: which service is broken, and why. Every Argo CD application, and every workload no application tracks, is listed with its health and a one-line reason read from the cluster's own status. One Enter opens the facts, the pods and the right log line. The full resource explorer is one click away.
+Find the problem
+Applications puts what needs attention first. Every Argo CD application, and every workload no application tracks, has a health verdict and a one-line reason from the cluster's own status. Open an app for the facts behind that verdict, its pods, a timeline, and the crashing pod's last run. The full Resources explorer is one click away.
 
-It reads your existing kubeconfig: every context in $KUBECONFIG and ~/.kube/config, including exec-plugin sign-in for AWS EKS, Google GKE and Azure AKS, and clusters behind a proxy. Nothing is copied into the app: no token, no certificate and no credential is ever written to app storage.
+Connect with what you already use
+kubeNimbus reads every context in $KUBECONFIG and ~/.kube/config, including exec-plugin sign-in for AWS EKS, Google GKE and Azure AKS, and clusters behind a proxy. Open several clusters in tabs, select several namespaces, or use a fleet list across connected clusters. Production, staging and development have distinct colours. Passwords, tokens and certificates are never copied into app storage.
 
-What it does
-• Applications view: health and a one-line reason for every app, what needs attention first, a timeline of the last hour, what the last deploy changed, and the crashing pod's last run. Works with narrow permissions and says what it could not read.
-• Live resource lists for every kind your cluster serves, built from the discovery API. Custom resources are first-class, with the columns their own CustomResourceDefinition declares, as kubectl prints them.
+Inspect without leaving the app
+• Live resource lists for every kind your cluster serves, custom resources included. Lists update through Kubernetes watches, with search, sorting and column selection.
 • Pod logs with follow, search, regular expressions, level filters, error jumps, previous-container logs for a CrashLoopBackOff, and all of a workload's pods merged into one colour-keyed stream.
 • Pod detail: environment variables with ConfigMap values resolved and Secret values masked until you ask; conditions, probes and QoS; CPU and memory over time.
-• A real terminal for exec: vi, top and mc draw properly, and Ctrl+C reaches the container.
-• Port-forward, with the local address one click from being opened.
+• A real terminal for exec: vi, top and mc draw properly, and Ctrl+C reaches the container. Open exec or a node shell in your own terminal when you prefer.
+• Port-forward a Pod or Service, open the local address in a browser, and keep forwards running after their dock tab closes.
+• Service, Ingress and NetworkPolicy panes that explain whether traffic can reach the pods.
+• Node detail with allocatable-versus-requested headroom, events and measured usage. A capacity strip shows CPU and memory used and requested across nodes.
+
+Review changes before they run
 • YAML editing with server-side apply, strict field validation and a dry-run preview that asks the API server what a change would do before it does it.
+• Paste a manifest to create a new resource. Select several resources for a bulk delete with one confirmation.
 • Scale, rollout restart, delete, cordon and drain. A restart, a drain and a delete are armed and named before they fire, and a delete on a production cluster always asks; elsewhere you can turn the delete confirm off. Scale asks for the new count first.
-• Service, Ingress and NetworkPolicy panes that state, in words, whether traffic can reach the pods.
-• Node detail with allocatable-versus-requested headroom, events and measured usage.
-• Helm releases read straight off the cluster, no Helm binary needed. Argo CD sync and refresh, with no second sign-in.
-• RBAC access review in both directions: what may I do here, and who can do X.
-• Several clusters at once: tabs per context, a fuzzy cluster switcher, colour that tells production from staging, and one list across the whole fleet.
 
-No cluster yet? The app ships with a built-in demo cluster: sample data served from inside the program, with no network and no credentials, so you can look around before wiring anything up.
+Kubernetes tools, together
+• Browse Helm releases, values, manifests and revision history straight from the cluster, with no Helm binary needed.
+• Browse Argo CD Applications, ApplicationSets and AppProjects; sync, refresh or terminate a running sync over the Kubernetes connection, with no second sign-in.
+• RBAC access review: what may I do here, where does a ServiceAccount's access come from, and who can do X?
+• Ctrl+K finds a command; Ctrl+P switches clusters; F1 shows every shortcut. Light and dark themes are included.
 
-Your data stays yours. kubeNimbus connects only to the clusters you open. It has no account, no update check, no analytics and no crash reporting. The privacy policy is linked from this page and from the About box.
+Try it before connecting
+Choose "Explore demo cluster" on the first screen. The app includes sample applications, pods, logs and resource details, with no cluster, credentials or network needed. Sample data is labelled throughout; exec, port-forward and YAML apply need a real cluster.
+
+Your clusters stay yours
+kubeNimbus is a self-contained NativeAOT app, with no .NET runtime to install. It connects only to the clusters you open, with no analytics, crash reporting or update checks of its own. The Microsoft Store handles app updates. Credentials stay in your kubeconfig chain; the privacy policy lists the local settings and session files.
 
 kubeNimbus is free and open source under the MIT license: https://github.com/Shman4ik/kubeNimbus
 ```
@@ -96,7 +116,7 @@ One line per field.
 
 ```text
 Opens on Applications: health and a one-line reason for every app
-Native and fast: opens in about 150 ms, no runtime to install
+Native desktop app: no .NET runtime to install
 No telemetry, no account; credentials are never stored
 Every kind your cluster serves, custom resources included
 Live pod logs: search, regex, level filters, error jump
@@ -140,8 +160,37 @@ half dark. Captions, where the field exists:
 7. A real terminal in the container
 8. RBAC: who can do what
 
-Uploaded on 2026-09-29, replacing an older 1280-wide set; no captions are set in Partner Center.
-Two of them carry the demo cluster's banner, which says the data is sample data. Keep it in.
+The original set was uploaded on 2026-09-29, replacing an older 1280-wide set.
+Use the captions above when updating the listing. Two screenshots carry the demo
+cluster's banner, which says the data is sample data. Keep it in.
+
+## Trailer and hero image
+
+Partner Center → Store listings → English → Trailers and additional assets:
+
+| Field | File or value |
+|---|---|
+| Trailer video | `design/store/trailer/kubenimbus-trailer.mp4` |
+| Trailer thumbnail | `design/store/trailer/kubenimbus-trailer-thumbnail.png` |
+| 16:9 Super hero art | `design/store/SuperHeroArt-16x9-1920x1080.png` |
+
+Trailer title:
+
+```text
+Find the unhealthy app, see why, and open its logs
+```
+
+The 34.5-second trailer shows three real demo recordings: application findings,
+the command palette and merged workload logs, then unhealthy pods and their logs.
+It closes with the wordmark and the same free/open-source/privacy message as
+pgNimbus. It has a silent stereo AAC track, so it works with autoplay muted.
+The thumbnail is a frame from the first scene. Both images are 1920×1080 PNGs;
+the video is 1920×1080 H.264 MP4.
+
+The hero image uses pgNimbus's navy background and right-hand app placement,
+with the left third clear for the Store's own title and install button. It has
+no added wordmark or marketing text. See [the media README](../README.md) for
+sources, generation commands and the upload checklist.
 
 ## Copyright and trademark info
 
