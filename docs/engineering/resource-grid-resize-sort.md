@@ -164,3 +164,48 @@ header and fails if an inspector tab opens (confirmed red without the fix), then
 pointer; `ux-node-pods-sort` sorts by CPU req. `DetailPodSortTests` pins the order, the three
 states and the selection kept through a move; `HelmArgoSortTests` the Helm and Argo orders and a
 sort kept through a reload; `ux-helm-sort` and `ux-argo-sort` sort by pointer.
+
+## Hidden columns: the column chooser (FEAT-13)
+
+A right click on any column header of the resource list opens the column chooser: one
+checkable row per column the selected kind shows, then **Reset columns**. Unticking a column
+hides it for that kind, remembered as `GridLayout.HiddenColumns` in the same per-kind record
+as the widths and the sort (`workspace.json`, session state by the same test as rule 12).
+The palette carries **Reset the list's columns** for the list on screen, offered only when that
+kind has a choice to undo. There is no always-visible control (UI rule 1). Seven things are
+load-bearing.
+
+1. **The kind decides which columns exist; the reader decides which of those to hide.** The
+   chooser lists only what the kind shows after every visibility pass (ResourceStatusSummary,
+   the CRD's printer columns, metrics, the fleet column), so it never offers a column the kind
+   has none of. `ClusterTabView.ApplyHiddenColumns` re-runs all four passes, records what they
+   showed, then hides what the reader hid. Each pass sets `IsVisible` outright, so this is the
+   only order that both brings an un-hidden column back and keeps a hidden one hidden whichever
+   pass ran last; it runs at the start of `ApplyColumnLayout`, which every path already ends in.
+2. **What is stored is what was hidden, not what is shown.** A column a later build adds to a
+   kind then appears by default, rather than being hidden by a file written before it existed.
+3. **The identity column cannot be hidden**: Name, and on the Events list (which has no Name)
+   the Object the event is about (`ClusterTabViewModel.IsColumnAlwaysShown`). The chooser shows
+   it ticked and disabled, with a tooltip saying why, and `SetColumnHidden` refuses it, so a
+   hand-edited `workspace.json` cannot hide it either (`LoadHiddenColumns` drops it).
+4. **A CRD printer column is hidden by its name, `crd:<name>`**, for rule 8's reason: a slot
+   number would hide a different column on the next kind.
+5. **Reset columns clears the hidden set and the widths, and keeps the sort.** The sort has its
+   own way back (the third header click), and a reset that also re-ordered a live list would
+   move rows under the pointer.
+6. **A layout whose only choice is a hidden column stays in the file.** `GridLayoutStore.Update`
+   drops a layout it thinks is default, and its old test was "no sort and no widths"; it is
+   `GridLayout.IsDefault` now, which counts hidden columns. `ColumnChooserTests.A_layout_whose_only_choice_is_a_hidden_column_is_kept`
+   was confirmed red with the old test put back.
+7. **`Rows` stays the watch's list.** Hiding a column changes the grid and nothing else
+   (UI rule 13); `ColumnChooserTests.Rows_stay_the_watchs_list_when_a_column_is_hidden`.
+
+The chooser opens from a **Tunnel** `ContextRequested` handler on the grid, which marks the
+event handled when it came from a `DataGridColumnHeader`, so the row menu (the grid's own
+`ContextFlyout`) does not open as well. `ux-column-chooser` in the screenshot harness right
+clicks the Restarts header, checks that the chooser opened and the row menu did not, that Name
+is ticked and disabled, unticks Restarts through the menu and checks the column went, and leaves
+the chooser open for the PNG. **Not built:** reordering columns, a chooser for the Helm and Argo
+grids, and keyboard access to the chooser (the headers are not focusable; the palette's reset is
+the keyboard's half). Hiding the column the list is sorted by leaves the sort in place, with no
+arrow to show it, until the column comes back or the sort is changed.

@@ -297,6 +297,11 @@
                takes what is left. ClipToBounds, because a warning squeezed to nothing
                would otherwise still draw its icon over its neighbour. -->
           <DockPanel Grid.Column="3" Margin="12,0,0,0" ClipToBounds="True" VerticalAlignment="Center">
+            <!-- "3 selected" (FEAT-6), only while more than one row is: the count a bulk
+                 Delete will act on, read before the strip asks. -->
+            <TextBlock DockPanel.Dock="Right" Text="{Binding SelectionSummary}" FontSize="11" Opacity="0.75"
+                       VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"
+                       IsVisible="{Binding HasMultipleSelection}" />
             <TextBlock DockPanel.Dock="Right" Text="{Binding RowFilterSummary}" FontSize="11" Opacity="0.55"
                        VerticalAlignment="Center" Margin="8,0,0,0"
                        TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding RowFilterSummary}"
@@ -382,8 +387,14 @@
           <!-- VisibleRows, not Rows: the watch keeps applying its events against the
                full list (see ClusterTabViewModel.Rows) while this renders whatever
                survives the search box. -->
+          <!-- Extended selection (FEAT-6): Shift/Ctrl+click and Shift+arrows select several
+               rows, and Delete arms one strip for all of them. SelectedItem stays bound — it is
+               the current row every single-object command acts on — and the whole selection
+               reaches the view model through SelectionChanged (OnGridSelectionChanged), since
+               SelectedItems is not bindable. -->
           <DataGrid Name="ResourceGrid"
                      ItemsSource="{Binding VisibleRows}" SelectedItem="{Binding SelectedRow}"
+                     SelectionMode="Extended" SelectionChanged="OnGridSelectionChanged"
                      IsReadOnly="True" GridLinesVisibility="Horizontal"
                      CanUserResizeColumns="True" CanUserSortColumns="True"
                      Sorting="OnGridSorting"
@@ -544,7 +555,7 @@
                   </MenuItem.Icon>
                 </MenuItem>
                 <MenuItem Header="Delete…" Command="{Binding DeleteSelectedCommand}" InputGesture="Delete"
-                          ToolTip.Tip="Asks to confirm, naming the object — for a controller-owned pod, deleting it is how it gets recreated">
+                          ToolTip.Tip="Asks to confirm, naming the object or, with several rows selected, how many — for a controller-owned pod, deleting it is how it gets recreated">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource DeleteIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>

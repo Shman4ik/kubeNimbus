@@ -37,6 +37,8 @@ public enum CommandId
     FilterListFromRows,
     ToggleUnhealthyOnly,
     RefreshList,
+    NewYaml,
+    ResetListColumns,
 
     // --- Pods ---
     PodLogs,

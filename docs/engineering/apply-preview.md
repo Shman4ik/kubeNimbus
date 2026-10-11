@@ -250,3 +250,37 @@ and cert-manager's 900-line Certificate CRD, with two descriptions edited far ap
 force-previewed, diffs to exactly those two lines, collapses to two hunks of three context lines
 each, and under a 100-cell budget reports `IsApproximate` with both edits still shown. What is
 left of VER-34 is the panel itself in both dock heights, driven by hand.
+
+## New YAML… (FEAT-12, the paste-or-type slice)
+
+**New resource from YAML…** in the ☰ menu and the palette opens an empty YAML editor in the dock.
+It applies through everything above — the preview, strict field validation, the conflict and
+validation panels — because it is the same editor; only where it applies is new. Five things
+are load-bearing.
+
+1. **What it applies to is read from its text at every press** (`NewManifest.Read`, Core, pure):
+   apiVersion, kind, metadata.name and metadata.namespace. The kind is resolved against this
+   cluster's discovery catalog (the whole catalog, not the sidebar, which the Advanced view can
+   shorten), with the manifest's own version, as kubectl sends it. A kind the cluster does not
+   serve is refused before anything is sent, naming the group, rather than reaching the server as
+   a 404 on a guessed path.
+2. **A namespaced object without a namespace goes to the list's namespace** — the first, when the
+   list shows several — else the context's, else `default` (kubectl's order), and the InfoBar over
+   the empty editor says which. The manifest is sent as typed, without a namespace, to that path;
+   the API server fills it in from the path. A manifest naming its own namespace is sent to *that*
+   namespace's path, because the server refuses a body that disagrees with its path.
+   `NewManifestLiveTests` checks both against k3s.
+3. **One object per editor.** `YamlJson.ParseYamlToJson` reads only the first document, so a pasted
+   multi-document file would have applied its first object and dropped the rest without a word;
+   `NewManifest.Read` counts documents first and refuses more than one, and a `v1 List` too.
+   `generateName` without a name is refused with its reason: a server-side apply needs a name.
+4. **Each one is its own tab and never replaces an editor** (UI rule 5): its key is
+   `yaml:new:<n>`, unique per tab, and it is never a preview tab. After its first apply its title
+   becomes `Kind/name`, Reload and Delete come alive (they were disabled, with nothing on the server
+   to act on) and the InfoBar goes; it stays a new-document editor, so editing the name and
+   applying again creates a second object.
+5. **Not on the demo cluster, and not before a connect**: `ClusterTabViewModel.CanCreateFromYaml`
+   is false with no `ClusterClient`, the ☰ item is disabled and the palette has no row.
+
+**Not built (left for the backlog):** opening a local file into the editor, a template library,
+and applying several documents in one go.

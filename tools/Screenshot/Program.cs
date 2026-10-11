@@ -283,6 +283,13 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-job-detail", () => HostInMainWindow(ClusterTabScenarios.JobDetail(), height: 1000)),
     // FEAT-47 — a bound PersistentVolume naming its claim, beside one nothing has claimed.
     ("cluster-tab-persistent-volumes", () => HostInMainWindow(ClusterTabScenarios.PersistentVolumes())),
+    // Bundle L — a bulk delete armed and after a partial refusal (FEAT-6), the same driven by
+    // pointer and key on the demo list, the column chooser (FEAT-13) and New YAML… (FEAT-12).
+    ("cluster-tab-row-action-bulk-delete", () => HostInMainWindow(ListCreateChecks.BulkDeleteArmed())),
+    ("cluster-tab-bulk-delete-partial", () => HostInMainWindow(ListCreateChecks.BulkDeletePartial())),
+    ("ux-bulk-delete", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
+    ("ux-column-chooser", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
+    ("cluster-tab-yaml-new", () => HostInMainWindow(ListCreateChecks.NewYaml())),
 
     // FEAT-4 — the node surface. All on the demo cluster, which is where the node
     // dataset lives; the drain's progress states are the two the harness cannot produce
@@ -590,6 +597,8 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     if (name == "cluster-tab-argo-resource-logs-hover") PaneLogsChecks.HoverArgoRow(window, "Deployment");
     if (name.StartsWith("cluster-tab-row-logs", StringComparison.Ordinal)) UxInteractionChecks.HoverRow(window, 3);
     if (name == "ux-font-settings") FontChecks.SettingsReachOpenText(window);
+    if (name == "ux-bulk-delete") ListCreateChecks.BulkDelete(window);
+    if (name == "ux-column-chooser") ListCreateChecks.ColumnChooser(window);
 
     // Last, so a pane a check just opened settles too: capture when the log streams have
     // stopped moving, not whenever the builder happened to return (ENG-10).

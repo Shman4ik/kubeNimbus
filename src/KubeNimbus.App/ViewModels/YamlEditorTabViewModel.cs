@@ -40,9 +40,12 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
 
     /// <summary>Null on the demo cluster — see <see cref="InspectorTabViewModelBase.IsDemo"/>.</summary>
     private readonly ClusterClient? _client;
-    private readonly ResourceDescriptor _descriptor;
-    private readonly string? _namespace;
-    private readonly string _name;
+    // Not readonly for one reason: a new document (New YAML…, FEAT-12) learns what it is only
+    // when it is applied, from its own text (NewManifest.Read). An editor opened on an object
+    // sets them once, here in the constructor, and never again.
+    private ResourceDescriptor _descriptor;
+    private string? _namespace;
+    private string _name;
 
     private DispatcherTimer? _revealTimer;
 
@@ -201,6 +204,12 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
     /// so the toolbar disables rather than silently no-ops (UI rule 9's last clause).
     /// </summary>
     private bool IsLive => _client is not null;
+
+    /// <summary>
+    /// Reload and Delete need an object on the server to act on. An editor opened on an
+    /// object always has one; a new document has one only once it has been applied.
+    /// </summary>
+    private bool HasLiveTarget => IsLive && (!IsNewDocument || _hasAppliedTarget);
 
     public YamlEditorTabViewModel(
         ClusterClient? client, ResourceDescriptor descriptor, string? @namespace, string name, string initialYaml,
@@ -668,7 +677,7 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
     /// press, and refreshes this from what it read.
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ApplyButtonLabel), nameof(ApplyButtonTip))]
+    [NotifyPropertyChangedFor(nameof(ApplyButtonLabel), nameof(ApplyButtonTip), nameof(NewDocumentNotice))]
     private bool _previewsApplies;
 
     /// <summary>
@@ -741,6 +750,11 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
             return;
         }
 
+        if (!await ResolveNewDocumentTargetAsync())
+        {
+            return;
+        }
+
         if (!IsSelfDescribing(YamlText))
         {
             StatusMessage = MissingTypeMessage;
@@ -789,6 +803,11 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
             return;
         }
 
+        if (!await ResolveNewDocumentTargetAsync())
+        {
+            return;
+        }
+
         if (!IsSelfDescribing(YamlText))
         {
             StatusMessage = MissingTypeMessage;
@@ -807,6 +826,10 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
             IsDirty = false;
             StaleNotice = null;
             StatusMessage = $"Applied at {DateTimeOffset.Now:T}.{LooseValidationSuffix}";
+            if (IsNewDocument)
+            {
+                MarkNewDocumentApplied();
+            }
         }
         catch (ServerSideApplyConflictException ex)
         {
@@ -826,7 +849,7 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
         }
     }
 
-    [RelayCommand(CanExecute = nameof(IsLive))]
+    [RelayCommand(CanExecute = nameof(HasLiveTarget))]
     private async Task ReloadAsync()
     {
         if (_client is null)
@@ -921,7 +944,7 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
     /// expects the very next delete to ask, not the next tab they open.
     /// </para>
     /// </summary>
-    [RelayCommand(CanExecute = nameof(IsLive))]
+    [RelayCommand(CanExecute = nameof(HasLiveTarget))]
     private async Task RequestDeleteAsync()
     {
         // The same rule as the list's strip, from the same place: a production cluster
@@ -938,7 +961,7 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
     [RelayCommand]
     private void CancelDelete() => IsConfirmingDelete = false;
 
-    [RelayCommand(CanExecute = nameof(IsLive))]
+    [RelayCommand(CanExecute = nameof(HasLiveTarget))]
     private async Task ConfirmDeleteAsync()
     {
         if (_client is null)
@@ -1020,6 +1043,7 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
         OnPropertyChanged(nameof(ClusterEnvironment));
         OnPropertyChanged(nameof(IsProductionCluster));
         OnPropertyChanged(nameof(DeleteTargetDescription));
+        OnPropertyChanged(nameof(NewDocumentNotice));
     }
 
     public override Task OnClosingAsync()

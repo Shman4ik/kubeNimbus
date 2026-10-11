@@ -120,7 +120,21 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// The setter is internal for the view-model tests, which hand a tab an offline client
     /// so a mutating path runs past its demo refusal; only <c>ConnectAsync</c> sets it here.
     /// </summary>
-    public ClusterClient? Client { get; internal set; }
+    public ClusterClient? Client
+    {
+        get => _client;
+        internal set
+        {
+            _client = value;
+
+            // New YAML… needs an API server to apply to, and the menu item bound to it is
+            // created before the connect lands.
+            OnPropertyChanged(nameof(CanCreateFromYaml));
+            NewYamlCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    private ClusterClient? _client;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsIdle))]
@@ -285,6 +299,13 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         var layout =value is { IsHelmReleases: false, IsArgoDashboard: false, Descriptor: { } descriptor }
             ? GridLayoutStore.Load(GridLayoutStore.KeyFor(descriptor))
             : GridLayout.Empty;
+
+        // The column chooser's half of the same record (FEAT-13). The view reads it on the
+        // SelectedKind notification below, after its own visibility passes.
+        LoadHiddenColumns(layout);
+
+        // A selection is a question about the list it was made in.
+        SetSelectedRows([]);
 
         // Unhealthy-only is a mode that outlives the kind, but whether it *applies* is
         // a property of the kind. No rebuild of its own: SetSort below rebuilds anyway.
@@ -2451,7 +2472,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             return;
         }
 
-        if (PendingRowAction is { IsBusy: true } or { IsDraining: true })
+        if (PendingRowAction is { IsBusy: true } or { IsDraining: true } or { IsDeletingMany: true })
         {
             return;
         }
@@ -3869,8 +3890,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         && WorkloadActions.SupportsRestart(descriptor, row.Resource);
 
     /// <summary>Whether the server says the selected row's kind can be deleted at all.</summary>
-    public bool CanDeleteSelectedRow =>
-        SelectedRow is { } row && DescriptorFor(row) is { } descriptor && WorkloadActions.SupportsDelete(descriptor);
+    public bool CanDeleteSelectedRow => DeleteTargets().Count > 0;
 
     [RelayCommand(CanExecute = nameof(CanScaleSelectedRow))]
     private async Task ScaleSelectedAsync()
@@ -3910,7 +3930,10 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [RelayCommand(CanExecute = nameof(CanDeleteSelectedRow))]
     private void DeleteSelected()
     {
-        if (ArmRowAction(RowActionKind.Delete) is { } action && !action.NeedsConfirm(App.LoadSettings().ConfirmDeletes))
+        // Several rows selected: one strip for all of them (FEAT-6), under the same
+        // confirm rule as one row.
+        var action = HasMultipleSelection ? ArmBulkDelete() : ArmRowAction(RowActionKind.Delete);
+        if (action is not null && !action.NeedsConfirm(App.LoadSettings().ConfirmDeletes))
         {
             action.RunNow();
         }
@@ -4001,7 +4024,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         // the loop running with nothing on screen reporting it. Portainer reached the
         // same rule from the other direction (portainer#4006) — a drain should be issued
         // to one node at a time, and a single-slot strip is what enforces that here.
-        if (PendingRowAction is { IsBusy: true } or { IsDraining: true })
+        if (PendingRowAction is { IsBusy: true } or { IsDraining: true } or { IsDeletingMany: true })
         {
             return null;
         }
