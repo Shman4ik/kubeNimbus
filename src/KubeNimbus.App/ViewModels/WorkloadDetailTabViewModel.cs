@@ -112,7 +112,8 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
         {
             if (status.TryGetProperty("conditions", out var conditions) && conditions.ValueKind == JsonValueKind.Array)
                 foreach (var c in conditions.EnumerateArray())
-                    Conditions.Add(new(Text(c, "type"), Text(c, "status"), Text(c, "reason"), Text(c, "message")));
+                    Conditions.Add(new(Text(c, "type"), Text(c, "status"), Text(c, "reason"), Text(c, "message"),
+                        ConditionSince.Parse(Text(c, "lastTransitionTime"))));
             if (_descriptor is { Group: "batch", Kind: "Job" })
             {
                 Rollout = JobProgress(raw, status);
@@ -318,4 +319,16 @@ public sealed partial class WorkloadDetailTabViewModel : InspectorTabViewModelBa
     }
 }
 
-public sealed record WorkloadCondition(string Type, string Status, string Reason, string Message);
+/// <summary>
+/// One entry of a workload's <c>status.conditions</c>, with how long it has held (#268):
+/// <see cref="Age"/> in the list's Age format and the exact instant on <see cref="AgeTooltip"/>.
+/// </summary>
+public sealed record WorkloadCondition(
+    string Type, string Status, string Reason, string Message, DateTimeOffset? LastTransition = null, DateTimeOffset? Now = null)
+{
+    /// <summary>How long ago the condition last changed ("6d"), empty when the server sent no time.</summary>
+    public string Age { get; } = ConditionSince.Age(LastTransition, Now ?? DateTimeOffset.UtcNow);
+
+    /// <summary>The exact instant of that change, or null.</summary>
+    public string? AgeTooltip => ConditionSince.Tooltip(LastTransition);
+}

@@ -206,15 +206,20 @@
          shared focus ring, which the shared ListBoxItem style switches off for rows: a tab
          strip's selected item means "the one showing", not "the one the keys act on", so
          without a ring a focused strip looked exactly like an unfocused one. -->
+    <!-- One row, scrolled sideways, never wrapped (#269): a WrapPanel put nine open tabs on
+         three rows, about 90px of a ~300px dock, against UI rule 10's two rows of chrome. The
+         tab the keys or a click bring to the front is scrolled into view (the ListBox's own
+         AutoScrollToSelectedItem, and BringIntoView in OnInspectorTabStripKeyDown), and the
+         overlay scroll bar shows only under the pointer. -->
     <Style Selector="ListBox.dockTabs">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Padding" Value="0" />
-        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto" />
         <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
         <Setter Property="ItemsPanel">
             <ItemsPanelTemplate>
-                <WrapPanel Orientation="Horizontal" />
+                <StackPanel Orientation="Horizontal" />
             </ItemsPanelTemplate>
         </Setter>
     </Style>

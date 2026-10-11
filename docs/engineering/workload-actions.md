@@ -103,7 +103,13 @@ to [5]", where [5] is the replica box itself (B3-4, reshaped by FEAT-77 below); 
 strip's accessible name, carries the box's number at the end: "… from 3 replicas (2 running) to
 5". N is the object's own `spec.replicas` until the `scale` subresource has been read, then that
 read's answer (`SetCurrentScale`), which also supplies the running count; with no starting count
-the sentence says "to" alone. The 2026-10 form of this said "— it is already at 3" when the box
+the sentence says "to" alone. The "to" before the box stands on the baseline of the box's
+number (#293): centred beside the box, the 13px word and the 14px number were centred on their
+line boxes, and in the owner's real window "to" sat visibly above the number. A StackPanel has
+no baseline alignment, so `RowActionStrip.AlignBlankLead` sets the word's top margin from the
+two text layouts after layout, and `LayoutChecks.ActionStripReadsAsOneBlock` checks the two
+baselines agree within 0.5px. The headless renderer happened to agree before the change too, so
+that check is a guard, not a reproduction. The 2026-10 form of this said "— it is already at 3" when the box
 still held the starting count; with the box beside "from 3 replicas … to" that reads the same
 without a second phrasing. Three deterministic warnings, none of which disables the confirm
 (`RowActionViewModel.ScaleWarningFor`): to 0 from anything else (every pod stops), ten times the

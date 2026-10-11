@@ -824,14 +824,18 @@
                 <ItemsControl ItemsSource="{Binding Conditions}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:PodConditionViewModel">
-                      <Grid ColumnDefinitions="Auto,170,56,*" Margin="0,2">
+                      <!-- The third column is how long the condition has held (#268): "not
+                           Ready for 6d" and "for 20s" are different problems. -->
+                      <Grid ColumnDefinitions="Auto,170,56,44,*" Margin="0,2">
                         <Ellipse Grid.Column="0" Classes="statusDot" Width="8" Height="8"
                                  VerticalAlignment="Center" Margin="0,0,8,0"
                                  Fill="{Binding Health, Converter={x:Static conv:HealthToBrushConverter.Instance}}" />
                         <TextBlock Grid.Column="1" Text="{Binding Type}" FontSize="12" VerticalAlignment="Center"
                                    TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Type}" />
                         <TextBlock Grid.Column="2" Text="{Binding Status}" FontSize="12" Opacity="0.7" VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="3" Text="{Binding Message}" FontSize="12" Opacity="0.75" VerticalAlignment="Center"
+                        <TextBlock Grid.Column="3" Text="{Binding Age}" FontSize="12" Opacity="0.7" VerticalAlignment="Center"
+                                   ToolTip.Tip="{Binding AgeTooltip}" />
+                        <TextBlock Grid.Column="4" Text="{Binding Message}" FontSize="12" Opacity="0.75" VerticalAlignment="Center"
                                    TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Message}" />
                       </Grid>
                     </DataTemplate>

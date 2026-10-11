@@ -2061,11 +2061,13 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
 /// </summary>
 public sealed class PodConditionViewModel
 {
-    public PodConditionViewModel(PodCondition condition)
+    public PodConditionViewModel(PodCondition condition, DateTimeOffset? now = null)
     {
         ArgumentNullException.ThrowIfNull(condition);
 
         Condition = condition;
+        Age = ConditionSince.Age(condition.LastTransition, now ?? DateTimeOffset.UtcNow);
+        AgeTooltip = ConditionSince.Tooltip(condition.LastTransition);
 
         // Three outcomes, not two. A condition type this app does not classify, and one
         // whose status is Unknown, both render grey: claiming a readiness gate nobody has
@@ -2080,6 +2082,12 @@ public sealed class PodConditionViewModel
     }
 
     public PodCondition Condition { get; }
+
+    /// <summary>How long ago the condition last changed ("6d"; ConditionSince), empty when unknown.</summary>
+    public string Age { get; }
+
+    /// <summary>The exact instant of that change, or null when the server sent none.</summary>
+    public string? AgeTooltip { get; }
 
     public string Type => Condition.Type;
 

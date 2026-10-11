@@ -69,8 +69,13 @@ on the client; so does this, and the pane names the pod it picked.
   reaches the pane, which names the new pod and why it moved. It never forwards silently to
   nothing: with no ready pod left, each connection fails with the resolution's sentence.
 
-It is started from the Service pane's **Port-forward** button and from the palette with a
-Service row selected. `ServicePortForwardLiveTests` runs it against the sandbox: busybox
+It is started from the Service pane's **Port-forward** button, from the palette with a
+Service row selected, and (#280) from the resource list's F key and row menu on a Service row.
+All of them go through `ClusterTabViewModel.PortForwardService` and are enabled by one rule,
+`ServiceDetailTabViewModel.IsForwardable` (not ExternalName, at least one TCP port), so the
+pod a forward picks and the sentence it refuses with cannot differ by where it was started.
+`PortForwardSelectedCommand` takes a pod row or such a Service row; the palette's Service row
+appears only when that rule holds (`ServicePaneDeleteAndForwardTests`, the two `F_on_` tests). `ServicePortForwardLiveTests` runs it against the sandbox: busybox
 `httpd` pods that serve their own name, a named target port, the pod deleted mid-forward,
 and the next answer coming from its replacement with the move announced. With the re-resolve
 removed that test times out, which is how it was checked.

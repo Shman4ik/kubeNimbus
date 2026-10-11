@@ -80,6 +80,16 @@ public sealed partial class ClusterTabViewModel
     public bool IsServiceRowSelected =>
         SelectedKind?.Descriptor is { Group: "", Kind: "Service" } && SelectedRow is not null;
 
+    /// <summary>
+    /// F and the row menu's Port-forward (<c>PortForwardSelectedCommand</c>): a pod row, or a
+    /// Service row the Service pane would forward too (#280), through the same call and the
+    /// same rule as that pane's button.
+    /// </summary>
+    public bool CanPortForwardSelected =>
+        IsPodRowSelected
+        || (IsServiceRowSelected && SelectedRow is { } row
+            && ServiceDetailTabViewModel.IsForwardable(ServiceBackends.ShapeOf(row.Resource), ServiceBackends.Ports(row.Resource)));
+
     [RelayCommand]
     private void PortForwardSelectedService()
     {

@@ -1518,7 +1518,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                     "ConsoleIconGeometry",
                     () => _ = HandOffAsync(rowTab, () => TerminalHandoff.NodeShellCommand(node), TerminalHandoff.NodeShellLeftover));
             }
-            else if (rowTab.IsServiceRowSelected)
+            else if (rowTab.IsServiceRowSelected && rowTab.CanPortForwardSelected)
             {
                 // A Service forwards too (FEAT-29): to one ready pod behind it, which the
                 // pane names once it has picked it.

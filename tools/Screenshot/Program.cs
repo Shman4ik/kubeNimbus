@@ -423,6 +423,10 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("ux-keyboard-walk", () => HostInMainWindow(ClusterTabScenarios.DemoDockTabs(), height: 1000)),
     ("ux-leave-yaml-editor", () => HostInMainWindow(ClusterTabScenarios.YamlEditor())),
     ("ux-leave-exec-terminal", () => HostInMainWindow(ClusterTabScenarios.Exec())),
+    // #266: a splitter drag gives focus back to the exec terminal (KeyboardChecks.DockSplitterKeepsFocus).
+    ("ux-dock-splitter-focus", () => HostInMainWindow(ClusterTabScenarios.Exec())),
+    // #269: ten open tabs stay on one row of the dock's strip at 1280px (LayoutChecks.DockTabsOneRow).
+    ("cluster-tab-dock-many-tabs", () => HostInMainWindow(ClusterTabScenarios.DemoDockTabs(10))),
     // #267: a copy trims the blank cells at the end of each line (KeyboardChecks.ExecCopy).
     ("ux-exec-copy", () => HostInMainWindow(ClusterTabScenarios.Exec())),
     // #265: Ctrl+Shift+C pressed as a keyboard sends it, after Select all and after a drag (ClipboardChecks).
@@ -566,6 +570,8 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     if (name is "ux-leave-yaml-editor" or "ux-leave-exec-terminal") KeyboardChecks.LeaveEditorKeys(window);
     if (name == "ux-exec-copy") KeyboardChecks.ExecCopy(window);
     if (name == "ux-exec-copy-keys") ClipboardChecks.ExecCopyRealKeys(window);
+    if (name == "ux-dock-splitter-focus") KeyboardChecks.DockSplitterKeepsFocus(window);
+    if (name == "cluster-tab-dock-many-tabs") LayoutChecks.DockTabsOneRow(window);
     if (name == "cluster-tab-exec") LayoutChecks.ExecHasNoStatusDot(window);
     if (name == "main-window-switcher") LayoutChecks.SwitcherPinsOnlyWhereUsed(window);
     if (name == "ux-log-search-keys") KeyboardChecks.LogSearchKeys(window);

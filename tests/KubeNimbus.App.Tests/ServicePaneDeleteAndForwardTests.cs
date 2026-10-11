@@ -118,4 +118,38 @@ public class ServicePaneDeleteAndForwardTests
         await Assert.That(pane.PortForwardCommand.CanExecute(null)).IsFalse();
         await Assert.That(pane.PortForwardTooltip).Contains("DNS name");
     }
+
+    /// <summary>
+    /// #280: F and the row menu on a Service row start the forward the pane's button starts,
+    /// with the same ports and title, instead of doing nothing because the row is not a pod.
+    /// </summary>
+    [Test]
+    public async Task F_on_a_service_row_opens_the_same_forward_as_the_pane()
+    {
+        var (tab, pane) = Open("checkout");
+        pane.PortForwardCommand.Execute(null);
+        var fromPane = (PortForwardTabViewModel)tab.SelectedInspectorTab!;
+        tab.CloseInspectorTabCommand.Execute(fromPane);
+        tab.SelectedRow = tab.Rows.First(r => r.Name == "checkout");
+
+        await Assert.That(tab.PortForwardSelectedCommand.CanExecute(null)).IsTrue();
+        tab.PortForwardSelectedCommand.Execute(null);
+
+        var fromRow = (PortForwardTabViewModel)tab.SelectedInspectorTab!;
+        await Assert.That(fromRow).IsNotSameReferenceAs(fromPane);
+        await Assert.That(fromRow.IsService).IsTrue();
+        await Assert.That(fromRow.Title).IsEqualTo(fromPane.Title);
+        await Assert.That(fromRow.AvailablePorts.Select(p => p.Number).ToArray())
+            .IsEquivalentTo(fromPane.AvailablePorts.Select(p => p.Number).ToArray());
+    }
+
+    /// <summary>The row refuses what the pane refuses: an ExternalName has no pod to forward to.</summary>
+    [Test]
+    public async Task F_on_an_external_name_row_is_disabled_as_the_pane_is()
+    {
+        var (tab, _) = Open("payments-db");
+        tab.SelectedRow = tab.Rows.First(r => r.Name == "payments-db");
+
+        await Assert.That(tab.PortForwardSelectedCommand.CanExecute(null)).IsFalse();
+    }
 }

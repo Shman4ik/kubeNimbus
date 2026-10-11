@@ -757,9 +757,15 @@ public sealed partial class ServiceDetailTabViewModel : InspectorTabViewModelBas
     /// ExternalName is a DNS name), and it has a TCP port. A demo pane offers the button and
     /// lands on the forward pane's own "not available here" state, as a demo pod does.
     /// </summary>
-    private bool CanPortForward =>
-        _openForward is not null && !IsDeleted && Shape != ServiceShape.ExternalName
-        && Ports.Any(p => string.Equals(p.Protocol, "TCP", StringComparison.Ordinal));
+    private bool CanPortForward => _openForward is not null && !IsDeleted && IsForwardable(Shape, Ports);
+
+    /// <summary>
+    /// The rule both this pane and the resource list's F and row menu (#280) apply: a Service
+    /// that routes to pods (an ExternalName is a DNS name) and has a TCP port.
+    /// </summary>
+    internal static bool IsForwardable(ServiceShape shape, IEnumerable<ServicePortInfo> ports) =>
+        shape != ServiceShape.ExternalName
+        && ports.Any(p => string.Equals(p.Protocol, "TCP", StringComparison.Ordinal));
 
     public string PortForwardTooltip => Shape == ServiceShape.ExternalName
         ? "An ExternalName service is a DNS name, with no pod to forward to"

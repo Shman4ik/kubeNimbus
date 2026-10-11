@@ -161,4 +161,25 @@ public class SidebarRecentKindsTests
 
         await Assert.That(RecentNames(tab)).IsEqualTo("Pods, Services");
     }
+
+    /// <summary>
+    /// #213 / #244: a section's rows draw no glyph — it was the same on every row under a
+    /// header that names the section — and only Recent's rows, which mix sections, keep one.
+    /// </summary>
+    [Test]
+    public async Task Only_Recent_rows_draw_the_kind_glyph()
+    {
+        var tab = DemoTab();
+        tab.SelectKindCommand.Execute(Row(tab, "apps", "Deployment"));
+
+        var withGlyph = tab.SidebarSections
+            .Where(s => s.Title != SidebarGrouping.RecentSection)
+            .SelectMany(s => s.Kinds)
+            .Where(k => k.ShowIcon)
+            .Select(k => k.DisplayName)
+            .ToList();
+        await Assert.That(string.Join(", ", withGlyph)).IsEqualTo("");
+        await Assert.That(Recent(tab)!.Kinds.Count).IsGreaterThan(0);
+        await Assert.That(Recent(tab)!.Kinds.All(k => k.ShowIcon)).IsTrue();
+    }
 }

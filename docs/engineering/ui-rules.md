@@ -77,7 +77,13 @@ which now have a page of their own in this directory.
    screenshot harness all assign the kind directly, and a highlight only the sidebar
    command maintained is how two rows came to be lit at once. A Recent entry selects
    its canonical row, so clicking the Recent copy of the kind on screen is the same
-   no-op as clicking the row. `SidebarRecentKindsTests` pins both. Two sections carry a **synthetic** row on top of the
+   no-op as clicking the row. `SidebarRecentKindsTests` pins both. **Only Recent's rows
+   draw the kind glyph** (#213, owner's decision 2026-10-10, which also settled #244's
+   `events.k8s.io` glyph): in a section the glyph was the same on every row, directly under
+   a header that says the same thing, and it cost the width that truncates long kind names.
+   Recent mixes sections, so there the glyph says where a row came from; the command palette
+   keeps its glyph for the same reason (`SidebarKindViewModel.ShowIcon`,
+   `Only_Recent_rows_draw_the_kind_glyph`). Two sections carry a **synthetic** row on top of the
    discovered kinds — Helm's release browser and Argo's GitOps dashboard — and
    both are gated on evidence the cluster actually has that thing (a release
    Secret; the Application kind in discovery), because a row that opens on
@@ -96,6 +102,25 @@ which now have a page of their own in this directory.
    terminal, whose Esc is their own), and while it is maximized the collapsed list keeps
    focus but ignores its row keys — see
    [row-logs-and-maximized](row-logs-and-maximized.md).
+
+   Three findings of the 2026-10 sweep (#259) about the dock's chrome:
+   - **The tab strip is one row** (#269). It was a `WrapPanel`, and nine open tabs took three
+     rows, about 90px of a ~300px dock, against rule 10. It is a horizontal `StackPanel` in the
+     ListBox's own `ScrollViewer` (overlay scroll bar, shown under the pointer); the tab brought
+     to the front is scrolled into view. `cluster-tab-dock-many-tabs` opens ten tabs at 1280px
+     and `LayoutChecks.DockTabsOneRow` fails on a second row or a front tab out of view.
+   - **The arrow keys keep the focus ring** (#293). `ListBox`'s own Left/Right focuses the next
+     item with no navigation method, which Avalonia does not treat as keyboard focus, so the
+     tab the keys reached drew no ring in the real window (the harness's Tab-only check never
+     saw it; the ring adorner is on the window's adorner layer and was not clipped).
+     `OnInspectorTabStripKeyDown` moves along the strip itself (Left/Right, Up/Down, Home,
+     End) and focuses with `NavigationMethod.Directional`. `ux-keyboard-walk` now checks the
+     ring after Right and after Left; it fails with the handler removed.
+   - **A splitter drag gives focus back** (#266). The splitter takes focus on the press, so
+     the exec terminal went hollow and swallowed the next key. The view records what had focus
+     on the press (tunnel, `handledEventsToo`) and restores it on `DragCompleted`.
+     `ux-dock-splitter-focus` drags it 40px with the terminal focused and fails if focus is
+     anywhere else afterwards; it fails with the `DragCompleted` handler removed.
 8. **A click target must hit-test across its whole area, and say it is one.**
    In Avalonia a `Panel` or `Border` with a **null** `Background` does not
    hit-test where no child covers it, and a container's own `Padding` lies
