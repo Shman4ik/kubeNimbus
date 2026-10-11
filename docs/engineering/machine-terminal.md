@@ -206,3 +206,20 @@ shell; for a hand-off only a PowerShell is handed the command, and **Windows Ter
 refused** with the reason (rule 4: its tab would be spawned by another process and not carry
 `KUBECONFIG`; making it the default terminal application is the way to get it).
 `Normalized` trims it and drops a value with a control character or past 1,024 characters.
+
+**A preference that is passed over is named even when a fallback opens** (#290). Naming `wt`
+used to open the default PowerShell with a notice that said nothing about the preference, so the
+reason above was never seen. The candidates built from the setting and `$TERMINAL` carry
+`IsPreference`; each one refused, not found, or failing to start lands in
+`TerminalLaunchResult.PassedOver` with its reason, and the "Opened …" notice, the tab's and a
+hand-off's alike, adds "Your preferred terminal was not used — …" and becomes a warning
+(`ClusterTabTerminalTests`, `TerminalHandoffPlanTests`). A launch where nothing opened already
+lists every candidate with its reason.
+
+**An isolated profile holds the terminal's files too** (#289). The overlays and hand-off scripts
+live under `AppDataDirectory.Roaming`, which answers `AppDataDirectory.ProfileOverride` when
+`KUBENIMBUS_PROFILE_DIR` is set (`Program.ApplyIsolatedProfile`), as `Local` (the discovery
+cache) does; a QA run used to write its overlay into the developer's real
+`%APPDATA%\kubeNimbus\terminal`. `AppDataDirectoryTests` sets the override, runs a hand-off with no
+terminal to start, and finds every written file inside the profile; with `Roaming` ignoring the
+override it fails.
