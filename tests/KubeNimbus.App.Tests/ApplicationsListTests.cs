@@ -229,8 +229,7 @@ public class ApplicationsListTests
 
     /// <summary>
     /// The picker offers the namespaces applications run in, with their counts, and narrows
-    /// the list, the chips' counts with it. It opens on every namespace whatever the tab's
-    /// Resources list shows.
+    /// the list, the chips' counts with it.
     /// </summary>
     [Test]
     public async Task The_namespace_picker_narrows_the_list_and_its_counts()
@@ -264,6 +263,34 @@ public class ApplicationsListTests
         await Assert.That(apps.FilterEmptyText).IsEqualTo("Nothing matches “search” in payments");
 
         apps.ShowEverythingCommand.Execute(null);
+        await Assert.That(apps.IsNamespaceSelected).IsFalse();
+        await Assert.That(apps.VisibleRows.Count).IsEqualTo(3);
+    }
+
+    /// <summary>
+    /// One choice per tab: a namespace chosen here is the one the Resources list shows, and
+    /// the other way round, so switching modes never loses where the reader is, and the
+    /// workspace keeps it with the tab.
+    /// </summary>
+    [Test]
+    public async Task The_namespace_choice_is_the_tabs_and_both_modes_follow_it()
+    {
+        var apps = List();
+        var tab = apps.Tab;
+        Add(apps, "Deployment", Deployment("checkout", 1, 1, ns: "payments"));
+        Add(apps, "Deployment", Deployment("search", 1, 1, ns: "catalog"));
+        Add(apps, "Deployment", Deployment("ledger", 1, 1, ns: "ledger"));
+
+        apps.SetNamespaces(["payments", "ledger"]);
+        await Assert.That(tab.SelectedNamespaces).IsEquivalentTo(["ledger", "payments"]);
+        await Assert.That(tab.SelectedNamespace).IsEqualTo("ledger");
+
+        tab.SetNamespaces(["catalog"]);
+        await Assert.That(apps.SelectedNamespaces).IsEquivalentTo(["catalog"]);
+        await Assert.That(Names(apps)).IsEqualTo("search");
+
+        // A single namespace set the old way, as the palette and a reveal do, reaches it too.
+        tab.SelectedNamespace = ClusterTabViewModel.AllNamespaces;
         await Assert.That(apps.IsNamespaceSelected).IsFalse();
         await Assert.That(apps.VisibleRows.Count).IsEqualTo(3);
     }

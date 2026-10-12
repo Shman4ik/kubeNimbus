@@ -24,8 +24,10 @@ There are **two** persisted files and the split is not arbitrary:
 
 Each tab snapshot also carries the **kind and namespace** (or namespaces) it was showing, and the
 workspace the index of the tab in front, so a restart lands where you left off instead
-of on Pods in all namespaces on every tab. With nothing saved, a tab opens on the
-kubeconfig context's own `namespace` (what kubectl would use), and the first launch
+of on Pods in all namespaces on every tab. With nothing saved, a tab opens on all
+namespaces, or on the kubeconfig context's own `namespace` (what kubectl would use) where
+listing namespaces was refused; the choice is the tab's, shared by both modes
+([several-namespaces](several-namespaces.md)). The first launch
 opens the chain's `current-context` rather than whichever context the merge listed
 first — unless a picked folder supplied it or named it current, in which case nothing opens on
 its own (B4-4, `KubeconfigChain.AutomaticFirstContext`; see

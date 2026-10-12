@@ -81,6 +81,14 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
     {
         _tab = tab;
         Clock = tab.IsDemo ? () => DemoData.Now : () => DateTimeOffset.UtcNow;
+        _selectedNamespaces.UnionWith(tab.SelectedNamespaces);
+        tab.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ClusterTabViewModel.SelectedNamespaces))
+            {
+                OnTabNamespacesChanged();
+            }
+        };
     }
 
     public ClusterTabViewModel Tab => _tab;
@@ -332,7 +340,9 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
                 // One awaited hop per batch of events (AsyncBatching), where this used to post
                 // one unawaited job per event: a cluster-wide initial list (5,000 pods and
                 // 10,000 ReplicaSets) queued 15,000 jobs ahead of input and rendering.
-                await foreach (var batch in client.WatchResourceAsync(
+                // Through the connection's shared watches, which the Resources list reads too: a
+                // kind both modes show is listed once.
+                await foreach (var batch in client.Watches.WatchAsync(
                     descriptor,
                     @namespace,
                     connectionLost: ex => OnConnectionLost(client, kind, @namespace, ex, cts),
@@ -937,15 +947,15 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
 
     public const string AllNamespaces = ClusterTabViewModel.AllNamespaces;
 
+    // The tab's choice, mirrored for the lookups a rebuild makes per row.
     private readonly SortedSet<string> _selectedNamespaces = new(StringComparer.Ordinal);
 
     /// <summary>
-    /// The namespaces the list is narrowed to; empty means every namespace. Its own, not the
-    /// tab's: the Resources list's namespace is often the kubeconfig context's, and this
-    /// list's job is the whole cluster at a glance, so it opens on every namespace whatever
-    /// the other mode shows. Session state, like the chips. It narrows what was read and
-    /// starts no watch: under narrow RBAC the reads already cover every namespace the tab
-    /// knows of.
+    /// The namespaces the list is narrowed to; empty means every namespace. The tab's
+    /// (<see cref="ClusterTabViewModel.SelectedNamespaces"/>), not one of its own: a namespace
+    /// chosen here is the one the Resources list shows, and the other way round, and the
+    /// workspace keeps it for the next launch. It narrows what was read and starts no watch:
+    /// under narrow RBAC the reads already cover every namespace the tab knows of.
     /// </summary>
     public IReadOnlyCollection<string> SelectedNamespaces => _selectedNamespaces;
 
@@ -972,16 +982,19 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
         : $"in the {_selectedNamespaces.Count} chosen namespaces";
 
     /// <summary>Narrows to exactly these namespaces; none means every namespace.</summary>
-    public void SetNamespaces(IEnumerable<string> namespaces)
+    public void SetNamespaces(IEnumerable<string> namespaces) =>
+        _tab.SetNamespaces(namespaces.Where(n => n.Length > 0 && n != AllNamespaces));
+
+    /// <summary>The tab's choice moved, from either mode's picker, the palette or a restore.</summary>
+    private void OnTabNamespacesChanged()
     {
-        var wanted = namespaces.Where(n => n.Length > 0 && n != AllNamespaces).ToHashSet(StringComparer.Ordinal);
-        if (_selectedNamespaces.SetEquals(wanted))
+        if (_selectedNamespaces.SetEquals(_tab.SelectedNamespaces))
         {
             return;
         }
 
         _selectedNamespaces.Clear();
-        _selectedNamespaces.UnionWith(wanted);
+        _selectedNamespaces.UnionWith(_tab.SelectedNamespaces);
         OnNamespacesChanged();
     }
 
@@ -994,12 +1007,13 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
             return;
         }
 
-        if (!_selectedNamespaces.Remove(choice.Name))
+        var chosen = new SortedSet<string>(_selectedNamespaces, StringComparer.Ordinal);
+        if (!chosen.Remove(choice.Name))
         {
-            _selectedNamespaces.Add(choice.Name);
+            chosen.Add(choice.Name);
         }
 
-        OnNamespacesChanged();
+        SetNamespaces(chosen);
     }
 
     /// <summary>Enter on a picker row: that namespace and no other, the single-namespace gesture.</summary>

@@ -143,3 +143,39 @@ notification and has exactly the effect of the same events applied one at a time
   websocket port-forward channel framing doesn't support multiplexing several
   local clients over one upstream connection) and pumps bytes with the
   channel-byte-prefix framing by hand.
+
+## The shared watches
+
+Since 2026-10-12 the list watches go through `ClusterClient.Watches`, a `WatchCache` (Core):
+one source list+watch per collection path (`ResourceDescriptor.CollectionPath`), shared by
+every list that reads it. It is the informer cache client-go and Lens keep, made for two
+facts of this app: the Applications mode watches seven kinds across the cluster while the
+Resources list shows one of them, and a reader who flipped between two kinds paid a full
+list on every flip.
+
+- **One source, many readers.** The Resources list (`RestartWatch`, `NamespaceWatch`), the
+  fleet views (`ClusterFleet`) and the Applications mode subscribe; a reader that joins an
+  entry already running is given what it holds first (`Reset`, an `Added` per object,
+  `Synced` if the first list completed), then the live events. A watch with a label or field
+  selector (a workload's pods, a node's pods, a service's endpoints) is not a collection and
+  still calls `WatchResourceAsync` directly.
+- **A namespace is served from a synced cluster-wide entry**, filtered, with no list of its
+  own. Only a synced one: a cluster-wide watch still waiting for its list may be one RBAC
+  refuses, and a reader granted the namespace must not get the cluster's refusal.
+- **The last five synced collections nobody reads keep watching** (`DefaultIdleCapacity`),
+  the least recently used evicted, so going back to a kind is instant and current. One that
+  never synced is stopped when its last reader goes: that is most often a refused watch, and
+  it would retry for ever with nobody reading it. The cost is up to five more watch
+  connections per cluster and the objects they hold in memory; nothing is written to disk.
+- **Refresh relists** (`WatchCache.Relist`): the entry's source restarts in place, so every
+  reader sees a `Reset` and a fresh list. A cache would otherwise answer F5 with what it held.
+- **A failed reconnect clears the cache** (`ShowReconnectFailureAsync`), so the next good
+  connect reads everything again. A source that fails ends its readers with the failure and
+  is dropped; the next reader starts a new one.
+- **Not replayed**: a connection warning or an unreadable object reaches the readers present
+  when it happens. One that joins later sees the rows, not the warning.
+
+`WatchCacheTests` pins the sharing, the late reader's replay, the namespace filter and its
+synced-only rule, idle retention and eviction, the never-synced stop, the relist and the
+failure. Not verified here: the cost of five idle watches against a real API server with
+large lists, which is reasoned, not measured.

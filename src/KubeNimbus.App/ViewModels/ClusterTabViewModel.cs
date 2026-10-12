@@ -1749,6 +1749,10 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         // connection change a successful Reconnect makes (ApplicationsViewModel.TryStart).
         // After IsConnected is false, or the connection change would start them again here.
         Applications.Suspend();
+
+        // And the shared watches behind both, kept or not: the next successful connect reads
+        // everything again rather than resuming a cache the failed client filled.
+        Client?.Watches.Clear();
     }
 
     /// <summary>
@@ -1794,12 +1798,17 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         _metricsApiAvailable = true;
 
-        ApplyInitialView(fallbackNamespace: "payments");
+        ApplyInitialView(fallbackNamespace: null);
     }
 
     /// <summary>
     /// Where a freshly connected tab lands: the kind and namespace it was left on when
-    /// the workspace was saved, else the context's own namespace and Pods.
+    /// the workspace was saved, else Pods in all namespaces. The namespace choice is the
+    /// tab's, shared with the Applications mode, which is the whole cluster at a glance, so
+    /// a tab with nothing saved opens on the whole cluster in both. Only where listing
+    /// namespaces was refused does it open on <paramref name="fallbackNamespace"/>, the
+    /// context's own: under that RBAC the cluster-wide read is refused too, and the context's
+    /// namespace is how kubectl copes.
     ///
     /// <para>
     /// The namespace is set before the kind, so the single RestartWatch that SelectKind
@@ -1810,7 +1819,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// </summary>
     internal void ApplyInitialView(string? fallbackNamespace)
     {
-        var @namespace = RestoreNamespace ?? fallbackNamespace;
+        var listingRefused = NamespaceOptions.Count <= 1 && !IsDemo;
+        var @namespace = RestoreNamespace ?? (listingRefused ? fallbackNamespace : null);
         if (!string.IsNullOrEmpty(@namespace))
         {
             // A namespace the list does not contain is still a real answer when the list
@@ -1819,7 +1829,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             // how kubectl copes with that. When the list *was* read, a name missing from
             // it has been deleted, and opening on it would be an empty list that looks
             // like a broken watch — so it is only added in the first case.
-            if (!NamespaceOptions.Contains(@namespace) && NamespaceOptions.Count <= 1 && !IsDemo)
+            if (!NamespaceOptions.Contains(@namespace) && listingRefused)
             {
                 NamespaceOptions.Add(@namespace);
             }
@@ -1833,7 +1843,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             // read without has been deleted and is dropped; one it could not read is kept.
             if (RestoreNamespaces is { Count: > 1 } restored && SelectedNamespace == @namespace)
             {
-                SetNamespaces(restored.Where(ns => NamespaceOptions.Contains(ns) || (NamespaceOptions.Count <= 1 && !IsDemo)));
+                SetNamespaces(restored.Where(ns => NamespaceOptions.Contains(ns) || listingRefused));
             }
         }
 
@@ -2742,6 +2752,26 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
         else
         {
+            // A refresh is a request to read the cluster again, which the shared watches would
+            // otherwise answer with what they already hold.
+            if (IsFleetView)
+            {
+                // Each cluster is read whole or in one namespace (StartFleetWatch), through its
+                // own descriptor for the kind.
+                var fleetNamespace = SelectedKind is { } fleetKind && WatchNamespaces(fleetKind.Descriptor) is [var one] ? one : null;
+                foreach (var target in _fleetTargets.Values)
+                {
+                    target.Member.Client.Watches.Relist(target.Descriptor, fleetNamespace);
+                }
+            }
+            else if (Client is { } client && SelectedKind is { } kind)
+            {
+                foreach (var ns in WatchNamespaces(kind.Descriptor))
+                {
+                    client.Watches.Relist(kind.Descriptor, ns);
+                }
+            }
+
             RestartWatch();
         }
     }
@@ -2841,7 +2871,9 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         {
             try
             {
-                await foreach (var batch in client.WatchResourceAsync(
+                // Through the connection's shared watches: a kind the Applications mode already
+                // reads, or one this list showed a moment ago, is given its rows at once.
+                await foreach (var batch in client.Watches.WatchAsync(
                     descriptor, @namespace,
                     connectionLost: ex => Dispatcher.UIThread.Post(() =>
                     {

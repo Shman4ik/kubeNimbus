@@ -87,7 +87,17 @@ public sealed partial class ClusterClient : IDisposable
         _client = Create(setup);
         Proxy = setup.Proxy;
         SkipsTlsVerification = SkipsTls(setup);
+        Watches = new WatchCache((descriptor, @namespace, connectionLost, ct) =>
+            WatchResourceAsync(descriptor, @namespace, connectionLost, ct));
     }
+
+    /// <summary>
+    /// The shared list+watch of each collection this connection reads: the Resources list, the
+    /// Applications mode and the fleet views go through it, so one kind is listed once however
+    /// many of them show it, and the last few kinds stay live after they are left. A watch with
+    /// a label or field selector is not a collection and goes to <see cref="WatchResourceAsync"/>.
+    /// </summary>
+    public WatchCache Watches { get; }
 
     private static bool SkipsTls(ClientSetup setup) => setup.Configuration.SkipTlsVerify;
 
@@ -819,6 +829,7 @@ public sealed partial class ClusterClient : IDisposable
             }
 
             _disposed = true;
+            Watches.Dispose();
             foreach (var retired in _retired)
             {
                 retired.Dispose();

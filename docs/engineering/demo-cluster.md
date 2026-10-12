@@ -65,8 +65,8 @@ Six rules:
    `DemoData.ReadObject` instead of a GET. A kind the dataset has nothing for lands on
    the real "No &lt;kind&gt; found" empty state, which is most of a 100-kind catalog.
    `DemoRowsTests` pins what the dataset shows through `PopulateDemoRows` (ENG-14): every
-   payments pod, a crash loop among them, usage on **every** running pod, three nodes of
-   which one is cordoned, a CRD in its own columns, and an empty kind landing on the
+   pod in all namespaces (where a tab with nothing saved opens), a crash loop among them,
+   usage on **every** running pod, three nodes of which one is cordoned, a CRD in its own columns, and an empty kind landing on the
    empty state. Writing it found drift: pods added for later features had arrived with
    no `pod-metrics.json` entry, so ten running pods drew a usage column of dashes — the
    rule is one metrics entry per running pod, and that test is what holds it.
