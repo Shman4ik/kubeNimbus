@@ -504,7 +504,7 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
                 {
                     StopStream(deleted.Name);
                     source.State = LogSourceState.Gone;
-                    source.StatusMessage = "Pod deleted; its lines are kept.";
+                    source.StatusMessage = PodDeletedMessage;
                 }
 
                 break;
@@ -539,9 +539,11 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
                 LogSourceState.NotStarted => LogFollowRetry.HasStarted(PodDetails.ContainerRunOf(pod.Raw, existing.ContainerName)),
                 _ => false,
             };
+            // Asked again as the reader has Follow set now: a pod that comes up while Follow
+            // is off is loaded as a range, not followed behind their back (#331).
             if (retry && !_streamsByPod.ContainsKey(pod.Name))
             {
-                StartStream(existing);
+                StartStream(existing, IsFollowing);
             }
 
             return;
@@ -555,7 +557,7 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
             return;
         }
 
-        StartStream(RegisterSource(pod.Name, FirstContainerOf(pod)));
+        StartStream(RegisterSource(pod.Name, FirstContainerOf(pod)), IsFollowing);
     }
 
     /// <summary>
@@ -597,6 +599,7 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
     {
         // The run before cannot be followed: the API server refuses follow with previous.
         follow &= !_options.Previous;
+        source.Follows = follow;
         StopStream(source.PodName);
         _respondedPods.Remove(source.PodName);
         _streamGeneration++;
@@ -683,6 +686,10 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
             {
                 await WaitForStartAsync(source, FirstLine(ex.Message), client, podNamespace, atStart, token);
             }
+            catch (Exception ex) when (LogFollowRetry.IsNotFound(ex))
+            {
+                await NotFoundAsync(source, ex, client, podNamespace, token);
+            }
             catch (Exception ex)
             {
                 await EndSourceAsync(source, LogSourceState.Failed, FirstLine(ex.Message), token);
@@ -734,9 +741,49 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
             return false;
         }
 
-        StartStream(source);
+        StartStream(source, IsFollowing);
         return true;
     }
+
+    /// <summary>
+    /// A log request answered 404 (#332). During a rollout an old pod's request can land
+    /// after the pod was deleted, or while its node is tearing it down, before the pod
+    /// watch's Deleted event has reached the pane; the chip then read <b>failed</b> with
+    /// "the server could not find the requested resource" over a pod that was simply going
+    /// away. So the pod is read once: gone or being deleted, and the source takes the state
+    /// the Deleted event gives it, its lines kept; still there, and the 404 is a failure,
+    /// said as before.
+    /// </summary>
+    private async Task NotFoundAsync(
+        LogSourceViewModel source, Exception error, ClusterClient client, string podNamespace, CancellationToken token)
+    {
+        DynamicResource? now;
+        try
+        {
+            now = await client.ReadResourceAsync(ResourceDescriptor.Pods, podNamespace, source.PodName, token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception)
+        {
+            // The read failed too; the 404 is all the pane knows.
+            await EndSourceAsync(source, LogSourceState.Failed, FirstLine(error.Message), token);
+            return;
+        }
+
+        var (state, message) = NotFoundVerdict(error, now);
+        await EndSourceAsync(source, state, message, token);
+    }
+
+    /// <summary>The state and sentence a 404'd source ends with, given the pod as read after it.</summary>
+    internal static (LogSourceState State, string Message) NotFoundVerdict(Exception error, DynamicResource? podNow) =>
+        LogFollowRetry.IsPodGone(error, podNow)
+            ? (LogSourceState.Gone, PodDeletedMessage)
+            : (LogSourceState.Failed, FirstLine(error.Message));
+
+    internal const string PodDeletedMessage = "Pod deleted; its lines are kept.";
 
     private void OnLogResponseReady(LogSourceViewModel source, CancellationToken token, bool follow) =>
         Dispatcher.UIThread.Post(() =>

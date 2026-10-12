@@ -30,7 +30,7 @@ public class LogFollowRetryTests
     }
 
     /// <summary>A pod of the pane's selector: unscheduled, scheduled with no container status yet, creating, or running.</summary>
-    private static DynamicResource Pod(string phase)
+    private static DynamicResource Pod(string phase, string name = "api-1")
     {
         var node = phase == "unscheduled" ? "" : "\"nodeName\": \"worker-1\",";
         var statuses = phase switch
@@ -42,7 +42,7 @@ public class LogFollowRetryTests
         return Object($$"""
             {
               "apiVersion": "v1", "kind": "Pod",
-              "metadata": { "name": "api-1", "namespace": "nowhere", "labels": { "app": "api-retry" } },
+              "metadata": { "name": "{{name}}", "namespace": "nowhere", "labels": { "app": "api-retry" } },
               "spec": { {{node}} "containers": [ { "name": "app" } ] },
               "status": { "phase": "{{(phase == "running" ? "Running" : "Pending")}}"{{statuses}} }
             }
@@ -157,6 +157,65 @@ public class LogFollowRetryTests
         await Assert.That(pane.FollowIfStarted(source, Creating, Running, CancellationToken.None)).IsFalse();
     }
 
+    /// <summary>
+    /// #331: the reader's Follow choice is theirs. With Follow off, a pod that comes up after
+    /// a refusal — through the pod read or the watch — is loaded as a range, not followed.
+    /// </summary>
+    [Test]
+    public async Task With_Follow_off_a_pod_that_comes_up_is_loaded_as_a_range_not_followed()
+    {
+        var pane = Pane();
+        pane.IsFollowing = false;
+
+        var read = pane.RegisterSource("api-1", "app");
+        read.State = LogSourceState.NotStarted;
+        await Assert.That(pane.FollowIfStarted(read, Creating, Running, CancellationToken.None)).IsTrue();
+        await Assert.That(read.Follows).IsFalse();
+
+        var watched = pane.RegisterSource("api-2", "app");
+        watched.State = LogSourceState.NotStarted;
+        pane.ApplyPodEvent(new ResourceEvent<DynamicResource>(ResourceEventType.Modified, Pod("running", "api-2")));
+        await Assert.That(watched.State).IsEqualTo(LogSourceState.Starting);
+        await Assert.That(watched.Follows).IsFalse();
+
+        // With Follow on, the same retry follows.
+        pane.IsFollowing = true;
+        var followed = pane.RegisterSource("api-3", "app");
+        followed.State = LogSourceState.NotStarted;
+        await Assert.That(pane.FollowIfStarted(followed, Creating, Running, CancellationToken.None)).IsTrue();
+        await Assert.That(followed.Follows).IsTrue();
+    }
+
+    // --------------------------------------------- a 404 for a pod going away (#332)
+
+    private static DynamicResource Deleting() => Object("""
+        {
+          "apiVersion": "v1", "kind": "Pod",
+          "metadata": { "name": "api-1", "namespace": "nowhere", "deletionTimestamp": "2026-10-12T10:00:00Z" },
+          "spec": { "nodeName": "worker-1", "containers": [ { "name": "app" } ] },
+          "status": { "phase": "Running" }
+        }
+        """);
+
+    [Test]
+    public async Task A_404_for_a_pod_that_is_gone_or_being_deleted_ends_the_source_as_deleted()
+    {
+        var notFound = Refusal(HttpStatusCode.NotFound);
+
+        await Assert.That(WorkloadLogsTabViewModel.NotFoundVerdict(notFound, null))
+            .IsEqualTo((LogSourceState.Gone, WorkloadLogsTabViewModel.PodDeletedMessage));
+        await Assert.That(WorkloadLogsTabViewModel.NotFoundVerdict(notFound, Deleting()))
+            .IsEqualTo((LogSourceState.Gone, WorkloadLogsTabViewModel.PodDeletedMessage));
+
+        // A pod that is still there and not being deleted: the 404 is a failure, said.
+        await Assert.That(WorkloadLogsTabViewModel.NotFoundVerdict(notFound, Pod("running")).State)
+            .IsEqualTo(LogSourceState.Failed);
+
+        // Only a 404 is a pod going away; a 400 or a 403 for a deleted pod is not.
+        await Assert.That(LogFollowRetry.IsPodGone(Refusal(HttpStatusCode.BadRequest), null)).IsFalse();
+        await Assert.That(LogFollowRetry.IsPodGone(Refusal(HttpStatusCode.Forbidden), null)).IsFalse();
+    }
+
     // -------------------------------------------------------------- pod detail (#184)
 
     private static PodDetailTabViewModel Detail()
@@ -206,5 +265,20 @@ public class LogFollowRetryTests
         // Not armed (the reader chose something else since): never followed behind their back.
         var other = Detail();
         await Assert.That(other.FollowIfStarted(other.LogGeneration, "model-server", null, Running)).IsFalse();
+    }
+
+    /// <summary>
+    /// #331: a Follow-off range load refused because the container had not started is
+    /// loaded as a range once it runs — the refused request asked again, not a live follow.
+    /// </summary>
+    [Test]
+    public async Task Pod_detail_loads_a_refused_range_as_a_range_once_the_container_runs()
+    {
+        var detail = Detail();
+        var generation = detail.LogGeneration;
+        detail.ArmFollowWhenStarted(generation, "model-server", follow: false);
+
+        await Assert.That(detail.FollowIfStarted(generation, "model-server", null, Running)).IsTrue();
+        await Assert.That(detail.IsFollowingLogs).IsFalse();
     }
 }

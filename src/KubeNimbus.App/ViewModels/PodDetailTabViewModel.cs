@@ -670,11 +670,11 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         RefreshOverview();
 
         if (_followWhenStarted is { } waiting
-            && SelectedContainer?.Name == waiting
+            && SelectedContainer?.Name == waiting.Container
             && _streaming is null
-            && LogFollowRetry.HasStarted(PodDetails.ContainerRunOf(raw, waiting)))
+            && LogFollowRetry.HasStarted(PodDetails.ContainerRunOf(raw, waiting.Container)))
         {
-            StartLogs();
+            StartLogs(waiting.Follow);
         }
     }
 
@@ -1195,9 +1195,12 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     /// container is not up yet, with a 400 — see <see cref="WaitForStartAsync"/>). The next
     /// watch tick that shows it started starts the follow again, so a pane opened on a pod that is
     /// coming up does not sit on "has not started" after it has. Cleared by any start or
-    /// stop, which is the reader choosing something else.
+    /// stop, which is the reader choosing something else. It keeps the refused request's own
+    /// Follow flag, because the retry asks again what the reader asked: a Follow-off range
+    /// load refused this way is loaded as a range once the container runs, never turned into
+    /// a live follow behind the reader's back (#331).
     /// </summary>
-    private string? _followWhenStarted;
+    private (string Container, bool Follow)? _followWhenStarted;
 
     /// <summary>
     /// Why the pane looks the way it does — the reason a stream ended, or null while
@@ -1483,7 +1486,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
 
                     // Picked up again by RefreshFromRow once the container runs — the
                     // multi-pod pane does the same for a pod that was pending.
-                    _followWhenStarted = notStarted ? container.Name : null;
+                    _followWhenStarted = notStarted ? (container.Name, follow) : null;
                 });
             }
             catch (OperationCanceledException)
@@ -1492,7 +1495,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
             }
             catch (Exception ex) when (LogFollowRetry.IsNotStartedRefusal(ex, atStart))
             {
-                await WaitForStartAsync(generation, container.Name, FirstLine(ex.Message), client, atStart, token);
+                await WaitForStartAsync(generation, container.Name, follow, FirstLine(ex.Message), client, atStart, token);
             }
             catch (Exception ex)
             {
@@ -1511,10 +1514,11 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     /// scheduling gate was released sat on "is not available (400 Bad Request)" while running.
     /// </summary>
     private async Task WaitForStartAsync(
-        int generation, string container, string refusal, ClusterClient client, ContainerRun? atStart, CancellationToken token)
+        int generation, string container, bool follow, string refusal, ClusterClient client, ContainerRun? atStart,
+        CancellationToken token)
     {
         await EndLogStreamAsync(generation, refusal, problem: true);
-        await Dispatcher.UIThread.InvokeAsync(() => ArmFollowWhenStarted(generation, container));
+        await Dispatcher.UIThread.InvokeAsync(() => ArmFollowWhenStarted(generation, container, follow));
 
         ContainerRun? now;
         try
@@ -1535,7 +1539,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     /// </summary>
     internal int LogGeneration => _logGeneration;
 
-    internal void ArmFollowWhenStarted(int generation, string container)
+    internal void ArmFollowWhenStarted(int generation, string container, bool follow = true)
     {
         if (generation != _logGeneration || _streaming is not null)
         {
@@ -1543,7 +1547,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         }
 
         IsLogStatusProblem = false;
-        _followWhenStarted = container;
+        _followWhenStarted = (container, follow);
     }
 
     /// <summary>
@@ -1555,13 +1559,14 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     {
         if (generation != _logGeneration
             || _streaming is not null
-            || _followWhenStarted != container
+            || _followWhenStarted is not { } waiting
+            || waiting.Container != container
             || !LogFollowRetry.ShouldFollowAgain(atStart, now))
         {
             return false;
         }
 
-        StartLogs();
+        StartLogs(waiting.Follow);
         return true;
     }
 

@@ -292,6 +292,20 @@ Setup: `qa-seed.ps1 -Reset`; `./scripts/qa-netcut.ps1 start` for G-11.
   real click cannot catch: UNSURE unless a fixture holds the row. On `qa-limited` a pod's logs
   show `pods "…" is forbidden: User "system:serviceaccount:qa-shop:qa-limited" cannot get resource
   "pods/log" … (403 Forbidden)`.
+- **G-17 [text]** (#331) `qa-gated` again (gated, logs a line every 2 s). Open its logs, turn
+  Follow off, pick the range "Last 5 minutes": the pane shows the not-started sentence as a wait.
+  Remove the gate: within about 30 s the pane shows the pod's lines and "Selected range loaded —
+  this is a snapshot.", and Follow stays **off** (no new line arrives in the next 10 s). Before
+  #331 it began following. Delete the pod.
+- **G-18 [text]** (#331) `Logs (all pods)` on `shop-web`, Follow off. `kubectl rollout restart
+  deploy/shop-web -n qa-shop`: each new pod's chip reads "loaded" (a snapshot), never no word
+  at all (how a streaming chip looks), and the status line keeps "Log streaming is stopped. Press Follow to start it."
+  Press Follow: every chip streams.
+- **G-19 [text]** (#332) `Logs (all pods)` on `shop-web`, Follow on, then `kubectl rollout restart
+  deploy/shop-web -n qa-shop` three times, waiting for each to finish: every old pod's chip ends
+  "deleted" with "Pod deleted; its lines are kept." on hover, never "failed" with "the server could not
+  find the requested resource". One attempt per restart; the 404 is a race the VM may not hit,
+  so a run that never shows "failed" is a PASS.
 
 ## Batch T — terminal, exec and copy
 
@@ -458,6 +472,15 @@ kubeconfig is merged into the run's. Otherwise all seven are UNSURE "no Argo san
 - **M-2 [text]** (PR #307) Usage figures change across polls with the CPU column; the usage tooltip
   is "Measured by metrics-server over its last window, against allocatable."
 - **M-3 [text]** No strip over Pods or Helm releases; it returns over Nodes.
+- **M-12 [text]** (#308) `kubectl create quota qa-quota -n qa-shop --hard=pods=50,services.loadbalancers=0`
+  (a `qa-*` object; delete it after). Context `qa-limited`, Config → ResourceQuotas in `qa-shop`:
+  the row's Status reads "Within quota", Details `pods: <n>/50, services.loadbalancers: 0/0`. Patch
+  `pods` down to the current count (`kubectl patch quota qa-quota -n qa-shop --type=merge -p
+  '{"spec":{"hard":{"pods":"<n>"}}}'`): within a few seconds "Full: pods" in error colour, and
+  Unhealthy only keeps the row. If `qa-limited` cannot list resourcequotas, note the 403 sentence
+  and repeat on the sandbox context.
+- **M-13 [look]** (#308) Demo cluster, ResourceQuotas in `payments`: "Almost full: limits.memory 93%"
+  (warn) and "Full: persistentvolumeclaims" (error) pills, both themes.
 - **M-4 [text]** (PR #307) Create `qa-nodes-only`: a ServiceAccount, and a ClusterRole and ClusterRoleBinding
   of that name granting only `nodes` get/list/watch (two cluster-scoped `qa-*` objects; delete them
   after), a token, and a context built like `qa-limited`. Nodes shows "1 node · Ready CPU usage not

@@ -1187,5 +1187,95 @@
     "status": {
       "phase": "Available"
     }
+  },
+  {
+    "kind": "ResourceQuota",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "payments-quota",
+      "namespace": "payments",
+      "uid": "f4444444-4444-4444-4444-444444444444",
+      "creationTimestamp": "2026-01-12T09:00:00Z"
+    },
+    "spec": {
+      "hard": {
+        "limits.memory": "4Gi",
+        "pods": "20",
+        "requests.cpu": "4",
+        "requests.memory": "8Gi",
+        "services.loadbalancers": "0"
+      }
+    },
+    "status": {
+      "hard": {
+        "limits.memory": "4Gi",
+        "pods": "20",
+        "requests.cpu": "4",
+        "requests.memory": "8Gi",
+        "services.loadbalancers": "0"
+      },
+      "used": {
+        "limits.memory": "3840Mi",
+        "pods": "14",
+        "requests.cpu": "2350m",
+        "requests.memory": "3Gi",
+        "services.loadbalancers": "0"
+      }
+    }
+  },
+  {
+    "kind": "ResourceQuota",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "payments-storage",
+      "namespace": "payments",
+      "uid": "f5555555-5555-5555-5555-555555555555",
+      "creationTimestamp": "2026-01-12T09:00:00Z"
+    },
+    "spec": {
+      "hard": {
+        "persistentvolumeclaims": "2",
+        "requests.storage": "50Gi"
+      }
+    },
+    "status": {
+      "hard": {
+        "persistentvolumeclaims": "2",
+        "requests.storage": "50Gi"
+      },
+      "used": {
+        "persistentvolumeclaims": "2",
+        "requests.storage": "28Gi"
+      }
+    }
+  },
+  {
+    "kind": "ResourceQuota",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "monitoring-quota",
+      "namespace": "monitoring",
+      "uid": "f6666666-6666-6666-6666-666666666666",
+      "creationTimestamp": "2026-01-12T09:00:00Z"
+    },
+    "spec": {
+      "hard": {
+        "pods": "30",
+        "requests.cpu": "6",
+        "requests.memory": "12Gi"
+      }
+    },
+    "status": {
+      "hard": {
+        "pods": "30",
+        "requests.cpu": "6",
+        "requests.memory": "12Gi"
+      },
+      "used": {
+        "pods": "9",
+        "requests.cpu": "1800m",
+        "requests.memory": "5Gi"
+      }
+    }
   }
 ]

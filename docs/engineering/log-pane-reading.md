@@ -329,6 +329,21 @@ follow after the container runs reads its lines. The panes' own wiring — the `
 a refusal to the wait, and its `Dispatcher` hop — is not driven by a test (the view-model tests
 have no client), and stays a desktop check (G-13).
 
+**The retry asks again what the reader asked (#331).** The first version of the retry always
+opened a live follow, because the panes' start methods default to one. A Follow-off range load
+refused the same way (a 400 for a container that has not started; the API server refuses a
+snapshot exactly as it refuses a follow) was then turned into a live follow once the container ran,
+behind the back of a reader who had turned Follow off. The reader's Follow choice is theirs, so:
+pod detail keeps the refused request's own Follow flag with the container it waits for
+(`_followWhenStarted`), and both the pod read and the watch tick re-open the stream with it — a
+range load comes back as a range ("Selected range loaded — this is a snapshot."). The multi-pod
+pane opens every automatic start — a new pod, a pod the watch finds started, a pod the read after a
+refusal finds started — with the pane's `IsFollowing`, which nothing but the Follow button sets: a
+pod that comes up while Follow is off is loaded as a range, as the range picker would load it. That
+includes a pod a rollout adds while Follow is off, which used to be followed alone under "Log
+streaming is stopped". `LogFollowRetryTests` pins both panes; reverting either retry to a bare
+`StartLogs()` / `StartStream(source)` turns its test red (checked).
+
 ## While the pane holds lines, its state is still said (#319)
 
 The snapshot, Previous and Cleared messages, and how a stream ended, were drawn only as the

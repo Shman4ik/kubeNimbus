@@ -292,6 +292,8 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-job-detail", () => HostInMainWindow(ClusterTabScenarios.JobDetail(), height: 1000)),
     // FEAT-47 — a bound PersistentVolume naming its claim, beside one nothing has claimed.
     ("cluster-tab-persistent-volumes", () => HostInMainWindow(ClusterTabScenarios.PersistentVolumes())),
+    // #308 — a namespace out of room: ResourceQuota rows full, almost full and with room.
+    ("cluster-tab-resource-quotas", () => HostInMainWindow(ClusterTabScenarios.ResourceQuotas())),
     // Bundle L — a bulk delete armed and after a partial refusal (FEAT-6), the same driven by
     // pointer and key on the demo list, the column chooser (FEAT-13) and New YAML… (FEAT-12).
     ("cluster-tab-row-action-bulk-delete", () => HostInMainWindow(ListCreateChecks.BulkDeleteArmed())),
