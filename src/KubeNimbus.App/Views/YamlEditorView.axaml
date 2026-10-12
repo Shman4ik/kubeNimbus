@@ -137,9 +137,9 @@
     <ContentControl Grid.Row="2" Content="{Binding PendingPreview}" IsVisible="{Binding HasPendingPreview}">
       <ContentControl.ContentTemplate>
         <DataTemplate x:DataType="vm:ApplyPreviewViewModel">
-          <!-- A rule above it, not a card around it: the editor above has no box of its own
-               any more, so one line is all that separates the two, and a box here nested a
-               third level inside the dock (DESIGN.md rule 23). Padding is tight on purpose:
+          <!-- A rule above it, not a card around it: the editor's row is collapsed while the
+               diff is open, so one line is all that separates it from the pane's toolbar, and
+               a box here nested inside the dock's card (DESIGN.md rule 23). Padding is tight on purpose:
                at the dock's default ~300px every 8px of chrome here is a line of the diff. -->
           <Border BorderThickness="0,1,0,0" BorderBrush="{StaticResource CardBorderBrush}" Padding="0,8,0,0" Margin="0,6,0,0">
             <DockPanel>
