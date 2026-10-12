@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using KubeNimbus.Core;
 
 namespace KubeNimbus.App;
@@ -40,11 +41,19 @@ public sealed record GridLayout(
 {
     public static GridLayout Empty { get; } = new();
 
+    // The two views below are never written (#318). The source-generated serializer writes
+    // every public readable property, so without JsonIgnore each layout carried its hidden
+    // columns twice (HiddenColumns and Hidden) and its widths twice (ColumnWidths and Widths).
+    // A file with both still loads: a get-only property is never read from JSON.
+
+    [JsonIgnore]
     public IReadOnlyDictionary<string, GridColumnWidth> Widths => ColumnWidths ?? [];
 
+    [JsonIgnore]
     public IReadOnlyList<string> Hidden => HiddenColumns ?? [];
 
     /// <summary>True when nothing here is a choice anybody made, so the kind can drop out of the file.</summary>
+    [JsonIgnore]
     public bool IsDefault =>
         SortColumn is null
         && (ColumnWidths is null || ColumnWidths.Count == 0)

@@ -137,6 +137,63 @@ public class NewYamlTests
         await Assert.That(editors[2].DefaultNamespace).IsEqualTo("team-a");
     }
 
+    /// <summary>
+    /// #300: after its apply a New YAML editor is that object's editor, so E on the object's row
+    /// focuses it rather than opening a second one (UI rule 5). Mutation-checked by leaving the
+    /// key at <c>yaml:new:1</c>: E then adds a second editor.
+    /// </summary>
+    [Test]
+    public async Task After_the_apply_E_on_the_created_object_focuses_the_new_document()
+    {
+        using var server = new StubApiServer();
+        server.Respond("PATCH", "/api/v1/namespaces/team-a/configmaps/settings", HttpStatusCode.OK, AppliedConfigMap);
+        var client = server.Connect();
+        var editor = NewEditor(client, ConfigMapYaml);
+        await editor.ApplyCommand.ExecuteAsync(null);
+        await editor.ConfirmPreviewCommand.ExecuteAsync(null);
+
+        await Assert.That(editor.Key)
+            .IsEqualTo(YamlEditorTabViewModel.KeyFor("", TestObjects.ConfigMapDescriptor, "team-a", "settings"));
+
+        var tab = new ClusterTabViewModel(TestObjects.Context)
+        {
+            SelectedKind = new SidebarKindViewModel(TestObjects.ConfigMapDescriptor, "config"),
+        };
+        tab.Apply(TestObjects.Added(TestObjects.ConfigMap("team-a", "settings")));
+        tab.Client = client;
+        tab.InspectorTabs.Add(editor);
+        tab.SelectedRow = tab.Rows.Single();
+
+        tab.EditSelectedYamlCommand.Execute(null);
+
+        await Assert.That(tab.InspectorTabs.OfType<YamlEditorTabViewModel>().Count()).IsEqualTo(1);
+        await Assert.That(tab.SelectedInspectorTab).IsSameReferenceAs(editor);
+    }
+
+    /// <summary>
+    /// #300: the editor E opens applies its first document only, so a second one pasted below
+    /// is refused with the reason before anything is sent — with the preview on and with it off.
+    /// Mutation-checked by removing the check from the apply path.
+    /// </summary>
+    [Test]
+    [Arguments(true)]
+    [Arguments(false)]
+    public async Task An_opened_object_refuses_a_second_pasted_document(bool previewApplies)
+    {
+        App.Update(s => s with { PreviewApplies = previewApplies });
+        using var server = new StubApiServer();
+        var editor = new YamlEditorTabViewModel(server.Connect(), TestObjects.ConfigMapDescriptor, "team-a", "settings", ConfigMapYaml)
+        {
+            YamlText = ConfigMapYaml + "\n---\n" + ConfigMapYaml.Replace("name: settings", "name: other", StringComparison.Ordinal),
+        };
+
+        await editor.ApplyCommand.ExecuteAsync(null);
+
+        await Assert.That(server.Requests.Count).IsEqualTo(0);
+        await Assert.That(editor.StatusMessage).IsEqualTo(YamlEditorTabViewModel.MultipleDocumentsMessage);
+        await Assert.That(editor.PendingPreview).IsNull();
+    }
+
     [Test]
     public async Task There_is_no_new_document_without_an_api_server()
     {

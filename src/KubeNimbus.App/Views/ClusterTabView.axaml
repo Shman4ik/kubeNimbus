@@ -415,33 +415,45 @@
                  InputGesture is a caption only (a MenuItem's HotKey is the binding, and
                  there is none): the keys themselves are handled by OnGridKeyDown from
                  the command catalog, and these captions are how a mouse user learns
-                 them. Keep the two in step with CommandCatalog's List-scoped rows. -->
+                 them. Keep the two in step with CommandCatalog's List-scoped rows.
+
+                 #305: with several rows selected, every item that acts on one object is
+                 disabled (its CanExecute reads ActionRow, null then) and its tooltip says why
+                 (SingleRowActionTip, which is null with one row, so each item's own tooltip
+                 comes back through TargetNullValue). Delete is the item that acts on all of
+                 them. The state-dependent items stay where they are, disabled, through their
+                 Offers* visibility, so the menu does not change shape under a selection. -->
             <DataGrid.ContextFlyout>
               <MenuFlyout>
                 <!-- On an Event about a pod, "Logs" is that pod's (L3). -->
-                <MenuItem Header="Logs" Command="{Binding OpenLogsCommand}" InputGesture="L">
+                <MenuItem Header="Logs" Command="{Binding OpenLogsCommand}" InputGesture="L"
+                          ToolTip.Tip="{Binding SingleRowActionTip}" ToolTip.ShowOnDisabled="True">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource PlayIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
                 <MenuItem Header="Previous logs" Command="{Binding OpenPreviousLogsCommand}" InputGesture="P"
-                          ToolTip.Tip="The crashed instance's logs — where a CrashLoopBackOff explains itself" />
+                          ToolTip.ShowOnDisabled="True"
+                          ToolTip.Tip="{Binding SingleRowActionTip, TargetNullValue='Logs of the crashed instance — where a CrashLoopBackOff explains itself'}" />
                 <!-- Enabled for whatever names the pods it owns — a Deployment, a
                      StatefulSet, a Service, a CRD with a pod selector — and disabled on
                      a pod, whose own detail pane is the answer. -->
                 <MenuItem Header="Logs (all pods)" Command="{Binding OpenWorkloadLogsCommand}" InputGesture="L"
-                          ToolTip.Tip="Tail every pod this workload owns in one pane, colour-keyed by pod">
+                          ToolTip.ShowOnDisabled="True"
+                          ToolTip.Tip="{Binding SingleRowActionTip, TargetNullValue='Tail every pod this workload owns in one pane, colour-keyed by pod'}">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource LayersIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
                 <Separator />
-                <MenuItem Header="Exec" Command="{Binding ExecIntoSelectedCommand}" InputGesture="S">
+                <MenuItem Header="Exec" Command="{Binding ExecIntoSelectedCommand}" InputGesture="S"
+                          ToolTip.Tip="{Binding SingleRowActionTip}" ToolTip.ShowOnDisabled="True">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource ConsoleIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
-                <MenuItem Header="Port-forward" Command="{Binding PortForwardSelectedCommand}" InputGesture="F">
+                <MenuItem Header="Port-forward" Command="{Binding PortForwardSelectedCommand}" InputGesture="F"
+                          ToolTip.Tip="{Binding SingleRowActionTip}" ToolTip.ShowOnDisabled="True">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource SwapHorizontalIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
@@ -455,13 +467,15 @@
                      the object has a pod template to stamp — both from discovery/the
                      object, never from a list of kinds. -->
                 <MenuItem Header="Scale…" Command="{Binding ScaleSelectedCommand}" InputGesture="S"
-                          ToolTip.Tip="Set the replica count through the scale subresource">
+                          ToolTip.ShowOnDisabled="True"
+                          ToolTip.Tip="{Binding SingleRowActionTip, TargetNullValue='Set the replica count through the scale subresource'}">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource ScaleIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
                 <MenuItem Header="Rollout restart…" Command="{Binding RestartSelectedCommand}" InputGesture="R"
-                          ToolTip.Tip="Stamps the pod template so the controller rolls its pods — the same thing kubectl rollout restart does">
+                          ToolTip.ShowOnDisabled="True"
+                          ToolTip.Tip="{Binding SingleRowActionTip, TargetNullValue='Stamps the pod template so the controller rolls its pods — the same thing kubectl rollout restart does'}">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource RestartIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
@@ -475,22 +489,22 @@
                      a question anyone has. Cordon and uncordon fire on the click and carry
                      no ellipsis, since each takes the other back (UI rule 17); the drain asks. -->
                 <MenuItem Header="Cordon" Command="{Binding CordonSelectedCommand}"
-                          IsVisible="{Binding CanCordonSelectedRow}"
-                          ToolTip.Tip="Stop scheduling new pods on this node. Its running pods stay put.">
+                          IsVisible="{Binding OffersCordon}" ToolTip.ShowOnDisabled="True"
+                          ToolTip.Tip="{Binding SingleRowActionTip, TargetNullValue='Stop scheduling new pods on this node. Its running pods stay put.'}">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource CordonIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
                 <MenuItem Header="Uncordon" Command="{Binding UncordonSelectedCommand}"
-                          IsVisible="{Binding CanUncordonSelectedRow}"
-                          ToolTip.Tip="Put this node back into service — the scheduler starts using it again.">
+                          IsVisible="{Binding OffersUncordon}" ToolTip.ShowOnDisabled="True"
+                          ToolTip.Tip="{Binding SingleRowActionTip, TargetNullValue='Put this node back into service — the scheduler starts using it again.'}">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource CheckIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
                 <MenuItem Header="Drain…" Command="{Binding DrainSelectedCommand}"
-                          IsVisible="{Binding CanDrainSelectedRow}"
-                          ToolTip.Tip="Cordon the node and evict the pods that may be evicted, honouring PodDisruptionBudgets">
+                          IsVisible="{Binding OffersDrain}" ToolTip.ShowOnDisabled="True"
+                          ToolTip.Tip="{Binding SingleRowActionTip, TargetNullValue='Cordon the node and evict the pods that may be evicted, honouring PodDisruptionBudgets'}">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource DrainIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
@@ -500,22 +514,22 @@
                      one slot, like cordon and uncordon: exactly one is ever shown. Suspend
                      fires on the click; run-now and resume ask, since each can start a Job. -->
                 <MenuItem Header="Run now…" Command="{Binding TriggerSelectedCommand}"
-                          IsVisible="{Binding CanTriggerSelectedRow}"
-                          ToolTip.Tip="Create a Job from this CronJob's template now — kubectl create job --from=cronjob">
+                          IsVisible="{Binding OffersTrigger}" ToolTip.ShowOnDisabled="True"
+                          ToolTip.Tip="{Binding SingleRowActionTip, TargetNullValue='Create a Job from the template of this CronJob now — kubectl create job --from=cronjob'}">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource PlayIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
                 <MenuItem Header="Suspend" Command="{Binding SuspendSelectedCommand}"
-                          IsVisible="{Binding CanSuspendSelectedRow}"
-                          ToolTip.Tip="Stop scheduling new Jobs. Jobs already running carry on.">
+                          IsVisible="{Binding OffersSuspend}" ToolTip.ShowOnDisabled="True"
+                          ToolTip.Tip="{Binding SingleRowActionTip, TargetNullValue='Stop scheduling new Jobs. Jobs already running carry on.'}">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource PauseIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
                 <MenuItem Header="Resume…" Command="{Binding ResumeSelectedCommand}"
-                          IsVisible="{Binding CanResumeSelectedRow}"
-                          ToolTip.Tip="Put this CronJob back on its schedule">
+                          IsVisible="{Binding OffersResume}" ToolTip.ShowOnDisabled="True"
+                          ToolTip.Tip="{Binding SingleRowActionTip, TargetNullValue='Put this CronJob back on its schedule'}">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource ClockOutlineIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
@@ -526,29 +540,29 @@
                      the identical three. Sync and refresh fire on the click; sync with prune,
                      which deletes, asks (UI rule 17). -->
                 <MenuItem Header="Sync" Command="{Binding SyncArgoApplicationCommand}"
-                          IsVisible="{Binding CanSyncSelectedArgoApplication}"
-                          ToolTip.Tip="Ask Argo CD to apply the revision this Application targets. Sent on the click.">
+                          IsVisible="{Binding OffersArgoSyncOnRow}" ToolTip.ShowOnDisabled="True"
+                          ToolTip.Tip="{Binding SingleRowActionTip, TargetNullValue='Ask Argo CD to apply the revision this Application targets. Sent on the click.'}">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource SyncIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
                 <MenuItem Header="Sync with prune…" Command="{Binding SyncArgoApplicationWithPruneCommand}"
-                          IsVisible="{Binding CanSyncSelectedArgoApplication}"
-                          ToolTip.Tip="Sync, and delete the resources Git no longer declares. Asks first.">
+                          IsVisible="{Binding OffersArgoSyncOnRow}" ToolTip.ShowOnDisabled="True"
+                          ToolTip.Tip="{Binding SingleRowActionTip, TargetNullValue='Sync, and delete the resources Git no longer declares. Asks first.'}">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource SyncIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
                 <MenuItem Header="Refresh from Git" Command="{Binding RefreshArgoApplicationCommand}"
-                          IsVisible="{Binding CanSyncSelectedArgoApplication}"
-                          ToolTip.Tip="Ask Argo to re-compare this Application against Git. Changes nothing on the cluster.">
+                          IsVisible="{Binding OffersArgoSyncOnRow}" ToolTip.ShowOnDisabled="True"
+                          ToolTip.Tip="{Binding SingleRowActionTip, TargetNullValue='Ask Argo to re-compare this Application against Git. Changes nothing on the cluster.'}">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
                 <MenuItem Header="Terminate sync…" Command="{Binding TerminateArgoSyncCommand}"
-                          IsVisible="{Binding CanSyncSelectedArgoApplication}"
-                          ToolTip.Tip="Stop the sync Argo is running, where it is. Only while one is running; asks first.">
+                          IsVisible="{Binding OffersArgoSyncOnRow}" ToolTip.ShowOnDisabled="True"
+                          ToolTip.Tip="{Binding SingleRowActionTip, TargetNullValue='Stop the sync Argo is running, where it is. Only while one is running; asks first.'}">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource StopIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
@@ -556,13 +570,15 @@
                 <!-- FEAT-47: the other end of a PV/PVC binding, named in the header so the
                      item says what it opens. Present only on a bound claim or volume. -->
                 <MenuItem Header="{Binding BoundObjectLabel}" Command="{Binding OpenBoundObjectCommand}"
-                          IsVisible="{Binding CanOpenBoundObject}">
+                          IsVisible="{Binding OffersBoundObject}"
+                          ToolTip.Tip="{Binding SingleRowActionTip}" ToolTip.ShowOnDisabled="True">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource LinkIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
                 <Separator />
-                <MenuItem Header="Edit YAML" Command="{Binding EditSelectedYamlCommand}" InputGesture="E">
+                <MenuItem Header="Edit YAML" Command="{Binding EditSelectedYamlCommand}" InputGesture="E"
+                          ToolTip.Tip="{Binding SingleRowActionTip}" ToolTip.ShowOnDisabled="True">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource CodeBracesIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>

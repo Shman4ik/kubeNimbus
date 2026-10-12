@@ -39,20 +39,29 @@ public sealed partial class ClusterTabViewModel
     /// lists a creatable Job kind — the object's evidence and the server's, never a list of
     /// kinds, so a CronJob-shaped CRD would qualify on the same terms.
     /// </summary>
-    public bool CanTriggerSelectedRow =>
+    public bool CanTriggerSelectedRow => !HasMultipleSelection && OffersTrigger;
+
+    /// <summary>The row menu shows Run now for this row; with several rows selected, disabled (#305).</summary>
+    public bool OffersTrigger =>
         SelectedRow is { } row && CronJobActions.SupportsTrigger(row.Resource, JobDescriptorFor(row));
 
     /// <summary>
     /// Suspend and resume share one menu slot, like cordon and uncordon (UI rule 11): which
     /// of the two is offered comes from the CronJob's own <c>spec.suspend</c>.
     /// </summary>
-    public bool CanSuspendSelectedRow =>
+    public bool CanSuspendSelectedRow => !HasMultipleSelection && OffersSuspend;
+
+    /// <inheritdoc cref="OffersTrigger"/>
+    public bool OffersSuspend =>
         SelectedRow is { } row && DescriptorFor(row) is { } descriptor
         && CronJobActions.SupportsSuspend(descriptor, row.Resource)
         && !CronJobActions.IsSuspended(row.Resource);
 
     /// <inheritdoc cref="CanSuspendSelectedRow"/>
-    public bool CanResumeSelectedRow =>
+    public bool CanResumeSelectedRow => !HasMultipleSelection && OffersResume;
+
+    /// <inheritdoc cref="OffersTrigger"/>
+    public bool OffersResume =>
         SelectedRow is { } row && DescriptorFor(row) is { } descriptor
         && CronJobActions.SupportsSuspend(descriptor, row.Resource)
         && CronJobActions.IsSuspended(row.Resource);
@@ -117,6 +126,13 @@ public sealed partial class ClusterTabViewModel
         OnPropertyChanged(nameof(CanResumeSelectedRow));
         OnPropertyChanged(nameof(CanCordonSelectedRow));
         OnPropertyChanged(nameof(CanUncordonSelectedRow));
+        OnPropertyChanged(nameof(OffersTrigger));
+        OnPropertyChanged(nameof(OffersSuspend));
+        OnPropertyChanged(nameof(OffersResume));
+        OnPropertyChanged(nameof(OffersCordon));
+        OnPropertyChanged(nameof(OffersUncordon));
+        OnPropertyChanged(nameof(OffersDrain));
+        OnPropertyChanged(nameof(OffersArgoSyncOnRow));
         TriggerSelectedCommand.NotifyCanExecuteChanged();
         SuspendSelectedCommand.NotifyCanExecuteChanged();
         ResumeSelectedCommand.NotifyCanExecuteChanged();

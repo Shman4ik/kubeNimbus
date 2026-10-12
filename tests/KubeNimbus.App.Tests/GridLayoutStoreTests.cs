@@ -151,4 +151,72 @@ public class GridLayoutStoreTests
         await Assert.That(settings.Tabs.Single().ContextName).IsEqualTo("prod-payments");
         await Assert.That(settings.PinnedContexts!.Single()).IsEqualTo("prod-payments");
     }
+
+    private static string WorkspaceFile => Path.Combine(WorkspaceStore.DirectoryOverride!, "workspace.json");
+
+    /// <summary>
+    /// #318: a layout is stored under one field for hidden columns and one for widths. The
+    /// computed <c>Hidden</c> and <c>Widths</c> views were serialized beside the fields they
+    /// read, so every layout held both. Mutation-checked by removing the JsonIgnore.
+    /// </summary>
+    [Test]
+    public async Task A_layout_is_written_once_per_field()
+    {
+        TestObjects.RedirectStores();
+
+        GridLayoutStore.Update(PodKey, l => l with
+        {
+            ColumnWidths = new Dictionary<string, GridColumnWidth> { [ResourceColumn.Name] = new(GridColumnWidth.Pixels, 240) },
+            HiddenColumns = [ResourceColumn.Restarts],
+        });
+
+        using var json = System.Text.Json.JsonDocument.Parse(await File.ReadAllTextAsync(WorkspaceFile));
+        var layout = json.RootElement.GetProperty("GridLayouts").GetProperty(PodKey);
+        var names = layout.EnumerateObject().Select(p => p.Name).Order(StringComparer.Ordinal).ToList();
+        await Assert.That(string.Join(",", names)).IsEqualTo("ColumnWidths,HiddenColumns,SortColumn,SortDescending");
+
+        var back = GridLayoutStore.Load(PodKey);
+        await Assert.That(back.Hidden.Single()).IsEqualTo(ResourceColumn.Restarts);
+        await Assert.That(back.Widths[ResourceColumn.Name].Value).IsEqualTo(240);
+    }
+
+    /// <summary>#318: a file an older build wrote, with both spellings, still loads from the real fields.</summary>
+    [Test]
+    public async Task A_file_with_both_spellings_still_loads()
+    {
+        TestObjects.RedirectStores();
+        await File.WriteAllTextAsync(WorkspaceFile, """
+            {"Theme":null,"Tabs":[],"IsAdvancedView":false,"GridLayouts":{"POD_KEY":{
+              "ColumnWidths":{"Name":{"Unit":"px","Value":240}},"SortColumn":null,"SortDescending":false,
+              "HiddenColumns":["IP"],"Widths":{"Name":{"Unit":"px","Value":240}},"Hidden":["IP"],"IsDefault":false}}}
+            """.Replace("POD_KEY", PodKey, StringComparison.Ordinal));
+
+        var layout = GridLayoutStore.Load(PodKey);
+
+        await Assert.That(layout.Hidden.Single()).IsEqualTo("IP");
+        await Assert.That(layout.Widths["Name"].Value).IsEqualTo(240);
+    }
+
+    /// <summary>
+    /// #318: the Advanced view lives in settings.json only. <c>Normalize</c> wrote the legacy
+    /// workspace property as <c>false</c> on every save, so a fresh profile's workspace.json
+    /// contradicted the sidebar's toggle. Mutation-checked by restoring the property.
+    /// </summary>
+    [Test]
+    public async Task The_advanced_view_is_never_written_to_the_workspace_and_the_shell_shows_the_stored_preference()
+    {
+        TestObjects.RedirectStores();
+        await File.WriteAllTextAsync(WorkspaceFile, """{"Theme":null,"Tabs":[],"IsAdvancedView":false}""");
+        App.Update(s => s with { IsAdvancedView = true });
+
+        WorkspaceStore.Save(WorkspaceStore.Load());
+        var shell = new MainWindowViewModel();
+        shell.IsAdvancedView = false;
+        shell.IsAdvancedView = true;
+
+        await Assert.That(await File.ReadAllTextAsync(WorkspaceFile)).DoesNotContain("IsAdvancedView");
+        await Assert.That(new MainWindowViewModel().IsAdvancedView).IsTrue();
+        App.Update(s => s with { IsAdvancedView = false });
+        await Assert.That(new MainWindowViewModel().IsAdvancedView).IsFalse();
+    }
 }

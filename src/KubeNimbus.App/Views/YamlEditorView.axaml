@@ -91,7 +91,7 @@
          API server to apply to or delete from. Reload/Apply/Delete disable themselves
          (CanExecute on the view model); this says why, rather than leaving three dead
          buttons unexplained. -->
-    <DockPanel Grid.Row="1">
+    <DockPanel Grid.Row="1" Name="EditorRow">
       <Border DockPanel.Dock="Top" Classes="demoBar" Margin="0,0,0,8" IsVisible="{Binding IsDemo}">
         <!-- DockPanel, not a horizontal StackPanel: a StackPanel measures its children
              with infinite width, so TextWrapping never fires and the sentence is
@@ -122,10 +122,9 @@
          the rest of the time (UI rules 1 and 17). Height-capped: this is a ~300px dock
          and a 200-line diff would otherwise take the editor's whole share of it.
 
-         Its row is star-sized from code-behind while a preview is open and Auto when
-         it is not, so the diff and the editor split the dock rather than one evicting
-         the other: an Auto row tall enough to read left a zero-height editor at the
-         dock's default ~300px, and a MinHeight on the editor overflowed the dock and
+         Its row is star-sized from code-behind while a diff is open, and the editor's row
+         is collapsed then (#316): a 1:3 split left about two lines of diff at the dock's
+         default ~300px, and an Auto row tall enough to read overflowed the dock and
          overlapped its own rows. Mutating a RowDefinition in code-behind is the same
          answer ClusterTabView.ApplyDockState reaches for, and for the same reason.
 
@@ -164,6 +163,12 @@
                 <Button Grid.Column="4" Content="Cancel" Margin="6,0,0,0"
                         Command="{Binding $parent[UserControl].((vm:YamlEditorTabViewModel)DataContext).CancelPreviewCommand}" />
               </Grid>
+
+              <!-- #316: the forced dry run behind a conflict names the fields and their owner
+                   here, one line under the chrome, rather than in a card of its own below:
+                   at the dock's default height that card left the diff a line and a half. -->
+              <SelectableTextBlock DockPanel.Dock="Top" Text="{Binding Conflict}" Classes="statusText warn"
+                                   FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0" IsVisible="{Binding IsAfterConflict}" />
 
               <TextBlock DockPanel.Dock="Bottom" Text="{Binding Footnote}" FontSize="11" Opacity="0.6"
                          TextWrapping="Wrap" Margin="0,4,0,0" IsVisible="{Binding HasFootnote}" />
@@ -399,8 +404,11 @@
       </Grid>
     </Border>
 
+    <!-- #316: a conflicting Review shows the forced dry run's diff, and that panel carries the
+         conflict sentence and the Force apply, so this card stands only without one (a
+         conflict on a direct apply, or a forced dry run that failed too). -->
     <Border Grid.Row="5" Classes="card" Padding="10" Margin="0,8,0,0"
-            IsVisible="{Binding ConflictDetails, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
+            IsVisible="{Binding ShowsConflictPanel}">
       <StackPanel Spacing="6">
         <TextBlock Text="Apply conflict — another field manager owns some of these fields." Classes="statusText warn" />
         <TextBlock Text="{Binding ConflictDetails}" TextWrapping="Wrap" FontSize="11" Opacity="0.8" />
@@ -433,13 +441,15 @@
       </StackPanel>
     </Border>
 
-    <StackPanel Grid.Row="7" Spacing="4" Margin="0,6,0,0">
-      <TextBlock Classes="statusText warn" TextWrapping="Wrap" IsVisible="{Binding IsDeleted}"
+    <!-- Spacing and margin on the lines rather than the panel: an empty panel is then zero
+         height, and every pixel of it was a pixel of the diff above (#316). -->
+    <StackPanel Grid.Row="7">
+      <TextBlock Classes="statusText warn" TextWrapping="Wrap" IsVisible="{Binding IsDeleted}" Margin="0,6,0,0"
                  Text="Deleted from the cluster — this tab is read-only. Reload checks whether it came back." />
-      <TextBlock Classes="statusText warn" TextWrapping="Wrap" Text="{Binding StaleNotice}"
+      <TextBlock Classes="statusText warn" TextWrapping="Wrap" Text="{Binding StaleNotice}" Margin="0,6,0,0"
                  IsVisible="{Binding StaleNotice, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
-      <TextBlock Text="{Binding StatusMessage}" Opacity="0.7" FontSize="12" TextWrapping="Wrap"
-                 IsVisible="{Binding ConflictDetails, Converter={x:Static conv:ObjectConverters.IsNull}}" />
+      <TextBlock Text="{Binding StatusMessage}" Opacity="0.7" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0"
+                 IsVisible="{Binding ShowsStatusMessage}" />
     </StackPanel>
   </Grid>
 </UserControl>

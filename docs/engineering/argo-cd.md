@@ -183,6 +183,18 @@ this tab's (which would sync a namesake on the wrong cluster); the detail pane o
 client. Rows with the same `namespace/name` on two clusters order by cluster, so they no longer
 swap on a reload.
 
+That property is now a test rather than a reading of the code (#306):
+`ArgoFleetRoutingTests.A_fleet_rows_sync_goes_to_its_own_cluster_and_to_none_once_it_left`
+reads two stub API servers through `ClusterFleet.ListArgoApplicationsAsync` (aggregated
+discovery serving `argoproj.io/Application`, one `argocd/checkout` on each), syncs the west row
+and sees the PATCH reach the west server only, then drops west from the members and sees the
+sync arm nothing and reach no server. It went red with `ClientForArgoRow` returning the tab's own
+client. **A fleet read clears only its own warning**: the reload clears the tab's warning line
+only when it begins with `ArgoReadWarning` ("Could not read Argo CD Applications"), for the
+fleet and the single-cluster read alike. Before, a fleet read with no failures set it to null and
+erased whatever else the line carried (a reconnect notice, a dropped watch);
+`…keeps_an_unrelated_warning_and_clears_its_own` went red with that restored.
+
 ## A real Argo CD in a sandbox
 
 `scripts/argo-sandbox-up.ps1` installs Argo CD **v3.5.4** into a second, throwaway sandbox

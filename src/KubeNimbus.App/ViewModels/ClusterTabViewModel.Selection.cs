@@ -22,6 +22,24 @@ public sealed partial class ClusterTabViewModel
     /// </summary>
     public string SelectionSummary => HasMultipleSelection ? $"{_selectedRows.Count} selected" : "";
 
+    /// <summary>
+    /// The row a single-object action acts on: the current row while one row is selected, and
+    /// none while several are (#305, the owner's decision of 2026-10-12). With three nodes
+    /// highlighted, Cordon used to cordon the grid's current row alone and leave the other two
+    /// highlighted and untouched; now every action that acts on one object is disabled, with
+    /// <see cref="SingleRowActionTip"/> saying why, and Delete — which acts on every selected
+    /// row — is the one that stays.
+    /// </summary>
+    private ResourceRowViewModel? ActionRow => HasMultipleSelection ? null : SelectedRow;
+
+    /// <summary>
+    /// The tooltip a disabled single-object row action shows while several rows are selected;
+    /// null otherwise, when each item keeps its own tooltip.
+    /// </summary>
+    public string? SingleRowActionTip => HasMultipleSelection
+        ? $"Acts on one object, and {_selectedRows.Count} rows are selected. Select one row to use it; Delete acts on all of them."
+        : null;
+
     /// <summary>Called by the view on the grid's SelectionChanged, and with nothing when the kind changes.</summary>
     public void SetSelectedRows(IReadOnlyList<ResourceRowViewModel> rows)
     {
@@ -34,8 +52,46 @@ public sealed partial class ClusterTabViewModel
         OnPropertyChanged(nameof(SelectedRows));
         OnPropertyChanged(nameof(HasMultipleSelection));
         OnPropertyChanged(nameof(SelectionSummary));
+        OnPropertyChanged(nameof(SingleRowActionTip));
         OnPropertyChanged(nameof(CanDeleteSelectedRow));
         DeleteSelectedCommand.NotifyCanExecuteChanged();
+        NotifySingleRowActions();
+    }
+
+    /// <summary>
+    /// Every single-object row action reads <see cref="ActionRow"/>, so a change in how many rows
+    /// are selected re-asks each of them — the same set a <c>SelectedRow</c> change notifies.
+    /// </summary>
+    private void NotifySingleRowActions()
+    {
+        foreach (var name in (string[])
+        [
+            nameof(HasSelectedRow), nameof(IsPodRowSelected), nameof(CanOpenPodLogsForSelectedRow),
+            nameof(CanAggregateLogsForSelectedRow), nameof(CanOpenLogsForSelectedRow), nameof(CanPortForwardSelected),
+            nameof(CanScaleSelectedRow), nameof(CanRestartSelectedRow), nameof(CanDrainSelectedRow),
+            nameof(CanSyncSelectedArgoApplication), nameof(CanTerminateSelectedArgoSync),
+        ])
+        {
+            OnPropertyChanged(name);
+        }
+
+        OpenLogsCommand.NotifyCanExecuteChanged();
+        OpenPreviousLogsCommand.NotifyCanExecuteChanged();
+        OpenWorkloadLogsCommand.NotifyCanExecuteChanged();
+        OpenLogsMaximizedCommand.NotifyCanExecuteChanged();
+        ExecIntoSelectedCommand.NotifyCanExecuteChanged();
+        PortForwardSelectedCommand.NotifyCanExecuteChanged();
+        EditSelectedYamlCommand.NotifyCanExecuteChanged();
+        ScaleSelectedCommand.NotifyCanExecuteChanged();
+        RestartSelectedCommand.NotifyCanExecuteChanged();
+        DrainSelectedCommand.NotifyCanExecuteChanged();
+        SyncArgoApplicationCommand.NotifyCanExecuteChanged();
+        SyncArgoApplicationWithPruneCommand.NotifyCanExecuteChanged();
+        RefreshArgoApplicationCommand.NotifyCanExecuteChanged();
+        TerminateArgoSyncCommand.NotifyCanExecuteChanged();
+
+        // Cordon, uncordon, run now, suspend, resume and the storage link.
+        NotifyStateDependentRowActions();
     }
 
     /// <summary>
@@ -65,7 +121,8 @@ public sealed partial class ClusterTabViewModel
     /// <summary>
     /// Arms one strip for the whole selection. The sentence names the count and the cluster
     /// (the row's own, in a fleet list; "on 2 clusters" when the selection spans several), and
-    /// production — any row on a production cluster — always asks, as a single delete does.
+    /// it always asks, whatever "Confirm before deleting" says (#305); the production border
+    /// marks a selection with any row on a production cluster.
     /// </summary>
     private RowActionViewModel? ArmBulkDelete()
     {

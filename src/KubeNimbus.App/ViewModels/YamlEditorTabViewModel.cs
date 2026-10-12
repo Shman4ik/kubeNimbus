@@ -57,7 +57,15 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
     /// </summary>
     private (int Hash, int Length)? _revealSignature;
 
-    public override string Key { get; }
+    /// <summary>
+    /// Set once for an editor opened on an object. A New YAML editor starts as
+    /// <c>yaml:new:&lt;n&gt;</c> and is re-keyed to the object at each apply
+    /// (<see cref="MarkNewDocumentApplied"/>), so E on that object focuses it instead of
+    /// opening a second editor (#300, UI rule 5).
+    /// </summary>
+    public override string Key => _key;
+
+    private string _key;
 
     [ObservableProperty]
     private string _yamlText;
@@ -73,7 +81,15 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
     private bool _isRefreshing;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowsStatusMessage))]
     private string? _statusMessage;
+
+    /// <summary>
+    /// The status line takes a row only when it has something to say, and not under the
+    /// conflict panel, which says it. An empty line cost the diff a row at the dock's
+    /// default height (#316).
+    /// </summary>
+    public bool ShowsStatusMessage => ConflictDetails is null && !string.IsNullOrEmpty(StatusMessage);
 
     /// <summary>
     /// Set when this tab is showing the list's snapshot because the server read failed.
@@ -87,7 +103,14 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
     private bool _isConfirmingDelete;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowsStatusMessage), nameof(ShowsConflictPanel))]
     private string? _conflictDetails;
+
+    /// <summary>
+    /// The conflict card, with its own Force apply, stands only when no forced preview does
+    /// (#316): the preview then carries the conflict sentence and its button is that force apply.
+    /// </summary>
+    public bool ShowsConflictPanel => ConflictDetails is not null && PendingPreview is null;
 
     /// <summary>
     /// The API server's own sentence refusing a field it does not know — strict field
@@ -106,7 +129,7 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
     /// the same shape as the resource list's row-action strip (CLAUDE.md UI rule 17).
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasPendingPreview))]
+    [NotifyPropertyChangedFor(nameof(HasPendingPreview), nameof(ShowsConflictPanel))]
     private ApplyPreviewViewModel? _pendingPreview;
 
     public bool HasPendingPreview => PendingPreview is not null;
@@ -224,7 +247,7 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
         _name = name;
         _yamlText = ForEditor(initialYaml);
         ClusterName = clusterName;
-        Key = KeyFor(clusterName, descriptor, @namespace, name);
+        _key = KeyFor(clusterName, descriptor, @namespace, name);
 
         // Why this is conditional rather than an unconditional read-on-open: the row's
         // object comes from a live watch, so it is as current as a GET would be and a
@@ -838,6 +861,11 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
             return;
         }
 
+        if (RefusesMultipleDocuments())
+        {
+            return;
+        }
+
         if (!IsSelfDescribing(YamlText))
         {
             StatusMessage = MissingTypeMessage;
@@ -859,6 +887,13 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
             // A conflict is an answer, not a failure of the preview — and it is the one
             // this feature most wants to deliver before the object moves rather than after.
             ConflictDetails = ex.Message;
+            if (!force)
+            {
+                // #316 (QA Y-8): the conflict says the apply would collide, not what it would
+                // change, and that change is what the choice to take the fields is about. A
+                // forced dry run answers it and still changes nothing.
+                PendingPreview = await ForcedPreviewAfterConflictAsync();
+            }
         }
         catch (ServerSideApplyValidationException ex)
         {
@@ -879,6 +914,29 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
         }
     }
 
+    /// <summary>
+    /// The would-be diff behind a conflict: the same dry run with <c>force=true</c>, labelled
+    /// as a force apply, so the panel's own button is the force apply it previews. Null when
+    /// that dry run fails as well; the conflict panel still stands, with its Force apply.
+    /// </summary>
+    private async Task<ApplyPreviewViewModel?> ForcedPreviewAfterConflictAsync()
+    {
+        if (_client is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var forced = await _client.PreviewApplyAsync(_descriptor, _namespace, _name, YamlText, FieldManager, force: true);
+            return new ApplyPreviewViewModel(forced, isForce: true, conflict: ConflictDetails);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
     private async Task ApplyCoreAsync(bool force)
     {
         if (_client is null)
@@ -887,6 +945,11 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
         }
 
         if (!await ResolveNewDocumentTargetAsync())
+        {
+            return;
+        }
+
+        if (RefusesMultipleDocuments())
         {
             return;
         }
@@ -1144,6 +1207,40 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
     private static bool IsSelfDescribing(string yaml) =>
         HasTopLevelKey(yaml, "apiVersion") && HasTopLevelKey(yaml, "kind");
 
+    /// <summary>
+    /// Said when the text holds a second document (#300). The apply body is built from the
+    /// first document only, so a second one pasted below was neither applied nor refused.
+    /// </summary>
+    internal const string MultipleDocumentsMessage =
+        "Nothing was applied: this text holds more than one document (---). This editor applies "
+        + "the object it was opened on; remove the others, or apply each with New YAML….";
+
+    /// <summary>
+    /// True, with the reason on the status line, when the text holds more than one document.
+    /// A new document runs the same check inside <see cref="NewManifest.Read"/>. Text that does
+    /// not parse is left to the apply, which reports the parser's own message.
+    /// </summary>
+    private bool RefusesMultipleDocuments()
+    {
+        int count;
+        try
+        {
+            count = YamlJson.CountDocuments(YamlText);
+        }
+        catch (Exception ex) when (ex is YamlDotNet.Core.YamlException or FormatException or InvalidOperationException)
+        {
+            return false;
+        }
+
+        if (count <= 1)
+        {
+            return false;
+        }
+
+        StatusMessage = MultipleDocumentsMessage;
+        return true;
+    }
+
     private static bool HasTopLevelKey(string yaml, string key) =>
         yaml.StartsWith($"{key}:", StringComparison.Ordinal)
         || yaml.Contains($"\n{key}:", StringComparison.Ordinal);
@@ -1164,10 +1261,16 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
 /// </summary>
 public sealed class ApplyPreviewViewModel
 {
-    public ApplyPreviewViewModel(ApplyPreview preview, bool isForce)
+    /// <param name="conflict">
+    /// The server's conflict sentence when this is the forced dry run behind a conflicting
+    /// Review (#316); the panel then carries it, in place of the separate conflict card.
+    /// </param>
+    public ApplyPreviewViewModel(ApplyPreview preview, bool isForce, string? conflict = null)
     {
         var diff = preview.Diff;
         IsForce = isForce;
+        Conflict = conflict;
+        var afterConflict = conflict is not null;
         IsCreate = diff.IsCreate;
         Rows = [.. diff.Changes.Select(c => new DiffRowViewModel(c))];
 
@@ -1192,6 +1295,12 @@ public sealed class ApplyPreviewViewModel
 
         Headline = diff switch
         {
+            // Beside the conflict panel: what this is a diff of has to be in the sentence,
+            // because the plain apply that was asked for changes nothing.
+            _ when afterConflict && diff.IsEmpty => "Apply conflict. A force apply would change no field values.",
+            _ when afterConflict => diff.TotalChanges == 1
+                ? "Apply conflict. A force apply would take these fields and make 1 change:"
+                : $"Apply conflict. A force apply would take these fields and make {diff.TotalChanges} changes:",
             { IsCreate: true } => "This object is not on the server. Applying would create it:",
             // A field diff that is empty while the text one is not means the server would
             // write the same values in a different order. Saying "nothing would change"
@@ -1276,6 +1385,15 @@ public sealed class ApplyPreviewViewModel
 
     /// <summary>Whether the apply this previews takes conflicted fields from their current owner.</summary>
     public bool IsForce { get; }
+
+    /// <summary>
+    /// True for the forced dry run shown for a conflict (#316): the plain apply was refused,
+    /// and this is what taking the fields would change.
+    /// </summary>
+    public bool IsAfterConflict => Conflict is not null;
+
+    /// <summary>The server's sentence naming the fields and their owner, or null.</summary>
+    public string? Conflict { get; }
 
     /// <summary>
     /// The confirm button says which apply it is. A force-apply reached through a

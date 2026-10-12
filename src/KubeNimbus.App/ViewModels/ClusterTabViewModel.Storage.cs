@@ -19,7 +19,10 @@ public sealed partial class ClusterTabViewModel
     /// <summary>"Open volume pvc-…" / "Open claim payments/data-0" — the menu item names what it opens.</summary>
     public string? BoundObjectLabel => SelectedBinding is { } bound ? $"Open {bound.Description}" : null;
 
-    public bool CanOpenBoundObject => SelectedBinding is not null;
+    public bool CanOpenBoundObject => !HasMultipleSelection && OffersBoundObject;
+
+    /// <summary>The row menu shows the item for this row; with several rows selected, disabled (#305).</summary>
+    public bool OffersBoundObject => SelectedBinding is not null;
 
     [RelayCommand(CanExecute = nameof(CanOpenBoundObject))]
     private Task OpenBoundObjectAsync()
@@ -40,6 +43,7 @@ public sealed partial class ClusterTabViewModel
     {
         OnPropertyChanged(nameof(BoundObjectLabel));
         OnPropertyChanged(nameof(CanOpenBoundObject));
+        OnPropertyChanged(nameof(OffersBoundObject));
         OpenBoundObjectCommand.NotifyCanExecuteChanged();
     }
 }

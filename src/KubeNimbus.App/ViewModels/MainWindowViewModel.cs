@@ -1492,7 +1492,19 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         // finding the buttons on its container strip. Offered only when they apply,
         // rather than listed-and-disabled: a palette is a search, and an entry that
         // matches your query and then refuses to run is worse than no match.
-        if (SelectedTab is { SelectedRow: { } row } rowTab)
+        //
+        // With several rows selected, only Delete, which acts on all of them (#305): every
+        // entry below acts on one object, and the palette runs a command's Execute, which
+        // does not consult CanExecute, so leaving them listed would act on the current row.
+        if (SelectedTab is { HasMultipleSelection: true } selectionTab)
+        {
+            if (selectionTab.CanDeleteSelectedRow)
+            {
+                yield return Catalog(CommandId.DeleteResource, $"{selectionTab.SelectionSummary} · asks to confirm",
+                    () => selectionTab.DeleteSelectedCommand.Execute(null));
+            }
+        }
+        else if (SelectedTab is { SelectedRow: { } row } rowTab)
         {
             var where = $"{row.Namespace}/{row.Name}";
 

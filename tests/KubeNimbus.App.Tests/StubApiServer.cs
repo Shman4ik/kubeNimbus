@@ -75,6 +75,15 @@ internal sealed class StubApiServer : IDisposable
     public void Respond(string method, string path, HttpStatusCode status, string body) =>
         _responses[$"{method} {path}"] = (status, body);
 
+    private readonly List<(string Method, string Path, string QueryPart, HttpStatusCode Status, string Body)> _queryResponses = [];
+
+    /// <summary>
+    /// An answer for a request whose query contains <paramref name="queryPart"/> (a forced
+    /// dry run, say), checked before the answers <see cref="Respond"/> gives by path alone.
+    /// </summary>
+    public void RespondWhenQueryContains(string method, string path, string queryPart, HttpStatusCode status, string body) =>
+        _queryResponses.Add((method, path, queryPart, status, body));
+
     public ClusterClient Connect() => ClusterClient.Connect(new ClusterContext(
         "stub", "stub", null, "stub", Path.Combine(_directory, "kubeconfig.yaml")));
 
@@ -120,7 +129,12 @@ internal sealed class StubApiServer : IDisposable
                 await gate.Task;
             }
 
-            var (status, responseBody) = _responses.TryGetValue($"{context.Request.HttpMethod} {path}", out var canned)
+            var query = context.Request.Url.Query;
+            var byQuery = _queryResponses.FirstOrDefault(r => r.Method == context.Request.HttpMethod && r.Path == path
+                && query.Contains(r.QueryPart, StringComparison.Ordinal));
+            var (status, responseBody) = byQuery.Method is not null
+                ? (byQuery.Status, byQuery.Body)
+                : _responses.TryGetValue($"{context.Request.HttpMethod} {path}", out var canned)
                 ? canned
                 : (HttpStatusCode.NotFound, """{"kind":"Status","apiVersion":"v1","status":"Failure","reason":"NotFound","code":404}""");
             var bytes = Encoding.UTF8.GetBytes(responseBody);

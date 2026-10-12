@@ -233,17 +233,21 @@
                   <!-- The name gets what it needs up to 480px: pod names share long prefixes
                        (payment-service-report-generator-7f9c…), and a fixed 260 cut every one of
                        them before the part that tells them apart. -->
+                  <!-- #305: the refusal wraps rather than trimming. At 1280px a 403 was cut
+                       before its verb and resource (User "system:ser…), and that sentence is the
+                       whole diagnosis. Top-aligned, so a wrapped row's dot and name stay level
+                       with its first line. -->
                   <Grid ColumnDefinitions="Auto,Auto,*" Margin="0,1">
                     <Ellipse Grid.Column="0" Classes="statusDot" Width="8" Height="8"
-                             VerticalAlignment="Center" Margin="0,0,8,0"
+                             VerticalAlignment="Top" Margin="0,5,8,0"
                              Classes.ok="{Binding IsDone}"
                              Classes.warn="{Binding IsUncertain}"
                              Classes.error="{Binding IsFailed}" />
                     <TextBlock Grid.Column="1" Text="{Binding Key}" FontSize="11.5" MaxWidth="480"
-                               Classes="mono"
+                               Classes="mono" VerticalAlignment="Top"
                                TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Key}" />
-                    <TextBlock Grid.Column="2" Text="{Binding Detail}" FontSize="11.5" Opacity="0.75" Margin="12,0,0,0"
-                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Detail}" />
+                    <TextBlock Grid.Column="2" Name="BulkItemDetail" Text="{Binding Detail}" FontSize="11.5" Opacity="0.75"
+                               Margin="12,0,0,0" TextWrapping="Wrap" VerticalAlignment="Top" />
                   </Grid>
                 </DataTemplate>
               </ItemsControl.ItemTemplate>

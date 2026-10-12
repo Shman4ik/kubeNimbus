@@ -197,6 +197,14 @@ load-bearing.
    drops a layout it thinks is default, and its old test was "no sort and no widths"; it is
    `GridLayout.IsDefault` now, which counts hidden columns. `ColumnChooserTests.A_layout_whose_only_choice_is_a_hidden_column_is_kept`
    was confirmed red with the old test put back.
+   **Each choice is stored under one field** (#318). The QA VM found every layout holding its
+   hidden columns twice (`HiddenColumns` and `Hidden`) and its widths twice (`ColumnWidths` and
+   `Widths`), plus an `IsDefault`. The cause: the source-generated serializer writes every public
+   readable property, and `Hidden`, `Widths` and `IsDefault` are computed views over the real
+   fields. They are `[JsonIgnore]` now; only the real fields were ever read back (a get-only
+   property is not deserialized), so a file with both spellings still loads.
+   `GridLayoutStoreTests.A_layout_is_written_once_per_field` reads the raw file and went red with
+   the attribute taken off `Hidden`; `A_file_with_both_spellings_still_loads` pins the old file.
 7. **`Rows` stays the watch's list.** Hiding a column changes the grid and nothing else
    (UI rule 13); `ColumnChooserTests.Rows_stay_the_watchs_list_when_a_column_is_hidden`.
 

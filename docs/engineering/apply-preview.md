@@ -37,6 +37,17 @@ Thirteen things are load-bearing.
    somebody else is managing. The confirm button says `Force apply` rather than
    `Apply changes` — the more consequential of the two applies must not be confirmed
    under the same word.
+   **A conflicting Review still shows the would-be diff** (#316, QA Y-8). The conflict says
+   the apply would collide, not what it would change, and someone deciding whether to take the
+   fields was deciding blind. On a conflict, `PreviewCoreAsync` runs the same dry run with
+   `force=true` (`ForcedPreviewAfterConflictAsync`; still `dryRun=All`, so nothing changes) and
+   opens the panel on it, its headline "Apply conflict. A force apply would take these fields
+   and make N changes:", the server's conflict sentence on the line under it, and its confirm
+   button `Force apply`. The separate conflict card (`ShowsConflictPanel`) stands only without
+   such a panel — a conflict on a direct apply, after Cancel, or when the forced dry run fails
+   too. `ApplyConflictPreviewTests` replays a 409 and a forced 200 through a real
+   `ClusterClient`; it went red with the forced dry run dropped, and checks that both PATCHes
+   carried `dryRun=All`. `cluster-tab-yaml-conflict-diff` renders it at the dock's default height.
 4. **Three fields are excluded and counted, not shown.** `metadata.managedFields` is the
    apply's own bookkeeping and changes on every apply including one that changes nothing
    else; `resourceVersion` and `generation` are the server's counters. Leaving them in is
@@ -55,18 +66,20 @@ Thirteen things are load-bearing.
    reloading, or applying clears it. A stale diff above a live editor is worse than no
    diff — it is a wrong answer wearing the server's authority. `YamlEditorPreviewTests`
    pins that, and the break was written and confirmed red before the test was called done.
-7. **The panel shares the dock with the editor, from code-behind, and the diff gets three
-   quarters of it.** The preview's row is star-sized while a diff is open and `Auto` when
-   it is not (or when the diff is empty, which is one sentence and two buttons). Both of
-   the obvious XAML answers were tried and rendered wrong at the dock's default ~300px: an
-   `Auto` row tall enough to read left a zero-height editor, and a `MinHeight` on the
-   editor pushed the grid past the dock and overlapped its own rows. Mutating a
-   `RowDefinition` is what `ClusterTabView.ApplyDockState` already does, for the same
-   reason. The **3:1 weight is the line diff's own finding**: an even split left the
-   panel's chrome row and footnote consuming its entire share, so the diff body rendered
-   at *zero* height while the editor kept five lines nobody was reading — and the editor
-   cannot be anything but context here, because typing in it discards the preview by rule
-   6 below. Even at 3:1 the default dock shows about three lines and scrolls; the dock's
+7. **While a diff is open it takes the editor's row, from code-behind.** The preview's row is
+   star-sized while a diff is open and `Auto` when it is not (or when the diff is empty, which
+   is one sentence and two buttons). Both of the obvious XAML answers were tried and rendered
+   wrong at the dock's default ~300px: an `Auto` row tall enough to read left a zero-height
+   editor, and a `MinHeight` on the editor pushed the grid past the dock and overlapped its
+   own rows. Mutating a `RowDefinition` is what `ClusterTabView.ApplyDockState` already does,
+   for the same reason. An even split left the diff body at *zero* height; the 3:1 weight that
+   replaced it left, by the QA VM's measurement (#316, Y-8), "about two lines in a ~35 px area"
+   with the footnote drawn over them. So since #316 the editor's row collapses while a diff is
+   open (`EditorRow.IsVisible = false`, height 0) and the panel takes the whole pane: the editor
+   cannot be anything but context here, because typing in it discards the preview by rule 6
+   below, and Cancel gives it back. The status line under the panel takes no row while it is
+   empty (`ShowsStatusMessage`), which was one more line of diff. `cluster-tab-yaml-diff-dock`
+   renders the diff at the default height: about six lines, the footnote under them; the dock's
    own maximize toggle sits directly above the panel and is what a long diff wants. The
    panel itself is a `ContentControl` + inline `DataTemplate`, never a `Border` with both
    `DataContext` and `x:DataType` — UI rule 17 records what that pair renders, which is
@@ -306,7 +319,18 @@ are load-bearing.
    `yaml:new:<n>`, unique per tab, and it is never a preview tab. After its first apply its title
    becomes `Kind/name`, Reload and Delete come alive (they were disabled, with nothing on the server
    to act on) and the InfoBar goes; it stays a new-document editor, so editing the name and
-   applying again creates a second object.
+   applying again creates a second object. **At each apply it is re-keyed to the object it
+   created** (#300): the key becomes `KeyFor` of the descriptor discovery returned (the version a
+   list row's key uses, not the manifest's own), so E on that object's row focuses this editor
+   instead of opening a second one beside it. `NewYamlTests.After_the_apply_E_on_the_created_object_focuses_the_new_document`
+   went red with the re-key taken out.
+
+**The editor E opens refuses a second document too** (#300). It applies the object it was opened
+on, and `ClusterClient.ApplyBody` reads the first document only, so a second one pasted below was
+neither applied nor refused. `RefusesMultipleDocuments` counts documents (`YamlJson.CountDocuments`)
+before the preview and before a direct apply and says "Nothing was applied: this text holds more
+than one document (---)…", with nothing sent. `NewYamlTests.An_opened_object_refuses_a_second_pasted_document`
+covers the preview on and off, and went red with the check bypassed.
 5. **Not on the demo cluster, and not before a connect**: `ClusterTabViewModel.CanCreateFromYaml`
    is false with no `ClusterClient`, the ☰ item is disabled and the palette has no row.
 

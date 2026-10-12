@@ -143,6 +143,9 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-yaml-diff-no-change", () => HostInMainWindow(ClusterTabScenarios.YamlEditorDiffNoChange())),
     ("cluster-tab-yaml-validation-rejected", () => HostInMainWindow(ClusterTabScenarios.YamlEditorValidationRejected())),
     ("cluster-tab-yaml-conflict", () => HostInMainWindow(ClusterTabScenarios.YamlEditorConflict())),
+    // #316: the diff at the dock's default height, and a conflicting Review with its would-be diff.
+    ("cluster-tab-yaml-diff-dock", () => HostInMainWindow(ClusterTabScenarios.YamlEditorDiffDock())),
+    ("cluster-tab-yaml-conflict-diff", () => HostInMainWindow(ClusterTabScenarios.YamlEditorConflictDiff())),
     ("cluster-tab-yaml-secret-masked", () => HostInMainWindow(ClusterTabScenarios.YamlEditorSecretMasked())),
     ("cluster-tab-yaml-secret-revealed", () => HostInMainWindow(ClusterTabScenarios.YamlEditorSecretRevealed())),
     // FEAT-30 — a TLS Secret's certificate chain, decoded without a Reveal.
@@ -614,6 +617,7 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     if (name.StartsWith("cluster-tab-row-logs", StringComparison.Ordinal)) UxInteractionChecks.HoverRow(window, 3);
     if (name == "ux-font-settings") FontChecks.SettingsReachOpenText(window);
     if (name == "ux-bulk-delete") ListCreateChecks.BulkDelete(window);
+    if (name == "cluster-tab-bulk-delete-partial") ListCreateChecks.BulkRefusalWraps(window);
     if (name == "ux-column-chooser") ListCreateChecks.ColumnChooser(window);
 
     // Last, so a pane a check just opened settles too: capture when the log streams have
