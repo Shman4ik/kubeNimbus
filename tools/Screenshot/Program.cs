@@ -243,6 +243,9 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // The log panes' reading tools (FEAT-33/36/39) and ENG-45's never-started pods.
     ("cluster-tab-workload-logs-find", () => HostInMainWindow(ClusterTabScenarios.DemoWorkloadLogsFind(), height: 1000)),
     ("cluster-tab-workload-logs-not-started", () => HostInMainWindow(ClusterTabScenarios.DemoWorkloadLogsNotStarted())),
+    // #319: a pane's state stays said while it holds lines — a snapshot, Follow off.
+    ("cluster-tab-demo-pod-detail-previous", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetailPreviousSnapshot())),
+    ("cluster-tab-workload-logs-stopped", () => HostInMainWindow(ClusterTabScenarios.DemoWorkloadLogsStopped())),
     ("cluster-tab-demo-pod-detail-find", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetailSearch(), height: 1000)),
     ("cluster-tab-demo-pod-detail-levels",
         () => HostInMainWindow(ClusterTabScenarios.DemoPodDetailSearch(query: "", hideInfo: true), height: 1000)),

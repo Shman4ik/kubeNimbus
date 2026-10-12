@@ -191,6 +191,12 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     /// </summary>
     private int? _clearedLines;
 
+    /// <summary>
+    /// What <see cref="_clearedLines"/> was once lines arrived after the clear: the pane's
+    /// status notice keeps saying so while it shows them (#319). Reset with the buffer.
+    /// </summary>
+    private int? _clearedEarlier;
+
     private readonly LogFind _find = new();
 
     public IReadOnlyList<LogRange> LogRanges => LogRange.Choices;
@@ -666,7 +672,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         if (_followWhenStarted is { } waiting
             && SelectedContainer?.Name == waiting
             && _streaming is null
-            && !LogStreamEnd.DescribePod(raw, waiting, atStart: null).NotStarted)
+            && LogFollowRetry.HasStarted(PodDetails.ContainerRunOf(raw, waiting)))
         {
             StartLogs();
         }
@@ -1185,8 +1191,9 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
 
     /// <summary>
     /// The container whose follow ended because it had never started (an unscheduled pod
-    /// answers a follow request with an immediate 204 No Content). The next watch tick
-    /// that shows it running starts the follow again, so a pane opened on a pod that is
+    /// answers a follow request with an immediate 204 No Content; a scheduled one whose
+    /// container is not up yet, with a 400 — see <see cref="WaitForStartAsync"/>). The next
+    /// watch tick that shows it started starts the follow again, so a pane opened on a pod that is
     /// coming up does not sit on "has not started" after it has. Cleared by any start or
     /// stop, which is the reader choosing something else.
     /// </summary>
@@ -1200,6 +1207,8 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LogPlaceholder))]
     [NotifyPropertyChangedFor(nameof(HasLogPlaceholder))]
+    [NotifyPropertyChangedFor(nameof(LogStatusNotice))]
+    [NotifyPropertyChangedFor(nameof(HasLogStatusNotice))]
     private string? _logStatus;
 
     /// <summary>True when <see cref="LogStatus"/> is a failure rather than an ordinary end.</summary>
@@ -1278,6 +1287,19 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     }
 
     public bool HasLogPlaceholder => LogPlaceholder is not null;
+
+    /// <summary>
+    /// The pane's state while it holds lines (#319): how the stream ended or that what is
+    /// shown is a snapshot ("Selected range loaded — this is a snapshot.", "Previous logs
+    /// loaded — …", "Stream ended — app exited."), and that lines were cleared. These used to
+    /// be drawn only as <see cref="LogPlaceholder"/>, which a pane with lines does not show,
+    /// so a snapshot over earlier lines looked exactly like a live tail (UI rules 9 and 18).
+    /// Null while the buffer is empty, where the placeholder already says it, and while a
+    /// healthy stream runs, where there is nothing to say.
+    /// </summary>
+    public string? LogStatusNotice => LogNotice.Compose(_allLogLines.Count, _clearedEarlier, LogStatus);
+
+    public bool HasLogStatusNotice => LogStatusNotice is not null;
 
     partial void OnSelectedLogRangeChanged(LogRange value)
     {
@@ -1468,11 +1490,79 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
             {
                 // normal on stop/close
             }
+            catch (Exception ex) when (LogFollowRetry.IsNotStartedRefusal(ex, atStart))
+            {
+                await WaitForStartAsync(generation, container.Name, FirstLine(ex.Message), client, atStart, token);
+            }
             catch (Exception ex)
             {
                 await EndLogStreamAsync(generation, FirstLine(ex.Message), problem: true);
             }
         }, token);
+    }
+
+    /// <summary>
+    /// A follow refused because the container has not started (#184, the 0.7.0 QA run's
+    /// G-13). The pane keeps the API server's sentence ("container \"app\" in pod \"x\" is
+    /// not available") as an ordinary wait rather than a failure, arms
+    /// <see cref="_followWhenStarted"/> so the watch picks the container up once it runs, and
+    /// reads the pod again in case the watch tick that would have done so came before the
+    /// refusal did (#309's race, which this pane has too). It used to end there: a pod whose
+    /// scheduling gate was released sat on "is not available (400 Bad Request)" while running.
+    /// </summary>
+    private async Task WaitForStartAsync(
+        int generation, string container, string refusal, ClusterClient client, ContainerRun? atStart, CancellationToken token)
+    {
+        await EndLogStreamAsync(generation, refusal, problem: true);
+        await Dispatcher.UIThread.InvokeAsync(() => ArmFollowWhenStarted(generation, container));
+
+        ContainerRun? now;
+        try
+        {
+            (_, _, _, now) = await LogStreamEnd.ExplainWithRunAsync(client, PodNamespace, PodName, container, atStart, token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        await Dispatcher.UIThread.InvokeAsync(() => FollowIfStarted(generation, container, atStart, now));
+    }
+
+    /// <summary>
+    /// After a not-started refusal: the status is a wait, not a problem, and the container is
+    /// followed once a watch tick shows it has started (<see cref="LogFollowRetry.HasStarted"/>).
+    /// </summary>
+    internal int LogGeneration => _logGeneration;
+
+    internal void ArmFollowWhenStarted(int generation, string container)
+    {
+        if (generation != _logGeneration || _streaming is not null)
+        {
+            return;
+        }
+
+        IsLogStatusProblem = false;
+        _followWhenStarted = container;
+    }
+
+    /// <summary>
+    /// The pod as read after a refusal: follows again when the container has started since
+    /// the refused request, unless the reader or a watch tick has moved the pane on already.
+    /// Internal so the view-model tests can deliver the read after the last watch tick.
+    /// </summary>
+    internal bool FollowIfStarted(int generation, string container, ContainerRun? atStart, ContainerRun? now)
+    {
+        if (generation != _logGeneration
+            || _streaming is not null
+            || _followWhenStarted != container
+            || !LogFollowRetry.ShouldFollowAgain(atStart, now))
+        {
+            return false;
+        }
+
+        StartLogs();
+        return true;
     }
 
     /// <summary>
@@ -1610,6 +1700,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
 
     private void ClearLogBuffer()
     {
+        _clearedEarlier = null;
         lock (_pendingLogLock)
         {
             _pendingLogLines.Clear();
@@ -1718,6 +1809,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         }
 
         _loadingLogRange = false;
+        _clearedEarlier = _clearedLines ?? _clearedEarlier;
         _clearedLines = null;
 
         // Trim before appending, so neither the buffer nor the rendered list ever holds more
@@ -1759,6 +1851,8 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     {
         OnPropertyChanged(nameof(LogPlaceholder));
         OnPropertyChanged(nameof(HasLogPlaceholder));
+        OnPropertyChanged(nameof(LogStatusNotice));
+        OnPropertyChanged(nameof(HasLogStatusNotice));
     }
 
     // The level filter always applies; the search narrows only in filter mode, where each

@@ -122,14 +122,35 @@ public class WorkloadLogsLiveTests
                     // flight. Nothing then brings it round to Follow again, and the pod reads as
                     // one that never logged (#279, the failure seen under shared load). So a
                     // refusal is checked against the pod as it is now, the same check the
-                    // empty-early-end retry below makes.
-                    var refusal = $"threw {ex.GetType().Name}: {ex.Message}";
+                    // empty-early-end retry below makes. Through LogFollowRetry, the rule the
+                    // panes run (#309), and until the container has started rather than once:
+                    // a single read that found the pod still coming up returned, and a Modified
+                    // event that arrived between that read and the return found the stream not
+                    // yet completed and was dropped — the same lost wake-up as #309, in the
+                    // test's own copy of the pane.
+                    var refusal = $"threw {ex.GetType().Name}: pod {p}: {ex.Message}";
+                    var atStartRun = atStart is null ? null : PodDetails.ContainerRunOf(atStart.Raw, "app");
+                    if (!LogFollowRetry.IsNotStartedRefusal(ex, atStartRun))
+                    {
+                        return refusal;
+                    }
+
                     try
                     {
-                        await Task.Delay(1000, paneCts.Token);
-                        var afterRefusal = await client.ReadResourceAsync(ResourceDescriptor.Pods, LiveCluster.Namespace, p, paneCts.Token);
-                        if (afterRefusal is null
-                            || PodDetails.ContainerRunOf(afterRefusal.Raw, "app") is not { State: ContainerRunState.Running })
+                        var started = false;
+                        for (var attempt = 0; attempt < 60 && !started; attempt++)
+                        {
+                            await Task.Delay(1000, paneCts.Token);
+                            var afterRefusal = await client.ReadResourceAsync(ResourceDescriptor.Pods, LiveCluster.Namespace, p, paneCts.Token);
+                            if (afterRefusal is null)
+                            {
+                                return refusal;
+                            }
+
+                            started = LogFollowRetry.ShouldFollowAgain(atStartRun, PodDetails.ContainerRunOf(afterRefusal.Raw, "app"));
+                        }
+
+                        if (!started)
                         {
                             return refusal;
                         }

@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using Avalonia;
+using Avalonia.Automation.Peers;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Styling;
@@ -242,6 +243,26 @@ internal static class StressChecks
             }, $"initial list of {ServicePods:N0} pods", 4);
         }));
 
+        bool Wanted(string name) => filter is null || name.Contains(filter, StringComparison.OrdinalIgnoreCase);
+        if (Wanted("logs-automation-workload"))
+        {
+            results.AddRange(LogAutomation("logs-automation-workload", host, () => ClusterTabScenarios.DemoWorkloadLogs(), tab =>
+            {
+                var pane = (WorkloadLogsTabViewModel)tab.SelectedInspectorTab!;
+                var source = pane.RegisterSource("stress-pod-0", "app");
+                return (i => pane.Enqueue($"{Stamp(i)} info: request {i} finished in 3ms", source), () => pane.Flush(force: true));
+            }));
+        }
+
+        if (Wanted("logs-automation-pod"))
+        {
+            results.AddRange(LogAutomation("logs-automation-pod", host, () => ClusterTabScenarios.DemoPodDetail(), tab =>
+            {
+                var pane = (PodDetailTabViewModel)tab.SelectedInspectorTab!;
+                return (i => pane.Enqueue($"{Stamp(i)} info: request {i} finished in 3ms"), pane.FlushLogLines);
+            }));
+        }
+
         Console.WriteLine();
         Console.WriteLine($"{"check",-28} {"action",-40} {"ms",8} {"visuals",8} {"notify",8}");
         foreach (var r in results)
@@ -305,6 +326,99 @@ internal static class StressChecks
         window.Close();
         Settle();
     }
+
+    /// <summary>
+    /// #321: with a fast, large log open, every UI Automation read of the window failed for
+    /// minutes in the 0.7.0 QA run. A UIA client walks the peer tree and listens for its
+    /// structure and property events, so this measures what such a client meets, in three
+    /// rows per pane: the UI thread's own cost of following a fast pod (ticks of
+    /// <see cref="FollowLinesPerTick"/> lines, the pane's 100 ms flush at about 200 lines a
+    /// second), which must fit in the ticks it takes; the <b>peers</b> in the whole window's
+    /// tree with a full buffer, which must be one per realized row, never one per buffered
+    /// line; and the <b>automation events</b> the same follow raises with a client listening,
+    /// which must be of the order of the realized rows per tick, never of the buffer.
+    /// </summary>
+    /// <remarks>
+    /// Measured when it was written (headless, this repo's CI shape): about 1,000 peers for
+    /// the multi-pod pane's window and 1,400 for pod detail's with 5,000 lines in the buffer,
+    /// so the peer tree is not the cause; 120 and 70 events a tick, because at this rate the
+    /// visible rows turn over every tick and each re-realized row raises its own structure
+    /// and name events; and 20 to 75 ms of a 100 ms tick on the UI thread, which is where a
+    /// UIA call has to be answered. See docs/engineering/log-pane-reading.md.
+    /// </remarks>
+    private static IEnumerable<Result> LogAutomation(
+        string name,
+        Func<ClusterTabViewModel, Control> host,
+        Func<ClusterTabViewModel> build,
+        Func<ClusterTabViewModel, (Action<int> Enqueue, Action Flush)> arrange)
+    {
+        Application.Current!.RequestedThemeVariant = ThemeVariant.Light;
+        var tab = build();
+        var window = (Window)host(tab);
+        window.Show();
+        LogSettle.Run(window);
+        Settle();
+
+        var (enqueue, flush) = arrange(tab);
+        var next = 0;
+        for (; next < 4_000; next++) enqueue(next);
+        flush();
+        Settle();
+
+        void Follow()
+        {
+            for (var i = 0; i < FollowLinesPerTick; i++) enqueue(next++);
+            flush();
+            Settle();
+        }
+
+        // The follow alone, before any client is listening: what the UI thread pays.
+        var bare = Stopwatch.StartNew();
+        for (var tick = 0; tick < FollowTicks; tick++) Follow();
+        bare.Stop();
+        yield return new Result(name, $"follow, {FollowTicks} ticks of {FollowLinesPerTick} lines",
+            bare.ElapsedMilliseconds, 0, null, 0, FollowTicks * 100 * 2);
+
+        var events = 0;
+        var peers = new HashSet<AutomationPeer>();
+        var root = ControlAutomationPeer.CreatePeerForElement(window);
+        void Walk(AutomationPeer peer)
+        {
+            if (peers.Add(peer))
+            {
+                peer.ChildrenChanged += (_, _) => events++;
+                peer.PropertyChanged += (_, _) => events++;
+            }
+
+            foreach (var child in peer.GetChildren()) Walk(child);
+        }
+
+        Walk(root);
+        yield return new Result(name, $"automation peers, {next:N0} lines buffered", 0, 0, peers.Count, MaxLogWindowPeers, SlowMs);
+
+        var clock = Stopwatch.StartNew();
+        for (var tick = 0; tick < FollowTicks; tick++)
+        {
+            Follow();
+
+            // A client reads again what changed, which is what creates the new rows' peers.
+            Walk(root);
+        }
+
+        clock.Stop();
+        yield return new Result(name, $"automation events, {FollowTicks} ticks",
+            clock.ElapsedMilliseconds, 0, events, FollowTicks * MaxAutomationEventsPerTick, FollowTicks * 100 * 2);
+
+        window.Close();
+        Settle();
+    }
+
+    private const int FollowTicks = 50;
+    private const int FollowLinesPerTick = 20;
+
+    // A peer per buffered line would add thousands; a per-line event would add 4,000 a tick.
+    private const int MaxLogWindowPeers = 2_500;
+    private const int MaxAutomationEventsPerTick = 250;
 
     private static void Settle()
     {

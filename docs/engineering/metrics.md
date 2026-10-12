@@ -45,6 +45,23 @@ container) and node usage. Three things are deliberate:
   403 through `ReadNodeUsageAsync` as a narrow user and goes red without the server's sentence
   (both checked).
 
+- **A 403 is an answer, and the poll stops asking (#310).** Narrow RBAC is the expected case.
+  Until 0.7.x a 403 on pod usage was swallowed as transient, so the Pods list's CPU/Memory
+  columns read "—" for ever while the poll asked again every interval, and on the Nodes list the
+  columns kept their dashes beside the strip's "usage not permitted". Now a poll in which every
+  cluster in scope refused (or has no metrics API) hides the columns the way a cluster without
+  metrics-server does, hands the refusal to the strip, and returns. The refusal is remembered per
+  kind (`_metricsRefused`) for the tab's connection, so going back to the list asks nothing; it is
+  cleared on connect, the one moment the user's permissions can have changed. The reason goes in
+  the status bar (`MetricsNotice`, "CPU and memory are hidden: this user may not read pod usage
+  (…server's sentence…)."), except on the Nodes list, whose strip already says it (UI rule 20).
+  A refused kind is per kind: a user may read node usage and not pod usage, or the reverse. In
+  fleet mode a refusal hides the columns for that watch only, since it is about one member.
+  `MetricsRefusedTests` pins the hide, the notice and the memo; `ClusterCapacityLiveTests` reads
+  the real 403 on pod metrics as a narrow ServiceAccount and checks it is the
+  `HttpRequestException` with `Forbidden` the poll catches. The poll loop itself (that it returns)
+  has no test: it needs a live client on the UI thread.
+
 Quantity strings (`"100m"`, `"128Mi"`, `"12345n"`, `"129e6"`) are parsed by
 `Quantity.cs` — a small AOT-safe reader, since `ResourceQuantity` from the k8s
 client only covers typed models and metrics/CRD objects arrive as raw JSON.

@@ -378,7 +378,7 @@
             <Binding Path="PortForwards.HasSomethingToShow" />
           </MultiBinding>
         </Border.IsVisible>
-        <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+        <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
           <!-- With no tab open there is no SelectedTab.Status to show, and that is
                exactly when the shell's own status (kubeconfig load result) matters. -->
           <!-- Gated on its own worth, not on the tab's existence: the bar may be open only for
@@ -398,10 +398,15 @@
           <TextBlock Grid.Column="2" Classes="statusText warn statusMessage" Margin="12,0,0,0"
                      Text="{x:Static vm:ClusterTabViewModel.PlainHttpNotice}"
                      IsVisible="{Binding SelectedTab.IsPlainHttp, FallbackValue=False}" />
+          <!-- Why the list has no CPU/Memory columns when this user may not read the kind's
+               usage (#310): a column that is simply absent does not say why. -->
+          <TextBlock Grid.Column="3" Classes="statusText statusMessage" Margin="12,0,0,0" MaxWidth="560"
+                     Text="{Binding SelectedTab.MetricsNotice}"
+                     IsVisible="{Binding SelectedTab.MetricsNotice, Converter={x:Static aconv:ObjectConverters.IsNotNull}, FallbackValue=False}" />
           <!-- Running forwards, counted; a click lists them with Open and Stop. When none is
                left it carries the last thing the registry did on its own (forwards stopped
                because their cluster tab closed). -->
-          <Button Grid.Column="3" Name="PortForwardsStatusButton" Classes="toolbar" Padding="6,1" Margin="12,0,0,0"
+          <Button Grid.Column="4" Name="PortForwardsStatusButton" Classes="toolbar" Padding="6,1" Margin="12,0,0,0"
                   Command="{Binding OpenPortForwardsCommand}"
                   IsVisible="{Binding PortForwards.HasSomethingToShow}"
                   AutomationProperties.Name="Port-forwards"

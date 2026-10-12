@@ -88,5 +88,24 @@ public class ClusterCapacityLiveTests
         // The same client's admin twin reads real usage through the same call.
         var adminRead = await admin.ReadNodeUsageAsync(ct);
         await Assert.That(adminRead.Outcome).IsEqualTo(NodeUsageOutcome.Read);
+
+        // The Pods list's poll (#310): a 403 on pod usage is the HttpRequestException with
+        // Forbidden that the poll treats as an answer — hiding the columns and asking no more
+        // — not the MetricsUnavailableException of a cluster with no metrics API, and not a
+        // transient failure it would retry every interval.
+        Exception? podMetrics = null;
+        try
+        {
+            await narrow.Client.GetPodMetricsAsync(LiveCluster.Namespace, ct);
+        }
+        catch (Exception ex)
+        {
+            podMetrics = ex;
+        }
+
+        await Assert.That(podMetrics is HttpRequestException { StatusCode: HttpStatusCode.Forbidden }).IsTrue()
+            .Because(podMetrics?.ToString() ?? "no exception");
+        await Assert.That(((KubernetesApiException)podMetrics!).ServerMessage)
+            .Contains("cannot list resource \"pods\" in API group \"metrics.k8s.io\"");
     }
 }

@@ -309,6 +309,11 @@
               IsVisible="{Binding TrimNotice, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}">
         <TextBlock Text="{Binding TrimNotice}" TextWrapping="Wrap" FontSize="11.5" />
       </Border>
+      <!-- The pane's state while it holds lines (#319); the empty pane's placeholder says the same. -->
+      <Border Classes="infoBar" Classes.warn="{Binding IsLogStatusProblem}" Margin="0,0,0,6"
+              IsVisible="{Binding HasLogStatusNotice}">
+        <TextBlock Text="{Binding LogStatusNotice}" TextWrapping="Wrap" FontSize="11.5" />
+      </Border>
     </StackPanel>
 
     <Border Grid.Row="3" Classes="card" Padding="8,8,2,8">

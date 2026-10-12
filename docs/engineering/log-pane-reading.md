@@ -143,7 +143,8 @@ watch what happens next" no longer means stopping and restarting — which lost 
 and fetched the tail again, bringing back the very lines being cleared. Lines received but
 not yet drawn go too. Until something new arrives the pane says "Cleared N lines — still
 following", not "no lines", which after a clear would be a verdict about the stream it has
-no grounds for. It lives in the pane rather than only in the palette, as the backlog row
+no grounds for; once lines arrive, the status notice above them keeps saying they were
+cleared (#319, below). It lives in the pane rather than only in the palette, as the backlog row
 guessed: the palette has no notion of the focused inspector tab.
 
 ## The toolbar keeps what is read, and the `⋯` menu keeps the rest
@@ -292,9 +293,79 @@ own unschedulable `fraud-detector` pods, so the demo cannot teach a different se
 the same state; before this the chip read "ended" with 0 lines beside a body that disagreed.
 
 Both panes also pick such a container up once it runs: the multi-pod pane re-opens a
-not-started source on the pod watch's next Modified that no longer reads as never started,
-and pod detail restarts its follow on the watch tick that shows the container running.
-Neither re-opens on every status update of a still-pending pod.
+not-started source on the pod watch's next Modified that shows the container has a run, and
+pod detail restarts its follow on the watch tick that shows it. Neither re-opens on every
+status update of a still-pending pod.
+
+**A refusal while the container comes up is a wait, not the end (#184, #309).** Once a gate is
+released or a pod is scheduled, a follow asked before the container runs is refused with a 400
+in the API server's words: `container "app" in pod "x" is not available` while the kubelet has
+not reported the container, `… is waiting to start: ContainerCreating` while it is created.
+The 0.7.0 QA run (G-13) found pod detail keeping that 400 for 100 s beside a pod that was
+`1/1 Running`: its watch had restarted the follow on the first tick after scheduling (the pod
+then had a node and no container status, which `DescribePod` does not call "not started"), the
+request was refused, and the refusal path armed nothing. The multi-pod pane had the same hole
+in a narrower form: it waited for the pod's next Modified, which under load had already come
+and gone before the refusal arrived, so a running pod read "waiting to start" for good (#309,
+found making `WorkloadLogsLiveTests` deterministic). Both now go through `LogFollowRetry` (Core):
+
+- `IsNotStartedRefusal`: a 400 for a container that had not started when it was asked for. A
+  403, a 500 or a 400 about a container that had run stays a failure, said as before.
+- `HasStarted`: the container has a run whose log can be read (running, terminated, or waiting
+  with a container id). The watch-driven retries wait for this, so a scheduled pod with no
+  container status is no longer asked only to be refused.
+- `ShouldFollowAgain(atStart, now)`: after a refusal the pane reads the pod again, as the Ended
+  path already did, and follows at once if the container has started since the request. It
+  cannot loop: a follow asked of a started container is never a not-started refusal.
+
+The chip reads **not started** with the server's sentence, pod detail shows the sentence as a
+wait rather than a problem, and whichever comes first — the pod read or a watch tick — re-opens
+the stream; the other then finds a stream already running and does nothing. `LogFollowRetryTests`
+(App) delivers the refusal after the last Modified and pins the rule; reverting the multi-pod
+pane's watch retry to the old `DescribePod` test turns `A_refusal_whose_pod_has_still_not_started_waits_for_the_watch`
+red (checked). `Live/GatedPodLogsLiveTests` (Core) runs the rule against a real gated pod: the
+gated follow ends empty, every refusal while the pod comes up classifies as not started, and the
+follow after the container runs reads its lines. The panes' own wiring — the `catch` that sends
+a refusal to the wait, and its `Dispatcher` hop — is not driven by a test (the view-model tests
+have no client), and stays a desktop check (G-13).
+
+## While the pane holds lines, its state is still said (#319)
+
+The snapshot, Previous and Cleared messages, and how a stream ended, were drawn only as the
+empty pane's placeholder, which a pane with lines never shows. A snapshot loaded over earlier
+lines looked exactly like a live tail (found by the 0.7.0 QA run in G-7 and G-8; UI rules 9 and
+18). Both panes now have a status notice, an `infoBar` above the lines (`warn` when the status is
+a problem), from `LogNotice.Compose`: null while the buffer is empty, where the placeholder says
+it (UI rule 20), and null while a stream is healthy, where there is nothing to say. Pod detail
+shows its `LogStatus` ("Selected range loaded — this is a snapshot.", "Previous logs loaded —
+…", "Stream ended — app exited.", "Log streaming is stopped…"); the multi-pod pane shows its own
+`LogStatus`, or the snapshot sentence once every pod still listed has loaded one. After a Clear
+the pane keeps "Cleared N lines; the lines shown arrived since." once new lines arrive
+(`_clearedEarlier`, reset with the buffer). `LogStatusNoticeTests` pins both panes; scenarios
+`cluster-tab-demo-pod-detail-previous` and `cluster-tab-workload-logs-stopped` render it. The
+demo pod pane now also says "Demo cluster: the sample stream has finished…" above its lines,
+which it always set and nobody saw. The harness's `PodDetail` fixture used to set Follow on
+after its offline client had refused the stream, a state the old pane hid; it now leaves Follow
+off and clears that refusal, so the published `pod-detail` images show the same pane as before.
+
+## The log list and UI Automation (#321)
+
+The 0.7.0 QA run saw every UI Automation read of the window fail for minutes with a fast pod
+(`qa-chatty`, about 200 lines a second) open in a log tab, even at 200 lines of scrollback. The
+question was whether the list's peer exposes every line. It does not: the stress mode's
+`logs-automation-*` checks walk the whole window's peer tree with 5,000 lines buffered and find
+about 1,000 peers (multi-pod pane) and 1,400 (pod detail), one set per realized row; un-virtualizing
+the list makes it 24,953 and fails the check (checked). What a fast follow does raise is churn:
+at 20 lines a 100 ms tick the visible rows turn over every tick, and each re-realized row raises
+its own children-changed and name events, about 120 a tick in the multi-pod pane and 70 in pod
+detail (1,200 and 700 a second), while the tick itself costs 20 to 75 ms of the UI thread's
+100 ms headless, which is the thread a UIA call is answered on. Neither is a per-line cost, so
+the scrollback setting does not help, which matches what QA saw. Bounding it (a peer for the list
+that reports one structure change per flush, or rows that are not re-announced while Follow
+moves them) is a change to how the list is exposed, not small, and is left for the backlog. The
+checks keep today's numbers from growing: peers ≤ 2,500, events ≤ 250 a tick, the follow within
+twice its own ticks. Not verified: what Windows' UIA provider makes of these events, which only
+a desktop run can show.
 
 ## ENG-36 and ENG-38, briefly
 
