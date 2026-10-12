@@ -162,7 +162,7 @@ public static class CommandBindings
     /// on every rebuild, and a range is a catalog gesture *note* rather than a chord, so
     /// it has no descriptor to iterate.
     /// </para>
-    /// </summary>
+    ///
     /// <para>
     /// <b>A chord the shell owns yields to the exec terminal</b> (#222). A window's key
     /// bindings run before the key reaches the focused control, so with focus in the exec
@@ -172,6 +172,7 @@ public static class CommandBindings
     /// <paramref name="terminalHasFocus"/> says so, and a binding that cannot execute
     /// leaves the key to the terminal.
     /// </para>
+    /// </summary>
     public static void RebuildWindowBindings(
         IList<KeyBinding> bindings,
         Func<CommandId, ICommand> commandFor,

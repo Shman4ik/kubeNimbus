@@ -177,7 +177,12 @@ somebody is looking. On one cluster it is now `WatchResourceAsync` over the Appl
 cluster-wide, folded into an `ArgoApplicationTable` (Core) and brought to the UI thread in
 batches (`ClusterTabViewModel.ArgoWatch.cs`). It rides the list's own `_watchCts`, so another
 kind, Refresh, the fleet toggle and closing the tab stop it as they stop any list watch, and it
-resumes and relists through the same engine as every other list.
+resumes and relists through the same engine as every other list. It reads the cluster-wide
+Applications collection through the shared `ClusterClient.Watches` (`WatchCache`, see
+[aot-watch-and-discovery](aot-watch-and-discovery.md)), the same entry the Applications mode's
+Argo watch reads, so opening the dashboard joins a running watch instead of listing again; Refresh
+calls `Watches.Relist` on that entry first, as the Resources list does, or it would be answered
+from the cache.
 
 - **Loading ends at the first row or at Synced, never at Reset** (UI rule 18). A Reset in the
   middle of the stream (a relist after 410 Gone) keeps the rows on screen until the relist has

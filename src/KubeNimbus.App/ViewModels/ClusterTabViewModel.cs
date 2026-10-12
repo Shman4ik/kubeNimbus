@@ -2793,6 +2793,13 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
         else if (IsArgoView)
         {
+            // The dashboard reads the shared watch too: relist it, or a refresh is answered
+            // with what the cache already holds.
+            if (Client is { } argoClient && !IsFleetView && ArgoApplicationDescriptor() is { } applications)
+            {
+                argoClient.Watches.Relist(applications);
+            }
+
             _ = ReloadArgoAsync();
         }
         else

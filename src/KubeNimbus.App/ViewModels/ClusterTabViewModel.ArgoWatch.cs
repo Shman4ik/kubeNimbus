@@ -9,6 +9,8 @@ namespace KubeNimbus.App.ViewModels;
 /// shows without a reload, which is the moment somebody is looking at it. It rides the list's
 /// own <c>_watchCts</c>, so choosing another kind, Refresh and closing the tab stop it exactly as
 /// they stop any list watch, and it reaches the UI thread in batches (<see cref="AsyncBatching"/>).
+/// It reads the shared watch (<see cref="WatchCache"/>), which the Applications mode's Argo
+/// watch also reads, and Refresh relists that entry.
 /// The fleet list and the demo cluster stay reads; see <c>ReloadArgoAsync</c>.
 /// </summary>
 public sealed partial class ClusterTabViewModel
@@ -35,7 +37,9 @@ public sealed partial class ClusterTabViewModel
         {
             try
             {
-                await foreach (var batch in client.WatchResourceAsync(
+                // The shared watch (WatchCache): the Applications mode watches the same
+                // collection, so the dashboard joins it rather than opening a second one.
+                await foreach (var batch in client.Watches.WatchAsync(
                     descriptor,
                     connectionLost: ex => Dispatcher.UIThread.Post(() =>
                     {
