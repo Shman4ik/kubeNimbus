@@ -42,7 +42,7 @@
       <StackPanel Spacing="8">
 
         <!-- Where its Applications may come from, and which namespaces may hold them. -->
-        <Border Classes="card" Padding="12,10">
+        <Border Classes="section">
           <StackPanel Spacing="6">
             <TextBlock Classes="sectionHeader" Text="SOURCE REPOSITORIES" />
             <TextBlock Classes="statusText dim" TextWrapping="Wrap" Text="{Binding Project.SourceReposRule}"
@@ -55,7 +55,7 @@
           </StackPanel>
         </Border>
 
-        <Border Classes="card" Padding="12,10">
+        <Border Classes="section">
           <StackPanel Spacing="6">
             <TextBlock Classes="sectionHeader" Text="DESTINATIONS" />
             <TextBlock Classes="statusText dim" TextWrapping="Wrap" Text="{Binding Project.DestinationsRule}"
@@ -73,7 +73,7 @@
         <!-- Which kinds. The empty-list rules are Argo's (IsGroupKindNamePermitted) and are
              the part a reader of the YAML gets wrong: an empty cluster allow list allows
              nothing, an absent namespaced one allows everything. -->
-        <Border Classes="card" Padding="12,10">
+        <Border Classes="section">
           <StackPanel Spacing="6">
             <TextBlock Classes="sectionHeader" Text="CLUSTER-SCOPED KINDS" />
             <TextBlock Classes="statusText dim" TextWrapping="Wrap" Text="{Binding Project.ClusterKindsRule}"
@@ -94,7 +94,7 @@
 
         <!-- Sync windows say what they do to a manual sync, because a sync from kubeNimbus is
              one (argo-cd.md, "what authorises it"). -->
-        <Border Classes="card" Padding="12,10">
+        <Border Classes="section">
           <StackPanel Spacing="6">
             <TextBlock Classes="sectionHeader" Text="SYNC WINDOWS" />
             <TextBlock Classes="statusText dim" Text="None: Applications may sync at any time." IsVisible="{Binding !HasSyncWindows}" />
@@ -102,7 +102,10 @@
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="core:ArgoSyncWindow">
                   <StackPanel Margin="0,0,0,10">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
+                    <!-- The dot hangs into the section's inset (7px and 9px of spacing, the 16px
+                         `dotLed` pulls back), so the window's text starts where the header does
+                         and its scope line under it (DESIGN.md rule 23). -->
+                    <StackPanel Orientation="Horizontal" Spacing="9" Classes="dotLed">
                       <Ellipse Classes="statusDot" VerticalAlignment="Center" Classes.warn="{Binding IsDeny}" Classes.ok="{Binding !IsDeny}" />
                       <SelectableTextBlock Text="{Binding When}" FontSize="12.5" Classes="mono" VerticalAlignment="Center" />
                     </StackPanel>
@@ -114,7 +117,7 @@
           </StackPanel>
         </Border>
 
-        <Border Classes="card" Padding="12,10">
+        <Border Classes="section">
           <StackPanel Spacing="6">
             <TextBlock Classes="sectionHeader" Text="ROLES" />
             <TextBlock Classes="statusText dim" Text="None." IsVisible="{Binding !HasRoles}" />

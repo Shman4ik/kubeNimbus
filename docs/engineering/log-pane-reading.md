@@ -118,7 +118,7 @@ application's own ANSI colours (they would compete with the level colour; see be
 A **Levels** button in each pane's toolbar opens three checkboxes. Its own caption is the
 filter's state — "Levels" when nothing is hidden, otherwise the levels still shown ("Error,
 Warn", or "Unleveled only") — and it is drawn in the accent while it narrows
-(`Button.chip.accentText`), because a filter whose state lives only in a closed flyout is a
+(`Button.chip.accentText`, a nimbusUi style since #249), because a filter whose state lives only in a closed flyout is a
 trap. It is a `Button` with a flyout, not a `ToggleButton`: it has no checked state of its
 own to fight the flyout over (UI rule 8b).
 

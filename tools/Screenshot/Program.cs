@@ -447,6 +447,8 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // the dock's tabs and the sidebar as one stop each, and Ctrl+Tab out of the YAML editor
     // and the terminal (KeyboardChecks.KeyboardWalk, LeaveEditorKeys).
     ("ux-keyboard-walk", () => HostInMainWindow(ClusterTabScenarios.DemoDockTabs(), height: 1000)),
+    // #297: Left/Right along a pane's segmented strip keep the focus ring (KeyboardChecks.SegmentedArrowFocus).
+    ("ux-segmented-arrow-focus", () => HostInMainWindow(ClusterTabScenarios.PodDetailOverview(), height: 1000)),
     ("ux-leave-yaml-editor", () => HostInMainWindow(ClusterTabScenarios.YamlEditor())),
     ("ux-leave-exec-terminal", () => HostInMainWindow(ClusterTabScenarios.Exec())),
     // #266: a splitter drag gives focus back to the exec terminal (KeyboardChecks.DockSplitterKeepsFocus).
@@ -593,12 +595,17 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     if (name == "ux-exec-keys") KeyboardChecks.ExecKeys(window);
     if (name == "ux-exec-paste") KeyboardChecks.ExecPaste(window);
     if (name == "ux-keyboard-walk") KeyboardChecks.KeyboardWalk(window);
+    if (name == "ux-segmented-arrow-focus") KeyboardChecks.SegmentedArrowFocus(window);
     if (name is "ux-leave-yaml-editor" or "ux-leave-exec-terminal") KeyboardChecks.LeaveEditorKeys(window);
     if (name == "ux-exec-copy") KeyboardChecks.ExecCopy(window);
     if (name == "ux-exec-copy-keys") ClipboardChecks.ExecCopyRealKeys(window);
     if (name == "ux-dock-splitter-focus") KeyboardChecks.DockSplitterKeepsFocus(window);
     if (name == "cluster-tab-dock-many-tabs") LayoutChecks.DockTabsOneRow(window);
     if (name == "cluster-tab-exec") LayoutChecks.ExecHasNoStatusDot(window);
+    // #215 / #237: one grouping device per group, nothing boxed inside the dock's card.
+    if (name is "cluster-tab-node-detail-cordoned" or "cluster-tab-pod-detail-overview" or "cluster-tab-pod-detail"
+        or "cluster-tab-exec" or "cluster-tab-yaml-diff-preview" or "net-service-overview" or "cluster-tab-argo-appproject-detail")
+        LayoutChecks.OneGroupingDevice(window);
     if (name == "main-window-switcher") LayoutChecks.SwitcherPinsOnlyWhereUsed(window);
     if (name == "ux-log-search-keys") KeyboardChecks.LogSearchKeys(window);
     if (name == "ux-yaml-apply-key") KeyboardChecks.YamlApplyKey(window);

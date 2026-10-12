@@ -643,6 +643,42 @@ internal static class KeyboardChecks
     }
 
     /// <summary>
+    /// #297: Left and Right along a pane's segmented strip (pod detail's Overview/Logs/…)
+    /// move the selection and keep the focus ring on the segment they reached. ListBox's own
+    /// arrow handling focused the next item with no navigation method, so the ring vanished on
+    /// the first key; nimbusUi's <c>ArrowKeyFocus</c>, set by the <c>ListBox.segmented</c>
+    /// style, focuses it as keyboard focus. Remove that setter and the first step throws.
+    /// </summary>
+    internal static void SegmentedArrowFocus(Window window)
+    {
+        var strip = Named<ListBox>(window, "DetailTabStrip");
+        var focus = window.FocusManager ?? throw new InvalidOperationException("The window has no focus manager.");
+        if (strip.ContainerFromIndex(strip.SelectedIndex) is not ListBoxItem first)
+            throw new InvalidOperationException("Pod detail's tab strip has no selected segment on screen.");
+
+        first.Focus(NavigationMethod.Tab);
+        Dispatcher.UIThread.RunJobs();
+        // Toward a neighbour and back: Right then Left, or Left then Right from the last segment.
+        var start = strip.SelectedIndex;
+        var (there, home) = start + 1 < strip.ItemCount ? (Key.Right, Key.Left) : (Key.Left, Key.Right);
+        var next = there == Key.Right ? start + 1 : start - 1;
+
+        Press(window, there, RawInputModifiers.None);
+        if (strip.SelectedIndex != next)
+            throw new InvalidOperationException($"{there} on pod detail's tab strip left segment {strip.SelectedIndex} selected, not {next}.");
+        if (focus.GetFocusedElement() is not ListBoxItem reached || strip.IndexFromContainer(reached) != next || !HasFocusVisual(reached))
+            throw new InvalidOperationException(
+                $"{there} on pod detail's tab strip left focus on {Describe(focus.GetFocusedElement() as Control)} with no focus ring (#297).");
+
+        Press(window, home, RawInputModifiers.None);
+        if (strip.SelectedIndex != start
+            || focus.GetFocusedElement() is not ListBoxItem back || strip.IndexFromContainer(back) != start || !HasFocusVisual(back))
+            throw new InvalidOperationException($"{home} on pod detail's tab strip did not come back to segment {start} with its focus ring (#297).");
+
+        Console.WriteLine("Segmented strip arrow keys passed (both directions keep the focus ring).");
+    }
+
+    /// <summary>
     /// What the keyboard sees on a stop: the shared ring in the adorner layer (DESIGN.md rule
     /// 20); a text box's own focused border and caret; the grid's focus rectangle on its
     /// current cell; or, for the selected row of a list that holds the focus, the accent

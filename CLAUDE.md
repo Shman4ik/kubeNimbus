@@ -185,7 +185,7 @@ Three rules about it:
 
 ## UI design rules
 
-Rules 1, 2, 5, 8, 8b, 9, 11, 12, 14 and 22 are shared with pgNimbus and owned by
+Rules 1, 2, 5, 8, 8b, 9, 11, 12, 14, 22 and 24 are shared with pgNimbus and owned by
 [`shared/nimbusUi/DESIGN.md`](shared/nimbusUi/DESIGN.md). **Each rule's full text and the
 incident behind it are in [ui-rules](docs/engineering/ui-rules.md); read the ones you touch
 before changing a view.** Docs and code cite these numbers.
@@ -254,6 +254,9 @@ before changing a view.** Docs and code cite these numbers.
     whatever lacks one, so never write `Background="Transparent"` beside a `ToolTip.Tip`.
 23. **Fonts are settings; no view writes a font name**: the interface face comes from
     `AppSettings.InterfaceFont`, code uses the `mono` class or `MonoFont` (`FontChecks`).
+24. **A group gets a header or a border, never both, and nothing is boxed inside the dock's
+    card**: a headed group is `Border.section`, a dot-led list in one takes `dotLed`
+    (`LayoutChecks.OneGroupingDevice`).
 
 ## Feature deep dives (docs/engineering/)
 

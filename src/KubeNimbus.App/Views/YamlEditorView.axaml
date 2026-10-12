@@ -109,7 +109,9 @@
               IsVisible="{Binding NewDocumentNotice, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
         <TextBlock Text="{Binding NewDocumentNotice}" TextWrapping="Wrap" FontSize="12" />
       </Border>
-      <Border Classes="card" Padding="0">
+      <!-- No card around the editor: the dock is the box, and a pane's content is never
+           boxed again inside it (DESIGN.md rule 23). -->
+      <Border Padding="0">
         <ae:TextEditor Name="Editor" ShowLineNumbers="True" Classes="mono" FontSize="12"
                        IsReadOnly="{Binding IsEditorReadOnly}" Margin="4" />
       </Border>
@@ -135,9 +137,11 @@
     <ContentControl Grid.Row="2" Content="{Binding PendingPreview}" IsVisible="{Binding HasPendingPreview}">
       <ContentControl.ContentTemplate>
         <DataTemplate x:DataType="vm:ApplyPreviewViewModel">
-          <!-- Padding and margins are tighter than the pane's other cards on purpose: at
-               the dock's default ~300px every 8px of chrome here is a line of the diff. -->
-          <Border Classes="card" Padding="8" Margin="0,6,0,0">
+          <!-- A rule above it, not a card around it: the editor above has no box of its own
+               any more, so one line is all that separates the two, and a box here nested a
+               third level inside the dock (DESIGN.md rule 23). Padding is tight on purpose:
+               at the dock's default ~300px every 8px of chrome here is a line of the diff. -->
+          <Border BorderThickness="0,1,0,0" BorderBrush="{StaticResource CardBorderBrush}" Padding="0,8,0,0" Margin="0,6,0,0">
             <DockPanel>
               <!-- One row of chrome above the diff, and the view-mode strip is part of it
                    (UI rule 10): the panel shares a ~300px dock with the editor, so a

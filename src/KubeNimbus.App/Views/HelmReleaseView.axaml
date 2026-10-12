@@ -32,9 +32,11 @@
       </Button>
     </Grid>
 
-    <Border Grid.Row="1" Classes="card" Padding="10"
+    <!-- An InfoBar at the top (UI rule 11), not a card filling the pane: the dock is the box
+         (DESIGN.md rule 23). -->
+    <Border Grid.Row="1" Classes="infoBar warn" VerticalAlignment="Top"
             IsVisible="{Binding ErrorMessage, Converter={x:Static aconv:ObjectConverters.IsNotNull}}">
-      <TextBlock Text="{Binding ErrorMessage}" Classes="statusText warn" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap" FontSize="12" />
     </Border>
 
     <TabControl Grid.Row="1" Classes="headerless" SelectedIndex="{Binding #HelmTabStrip.SelectedIndex}"
@@ -42,7 +44,8 @@
 
       <TabItem Header="Values">
         <Grid>
-          <Border Classes="card" Padding="0">
+          <!-- No card around the text: the dock is the box (DESIGN.md rule 23). -->
+          <Border Padding="0">
             <ae:TextEditor Name="ValuesEditor" IsReadOnly="True" ShowLineNumbers="True"
                            Classes="mono" FontSize="12" Margin="4" />
           </Border>
@@ -53,7 +56,7 @@
       </TabItem>
 
       <TabItem Header="Manifest">
-        <Border Classes="card" Padding="0">
+        <Border Padding="0">
           <ae:TextEditor Name="ManifestEditor" IsReadOnly="True" ShowLineNumbers="True"
                          Classes="mono" FontSize="12" Margin="4" />
         </Border>
@@ -61,7 +64,7 @@
 
       <TabItem Header="Notes">
         <Grid>
-          <Border Classes="card" Padding="8">
+          <Border Padding="4,4,0,0">
             <ScrollViewer>
               <SelectableTextBlock Text="{Binding Notes}" Classes="mono"
                                    FontSize="11.5" TextWrapping="Wrap" />

@@ -84,6 +84,19 @@ Setup: Resources, Pods, namespace `qa-shop`. Both themes where noted (`ThemeTogg
 - **C-7 [text][look]** (#213, #244) No row in Workloads, Network, Config, Storage, Cluster or
   CRDs draws an icon before its name, nor `EndpointSlices`/`Events` under `events.k8s.io`;
   after selecting four or five kinds the Recent rows do.
+- **C-8 [text][look]** (#297) Open a `shop-web-…` pod. Tab to its Overview/Logs/… strip, then
+  Right, Right, Left, End, Home: the selected segment changes with each key (text), and the
+  focus ring sits on the segment each key reached, never on none (a [look]: crop after each key,
+  both themes). Then ⚙ → Preferences, Tab to the General/Appearance/… tabs, Right and Left:
+  the same, with the tab's page following.
+- **C-9 [look]** (#215, #237) A pod's Overview and a node's Overview (`kubenimbus-sandbox`'s
+  node): SCHEDULING, CONDITIONS, TOLERATIONS, PROBES (and the node's four) are headers with no
+  border or fill around their rows; each condition's dot sits left of the CONDITIONS header and
+  its type starts directly under the header's first letter. Crop the dock, both themes.
+- **C-10 [look]** (#215) Logs, Exec (S on a `shop-api-…` pod), E on a Deployment and Review… a
+  change to its replicas, and a Helm release's Values tab if the cluster has a release: none draws a bordered box inside the
+  dock; the apply preview is set off from the editor by a single line above it. Crop the dock,
+  both themes.
 
 ## Batch L1 — selection and bulk delete
 

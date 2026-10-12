@@ -317,6 +317,57 @@ internal static class LayoutChecks
         Console.WriteLine("Exec pane has no status dot beside its sentence.");
     }
 
+    /// <summary>
+    /// #215 / #237, DESIGN.md rule 23: inside the dock, a group is marked by a header or a
+    /// border, never both; a pane's content (an editor, the terminal, a log) is never boxed
+    /// again inside the dock's own card; and a dot-led list hangs its dots into the section's
+    /// inset, so each row's text starts where the section header does. Put the `card` class
+    /// back on a section, an editor's border or the log's, or drop `dotLed`, and this throws.
+    /// </summary>
+    internal static void OneGroupingDevice(Window window)
+    {
+        var dock = window.GetVisualDescendants().OfType<Border>().First(b => b.Name == "DockRegion");
+        bool BoxedInDock(Visual v) => v.GetVisualAncestors().TakeWhile(a => a != dock)
+            .Any(a => a is Border { Classes: var classes } && classes.Contains("card"));
+
+        var headers = dock.GetVisualDescendants().OfType<TextBlock>()
+            .Where(t => t.Classes.Contains("sectionHeader") && t.IsEffectivelyVisible).ToList();
+        if (headers.FirstOrDefault(BoxedInDock) is { } boxed)
+            throw new InvalidOperationException($"The {boxed.Text} section has a header and a card around it (DESIGN.md rule 23, #215).");
+
+        var content = dock.GetVisualDescendants().Where(v => v is AvaloniaEdit.TextEditor
+            || v is SvcSystems.UI.Terminal.TerminalControl
+            || v is ItemsControl { Name: "LogItems" }).Where(v => v.IsEffectivelyVisible).ToList();
+        if (content.FirstOrDefault(BoxedInDock) is { } inner)
+            throw new InvalidOperationException($"A {inner.GetType().Name} sits in a card inside the dock's own (DESIGN.md rule 23, #215).");
+
+        var rows = 0;
+        // Every list in a section whose rows lead with a status dot, whatever its classes.
+        var dotLists = dock.GetVisualDescendants().OfType<ItemsControl>()
+            .Where(i => i.IsEffectivelyVisible && i.GetVisualAncestors().OfType<Border>().Any(b => b.Classes.Contains("section"))
+                        && i.GetRealizedContainers().Any(r => r.GetVisualDescendants().OfType<Ellipse>().Any(e => e.Classes.Contains("statusDot"))));
+        foreach (var list in dotLists)
+        {
+            var header = list.GetVisualAncestors().OfType<Border>().First(b => b.Classes.Contains("section"))
+                .GetVisualDescendants().OfType<TextBlock>().First(t => t.Classes.Contains("sectionHeader"));
+            var headerX = header.TranslatePoint(default, window)!.Value.X;
+            foreach (var row in list.GetRealizedContainers())
+            {
+                if (row.GetVisualDescendants().OfType<Ellipse>().FirstOrDefault(e => e.Classes.Contains("statusDot")) is not { } dot)
+                    continue;
+                var text = row.GetVisualDescendants().OfType<TextBlock>().First(t => t.IsEffectivelyVisible && !string.IsNullOrEmpty(t.Text));
+                var dotX = dot.TranslatePoint(default, window)!.Value.X;
+                var textX = text.TranslatePoint(default, window)!.Value.X;
+                if (Math.Abs(textX - headerX) > 0.5 || dotX >= headerX)
+                    throw new InvalidOperationException(
+                        $"\"{text.Text}\" starts at x={textX:0.0} under {header.Text} at x={headerX:0.0}, its dot at x={dotX:0.0}: a dot-led row should hang its dot left of the header and line its text up with it (#237).");
+                rows++;
+            }
+        }
+
+        Console.WriteLine($"One grouping device: {headers.Count} section headers unboxed, {content.Count} pane contents unboxed, {rows} dot-led rows aligned.");
+    }
+
     private static double RightEdge(Visual control, Visual root) =>
         control.TranslatePoint(new Point(control.Bounds.Width, 0), root)?.X ?? double.PositiveInfinity;
 }

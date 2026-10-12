@@ -382,7 +382,8 @@
               </ItemsControl.ItemTemplate>
             </ItemsControl>
           </StackPanel>
-          <Border Grid.Row="1" Classes="card" Padding="8,8,2,8">
+          <!-- No card around the log: the dock is the box (DESIGN.md rule 23). -->
+          <Border Grid.Row="1" Padding="0,6,0,0">
             <Grid ColumnDefinitions="*,10">
               <!-- Every error, warning, match and pin as a tick beside the scrollbar; a click
                    goes there (Controls/LogOverviewRuler). -->
@@ -473,7 +474,7 @@
         <!-- No "ENV — <container>" header: the container strip two rows up is the
              selector for it and already names it. -->
         <Grid RowDefinitions="*,Auto">
-          <Border Grid.Row="0" Classes="card" Padding="10">
+          <Border Grid.Row="0" Padding="2,4,0,0">
             <ScrollViewer>
               <ItemsControl ItemsSource="{Binding EnvironmentVars}">
                 <ItemsControl.ItemTemplate>
@@ -770,7 +771,7 @@
             <!-- Scheduling. QoS and priority are one line each and belong beside the node
                  selector, since all three answer "where can this run and what happens to
                  it when the node is under pressure". -->
-            <Border Classes="card" Padding="12,10">
+            <Border Classes="section">
               <StackPanel Spacing="6">
                 <TextBlock Classes="sectionHeader" Text="SCHEDULING" />
 
@@ -823,12 +824,12 @@
             <!-- Conditions. Positive when True for the types Kubernetes defines that way,
                  negative for DisruptionTarget, and deliberately grey — neither — for a
                  type this app has not classified: see PodDetails.PolarityOf. -->
-            <Border Classes="card" Padding="12,10">
+            <Border Classes="section">
               <StackPanel Spacing="6">
                 <TextBlock Classes="sectionHeader" Text="CONDITIONS" />
                 <TextBlock Classes="statusText dim" FontSize="12" TextWrapping="Wrap" IsVisible="{Binding !HasConditions}"
                            Text="This pod reports no conditions yet — the scheduler and kubelet write them as it is admitted and started." />
-                <ItemsControl ItemsSource="{Binding Conditions}">
+                <ItemsControl ItemsSource="{Binding Conditions}" Classes="dotLed">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:PodConditionViewModel">
                       <!-- The third column is how long the condition has held (#268): "not
@@ -855,7 +856,7 @@
                  DefaultTolerationSeconds admission plugin adds to nearly every pod.
                  Hiding those would make a pod that genuinely declares one look the same
                  as one that does not. -->
-            <Border Classes="card" Padding="12,10">
+            <Border Classes="section">
               <StackPanel Spacing="6">
                 <TextBlock Classes="sectionHeader" Text="TOLERATIONS" />
                 <TextBlock Classes="statusText dim" FontSize="12" TextWrapping="Wrap" IsVisible="{Binding !HasTolerations}"
@@ -875,7 +876,7 @@
                  relationship the Environment tab has with it, so this section needs no
                  picker of its own. The handler and timing wording is kubectl's, so a
                  probe read here and one read in a terminal are visibly the same probe. -->
-            <Border Classes="card" Padding="12,10">
+            <Border Classes="section">
               <StackPanel Spacing="6">
                 <TextBlock Classes="sectionHeader" Text="PROBES" />
                 <TextBlock Classes="statusText dim" FontSize="12" TextWrapping="Wrap" IsVisible="{Binding !HasProbes}"
