@@ -125,9 +125,13 @@ beside it, and Scale / Cancel pushed to the window's far edge. The owner's verdi
 the 0.5.0 pass was "this panel needs to be more elegant". It now reads as one sentence with its
 answer beside it, the same shape for every action it hosts:
 
-- **The verb's glyph leads**, in a tinted 32px square: the accent for the reversible actions,
-  red for the ones that destroy something (`RowActionViewModel.IsDestructive`: delete, drain and
-  Argo's sync with prune), whose confirm button is `danger` rather than `accent` too (UI rule 20).
+- **The verb's glyph leads**, a bare 16px icon level with the sentence's first line: the accent
+  for the reversible actions, red for the ones that destroy something
+  (`RowActionViewModel.IsDestructive`: delete, drain and Argo's sync with prune), whose confirm
+  button is `danger` rather than `accent` too (UI rule 20). It used to sit in a tinted 32px
+  square, which is how the soft buttons look, and on an Argo sync's result line the owner asked
+  whether the sync glyph was a refresh button (2026-10-12). Nothing about it is clickable, so
+  nothing about it may look clickable: the tile went.
 - **The object and the verb are one sentence**: "**Restart** Deployment **checkout-worker** in
   payments on prod-eu (production)", composed in the view from `Verb`, `TargetKind`,
   `TargetName`, `TargetPlace` and `HeadlineSuffix`, with the kind dimmed and the verb and name in
