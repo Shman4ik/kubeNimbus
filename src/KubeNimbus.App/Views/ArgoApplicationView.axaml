@@ -106,7 +106,7 @@
             <!-- The last operation, which is what "did my sync work?" is asking about.
                  Absent entirely on an Application nothing has ever synced, rather than a
                  card of empty fields. -->
-            <Border Classes="card" Padding="12,10"
+            <Border Classes="section"
                     IsVisible="{Binding Application.OperationPhase, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}">
               <StackPanel Spacing="6">
                 <TextBlock Classes="sectionHeader" Text="LAST OPERATION" />

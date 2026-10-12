@@ -69,9 +69,10 @@
       </StackPanel>
     </Grid>
 
-    <!-- ClipToBounds because the terminal paints its own opaque background edge to
-         edge and would otherwise square off the card's rounded corners. -->
-    <Border Grid.Row="1" Classes="card" Padding="0" ClipToBounds="True">
+    <!-- No card around the terminal: the dock is the box, and a pane's content is never
+         boxed again inside it (DESIGN.md rule 23). ClipToBounds because the terminal paints
+         its own opaque background edge to edge. -->
+    <Border Grid.Row="1" Padding="0" ClipToBounds="True">
       <Panel>
         <!-- The token rather than the `mono` class, the one code surface that has to
              (DESIGN.md rule 22): TerminalControl is a Grid with a FontFamily property of

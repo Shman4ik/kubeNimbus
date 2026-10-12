@@ -181,7 +181,7 @@
               </StackPanel>
             </Border>
 
-            <Border Classes="card" Padding="12,10">
+            <Border Classes="section">
               <StackPanel Spacing="4">
                 <TextBlock Classes="sectionHeader" Text="SERVICE" />
                 <ItemsControl ItemsSource="{Binding OverviewRows}">
@@ -200,7 +200,7 @@
             <!-- Port → target: the one mapping that is easy to get wrong and invisible in a
                  list cell. A named target port is resolved per pod, which is why the
                  Backends tab shows each endpoint's own resolved port. -->
-            <Border Classes="card" Padding="12,10">
+            <Border Classes="section">
               <StackPanel Spacing="4">
                 <TextBlock Classes="sectionHeader" Text="PORTS" />
                 <TextBlock Classes="statusText dim" IsVisible="{Binding HasNoPorts}"

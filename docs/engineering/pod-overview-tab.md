@@ -52,10 +52,17 @@ Eight things are load-bearing.
    different problems, and `kubectl describe` prints the time. Every row shows its
    `lastTransitionTime` as an age in the list's Age format (`RelativeTime.Compact`, through
    `ConditionSince`), with the exact local instant on the tooltip ("Last transition
-   2026-10-04 21:01:54"). The node Overview's Conditions card and the workload pane's
+   2026-10-04 21:01:54"). The node Overview's Conditions section and the workload pane's
    Conditions tab (a Since column) do the same. A condition the server sent no time for shows
    an empty cell and no tooltip, never a guess (UI rule 20). `ConditionSinceTests` pins the
    three views; the age is computed when the row is built, as the list's Age is.
+4c. **Sections, not cards, and the dot hangs (#215, #237, UI rule 24).** The four groups
+   (Scheduling, Conditions, Tolerations, Probes) are `Border.section`: the header marks each
+   one, so none has a border of its own inside the dock's card. The Conditions list takes
+   `dotLed`, so the status dot sits in the section's 16px inset and the condition's type
+   starts under the CONDITIONS header, like every other section's first column. Node detail's
+   Overview is built the same way. `LayoutChecks.OneGroupingDevice` asserts it on
+   `cluster-tab-pod-detail-overview` and `cluster-tab-node-detail-cordoned`.
 5. **The QoS class is read, never derived.** It is a pure function of the containers'
    requests and limits and could be recomputed, but the API server has already computed it
    and the eviction path uses *its* value; a local one that disagreed would be worse than

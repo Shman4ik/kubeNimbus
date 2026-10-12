@@ -8,9 +8,9 @@ which now have a page of their own in this directory.
 
 ## UI design rules
 
-> Rules **1, 2, 5, 8, 8b, 9, 11, 12, 14 and 22 are shared with pgNimbus**, and their
+> Rules **1, 2, 5, 8, 8b, 9, 11, 12, 14, 22 and 24 are shared with pgNimbus**, and their
 > canonical statement is in [`shared/nimbusUi/DESIGN.md`](../../shared/nimbusUi/DESIGN.md)
-> (as its rules 1, 2, 3, 5, 6, 7, 8, 9, 12 and 21). What is kept below is the
+> (as its rules 1, 2, 3, 5, 6, 7, 8, 9, 12, 21 and 23). What is kept below is the
 > kubeNimbus incident behind each one — the concrete failure is the reason the
 > rule is believed, and it is worth more here than a second copy of the rule.
 > Change a shared rule in DESIGN.md, not here. Rules 3, 4, 6, 7, 10 and 13 are
@@ -116,6 +116,15 @@ which now have a page of their own in this directory.
      `OnInspectorTabStripKeyDown` moves along the strip itself (Left/Right, Up/Down, Home,
      End) and focuses with `NavigationMethod.Directional`. `ux-keyboard-walk` now checks the
      ring after Right and after Left; it fails with the handler removed.
+     **Every other strip got the same fix in one place (#297)**: nimbusUi's
+     `Controls/ArrowKeyFocus`, an attached property the `ListBox.segmented` style sets, so pod
+     detail's Overview/Logs/… strip and every pane's strip, the YAML diff's view strip and the
+     mode switch keep the ring on Left/Right, Home and End. The dock's own strip keeps its
+     handler, which also routes the choice through `SelectInspectorTabCommand`.
+     `ux-segmented-arrow-focus` presses an arrow on pod detail's strip and back, and failed
+     before the setter existed ("Left on pod detail's tab strip left focus on ListBoxItem with
+     no focus ring"). The shared half also sets it on `ListBox.strip` and `TabControl.capsule`
+     (the preferences page's tabs), which pgNimbus uses.
    - **A splitter drag gives focus back** (#266). The splitter takes focus on the press, so
      the exec terminal went hollow and swallowed the next key. The view records what had focus
      on the press (tunnel, `handledEventsToo`) and restores it on `DragCompleted`.
@@ -615,5 +624,32 @@ which now have a page of their own in this directory.
    back off the text. A face planted on one `TextBlock` fails the run, which was tried.
    `PreferencesFontTests` and `AppSettingsTests` hold what the page opens on and stores. Not
    checkable here: how San Francisco looks at 13px, which is release checklist row 28.
+
+24. **One grouping device per group, and nothing boxed inside the dock's card** (DESIGN.md
+   rule 23, 2026-10, #215 and #237, owner decision recorded on both issues). The dock is a
+   ~300px card, and inside it pod and node detail's Overview stacked four bordered cards with
+   an uppercase header inside each, Service, NetworkPolicy and AppProject detail did the same,
+   and the log, exec, Helm values/manifest/notes, YAML editor and apply-preview panes each
+   drew a card inside the dock's card (the diff three boxes deep). Now a headed group is a
+   `Border.section` (no border, no fill, a 16px inset), a pane's content sits straight in the
+   dock, the apply preview (which takes the whole pane while open, the editor hidden, since #333) is set off from the pane's toolbar by one rule above it, and Helm's load
+   error is an InfoBar (rule 11) instead of a card filling the pane. #237 fell out of it: on
+   `cluster-tab-node-detail-cordoned` the CONDITIONS rows started at x≈375 while the other
+   cards' content started at x≈359, because the dot took the first slot and could not hang
+   into a bordered card's padding. The condition lists take `dotLed`, which pulls them into
+   the section's inset, so the dot sits left of the header and the text starts under it
+   (x=275 for both, after the change). The hang goes on the list and not the row: on the
+   first try it was on each row's `Grid`, and the `ItemsControl` clipped every dot away. The
+   same mistake shipped in the first version of this PR on AppProject's sync windows, and the
+   check passed it because it measured where the dot was laid out, not whether it painted; it
+   now also fails a dot that an ancestor with `ClipToBounds` cuts sideways (seen failing on
+   that markup: "The dot of "deny · 0 22 * * 5 …" under SYNC WINDOWS is clipped by
+   ItemsControl").
+   `LayoutChecks.OneGroupingDevice` asserts all three halves on seven scenarios (node and pod
+   Overview, the pod log, exec, the diff preview, Service and AppProject detail), and failed
+   both ways it was mutation-checked: one section put back in a card, and `dotLed` taken off
+   the node's conditions. Cards that group rows with no header of their own (the pod Usage
+   tiles, an Ingress's rule cards, Argo's condition cards, the RBAC answer) keep their
+   border, which is the rule's other half.
 
 [fluent-basics]: https://learn.microsoft.com/en-us/windows/apps/design/basics/

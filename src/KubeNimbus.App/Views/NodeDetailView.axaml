@@ -95,7 +95,7 @@
             <!-- Allocatable vs requested. The number people open a node for: how much of
                  it the scheduler has already promised away. Allocatable is the
                  denominator, not capacity — see NodeResources.Summarize. -->
-            <Border Classes="card" Padding="12,10">
+            <Border Classes="section">
               <StackPanel Spacing="8">
                 <TextBlock Classes="sectionHeader" Text="ALLOCATABLE VS REQUESTED" />
 
@@ -175,10 +175,10 @@
                  one condition Kubernetes defines as positive rather than off a list of
                  the negative ones, so a condition nobody has heard of is classified the
                  same way kubectl classifies it. -->
-            <Border Classes="card" Padding="12,10">
+            <Border Classes="section">
               <StackPanel Spacing="6">
                 <TextBlock Classes="sectionHeader" Text="CONDITIONS" />
-                <ItemsControl ItemsSource="{Binding Conditions}">
+                <ItemsControl ItemsSource="{Binding Conditions}" Classes="dotLed">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:NodeConditionViewModel">
                       <!-- The fourth column is how long the condition has held (#268). -->
@@ -204,7 +204,7 @@
             <!-- Taints. A cordoned node carries the scheduler's own
                  node.kubernetes.io/unschedulable taint as well as spec.unschedulable, so
                  both halves of "why is nothing landing here" are on the same card. -->
-            <Border Classes="card" Padding="12,10">
+            <Border Classes="section">
               <StackPanel Spacing="6">
                 <TextBlock Classes="sectionHeader" Text="TAINTS" />
                 <TextBlock Classes="statusText dim" IsVisible="{Binding HasNoTaints}"
@@ -226,7 +226,7 @@
                  what is absent, so a bare-metal node has no Provider ID row rather than a
                  label beside nothing. Selectable, because IPs and provider IDs are what
                  people copy out of this card. -->
-            <Border Classes="card" Padding="12,10">
+            <Border Classes="section">
               <StackPanel Spacing="4">
                 <TextBlock Classes="sectionHeader" Text="SYSTEM" />
                 <ItemsControl ItemsSource="{Binding SystemRows}">

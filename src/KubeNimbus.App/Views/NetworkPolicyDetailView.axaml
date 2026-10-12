@@ -43,7 +43,7 @@
             <TextBlock Classes="statusText dim" FontSize="11.5" TextWrapping="Wrap" Text="{Binding PolicyTypesNote}"
                        IsVisible="{Binding PolicyTypesNote, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}" />
 
-            <Border Classes="card" Padding="12,10">
+            <Border Classes="section">
               <StackPanel Spacing="6">
                 <TextBlock Classes="sectionHeader" Text="INGRESS — WHO MAY REACH THESE PODS" />
                 <TextBlock Text="{Binding IngressSummary}" FontSize="12" TextWrapping="Wrap" />
@@ -64,7 +64,7 @@
               </StackPanel>
             </Border>
 
-            <Border Classes="card" Padding="12,10">
+            <Border Classes="section">
               <StackPanel Spacing="6">
                 <TextBlock Classes="sectionHeader" Text="EGRESS — WHAT THESE PODS MAY REACH" />
                 <TextBlock Text="{Binding EgressSummary}" FontSize="12" TextWrapping="Wrap" />

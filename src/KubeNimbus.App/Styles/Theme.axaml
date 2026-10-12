@@ -300,6 +300,9 @@
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Padding" Value="0" />
+        <!-- Left/Right keep the focus ring on the segment they reach (#297); ListBox's own
+             arrow handling focused it with no navigation method, and the ring went. -->
+        <Setter Property="nimbus:ArrowKeyFocus.IsEnabled" Value="True" />
         <Setter Property="ItemsPanel">
             <ItemsPanelTemplate>
                 <StackPanel Orientation="Horizontal" Spacing="2" />
@@ -911,21 +914,9 @@
     <!-- Disabled while checked means "the mode is on, and does not apply here" (the
          unhealthy-only chip over a kind with no health verdict). The shared checked rule
          pins Opacity to 1, so without this a disabled chip rendered identically to one
-         that was filtering the list under it — a claim about the list that was false. -->
-    <!-- A chip Button whose own text is a filter's state (the log panes' Levels): drawn in
-         the accent while it is narrowing, like a checked `checkedAccent` toggle, so a pane
-         with a level hidden never looks like an unfiltered one. A Button rather than a
-         ToggleButton because it opens a flyout and has no checked state of its own — a
-         ToggleButton here would flip on the click and fight its binding (UI rule 8b). -->
-    <Style Selector="Button.chip.accentText /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Foreground" Value="{StaticResource AppAccentBrush}" />
-    </Style>
-    <Style Selector="Button.chip.accentText:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Foreground" Value="{StaticResource AppAccentBrush}" />
-    </Style>
-    <Style Selector="Button.chip.accentText:pressed /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Foreground" Value="{StaticResource AppAccentBrush}" />
-    </Style>
+         that was filtering the list under it — a claim about the list that was false.
+         `Button.chip.accentText`, the Button counterpart of `checkedAccent`, lives in
+         nimbusUi's Theme.axaml. -->
     <Style Selector="ToggleButton.chip.checkedAccent:disabled">
         <Setter Property="Opacity" Value="0.35" />
     </Style>

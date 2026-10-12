@@ -316,7 +316,8 @@
       </Border>
     </StackPanel>
 
-    <Border Grid.Row="3" Classes="card" Padding="8,8,2,8">
+    <!-- No card around the log: the dock is the box (DESIGN.md rule 23). -->
+    <Border Grid.Row="3" Padding="0,6,0,0">
       <Grid ColumnDefinitions="*,10">
         <!-- Every error, warning, match and pin as a tick beside the scrollbar; a click goes
              there (Controls/LogOverviewRuler). -->

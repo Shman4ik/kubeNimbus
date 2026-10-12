@@ -154,7 +154,7 @@ stays in the context menu), an ApplicationSet and an AppProject their own. `Argo
   from the set's status. **An ApplicationSet's conditions are read by their `status`**:
   `ErrorOccurred: False` is the healthy state, so the Application pane's type-suffix rule would
   have shown every healthy set with a red condition (`ArgoCondition.Problem`).
-- **AppProject** (`ArgoCd.ReadProject`, `ArgoProjectView`): one scroll of five short cards —
+- **AppProject** (`ArgoCd.ReadProject`, `ArgoProjectView`): one scroll of five short sections (headed, so no cards: UI rule 24) —
   source repositories (a `!` entry is a deny pattern) and Application namespaces, destinations,
   cluster-scoped and namespaced kinds, sync windows, roles. **Each empty list says what Argo
   makes of it**, from `IsGroupKindNamePermitted`, `IsSourcePermitted` and
