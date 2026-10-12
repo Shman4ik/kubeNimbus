@@ -91,3 +91,15 @@ The clear runs detached from the Copy command: an `AsyncRelayCommand` that is st
 disables its button, and every Copy in the panel shares one command. `SensitiveClipboardTests`
 pins the clear rule and the formats; that the clear happens in the running app is not covered
 by a test.
+
+## A carriage return in a value survives the editor (#311)
+
+A value that carries `\r` is written as a double-quoted scalar, where the carriage return is an
+escape (`\r`), never a raw byte: in a plain or block scalar it is a line break, and every YAML
+parser normalizes line breaks to `\n`, so the value came back from the editor changed. Checking
+this item showed the `\r\n` case named in #311 already survived (the emitter escapes a CRLF
+value in a double-quoted scalar on its own); the case that did not was a lone `\r`, which went
+out raw and came back as `\n`. `YamlJson.StringToYaml` now quotes any value containing `\r`, and
+`YamlJsonTests.Carriage_returns_in_a_value_survive_byte_for_byte` round-trips CRLF, a lone CR and
+a mix of CRLF and LF byte for byte and checks the YAML text holds no raw `\r` (the editor's text
+is LF-only, #287). The lone-CR case went red with the quoting rule taken out.

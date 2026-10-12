@@ -160,7 +160,10 @@ public static class YamlJson
     private static YamlScalarNode StringToYaml(string? value)
     {
         var text = value ?? "";
-        return NeedsQuoting(text)
+        // A carriage return survives only as a double-quoted escape: a plain or block scalar
+        // carries it as a line break, and every YAML parser normalizes line breaks to \n. The
+        // emitter already escaped a CRLF value; a lone \r went out raw and came back as \n (#311).
+        return NeedsQuoting(text) || text.Contains('\r', StringComparison.Ordinal)
             ? new YamlScalarNode(text) { Style = YamlDotNet.Core.ScalarStyle.DoubleQuoted }
             : new YamlScalarNode(text);
     }

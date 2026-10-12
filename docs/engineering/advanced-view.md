@@ -86,5 +86,13 @@ is gone: with every declared column always drawn it rendered identically to
 to carry `WorkspaceSettings.IsAdvancedView` across; it no longer reads it, because that
 flag answered a question that no longer exists and most people never touched it — so
 migrating would have opted nearly everyone into the shorter sidebar on the strength of
-a default they never chose. The workspace property is kept unread so a downgrade still
-finds it.
+a default they never chose. The workspace property was kept unread, so a downgrade would
+still find it, until #318: `WorkspaceStore.Normalize` and the empty workspace wrote it as
+`false` on every save, so a fresh profile's `workspace.json` read `"IsAdvancedView":false`
+while the sidebar's toggle, which reads `settings.json`, showed On — two files disagreeing
+about one switch, found by the QA VM run. The property is gone from `WorkspaceSettings`; an
+older file's is ignored on read like any unknown property, and nothing writes it. A downgrade
+to a build that read it finds it missing and takes its own default, which is what a fresh
+profile had anyway. `GridLayoutStoreTests.The_advanced_view_is_never_written_to_the_workspace_and_the_shell_shows_the_stored_preference`
+loads a legacy file, saves, and checks the file no longer names it and that the shell's value
+follows `settings.json` both ways.

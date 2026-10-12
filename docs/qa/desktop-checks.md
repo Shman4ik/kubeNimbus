@@ -117,6 +117,18 @@ clicks are `click -Modifiers shift|ctrl`. Rows have no selected flag in the tree
   `qa-shop`. Its check box on `demo-shop` (tooltip "Add this namespace to the list, or take it
   out", not in the UIA tree: `click -Id NamespaceList -OffsetX … -OffsetY …`): flyout stays,
   button reads both names. "All namespaces" reads "All namespaces".
+- **L-15 [input]** (#305) Select `qa-del-a` to `qa-del-c` ("3 selected"), right-click inside the
+  selection: Logs, Previous logs, Exec, Port-forward and Edit YAML are present and disabled,
+  Delete… is enabled. Hover Edit YAML: tooltip "Acts on one object, and 3 rows are selected.
+  Select one row to use it; Delete acts on all of them." (`help=`). Press E and L with the three
+  selected: no tab opens. Click one row: the items are enabled again.
+- **L-16 [input]** (#305) `qa-seed.ps1 -Reset`. Preferences → Changes → "Confirm before deleting"
+  off, context `kubenimbus-sandbox` (not production). Select `qa-del-a` alone, Delete: it is
+  deleted on the press, no strip question. `qa-seed.ps1 -Reset`; select `qa-del-a` and `qa-del-b`,
+  Delete: the strip asks ("Delete 2 Pods in qa-shop on …", red Delete and Cancel) and `kubectl`
+  still shows both. Cancel; turn the preference back on.
+- **L-17 [look]** (#305) In L-7's run at 1280 px wide, the refused line's sentence wraps under
+  itself and is not cut with "…" before "cannot delete resource". Crop the strip.
 
 ## Batch L2 — columns and the Service row
 
@@ -160,11 +172,28 @@ real keyboard and the clipboard (click in, Ctrl+A, Ctrl+V), read it back through
   such row (the query "new yaml" matches nothing even on a real cluster; use "yaml").
 - **Y-8 [input][look]** (#173) On `shop-api`: E, change one env value and add one with a ~200
   character value (not `replicas`: the objects were made with `kubectl apply`, and a replicas
-  edit ends in a field-manager conflict panel without a diff), Review…. The mode strip's
+  edit ends in a field-manager conflict, which is Y-12), Review…. The mode strip's
   `Diff`, `Split`, `Fields` follow real clicks; hover a trimmed line in Split for its
   full-line tooltip (`help=` has the whole line); maximize the dock ("Maximize inspector",
   Esc restores) and repeat. At the default dock height say whether the diff is usable (0.7.0:
-  about two lines, overlapping the footer). Nothing applied: `kubectl get deploy shop-api`.
+  about two lines, overlapping the footer; since #316 the diff takes the editor's place and
+  shows about six lines, the footnote under them). Nothing applied: `kubectl get deploy shop-api`.
+- **Y-9 [text]** (#300) New YAML, a ConfigMap `qa-y-rekey` with no namespace, Review…, Apply
+  changes: tab `ConfigMap/qa-y-rekey`. ConfigMaps, `qa-shop`, select `qa-y-rekey`, press E: the
+  same tab comes to the front and no second `ConfigMap/qa-y-rekey` tab opens. `kubectl delete` it.
+- **Y-10 [text]** (#300) E on ConfigMap `shop-config` (or any `qa-shop` ConfigMap), paste a
+  second document under the text (`---` then another ConfigMap), Review…: "Nothing was applied:
+  this text holds more than one document (---)…"; `kubectl get cm` shows no second object and
+  the first unchanged. Reload to discard.
+- **Y-11 [look]** (#316) Y-8's Review at the default dock height: the editor gives way to the
+  diff, about six lines show, the footnote sits under them, nothing overlaps. Cancel brings the
+  editor back with the edit still in it. Crop the dock.
+- **Y-12 [text][look]** (#316) On `shop-api`: E, change `spec.replicas`, Review…: the panel's
+  headline starts "Apply conflict. A force apply would take these fields and make", the
+  conflict sentence names `.spec.replicas` and its manager under it, the diff shows the replicas
+  line, and the confirm reads "Force apply". No separate conflict card below. Cancel: the
+  conflict card comes back with its own Force apply. Nothing applied: `kubectl get deploy
+  shop-api` replicas unchanged. Reload to discard.
 
 ## Batch G1 — log panes
 

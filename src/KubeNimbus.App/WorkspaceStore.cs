@@ -51,15 +51,10 @@ public sealed record WorkspaceSettings(
     /// <summary>Context name → <see cref="KubeNimbus.Core.ClusterEnvironment"/> name, where
     /// the user has corrected (or supplied) the guess. Always wins over the heuristic.</summary>
     Dictionary<string, string>? EnvironmentOverrides = null,
-    /// <summary>
-    /// <b>Legacy.</b> The advanced-view switch used to live here before it moved to
-    /// <c>settings.json</c>, where it is a preference rather than a description of the
-    /// open session. Nothing reads this any more — not even the migration, since the
-    /// switch it recorded gated a different set of controls (see
-    /// <c>AppSettings.IsAdvancedView</c>). It is kept so a downgrade still finds the
-    /// property it expects; do not start reading it again.
-    /// </summary>
-    bool? IsAdvancedView = null,
+    // The advanced-view switch used to be a property here, before it moved to settings.json
+    // (AppSettings.IsAdvancedView). It is gone (#318): Normalize wrote `false` into it on every
+    // save, so a fresh profile's workspace.json read "IsAdvancedView": false beside a sidebar
+    // toggle reading On. An older file's property is ignored on read, like any unknown one.
     /// <summary>
     /// Kubeconfig files the user pointed the app at through "Open kubeconfig file…",
     /// so the choice survives a restart. <b>Paths only</b> — never the file's contents
@@ -118,7 +113,7 @@ public static class WorkspaceStore
     /// <summary>Recents past this are noise — the switcher's search covers the long tail.</summary>
     public const int MaxRecentContexts = 8;
 
-    private static WorkspaceSettings Empty => new(null, [], [], [], [], false, [], []);
+    private static WorkspaceSettings Empty => new(null, [], [], [], [], [], []);
 
     /// <summary>
     /// Overrides where the workspace is read from and written to. Set by the
@@ -162,9 +157,6 @@ public static class WorkspaceStore
         PinnedContexts = settings.PinnedContexts ?? [],
         RecentContexts = settings.RecentContexts ?? [],
         EnvironmentOverrides = settings.EnvironmentOverrides ?? [],
-
-        // Legacy field, kept only so a downgrade finds it — see the record above.
-        IsAdvancedView = settings.IsAdvancedView ?? false,
         KubeconfigPaths = settings.KubeconfigPaths ?? [],
         GridLayouts = settings.GridLayouts ?? [],
         RecentNamespaces = settings.RecentNamespaces ?? [],

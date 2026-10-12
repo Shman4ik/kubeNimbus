@@ -117,8 +117,18 @@ internal static class ListCreateChecks
         if (vm.SelectedRows.Count != 3)
             throw new InvalidOperationException(
                 $"A right click inside the selection collapsed it to {vm.SelectedRows.Count} row(s); its menu's Delete would act on one.");
-        if (grid.ContextFlyout is { IsOpen: true } menu)
+        if (grid.ContextFlyout is MenuFlyout { IsOpen: true } menu)
         {
+            // #305: with three rows selected, an item that acts on one object is disabled and
+            // says why; Delete, which acts on all three, is the one left enabled.
+            var items = menu.Items.OfType<MenuItem>().Where(i => i.IsVisible).ToList();
+            var edit = items.First(i => i.Header as string == "Edit YAML");
+            if (edit.IsEffectivelyEnabled || vm.EditSelectedYamlCommand.CanExecute(null))
+                throw new InvalidOperationException("Edit YAML is enabled with three rows selected; it would edit one of them.");
+            if (ToolTip.GetTip(edit) is not string tip || !tip.Contains("3 rows are selected", StringComparison.Ordinal))
+                throw new InvalidOperationException($"Edit YAML's tooltip does not say why it is disabled: \"{ToolTip.GetTip(edit)}\".");
+            if (!items.Any(i => i.Header as string == "Delete…") || !vm.DeleteSelectedCommand.CanExecute(null))
+                throw new InvalidOperationException("Delete is missing or disabled with three rows selected.");
             menu.Hide();
         }
         else
@@ -137,6 +147,23 @@ internal static class ListCreateChecks
         if (action.ConfirmCommand.CanExecute(null))
             throw new InvalidOperationException("The demo cluster's bulk Delete is enabled; there is no API server to delete on.");
         Console.WriteLine($"Bulk delete passed: \"{action.Headline}\".");
+    }
+
+    /// <summary>
+    /// #305: the refused row of a bulk delete shows the API server's whole sentence at the
+    /// harness's 1280px — wrapped, never cut with an ellipsis before the verb and resource.
+    /// </summary>
+    internal static void BulkRefusalWraps(Window window)
+    {
+        Settle(window);
+        var detail = window.GetVisualDescendants().OfType<TextBlock>()
+            .FirstOrDefault(t => t.Name == "BulkItemDetail" && t.Text?.Contains("forbidden", StringComparison.Ordinal) == true)
+            ?? throw new InvalidOperationException("The bulk strip shows no refusal.");
+        if (detail.TextLayout.TextLines.Any(line => line.HasCollapsed))
+            throw new InvalidOperationException("The refusal is cut with an ellipsis; it must wrap.");
+        if (detail.TextLayout.TextLines.Count < 2)
+            throw new InvalidOperationException("The refusal fits one line at 1280px, so this check no longer proves it wraps.");
+        Console.WriteLine($"Bulk refusal passed: {detail.TextLayout.TextLines.Count} lines, none cut.");
     }
 
     /// <summary>

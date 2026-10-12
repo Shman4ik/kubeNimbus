@@ -173,8 +173,14 @@ public class BulkDeleteTests
         await Assert.That(server.Requests.Count).IsEqualTo(0);
     }
 
+    /// <summary>
+    /// #305, the owner's decision of 2026-10-12: a bulk delete of more than one row always
+    /// asks, even with "Confirm before deleting" off on a non-production cluster — the
+    /// preference was set for one object, not for N. Mutation-checked by letting the bulk
+    /// action follow the preference again: the run then starts on the press.
+    /// </summary>
     [Test]
-    public async Task Off_production_with_the_preference_off_the_run_starts_on_the_press()
+    public async Task Off_production_with_the_preference_off_a_bulk_delete_still_asks()
     {
         App.Update(s => s with { ConfirmDeletes = false });
         using var server = new StubApiServer();
@@ -185,9 +191,93 @@ public class BulkDeleteTests
 
         var tab = PodTab(server.Connect());
         tab.DeleteSelectedCommand.Execute(null);
-        var action = await DoneAsync(tab.PendingRowAction!);
 
+        var action = tab.PendingRowAction!;
+        await Assert.That(action.IsBulk).IsTrue();
+        await Assert.That(action.IsPromptVisible).IsTrue();
+        await Task.Delay(200);
+        await Assert.That(server.Requests.Count).IsEqualTo(0);
+
+        await action.ConfirmCommand.ExecuteAsync(null);
+        await DoneAsync(action);
         await Assert.That(action.Message).IsEqualTo("Deleted 3 Pods.");
+    }
+
+    /// <summary>#305: one row keeps following the preference — off, the delete runs on the press.</summary>
+    [Test]
+    public async Task Off_production_with_the_preference_off_one_row_is_deleted_on_the_press()
+    {
+        App.Update(s => s with { ConfirmDeletes = false });
+        using var server = new StubApiServer();
+        server.Respond("DELETE", PodPath("checkout-b"), HttpStatusCode.OK, StubApiServer.Deleted);
+        var tab = PodTab(server.Connect());
+        tab.SetSelectedRows([tab.Rows[1]]);
+        tab.SelectedRow = tab.Rows[1];
+
+        tab.DeleteSelectedCommand.Execute(null);
+        await DoneAsync(tab.PendingRowAction!);
+
+        await Assert.That(server.Requests.Single(r => r.Method == "DELETE").Path).IsEqualTo(PodPath("checkout-b"));
+    }
+
+    /// <summary>
+    /// #305: with several rows selected, every action that acts on one object is disabled
+    /// and says why; Delete is the one that acts on all of them. Back to one row, they come
+    /// back. Mutation-checked by reading <c>SelectedRow</c> instead of <c>ActionRow</c> in
+    /// <c>HasSelectedRow</c>: Edit YAML is then enabled under the selection.
+    /// </summary>
+    [Test]
+    public async Task With_several_rows_selected_single_object_actions_are_disabled_and_say_why()
+    {
+        using var server = new StubApiServer();
+        var tab = PodTab(server.Connect());
+
+        await Assert.That(tab.HasMultipleSelection).IsTrue();
+        await Assert.That(tab.EditSelectedYamlCommand.CanExecute(null)).IsFalse();
+        await Assert.That(tab.OpenLogsCommand.CanExecute(null)).IsFalse();
+        await Assert.That(tab.OpenPreviousLogsCommand.CanExecute(null)).IsFalse();
+        await Assert.That(tab.ExecIntoSelectedCommand.CanExecute(null)).IsFalse();
+        await Assert.That(tab.PortForwardSelectedCommand.CanExecute(null)).IsFalse();
+        await Assert.That(tab.DeleteSelectedCommand.CanExecute(null)).IsTrue();
+        await Assert.That(tab.SingleRowActionTip)
+            .IsEqualTo("Acts on one object, and 3 rows are selected. Select one row to use it; Delete acts on all of them.");
+
+        tab.SetSelectedRows([tab.Rows[0]]);
+
+        await Assert.That(tab.EditSelectedYamlCommand.CanExecute(null)).IsTrue();
+        await Assert.That(tab.OpenLogsCommand.CanExecute(null)).IsTrue();
+        await Assert.That(tab.ExecIntoSelectedCommand.CanExecute(null)).IsTrue();
+        await Assert.That(tab.SingleRowActionTip).IsNull();
+    }
+
+    /// <summary>
+    /// The issue's own example: three nodes selected, Cordon stays in the menu (its slot does
+    /// not move) but is disabled, so it can no longer cordon the current row alone.
+    /// </summary>
+    [Test]
+    public async Task Three_selected_nodes_keep_cordon_in_the_menu_disabled()
+    {
+        var tab = new ClusterTabViewModel(TestObjects.Context)
+        {
+            SelectedKind = new SidebarKindViewModel(TestObjects.NodeDescriptor, "cluster"),
+        };
+        foreach (var name in (string[])["node-a", "node-b", "node-c"])
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(
+                """{"apiVersion":"v1","kind":"Node","metadata":{"name":"NAME","uid":"NAME"},"spec":{}}""".Replace("NAME", name, StringComparison.Ordinal));
+            tab.Apply(TestObjects.Added(new DynamicResource(document.RootElement.Clone())));
+        }
+
+        tab.Client = TestObjects.OfflineClient();
+        tab.SelectedRow = tab.Rows[0];
+        await Assert.That(tab.CordonSelectedCommand.CanExecute(null)).IsTrue();
+
+        tab.SetSelectedRows([.. tab.Rows]);
+
+        await Assert.That(tab.OffersCordon).IsTrue();
+        await Assert.That(tab.CordonSelectedCommand.CanExecute(null)).IsFalse();
+        tab.CordonSelectedCommand.Execute(null);
+        await Assert.That(tab.PendingRowAction).IsNull();
     }
 
     [Test]

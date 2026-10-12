@@ -2209,10 +2209,9 @@ internal static class ClusterTabScenarios
     /// is the dry-run response itself, which needs an API server.
     ///
     /// <para>
-    /// Rendered maximized, because that is the state a diff worth reading is read in:
-    /// at the dock's default ~300px the preview and the editor split the height and one
-    /// row of the diff is visible at a time. The no-change scenario is the one that
-    /// shows that split.
+    /// Rendered maximized, the state a long diff is read in. The same diff at the dock's
+    /// default ~300px, where it takes the editor's row (#316), is
+    /// <see cref="YamlEditorDiffDock"/>.
     /// </para>
     /// </summary>
     public static ClusterTabViewModel YamlEditorDiffPreview()
@@ -2407,6 +2406,38 @@ internal static class ClusterTabScenarios
         if (tab.SelectedInspectorTab is YamlEditorTabViewModel yaml)
         {
             yaml.ConflictDetails = "Field .spec.replicas is owned by field manager \"kubectl-scale\" (apply conflicts with your changes).";
+        }
+
+        return tab;
+    }
+
+    /// <summary>
+    /// #316 (QA Y-8): a Review that ends in a conflict shows what a force apply would change —
+    /// the forced dry run's diff, at the dock's default height — with the conflict sentence in
+    /// the panel and its button the force apply; the separate conflict card steps aside.
+    /// </summary>
+    public static ClusterTabViewModel YamlEditorConflictDiff()
+    {
+        var tab = YamlEditorConflict();
+        if (tab.SelectedInspectorTab is YamlEditorTabViewModel yaml)
+        {
+            yaml.PendingPreview = new ApplyPreviewViewModel(FixturePreview(), isForce: true, conflict: yaml.ConflictDetails);
+        }
+
+        return tab;
+    }
+
+    /// <summary>
+    /// #316: the unified diff at the dock's default ~300px, the height most people see. The
+    /// diff takes the editor's row while it is open, so it shows a readable run of lines and
+    /// the footnote sits under it rather than over it.
+    /// </summary>
+    public static ClusterTabViewModel YamlEditorDiffDock()
+    {
+        var tab = YamlEditor();
+        if (tab.SelectedInspectorTab is YamlEditorTabViewModel yaml)
+        {
+            yaml.PendingPreview = new ApplyPreviewViewModel(FixturePreview(), isForce: false);
         }
 
         return tab;

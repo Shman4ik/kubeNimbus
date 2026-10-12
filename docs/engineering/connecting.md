@@ -404,7 +404,13 @@ for the life of the tab.
   flag and restarts the list, and its `IsConnected` change starts the Applications reads again
   through `TryStart`. `ConnectionStateTests.A_failed_reconnect_stops_both_modes_and_a_successful_one_starts_them_again`
   drives both directions against a server that answers `/version` and holds the rest open, and
-  went red with either the guard or the `Suspend` call taken out. It is offered on the failure view, beside the list's
+  went red with either the guard or the `Suspend` call taken out. The Helm and Argo views are
+  one-shot reads rather than watches, so `RestartWatch`'s guard did not cover them: a namespace
+  change or a refresh behind the view re-read releases or Applications through the client that
+  had just failed. `RefreshHelmReleasesAsync` and `ReloadArgoAsync` start nothing while
+  `_reconnectFailed` is set either (#311); the successful Reconnect's `Refresh` reads them again.
+  `ReconnectFailedReadsTests` counts the requests a stub server receives after the failure, for
+  each view, and went red (Helm) with the guard taken out. It is offered on the failure view, beside the list's
   warning when that warning is a lost or refused watch (`ConnectionWarningOffersReconnect`,
   reset whenever the warning changes so a later RBAC warning cannot inherit the button), in
   the ☰ menu, the macOS menu and the palette. Never on the demo cluster.

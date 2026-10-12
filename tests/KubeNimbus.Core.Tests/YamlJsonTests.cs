@@ -47,6 +47,21 @@ public class YamlJsonTests
     }
 
     [Test]
+    [Arguments("line one\r\nline two\r\n")] // a ConfigMap value written on Windows (#311)
+    [Arguments("a\rb")]                     // a lone carriage return
+    [Arguments("mixed\r\nand\nplain\n")]    // only the \r\n half must keep its \r
+    public async Task Carriage_returns_in_a_value_survive_byte_for_byte(string value)
+    {
+        using var document = JsonDocument.Parse(new JsonObject { ["data"] = new JsonObject { ["file"] = value } }.ToJsonString());
+        var yaml = YamlJson.ToYamlString(document.RootElement);
+
+        // The editor's text is LF-only (#287), so the \r has to be an escape, not a raw byte.
+        await Assert.That(yaml.Contains('\r', StringComparison.Ordinal)).IsFalse();
+        var back = YamlJson.ParseYamlToJson(yaml)!["data"]!["file"]!.GetValue<string>();
+        await Assert.That(back).IsEqualTo(value);
+    }
+
+    [Test]
     [Arguments("8080")]
     [Arguments("true")]
     [Arguments("null")]

@@ -87,7 +87,7 @@ public sealed partial class ClusterTabViewModel
     /// </summary>
     public bool CanPortForwardSelected =>
         IsPodRowSelected
-        || (IsServiceRowSelected && SelectedRow is { } row
+        || (IsServiceRowSelected && ActionRow is { } row
             && ServiceDetailTabViewModel.IsForwardable(ServiceBackends.ShapeOf(row.Resource), ServiceBackends.Ports(row.Resource)));
 
     [RelayCommand]

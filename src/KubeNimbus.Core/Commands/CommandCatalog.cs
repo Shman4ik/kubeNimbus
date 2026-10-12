@@ -390,7 +390,8 @@ public static class CommandCatalog
             IconKey = "SwapHorizontalIconGeometry",
             Chord = new(CommandKey.F),
             Surfaces = PaletteAndSheet,
-        },        new()
+        },
+        new()
         {
             // Every running forward, whichever tab started it — offered only while one runs.
             Id = CommandId.PortForwards,
@@ -604,7 +605,8 @@ public static class CommandCatalog
             IconKey = "RefreshIconGeometry",
             Chord = new(CommandKey.R, Cmd),
             Surfaces = Everywhere,
-        },        new()
+        },
+        new()
         {
             // FEAT-12: an empty YAML editor, applied through the same preview as any edit.
             // The ☰ menu carries it too (UI rule 15); it has no gesture of its own.

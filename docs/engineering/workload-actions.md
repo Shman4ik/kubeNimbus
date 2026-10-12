@@ -232,16 +232,20 @@ read-only user gets the server's own 403 sentence with the CronJob unchanged.
 
 The resource list takes an extended selection (click, Shift+click, Ctrl/Cmd+click, Shift+arrows,
 Ctrl/Cmd+A), the header row says **"3 selected"** while more than one row is, and Delete — the
-key or the row menu — arms **one** strip for all of them. Six things are
+key or the row menu — arms **one** strip for all of them. Seven things are
 load-bearing.
 
 1. **One sentence, the count and the cluster in it**: "Delete 8 Pods in payments on prod-eu
    (production)", with the names listed under it (`RowActionViewModel.BulkItems`), so nobody
    confirms a number they cannot read. Several namespaces read "in 3 namespaces"; a fleet
    selection across clusters reads "on 2 clusters", and then each name carries its cluster.
-2. **The confirm rule is the single delete's** (`NeedsConfirm`): "Confirm before deleting" read
-   at the press, and **production always asks** — any selected row on a production cluster makes
-   the whole strip a production one.
+2. **A bulk delete always asks** (#305, the owner's decision of 2026-10-12): with "Confirm
+   before deleting" off on a non-production cluster, one row is still deleted on the press, but
+   two or more arm the strip and wait for the confirm. The preference is a choice made about
+   one object and does not stretch to N. Any selected row on a production cluster makes the
+   whole strip a production one. `BulkDeleteTests.Off_production_with_the_preference_off_a_bulk_delete_still_asks`
+   was confirmed red with the bulk action following the preference again (the run started on
+   the press); `…one_row_is_deleted_on_the_press` pins the one-row half.
 3. **One request per object, never a deletecollection.** A narrow-RBAC reader may delete some
    of the selection and not the rest, and that is the case this is built for: every allowed
    delete goes through, each refused one keeps the API server's own sentence beside its name (a
@@ -266,8 +270,31 @@ load-bearing.
    presses Delete and checks one strip was armed for three; it was confirmed red with the guard
    removed.
 
-Every other row action (logs, exec, scale, restart, the node and CronJob actions) still acts on
-the current row, `SelectedRow`, which the grid's `SelectedItem` stays bound to. **Not built:**
-bulk restart, scale or any other bulk action, and keeping a multi-row selection through a
-re-sort that replaces the list (a metrics poll on a list sorted by CPU puts back only the
-current row).
+7. **The refusal wraps** (#305). The refused row's sentence wraps under itself instead of being
+   cut with an ellipsis: at 1280px a 403 read `User "system:ser…`, before the verb and the
+   resource that are the whole diagnosis. The harness check on `cluster-tab-bulk-delete-partial`
+   (`ListCreateChecks.BulkRefusalWraps`) fails when any line of it is collapsed, and when it fits
+   one line (the check would then prove nothing).
+
+**With several rows selected, an action that acts on one object is disabled** (#305, the owner's
+decision of 2026-10-12). Before, with three nodes highlighted, Cordon cordoned the grid's current
+row alone and left the other two highlighted and untouched; the strip named the one node, but
+the gesture read as acting on the selection. Now every single-object action — logs, previous
+logs, logs (all pods), exec, port-forward, scale, rollout restart, cordon, uncordon, drain, run
+now, suspend, resume, the Argo items, the PV/PVC link and Edit YAML — reads `ActionRow`, which is
+the current row with one row selected and null with several. Their commands are disabled, the
+palette leaves them out (it lists by the same `Can…` properties) and the single-letter keys check
+`CanExecute`. In the row menu each one stays in its place, disabled, with a tooltip saying why
+(`SingleRowActionTip`, "Acts on one object, and 3 rows are selected…", shown on a disabled item
+through `ToolTip.ShowOnDisabled`); the state-dependent ones keep their slot through `Offers…`
+properties that ignore the selection count, so the menu does not change shape under a
+selection. Delete is the item that acts on all of them. A detail pane's own actions pass their
+row in (`ArmRowAction(kind, row, …)`) and are unaffected. Opening a row (Enter, double-click) is
+navigation to the current row and is unchanged. `BulkDeleteTests.With_several_rows_selected_…`
+was confirmed red with `HasSelectedRow` reading `SelectedRow` again, and the `ux-bulk-delete`
+harness check now also asserts that Edit YAML is disabled under the three-row selection, says
+why, and that Delete is enabled.
+
+**Not built:** bulk restart, scale or any other bulk action, and keeping a multi-row selection
+through a re-sort that replaces the list (a metrics poll on a list sorted by CPU puts back only
+the current row).

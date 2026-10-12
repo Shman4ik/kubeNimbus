@@ -33,7 +33,7 @@ public sealed partial class YamlEditorTabViewModel
         _name = "";
         _yamlText = "";
         ClusterName = "";
-        Key = $"yaml:new:{number}";
+        _key = $"yaml:new:{number}";
         IsNewDocument = true;
 
         _previewsApplies = App.LoadSettings().PreviewApplies;
@@ -105,6 +105,7 @@ public sealed partial class YamlEditorTabViewModel
         // The manifest's own version, as kubectl sends it: discovery names the preferred one,
         // and a server serving several versions of a kind accepts any of them.
         _descriptor = known with { Version = identity.Version };
+        _resolvedDescriptor = known;
         _name = identity.Name;
         _namespace = known.Namespaced
             ? identity.Namespace ?? (_defaultNamespace.Length > 0 ? _defaultNamespace : "default")
@@ -112,9 +113,20 @@ public sealed partial class YamlEditorTabViewModel
         return true;
     }
 
+    /// <summary>
+    /// The descriptor discovery returned, at its preferred version: the one a list row and E
+    /// build their key from, where <see cref="_descriptor"/> carries the manifest's own version.
+    /// </summary>
+    private ResourceDescriptor? _resolvedDescriptor;
+
     private void MarkNewDocumentApplied()
     {
         _hasAppliedTarget = true;
+
+        // From here on this is that object's editor, so it answers to that object's key: E on
+        // the row focuses it rather than opening a second editor beside it (#300, UI rule 5).
+        // Re-keyed at every apply, because the text may since name a different object.
+        _key = KeyFor(ClusterName, _resolvedDescriptor ?? _descriptor, _namespace, _name);
         Title = $"{_descriptor.Kind}/{_name}";
         OnPropertyChanged(nameof(NewDocumentNotice));
         ReloadCommand.NotifyCanExecuteChanged();

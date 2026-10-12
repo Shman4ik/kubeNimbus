@@ -2370,7 +2370,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [RelayCommand]
     private async Task ReloadArgoAsync()
     {
-        if (Client is null && !IsDemo)
+        // Not behind a failed reconnect's view (#311), for the reason RefreshHelmReleasesAsync gives.
+        if ((Client is null && !IsDemo) || _reconnectFailed)
         {
             return;
         }
@@ -2385,6 +2386,15 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         IsArgoEmpty = false;
         var previous = SelectedArgoApplication is { } selected ? (selected.ClusterName, selected.Application.Key) : default;
         ArgoApplications.Clear();
+
+        // Only the warning this method set itself is cleared (#306): the tab's warning line
+        // carries others too (a reconnect notice, a watch that dropped), and a successful
+        // Argo read says nothing about them.
+        if (ConnectionWarning?.StartsWith(ArgoReadWarning, StringComparison.Ordinal) == true)
+        {
+            ConnectionWarning = null;
+        }
+
         try
         {
             IReadOnlyList<ArgoApplicationRowViewModel> rows;
@@ -2397,18 +2407,14 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 rows = [.. read.Applications.Select(a => new ArgoApplicationRowViewModel(a.Application, a.Descriptor, a.ClusterName))];
                 ArgoCounts = read.Counts;
                 FleetSummary = read.Summary;
-                ConnectionWarning = read.Failed.Count == 0
-                    ? null
-                    : $"Could not read Argo CD Applications on {string.Join(", ", read.Failed.Select(f => f.Cluster))}: "
-                      + read.Failed[0].Error.Message;
+                if (read.Failed.Count > 0)
+                {
+                    ConnectionWarning = $"{ArgoReadWarning} on {string.Join(", ", read.Failed.Select(f => f.Cluster))}: "
+                        + read.Failed[0].Error.Message;
+                }
             }
             else
             {
-                if (ConnectionWarning?.StartsWith("Could not read Argo CD Applications", StringComparison.Ordinal) == true)
-                {
-                    ConnectionWarning = null;
-                }
-
                 var applications = Client is null
                     ? Demo.DemoData.ArgoApplications
                     : await Client.ListArgoApplicationsAsync(descriptor);
@@ -2433,7 +2439,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
         catch (Exception ex)
         {
-            ConnectionWarning = $"Could not read Argo CD Applications: {ex.Message}";
+            ConnectionWarning = $"{ArgoReadWarning}: {ex.Message}";
         }
         finally
         {
@@ -2442,6 +2448,9 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             OnPropertyChanged(nameof(ArgoAttentionSummary));
         }
     }
+
+    /// <summary>How every warning <see cref="ReloadArgoAsync"/> sets begins, so it clears only its own.</summary>
+    internal const string ArgoReadWarning = "Could not read Argo CD Applications";
 
     private bool HasSelectedArgoApplication => SelectedArgoApplication is not null;
 
@@ -2500,7 +2509,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 : null;
         }
 
-        if (SelectedRow is { } selected
+        if (ActionRow is { } selected
             && DescriptorFor(selected) is { } descriptor
             && ArgoCd.SupportsSync(descriptor))
         {
@@ -2509,6 +2518,13 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         return null;
     }
+
+    /// <summary>
+    /// The row menu shows the Argo items for an Applications row; with several rows selected
+    /// they stay, disabled (#305). The dashboard's own menu keeps <see cref="CanSyncSelectedArgoApplication"/>.
+    /// </summary>
+    public bool OffersArgoSyncOnRow =>
+        SelectedRow is { } row && DescriptorFor(row) is { } descriptor && ArgoCd.SupportsSync(descriptor);
 
     /// <summary>
     /// Whether a sync or refresh is offered at all. The kind is named inside
@@ -2596,7 +2612,10 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [RelayCommand]
     private async Task RefreshHelmReleasesAsync()
     {
-        if (Client is null && !IsDemo)
+        // Behind a failed reconnect's view the client is the one that just failed, so a
+        // namespace change starts no read (#311, as RestartWatch does for #294); the
+        // Reconnect that succeeds runs Refresh, which reads again.
+        if ((Client is null && !IsDemo) || _reconnectFailed)
         {
             return;
         }
@@ -3784,10 +3803,10 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     // actions are reachable by mouse and by keyboard.
 
     /// <summary>True when the selected row is a pod — the only kind logs/exec/forward apply to.</summary>
-    public bool IsPodRowSelected => SelectedRow is { } row && DescriptorFor(row) is { Kind: "Pod", Group: "" };
+    public bool IsPodRowSelected => ActionRow is { } row && DescriptorFor(row) is { Kind: "Pod", Group: "" };
 
     /// <summary>True whenever a row is selected at all (YAML and delete work for any kind).</summary>
-    public bool HasSelectedRow => SelectedRow is not null;
+    public bool HasSelectedRow => ActionRow is not null;
 
     /// <summary>
     /// The pod the selected row is an Event about, when it is one — see
@@ -3801,7 +3820,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// one. Gates the "Logs" menu item and L's pod half; exec, port-forward and previous
     /// logs stay on <see cref="IsPodRowSelected"/>, since they act on a pod row itself.
     /// </summary>
-    public bool CanOpenPodLogsForSelectedRow => IsPodRowSelected || SelectedEventPod is not null;
+    public bool CanOpenPodLogsForSelectedRow => IsPodRowSelected || (ActionRow is not null && SelectedEventPod is not null);
 
     /// <summary>
     /// Opens pod detail on the Logs tab. Same tab-reuse path as a double-click, so
@@ -3834,7 +3853,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// than read as "everything".
     /// </summary>
     public bool CanAggregateLogsForSelectedRow =>
-        SelectedRow is { } row && LabelSelector.ForPodsOf(row.Resource) is not null;
+        ActionRow is { } row && LabelSelector.ForPodsOf(row.Resource) is not null;
 
     /// <summary>
     /// One pane over every pod the selected workload owns. This is the gesture people
@@ -4109,7 +4128,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// the menu is right on both.
     /// </summary>
     public bool CanScaleSelectedRow =>
-        SelectedRow is { } row && DescriptorFor(row) is { } descriptor && WorkloadActions.SupportsScale(descriptor);
+        ActionRow is { } row && DescriptorFor(row) is { } descriptor && WorkloadActions.SupportsScale(descriptor);
 
     /// <summary>
     /// Whether the selected object can be rollout-restarted: it has a pod template to
@@ -4118,7 +4137,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// pod template, with none of the four named anywhere.
     /// </summary>
     public bool CanRestartSelectedRow =>
-        SelectedRow is { } row && DescriptorFor(row) is { } descriptor
+        ActionRow is { } row && DescriptorFor(row) is { } descriptor
         && WorkloadActions.SupportsRestart(descriptor, row.Resource);
 
     /// <summary>Whether the server says the selected row's kind can be deleted at all.</summary>
@@ -4162,10 +4181,11 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [RelayCommand(CanExecute = nameof(CanDeleteSelectedRow))]
     private void DeleteSelected()
     {
-        // Several rows selected: one strip for all of them (FEAT-6), under the same
-        // confirm rule as one row.
+        // Several rows selected: one strip for all of them (FEAT-6), and it always asks (#305,
+        // the owner's decision of 2026-10-12): "Confirm before deleting" is a choice made about
+        // one object, and it does not stretch to N. One row keeps following the preference.
         var action = HasMultipleSelection ? ArmBulkDelete() : ArmRowAction(RowActionKind.Delete);
-        if (action is not null && !action.NeedsConfirm(App.LoadSettings().ConfirmDeletes))
+        if (action is { IsBulk: false } && !action.NeedsConfirm(App.LoadSettings().ConfirmDeletes))
         {
             action.RunNow();
         }
@@ -4183,7 +4203,10 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     // pods/eviction.
 
     /// <summary>True when the selected row is a core/v1 Node this server says is patchable.</summary>
-    public bool CanCordonSelectedRow =>
+    public bool CanCordonSelectedRow => !HasMultipleSelection && OffersCordon;
+
+    /// <summary>The row menu shows Cordon for this row; with several rows selected it shows it disabled (#305).</summary>
+    public bool OffersCordon =>
         SelectedRow is { } row
         && DescriptorFor(row) is { } descriptor
         && NodeActions.SupportsCordon(descriptor)
@@ -4196,14 +4219,20 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// port-forward pane's Start/Stop settled (UI rule 11). Two commands rather than one
     /// toggle so that neither the palette nor a test has to infer which way it would go.
     /// </summary>
-    public bool CanUncordonSelectedRow =>
+    public bool CanUncordonSelectedRow => !HasMultipleSelection && OffersUncordon;
+
+    /// <inheritdoc cref="OffersCordon"/>
+    public bool OffersUncordon =>
         SelectedRow is { } row
         && DescriptorFor(row) is { } descriptor
         && NodeActions.SupportsCordon(descriptor)
         && NodeActions.IsCordoned(row.Resource);
 
     /// <summary>True when this cluster serves <c>pods/eviction</c> and the row is a node.</summary>
-    public bool CanDrainSelectedRow =>
+    public bool CanDrainSelectedRow => !HasMultipleSelection && OffersDrain;
+
+    /// <inheritdoc cref="OffersCordon"/>
+    public bool OffersDrain =>
         SelectedRow is { } row
         && DescriptorFor(row) is { } descriptor
         && NodeActions.SupportsDrain(descriptor, PodDescriptorFor(row));
@@ -4236,7 +4265,9 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// </summary>
     private RowActionViewModel? ArmRowAction(RowActionKind kind, ResourceRowViewModel? targetRow = null, ResourceDescriptor? targetDescriptor = null, ClusterClient? targetClient = null)
     {
-        var row = targetRow ?? SelectedRow;
+        // The list's own row actions act on one object, so not while several rows are
+        // selected (#305); a row handed in by a detail pane is its own target.
+        var row = targetRow ?? ActionRow;
         var descriptor = targetDescriptor ?? (row is null ? null : DescriptorFor(row));
         if (row is null || descriptor is null)
         {
