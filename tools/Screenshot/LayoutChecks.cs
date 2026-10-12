@@ -361,11 +361,32 @@ internal static class LayoutChecks
                 if (Math.Abs(textX - headerX) > 0.5 || dotX >= headerX)
                     throw new InvalidOperationException(
                         $"\"{text.Text}\" starts at x={textX:0.0} under {header.Text} at x={headerX:0.0}, its dot at x={dotX:0.0}: a dot-led row should hang its dot left of the header and line its text up with it (#237).");
+                // A dot laid out in the right place can still be clipped away: a hang put on the
+                // row rather than the list sits outside the ItemsControl's bounds, which clip it.
+                if (ClippedBy(dot) is { } clip)
+                    throw new InvalidOperationException(
+                        $"The dot of \"{text.Text}\" under {header.Text} is clipped by {clip.GetType().Name}: put `dotLed` on the list, not the row (#237).");
                 rows++;
             }
         }
 
         Console.WriteLine($"One grouping device: {headers.Count} section headers unboxed, {content.Count} pane contents unboxed, {rows} dot-led rows aligned.");
+    }
+
+    /// <summary>The first ancestor that clips to its bounds and cuts into <paramref name="visual"/> sideways, if any.</summary>
+    private static Visual? ClippedBy(Visual visual)
+    {
+        foreach (var ancestor in visual.GetVisualAncestors())
+        {
+            if (!ancestor.ClipToBounds || visual.TranslatePoint(default, ancestor) is not { } origin)
+                continue;
+            // Horizontal only: a row scrolled below a ScrollViewer's fold is clipped vertically
+            // on purpose, and a hang moves the dot sideways.
+            if (origin.X < -0.5 || origin.X + visual.Bounds.Width > ancestor.Bounds.Width + 0.5)
+                return ancestor;
+        }
+
+        return null;
     }
 
     private static double RightEdge(Visual control, Visual root) =>

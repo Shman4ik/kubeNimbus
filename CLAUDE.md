@@ -255,8 +255,8 @@ before changing a view.** Docs and code cite these numbers.
 23. **Fonts are settings; no view writes a font name**: the interface face comes from
     `AppSettings.InterfaceFont`, code uses the `mono` class or `MonoFont` (`FontChecks`).
 24. **A group gets a header or a border, never both, and nothing is boxed inside the dock's
-    card**: a headed group is `Border.section`, a dot-led list in one takes `dotLed`
-    (`LayoutChecks.OneGroupingDevice`).
+    card** (DESIGN.md rule 23): a headed group is `Border.section`, a dot-led list in one
+    takes `dotLed` (`LayoutChecks.OneGroupingDevice`).
 
 ## Feature deep dives (docs/engineering/)
 

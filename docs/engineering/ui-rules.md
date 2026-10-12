@@ -639,7 +639,12 @@ which now have a page of their own in this directory.
    into a bordered card's padding. The condition lists take `dotLed`, which pulls them into
    the section's inset, so the dot sits left of the header and the text starts under it
    (x=275 for both, after the change). The hang goes on the list and not the row: on the
-   first try it was on each row's `Grid`, and the `ItemsControl` clipped every dot away.
+   first try it was on each row's `Grid`, and the `ItemsControl` clipped every dot away. The
+   same mistake shipped in the first version of this PR on AppProject's sync windows, and the
+   check passed it because it measured where the dot was laid out, not whether it painted; it
+   now also fails a dot that an ancestor with `ClipToBounds` cuts sideways (seen failing on
+   that markup: "The dot of "deny · 0 22 * * 5 …" under SYNC WINDOWS is clipped by
+   ItemsControl").
    `LayoutChecks.OneGroupingDevice` asserts all three halves on seven scenarios (node and pod
    Overview, the pod log, exec, the diff preview, Service and AppProject detail), and failed
    both ways it was mutation-checked: one section put back in a card, and `dotLed` taken off

@@ -98,18 +98,21 @@
           <StackPanel Spacing="6">
             <TextBlock Classes="sectionHeader" Text="SYNC WINDOWS" />
             <TextBlock Classes="statusText dim" Text="None: Applications may sync at any time." IsVisible="{Binding !HasSyncWindows}" />
-            <ItemsControl ItemsSource="{Binding Project.SyncWindows}">
+            <!-- dotLed on the list, not the row: the ItemsControl clips a row pulled out of
+                 its bounds, and the dot disappeared when the hang sat on the row. -->
+            <ItemsControl ItemsSource="{Binding Project.SyncWindows}" Classes="dotLed">
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="core:ArgoSyncWindow">
                   <StackPanel Margin="0,0,0,10">
                     <!-- The dot hangs into the section's inset (7px and 9px of spacing, the 16px
-                         `dotLed` pulls back), so the window's text starts where the header does
-                         and its scope line under it (DESIGN.md rule 23). -->
-                    <StackPanel Orientation="Horizontal" Spacing="9" Classes="dotLed">
+                         the list's `dotLed` pulls back), so the window's text starts where the
+                         header does; the scope line is indented by the same 16px to sit under it
+                         (DESIGN.md rule 23). -->
+                    <StackPanel Orientation="Horizontal" Spacing="9">
                       <Ellipse Classes="statusDot" VerticalAlignment="Center" Classes.warn="{Binding IsDeny}" Classes.ok="{Binding !IsDeny}" />
                       <SelectableTextBlock Text="{Binding When}" FontSize="12.5" Classes="mono" VerticalAlignment="Center" />
                     </StackPanel>
-                    <TextBlock Text="{Binding Scope}" Classes="statusText dim" FontSize="11.5" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Scope}" Classes="statusText dim" FontSize="11.5" TextWrapping="Wrap" Margin="16,0,0,0" />
                   </StackPanel>
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
