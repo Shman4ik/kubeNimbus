@@ -1199,26 +1199,26 @@
     },
     "spec": {
       "hard": {
-        "limits.memory": "4Gi",
+        "limits.memory": "32Gi",
         "pods": "20",
-        "requests.cpu": "4",
+        "requests.cpu": "10",
         "requests.memory": "8Gi",
         "services.loadbalancers": "0"
       }
     },
     "status": {
       "hard": {
-        "limits.memory": "4Gi",
+        "limits.memory": "32Gi",
         "pods": "20",
-        "requests.cpu": "4",
+        "requests.cpu": "10",
         "requests.memory": "8Gi",
         "services.loadbalancers": "0"
       },
       "used": {
-        "limits.memory": "3840Mi",
-        "pods": "14",
-        "requests.cpu": "2350m",
-        "requests.memory": "3Gi",
+        "limits.memory": "32256Mi",
+        "pods": "13",
+        "requests.cpu": "7050m",
+        "requests.memory": "4Gi",
         "services.loadbalancers": "0"
       }
     }
@@ -1234,18 +1234,18 @@
     },
     "spec": {
       "hard": {
-        "persistentvolumeclaims": "2",
+        "persistentvolumeclaims": "1",
         "requests.storage": "50Gi"
       }
     },
     "status": {
       "hard": {
-        "persistentvolumeclaims": "2",
+        "persistentvolumeclaims": "1",
         "requests.storage": "50Gi"
       },
       "used": {
-        "persistentvolumeclaims": "2",
-        "requests.storage": "28Gi"
+        "persistentvolumeclaims": "1",
+        "requests.storage": "8Gi"
       }
     }
   },
@@ -1272,9 +1272,9 @@
         "requests.memory": "12Gi"
       },
       "used": {
-        "pods": "9",
-        "requests.cpu": "1800m",
-        "requests.memory": "5Gi"
+        "pods": "2",
+        "requests.cpu": "0",
+        "requests.memory": "0"
       }
     }
   }

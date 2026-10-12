@@ -251,8 +251,14 @@ readable under the built-in `view` role, so the slice of #308 built is the Resou
 - **A hard limit of 0 forbids a resource rather than budgeting it** (`services.loadbalancers: 0`
   is the common policy), so it is listed but never makes the quota full; without that, every
   namespace with such a policy would read red.
-- **Before the quota controller has counted** (no `status.used`) the row claims nothing (UI rule
-  20) and lists the hard limits with `—` for use.
+- **A limit with no used figure is never counted as within.** Before the quota controller has
+  counted (no `status.used`, an empty one, or one missing a limit) that limit is listed as `—`.
+  Full and Almost full still stand on the limits that were counted, but "Within quota" is a claim
+  about every limit, so without a count for each the row claims nothing (UI rule 20).
+- **The demo's quotas count the demo's own objects** (13 live pods and 1 claim in `payments`, 2
+  pods in `monitoring`, and the payments pods' summed requests and limits), with the hard limits set
+  so one is full and one almost full; `The_demo_quotas_count_the_demos_own_objects` keeps the
+  counts honest.
 - `ResourceQuotaSummaryTests` pins the verdicts with the sandbox's own object; making the Full
   check `> 100` instead of `>= 100` turns the full-quota test red (checked). Screenshot:
   `cluster-tab-resource-quotas`, from three demo quotas (almost full, full, with room).

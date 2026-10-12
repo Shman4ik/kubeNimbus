@@ -479,7 +479,7 @@ kubeconfig is merged into the run's. Otherwise all seven are UNSURE "no Argo san
   '{"spec":{"hard":{"pods":"<n>"}}}'`): within a few seconds "Full: pods" in error colour, and
   Unhealthy only keeps the row. If `qa-limited` cannot list resourcequotas, note the 403 sentence
   and repeat on the sandbox context.
-- **M-13 [look]** (#308) Demo cluster, ResourceQuotas in `payments`: "Almost full: limits.memory 93%"
+- **M-13 [look]** (#308) Demo cluster, ResourceQuotas in `payments`: "Almost full: limits.memory 98%"
   (warn) and "Full: persistentvolumeclaims" (error) pills, both themes.
 - **M-4 [text]** (PR #307) Create `qa-nodes-only`: a ServiceAccount, and a ClusterRole and ClusterRoleBinding
   of that name granting only `nodes` get/list/watch (two cluster-scoped `qa-*` objects; delete them

@@ -73,6 +73,64 @@ public class ResourceQuotaSummaryTests
         await Assert.That(summary.Details).IsEqualTo("pods: —/2");
     }
 
+    /// <summary>
+    /// "Within quota" is a claim about every limit: an empty <c>used</c>, or one missing a limit,
+    /// leaves that limit uncounted (<c>—</c>) and the row claiming nothing. A limit that was
+    /// counted can still be full on its own evidence.
+    /// </summary>
+    [Test]
+    public async Task A_limit_with_no_used_figure_is_never_counted_as_within_quota()
+    {
+        var empty = Quota("""{ "pods": "20" }""", "{}");
+        await Assert.That(empty.Status).IsEqualTo("");
+        await Assert.That(empty.Health).IsEqualTo(ResourceHealth.Idle);
+        await Assert.That(empty.Details).IsEqualTo("pods: —/20");
+
+        var partial = Quota("""{ "pods": "20", "requests.cpu": "4" }""", """{ "pods": "3" }""");
+        await Assert.That(partial.Status).IsEqualTo("");
+        await Assert.That(partial.Health).IsEqualTo(ResourceHealth.Idle);
+        await Assert.That(partial.Details).IsEqualTo("pods: 3/20, requests.cpu: —/4");
+
+        var fullAnyway = Quota("""{ "pods": "3", "requests.cpu": "4" }""", """{ "pods": "3" }""");
+        await Assert.That(fullAnyway.Status).IsEqualTo("Full: pods");
+    }
+
+    /// <summary>
+    /// UI rule 20 for the demo: its quotas' counts are the demo's own objects — the non-terminal
+    /// pods and the claims in each quota's namespace — so the demo never states a figure it does
+    /// not have.
+    /// </summary>
+    [Test]
+    public async Task The_demo_quotas_count_the_demos_own_objects()
+    {
+        var quotas = KubeNimbus.App.Demo.DemoData.OfKind("ResourceQuota");
+        await Assert.That(quotas.Count).IsEqualTo(3);
+        foreach (var quota in quotas)
+        {
+            var used = quota.Raw.GetProperty("status").GetProperty("used");
+            var ns = quota.Namespace;
+            if (used.TryGetProperty("pods", out var pods))
+            {
+                var live = KubeNimbus.App.Demo.DemoData.Pods.Count(p => p.Namespace == ns
+                    && !(p.Raw.TryGetProperty("status", out var s) && s.TryGetProperty("phase", out var phase)
+                         && phase.GetString() is "Succeeded" or "Failed"));
+                await Assert.That(int.Parse(pods.GetString()!, System.Globalization.CultureInfo.InvariantCulture))
+                    .IsEqualTo(live).Because($"{quota.Name}: pods");
+            }
+
+            if (used.TryGetProperty("persistentvolumeclaims", out var claims))
+            {
+                var bound = KubeNimbus.App.Demo.DemoData.OfKind("PersistentVolumeClaim").Count(c => c.Namespace == ns);
+                await Assert.That(int.Parse(claims.GetString()!, System.Globalization.CultureInfo.InvariantCulture))
+                    .IsEqualTo(bound).Because($"{quota.Name}: persistentvolumeclaims");
+            }
+        }
+
+        var statuses = quotas.Select(q => ResourceStatusSummary.Summarize(q).Health).ToList();
+        await Assert.That(statuses).Contains(ResourceHealth.Error);
+        await Assert.That(statuses).Contains(ResourceHealth.Warn);
+    }
+
     [Test]
     public async Task The_quota_list_has_a_Details_column()
     {

@@ -461,8 +461,10 @@ public static class ResourceStatusSummary
     /// needs any of it is refused — or else the fullest one when it is <b>Almost full</b>
     /// (warn, from <see cref="QuotaAlmostFullPercent"/>); otherwise <b>Within quota</b>. A hard limit of 0
     /// forbids a resource rather than budgeting it (<c>services.loadbalancers: 0</c>), so it
-    /// is listed but never makes the quota full. With no <c>status.used</c> yet — the quota
-    /// controller has not counted — the row claims nothing.
+    /// is listed but never makes the quota full. A limit with no used figure — no
+    /// <c>status.used</c> yet, an empty one, or one missing that limit — is shown as <c>—</c>
+    /// and never counted as within: Full and Almost full still stand on the limits that were
+    /// counted, but "Within quota" needs every limit counted, else the row claims nothing.
     /// </summary>
     private static ResourceSummary SummarizeResourceQuota(JsonElement spec, JsonElement status)
     {
@@ -478,25 +480,22 @@ public static class ResourceStatusSummary
         }
 
         var used = Obj(status, "used");
-        var counted = used.ValueKind == JsonValueKind.Object;
-        var entries = new List<(string Name, string Used, string Hard, double? Percent)>();
+        var entries = new List<(string Name, string Used, string Hard, bool Counted, double? Percent)>();
         foreach (var limit in hard.EnumerateObject())
         {
             var hardText = limit.Value.ValueKind == JsonValueKind.String ? limit.Value.GetString() ?? "" : limit.Value.ToString();
             var usedText = Str(used, limit.Name);
-            var percent = Quantity.Parse(hardText) is { } h && h > 0 && Quantity.Parse(usedText) is { } u
-                ? u * 100d / h
-                : (double?)null;
-            entries.Add((limit.Name, usedText.Length > 0 ? usedText : "—", hardText, percent));
+            var hardAmount = Quantity.Parse(hardText);
+            var usedAmount = Quantity.Parse(usedText);
+            var percent = hardAmount is { } h && h > 0 && usedAmount is { } u ? u * 100d / h : (double?)null;
+            entries.Add((limit.Name, usedText.Length > 0 ? usedText : "—", hardText,
+                hardAmount is not null && usedAmount is not null, percent));
         }
 
         entries.Sort((a, b) => string.CompareOrdinal(a.Name, b.Name));
         var details = string.Join(", ", entries.Select(e => $"{e.Name}: {e.Used}/{e.Hard}"));
-        if (!counted || entries.Count == 0)
-        {
-            return new ResourceSummary("", ResourceHealth.Idle, "", 0, null, details);
-        }
 
+        // What has been counted can be full or almost full on its own evidence.
         var full = entries.Where(e => e.Percent >= 100).Select(e => e.Name).ToList();
         if (full.Count > 0)
         {
@@ -504,10 +503,17 @@ public static class ResourceStatusSummary
         }
 
         var fullest = entries.Where(e => e.Percent is not null).OrderByDescending(e => e.Percent).FirstOrDefault();
-        return fullest.Percent >= QuotaAlmostFullPercent
-            ? new ResourceSummary(
-                $"Almost full: {fullest.Name} {Math.Floor(fullest.Percent.Value):0}%", ResourceHealth.Warn, "", 0, null, details)
-            : new ResourceSummary("Within quota", ResourceHealth.Ok, "", 0, null, details);
+        if (fullest.Percent >= QuotaAlmostFullPercent)
+        {
+            return new ResourceSummary(
+                $"Almost full: {fullest.Name} {Math.Floor(fullest.Percent.Value):0}%", ResourceHealth.Warn, "", 0, null, details);
+        }
+
+        // "Within quota" is a claim about every limit, so it needs a count for every one: a
+        // limit with no (or an unreadable) used figure leaves the row claiming nothing.
+        return entries.Count > 0 && entries.All(e => e.Counted)
+            ? new ResourceSummary("Within quota", ResourceHealth.Ok, "", 0, null, details)
+            : new ResourceSummary("", ResourceHealth.Idle, "", 0, null, details);
     }
 
     /// <summary>
