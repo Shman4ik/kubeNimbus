@@ -123,16 +123,17 @@ cluster. Pass a scenario-name substring as a second argument to render just one.
   `[ObservableProperty]`/`[RelayCommand]` source generators rather than
   hand-written INPC. `.editorconfig` covers formatting — please don't reformat
   files you aren't otherwise changing.
-- CI runs on every PR, and only the jobs its files can affect: build + tests (required), the headless XAML smoke test and a linux-x64 AOT publish run in parallel; a docs-only PR skips them all. A dependency review (also required) runs on every PR and fails one that adds a package with a known advisory. There is no separate run after the merge. Both required checks must be green.
+- CI runs on every PR, and only the jobs its files can affect: build + tests (required), the headless XAML smoke test and a linux-x64 AOT publish run in parallel; a docs-only PR skips them all. A dependency review (also required) runs on every PR and fails one that adds a package with a known advisory. The `nimbusUi drift` job below (also required) runs on every PR. There is no separate run after the merge. All three required checks must be green.
 - **`shared/nimbusUi` must match [nimbusUi](https://github.com/Shman4ik/nimbusUi)'s `main`.**
   The `nimbusUi drift` job compares every file under it with nimbusUi's `main`, ignoring
   line endings, and fails on any difference (`scripts/check-nimbusui-drift.sh <nimbusUi
-  checkout>` runs the same check locally). It is not a required check, and it has no
-  exemption: a "Take nimbusUi: …" PR, which copies files from a nimbusUi PR, is red until
-  that nimbusUi PR has merged. That is the merge order — nimbusUi first, then re-run the
-  job on each app's PR (kubeNimbus and pgNimbus) and merge them once it is green. A red
-  drift job on a PR that touches nothing shared means someone else's sync is unfinished;
-  say so in the PR rather than syncing in it.
+  checkout>` runs the same check locally). It is a required check, and it has no
+  exemption: a "Take nimbusUi: …" PR, which copies files from a nimbusUi PR, is red, and
+  cannot merge, until that nimbusUi PR has merged. That is the merge order — nimbusUi
+  first, then re-run the job on each app's PR (kubeNimbus and pgNimbus) and merge them once
+  it is green. A red drift job on a PR that touches nothing shared means someone else's
+  sync is unfinished, and it blocks every PR until that sync lands; say so in the PR
+  rather than syncing in it.
 
 Small fixes are welcome without discussion. For anything large — a new
 top-level feature, a new dependency, a structural change — **open an issue

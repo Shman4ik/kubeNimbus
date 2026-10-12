@@ -86,10 +86,12 @@ unconditionally. So:
    `ci.yml` and `release.yml` use `actions/cache/restore` and never save. Cache
    storage is separate from the 0.5 GB artifact budget above (10 GB per repo).
 
-**Only `Build & test` and `dependency-review` are required checks.** The
-branch ruleset on `main` requires a PR, resolved review threads and those two
-jobs, and no approval (2026-09, the same as pgNimbus); `dependency-review`
-refuses a PR that adds a package with a known advisory. `XAML smoke test` and `NativeAOT publish
+**Only `Build & test`, `dependency-review` and `nimbusUi drift` are required
+checks.** The branch ruleset on `main` requires a PR, resolved review threads and
+those three jobs, and no approval (2026-09, the same as pgNimbus; `nimbusUi drift`
+added in both repos 2026-10-12, #343); `dependency-review` refuses a PR that adds
+a package with a known advisory, and `nimbusUi drift` one whose `shared/nimbusUi`
+differs from nimbusUi's `main` (CONTRIBUTING.md has the merge order it implies). `XAML smoke test` and `NativeAOT publish
 (linux-x64)` still run on every PR that can affect them and are still worth
 reading, but they do not hold the merge. The smoke test is a candidate for the
 required list (it catches a view that no longer loads, which nothing else in CI

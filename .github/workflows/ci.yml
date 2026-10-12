@@ -137,7 +137,8 @@ jobs:
   # line endings ignored, on every PR whatever `changes` says: nimbusUi's main moves on its
   # own, so a PR that touches nothing shared still reports a drift someone else left.
   # Read-only: nimbusUi is public, the checkout keeps no credentials, and the job writes
-  # nothing. Not a required check. A "Take nimbusUi" PR is red until its nimbusUi PR has
+  # nothing. A required check, so the job has no `if:` and always reports; a
+  # "Take nimbusUi" PR is red until its nimbusUi PR has
   # merged; re-run this job then, before merging (CONTRIBUTING.md). pgNimbus runs the same job.
   nimbusui-drift:
     name: nimbusUi drift
