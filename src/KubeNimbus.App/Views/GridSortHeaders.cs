@@ -70,7 +70,9 @@ internal sealed class GridSortHeaders
     private void OnSorting(object? sender, DataGridColumnEventArgs e)
     {
         e.Handled = true;
-        if (_sort is { } sort && e.Column.Tag is string id)
+
+        // A press that moved is a drag that missed the resize grip, not a click (#320).
+        if (!HeaderDragGuard.IsDrag && _sort is { } sort && e.Column.Tag is string id)
         {
             sort.Toggle(id);
         }

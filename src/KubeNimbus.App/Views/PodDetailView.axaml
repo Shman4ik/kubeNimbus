@@ -667,50 +667,53 @@
                 </DockPanel>
               </Border>
 
-              <!-- Whole-pod totals, full width: the two numbers an on-call read starts from.
-                   Measured, so they are only here once a poll has landed. -->
-              <Border Classes="card" Padding="12" ToolTip.Tip="{Binding PodCpuTooltip}"
-                      IsVisible="{Binding HasUsageSamples}">
-                <Grid RowDefinitions="Auto,Auto">
-                  <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
-                    <TextBlock Grid.Column="0" Text="CPU — pod total" FontSize="12" FontWeight="SemiBold" Opacity="0.8" />
-                    <TextBlock Grid.Column="1" Classes="mono" FontSize="11.5" Opacity="0.8">
-                      <Run Text="{Binding PodCpuText}" />
-                      <Run Text="  · peak " />
-                      <Run Text="{Binding PodPeakCpuText}" />
-                    </TextBlock>
+              <!-- Whole-pod totals: the two numbers an on-call read starts from. Measured, so
+                   they are only here once a poll has landed. Side by side and 32px tall (#320):
+                   stacked full width at 72px they took the whole tab at the default ~300px
+                   dock, and every container's figures, the ones this tab is opened for,
+                   needed a scroll. -->
+              <Grid ColumnDefinitions="*,8,*" IsVisible="{Binding HasUsageSamples}">
+                <Border Grid.Column="0" Classes="card" Padding="12,6" ToolTip.Tip="{Binding PodCpuTooltip}">
+                  <Grid RowDefinitions="Auto,Auto">
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+                      <TextBlock Grid.Column="0" Text="CPU — pod total" FontSize="12" FontWeight="SemiBold" Opacity="0.8" />
+                      <TextBlock Grid.Column="1" Classes="mono" FontSize="11.5" Opacity="0.8">
+                        <Run Text="{Binding PodCpuText}" />
+                        <Run Text="  · peak " />
+                        <Run Text="{Binding PodPeakCpuText}" />
+                      </TextBlock>
+                    </Grid>
+                    <controls:Sparkline Grid.Row="1" Height="32" Values="{Binding PodCpuSeries}"
+                                        Stroke="{StaticResource UsageCpuStrokeBrush}"
+                                        AreaFill="{StaticResource UsageCpuAreaBrush}"
+                                        BaselineBrush="{StaticResource ChartBaselineBrush}"
+                                        StrokeThickness="1.6" />
                   </Grid>
-                  <controls:Sparkline Grid.Row="1" Height="72" Values="{Binding PodCpuSeries}"
-                                      Stroke="{StaticResource UsageCpuStrokeBrush}"
-                                      AreaFill="{StaticResource UsageCpuAreaBrush}"
-                                      BaselineBrush="{StaticResource ChartBaselineBrush}"
-                                      StrokeThickness="1.6" />
-                </Grid>
-              </Border>
+                </Border>
 
-              <Border Classes="card" Padding="12" ToolTip.Tip="{Binding PodMemoryTooltip}"
-                      IsVisible="{Binding HasUsageSamples}">
-                <Grid RowDefinitions="Auto,Auto">
-                  <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
-                    <TextBlock Grid.Column="0" Text="Memory — pod total" FontSize="12" FontWeight="SemiBold" Opacity="0.8" />
-                    <TextBlock Grid.Column="1" Classes="mono" FontSize="11.5" Opacity="0.8">
-                      <Run Text="{Binding PodMemoryText}" />
-                      <Run Text="  · peak " />
-                      <Run Text="{Binding PodPeakMemoryText}" />
-                    </TextBlock>
+                <Border Grid.Column="2" Classes="card" Padding="12,6" ToolTip.Tip="{Binding PodMemoryTooltip}">
+                  <Grid RowDefinitions="Auto,Auto">
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+                      <TextBlock Grid.Column="0" Text="Memory — pod total" FontSize="12" FontWeight="SemiBold" Opacity="0.8" />
+                      <TextBlock Grid.Column="1" Classes="mono" FontSize="11.5" Opacity="0.8">
+                        <Run Text="{Binding PodMemoryText}" />
+                        <Run Text="  · peak " />
+                        <Run Text="{Binding PodPeakMemoryText}" />
+                      </TextBlock>
+                    </Grid>
+                    <controls:Sparkline Grid.Row="1" Height="32" Values="{Binding PodMemorySeries}"
+                                        Stroke="{StaticResource UsageMemoryStrokeBrush}"
+                                        AreaFill="{StaticResource UsageMemoryAreaBrush}"
+                                        BaselineBrush="{StaticResource ChartBaselineBrush}"
+                                        StrokeThickness="1.6" />
                   </Grid>
-                  <controls:Sparkline Grid.Row="1" Height="72" Values="{Binding PodMemorySeries}"
-                                      Stroke="{StaticResource UsageMemoryStrokeBrush}"
-                                      AreaFill="{StaticResource UsageMemoryAreaBrush}"
-                                      BaselineBrush="{StaticResource ChartBaselineBrush}"
-                                      StrokeThickness="1.6" />
-                </Grid>
-              </Border>
+                </Border>
+              </Grid>
 
               <!-- Per container: which one is actually spending the pod's budget.
                    CPU and Memory side by side, since a container row is a comparison,
                    not a headline. -->
-              <TextBlock Classes="sectionHeader" Text="BY CONTAINER" Margin="2,4,0,0" />
+              <TextBlock Classes="sectionHeader" Text="BY CONTAINER" Margin="2,0,0,0" />
               <ItemsControl ItemsSource="{Binding Containers}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:ContainerViewModel">

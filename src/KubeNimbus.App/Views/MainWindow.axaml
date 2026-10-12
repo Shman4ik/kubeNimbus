@@ -226,16 +226,24 @@
                  the overflow scrollbar — which only exists past ~8 clusters, and only
                  while hovered — falls inside the caption region and can't be dragged;
                  the wheel, Ctrl/Cmd+1…9 and the switcher all still reach those tabs. -->
-            <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+            <ScrollViewer Grid.Column="1" Name="TabScroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
                           Margin="6,0,10,0" VerticalAlignment="Center">
               <StackPanel Orientation="Horizontal" Spacing="3">
-              <ItemsControl Name="TabStrip" ItemsSource="{Binding Tabs}">
-                <ItemsControl.ItemsPanel>
-                  <ItemsPanelTemplate>
-                    <StackPanel Orientation="Horizontal" Spacing="3" />
-                  </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
+              <!-- A ListBox, not an ItemsControl of Borders with a Tapped handler (#236, the
+                   command bar's half of ENG-54): the strip is one Tab stop entered on the
+                   cluster in front, the arrow keys, Home and End bring another to the front
+                   (OnClusterTabStripKeyDown), and UI Automation reads a Tab of TabItems named
+                   by the cluster, with the selection pattern. The selection is pushed one way
+                   from SelectedTab and read back in OnClusterTabSelectionChanged, never bound
+                   two-way, for the dock strip's reason: closing the selected tab makes the
+                   list report a null selection, which a two-way binding would write back. The
+                   drawn state stays the Border's own `active` class, from the view model. -->
+              <ListBox Name="TabStrip" Classes="clusterTabs" ItemsSource="{Binding Tabs}"
+                       SelectedItem="{Binding SelectedTab, Mode=OneWay}"
+                       SelectionChanged="OnClusterTabSelectionChanged"
+                       AutomationProperties.Name="Clusters"
+                       AutomationProperties.ControlTypeOverride="Tab">
+                <ListBox.ItemTemplate>
                   <DataTemplate x:DataType="vm:ClusterTabViewModel">
                     <Border Classes="clusterTab" Classes.active="{Binding IsSelected}"
                             chrome:WindowDecorationProperties.ElementRole="User"
@@ -289,16 +297,17 @@
                         <TextBlock Text="{Binding Header}" FontSize="12" VerticalAlignment="Center"
                                    MaxWidth="170" TextTrimming="CharacterEllipsis" />
                         <Button Classes="chip" Padding="0" MinWidth="14" MinHeight="14"
-                                ToolTip.Tip="Close tab" AutomationProperties.Name="{Binding Header, StringFormat='Close {0}'}"
-                                Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).CloseTabCommand}"
+                                IsTabStop="False"
+                                ToolTip.Tip="Close tab" AutomationProperties.Name="{Binding Header, StringFormat='Close {0}', FallbackValue='Close tab', TargetNullValue='Close tab'}"
+                                Command="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).CloseTabCommand}"
                                 CommandParameter="{Binding}">
                           <PathIcon Data="{StaticResource CloseIconGeometry}" Width="9" Height="9" />
                         </Button>
                       </StackPanel>
                     </Border>
                   </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
+                </ListBox.ItemTemplate>
+              </ListBox>
 
               <!-- The switcher entry point, after the last tab where a browser keeps its
                    "new tab" button. It used to sit before the tabs as a chip naming the

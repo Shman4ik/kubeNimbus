@@ -50,7 +50,7 @@
            chip is the one place that says something was left out of the text (UI rule 20);
            a two-way IsChecked and no command (UI rule 8b). -->
       <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" Margin="0,0,4,0">
-        <ToggleButton Classes="chip" Padding="7,3" FontSize="11"
+        <ToggleButton Name="ManagedFieldsChip" Classes="chip" Padding="7,3" FontSize="11"
                       IsVisible="{Binding HasManagedFields}" IsChecked="{Binding ShowManagedFields}"
                       ToolTip.Tip="Show metadata.managedFields, the server's record of which manager owns which field. Never sent on apply."
                       Content="Managed fields" />

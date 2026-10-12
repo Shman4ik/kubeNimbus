@@ -48,6 +48,12 @@ public partial class MainWindow : Window
         // Resources the press only switches mode and the open page is kept.
         ApplicationsModeItem.AddHandler(PointerPressedEvent, OnApplicationsModePressed, RoutingStrategies.Tunnel);
 
+        // The cluster tabs are a ListBox (#236): the arrow keys, Home, End and Delete are
+        // handled here for the dock strip's reason (a focus with a navigation method draws
+        // the ring), and a plain vertical wheel scrolls the row sideways (#313).
+        TabStrip.AddHandler(KeyDownEvent, OnClusterTabStripKeyDown, RoutingStrategies.Tunnel);
+        HorizontalWheel.Install(TabScroller);
+
         // The Ctrl/Cmd scheme is a user preference now, so every gesture in the window
         // has to be rebuilt when it changes — a KeyGesture built once holds the
         // modifier it was created with, and the window would answer the other
@@ -454,6 +460,88 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// A click or the keys chose a cluster tab. Read one way: a null selection (the selected
+    /// tab was just closed, or a drag moved it) is not a choice, and the view model picks
+    /// the neighbour itself.
+    /// </summary>
+    private void OnClusterTabSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_dragging || TabStrip.SelectedItem is not ClusterTabViewModel tab || Vm is not { } vm)
+        {
+            return;
+        }
+
+        if (!ReferenceEquals(vm.SelectedTab, tab))
+        {
+            vm.SelectedTab = tab;
+        }
+    }
+
+    /// <summary>
+    /// Left/Right, Home and End along the cluster tabs bring that tab to the front and focus
+    /// it as keyboard focus, so it draws the focus ring; Delete closes the focused tab, whose
+    /// close button is a pointer target only (#236, <see cref="CommandId.CloseFocusedTab"/>).
+    /// </summary>
+    private void OnClusterTabStripKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.KeyModifiers != KeyModifiers.None || Vm is not { } vm || vm.Tabs.Count == 0
+            || e.Source is not Visual source
+            || source.FindAncestorOfType<ListBoxItem>(includeSelf: true) is not { DataContext: ClusterTabViewModel focused } from)
+        {
+            return;
+        }
+
+        var count = vm.Tabs.Count;
+        var current = TabStrip.IndexFromContainer(from);
+        if (current < 0)
+        {
+            return;
+        }
+
+        if (CommandBindings.Matches(CommandId.CloseFocusedTab, e))
+        {
+            e.Handled = true;
+            _ = CloseFocusedClusterTabAsync(vm, focused);
+            return;
+        }
+
+        int? target = e.Key switch
+        {
+            Key.Left or Key.Up => Math.Max(current - 1, 0),
+            Key.Right or Key.Down => Math.Min(current + 1, count - 1),
+            Key.Home => 0,
+            Key.End => count - 1,
+            _ => null,
+        };
+        if (target is not { } index)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        vm.SelectedTab = vm.Tabs[index];
+        if (TabStrip.ContainerFromIndex(index) is { } container)
+        {
+            container.Focus(NavigationMethod.Directional);
+            container.BringIntoView();
+        }
+    }
+
+    private async Task CloseFocusedClusterTabAsync(MainWindowViewModel vm, ClusterTabViewModel closing)
+    {
+        await vm.CloseTabCommand.ExecuteAsync(closing);
+
+        // After layout, so the container of the tab now in front exists.
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            if (vm.SelectedTab is { } front && TabStrip.ContainerFromItem(front) is { } next)
+            {
+                next.Focus(NavigationMethod.Directional);
+            }
+        }, DispatcherPriority.Loaded);
+    }
+
     private void OnTabHeaderTapped(object? sender, TappedEventArgs e)
     {
         if (_dragging)
@@ -522,6 +610,15 @@ public partial class MainWindow : Window
         _pressedTab?.Classes.Remove("pressed");
         _pressedTab = null;
         _draggingTab = null;
+
+        // A drag moves the tab in the collection, which the list can answer by dropping
+        // its selection; the drawn state is the view model's, but UI Automation reads the
+        // list's, so the one in front is pushed back without replacing the binding.
+        if (Vm?.SelectedTab is { } front && !ReferenceEquals(TabStrip.SelectedItem, front))
+        {
+            TabStrip.SetCurrentValue(ListBox.SelectedItemProperty, front);
+        }
+
         // Deferred so the Tapped gesture (which fires after PointerReleased) still sees the flag.
         Dispatcher.UIThread.Post(() => _dragging = false);
     }

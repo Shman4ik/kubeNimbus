@@ -92,6 +92,15 @@ public partial class ApplicationsView : UserControl
         e.Handled = true;
     }
 
+    /// <summary>UI Automation's Toggle on a namespace's check box: what a click on the box does (#236).</summary>
+    private void OnNamespaceCheckToggleRequested(object? sender, EventArgs e)
+    {
+        if (sender is Control { DataContext: ApplicationNamespaceChoice choice } && Vm is { } vm)
+        {
+            vm.ToggleNamespace(choice);
+        }
+    }
+
     private void OnNamespaceKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter)

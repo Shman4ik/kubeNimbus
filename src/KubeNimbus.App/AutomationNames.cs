@@ -60,6 +60,15 @@ internal static partial class AutomationNames
         ToolTip.TipProperty.Changed.AddClassHandler<Control>((control, _) => Derive(control));
         TextBox.PlaceholderTextProperty.Changed.AddClassHandler<TextBox>((control, _) => Derive(control));
 
+        // A grid row names itself after the row it shows (#236): its peer has no name of its
+        // own, so UI Automation read every row as an empty DataItem. Rows are recycled, so the
+        // name follows the row's data context; a row type with no ToString of its own is left
+        // unnamed rather than named after its type.
+        StyledElement.DataContextProperty.Changed.AddClassHandler<DataGridRow>((row, _) => NameGridRow(row));
+
+        // A header that arrives after the tooltip takes back the name the tooltip gave.
+        MenuItem.HeaderProperty.Changed.AddClassHandler<MenuItem>((item, _) => ClearDerivedForTextHeader(item));
+
         // A button or list item whose content is a layout of text and icons reads as the layout's
         // type name. Once it has its content, name it after the text it shows.
         Control.LoadedEvent.AddClassHandler<ContentControl>((control, _) => NameFromContentText(control));
@@ -163,7 +172,7 @@ internal static partial class AutomationNames
             return;
         }
 
-        if (control is ContentControl { Content: string })
+        if (control is ContentControl { Content: string } || HasTextHeader(control))
         {
             return;
         }
@@ -189,6 +198,39 @@ internal static partial class AutomationNames
 
         control.SetCurrentValue(AutomationProperties.NameProperty, name);
         control.SetValue(DerivedProperty, true);
+    }
+
+    /// <summary>
+    /// A menu item (or a tab) whose header is text names itself from that text, the label
+    /// on screen. Its tooltip is the longer explanation, and deriving the name from it made
+    /// UI Automation read "Tail every pod this workload owns in one pane" for the item that
+    /// says "Logs (all pods)" (#236, the 0.7.0 QA run).
+    /// </summary>
+    private static bool HasTextHeader(Control control) =>
+        control is HeaderedSelectingItemsControl { Header: string } or HeaderedContentControl { Header: string };
+
+    private static void NameGridRow(DataGridRow row)
+    {
+        var name = row.DataContext is { } item && item.ToString() is { Length: > 0 } text && text != item.GetType().ToString()
+            ? text
+            : null;
+        if (name is null)
+        {
+            row.ClearValue(AutomationProperties.NameProperty);
+        }
+        else
+        {
+            row.SetValue(AutomationProperties.NameProperty, name);
+        }
+    }
+
+    private static void ClearDerivedForTextHeader(Control control)
+    {
+        if (HasTextHeader(control) && control.GetValue(DerivedProperty))
+        {
+            control.ClearValue(AutomationProperties.NameProperty);
+            control.ClearValue(DerivedProperty);
+        }
     }
 
     private static bool HasHandWrittenName(Control control) =>

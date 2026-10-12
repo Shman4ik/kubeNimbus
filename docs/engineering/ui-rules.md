@@ -71,13 +71,19 @@ which now have a page of their own in this directory.
    so a session-scoped Recent was empty exactly when it would have helped; a kind the
    cluster no longer serves is dropped, and nothing is saved before the saved list has
    been read, which on a real cluster is after the early Pods list has already started).
-   **Exactly one kind is drawn selected** — its own row and its Recent copy — and the
-   highlight is derived from `SelectedKind` in `MarkSelectedKind`, never set by
-   whoever selects (ENG-26): the palette, a restore, discovery's Pods swap and the
-   screenshot harness all assign the kind directly, and a highlight only the sidebar
-   command maintained is how two rows came to be lit at once. A Recent entry selects
-   its canonical row, so clicking the Recent copy of the kind on screen is the same
-   no-op as clicking the row. `SidebarRecentKindsTests` pins both. **Only Recent's rows
+   **Exactly one row is drawn selected**: the selected kind's own row while it is on
+   screen, and its Recent copy only while the own row is not (its section folded, or
+   hidden by the filter or the basic view). The highlight is derived from `SelectedKind`
+   in `MarkSelectedKind`, never set by whoever selects (ENG-26): the palette, a restore,
+   discovery's Pods swap and the screenshot harness all assign the kind directly, and a
+   highlight only the sidebar command maintained is how two rows came to be lit at once.
+   Until #317 (2026-10) the rule lit both the row and its Recent copy, which the QA run
+   read as two selections, UI Automation reported as two selected items, and left the
+   keyboard's way into the sidebar (entered on the selected row) two rows to choose from;
+   folding a section or typing in the filter re-derives it. A Recent entry selects its
+   canonical row, so clicking the Recent copy of the kind on screen is the same no-op as
+   clicking the row. `SidebarRecentKindsTests` pins both (red on the both-lit rule in six
+   tests), and `ux-automation-patterns` counts the lit rows with Workloads folded and open. **Only Recent's rows
    draw the kind glyph** (#213, owner's decision 2026-10-10, which also settled #244's
    `events.k8s.io` glyph): in a section the glyph was the same on every row, directly under
    a header that says the same thing, and it cost the width that truncates long kind names.

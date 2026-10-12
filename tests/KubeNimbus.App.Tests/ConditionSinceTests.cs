@@ -23,7 +23,7 @@ public class ConditionSinceTests
 
         await Assert.That(row.Age).IsEqualTo("6d");
         await Assert.That(row.AgeTooltip).IsEqualTo(
-            $"Last transition {SixDaysAgo.ToLocalTime():yyyy-MM-dd HH:mm:ss}");
+            $"Last transition {LocalTimeText.Exact(SixDaysAgo)}");
     }
 
     [Test]

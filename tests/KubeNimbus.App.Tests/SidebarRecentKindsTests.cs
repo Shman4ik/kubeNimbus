@@ -8,8 +8,8 @@ namespace KubeNimbus.App.Tests;
 /// sidebar through the same <c>SidebarGrouping</c> calls discovery does.
 ///
 /// <para>
-/// ENG-26: exactly one kind is drawn selected — its own row and its copy in Recent, and no
-/// other — however it came to be selected. ENG-5: Recent survives the tab, per cluster, as
+/// ENG-26 and #317: exactly one row is drawn selected — the kind's own row while it is on
+/// screen, its copy in Recent while it is not — however the kind came to be selected. ENG-5: Recent survives the tab, per cluster, as
 /// kind keys resolved against the next catalog.
 /// </para>
 ///
@@ -56,16 +56,73 @@ public class SidebarRecentKindsTests
     // ------------------------------------------------------------------ ENG-26
 
     [Test]
-    public async Task The_kind_on_screen_is_lit_in_its_section_and_in_Recent_and_nowhere_else()
+    public async Task The_kind_on_screen_is_lit_in_its_own_section_only()
     {
         var tab = DemoTab();
         tab.SelectKindCommand.Execute(Row(tab, "", "Service"));
         tab.SelectKindCommand.Execute(Row(tab, "", "ConfigMap"));
         tab.SelectKindCommand.Execute(Row(tab, "", "Pod"));
 
-        // Before: only the Workloads copy lit up, and the Recent entry for the kind being
-        // looked at read as inactive.
-        await Assert.That(Lit(tab)).IsEqualTo("Recent/Pods, Workloads/Pods");
+        // Pods is in Recent too. Both copies used to be lit, which read as two selections
+        // and gave UI Automation two selected items (#317).
+        await Assert.That(Lit(tab)).IsEqualTo("Workloads/Pods");
+    }
+
+    /// <summary>
+    /// The Recent copy takes the highlight only while the kind's own row is off screen, so
+    /// the kind on screen is always lit somewhere a reader can see (ENG-26's half), and
+    /// never in two places (#317's).
+    /// </summary>
+    [Test]
+    public async Task Folding_the_kinds_section_hands_the_highlight_to_its_Recent_copy_and_back()
+    {
+        var tab = DemoTab();
+        var workloads = tab.SidebarSections.Single(s => s.Title == "Workloads");
+        await Assert.That(Lit(tab)).IsEqualTo("Workloads/Pods");
+
+        workloads.IsExpanded = false;
+        await Assert.That(Lit(tab)).IsEqualTo("Recent/Pods");
+
+        workloads.IsExpanded = true;
+        await Assert.That(Lit(tab)).IsEqualTo("Workloads/Pods");
+    }
+
+    [Test]
+    public async Task A_filter_that_hides_the_kinds_own_row_lights_one_row_at_most()
+    {
+        var tab = DemoTab();
+        tab.SelectKindCommand.Execute(Row(tab, "", "Service"));
+
+        // "serv" matches Services in Network and in Recent; the own row stays lit.
+        tab.SidebarFilter = "serv";
+        await Assert.That(Lit(tab)).IsEqualTo("Network/Services");
+
+        // A filter that hides Services everywhere still lights one row, its own.
+        tab.SidebarFilter = "configm";
+        await Assert.That(Lit(tab)).IsEqualTo("Network/Services");
+
+        tab.SidebarFilter = "";
+        await Assert.That(Lit(tab)).IsEqualTo("Network/Services");
+    }
+
+    /// <summary>Every route that selects a kind ends with exactly one row lit.</summary>
+    [Test]
+    public async Task Every_way_of_selecting_a_kind_leaves_exactly_one_row_lit()
+    {
+        var tab = DemoTab();
+        tab.SelectKindCommand.Execute(Row(tab, "", "Service"));
+        tab.SelectKindCommand.Execute(Row(tab, "", "ConfigMap"));
+        // Config starts folded, so the Recent copy is the one on screen.
+        await Assert.That(Lit(tab)).IsEqualTo("Recent/ConfigMaps");
+
+        tab.SelectKindCommand.Execute(Recent(tab)!.Kinds.Single(k => k.DisplayName == "Services"));
+        await Assert.That(Lit(tab)).IsEqualTo("Network/Services");
+
+        tab.SelectedKind = Row(tab, "apps", "Deployment");
+        await Assert.That(Lit(tab)).IsEqualTo("Workloads/Deployments");
+
+        tab.SelectedKind = Recent(tab)!.Kinds.First(k => k.DisplayName == "ConfigMaps");
+        await Assert.That(Lit(tab).Split(", ").Length).IsEqualTo(1);
     }
 
     /// <summary>
@@ -77,7 +134,7 @@ public class SidebarRecentKindsTests
     public async Task Assigning_the_kind_directly_moves_the_highlight_too()
     {
         var tab = DemoTab();
-        await Assert.That(Lit(tab)).IsEqualTo("Recent/Pods, Workloads/Pods");
+        await Assert.That(Lit(tab)).IsEqualTo("Workloads/Pods");
 
         tab.SelectedKind = Row(tab, "apps", "Deployment");
 
@@ -114,7 +171,7 @@ public class SidebarRecentKindsTests
 
         await Assert.That(ReferenceEquals(tab.SelectedKind, Row(tab, "", "Service"))).IsTrue();
         await Assert.That(RecentNames(tab)).IsEqualTo("ConfigMaps, Services, Pods");
-        await Assert.That(Lit(tab)).IsEqualTo("Recent/Services, Network/Services");
+        await Assert.That(Lit(tab)).IsEqualTo("Network/Services");
     }
 
     // ------------------------------------------------------------------- ENG-5

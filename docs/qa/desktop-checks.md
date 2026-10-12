@@ -66,8 +66,8 @@ Setup: Resources, Pods, namespace `qa-shop`. Both themes where noted (`ThemeTogg
   both themes.
 - **C-2 [text][input]** (#269) Open 10 or more tabs (pods, a ConfigMap, a Secret, a Deployment,
   an exec). The strip stays one row, about 30 DIP high, and the dock content starts under it.
-  `wheel -Id InspectorTabStrip -Delta -3` (the plain wheel) and `-Horizontal` both scroll it;
-  the 0.7.0 run found only the horizontal wheel did. End on a focused tab selects the last tab.
+  `wheel -Id InspectorTabStrip -Delta -3` (the plain wheel) and `-Horizontal` both scroll it
+  (#313: the 0.7.0 run found only the horizontal wheel did). End on a focused tab selects the last tab.
   A thin line across the selected tab's bottom edge with the pointer away is a [look].
 - **C-3 [input]** (#266) Exec on a `shop-api-…` pod (S), click into the terminal, then
   `drag -Id DockSplitter -DY -100` and `-DY 100`. With no click, `echo hi` still reaches the
@@ -97,6 +97,28 @@ Setup: Resources, Pods, namespace `qa-shop`. Both themes where noted (`ThemeTogg
   change to its replicas, and a Helm release's Values tab if the cluster has a release: none draws a bordered box inside the
   dock; the apply preview (the editor hidden while it is open) is set off from the pane's toolbar by a single line above it. Crop the dock,
   both themes.
+- **C-11 [text][input]** (#236) Open a second cluster tab (the demo cluster). `dump` shows a
+  `Tab 'Clusters' [TabStrip]` holding one `TabItem` per cluster, named by the cluster, the one in
+  front selected. Tab from ☰ reaches the strip as one stop; Right brings the next cluster to the
+  front (the cluster switches), Left back. The focus ring on the focused tab is a [look].
+- **C-12 [input]** (#236) Delete on the focused demo cluster tab closes it and leaves focus on the
+  tab now in front. With three dock tabs open, Tab to the strip and press Delete: the focused tab
+  closes, a neighbour is in front and has the focus; Delete again closes that one. No close
+  button is a Tab stop.
+- **C-13 [text]** (#236) `dump` the sidebar: each section header is a `Group` named by its title
+  with the ExpandCollapse pattern, state Expanded for Workloads and Collapsed for Config; UIA
+  `collapse` on Workloads folds it on screen and `expand` unfolds it.
+- **C-14 [text][look]** (#317) Select Services, ConfigMaps, then Pods from the sidebar. Exactly one
+  sidebar row is drawn selected (Workloads/Pods), not its copy in Recent. Fold Workloads: the
+  Recent copy of Pods is drawn selected instead; unfold: back to Workloads. Then click Recent's
+  ConfigMaps (Config folded): only the Recent row is drawn selected. Crop the sidebar each time.
+- **C-15 [text]** (#236) Open the namespace picker: each namespace's box is a `CheckBox` named by
+  the namespace, Off or On as drawn; UIA `toggle` on `qa-shop`'s box adds it with the picker kept
+  open, and again takes it out. Escape closes the picker.
+- **C-16 [text]** (#236) `dump` the Pods list: each `DataItem` row is named "<pod>, qa-shop";
+  select two rows (click, Ctrl+click) and both report the item status "Selected", the others none.
+  Right-click a Deployment row: the menu item reads `MenuItem 'Logs (all pods)'` (its help text is
+  the longer tooltip), and the column chooser's items are named by their column.
 
 ## Batch L1 — selection and bulk delete
 
@@ -350,22 +372,29 @@ and read what ran through the clipboard or a marker file (`echo hi > /tmp/m`,
 ## Batch P — panes
 
 - **P-1 [text]** (#268, #172) `demo-broken/never-ready-…` Overview Conditions rows show an age; its
-  tooltip is "Last transition YYYY-MM-DD HH:MM:SS" (local time, unlabelled). Same on the node's
+  tooltip is "Last transition YYYY-MM-DD HH:MM:SS UTC-07:00" (local time with its offset, #320;
+  the VM's own offset, "UTC" when it is zero). A row's Age tooltip ("Created …") and an event's
+  "Last seen …" carry the offset too. Same on the node's
   Overview and "Since" in `shop-web`'s Conditions tab.
-- **P-2 [text]** (#171) A `shop-web-…` pod, dock not maximized, Usage tab, scroll to BY CONTAINER:
-  `web` "request 10m · limit 200m · <1% of limit", memory "request 24 MiB · limit 128 MiB · N% of
-  limit", `access-log-tailer` "request 5m · no limit"; within rounding of `kubectl top pod -n
-  qa-shop --containers`. Say whether it reads well at this height (0.7.0: one container per scroll).
+- **P-2 [text]** (#171, #320) A `shop-web-…` pod, dock not maximized, Usage tab: the pod's CPU and
+  memory totals side by side, and BY CONTAINER's first container on screen with no scroll. `web`
+  "request 10m · limit 200m · N% of limit" with N a figure such as `0.4%` (not `<1%`; `<0.1%`
+  only under 0.05 %), memory "request 24 MiB · limit 128 MiB · N% of limit", `access-log-tailer`
+  "request 5m · no limit"; within rounding of `kubectl top pod -n qa-shop --containers`.
 - **P-3 [text]** (#166) Backups are cluster-scoped. `kubectl apply` a `Backup` `qa-last-run` with
   `status.lastRunTime` now (UTC `yyyy-MM-ddTHH:mm:ssZ`; the CRD has no status subresource):
   "Last run" reads `4s`, later `29s`, `1m` with no refresh, in step with Age. Delete it.
-- **P-4 [input]** (#167) `Widgets` in `demo-shop`, then `Backups`, window 960 DIP: no CRD header
-  overlaps another (clipped by a fade, not an ellipsis; Age may sit off to the right). At 1280
+- **P-4 [input]** (#167, #320) `Widgets` in `demo-shop`, then `Backups`, window 960 DIP: no CRD
+  header overlaps another, and a header cut short ends in an ellipsis with its whole name on a
+  tooltip (Age may sit off to the right). Press a header a few pixels left of its resize grip and
+  drag 30 px: the column resizes or nothing happens, the sort does not change. At 1280
   `drag` a CRD header edge: it resizes **and holds after switching kind and back**
   (0.7.0 failed with an injected drag; re-test with the real `drag`). Three header clicks
   cycle ascending, descending, none; dragging a header onto another moves nothing. The
   overflow-at-1280 half has no sandbox CRD wide enough: UNSURE.
-- **P-5 [text]** (#176) Double-click the node: tabs Overview, Pods, Events, Usage; the Pods tab
+- **P-5 [text]** (#176, #320) Double-click the node: tabs Overview, Pods, Events, Usage; the
+  Overview's pods row reads "Active pods N / 110" and, when finished pods sit on the node, the
+  header "M pods on this node, N active" (the plain count otherwise), with the same N; the Pods tab
   follows a `kubectl scale` with no refresh; "Re-read the events about this node" works.
   Right-click → "Drain…" (UIA name is its tooltip) arms the strip; **never press Drain**; tick and
   untick "Evict unmanaged pods" and "Delete emptyDir data" and quote the plan line each time
@@ -497,9 +526,10 @@ kubeconfig is merged into the run's. Otherwise all seven are UNSURE "no Argo san
   press the chip again: the field goes, the edit stays, Reload is enabled. Review… → Apply: the
   managers listed with the field shown are the old ones plus `kubenimbus`. `kubectl label deploy
   shop-web qa-check-` afterwards.
-- **M-8 [input]** (PR #307) A stray `{` in the text, then a **real** click on the chip (UIA `toggle`
-  bypasses the refusal): it stays unpressed and the status line reads "The managed fields can be
-  shown again once the text above reads as one YAML document." Close the tab without applying.
+- **M-8 [input][text]** (PR #307, #236) A stray `{` in the text, then a **real** click on the chip:
+  it stays unpressed and the status line reads "The managed fields can be shown again once the
+  text above reads as one YAML document." Then UIA `toggle` on the chip: the same refusal, and its
+  toggle state reads Off afterwards (0.7.0: On). Close the tab without applying.
 - **M-9 [text]** (PR #307) A `qa-shop` ConfigMap's YAML has the chip; a Deployment's YAML on the demo
   cluster does not.
 - **M-10 [input]** (#294) On `qa-cut`: Applications mode open, then `qa-netcut.ps1 cut`, then Reconnect: the

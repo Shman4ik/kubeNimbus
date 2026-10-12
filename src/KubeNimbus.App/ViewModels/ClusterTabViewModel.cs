@@ -1978,7 +1978,14 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             // Wired here rather than at construction because this runs after every
             // rebuild, and a section built during one must not record its state while
             // the list is still half-assembled.
-            section.ExpansionChanged = PersistExpandedSections;
+            section.ExpansionChanged = () =>
+            {
+                PersistExpandedSections();
+
+                // Folding the section that holds the selected kind hands the highlight to
+                // its Recent copy, and unfolding it takes it back (#317).
+                MarkSelectedKind();
+            };
         }
 
         // The advanced-view gate is per kind now (Nodes and Namespaces survive it), and
@@ -2180,24 +2187,61 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     }
 
     /// <summary>
-    /// Draws exactly one kind as selected (ENG-26): every sidebar row whose descriptor is
-    /// the selected kind's, which is its own row plus its copy in Recent, and no other.
-    /// Derived from <see cref="SelectedKind"/> rather than set by whoever selects, because
-    /// several things select — the sidebar, the Recent section, a restore, discovery
-    /// replacing the early Pods entry, the screenshot harness — and a highlight set by
-    /// only some of them is how two rows came to be lit at once while the Recent copy of
-    /// the kind being shown was not. By descriptor reference: a Recent entry holds the
+    /// Draws exactly one sidebar row as selected (ENG-26, #317): the selected kind's own row
+    /// while it is on screen, and its copy in Recent only while the own row is not (its
+    /// section folded, or hidden by the filter or the basic view). Derived from
+    /// <see cref="SelectedKind"/> rather than set by whoever selects, because several things
+    /// select — the sidebar, the Recent section, a restore, discovery replacing the early
+    /// Pods entry, the screenshot harness — and a highlight set by only some of them is how
+    /// two rows came to be lit at once. It used to light both the row and its Recent copy,
+    /// which read as two selections to the eye and to UI Automation (two selected items in
+    /// one list), and left the keyboard's way into the sidebar, which enters on the selected
+    /// row, with two to choose from. By descriptor reference: a Recent entry holds the
     /// catalog's own instance, and two same-named kinds from different groups are
-    /// different instances.
+    /// different instances. Re-derived when a section folds or the filter changes, since
+    /// either can move the highlight between the two copies.
     /// </summary>
     private void MarkSelectedKind()
     {
         var selected = SelectedKind?.Descriptor;
+        SidebarKindViewModel? own = null;
+        SidebarKindViewModel? recent = null;
+        var ownShown = false;
+        var recentShown = false;
         foreach (var section in SidebarSections)
         {
             foreach (var kind in section.Kinds)
             {
-                kind.IsSelected = selected is not null && ReferenceEquals(kind.Descriptor, selected);
+                if (selected is null || !ReferenceEquals(kind.Descriptor, selected))
+                {
+                    continue;
+                }
+
+                var shown = section.IsSectionVisible && section.ShowKinds && kind.IsVisible;
+                if (kind.IsRecentEntry)
+                {
+                    if (recent is null)
+                    {
+                        recent = kind;
+                        recentShown = shown;
+                    }
+                }
+                else if (own is null)
+                {
+                    own = kind;
+                    ownShown = shown;
+                }
+            }
+        }
+
+        // The own row when it is on screen; the Recent copy when only that one is; the own
+        // row again when neither is, so a cleared filter or an unfolded section finds it lit.
+        var lit = ownShown || !recentShown ? own ?? recent : recent;
+        foreach (var section in SidebarSections)
+        {
+            foreach (var kind in section.Kinds)
+            {
+                kind.IsSelected = ReferenceEquals(kind, lit);
             }
         }
     }
@@ -2251,6 +2295,9 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             section.IsForceExpanded = filtering && anyMatch;
             section.IsHiddenByBasicView = gated && !anyInBasicView;
         }
+
+        // What is on screen decides which copy of the selected kind is lit (#317).
+        MarkSelectedKind();
     }
 
     [RelayCommand]

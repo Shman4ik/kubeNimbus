@@ -51,7 +51,8 @@ public class NodePodsLiveTests
         await Assert.That(detail.Pods.Count).IsEqualTo(before + 1);
         await Assert.That(detail.Pods[0].Name).IsEqualTo("newcomer");
         await Assert.That(RequestedCpu(detail) - cpuBefore).IsEqualTo(0.25).Within(0.0001);
-        await Assert.That(detail.PodsCaption).IsEqualTo($"{before + 1} pods on this node");
+        // The demo node holds a finished Job pod, so the caption also says how many are active (#320).
+        await Assert.That(detail.PodsCaption).StartsWith($"{before + 1} pods on this node, ");
     }
 
     [Test]
@@ -116,5 +117,29 @@ public class NodePodsLiveTests
         await Assert.That(detail.HasCountedPods).IsTrue();
         await Assert.That(detail.PodsCaption).IsEqualTo("1 pod on this node");
         await Assert.That(RequestedCpu(detail)).IsEqualTo(0.25).Within(0.0001);
+    }
+
+    /// <summary>
+    /// #320: the header counts every pod on the node and the Overview's "Active pods" line
+    /// only those that hold a slot; with a finished pod among them the header says how many
+    /// are active, so the two figures stop reading as a contradiction.
+    /// </summary>
+    [Test]
+    public async Task The_pod_count_says_how_many_are_active_when_some_have_finished()
+    {
+        var detail = OpenWorker1();
+
+        detail.ApplyPodEvent(ResourceEvent<DynamicResource>.Reset);
+        detail.ApplyPodEvent(TestObjects.Added(NodePod("payments", "web")));
+        detail.ApplyPodEvent(TestObjects.Added(NodePod("payments", "job-1", phase: "Succeeded")));
+        detail.ApplyPodEvent(ResourceEvent<DynamicResource>.Synced);
+
+        await Assert.That(detail.PodsCaption).IsEqualTo("2 pods on this node, 1 active");
+        var line = detail.ResourceLines.Single(l => l.Label == "Active pods");
+        await Assert.That(line.RequestedText).IsEqualTo("1");
+
+        detail.ApplyPodEvent(TestObjects.Deleted(NodePod("payments", "job-1", phase: "Succeeded")));
+
+        await Assert.That(detail.PodsCaption).IsEqualTo("1 pod on this node");
     }
 }
