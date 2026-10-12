@@ -632,7 +632,7 @@ which now have a page of their own in this directory.
    and the log, exec, Helm values/manifest/notes, YAML editor and apply-preview panes each
    drew a card inside the dock's card (the diff three boxes deep). Now a headed group is a
    `Border.section` (no border, no fill, a 16px inset), a pane's content sits straight in the
-   dock, the apply preview is set off from the editor by one rule above it, and Helm's load
+   dock, the apply preview (which takes the whole pane while open, the editor hidden, since #333) is set off from the pane's toolbar by one rule above it, and Helm's load
    error is an InfoBar (rule 11) instead of a card filling the pane. #237 fell out of it: on
    `cluster-tab-node-detail-cordoned` the CONDITIONS rows started at x≈375 while the other
    cards' content started at x≈359, because the dot took the first slot and could not hang

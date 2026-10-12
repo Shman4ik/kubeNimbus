@@ -95,7 +95,7 @@ Setup: Resources, Pods, namespace `qa-shop`. Both themes where noted (`ThemeTogg
   its type starts directly under the header's first letter. Crop the dock, both themes.
 - **C-10 [look]** (#215) Logs, Exec (S on a `shop-api-…` pod), E on a Deployment and Review… a
   change to its replicas, and a Helm release's Values tab if the cluster has a release: none draws a bordered box inside the
-  dock; the apply preview is set off from the editor by a single line above it. Crop the dock,
+  dock; the apply preview (the editor hidden while it is open) is set off from the pane's toolbar by a single line above it. Crop the dock,
   both themes.
 
 ## Batch L1 — selection and bulk delete
