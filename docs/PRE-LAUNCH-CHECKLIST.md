@@ -141,8 +141,11 @@ repo has a release, screenshots and a Store listing — all three exist now.
       ~62 MB payload against a 382 MiB single file, and no telemetry where theirs
       is on by default. The README's three GIFs (#138) cover the capture this item
       used to ask for; a 20–30 s video for the Store listing is still open (DIST-5).
-- [ ] **A comparison page** (backlog DIST-4, DIST-7, DIST-9) — the positioning lives
-      only in `CLAUDE.md` and `docs/research/`, where no prospective user reads it.
+- [x] **A comparison page** (#230) — the positioning used to live only in
+      `CLAUDE.md` and `docs/research/`, where no prospective user reads it.
+      [`docs/comparison.md`](comparison.md) was written against sources in October and
+      published on 2026-10-12: the README links it from the nav and from
+      "Why kubeNimbus?". A landing page of its own (DIST-7, DIST-9) is still open.
 - [ ] **awesome-kubernetes** and similar curated lists — permanent discovery.
 - [ ] **r/kubernetes and r/devops** — read the self-promotion rules first, and be
       in the comments all day.
