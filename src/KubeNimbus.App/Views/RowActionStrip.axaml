@@ -28,23 +28,19 @@
        the sentence, "(production)", because a colour alone is information only for someone
        who knows the code (UI rule 11). -->
   <UserControl.Styles>
-    <!-- The strip's own parts (FEAT-77). The glyph is the verb's icon in a tinted square:
-         accent for the reversible actions, red for the ones that destroy something
-         (delete, drain, a sync that prunes), so the kind of question is legible before it
-         is read. The sentence is 13px, a step above the 12px consequence under it. -->
-    <Style Selector="Border.actionGlyph">
-      <Setter Property="Width" Value="32" />
-      <Setter Property="Height" Value="32" />
-      <Setter Property="CornerRadius" Value="{StaticResource CardCornerRadius}" />
-      <Setter Property="Background" Value="{DynamicResource AppSelectionBrush}" />
-    </Style>
-    <Style Selector="Border.actionGlyph PathIcon">
+    <!-- The strip's own parts (FEAT-77). The glyph is the verb's bare icon: accent for the
+         reversible actions, red for the ones that destroy something (delete, drain, a sync
+         that prunes), so the kind of question is legible before it is read. It has no tile
+         behind it: a tinted square with an accent icon is what the soft buttons look like,
+         and the owner asked whether it was a refresh button (2026-10-12). It is level with
+         the sentence's first line. The sentence is 13px, a step above the 12px consequence
+         under it. -->
+    <Style Selector="PathIcon.actionGlyph">
+      <Setter Property="Width" Value="16" />
+      <Setter Property="Height" Value="16" />
       <Setter Property="Foreground" Value="{DynamicResource AppAccentBrush}" />
     </Style>
-    <Style Selector="Border.actionGlyph.danger">
-      <Setter Property="Background" Value="{DynamicResource AppDangerWashBrush}" />
-    </Style>
-    <Style Selector="Border.actionGlyph.danger PathIcon">
+    <Style Selector="PathIcon.actionGlyph.danger">
       <Setter Property="Foreground" Value="{DynamicResource AppDangerBrush}" />
     </Style>
     <Style Selector="TextBlock.actionSentence">
@@ -74,11 +70,9 @@
   <Border Classes="card actionStrip" Classes.production="{Binding IsProduction}" Padding="14,12"
           AutomationProperties.Name="{Binding Question}">
     <Grid ColumnDefinitions="Auto,*">
-      <Border Grid.Column="0" Classes="actionGlyph" Classes.danger="{Binding IsDestructive}"
-              VerticalAlignment="Top" Margin="0,0,12,0">
-        <PathIcon Data="{Binding IconKey, Converter={x:Static conv:IconKeyToGeometryConverter.Instance}}"
-                  Width="16" Height="16" />
-      </Border>
+      <PathIcon Grid.Column="0" Classes="actionGlyph" Classes.danger="{Binding IsDestructive}"
+                Data="{Binding IconKey, Converter={x:Static conv:IconKeyToGeometryConverter.Instance}}"
+                VerticalAlignment="Top" Margin="0,1,10,0" />
 
       <StackPanel Grid.Column="1" Spacing="10" MaxWidth="900" HorizontalAlignment="Left">
         <!-- The question and its answer. The sentence column is a star so it wraps on a
