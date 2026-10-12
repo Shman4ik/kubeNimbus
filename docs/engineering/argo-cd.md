@@ -182,7 +182,9 @@ Applications collection through the shared `ClusterClient.Watches` (`WatchCache`
 [aot-watch-and-discovery](aot-watch-and-discovery.md)), the same entry the Applications mode's
 Argo watch reads, so opening the dashboard joins a running watch instead of listing again; Refresh
 calls `Watches.Relist` on that entry first, as the Resources list does, or it would be answered
-from the cache.
+from the cache. `ArgoDashboardRefreshTests` pins that against a fake API server that counts the
+Application lists: Refresh with the dashboard open is a second list (mutation-checked: without
+the `Relist` call the test times out on one).
 
 - **Loading ends at the first row or at Synced, never at Reset** (UI rule 18). A Reset in the
   middle of the stream (a relist after 410 Gone) keeps the rows on screen until the relist has
