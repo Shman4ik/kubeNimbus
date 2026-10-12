@@ -39,12 +39,13 @@ public class DemoRowsTests
         string.Join(", ", rows.Select(r => r.Name).Order(StringComparer.Ordinal));
 
     [Test]
-    public async Task The_demo_opens_on_every_payments_pod_with_a_crash_loop_among_them()
+    public async Task The_demo_opens_on_every_pod_in_all_namespaces_with_a_crash_loop_among_them()
     {
         var tab = DemoTab();
 
-        var expected = DemoData.Pods.Where(p => p.Namespace == "payments").ToList();
-        await Assert.That(tab.SelectedNamespace).IsEqualTo("payments");
+        // A tab with nothing saved opens on the whole cluster, the demo's included.
+        var expected = DemoData.Pods.ToList();
+        await Assert.That(tab.SelectedNamespace).IsEqualTo(ClusterTabViewModel.AllNamespaces);
         await Assert.That(expected.Count).IsGreaterThanOrEqualTo(8);
         await Assert.That(Names(tab.Rows)).IsEqualTo(string.Join(", ", expected.Select(p => p.Name).Order(StringComparer.Ordinal)));
 
@@ -99,6 +100,7 @@ public class DemoRowsTests
     public async Task The_demo_deployments_are_listed_in_their_namespace()
     {
         var tab = DemoTab();
+        tab.SelectedNamespace = "payments";
         Select(tab, "apps", "Deployment");
 
         var expected = DemoData.Deployments.Where(d => d.Namespace == "payments").Select(d => d.Name);

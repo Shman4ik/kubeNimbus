@@ -6,8 +6,8 @@ namespace KubeNimbus.App.Tests;
 /// <summary>
 /// Where a freshly connected tab lands (<see cref="ClusterTabViewModel.ApplyInitialView"/>).
 /// Before this, every tab opened on Pods in all namespaces whatever it had been left on,
-/// so each launch began with the same two or three clicks on every tab — and a context
-/// whose kubeconfig names a namespace opened somewhere kubectl would not.
+/// so each launch began with the same two or three clicks on every tab. With nothing saved
+/// it opens on all namespaces, except where listing them was refused.
 /// </summary>
 public class ClusterTabInitialViewTests
 {
@@ -56,14 +56,17 @@ public class ClusterTabInitialViewTests
     }
 
     [Test]
-    public async Task With_nothing_saved_the_contexts_own_namespace_and_pods_are_used()
+    public async Task With_nothing_saved_pods_in_all_namespaces_are_used_not_the_contexts_own()
     {
+        // The choice is shared with the Applications mode, the whole cluster at a glance; the
+        // context's namespace would open it on one namespace's applications.
         var tab = Tab(null, null, "default", "payments");
 
         tab.ApplyInitialView(fallbackNamespace: "payments");
 
         await Assert.That(tab.SelectedKind!.Descriptor.Kind).IsEqualTo("Pod");
-        await Assert.That(tab.SelectedNamespace).IsEqualTo("payments");
+        await Assert.That(tab.SelectedNamespace).IsEqualTo(ClusterTabViewModel.AllNamespaces);
+        await Assert.That(tab.Applications.SelectedNamespaces).IsEmpty();
     }
 
     [Test]

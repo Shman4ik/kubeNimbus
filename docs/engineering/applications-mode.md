@@ -135,11 +135,14 @@ and Argo's own Degraded/Unknown when nothing read from the workloads explains it
 
 ## The list
 
-1. **It owns its own watches.** One list+watch per kind (Deployment, StatefulSet, DaemonSet,
-   CronJob, Job, ReplicaSet, Pod, and Argo's Application when discovery serves it), through
-   the same `WatchResourceAsync` informer every other list uses, started the first time the
-   mode is shown for a tab and stopped only when the tab closes. The Resources list's watch
-   is never touched, so switching modes restarts nothing in either direction.
+1. **It holds its own subscriptions.** One list+watch per kind (Deployment, StatefulSet,
+   DaemonSet, CronJob, Job, ReplicaSet, Pod, and Argo's Application when discovery serves it),
+   through the connection's shared watches (`ClusterClient.Watches`), subscribed the first time
+   the mode is shown for a tab and dropped only when the tab closes. The Resources list's
+   subscription is never touched, so switching modes restarts nothing in either direction.
+   Since 2026-10-12 the two share the source when they read the same collection: Pods across
+   the cluster are listed once for both, and the Resources list of any of these kinds in one
+   namespace is a filter of what this mode already holds.
 2. **Narrow RBAC is the expected case.** Each kind is tried across the cluster. A 403 (on the
    list, or on the watch where list is allowed and watch is not) moves it to one watch per
    namespace from `ApplicationScope.CandidateNamespaces`: the kubeconfig context's namespace,
@@ -202,9 +205,11 @@ and Argo's own Degraded/Unknown when nothing read from the workloads explains it
    closes, and a row's box, Ctrl/Cmd+click or Space adds or removes one and keeps the picker
    open. The All namespaces row's box clears the choice. The button reads All namespaces, one or
    two names, or "3 namespaces" with the names in its tooltip. Five decisions:
-   - **Its own selection, not the tab's.** The Resources list's namespace is often the
-     kubeconfig context's, and this list is the whole cluster at a glance, so it opens on All
-     namespaces whatever the other mode shows. Session state, like the chips.
+   - **The tab's selection, shared with Resources and kept by the workspace** (2026-10-12).
+     It was its own, session-only and opening on All namespaces, so that the Resources list's
+     default (the kubeconfig context's namespace) would not narrow the whole-cluster view; the
+     owner asked for one choice that survives a restart. The Resources default moved to All
+     namespaces instead ([several-namespaces](several-namespaces.md), "What is kept").
    - **Its rows are the namespaces applications run in, with their counts**, taken from the
      rows rather than a namespace list. It offers only what narrows to something, and it works
      where RBAC refuses `list namespaces`. A chosen namespace whose last application went away

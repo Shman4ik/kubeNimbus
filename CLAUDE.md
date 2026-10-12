@@ -355,7 +355,8 @@ The preferences page applies immediately, has no OK/Cancel, and has exactly four
 
 Workload and node detail sync their pod grids' selection in code-behind, never through a
 two-way `SelectedItem`. The namespace picker offers a typed name only until the namespace
-list has been read. Full text: [workload-detail](docs/engineering/workload-detail.md).
+list has been read. **The namespace choice is the tab's, one for both modes**, kept by the
+workspace; a tab with nothing saved opens on All namespaces ([several-namespaces](docs/engineering/several-namespaces.md)). Full text: [workload-detail](docs/engineering/workload-detail.md).
 
 ## The command catalog (shortcuts, palette, cheat sheet, docs)
 
@@ -454,6 +455,9 @@ Full text: [aot-watch-and-discovery](docs/engineering/aot-watch-and-discovery.md
   what a plugin returned, and read `_client` once per operation.
 - Runtime kinds, pods included, go through `WatchResourceAsync` with `DynamicResource`: one
   live-list path. **A watch reaches the UI thread in batches**, never one hop per event.
+- **A list of a whole collection subscribes to `ClusterClient.Watches`** (`WatchCache`), never
+  `WatchResourceAsync` directly: one source per collection path for both modes, the last five
+  idle ones kept live, Refresh relists in place. Only a selector watch calls the client.
 
 ## Discovery, server-side apply, events, exec, port-forward
 

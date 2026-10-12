@@ -170,7 +170,7 @@ public static class ClusterFleet
         Action<FleetMember, Exception>? connectionLost,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var stream = target.Member.Client.WatchResourceAsync(
+        var stream = target.Member.Client.Watches.WatchAsync(
             target.Descriptor,
             target.Descriptor.Namespaced ? @namespace : null,
             connectionLost: ex => connectionLost?.Invoke(target.Member, ex),

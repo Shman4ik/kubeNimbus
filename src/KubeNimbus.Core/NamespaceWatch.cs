@@ -33,7 +33,7 @@ public static class NamespaceWatch
         CancellationToken cancellationToken = default) =>
         AsyncMerge.Merge(
             namespaces.Select(ns => TagAsync(
-                client.WatchResourceAsync(
+                client.Watches.WatchAsync(
                     descriptor, ns,
                     connectionLost: ex => connectionLost?.Invoke(ns, ex),
                     cancellationToken: cancellationToken),

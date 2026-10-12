@@ -5,7 +5,9 @@
 Both namespace pickers, the Resources list's and the Applications list's, choose one
 namespace or several (2026-10). A team that owns `payments`, `checkout` and `ledger` used to
 choose between one of them and the whole cluster; Lens and Headlamp both let it choose the
-three. This page covers the Resources list, where the choice is a watch; the Applications
+three. **The two pickers make one choice, the tab's** (2026-10-12): a namespace chosen in
+Applications is the one Resources shows, and the other way round, and the workspace keeps it.
+This page covers the Resources list, where the choice is a watch; the Applications
 list only narrows rows it has already read, and its half is in
 [applications-mode](applications-mode.md), "The list", rule 9.
 
@@ -89,6 +91,18 @@ every row compares equal on it and the sort's own tie-break decides. `NamespaceC
 removed). The Helm release list is a grid of its own and follows the same rule, since it reads the same
 choice (its synthetic kind is namespaced); a release's history has no Namespace column.
 
+## One choice for both modes
+
+`ApplicationsViewModel.SelectedNamespaces` mirrors `ClusterTabViewModel.SelectedNamespaces`;
+the Applications picker writes through `ClusterTabViewModel.SetNamespaces` and redraws when
+the tab raises `SelectedNamespaces`, so whatever moves the choice (either picker, the palette,
+a reveal, a restore) moves it in both modes. Until 2026-10-12 the Applications picker kept a
+session-only choice of its own and opened on All namespaces, so a reader who chose three
+namespaces there found them gone on the next launch, and found Resources showing something
+else. A choice made in Applications re-reads the Resources list behind it; with the shared
+watches ([aot-watch-and-discovery](aot-watch-and-discovery.md), "The shared watches") a kind
+the Applications mode already reads costs no second list.
+
 ## What is kept
 
 `workspace.json` keeps every chosen namespace in `TabSnapshot.Namespaces` beside
@@ -97,6 +111,13 @@ choice (its synthetic kind is namespaced); a release's history has no Namespace 
 missing from a namespace list that was read has been deleted and is dropped; one missing
 because listing was refused is kept. `PRIVACY.md` says the workspace holds "the namespace or
 namespaces showing".
+
+**A tab with nothing saved opens on All namespaces** in both modes, not on the kubeconfig
+context's namespace (2026-10-12): the choice is shared with the Applications mode, which is
+the whole cluster at a glance, and the context's `default` opened it on an empty list. The
+exception is a cluster whose namespace list was refused: there the cluster-wide read is
+refused too, and the context's namespace is how kubectl copes, so the tab opens on it. The
+demo follows the same rule and opens on all of its namespaces.
 
 ## Verification
 

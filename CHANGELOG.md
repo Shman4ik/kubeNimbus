@@ -12,6 +12,17 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+### Changed
+
+- **One namespace choice per cluster tab, kept across restarts.** The Applications and
+  Resources pickers now share the tab's choice: namespaces chosen in one mode are the ones
+  the other shows, and the next launch opens on them again. A tab with nothing saved opens on
+  all namespaces (or on the kubeconfig context's namespace where listing namespaces is refused).
+- **Lists open faster.** Each collection is listed and watched once per connection and shared
+  by both modes, so the Resources list of Pods, Deployments and the other kinds the
+  Applications mode reads appears at once, and the last five kinds you left stay live: going
+  back to one shows current rows with no new list. Refresh still reads the cluster again.
+
 ## [0.7.0] - 2026-10-11
 
 ### Added
