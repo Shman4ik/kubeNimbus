@@ -49,7 +49,10 @@ shared with other sessions running at the same time:
   that label older than two hours (`LiveCluster.IsAbandoned`, pinned by
   `LiveNamespaceSweepTests`). The age is the guard that keeps one run's sweep away from a
   run still going, and the label key is new so the sweep can never reach a namespace made
-  by the old code. A test that needs a namespace-wide object (a `LimitRange`) makes a
+  by the old code. `KUBENIMBUS_LIVE_NAMESPACE` names the namespace instead, for a session
+  that works under a namespace rule of its own (the backlog bundles each mutate only
+  `bundle-<letter>`); such a run skips both sweeps, so it touches nothing outside that
+  namespace, and its hook deletes it as usual. A test that needs a namespace-wide object (a `LimitRange`) makes a
   second namespace with the same label and deletes it itself. Cluster-scoped objects (a
   throwaway CRD) carry the run id in their name and group, are deleted in a `finally`, and
   carry the same label with the run id as its value, so a run killed before its `finally`

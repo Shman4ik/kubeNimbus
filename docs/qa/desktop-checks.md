@@ -179,7 +179,8 @@ SidebarSplitter -DX 300` (and back).
 - **G-2 [input]** ⋯ → "Clear the pane": the pane empties and the menu closes. ⋯ → "Save to a
   file…": a save dialog opens; cancel it.
 - **G-3 [input]** `shop-web` row menu "Logs (all pods)" (its UIA name is the help text "Tail every
-  pod this workload owns in one pane…"). ⋯ → Clear: "Cleared N lines — still following N pods; …".
+  pod this workload owns in one pane…"). ⋯ → Clear: "Cleared N lines — still following N pods; …"; once new lines arrive, the bar above
+  them reads "Cleared N lines; the lines shown arrived since." (#319).
   Save: the dialog "Save aggregated logs", file name `shop-web-all-pods`; cancel.
 - **G-4 [text]** (#290) The Range combo's tooltip: "How far back the log is read: a number of
   lines, a time window, or everything the node kept", no mention of the demo. On the demo
@@ -195,12 +196,12 @@ SidebarSplitter -DX 300` (and back).
   Copy puts pod-prefixed lines on the clipboard.
 - **G-7 [text]** (#226) `shop-api-…`: each Range item loads lines that keep arriving with Follow on
   (compare two reads of `LogItems`' height 5 s apart). Follow off with "Last 5 minutes" and
-  with "Last 200 lines": "Selected range loaded — this is a snapshot." (shown only as the
-  empty-pane placeholder: Clear first). `qa-quiet` "Last 5 minutes": Follow on "No lines
+  with "Last 200 lines": "Selected range loaded — this is a snapshot." in the bar above the
+  lines (#319; 0.7.0 showed it only as the empty-pane placeholder). `qa-quiet` "Last 5 minutes": Follow on "No lines
   received yet in the last 5 minutes — following new output.", off "No lines in the last 5
   minutes."
-- **G-8 [text]** (#226) `qa-restarter`, Previous (P): "Previous logs loaded — this is a snapshot,
-  not a live stream." with `started …` and `ERROR exiting`; Range "Last 200 lines" and "Last 5
+- **G-8 [text]** (#226, #319) `qa-restarter`, Previous (P): "Previous logs loaded — this is a snapshot,
+  not a live stream." in the bar above the lines, which show `started …` and `ERROR exiting`; Range "Last 200 lines" and "Last 5
   minutes" reload them.
 - **G-9 [text]** (#226) Preferences → Logs and metrics → Log scrollback 200, **then** open
   `qa-chatty` (about 20 lines a second): "Older lines were trimmed at the 200-line scrollback
@@ -228,8 +229,12 @@ Setup: `qa-seed.ps1 -Reset`; `./scripts/qa-netcut.ps1 start` for G-11.
   that logs a line every 2 s: its logs say "app has not started — the pod is not scheduled onto
   a node yet (SchedulingGated), so there is no log to read."; remove the gate
   (`kubectl patch … --type=json -p '[{"op":"remove","path":"/spec/schedulingGates"}]'`) and,
-  with no click, "INFO gated pod line …" appears within about 30 s. **0.7.0 failed:** the pane
-  stayed on `container "app" in pod "qa-gated" is not available (400 Bad Request)`. Delete the pod.
+  with no click, "INFO gated pod line …" appears within about 30 s; a `container "app" in pod
+  "qa-gated" is not available` or `is waiting to start` sentence may show in between, as a wait
+  (not in warning colour). Repeat with `Logs (all pods)` on a Deployment whose pod is gated: the chip
+  reads "not started", then streams. **0.7.0 failed:** the pane stayed on `container "app" in pod
+  "qa-gated" is not available (400 Bad Request)` (#184; fixed by #309's retry, and the rule is a
+  live test, `GatedPodLogsLiveTests`; what stays here is the panes' own wiring). Delete the pod.
 - **G-14 [input]** (#222) Ctrl+Shift+L: the palette opens prefilled `logs `; "shop-web" and the pod
   row streams (a line under 10 s old), "Logs: Deployment/shop-web" opens the multi-pod pane. The
   chord in a YAML editor opens it. In an exec terminal it is **not** meant to (the terminal
@@ -414,3 +419,8 @@ kubeconfig is merged into the run's. Otherwise all six are UNSURE "no Argo sandb
   failure view in both modes; switching kind in the Resources sidebar behind it shows no "Loading…"
   and starts nothing (no new "Watch connection lost"). `restore`, Retry: both modes load.
   Delete the `qa-nodes-only` objects and context when M-4 is done.
+- **M-11 [text]** (#310) Context `qa-limited` (reads pods in `qa-shop`, no metrics): Pods in `qa-shop`
+  has no CPU or Memory column, and the status bar reads "CPU and memory are hidden: this user may
+  not read pod usage (pods.metrics.k8s.io is forbidden: …)." Switch to Deployments and back to Pods:
+  the same, at once (the refusal is remembered; no "—" columns appear first). Reconnect the tab:
+  asked once more, same result. **0.7.0:** the columns read "—" for ever.

@@ -49,6 +49,14 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     private CancellationTokenSource? _watchCts;
     private bool _metricsApiAvailable;
 
+    /// <summary>
+    /// Metered kinds whose usage this user may not read (a 403 from metrics.k8s.io), with
+    /// the server's sentence, so returning to the list does not ask again. Narrow RBAC is
+    /// the expected case, and a refusal is an answer, not a blip (#310). Cleared on connect,
+    /// the one moment the user's permissions can have changed under the app's feet.
+    /// </summary>
+    private readonly Dictionary<string, string> _metricsRefused = new(StringComparer.Ordinal);
+
     public ClusterContext Context { get; }
 
     public string Header => Context.Name;
@@ -214,7 +222,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// warning — still gets the bar.
     /// </summary>
     public bool IsStatusWorthShowing =>
-        Status != _routineStatus || ConnectionWarning is not null || IsTlsUnverified || IsPlainHttp;
+        Status != _routineStatus || ConnectionWarning is not null || IsTlsUnverified || IsPlainHttp
+        || MetricsNotice is not null;
 
     /// <summary>
     /// The connected cluster's entry sets <c>insecure-skip-tls-verify</c>: nothing checks
@@ -2677,6 +2686,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// </summary>
     private async Task DetectMetricsApiAsync()
     {
+        _metricsRefused.Clear();
         try
         {
             _metricsApiAvailable = Client is not null && await Client.IsMetricsApiAvailableAsync();
@@ -2753,6 +2763,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     private void StopWatch()
     {
         _lastUsage = null;
+        MetricsNotice = null;
         _capacityActive = false;
         Capacity.Hide();
         _watchCts?.Cancel();
@@ -3259,6 +3270,16 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         var pods = descriptor.Kind == "Pod";
 
+        // Outside fleet mode a refusal is remembered for the tab's connection: the columns
+        // stay hidden with the reason, and nothing is asked again (#310).
+        var remember = sources.Count == 1 && sources[0].ClusterName.Length == 0;
+        if (remember && _metricsRefused.TryGetValue(descriptor.Kind, out var known))
+        {
+            ApplyUsage([], token, known);
+            RefuseMetrics(descriptor.Kind, known, token, remember: false);
+            return;
+        }
+
         _ = Task.Run(async () =>
         {
             using var timer = new PeriodicTimer(MetricsPollInterval);
@@ -3268,6 +3289,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 {
                     var byKey = new Dictionary<string, (long? Cpu, long? Memory)>(StringComparer.Ordinal);
                     var unavailable = 0;
+                    var refusedCount = 0;
                     string? refused = null;
 
                     // One request per cluster in scope (exactly one outside fleet mode).
@@ -3299,7 +3321,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                                     case NodeUsageOutcome.Refused:
                                         // Narrow RBAC: the metrics API is there and this user may not
                                         // read node usage. The capacity strip says so (#206) with the
-                                        // server's sentence; the columns keep their dashes.
+                                        // server's sentence, and the columns go (#310).
+                                        refusedCount++;
                                         refused ??= read.Reason;
                                         break;
                                     default:
@@ -3317,6 +3340,13 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                             // Registered but not serving (metrics-server down), or absent
                             // entirely on this cluster.
                             unavailable++;
+                        }
+                        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                        {
+                            // This user may not read pod usage: an answer, which asking again
+                            // every interval only repeats (#310).
+                            refusedCount++;
+                            refused ??= (ex as KubernetesApiException)?.ServerMessage ?? ex.Message;
                         }
                         catch (Exception) when (!token.IsCancellationRequested)
                         {
@@ -3338,6 +3368,20 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                         return;
                     }
 
+                    if (refusedCount > 0 && refusedCount + unavailable == sources.Count)
+                    {
+                        // Every cluster in scope refused or has no metrics API: the columns
+                        // would read "—" forever, so they go the way they go on a cluster
+                        // without metrics-server, with the reason said, and the poll stops.
+                        var reason = refused ?? "";
+                        await Dispatcher.UIThread.InvokeAsync(() =>
+                        {
+                            ApplyUsage(byKey, token, reason);
+                            RefuseMetrics(descriptor.Kind, reason, token, remember);
+                        });
+                        return;
+                    }
+
                     await Dispatcher.UIThread.InvokeAsync(() => ApplyUsage(byKey, token, refused));
                     await timer.WaitForNextTickAsync(token);
                 }
@@ -3348,6 +3392,42 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             }
         }, token);
     }
+
+    /// <summary>
+    /// Why the list's CPU/Memory columns are hidden when it is not that the cluster has no
+    /// metrics API: this user may not read the kind's usage (a 403, #310). Said in the
+    /// status bar, because a column that is simply absent does not say why. Not on the Nodes
+    /// list, whose capacity strip already says "usage not permitted" (UI rule 20).
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsStatusWorthShowing))]
+    private string? _metricsNotice;
+
+    /// <summary>
+    /// The list's usage was refused: hide the columns and say why. Internal so the
+    /// view-model tests can deliver a poll's refusal without a cluster.
+    /// </summary>
+    internal void RefuseMetrics(string kind, string reason, CancellationToken token, bool remember)
+    {
+        if (token.IsCancellationRequested)
+        {
+            return;
+        }
+
+        if (remember)
+        {
+            _metricsRefused[kind] = reason;
+        }
+
+        AreMetricsVisible = false;
+        MetricsNotice = _capacityActive
+            ? null
+            : $"CPU and memory are hidden: this user may not read {kind.ToLowerInvariant()} usage"
+              + (reason.Length > 0 ? $" ({reason})." : ".");
+    }
+
+    /// <summary>True when a refusal for <paramref name="kind"/> is remembered, so its poll does not start.</summary>
+    internal bool IsMetricsRefused(string kind) => _metricsRefused.ContainsKey(kind);
 
     /// <summary>
     /// The last poll of the list's current watch, kept so a row that arrives after it takes

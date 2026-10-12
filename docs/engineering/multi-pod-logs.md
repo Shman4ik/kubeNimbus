@@ -231,7 +231,8 @@ container that is not running, and this one has not run yet. The multi-pod pane 
 stream the instant its watch reports a pod, so during a rollout a new replica lands in that
 window (observed, with its empty 200, in one of about eight `Live/WorkloadLogsLiveTests` runs against k3s v1.33; the other
 runs saw the server's `is waiting to start: ContainerCreating` and `is not available` 400s,
-which the pane already retries on the pod's next Modified). Left alone, the new pod sat in
+which the pane now waits out through `LogFollowRetry` — see [log-pane-reading](log-pane-reading.md),
+"A refusal while the container comes up is a wait", #309). Left alone, the new pod sat in
 the strip with no lines, blamed on a dropped connection, and no later event restarted it.
 So when the stream that ended was opened on a container that was not running
 (`LogStreamEnd.StartedAfterRequest`: not running at the start, running now), the

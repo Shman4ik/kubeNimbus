@@ -56,7 +56,19 @@ internal static class LiveCluster
     /// single constant shared by every run, and a run's after-assembly cleanup then deleted
     /// the namespace another run was still testing in (#261).
     /// </summary>
-    public static readonly string Namespace = $"kn-live-{RunId}";
+    /// <remarks>
+    /// <c>KUBENIMBUS_LIVE_NAMESPACE</c> names it instead, for a session that shares the
+    /// sandbox under a rule of its own (the backlog bundles each mutate only
+    /// <c>bundle-&lt;letter&gt;</c>). Such a run touches nothing outside that namespace: the
+    /// sweeps of other runs' leftovers are skipped (<see cref="IsNamedByEnvironment"/>).
+    /// </remarks>
+    public static readonly string Namespace =
+        Environment.GetEnvironmentVariable("KUBENIMBUS_LIVE_NAMESPACE") is { Length: > 0 } named
+            ? named
+            : $"kn-live-{RunId}";
+
+    /// <summary>True when <c>KUBENIMBUS_LIVE_NAMESPACE</c> chose <see cref="Namespace"/>.</summary>
+    private static bool IsNamedByEnvironment => !Namespace.StartsWith("kn-live-", StringComparison.Ordinal);
 
     /// <summary>
     /// The label every run's namespace carries, valued with its run id. A key of its own
@@ -152,8 +164,11 @@ internal static class LiveCluster
                 await Task.Delay(1000, ct);
             }
 
-            await SweepAbandonedNamespacesAsync(client, ct);
-            await SweepAbandonedCrdsAsync(client, ct);
+            if (!IsNamedByEnvironment)
+            {
+                await SweepAbandonedNamespacesAsync(client, ct);
+                await SweepAbandonedCrdsAsync(client, ct);
+            }
 
             // A pod cannot be created until the namespace's default ServiceAccount exists.
             await WaitUntilAsync(

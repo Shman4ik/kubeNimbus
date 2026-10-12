@@ -228,6 +228,45 @@ internal static class ClusterTabScenarios
     }
 
     /// <summary>
+    /// #319: Previous on a demo pod whose container has restarted — a snapshot with lines in
+    /// it, which says so above them rather than only as the empty pane's placeholder.
+    /// </summary>
+    public static ClusterTabViewModel DemoPodDetailPreviousSnapshot()
+    {
+        var tab = DemoTab();
+        tab.SelectedRow = tab.Rows.First(r => r.Name.StartsWith("notification-dispatcher", StringComparison.Ordinal));
+        tab.OpenSelectedCommand.Execute(null);
+        if (tab.SelectedInspectorTab is PodDetailTabViewModel detail)
+        {
+            detail.IsShowingPreviousLogs = true;
+
+            // Until the snapshot has finished loading, which is when the pane says it is one.
+            for (var i = 0; i < 500 && !detail.HasLogStatusNotice; i++)
+            {
+                Dispatcher.UIThread.RunJobs();
+                Thread.Sleep(10);
+            }
+        }
+
+        return tab;
+    }
+
+    /// <summary>
+    /// #319: the multi-pod pane with Follow turned off over lines it had read — no longer a
+    /// live tail, and said so above the lines.
+    /// </summary>
+    public static ClusterTabViewModel DemoWorkloadLogsStopped()
+    {
+        var tab = DemoWorkloadLogs();
+        if (tab.SelectedInspectorTab is WorkloadLogsTabViewModel logs)
+        {
+            logs.IsFollowing = false;
+        }
+
+        return tab;
+    }
+
+    /// <summary>
     /// The inspector state a demo cluster genuinely cannot serve. Exec is the example;
     /// port-forward and the YAML editor's write half render the same way. This is the
     /// scenario that pins UI rule 9 for demo mode — "not available" must be a stated,
@@ -1627,6 +1666,19 @@ internal static class ClusterTabScenarios
         var client = FixtureData.CreateOfflineClient();
         var detail = new PodDetailTabViewModel(client, row, _ => { }, (_, _) => Task.CompletedTask) { IsPreview = false };
 
+        // The pane's own follow goes to the offline client and is refused at once. Since #319
+        // a pane with lines says how its stream ended, so that refusal would print over the
+        // fixture's lines as "No connection could be made…", a state of the harness and not
+        // of the pane this scenario shows. Let it land, then clear what it said.
+        for (var i = 0; i < 300 && detail.LogStatus is null; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(10);
+        }
+
+        detail.LogStatus = null;
+        detail.IsLogStatusProblem = false;
+
         foreach (var raw in new[]
         {
             "2026-07-20T08:41:02.114Z INFO  starting report-generator v2.14.3",
@@ -1645,7 +1697,8 @@ internal static class ClusterTabScenarios
         // see these lines the way they see a stream's.
         detail.FlushLogLines();
 
-        detail.IsFollowingLogs = true;
+        // Follow is left as the refused stream left it, off: turning it on would ask the
+        // offline client again, and its refusal would replace these lines.
 
         // Same reasoning as the list rows: no live metrics API behind the fixture,
         // so replay a session's worth of stand-in polls through the tab's real

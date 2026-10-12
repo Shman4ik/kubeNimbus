@@ -348,6 +348,13 @@
                     IsVisible="{Binding TrimNotice, Converter={x:Static conv:StringNotEmptyToBoolConverter.Instance}}">
               <TextBlock Text="{Binding TrimNotice}" FontSize="11.5" />
             </Border>
+            <!-- The pane's state while it holds lines (#319): a snapshot, the run before, a
+                 stream that ended, lines cleared. The empty pane says the same in its
+                 placeholder; a full pane never draws that, so a snapshot read as a live tail. -->
+            <Border Classes="infoBar" Classes.warn="{Binding IsLogStatusProblem}" Margin="0,0,0,4"
+                    IsVisible="{Binding HasLogStatusNotice}">
+              <TextBlock Text="{Binding LogStatusNotice}" TextWrapping="Wrap" FontSize="11.5" />
+            </Border>
             <!-- A regular expression that does not parse filters nothing and says why. -->
             <Border Classes="infoBar error" Margin="0,0,0,4" IsVisible="{Binding HasLogSearchError}">
               <TextBlock Text="{Binding LogSearchError}" TextWrapping="Wrap" FontSize="11.5" />

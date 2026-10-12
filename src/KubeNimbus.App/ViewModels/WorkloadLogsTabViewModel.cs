@@ -256,6 +256,12 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
     /// <summary>Lines the reader cleared while nothing has arrived since; see pod detail's twin.</summary>
     private int? _clearedLines;
 
+    /// <summary>
+    /// What <see cref="_clearedLines"/> was once lines arrived after the clear: the pane's
+    /// status notice keeps saying so while it shows them (#319). Reset with the buffer.
+    /// </summary>
+    private int? _clearedEarlier;
+
     private readonly LogFind _find = new();
 
     public IReadOnlyList<LogRange> LogRanges => LogRange.Choices;
@@ -290,6 +296,8 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LogPlaceholder))]
     [NotifyPropertyChangedFor(nameof(HasLogPlaceholder))]
+    [NotifyPropertyChangedFor(nameof(LogStatusNotice))]
+    [NotifyPropertyChangedFor(nameof(HasLogStatusNotice))]
     private string? _logStatus;
 
     [ObservableProperty]
@@ -453,7 +461,7 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
         RaisePlaceholder();
     }
 
-    private void ApplyPodEvent(ResourceEvent<DynamicResource> evt)
+    internal void ApplyPodEvent(ResourceEvent<DynamicResource> evt)
     {
         switch (evt.Type)
         {
@@ -519,14 +527,16 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
         {
             // A pod whose container had not started when the pane opened is picked up once
             // it has: an unscheduled pod's follow request is an immediate 204 No Content, so
-            // its stream ends cleanly rather than failing (a scheduled pod still creating its
-            // container is a 400 instead, the Failed path), and without this it stayed "not
-            // started" after the pod was running. Re-opened only once the pod no longer reads as never
-            // started, so a pending pod's status updates do not each cost a request.
+            // its stream ends cleanly, and a scheduled pod still creating its container is
+            // refused with a 400 (LogFollowRetry); both leave the source "not started", and
+            // without this it stayed so after the pod was running. Re-opened only once the
+            // container has a run (LogFollowRetry.HasStarted), so a pending pod's status
+            // updates do not each cost a request — and a scheduled pod whose kubelet has not
+            // reported the container yet is not asked, only to be refused again.
             var retry = existing.State switch
             {
                 LogSourceState.Failed => true,
-                LogSourceState.NotStarted => !LogStreamEnd.DescribePod(pod.Raw, existing.ContainerName, null).NotStarted,
+                LogSourceState.NotStarted => LogFollowRetry.HasStarted(PodDetails.ContainerRunOf(pod.Raw, existing.ContainerName)),
                 _ => false,
             };
             if (retry && !_streamsByPod.ContainsKey(pod.Name))
@@ -669,14 +679,63 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
             {
                 // normal on close, on Follow off, or when the pod goes away
             }
+            catch (Exception ex) when (LogFollowRetry.IsNotStartedRefusal(ex, atStart))
+            {
+                await WaitForStartAsync(source, FirstLine(ex.Message), client, podNamespace, atStart, token);
+            }
             catch (Exception ex)
             {
-                // The API server's own sentence — "container \"app\" is waiting to start:
-                // ContainerCreating" is the whole diagnosis, and a Modified event will
-                // bring this pod back round to StartStream once it is running.
                 await EndSourceAsync(source, LogSourceState.Failed, FirstLine(ex.Message), token);
             }
         }, token);
+    }
+
+    /// <summary>
+    /// A follow refused because the container has not started (#309). The chip reads "not
+    /// started" with the API server's own sentence ("container \"app\" is waiting to start:
+    /// ContainerCreating"), and the pod's next Modified event re-opens it once the container
+    /// runs (<see cref="AddSource"/>). That event may already have come: under load the
+    /// refusal arrives after the pod's last Modified, Running and Ready, and nothing else
+    /// would ever bring the pod round. So the pod is read again, as the Ended path does, and
+    /// followed at once if its container has started since the request.
+    /// </summary>
+    private async Task WaitForStartAsync(
+        LogSourceViewModel source, string refusal, ClusterClient client, string podNamespace,
+        ContainerRun? atStart, CancellationToken token)
+    {
+        await EndSourceAsync(source, LogSourceState.NotStarted, refusal, token);
+        ContainerRun? now;
+        try
+        {
+            (_, _, _, now) = await LogStreamEnd.ExplainWithRunAsync(
+                client, podNamespace, source.PodName, source.ContainerName, atStart, token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        await Dispatcher.UIThread.InvokeAsync(() => FollowIfStarted(source, atStart, now, token));
+    }
+
+    /// <summary>
+    /// The second half of <see cref="WaitForStartAsync"/>, on the UI thread: re-opens the
+    /// source when its container has started since the refused request, unless the reader
+    /// or a Modified event has moved it on already. Internal so the view-model tests can
+    /// deliver the pod read after the last Modified event, the order #309 is about.
+    /// </summary>
+    internal bool FollowIfStarted(LogSourceViewModel source, ContainerRun? atStart, ContainerRun? now, CancellationToken token)
+    {
+        if (token.IsCancellationRequested
+            || source.State is not LogSourceState.NotStarted
+            || _streamsByPod.ContainsKey(source.PodName)
+            || !LogFollowRetry.ShouldFollowAgain(atStart, now))
+        {
+            return false;
+        }
+
+        StartStream(source);
+        return true;
     }
 
     private void OnLogResponseReady(LogSourceViewModel source, CancellationToken token, bool follow) =>
@@ -991,6 +1050,7 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
             built.Add(new LogLineViewModel(raw, ShowLogTimestamps, source, UseUtcTimestamps));
         }
 
+        _clearedEarlier = _clearedLines ?? _clearedEarlier;
         _clearedLines = null;
 
         var ordered = OrderBatch(built);
@@ -1440,6 +1500,7 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
 
     private void ClearBuffer()
     {
+        _clearedEarlier = null;
         lock (_pendingLock)
         {
             _pending.Clear();
@@ -1591,10 +1652,28 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
 
     public bool HasLogPlaceholder => LogPlaceholder is not null;
 
+    /// <summary>
+    /// The pane's state while it holds lines (#319) — see pod detail's twin and
+    /// <see cref="LogNotice"/>. Here the snapshot sentence lives on each source rather than
+    /// on the pane, so the pane says it when every pod still listed has loaded one: Follow
+    /// off, or the run before.
+    /// </summary>
+    public string? LogStatusNotice => LogNotice.Compose(_allLogLines.Count, _clearedEarlier,
+        LogStatus is { Length: > 0 }
+            ? LogStatus
+            : Sources.Where(s => s.State is not LogSourceState.Gone).ToList() is { Count: > 0 } live
+              && live.All(s => s.State is LogSourceState.Loaded)
+                ? live[0].StatusMessage
+                : null);
+
+    public bool HasLogStatusNotice => LogStatusNotice is not null;
+
     private void RaisePlaceholder()
     {
         OnPropertyChanged(nameof(LogPlaceholder));
         OnPropertyChanged(nameof(HasLogPlaceholder));
+        OnPropertyChanged(nameof(LogStatusNotice));
+        OnPropertyChanged(nameof(HasLogStatusNotice));
     }
 
     // ------------------------------------------------------------------ commands

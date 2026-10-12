@@ -68,7 +68,9 @@ the next run records one in this table.
   and its 403 wording (M-1, M-3, M-4: a view-model test with a forbidden metrics client; the
   desktop run could not even catch the first), the column chooser's rules (L-10 to L-13), the
   Argo menus on the demo dataset (K-1 to K-7: harness scenarios), the log pane's range and
-  snapshot messages (G-7, G-8), and G-13's retry (a live test with a gated pod). The desktop
+  snapshot messages (G-7, G-8; the snapshot half is now `LogStatusNoticeTests`), and G-13's retry
+  (its rule is now `Live/GatedPodLogsLiveTests` and `LogFollowRetryTests`; the panes' wiring
+  between them still needs the desktop). The desktop
   run then keeps what only a desktop shows: real input, popups, focus, a second window, a
   real API server's timing.
 - **The 0.7.0 findings themselves** (C-2's wheel, G-13, P-4c, M-4, and G-14's terminal chord)
