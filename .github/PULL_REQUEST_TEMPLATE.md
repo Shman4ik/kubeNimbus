@@ -34,9 +34,10 @@ Anything left unverified:
 - [ ] [CLAUDE.md](../CLAUDE.md) updated if this changes a rule it states (one line),
       and the feature's `docs/engineering/` page if it changes what the page
       describes, with the evidence — the contract, not a record of the past
-- [ ] **Touches `shared/nimbusUi`?** Then the change is pgNimbus's too: push
-      the subtree up (`git subtree push --prefix shared/nimbusUi …`), open the
-      matching pgNimbus PR, and link it here. A shared change that lands in one
+- [ ] **Touches `shared/nimbusUi`?** Then the change is pgNimbus's too: copy the
+      files into a nimbusUi PR and into pgNimbus as a "Take nimbusUi: …" commit
+      (`git subtree` no longer works here; CLAUDE.md's sibling-project rule 1),
+      open the matching PRs, and link them here. A shared change that lands in one
       app only is how the copies drifted in the first place — see
       [DESIGN.md](../shared/nimbusUi/DESIGN.md).
 - [ ] Anything general enough for pgNimbus (a token, a style class, a window
