@@ -1,8 +1,6 @@
-> **DRAFT — not published.** Nothing links to this page yet, the README included. It is
-> the text of a comparison page (#230), written to be checked before anyone reads it.
-> Publishing it, and choosing where, is the owner's step. Every claim about another
-> product carries a source and the date it was checked; every claim about kubeNimbus
-> points at a file in this repository. A claim that goes stale is a defect in this page.
+> Every claim about another product carries a source and the date it was checked; every
+> claim about kubeNimbus points at a file in this repository. A claim that has gone stale
+> is a defect in this page: open an issue and it gets fixed or removed.
 >
 > Last checked: **2026-10-11**.
 

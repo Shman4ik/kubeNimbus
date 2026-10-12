@@ -30,6 +30,7 @@
   <a href="#screenshots">Screenshots</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#what-it-does">Features</a> ·
+  <a href="docs/comparison.md">How it compares</a> ·
   <a href="docs/keyboard-shortcuts.md">Keyboard shortcuts</a> ·
   <a href="#roadmap">Roadmap</a> ·
   <a href="#support">Support</a>
@@ -49,6 +50,11 @@
 - **Your clusters stay yours.** No telemetry, account or in-cluster agent.
   Credentials stay in your kubeconfig chain. MIT licensed, including commercial
   use, with no subscription or seat limit.
+
+[How it compares](docs/comparison.md) with Lens, FreeLens, KubeUI, Aptakube,
+Headlamp and k9s: startup, footprint, telemetry and metrics without Prometheus,
+with a source and a date beside every number, and the places other clients are
+ahead said plainly.
 
 ## Screenshots
 
@@ -451,6 +457,14 @@ not the issue tracker — see [SECURITY.md](SECURITY.md).
 
 By participating you agree to the
 [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Also from here
+
+[pgNimbus](https://github.com/Shman4ik/pgNimbus) is the same idea for PostgreSQL:
+a native client that is on screen in about 0.2 s, streams rows while the query
+runs, and sends no telemetry. It shares this app's UI layer
+([nimbusUi](https://github.com/Shman4ik/nimbusUi)), so the two look and behave
+like siblings. It reached 1.0 at the end of September and is at 1.2.0 now.
 
 ## Support
 
