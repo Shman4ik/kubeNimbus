@@ -282,9 +282,14 @@ row alone and left the other two highlighted and untouched; the strip named the 
 the gesture read as acting on the selection. Now every single-object action — logs, previous
 logs, logs (all pods), exec, port-forward, scale, rollout restart, cordon, uncordon, drain, run
 now, suspend, resume, the Argo items, the PV/PVC link and Edit YAML — reads `ActionRow`, which is
-the current row with one row selected and null with several. Their commands are disabled, the
-palette leaves them out (it lists by the same `Can…` properties) and the single-letter keys check
-`CanExecute`. In the row menu each one stays in its place, disabled, with a tooltip saying why
+the current row with one row selected and null with several. Their commands are disabled and
+the single-letter keys check `CanExecute`. The palette needs its own gate, because it runs a
+command's `Execute`, which does not consult `CanExecute`, and some of its row entries were
+listed on the row's kind alone (Edit YAML always, the node shell, an Event's pod logs, the
+PV/PVC link). With several rows selected, `BuildPaletteItems` therefore lists none of the row
+block and offers only Delete, its subtitle "3 selected · asks to confirm".
+`BulkDeleteTests.The_palette_offers_only_delete_for_several_selected_rows` went red with that
+branch removed (Edit YAML for the current row came back, and Delete named that one row). In the row menu each one stays in its place, disabled, with a tooltip saying why
 (`SingleRowActionTip`, "Acts on one object, and 3 rows are selected…", shown on a disabled item
 through `ToolTip.ShowOnDisabled`); the state-dependent ones keep their slot through `Offers…`
 properties that ignore the selection count, so the menu does not change shape under a

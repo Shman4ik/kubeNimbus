@@ -251,6 +251,37 @@ public class BulkDeleteTests
     }
 
     /// <summary>
+    /// #305: the palette runs a command's Execute, which does not consult CanExecute, so it
+    /// must not list a single-object entry under a multi-row selection; Delete for all of them
+    /// is the one row entry. Mutation-checked by removing the palette's multi-selection branch:
+    /// Edit YAML for the current row is listed again, and Delete names that one row.
+    /// </summary>
+    [Test]
+    public async Task The_palette_offers_only_delete_for_several_selected_rows()
+    {
+        using var server = new StubApiServer();
+        var tab = PodTab(server.Connect());
+        var shell = new MainWindowViewModel();
+        shell.Tabs.Add(tab);
+        shell.SelectedTab = tab;
+
+        shell.Palette.Open();
+        var rowEntries = shell.Palette.FilteredItems
+            .Where(i => i.Subtitle.StartsWith("payments/", StringComparison.Ordinal) || i.Subtitle.Contains("selected", StringComparison.Ordinal))
+            .Select(i => $"{i.Title} — {i.Subtitle}")
+            .ToList();
+        shell.Palette.Close();
+
+        await Assert.That(string.Join(" | ", rowEntries)).IsEqualTo("Delete resource — 3 selected · asks to confirm · Delete");
+
+        tab.SetSelectedRows([tab.Rows[0]]);
+        shell.Palette.Open();
+        var single = shell.Palette.FilteredItems.Where(i => i.Subtitle.StartsWith("payments/checkout-a", StringComparison.Ordinal)).ToList();
+        shell.Palette.Close();
+        await Assert.That(single.Any(i => i.Title == "Edit YAML")).IsTrue();
+    }
+
+    /// <summary>
     /// The issue's own example: three nodes selected, Cordon stays in the menu (its slot does
     /// not move) but is disabled, so it can no longer cordon the current row alone.
     /// </summary>
