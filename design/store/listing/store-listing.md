@@ -10,7 +10,7 @@ Product ID `9MZ3C28M65PB`. Field limits are Partner Center's own: What's new 1,5
 description 10,000, short description 1,000, 20 product features of 200 characters each, 7 search
 terms. Every fenced block below is pasted as it stands.
 
-**Written for 0.7.0.** "What's new" describes the changes since 0.6.0; the rest of the listing
+**Written for 0.7.0**, with the closing line of the description added on 2026-10-12 (the pgNimbus cross-mention; both listings carry one). "What's new" describes the changes since 0.6.0; the rest of the listing
 describes the whole app. (0.4.0 was submitted and failed certification on policy 10.5.1, below,
 which is why 0.6.0's text carried everything since 0.4.0.) Keep this file's date in step with the
 release it describes.
@@ -108,6 +108,8 @@ Your clusters stay yours
 kubeNimbus is a self-contained NativeAOT app, with no .NET runtime to install. It connects only to the clusters you open, with no analytics, crash reporting or update checks of its own. The Microsoft Store handles app updates. Credentials stay in your kubeconfig chain; the privacy policy lists the local settings and session files.
 
 kubeNimbus is free and open source under the MIT license: https://github.com/Shman4ik/kubeNimbus
+
+Also from the same developer: pgNimbus, a PostgreSQL client built the same way, free and in the Store: https://apps.microsoft.com/detail/9N6SZT42XJ24
 ```
 
 ## Product features
