@@ -136,7 +136,8 @@ public partial class MainWindow : Window
         CommandBindings.RebuildWindowBindings(
             KeyBindings,
             WindowCommandFor,
-            ordinal => new RelaySelectTabCommand(this, ordinal));
+            ordinal => new RelaySelectTabCommand(this, ordinal),
+            () => ExecView.IsInTerminal(FocusManager?.GetFocusedElement()));
 
         PaletteShortcutLabel.Text = Hotkeys.Describe(Hotkeys.CommandPalette);
 

@@ -4,6 +4,7 @@ using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using KubeNimbus.App.ViewModels;
 using SvcSystems.UI.Terminal;
 
@@ -20,11 +21,13 @@ namespace KubeNimbus.App.Views;
 /// <c>TextBox</c>, in a Tunnel handler, because a focused TextBox eats Ctrl+C as
 /// Copy and Tab as focus navigation.
 /// <para>
-/// The one consequence worth knowing: while the terminal has focus it marks
-/// Ctrl+&lt;letter&gt; handled, so the window's own Ctrl chords (the palette, the list
-/// filter) do not fire there. That is what a terminal is for — ^C has to reach the
-/// container — and it is why Copy and Paste are on Ctrl+Shift here, as they are in
-/// every terminal emulator.
+/// The one consequence worth knowing: while the terminal has focus, Ctrl+&lt;letter&gt; and
+/// Ctrl+Shift+&lt;letter&gt; are the shell's, so the window's own Ctrl chords (the palette,
+/// the logs palette, the switcher) do not fire there. A window key binding runs before the
+/// focused control sees the key, so that takes <c>CommandBindings.ShellOwns</c> standing the
+/// window's binding aside (#222) as well as the control marking the key handled. That is
+/// what a terminal is for — ^C has to reach the container — and it is why Copy and Paste
+/// are on Ctrl+Shift here, as they are in every terminal emulator.
 /// </para>
 /// </remarks>
 public partial class ExecView : UserControl
@@ -62,26 +65,82 @@ public partial class ExecView : UserControl
             return;
         }
 
-        if (!e.KeyModifiers.HasFlag(KeyModifiers.Control) || !e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && e.KeyModifiers.HasFlag(KeyModifiers.Shift))
         {
-            return;
+            switch (e.Key)
+            {
+                case Key.C:
+                    _ = CopySelectionAsync();
+                    e.Handled = true;
+                    return;
+                case Key.V:
+                    _ = PasteFromClipboardAsync();
+                    e.Handled = true;
+                    return;
+            }
         }
 
-        switch (e.Key)
+        // The rest of the chords the control gets wrong, encoded here (#315, #222).
+        if (EncodeKey(e.Key, e.KeyModifiers, altIsMeta: !OperatingSystem.IsMacOS()) is { } bytes && DataContext is ExecTabViewModel session)
         {
-            case Key.C:
-                _ = CopySelectionAsync();
-                e.Handled = true;
-                return;
-            case Key.V:
-                _ = PasteFromClipboardAsync();
-                e.Handled = true;
-                return;
+            session.Terminal.Send(bytes);
+            e.Handled = true;
         }
     }
 
+    /// <summary>True when <paramref name="element"/> is an exec terminal or inside one.</summary>
+    internal static bool IsInTerminal(object? element) =>
+        element is Visual visual && (visual is TerminalControl || visual.FindAncestorOfType<TerminalControl>() is not null);
+
     internal static bool IsModifierKey(Key key) => key is Key.LeftCtrl or Key.RightCtrl or Key.LeftShift or Key.RightShift
         or Key.LeftAlt or Key.RightAlt or Key.LWin or Key.RWin;
+
+    /// <summary>
+    /// What the terminal sends for the chords <see cref="TerminalControl"/> encodes wrongly, or
+    /// <c>null</c> to leave the key to the control.
+    /// <list type="bullet">
+    /// <item><b>Alt+letter is ESC and the letter in the case Shift gives it</b> (#315). The control
+    /// sends ESC followed by the key event's <c>KeySymbol</c>, and on Windows that symbol is the
+    /// upper-case letter for an Alt chord whatever Shift says, so Alt+B reached the shell as
+    /// <c>ESC B</c> — not readline's Meta-b (backward-word) — and the line editor inserted a
+    /// stray letter. Ctrl+Alt is left alone: on Windows it is AltGr, whose characters arrive as
+    /// text input. Only where Alt is Meta: on macOS Option types characters (Option+B is
+    /// <c>∫</c>), and the control's <c>OptionAsMetaKey</c> decides that there.</item>
+    /// <item><b>Ctrl+Shift+letter is the letter's control character</b>, as xterm sends it (#222).
+    /// The control encodes Ctrl+letter but not with Shift held, so Ctrl+Shift+L reached no shell
+    /// and went on to the window, where it opened the logs palette. The terminal owns its keys:
+    /// the chord is <c>^L</c> here, and Ctrl+Tab leaves the terminal for the palette.
+    /// Ctrl+Shift+C and V are Copy and Paste and never get here.</item>
+    /// </list>
+    /// </summary>
+    internal static string? EncodeKey(Key key, KeyModifiers modifiers, bool altIsMeta)
+    {
+        if (key is < Key.A or > Key.Z)
+        {
+            return null;
+        }
+
+        var offset = key - Key.A;
+        var control = modifiers.HasFlag(KeyModifiers.Control);
+        var shift = modifiers.HasFlag(KeyModifiers.Shift);
+        var alt = modifiers.HasFlag(KeyModifiers.Alt);
+        if (modifiers.HasFlag(KeyModifiers.Meta))
+        {
+            return null;
+        }
+
+        if (alt && !control && altIsMeta)
+        {
+            return "\u001b" + (char)((shift ? 'A' : 'a') + offset);
+        }
+
+        if (control && shift && !alt)
+        {
+            return ((char)(offset + 1)).ToString();
+        }
+
+        return null;
+    }
 
     /// <summary>
     /// Copies the selection with each line's trailing blank cells and the trailing blank lines

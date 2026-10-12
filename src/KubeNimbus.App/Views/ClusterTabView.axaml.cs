@@ -17,7 +17,9 @@ public partial class ClusterTabView : UserControl
 {
     private void OnNamespaceShortcut(object? sender, KeyEventArgs e)
     {
-        if (Hotkeys.NamespacePicker.Matches(e) && NamespaceButton.IsEffectivelyVisible)
+        // Ctrl+Shift+N inside the exec terminal is the shell's ^N, as every chord the shell owns is (#222).
+        if (Hotkeys.NamespacePicker.Matches(e) && NamespaceButton.IsEffectivelyVisible
+            && !(CommandBindings.ShellOwns(Hotkeys.NamespacePicker) && ExecView.IsInTerminal(e.Source)))
         {
             NamespaceButton.Flyout?.ShowAt(NamespaceButton);
             e.Handled = true;

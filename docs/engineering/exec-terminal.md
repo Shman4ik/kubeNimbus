@@ -44,6 +44,39 @@ Seven things are load-bearing:
 4. **The keyboard belongs to the terminal while it has focus, on purpose.** The control
    marks Ctrl+&lt;letter&gt;, Tab, Esc and F1–F10 handled, so the window's own chords —
    the palette, the list filter, the cheat sheet — do not fire inside the exec pane.
+   **That was only half true until #222.** A window's `KeyBindings` run before the focused
+   control sees the key, so with focus in the terminal Ctrl+Shift+L opened the logs palette
+   (QA G-14, 0.7.0 run), and a harness probe of `ux-exec-keys` showed Ctrl+K opening the
+   command palette, Ctrl+P the switcher and Ctrl+Shift+N the namespace picker, each sending
+   nothing to the shell. The owner's decision (2026-10-12, on #222): the terminal keeps the
+   chord. So `CommandBindings.RebuildWindowBindings` builds every binding whose gesture
+   `ShellOwns` (literal Ctrl, with or without Shift, on a letter; never Cmd, Alt, Ctrl+Tab,
+   Ctrl+digit or a function key) over a `YieldToTerminalCommand` that cannot execute while
+   focus is in a `TerminalControl` (`ExecView.IsInTerminal`), and a binding that cannot
+   execute leaves the key to the control. `ClusterTabView`'s own Tunnel handler for
+   Ctrl+Shift+N makes the same check. The control encodes Ctrl+letter itself but not
+   Ctrl+Shift+letter, which it neither sends nor marks handled; `ExecView.EncodeKey` sends
+   that as the letter's control character, as xterm does, so Ctrl+Shift+L is `^L` (clear
+   screen) in the shell. The palette stays one step away: Ctrl+Tab leaves the terminal, then
+   Ctrl+Shift+L. On macOS the palette's chord is Cmd+Shift+L, which the shell does not own,
+   so it opens the palette from the terminal too. `TerminalChordYieldTests` pins the yield
+   (mutation-checked: a `CanExecute` that ignores the focus fails it) and `ux-exec-keys`
+   presses the chords on a rendered pane: `^L`, `^K`, `^P` and `^N` reach the model with
+   the palette shut, and Ctrl+Shift+L with focus on the pane's button still opens the
+   palette on `logs `.
+   **Alt+&lt;letter&gt; is ESC and the letter in the case Shift gives it** (#315). The control
+   sends ESC followed by the key event's `KeySymbol`, and Windows reports an Alt chord's
+   symbol as the upper-case letter whatever Shift says, so Alt+B reached the shell as
+   `ESC B` rather than readline's Meta-b and the line editor inserted a stray `B` (QA T-3).
+   The harness probe showed the control's mapping exactly: symbol `b` gave `1B 62`, symbol
+   `B` gave `1B 42`. `ExecView.EncodeKey` now sends `ESC b` for Alt+B and `ESC B` for
+   Alt+Shift+B, on Windows and Linux; Ctrl+Alt is left alone (AltGr on Windows, whose
+   characters arrive as text input), and so is macOS, where Option types characters and the
+   control's `OptionAsMetaKey` decides. `ExecKeyEncodingTests` pins it (mutation-checked:
+   an always-upper-case letter fails it) and `ux-exec-keys` presses Alt+B with the symbol
+   `B` a real Windows keyboard sends. Whether a readline shell then moves by a word is a
+   desktop check (T-3 in `docs/qa/desktop-checks.md`), because the sandbox's busybox `ash`
+   cannot answer it.
    That is the trade command-catalog rule 5 already describes from the other side: `^C`
    has to reach the container, and an app that stole it would make the pane useless for
    the one thing it is for. Copy and Paste therefore move up one modifier to

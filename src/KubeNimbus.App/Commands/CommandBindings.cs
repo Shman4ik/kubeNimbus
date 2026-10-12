@@ -163,10 +163,20 @@ public static class CommandBindings
     /// it has no descriptor to iterate.
     /// </para>
     /// </summary>
+    /// <para>
+    /// <b>A chord the shell owns yields to the exec terminal</b> (#222). A window's key
+    /// bindings run before the key reaches the focused control, so with focus in the exec
+    /// terminal Ctrl+Shift+L opened the logs palette (QA G-14) and Ctrl+K the command
+    /// palette, and neither reached the shell. A binding whose gesture <see
+    /// cref="ShellOwns"/> is built over a command that cannot execute while
+    /// <paramref name="terminalHasFocus"/> says so, and a binding that cannot execute
+    /// leaves the key to the terminal.
+    /// </para>
     public static void RebuildWindowBindings(
         IList<KeyBinding> bindings,
         Func<CommandId, ICommand> commandFor,
-        Func<int, ICommand> tabJumpCommandFor)
+        Func<int, ICommand> tabJumpCommandFor,
+        Func<bool>? terminalHasFocus = null)
     {
         ArgumentNullException.ThrowIfNull(bindings);
         ArgumentNullException.ThrowIfNull(commandFor);
@@ -176,7 +186,13 @@ public static class CommandBindings
 
         foreach (var (id, gesture) in WindowBindings())
         {
-            bindings.Add(new KeyBinding { Gesture = gesture, Command = commandFor(id) });
+            var command = commandFor(id);
+            if (terminalHasFocus is not null && ShellOwns(gesture))
+            {
+                command = new YieldToTerminalCommand(command, terminalHasFocus);
+            }
+
+            bindings.Add(new KeyBinding { Gesture = gesture, Command = command });
         }
 
         for (var ordinal = 1; ordinal <= 9; ordinal++)
@@ -186,6 +202,43 @@ public static class CommandBindings
                 Gesture = new KeyGesture(Key.D0 + ordinal, Hotkeys.Primary),
                 Command = tabJumpCommandFor(ordinal),
             });
+        }
+    }
+
+    /// <summary>
+    /// True for a chord a shell reads as a control character: literal Ctrl, with or without
+    /// Shift, on a letter. Cmd (macOS) and Alt chords are not the shell's, and neither are
+    /// Ctrl+Tab (which leaves the terminal), Ctrl+digit or the function keys.
+    /// </summary>
+    public static bool ShellOwns(KeyGesture gesture)
+    {
+        ArgumentNullException.ThrowIfNull(gesture);
+        var modifiers = gesture.KeyModifiers;
+        return modifiers.HasFlag(KeyModifiers.Control)
+               && !modifiers.HasFlag(KeyModifiers.Alt)
+               && !modifiers.HasFlag(KeyModifiers.Meta)
+               && gesture.Key is >= Key.A and <= Key.Z;
+    }
+
+    /// <summary>A window command that stands aside while the exec terminal has focus.</summary>
+    internal sealed class YieldToTerminalCommand(ICommand inner, Func<bool> terminalHasFocus) : ICommand
+    {
+        public ICommand Inner => inner;
+
+        public event EventHandler? CanExecuteChanged
+        {
+            add => inner.CanExecuteChanged += value;
+            remove => inner.CanExecuteChanged -= value;
+        }
+
+        public bool CanExecute(object? parameter) => !terminalHasFocus() && inner.CanExecute(parameter);
+
+        public void Execute(object? parameter)
+        {
+            if (CanExecute(parameter))
+            {
+                inner.Execute(parameter);
+            }
         }
     }
 

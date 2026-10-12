@@ -143,16 +143,48 @@ internal static class KeyboardChecks
             Expect(Press(Key.D, RawInputModifiers.Control, PhysicalKey.D, "d"), [0x04], "Ctrl+D");
             Expect(Press(Key.Tab, RawInputModifiers.None, PhysicalKey.Tab, "\t"), [0x09], "Tab");
 
+            // Windows reports an Alt chord's key symbol as the upper-case letter whatever Shift
+            // says, so the symbol here is "B", as the QA run's real keyboard sent it (#315).
+            Expect(Press(Key.B, RawInputModifiers.Alt, PhysicalKey.B, "B"), [0x1B, (byte)'b'], "Alt+B");
+            Expect(Press(Key.F, RawInputModifiers.Alt, PhysicalKey.F, "F"), [0x1B, (byte)'f'], "Alt+F");
+            Expect(Press(Key.B, RawInputModifiers.Alt | RawInputModifiers.Shift, PhysicalKey.B, "B"), [0x1B, (byte)'B'], "Alt+Shift+B");
+
+            // The window's Ctrl chords are the shell's inside the terminal (#222): a window key
+            // binding runs before the focused control sees the key, so without the yield these
+            // opened the palette, the switcher and the namespace picker and sent nothing.
+            var palette = ((MainWindowViewModel)window.DataContext!).Palette;
+            Expect(Press(Key.L, RawInputModifiers.Control | RawInputModifiers.Shift, PhysicalKey.L, "L"), [0x0C], "Ctrl+Shift+L");
+            if (palette.IsOpen)
+                throw new InvalidOperationException("Ctrl+Shift+L inside the exec terminal opened the palette; the chord belongs to the shell.");
+            Expect(Press(Key.K, RawInputModifiers.Control, PhysicalKey.K, "k"), [0x0B], "Ctrl+K");
+            Expect(Press(Key.P, RawInputModifiers.Control, PhysicalKey.P, "p"), [0x10], "Ctrl+P");
+            Expect(Press(Key.N, RawInputModifiers.Control | RawInputModifiers.Shift, PhysicalKey.N, "N"), [0x0E], "Ctrl+Shift+N");
+
             var copy = Press(Key.C, RawInputModifiers.Control | RawInputModifiers.Shift, PhysicalKey.C, "C");
             if (copy.Contains((byte)0x03))
                 throw new InvalidOperationException("Ctrl+Shift+C reached the pod as ^C; it is the terminal's Copy.");
+
+            // Everywhere else Ctrl+Shift+L still opens the palette narrowed to logs.
+            var outside = view.GetVisualDescendants().OfType<Button>().FirstOrDefault(b => b.IsEffectivelyVisible && b.Focusable)
+                          ?? throw new InvalidOperationException("The exec pane has no button to move focus to.");
+            outside.Focus();
+            Dispatcher.UIThread.RunJobs();
+            sent.Clear();
+            window.KeyPress(Key.L, RawInputModifiers.Control | RawInputModifiers.Shift, PhysicalKey.L, "L");
+            window.KeyRelease(Key.L, RawInputModifiers.Control | RawInputModifiers.Shift, PhysicalKey.L, "L");
+            Dispatcher.UIThread.RunJobs();
+            if (!palette.IsOpen || palette.Query != CommandPaletteViewModel.LogsPrefix || sent.Count > 0)
+                throw new InvalidOperationException(
+                    $"Ctrl+Shift+L outside the terminal left the palette {(palette.IsOpen ? $"open on '{palette.Query}'" : "shut")} and sent {sent.Count} bytes; it should open on '{CommandPaletteViewModel.LogsPrefix}'.");
+            palette.IsOpen = false;
+            Dispatcher.UIThread.RunJobs();
         }
         finally
         {
             exec.Terminal.UserInput -= OnInput;
         }
 
-        Console.WriteLine("Exec terminal key mapping passed (^C 0x03, ^D 0x04, Tab 0x09, Ctrl+Shift+C not ^C).");
+        Console.WriteLine("Exec terminal key mapping passed (^C 0x03, ^D 0x04, Tab 0x09, Ctrl+Shift+C not ^C, Alt+B ESC b, Ctrl+Shift+L ^L in the terminal and the logs palette outside it, Ctrl+K ^K, Ctrl+P ^P, Ctrl+Shift+N ^N).");
     }
 
     /// <summary>

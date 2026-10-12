@@ -282,8 +282,8 @@ Setup: `qa-seed.ps1 -Reset`; `./scripts/qa-netcut.ps1 start` for G-11.
   live test, `GatedPodLogsLiveTests`; what stays here is the panes' own wiring). Delete the pod.
 - **G-14 [input]** (#222) Ctrl+Shift+L: the palette opens prefilled `logs `; "shop-web" and the pod
   row streams (a line under 10 s old), "Logs: Deployment/shop-web" opens the multi-pod pane. The
-  chord in a YAML editor opens it. In an exec terminal it is **not** meant to (the terminal
-  keeps Ctrl+letters; 0.7.0 observed it firing there); Ctrl+Tab out, then it opens.
+  chord in a YAML editor opens it. In an exec terminal it does **not** (owner decision on #222:
+  the terminal keeps the chord; 0.7.0 observed it firing there): see T-9. Ctrl+Tab out, then it opens.
 - **G-15 [text]** (#225) "Logs" and "Logs, maximized" from workload detail's Pods tab, "Logs" from
   node detail's Pods tab (read only, no Shell item) and from an Event about a `qa-shop` pod each
   open that pod's streaming logs.
@@ -305,9 +305,11 @@ and read what ran through the clipboard or a marker file (`echo hi > /tmp/m`,
 - **T-2 [input]** (#265) `ls /`; `drag` across two output lines, `keys ^+c`: the clipboard holds exactly
   those two lines.
 - **T-3 [input]** (PR #295) `echo hi` prints `hi`; `sleep 100` then Ctrl+C returns the prompt in under
-  2 s. Alt+B / Alt+F: `cat -v > /tmp/m` and press them; busybox `ash` has no word motion, so the
-  check is that the app sends `ESC b` and `ESC f` (0.7.0 saw `^[B^[F`, uppercase) and nothing
-  stray is inserted.
+  2 s. Alt+B / Alt+F (#315): run `cat -v`, press Alt+B, Alt+F, Alt+Shift+B, then Enter: the line
+  echoed back reads `^[b^[f^[B` (0.7.0 saw `^[B^[F`, uppercase). Ctrl+C. Busybox `ash` has no
+  word motion, so the cursor half needs a readline shell: where a pod runs `bash`, type `echo one
+  two`, Alt+B moves the cursor to the start of `two` and Alt+F back to the end, with nothing
+  inserted; UNSURE when no such pod is allowed.
 - **T-4 [text][look]** (#278, #290) Preferences → General → Terminal = `wt`; ☰ → "Open a terminal on
   this cluster": PowerShell opens, notice "Your preferred terminal was not used — Preferred
   terminal (wt): Windows Terminal opens its tabs from a process of its own …"; its severity colour
@@ -318,6 +320,10 @@ and read what ran through the clipboard or a marker file (`echo hi > /tmp/m`,
 - **T-7 [input]** (#189) `Set-Clipboard "echo one`necho two"`, Ctrl+Shift+V: the card "Paste 2 lines? This shell
   has not turned on bracketed paste, so each line runs as soon as it arrives." with `Paste` focused
   and `Cancel`; nothing ran (marker files). Esc closes it. A one-line paste has no card.
+- **T-9 [input]** (#222) In the exec terminal type `echo abc` (no Enter), then Ctrl+Shift+L: no
+  palette opens and the screen clears to the prompt with `echo abc` still typed (`^L`). Ctrl+K: no
+  palette opens. Ctrl+P: the cluster switcher does not open. Then Ctrl+Tab out of the terminal and
+  Ctrl+Shift+L: the palette opens prefilled `logs `. Close it.
 - **T-8 [opt]** (PR #286) The cordon one-click strip: not allowed on the shared node. UNSURE.
 - **T-11 [input]** (#198) Right-click a `shop-api-…` row: "Exec in my terminal" sits under Exec,
   no ellipsis. Click it: a PowerShell window opens in the container (`hostname` prints the pod
