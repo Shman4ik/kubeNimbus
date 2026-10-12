@@ -319,11 +319,11 @@ and read what ran through the clipboard or a marker file (`echo hi > /tmp/m`,
   has not turned on bracketed paste, so each line runs as soon as it arrives." with `Paste` focused
   and `Cancel`; nothing ran (marker files). Esc closes it. A one-line paste has no card.
 - **T-8 [opt]** (PR #286) The cordon one-click strip: not allowed on the shared node. UNSURE.
-- **T-9 [input]** (#198) Right-click a `shop-api-…` row: "Exec in my terminal" sits under Exec,
+- **T-11 [input]** (#198) Right-click a `shop-api-…` row: "Exec in my terminal" sits under Exec,
   no ellipsis. Click it: a PowerShell window opens in the container (`hostname` prints the pod
   name), and the notice above the list says the terminal opened. Close the window. With
   `qa-del-a` to `qa-del-c` selected, the item is disabled and its tooltip is L-15's sentence.
-- **T-10 [input]** (#198) Nodes, right-click the sandbox node: "Node shell in my terminal" is
+- **T-12 [input]** (#198) Nodes, right-click the sandbox node: "Node shell in my terminal" is
   present (it is absent on a pod row). Read its tooltip only; do not click it (it starts a
   privileged debug pod on the shared node).
 
