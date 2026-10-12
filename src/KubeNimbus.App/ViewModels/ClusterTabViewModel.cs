@@ -2388,7 +2388,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         // fleet list and the demo cluster are still the read below.
         if (Client is { } client && !(IsFleetView && FleetMembersProvider?.Invoke() is { Count: > 0 }))
         {
-            if (ConnectionWarning?.StartsWith("Could not read Argo CD Applications", StringComparison.Ordinal) == true)
+            if (ConnectionWarning?.StartsWith(ArgoReadWarning, StringComparison.Ordinal) == true)
             {
                 ConnectionWarning = null;
             }

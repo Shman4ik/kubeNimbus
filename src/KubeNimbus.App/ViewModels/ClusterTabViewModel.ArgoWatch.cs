@@ -48,7 +48,7 @@ public sealed partial class ClusterTabViewModel
                             return;
                         }
 
-                        ConnectionWarning = $"Could not read Argo CD Applications: {ex.Message}";
+                        ConnectionWarning = $"{ArgoReadWarning}: {ex.Message}";
                         ConnectionWarningOffersReconnect = ex is not UnreadableObjectException;
                     }),
                     cancellationToken: token).InBatches(cancellationToken: token))
@@ -75,7 +75,7 @@ public sealed partial class ClusterTabViewModel
                         return;
                     }
 
-                    ConnectionWarning = $"Could not read Argo CD Applications: {ex.Message}";
+                    ConnectionWarning = $"{ArgoReadWarning}: {ex.Message}";
                     IsArgoLoading = false;
                     IsArgoEmpty = ArgoApplications.Count == 0;
                 });
@@ -98,7 +98,7 @@ public sealed partial class ClusterTabViewModel
             return;
         }
 
-        if (ConnectionWarning?.StartsWith("Could not read Argo CD Applications", StringComparison.Ordinal) == true)
+        if (ConnectionWarning?.StartsWith(ArgoReadWarning, StringComparison.Ordinal) == true)
         {
             ConnectionWarning = null;
         }
