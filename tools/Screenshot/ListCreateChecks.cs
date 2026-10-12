@@ -76,7 +76,7 @@ internal static class ListCreateChecks
         tab.InspectorTabs.Clear();
         var editor = new YamlEditorTabViewModel(
             FixtureData.CreateOfflineClient(),
-            (_, _) => Task.FromResult<ResourceDescriptor?>(null),
+            (_, _, _) => Task.FromResult<ResourceDescriptor?>(null),
             "payments",
             1)
         {
@@ -127,6 +127,11 @@ internal static class ListCreateChecks
                 throw new InvalidOperationException("Edit YAML is enabled with three rows selected; it would edit one of them.");
             if (ToolTip.GetTip(edit) is not string tip || !tip.Contains("3 rows are selected", StringComparison.Ordinal))
                 throw new InvalidOperationException($"Edit YAML's tooltip does not say why it is disabled: \"{ToolTip.GetTip(edit)}\".");
+            // #198: so is the hand-off of kubectl exec to the machine's terminal.
+            var handOff = items.FirstOrDefault(i => i.Header as string == "Exec in my terminal")
+                ?? throw new InvalidOperationException("The row menu has no \"Exec in my terminal\".");
+            if (handOff.IsEffectivelyEnabled || vm.ExecInMyTerminalCommand.CanExecute(null))
+                throw new InvalidOperationException("Exec in my terminal is enabled with three rows selected; it would exec into one of them.");
             if (!items.Any(i => i.Header as string == "Delete…") || !vm.DeleteSelectedCommand.CanExecute(null))
                 throw new InvalidOperationException("Delete is missing or disabled with three rows selected.");
             menu.Hide();

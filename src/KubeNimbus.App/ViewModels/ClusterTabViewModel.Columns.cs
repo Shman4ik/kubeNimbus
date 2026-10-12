@@ -49,8 +49,24 @@ public sealed partial class ClusterTabViewModel
 
         var snapshot = _hiddenColumns.Order(StringComparer.Ordinal).ToList();
         GridLayoutStore.Update(key, layout => layout with { HiddenColumns = snapshot.Count == 0 ? null : snapshot });
+
+        // #301: the sort arrow is drawn in its column's header, so a list sorted by a column
+        // it no longer shows would be in an order nothing on screen explains (UI rule 20).
+        // Hiding that column clears the sort, as the third header click would.
+        if (hidden && string.Equals(SortColumnId, columnId, StringComparison.Ordinal))
+        {
+            SetSort(null, descending: false);
+        }
+
         OnPropertyChanged(ColumnLayoutChangedProperty);
     }
+
+    /// <summary>
+    /// The sort a kind opens on, unless its column is hidden: a remembered or default sort by
+    /// a column the reader hid would order the list with no arrow to say so (#301).
+    /// </summary>
+    private (string? Column, bool Descending) ShownSort((string? Column, bool Descending) sort) =>
+        sort.Column is { } column && _hiddenColumns.Contains(column) ? (null, false) : sort;
 
     /// <summary>Whether this kind's columns differ from what it ships with: something hidden or dragged.</summary>
     public bool HasCustomColumns =>

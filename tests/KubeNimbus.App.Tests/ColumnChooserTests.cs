@@ -109,6 +109,39 @@ public class ColumnChooserTests
         await Assert.That(raised).Contains(ClusterTabViewModel.ColumnLayoutChangedProperty);
     }
 
+    /// <summary>
+    /// #301: the sort arrow lives in its column's header, so hiding the column the list is
+    /// sorted by clears the sort (back to arrival order, remembered), and a stored sort by a
+    /// hidden column is not applied when the kind opens. Hiding another column keeps it.
+    /// Mutation-checked by removing the clear from <c>SetColumnHidden</c>: the sort then
+    /// stays on Age with Age hidden.
+    /// </summary>
+    [Test]
+    public async Task Hiding_the_sorted_column_clears_the_sort()
+    {
+        var tab = PodTab();
+        var pods = tab.SelectedKind;
+        tab.Apply(TestObjects.Added(TestObjects.Pod("payments", "b")));
+        tab.Apply(TestObjects.Added(TestObjects.Pod("payments", "a")));
+        tab.SetSort(ResourceColumn.Name, descending: false);
+        await Assert.That(tab.VisibleNames()).IsEqualTo("a, b");
+
+        tab.SetSort(ResourceColumn.Age, descending: true);
+        tab.SetColumnHidden(ResourceColumn.Restarts, hidden: true);
+        await Assert.That(tab.SortColumnId).IsEqualTo(ResourceColumn.Age);
+
+        tab.SetColumnHidden(ResourceColumn.Age, hidden: true);
+        await Assert.That(tab.SortColumnId).IsNull();
+        await Assert.That(tab.VisibleNames()).IsEqualTo("b, a");
+        await Assert.That(GridLayoutStore.Load(PodKey).SortColumn).IsNull();
+
+        // A sort stored by a column that is hidden (an older file, a hand edit) is not applied.
+        GridLayoutStore.Update(PodKey, layout => layout with { SortColumn = ResourceColumn.Age, SortDescending = true });
+        tab.SelectedKind = new SidebarKindViewModel(TestObjects.ConfigMapDescriptor, "config");
+        tab.SelectedKind = pods;
+        await Assert.That(tab.SortColumnId).IsNull();
+    }
+
     [Test]
     public async Task Rows_stay_the_watchs_list_when_a_column_is_hidden()
     {

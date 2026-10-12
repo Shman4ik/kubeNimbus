@@ -40,7 +40,7 @@ public sealed partial class ClusterTabViewModel
         _newYamlCount++;
         var editor = new YamlEditorTabViewModel(
             client,
-            async (group, kind) => (await client.GetResourceCatalogAsync())
+            async (group, kind, cancellationToken) => (await client.GetResourceCatalogAsync(cancellationToken))
                 .FirstOrDefault(d => d.Group == group && d.Kind == kind),
             NewObjectNamespace,
             _newYamlCount)

@@ -1192,11 +1192,11 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
         OnPropertyChanged(nameof(NewDocumentNotice));
     }
 
-    public override Task OnClosingAsync()
+    public override async Task OnClosingAsync()
     {
+        await _closed.CancelAsync();
         PreviewPreferenceChanged -= OnPreviewPreferenceChanged;
         _revealTimer?.Stop();
-        return Task.CompletedTask;
     }
 
     /// <summary>

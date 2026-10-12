@@ -154,6 +154,9 @@ Setup: Pods in `qa-shop`.
   UNSURE: `qa-app.ps1` starts every run on a fresh profile.
 - **L-12 [input]** Sort by Status, `drag` a column edge, then Reset columns: Restarts is back,
   the width is the default, the sort arrow stays.
+- **L-18 [input]** (#301) Click the Age header (arrow on Age), then untick Age in the column
+  menu: Age goes and no header shows an arrow; the rows are back in arrival order. Untick
+  Restarts with the list sorted by Status: the Status arrow stays.
 - **L-13 [text]** Ctrl+K "reset the list": "Reset the list's columns" appears only while a
   column is hidden or dragged.
 - **L-14 [input]** (#280) Services, `shop-web`, F: tab `Forward: svc/shop-web:80`; the row menu's
@@ -316,6 +319,13 @@ and read what ran through the clipboard or a marker file (`echo hi > /tmp/m`,
   has not turned on bracketed paste, so each line runs as soon as it arrives." with `Paste` focused
   and `Cancel`; nothing ran (marker files). Esc closes it. A one-line paste has no card.
 - **T-8 [opt]** (PR #286) The cordon one-click strip: not allowed on the shared node. UNSURE.
+- **T-9 [input]** (#198) Right-click a `shop-api-…` row: "Exec in my terminal" sits under Exec,
+  no ellipsis. Click it: a PowerShell window opens in the container (`hostname` prints the pod
+  name), and the notice above the list says the terminal opened. Close the window. With
+  `qa-del-a` to `qa-del-c` selected, the item is disabled and its tooltip is L-15's sentence.
+- **T-10 [input]** (#198) Nodes, right-click the sandbox node: "Node shell in my terminal" is
+  present (it is absent on a pod row). Read its tooltip only; do not click it (it starts a
+  privileged debug pod on the shared node).
 
 ## Batch P — panes
 

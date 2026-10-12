@@ -30,7 +30,7 @@ public class NewYamlTests
         {"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"settings","namespace":"team-a","resourceVersion":"7"},"data":{"mode":"fast"}}
         """;
 
-    private static Task<ResourceDescriptor?> Resolve(string group, string kind) =>
+    private static Task<ResourceDescriptor?> Resolve(string group, string kind, CancellationToken cancellationToken) =>
         Task.FromResult(group == "" && kind == "ConfigMap" ? TestObjects.ConfigMapDescriptor : null);
 
     private static YamlEditorTabViewModel NewEditor(ClusterClient client, string yaml) =>
@@ -135,6 +135,36 @@ public class NewYamlTests
         await Assert.That(editors[2].IsPreview).IsFalse();
         await Assert.That(tab.SelectedInspectorTab).IsSameReferenceAs(editors[2]);
         await Assert.That(editors[2].DefaultNamespace).IsEqualTo("team-a");
+    }
+
+    /// <summary>
+    /// #342 (hard rule 2): the press reads the cluster's kinds through the tab's real resolver,
+    /// and closing the editor while that read is held in flight stops it — the apply returns,
+    /// nothing is sent and no "could not be read" is said to a closed tab. Mutation-checked by
+    /// dropping the token from the catalog read: the held discovery request then keeps the
+    /// apply waiting past the timeout.
+    /// </summary>
+    [Test]
+    public async Task Closing_the_editor_cancels_the_catalog_read_its_apply_started()
+    {
+        using var server = new StubApiServer { Gate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously) };
+        var tab = new ClusterTabViewModel(TestObjects.Context)
+        {
+            SelectedKind = new SidebarKindViewModel(TestObjects.ConfigMapDescriptor, "config"),
+        };
+        tab.Client = server.Connect();
+        tab.NewYamlCommand.Execute(null);
+        var editor = tab.InspectorTabs.OfType<YamlEditorTabViewModel>().Single();
+        editor.YamlText = ConfigMapYaml;
+
+        var apply = editor.ApplyCommand.ExecuteAsync(null);
+        await server.Held.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await tab.CloseInspectorTabCommand.ExecuteAsync(editor);
+
+        await apply.WaitAsync(TimeSpan.FromSeconds(5));
+        await Assert.That(server.Requests.Any(r => r.Method == "PATCH")).IsFalse();
+        await Assert.That(editor.StatusMessage).IsNull();
+        await Assert.That(tab.InspectorTabs.Contains(editor)).IsFalse();
     }
 
     /// <summary>

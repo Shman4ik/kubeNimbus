@@ -141,12 +141,22 @@ terminal emulator in this container — see the pass note in Current status):
 ## Handing a command to the terminal (FEAT-17, FEAT-27)
 
 The exec pane's "Open this session in your terminal", node detail's node shell and their
-two palette rows ("Exec in my terminal" on a pod, "Node shell in my terminal" on a node)
-hand a `kubectl` command to the machine's terminal, with the context pinned exactly as for a
-plain terminal (rules 1–3). `TerminalCommand` (Core) is the command; `TerminalHandoff` (App)
-builds it per entry point and words the outcome; `TerminalLauncher.OpenAsync(context, command)`
-plans and starts it. The resource list's row menu does not have them yet (its files were
-another change's that round).
+two rows each in the palette and the resource list's row menu ("Exec in my terminal" on a
+pod, "Node shell in my terminal" on a node) hand a `kubectl` command to the machine's
+terminal, with the context pinned exactly as for a plain terminal (rules 1–3).
+`TerminalCommand` (Core) is the command; `TerminalHandoff` (App) builds it per entry point and
+words the outcome; `TerminalLauncher.OpenAsync(context, command)` plans and starts it.
+
+The palette rows and the row menu's items run the same two tab commands
+(`ClusterTabViewModel.ExecInMyTerminalCommand` and `NodeShellInMyTerminalCommand`, #198), so
+the two entry points cannot disagree about which row they act on or when they are offered.
+Both act on one object, so under a multi-row selection they are disabled with
+`SingleRowActionTip`'s reason (#305) and the palette leaves them out; "Node shell in my
+terminal" is shown only on a node row that is not a Windows node, like Cordon only on a node,
+and both are disabled in a fleet list. They fire on the click with no ellipsis (UI rule 17).
+`TerminalHandoffTests.TheRowMenuHandOffsActOnOneRowOfTheirKind` pins the gating (mutation-checked
+by dropping the multi-selection test from `CanNodeShellInMyTerminal`), and the harness's
+`ux-bulk-delete` check finds the item in the open row menu, disabled under three rows.
 
 1. **A command is a fourth argument shape on each platform, never the plain shape with
    something bolted on** (the seam rule 4 warned about):
@@ -191,8 +201,9 @@ another change's that round).
 4. **Every outcome is stated where the gesture was made**: an InfoBar laid over the top of
    the exec pane's terminal (like the paste prompt, so the remote PTY is not resized), an
    InfoBar under node detail's chrome row, and the tab's own terminal notice for the palette
-   rows. A fleet list does not offer the palette rows, because its rows belong to other tabs'
-   clusters and this tab's context would pin the wrong one.
+   rows and the row menu. A fleet list does not offer the palette rows and disables the menu
+   items, because its rows belong to other tabs' clusters and this tab's context would pin
+   the wrong one.
 
 ## The "Terminal" preference (FEAT-19)
 

@@ -185,6 +185,52 @@ public class TerminalHandoffTests
         await Assert.That(Find("Exec in my terminal")).IsNull();
     }
 
+    /// <summary>
+    /// #198: the row menu's "Exec in my terminal" and "Node shell in my terminal" are commands
+    /// on the tab — offered on the rows they apply to, disabled under a multi-row selection
+    /// (#305's rule for an action on one object) and in a fleet list, and reporting in the tab's
+    /// terminal notice. Driven on the demo tab, which refuses in place, so nothing is started.
+    /// Mutation-checked by dropping <c>!HasMultipleSelection</c> from
+    /// <c>CanNodeShellInMyTerminal</c>: the node shell then stays enabled under two nodes.
+    /// </summary>
+    [Test]
+    [NotInParallel]
+    public async Task TheRowMenuHandOffsActOnOneRowOfTheirKind()
+    {
+        TestObjects.RedirectStores();
+        var tab = new ClusterTabViewModel(ClusterContext.Demo);
+        tab.ConnectCommand.Execute(null);
+
+        tab.SelectKindCommand.Execute(tab.SidebarSections.SelectMany(s => s.Kinds).First(k => k.Descriptor is { Group: "", Kind: "Pod" }));
+        tab.SelectedRow = tab.Rows.First();
+        tab.SetSelectedRows([tab.Rows[0]]);
+        await Assert.That(tab.ExecInMyTerminalCommand.CanExecute(null)).IsTrue();
+        await Assert.That(tab.OffersNodeShellOnRow).IsFalse();
+        await Assert.That(tab.NodeShellInMyTerminalCommand.CanExecute(null)).IsFalse();
+
+        await tab.ExecInMyTerminalCommand.ExecuteAsync(null);
+        await Assert.That(tab.TerminalNotice).Contains("demo cluster");
+        await Assert.That(tab.TerminalNoticeIsWarning).IsTrue();
+
+        tab.SetSelectedRows([tab.Rows[0], tab.Rows[1]]);
+        await Assert.That(tab.ExecInMyTerminalCommand.CanExecute(null)).IsFalse();
+
+        tab.SelectKindCommand.Execute(tab.SidebarSections.SelectMany(s => s.Kinds).First(k => k.Descriptor is { Group: "", Kind: "Node" }));
+        tab.SelectedRow = tab.Rows.First();
+        tab.SetSelectedRows([tab.Rows[0]]);
+        await Assert.That(tab.OffersNodeShellOnRow).IsTrue();
+        await Assert.That(tab.NodeShellInMyTerminalCommand.CanExecute(null)).IsTrue();
+        await Assert.That(tab.ExecInMyTerminalCommand.CanExecute(null)).IsFalse();
+
+        tab.SetSelectedRows([tab.Rows[0], tab.Rows[1]]);
+        await Assert.That(tab.OffersNodeShellOnRow).IsTrue();
+        await Assert.That(tab.NodeShellInMyTerminalCommand.CanExecute(null)).IsFalse();
+
+        tab.SetSelectedRows([tab.Rows[0]]);
+        tab.IsFleetView = true;
+        await Assert.That(tab.NodeShellInMyTerminalCommand.CanExecute(null)).IsFalse();
+    }
+
     private static async Task WaitFor(Func<bool> condition)
     {
         for (var i = 0; i < 100 && !condition(); i++)
