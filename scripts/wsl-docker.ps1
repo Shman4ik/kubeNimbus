@@ -23,8 +23,10 @@
         `wsl.exe --exec sleep infinity` is a process in the distro, so the VM stays up for as
         long as it runs. Its pid goes in a JSON record beside the kubeconfig, which
         qa-preflight.ps1 reads; a live keep-alive for the same distro is reused, not doubled.
-        Stop it by hand (Stop-Process -Id <pid>) when the sandbox is no longer needed;
-        nothing else does.
+      * `Stop-WslKeepAlive <record path>`, which stops the recorded keep-alive (only when the
+        record's pid and start time still name it) and deletes the record. sandbox-down.ps1
+        -Wsl calls it once the last `kubenimbus*` container is gone, since the Argo sandbox
+        may still need the distro until then (#376).
 #>
 
 function docker {
@@ -66,4 +68,13 @@ function Start-WslKeepAlive([string] $RecordPath) {
     New-Item -ItemType Directory -Force (Split-Path $RecordPath -Parent) | Out-Null
     $record | ConvertTo-Json | Set-Content -Path $RecordPath -Encoding utf8
     $record
+}
+
+function Stop-WslKeepAlive([string] $RecordPath) {
+    # Only a process the record still names is stopped: a pid is reused once its process ends,
+    # and Get-WslKeepAlive checks the start time too. The record goes either way, live or stale.
+    $live = Get-WslKeepAlive $RecordPath
+    if ($live) { Stop-Process -Id $live.Pid -Force -ErrorAction SilentlyContinue }
+    if (Test-Path $RecordPath) { Remove-Item $RecordPath -Force }
+    $live
 }

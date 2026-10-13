@@ -113,6 +113,12 @@ arguments to the distro's shell, which strips the backslashes from a Windows pat
 `X:sourcekubeNimbusscriptsmanifests`, and the run died on a null `.Trim()`). `dotnet run`/`$env:KUBECONFIG` stay exactly as below; WSL2
 forwards `localhost:<port>` to Windows automatically. See
 [`scripts/README.md`](../../scripts/README.md#docker-without-docker-desktop-wsl2).
+The up scripts' WSL keep-alive (`wsl-keepalive.json`, #370) is stopped by `sandbox-down.ps1
+-Wsl` once no `kubenimbus*` container is left in the distro, and its record deleted with it
+(#376); while the Argo sandbox is still there it stays. `Stop-WslKeepAlive` stops only the
+process the record still names (pid and start time), so a reused pid is never killed. It was
+exercised on its own against a stand-in process named `wsl` (live, stale, reused pid, no
+record); the whole `-Wsl` teardown was not run, to leave the shared Docker Desktop sandbox alone.
 
 `-InstallKubeconfig` additionally copies it to `~/.kube/config`. That matters
 because `$KUBECONFIG` only reaches processes started from a shell that has it

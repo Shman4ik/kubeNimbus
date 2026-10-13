@@ -111,6 +111,24 @@ public class LogViewerTests
         await Assert.That(none).IsNull();
     }
 
+    /// <summary>
+    /// #377: a match that ran out of time used to count as "no match", so on a loaded machine
+    /// the filter hid matching lines and said nothing, and the two tests above flaked on CI.
+    /// No regular expression the query builds, include or exclusion, has a timeout now, so a
+    /// match always ends in the real answer however slow the machine is. Mutation-checked by
+    /// putting the 100 ms timeout back in <c>LogQuery.MatchTimeout</c>: this test fails.
+    /// </summary>
+    [Test]
+    public async Task A_regex_match_has_no_timeout_so_a_slow_machine_never_hides_a_matching_line()
+    {
+        var query = Query(@"^status=5\d\d !healthz", regex: true);
+        var timeouts = query.RegexTimeouts.ToList();
+
+        await Assert.That(timeouts.Count).IsEqualTo(2);
+        await Assert.That(timeouts.All(t => t == System.Text.RegularExpressions.Regex.InfiniteMatchTimeout)).IsTrue();
+        await Assert.That(Query("plain text").RegexTimeouts).IsEmpty();
+    }
+
     [Test]
     public async Task An_invalid_pattern_hides_nothing_and_says_so()
     {

@@ -85,7 +85,7 @@ if ($Kubeconfig -and (Test-Path $Kubeconfig)) {
     }
     # Whether the sandbox is WSL-hosted is read from what serves its port (`wslrelay` for a
     # container in WSL's own Docker Engine) or a live keep-alive, never from the record alone:
-    # sandbox-down.ps1 leaves the record, and after a reboot or with a Docker Desktop sandbox
+    # a record outlives its process after a reboot or a killed keep-alive, and with a Docker Desktop sandbox
     # a stale one would fail the run for nothing.
     $inWsl = $keepAlive -or ($who -match '^wsl')
     if ((Test-Path $keepAliveRecord) -and -not $keepAlive -and -not $inWsl) {

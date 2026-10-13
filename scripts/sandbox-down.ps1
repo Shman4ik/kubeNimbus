@@ -12,7 +12,10 @@
 
 .PARAMETER Wsl
     Route docker through `wsl.exe --exec docker ...` — pass this if the sandbox was
-    brought up with sandbox-up.ps1 -Wsl.
+    brought up with sandbox-up.ps1 -Wsl. Once no `kubenimbus*` container is left in the
+    distro, it also stops the WSL keep-alive the up scripts started and deletes its record
+    (wsl-keepalive.json beside the kubeconfig); while another one is left, the Argo sandbox
+    for instance, the keep-alive stays, because that container needs the distro up.
 
 .PARAMETER WslDistribution
     WSL distro to target (passed as `wsl -d <name>`). Only meaningful with
@@ -33,12 +36,8 @@ Set-StrictMode -Version Latest
 $repoRoot = Split-Path -Parent $PSScriptRoot
 if (-not $Kubeconfig) { $Kubeconfig = Join-Path $repoRoot '.sandbox/kubeconfig.yaml' }
 
-if ($Wsl) {
-    function docker {
-        if ($WslDistribution) { & wsl.exe -d $WslDistribution --exec docker @args }
-        else { & wsl.exe --exec docker @args }
-    }
-}
+# The same `docker` shadow and keep-alive functions sandbox-up.ps1 -Wsl uses.
+if ($Wsl) { . (Join-Path $PSScriptRoot 'wsl-docker.ps1') }
 
 $existing = (docker ps -a --filter "name=^/$Name$" --format '{{.Names}}') -join ''
 if ($existing) {
@@ -47,6 +46,20 @@ if ($existing) {
 }
 else {
     Write-Host "No container named '$Name'." -ForegroundColor DarkGray
+}
+
+# The keep-alive holds the distro up for the k3s containers in it (#370), so it goes with the
+# last of them and not before (#376). The record sits beside the kubeconfig, so it is read
+# before the kubeconfig is deleted below.
+if ($Wsl) {
+    $keepAliveRecord = Join-Path (Split-Path $Kubeconfig -Parent) 'wsl-keepalive.json'
+    $left = @(docker ps -a --filter 'name=^/kubenimbus' --format '{{.Names}}' | Where-Object { $_ })
+    if ($left.Count -gt 0) {
+        Write-Host "WSL keep-alive left running: $($left -join ', ') still in the distro." -ForegroundColor DarkGray
+    }
+    elseif ($stopped = Stop-WslKeepAlive $keepAliveRecord) {
+        Write-Host "Stopped the WSL keep-alive (pid $($stopped.Pid)) and removed $keepAliveRecord." -ForegroundColor Green
+    }
 }
 
 if (-not $KeepKubeconfig -and (Test-Path $Kubeconfig)) {

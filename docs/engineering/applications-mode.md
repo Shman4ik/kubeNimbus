@@ -337,8 +337,15 @@ stamped by the shell on every tab it holds. The palette's Argo CD items read it 
 mode they act on the open page's Application, or else the selected row's (opening its page), arm
 the page's own strip rather than the hidden Resources one, and offer nothing for
 an application no Argo Application tracks (argo-cd, "What the palette's Argo items act on"). The
-palette's other selected-row items (logs, exec, Edit YAML, delete) still follow the Resources
-list's selection in this mode; that is a backlog item, not yet changed.
+palette's other selected-row items (logs, previous logs, exec, port-forward, Edit YAML, delete,
+scale, node and CronJob actions, the ServiceAccount access review) are not offered in this mode
+at all (#373): they act on the Resources list's selection, which this mode hides, and "Delete
+resource" for a row nobody can see broke UI rule 20. With a page open the palette offers the
+page's own Edit YAML and Rollout restart instead, named after the application and landing on
+the page's strip or editor, and built as plain items: `Catalog()` would append the list's R and
+E keys, which the page does not handle; the page already shows its logs, and exec, port-forward and delete
+are not page actions. `ApplicationsModePaletteTests` pins both halves; removing the mode branch
+in `BuildPaletteItems` lists Delete resource, Logs and Exec for the hidden pod again.
 
 ## The demo cluster
 

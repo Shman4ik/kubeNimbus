@@ -82,7 +82,14 @@ pane keeps only its own narrowing (pods, levels, Errors only) as `LogProjection`
   Alt+R and Alt+C. The engine is `RegexOptions.NonBacktracking`, linear whatever is typed —
   the search runs on the UI thread over thousands of lines per keystroke, and a per-line
   timeout only bounds each line. Backreferences and lookarounds are refused in words; a
-  pattern that does not parse filters nothing and says why in an error bar.
+  pattern that does not parse filters nothing and says why in an error bar. **A match has no
+  timeout** (#377): it had 100 ms, and a timeout counted as "no match", so on a loaded CI runner
+  the first match on a new pattern (which builds the engine's automaton) ran past it and two
+  `LogViewerTests` failed; in the app the same thing hid matching lines and said nothing. The
+  linear engine and `BoundedLineReader`'s line cap already bound a match, so the timeout could
+  only give a wrong answer; `Regex.InfiniteMatchTimeout` is passed explicitly, which also
+  overrides a process-wide `REGEX_DEFAULT_MATCH_TIMEOUT`. A `LogViewerTests` test pins it, and
+  fails with the 100 ms put back.
 - **`!word` hides lines, in either mode** — k9s's `/!`, VS Code's output filter. Only when the
   box holds such a word is it split on spaces; otherwise the text is one phrase, as before.
   The counter adds "N hidden", so a pane that lost lines to an exclusion never looks quiet.

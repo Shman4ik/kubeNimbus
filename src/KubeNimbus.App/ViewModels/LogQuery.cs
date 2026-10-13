@@ -33,10 +33,21 @@ namespace KubeNimbus.App.ViewModels;
 /// engine under NativeAOT. A pattern that does not parse is not a search at all — the pane
 /// shows why and nothing is filtered, rather than hiding every line.
 /// </para>
+/// <para>
+/// A match has no timeout (#377). It had 100 ms, and a timeout counted as "no match": on a
+/// loaded CI runner the first match on a new pattern, which builds the engine's automaton,
+/// took longer than that, so a matching line was hidden from the filter and nothing said so
+/// (UI rule 20). The linear engine is what bounds a match, and a line is already capped by
+/// <c>BoundedLineReader</c>, so the timeout guarded against nothing the engine does not, and
+/// the only thing it could do was give a wrong answer. Passing
+/// <see cref="Regex.InfiniteMatchTimeout"/> explicitly also overrides a process-wide
+/// <c>REGEX_DEFAULT_MATCH_TIMEOUT</c>.
+/// </para>
 /// </remarks>
 public sealed class LogQuery
 {
-    private static readonly TimeSpan Timeout = TimeSpan.FromMilliseconds(100);
+    /// <summary>No timeout: a match always ends with an answer, never with a guess (#377).</summary>
+    internal static readonly TimeSpan MatchTimeout = Regex.InfiniteMatchTimeout;
 
     private readonly Term? _include;
     private readonly Term[] _excludes;
@@ -92,6 +103,13 @@ public sealed class LogQuery
 
     private static bool IsExclusion(string word) => word.Length > 1 && word[0] == '!';
 
+    /// <summary>
+    /// The match timeout of every regular expression this query runs, include and exclusions
+    /// alike; empty in plain-text mode. For the test that pins #377.
+    /// </summary>
+    internal IEnumerable<TimeSpan> RegexTimeouts =>
+        _excludes.Prepend(_include).OfType<Term>().Select(t => t.RegexTimeout).OfType<TimeSpan>();
+
     /// <summary>Whether the query has something to find, rather than only lines to hide.</summary>
     public bool HasInclude => _include is not null;
 
@@ -129,6 +147,9 @@ public sealed class LogQuery
         private readonly Regex? _regex;
         private readonly StringComparison _comparison;
 
+        /// <summary>The compiled pattern's timeout, or null for a plain-text term; for the tests.</summary>
+        public TimeSpan? RegexTimeout => _regex?.MatchTimeout;
+
         public Term(string text, bool regex, bool matchCase)
         {
             _text = text;
@@ -136,7 +157,7 @@ public sealed class LogQuery
             if (regex)
             {
                 var options = RegexOptions.NonBacktracking | RegexOptions.CultureInvariant | (matchCase ? RegexOptions.None : RegexOptions.IgnoreCase);
-                _regex = new Regex(text, options, Timeout);
+                _regex = new Regex(text, options, MatchTimeout);
             }
         }
 
@@ -147,14 +168,7 @@ public sealed class LogQuery
                 return text.Contains(_text, _comparison);
             }
 
-            try
-            {
-                return _regex.IsMatch(text);
-            }
-            catch (RegexMatchTimeoutException)
-            {
-                return false;
-            }
+            return _regex.IsMatch(text);
         }
 
         public IReadOnlyList<(int Start, int Length)> Matches(string text, int from)
@@ -182,19 +196,12 @@ public sealed class LogQuery
             // text: `^ERROR` means "the message starts with ERROR", and a start offset would
             // leave `^` anchored to the timestamp the pane printed in front of it.
             var message = index == 0 ? text : text[index..];
-            try
+            for (var match = _regex.Match(message); match.Success; match = match.NextMatch())
             {
-                for (var match = _regex.Match(message); match.Success; match = match.NextMatch())
+                if (match.Length > 0)
                 {
-                    if (match.Length > 0)
-                    {
-                        ranges.Add((index + match.Index, match.Length));
-                    }
+                    ranges.Add((index + match.Index, match.Length));
                 }
-            }
-            catch (RegexMatchTimeoutException)
-            {
-                // What was found before the timeout is still drawn.
             }
 
             return ranges;

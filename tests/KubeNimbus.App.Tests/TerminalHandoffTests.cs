@@ -157,7 +157,7 @@ public class TerminalHandoffTests
     public async Task ThePaletteOffersBothHandOffsOnTheRowsTheyApplyTo()
     {
         TestObjects.RedirectStores();
-        using var shell = new MainWindowViewModel();
+        using var shell = new MainWindowViewModel { Mode = ShellMode.Resources };
         var tab = new ClusterTabViewModel(ClusterContext.Demo);
         tab.ConnectCommand.Execute(null);
         shell.Tabs.Add(tab);
