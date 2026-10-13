@@ -50,8 +50,8 @@ Seven things are load-bearing:
    command palette, Ctrl+P the switcher and Ctrl+Shift+N the namespace picker, each sending
    nothing to the shell. The owner's decision (2026-10-12, on #222): the terminal keeps the
    chord. So `CommandBindings.RebuildWindowBindings` builds every binding whose gesture
-   `ShellOwns` (literal Ctrl, with or without Shift, on a letter; never Cmd, Alt, Ctrl+Tab,
-   Ctrl+digit or a function key) over a `YieldToTerminalCommand` that cannot execute while
+   `ShellOwns` (literal Ctrl, with or without Shift, on a letter, and since #337 F1–F12;
+   never Cmd, Alt, Ctrl+Tab or Ctrl+digit) over a `YieldToTerminalCommand` that cannot execute while
    focus is in a `TerminalControl` (`ExecView.IsInTerminal`), and a binding that cannot
    execute leaves the key to the control. `ClusterTabView`'s own Tunnel handler for
    Ctrl+Shift+N makes the same check. The control encodes Ctrl+letter itself but not
@@ -64,6 +64,19 @@ Seven things are load-bearing:
    presses the chords on a rendered pane: `^L`, `^K`, `^P` and `^N` reach the model with
    the palette shut, and Ctrl+Shift+L with focus on the pane's button still opens the
    palette on `logs `.
+   **F1–F12 are the shell's too** (#337, the owner's decision of 2026-10-12). Terminal programs
+   give them meaning (htop's F5 tree view, mc's F1 help, vim mappings), and the window's F1
+   (the cheat sheet) fired before the control saw the key, so F1 opened the sheet and sent
+   nothing. (The issue also named F5 as "reload"; no F5 binding exists in this app, only
+   Ctrl/Cmd+R.) `ShellOwns` now covers every function key, with any modifier, so F1 yields
+   like the Ctrl chords and works again after Ctrl+Tab leaves the terminal. The control
+   encodes F1–F10 as xterm does (`ESC O P`…`ESC O S`, `ESC [15~`…`ESC [21~`) but sends nothing
+   for F11 and F12, on 2.1.0 and on 2.2.2, so `ExecView.EncodeKey` sends `ESC [23~` and
+   `ESC [24~` (with xterm's `;1+mask` parameter when Shift, Alt or Ctrl is held).
+   `TerminalChordYieldTests` pins the F1 yield (mutation-checked: dropping the function keys
+   from `ShellOwns` fails it), `ExecKeyEncodingTests` pins F11/F12, and `ux-exec-keys` presses
+   F1–F12 on the rendered pane, expects each key's sequence with the sheet and the palette
+   shut, then F1 with focus on the pane's button opens the sheet.
    **Alt+&lt;letter&gt; is ESC and the letter in the case Shift gives it** (#315). The control
    sends ESC followed by the key event's `KeySymbol`, and Windows reports an Alt chord's
    symbol as the upper-case letter whatever Shift says, so Alt+B reached the shell as
@@ -280,7 +293,7 @@ alone, so both halves landed back where they started and `ESC[7m` rendered as or
 `top`'s header, `less`'s prompt, vim's status line and mc's menu bar, the whole default-colour
 case. There was no app-side hook (`ResolveColorBrush` was private), so it was left for upstream
 or a vendored copy and filed as ENG-19. **It no longer reproduces on 2.0.0 and later** (the
-package update of 2026-09-28; the app is on 2.1.0): the `cluster-tab-exec-fullscreen` fixture
+package update of 2026-09-28; the app is on 2.2.2 since #344): the `cluster-tab-exec-fullscreen` fixture
 emits the same `ESC[7m` real `top` emits, as it always has, and its header now renders as an
 inverted band in both themes, where the FEAT-10 render of the same fixture on 1.1.x showed
 plain text. Nothing in this repo changed for that, which is the reason the fixture was written

@@ -23,7 +23,8 @@ namespace KubeNimbus.App.Views;
 /// <para>
 /// The one consequence worth knowing: while the terminal has focus, Ctrl+&lt;letter&gt; and
 /// Ctrl+Shift+&lt;letter&gt; are the shell's, so the window's own Ctrl chords (the palette,
-/// the logs palette, the switcher) do not fire there. A window key binding runs before the
+/// the logs palette, the switcher) do not fire there, and so are F1–F12 (#337: F1 is the
+/// shell's, not the cheat sheet). A window key binding runs before the
 /// focused control sees the key, so that takes <c>CommandBindings.ShellOwns</c> standing the
 /// window's binding aside (#222) as well as the control marking the key handled. That is
 /// what a terminal is for — ^C has to reach the container — and it is why Copy and Paste
@@ -111,10 +112,23 @@ public partial class ExecView : UserControl
     /// and went on to the window, where it opened the logs palette. The terminal owns its keys:
     /// the chord is <c>^L</c> here, and Ctrl+Tab leaves the terminal for the palette.
     /// Ctrl+Shift+C and V are Copy and Paste and never get here.</item>
+    /// <item><b>F11 and F12 are xterm's <c>CSI 23 ~</c> and <c>CSI 24 ~</c></b> (#337). The control
+    /// encodes F1–F10 but sends nothing for F11 and F12 (read off a rendered pane by
+    /// <c>ux-exec-keys</c>, on 2.1.0 and 2.2.2). A modifier goes in xterm's parameter form,
+    /// <c>CSI 24 ; 1+mask ~</c> with Shift 1, Alt 2 and Ctrl 4.</item>
     /// </list>
     /// </summary>
     internal static string? EncodeKey(Key key, KeyModifiers modifiers, bool altIsMeta)
     {
+        if (key is Key.F11 or Key.F12)
+        {
+            var code = key == Key.F11 ? 23 : 24;
+            var mask = (modifiers.HasFlag(KeyModifiers.Shift) ? 1 : 0)
+                       + (modifiers.HasFlag(KeyModifiers.Alt) ? 2 : 0)
+                       + (modifiers.HasFlag(KeyModifiers.Control) ? 4 : 0);
+            return mask == 0 ? $"\u001b[{code}~" : $"\u001b[{code};{mask + 1}~";
+        }
+
         if (key is < Key.A or > Key.Z)
         {
             return null;
