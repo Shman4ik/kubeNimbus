@@ -105,7 +105,7 @@ internal static class MacMenu
             // is rebuilt only when the hotkey scheme changes, and the selected tab
             // changes far more often than that — a captured command would act on the
             // wrong cluster, or on a closed one.
-            cluster.Add(Item(CommandId.OpenTerminal, () => Run(vm.SelectedTab?.OpenInTerminalCommand)));
+            cluster.Add(Item(CommandId.OpenTerminal, () => Run(vm.SelectedTab?.Terminal.OpenInTerminalCommand)));
             cluster.Add(Item(CommandId.ReconnectCluster, () => Run(vm.SelectedTab?.ReconnectCommand)));
             cluster.Add(Item(CommandId.CloseClusterTab, () =>
             {

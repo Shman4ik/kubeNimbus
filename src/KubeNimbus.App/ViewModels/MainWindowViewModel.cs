@@ -1333,7 +1333,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             yield return Catalog(
                 CommandId.OpenTerminal,
                 $"KUBECONFIG and the current context, pointed at {terminalTab.Header}",
-                () => terminalTab.OpenInTerminalCommand.Execute(null));
+                () => terminalTab.Terminal.OpenInTerminalCommand.Execute(null));
         }
 
         // The answer to an expired session, by name: re-read the kubeconfig, re-run the

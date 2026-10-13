@@ -151,7 +151,7 @@
                          it at — but never disabled for the demo cluster, which refuses
                          in place with a sentence instead. -->
                     <MenuItem Header="Open a terminal on this cluster"
-                              Command="{Binding SelectedTab.OpenInTerminalCommand}" />
+                              Command="{Binding SelectedTab.Terminal.OpenInTerminalCommand}" />
                     <!-- Re-read the kubeconfig and re-run the credential plugin without
                          closing the tab: the way back after `aws sso login`. -->
                     <MenuItem Header="Reconnect" Command="{Binding SelectedTab.ReconnectCommand}" />

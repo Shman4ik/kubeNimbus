@@ -33,7 +33,7 @@ public sealed partial class ConnectionFailureViewModel : ObservableObject
 
         Report = report;
         _tab = tab;
-        _tab.PropertyChanged += OnTabPropertyChanged;
+        _tab.Terminal.PropertyChanged += OnTerminalPropertyChanged;
     }
 
     public ConnectionFailureReport Report { get; }
@@ -54,19 +54,19 @@ public sealed partial class ConnectionFailureViewModel : ObservableObject
 
     public IAsyncRelayCommand RetryCommand => _tab.ReconnectCommand;
 
-    public IAsyncRelayCommand OpenTerminalCommand => _tab.OpenInTerminalCommand;
+    public IAsyncRelayCommand OpenTerminalCommand => _tab.Terminal.OpenInTerminalCommand;
 
     /// <summary>What happened when the terminal was asked for — the tab's own notice, shown here too.</summary>
-    public string? TerminalNotice => _tab.TerminalNotice;
+    public string? TerminalNotice => _tab.Terminal.Notice;
 
-    public bool HasTerminalNotice => _tab.TerminalNotice is not null;
+    public bool HasTerminalNotice => _tab.Terminal.Notice is not null;
 
     /// <summary>Stops following the tab; called when the tab drops this failure.</summary>
-    internal void Detach() => _tab.PropertyChanged -= OnTabPropertyChanged;
+    internal void Detach() => _tab.Terminal.PropertyChanged -= OnTerminalPropertyChanged;
 
-    private void OnTabPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    private void OnTerminalPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(ClusterTabViewModel.TerminalNotice))
+        if (e.PropertyName == nameof(TerminalNoticeViewModel.Notice))
         {
             OnPropertyChanged(nameof(TerminalNotice));
             OnPropertyChanged(nameof(HasTerminalNotice));

@@ -59,6 +59,12 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     public ClusterContext Context { get; }
 
+    /// <summary>
+    /// "Open a terminal on this cluster" and the notice that reports how it went, which the
+    /// row and palette hand-offs to the user's terminal report into too (machine-terminal.md).
+    /// </summary>
+    public TerminalNoticeViewModel Terminal { get; }
+
     public string Header => Context.Name;
 
     /// <summary>
@@ -971,6 +977,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     public ClusterTabViewModel(ClusterContext context)
     {
         Context = context;
+        Terminal = new TerminalNoticeViewModel(context);
         _recentNamespaces = WorkspaceStore.Load().RecentNamespaces?.GetValueOrDefault(NamespaceHistoryKey) ?? [];
         NamespaceOptions.CollectionChanged += (_, _) => RebuildNamespaceChoices();
         RebuildNamespaceChoices();
