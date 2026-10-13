@@ -61,6 +61,18 @@ public static class Hotkeys
 
     public static KeyGesture ShortcutsHelp => Gesture(CommandId.ShortcutsWindow);
 
+    /// <summary>
+    /// Opens Avalonia's developer tools in a Debug build (<c>Program.BuildAvaloniaApp</c>);
+    /// Release builds do not reference them. Not the library's default F12: developer tools
+    /// read the key from the raw input stream, before any control sees it, so F12 opened them
+    /// from inside the exec terminal, where F1–F12 are the shell's (#337, #369). The key also
+    /// goes on to the focused control, so it has to be one the terminal sends nothing for:
+    /// Pause, which no command binds and the shell does not own (<c>CommandBindings.ShellOwns</c>).
+    /// A probe of the terminal control in <c>ux-exec-keys</c> ruled out the chords: it sent ^D
+    /// (end of input) for Ctrl+Alt+Shift+D and the key's character for Ctrl+Alt+Shift+0.
+    /// </summary>
+    public static KeyGesture DeveloperTools => new(Key.Pause);
+
     /// <summary>Human-readable label for a gesture, for palette rows and the cheat sheet.</summary>
     public static string Describe(KeyGesture gesture) => Nimbus.Ui.Hotkeys.Describe(gesture);
 

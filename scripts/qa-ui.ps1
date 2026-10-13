@@ -10,17 +10,23 @@
     needs nothing beyond Windows and PowerShell 7.
 
     Two kinds of action, deliberately separate:
-    - `invoke`, `select`, `toggle`, `set-text` use UIA patterns. They do not move the
+    - `invoke`, `select`, `toggle`, `collapse`, `set-text` use UIA patterns. They do not move the
       mouse or need focus, so they are safe while someone is using the machine.
     - `click`, `double-click`, `right-click` and `keys` are REAL OS input: the window is
       brought to the front and the pointer and keyboard really move. Use them only when a
       check is about real input (a DataGrid double-click, a context menu, a key gesture),
       which is exactly what the pattern actions cannot prove.
     A pattern action reads its state back: `select` fails when the item is not selected
-    afterwards, `toggle` when the state did not change, and `invoke` says which pattern it
-    used and, for InvokePattern (which has no state), that the effect is for the caller to
-    check. A list that only acts on a pointer press then fails loudly instead of printing
-    success; use `click` there.
+    afterwards, or when it sits in a popup list that is still open (the namespace picker's
+    list only moves its highlight on a selection), `toggle` when the state did not change,
+    `collapse` when the element is not collapsed, `set-text` when the box does not read the
+    text back, and `invoke` says which pattern it used and, for InvokePattern (which has no
+    state), that the effect is for the caller to check. A list that only acts on a pointer
+    press then fails loudly instead of printing success; use `click` there.
+
+    `dump` prints each element's pattern states when it has the pattern, false ones
+    included: `selected` / `not selected`, `toggle=On|Off`, `expand=Expanded|Collapsed`,
+    and the item status (`status='…'`) when the app sets one.
 
     Runs only inside the owner's Hyper-V QA VM (KUBENIMBUS_QA_VM=1), never on the owner's
     own desktop; see qa-app.ps1.
@@ -35,7 +41,10 @@
     not give them a node of their own (their parent is the main window), so a real click is
     judged by asking Windows which window is at the point it would land on: it must be one
     of this app's own windows. That also refuses a click that another application's window
-    would take.
+    would take. A scrolling ancestor clips the point only when it is drawn in the same
+    window, so a combo's drop-down items (the Range list) are not judged by the closed box.
+
+    `screenshot -Id DockContent` crops the open dock tab's pane (below the dock's tab strip).
 
     More real input, for checks that need it and have no element to target:
     - `click`/`double-click`/`right-click` take `-Modifiers ctrl,shift,alt` (held for the
@@ -67,7 +76,11 @@
       -Within <AutomationId>  search only inside that container (ResourceGrid, PaletteList,
                            InspectorTabStrip, …): much faster than a whole-window scan
       -Dialog              search the open Windows file dialog instead of the main window
-                           (its file name box is -Id 1148, Open is -Id 1, Cancel -Id 2)
+                           (its file name box is -Id 1148, Open is -Id 1, Cancel -Id 2).
+                           On Windows 11 1148 and 1 are Panes: `set-text` writes to the Edit
+                           inside 1148, `invoke` presses a Button inside 1 and, when there is
+                           none, says to commit with `keys -Dialog -Id 1148 -Keys '{ENTER}'`;
+                           real input (`keys`, `click`) brings the dialog forward, not the app
 
 .EXAMPLE
     ./scripts/qa-ui.ps1 dump -Match crashloop
@@ -79,12 +92,15 @@
     ./scripts/qa-ui.ps1 resize -Width 960 -Height 720
     ./scripts/qa-ui.ps1 set-text -Dialog -Id 1148 -Text C:\qa\extra.kubeconfig
     ./scripts/qa-ui.ps1 invoke -Dialog -Id 1
+    ./scripts/qa-ui.ps1 keys -Dialog -Id 1148 -Keys "{ENTER}"
+    ./scripts/qa-ui.ps1 collapse -Name Config -Within SidebarItems
     ./scripts/qa-ui.ps1 screenshot -Id RowFilterBox -Out $env:TEMP/qa/step1.png
+    ./scripts/qa-ui.ps1 screenshot -Id DockContent -Out $env:TEMP/qa/dock.png
 #>
 [CmdletBinding()]
 param(
     [Parameter(Position = 0, Mandatory)]
-    [ValidateSet('dump', 'find', 'invoke', 'select', 'toggle', 'set-text', 'click', 'double-click',
+    [ValidateSet('dump', 'find', 'invoke', 'select', 'toggle', 'collapse', 'set-text', 'click', 'double-click',
         'right-click', 'drag', 'wheel', 'keys', 'wait', 'wait-gone', 'screenshot', 'window', 'resize', 'move')]
     [string]$Command,
     [string]$Id,
@@ -130,6 +146,8 @@ Add-Type -Namespace QaNative -Name Win32 -MemberDefinition @'
 [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(long point);
 [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr hWnd, uint flags);
 [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+[DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+[DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
 '@
 
 $A = [System.Windows.Automation.AutomationElement]
@@ -168,7 +186,9 @@ function Get-Window {
 # class #32770, in this process. UI Automation lists it beside the main window or, as an owned
 # window, inside it; both are searched. Its controls have Win32 ids as AutomationIds: the
 # file name box is 1148 and Open is 1, so `set-text -Dialog -Id 1148 -Text <path>` and
-# `invoke -Dialog -Id 1` drive it (#314). Cancel is 2.
+# `invoke -Dialog -Id 1` drive it (#314). Cancel is 2. In the QA VM's Windows 11 both are
+# Panes with no pattern (#370), so those commands look inside them for the Edit and the
+# Button.
 $DialogClass = '#32770'
 function Get-Dialog {
     $byClass = New-Object System.Windows.Automation.PropertyCondition($A::ClassNameProperty, $DialogClass)
@@ -197,16 +217,24 @@ function Format-Element($element, [int]$number) {
     if (-not $c.IsEnabled) { $flags += 'disabled' }
     if ($c.IsOffscreen) { $flags += 'offscreen' }
     if ($c.HasKeyboardFocus) { $flags += 'focused' }
+    # Each pattern's state is printed whenever the element has the pattern, false included:
+    # a row that is not selected or a group that is collapsed is a reading a check can need
+    # (C-13, C-16 in the 2026-10-13 run could not tell "not selected" from "no pattern").
     try {
         $sel = $element.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern)
-        if ($sel.Current.IsSelected) { $flags += 'selected' }
+        $flags += if ($sel.Current.IsSelected) { 'selected' } else { 'not selected' }
     } catch { }
     try {
         $tog = $element.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern)
         $flags += "toggle=$($tog.Current.ToggleState)"
     } catch { }
+    try {
+        $exp = $element.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern)
+        $flags += "expand=$($exp.Current.ExpandCollapseState)"
+    } catch { }
     $id = if ($c.AutomationId) { " [$($c.AutomationId)]" } else { '' }
     if ($c.HelpText) { $id += " help='$($c.HelpText)'" }
+    if ($c.ItemStatus) { $id += " status='$($c.ItemStatus)'" }
     $f = if ($flags) { " ($($flags -join ', '))" } else { '' }
     $bounds = if ($r.IsEmpty) { '' } else { " @{0:0},{1:0} {2:0}x{3:0}" -f $r.X, $r.Y, $r.Width, $r.Height }
     "#{0} {1} '{2}'{3}{4}{5}" -f $number, $kind, (Format-Name $c.Name), $id, $f, $bounds
@@ -248,6 +276,21 @@ function Get-Target {
     Show-Element $found[$Index]
 }
 
+function Test-SameElement($a, $b) { [System.Windows.Automation.Automation]::Compare($a, $b) }
+
+# The element itself when it has the pattern, else the first descendant of the given control
+# type that has it, else any descendant that has it; $null when none does.
+function Find-PatternInside($element, $pattern, [string]$preferredType) {
+    $has = { param($el) try { $null = $el.GetCurrentPattern($pattern); $true } catch { $false } }
+    if (& $has $element) { return $element }
+    $inside = Invoke-UiaRead {
+        , @($element.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition))
+    }
+    $typed = $inside | Where-Object { ($_.Current.ControlType.ProgrammaticName -replace '^ControlType\.', '') -eq $preferredType -and (& $has $_) } | Select-Object -First 1
+    if ($typed) { return $typed }
+    $inside | Where-Object { & $has $_ } | Select-Object -First 1
+}
+
 # Whether a real click at a screen point would land on one of this app's own windows.
 # A popup (the log pane's ⋯ menu, a combo's drop-down, a context menu) is a native window
 # of its own that can hang past the main window's edge, but UI Automation gives it no node
@@ -256,16 +299,36 @@ function Get-Target {
 # that was plainly on screen). So the main window's bounds cannot judge them, and Windows
 # is asked who is at the point instead. A point over the desktop or another application's
 # window is refused, which also catches an app that something else has covered.
-function Test-LandsOnApp([double]$x, [double]$y) {
+function Get-RootAt([double]$x, [double]$y) {
     $low = [BitConverter]::ToUInt32([BitConverter]::GetBytes([int]$x), 0)
     $point = ([long][int]$y -shl 32) -bor [long]$low
     $hwnd = [QaNative.Win32]::WindowFromPoint($point)
-    if ($hwnd -eq [IntPtr]::Zero) { return $false }
+    if ($hwnd -eq [IntPtr]::Zero) { return [IntPtr]::Zero }
     $top = [QaNative.Win32]::GetAncestor($hwnd, 2)   # GA_ROOT
     if ($top -eq [IntPtr]::Zero) { $top = $hwnd }
+    $top
+}
+
+function Test-LandsOnApp([double]$x, [double]$y) {
+    $top = Get-RootAt $x $y
+    if ($top -eq [IntPtr]::Zero) { return $false }
     $owner = [uint32]0
     [QaNative.Win32]::GetWindowThreadProcessId($top, [ref]$owner) | Out-Null
     $owner -eq $appPid
+}
+
+# The popup window an element is drawn in, or zero when it is in the main window (or not on
+# screen). A flyout, a combo's drop-down and a context menu are native windows of their own
+# in this process; UI Automation still lists their items under the main window.
+function Get-PopupWindow($element) {
+    $r = $element.Current.BoundingRectangle
+    if ($r.IsEmpty) { return [IntPtr]::Zero }
+    $x = $r.X + $r.Width / 2
+    $y = $r.Y + $r.Height / 2
+    if (-not (Test-LandsOnApp $x $y)) { return [IntPtr]::Zero }
+    $root = Get-RootAt $x $y
+    if ($root -eq (Get-MainHandle)) { return [IntPtr]::Zero }
+    $root
 }
 
 # An element scrolled out of its list is in the tree but has no usable bounds and cannot
@@ -282,6 +345,11 @@ function Test-InWindow($element, [double]$px = [double]::NaN, [double]$py = [dou
     # Also inside the viewport of every scrolling ancestor: an item can be within the
     # window yet clipped by the sidebar's or a list's scroll viewer. AutomationElements
     # are compared with Automation.Compare — two wrappers of one element are not -eq.
+    # Only an ancestor drawn in the same native window as the point can clip it: a ComboBox
+    # has the Scroll pattern and its bounds are the closed box in the main window, while its
+    # items are in the drop-down's popup window, so judging them by the box refused every
+    # Range item in the 2026-10-13 run (#370).
+    $pointRoot = Get-RootAt $x $y
     $walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
     $node = $walker.GetParent($element)
     while ($node -and -not [System.Windows.Automation.Automation]::Compare($node, $window)) {
@@ -289,7 +357,14 @@ function Test-InWindow($element, [double]$px = [double]::NaN, [double]$py = [dou
         try { $null = $node.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern); $scrolls = $true } catch { }
         if ($scrolls) {
             $v = $node.Current.BoundingRectangle
-            if (-not $v.IsEmpty -and ($x -lt $v.Left -or $x -gt $v.Right -or $y -lt $v.Top -or $y -gt $v.Bottom)) { return $false }
+            $sameWindow = -not $v.IsEmpty -and (Get-RootAt ($v.X + $v.Width / 2) ($v.Y + $v.Height / 2)) -eq $pointRoot
+            # An open drop-down is never clipped by its own closed box, whichever window is
+            # at the box's centre.
+            try {
+                $dropDown = $node.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern)
+                if ($dropDown.Current.ExpandCollapseState -eq [System.Windows.Automation.ExpandCollapseState]::Expanded) { $sameWindow = $false }
+            } catch { }
+            if ($sameWindow -and ($x -lt $v.Left -or $x -gt $v.Right -or $y -lt $v.Top -or $y -gt $v.Bottom)) { return $false }
         }
         $node = $walker.GetParent($node)
     }
@@ -350,8 +425,12 @@ function Set-WindowPos([IntPtr]$hwnd, [int]$x, [int]$y, [int]$cx, [int]$cy, [uin
 
 function Show-Window {
     Assert-InputDesktop
-    $hwnd = [IntPtr](Get-Process -Id $appPid).MainWindowHandle
-    [QaNative.Win32]::ShowWindow($hwnd, 9) | Out-Null   # SW_RESTORE
+    # The file dialog takes real input itself: bringing its disabled owner forward instead
+    # would send the keys nowhere.
+    $hwnd = if ($Dialog) { [IntPtr](Get-Dialog).Current.NativeWindowHandle } else { Get-MainHandle }
+    # SW_RESTORE only when minimized: on a maximized window it restores the old size, and the
+    # move closes any popup (a drop-down, a flyout) the next click was meant for.
+    if ([QaNative.Win32]::IsIconic($hwnd)) { [QaNative.Win32]::ShowWindow($hwnd, 9) | Out-Null }
     [QaNative.Win32]::SetForegroundWindow($hwnd) | Out-Null
     Start-Sleep -Milliseconds 200
 }
@@ -383,6 +462,9 @@ function Move-PointerTo($element) {
     $px, $py = Get-ClickPoint $element
     if (-not (Test-InWindow $element $px $py)) {
         $r = $element.Current.BoundingRectangle
+        if (Test-LandsOnApp $px $py) {
+            throw "The point ($px,$py) is on the app but outside the viewport of a list that scrolls (element at $($r.X),$($r.Y)) — a real click would hit whatever covers it. Filter the list or scroll it into view."
+        }
         throw "The point ($px,$py) is not on one of the app's windows (element at $($r.X),$($r.Y)) — a real click would land elsewhere. Filter the list to bring it into view."
     }
     [QaNative.Win32]::SetCursorPos($px, $py) | Out-Null
@@ -434,10 +516,19 @@ function Send-Wheel($element, [int]$notches, [bool]$horizontal) {
 $SettleMs = 400
 
 function Invoke-Select($element, $pattern) {
+    # A list in a popup that is still open afterwards has only moved its highlight: the
+    # namespace picker's list selects a candidate and chooses on a press or Enter, so a
+    # Select read back "selected" in the 2026-10-13 run while the namespace stayed where it
+    # was (Q-2, #370). A popup that closes, as a combo's drop-down does when its choice is
+    # taken, passes.
+    $popup = Get-PopupWindow $element
     $pattern.Select()
     Start-Sleep -Milliseconds $SettleMs
     if (-not (Invoke-UiaRead { $pattern.Current.IsSelected })) {
         throw "Select changed nothing: $(Format-Element $element 0) is not selected afterwards (the app put its own selection back, or ignores a selection it did not see a press for). Use click for real input."
+    }
+    if ($popup -ne [IntPtr]::Zero -and [QaNative.Win32]::IsWindowVisible($popup)) {
+        throw "Select changed nothing the app acts on: $(Format-Element $element 0) is selected in a popup list that is still open, so only its highlight moved (the namespace picker chooses on a press or Enter). Use click for real input."
     }
 }
 
@@ -491,7 +582,30 @@ switch ($Command) {
             }
             return
         }
+        # The file dialog's Open (id 1) is a Pane with no pattern on this Windows build; the
+        # button, when there is one, is inside it (Q-3, #370).
+        if ($Dialog) {
+            $button = Find-PatternInside $e ([System.Windows.Automation.InvokePattern]::Pattern) 'Button'
+            if ($button) {
+                $before = Format-Element $button 0
+                $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+                "invoked (InvokePattern on a button inside $(Format-Element $e 0); the pattern reports no state, so check what it should have changed): $before"
+                return
+            }
+            throw "No Invoke pattern on the dialog's $(Format-Element $e 0) or on a button inside it. Commit the file name with Enter instead: ./scripts/qa-ui.ps1 keys -Dialog -Id 1148 -Keys '{ENTER}'."
+        }
         throw "No invoke/select/toggle/expand pattern on: $(Format-Element $e 0). Use click for real input."
+    }
+    'collapse' {
+        $e = Get-Target
+        $pattern = try { $e.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern) } catch { $null }
+        if (-not $pattern) { throw "No ExpandCollapse pattern on: $(Format-Element $e 0). Use click for real input." }
+        $pattern.Collapse()
+        Start-Sleep -Milliseconds $SettleMs
+        if ((Invoke-UiaRead { $pattern.Current.ExpandCollapseState }) -ne [System.Windows.Automation.ExpandCollapseState]::Collapsed) {
+            throw "Collapse changed nothing: $(Format-Element $e 0) is not collapsed afterwards. Use click for real input."
+        }
+        "collapsed: $(Format-Element $e 0)"
     }
     'select' {
         $e = Get-Target
@@ -504,9 +618,19 @@ switch ($Command) {
         "toggled: $(Format-Element $e 0)"
     }
     'set-text' {
+        if (-not $PSBoundParameters.ContainsKey('Text')) { throw 'Pass -Text, the text to put in the box.' }
         $e = Get-Target
-        $e.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($Text)
-        "text set: $(Format-Element $e 0)"
+        # The file dialog's name box (id 1148) is a Pane on this Windows build with the Edit
+        # inside it (Q-3, #370); a number box's text box sits inside its control the same way.
+        $box = Find-PatternInside $e ([System.Windows.Automation.ValuePattern]::Pattern) 'Edit'
+        if (-not $box) { throw "No Value pattern on $(Format-Element $e 0) or on an edit box inside it. Use click and keys for real input." }
+        $value = $box.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
+        $value.SetValue($Text)
+        Start-Sleep -Milliseconds $SettleMs
+        $now = Invoke-UiaRead { $value.Current.Value }
+        if ($now -ne $Text) { throw "Set text changed nothing: $(Format-Element $box 0) reads '$now' afterwards, not '$Text'. Use click and keys for real input." }
+        $where = if (Test-SameElement $box $e) { '' } else { " (the edit box inside $(Format-Element $e 0))" }
+        "text set: $(Format-Element $box 0)$where"
     }
     # The element is described before the input is sent: the click usually closes or
     # rebuilds what it hit, and a description read afterwards shows a half-gone element
@@ -543,7 +667,12 @@ switch ($Command) {
     'keys' {
         if (-not $Keys) { throw 'Pass -Keys in SendKeys syntax: {ENTER}, {ESC}, ^k, +l, l.' }
         Show-Window
-        if ($Id -or $Name -or $Match) { (Get-Target).SetFocus() }
+        if ($Id -or $Name -or $Match) {
+            $e = Get-Target
+            # With -Dialog the name box is a Pane with the Edit inside it (#370): focus the Edit.
+            if ($Dialog) { $e = (Find-PatternInside $e ([System.Windows.Automation.ValuePattern]::Pattern) 'Edit') ?? $e }
+            $e.SetFocus()
+        }
         [System.Windows.Forms.SendKeys]::SendWait($Keys)
         "sent (real keyboard): $Keys"
     }

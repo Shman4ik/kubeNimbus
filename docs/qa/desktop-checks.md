@@ -92,10 +92,10 @@ Setup: Resources, Pods, namespace `qa-shop`. Both themes where noted (`ThemeTogg
 - **C-9 [look]** (#215, #237) A pod's Overview and a node's Overview (`kubenimbus-sandbox`'s
   node): SCHEDULING, CONDITIONS, TOLERATIONS, PROBES (and the node's four) are headers with no
   border or fill around their rows; each condition's dot sits left of the CONDITIONS header and
-  its type starts directly under the header's first letter. Crop the dock, both themes.
+  its type starts directly under the header's first letter. Crop the dock (`screenshot -Id DockContent`), both themes.
 - **C-10 [look]** (#215) Logs, Exec (S on a `shop-api-…` pod), E on a Deployment and Review… a
   change to its replicas, and a Helm release's Values tab if the cluster has a release: none draws a bordered box inside the
-  dock; the apply preview (the editor hidden while it is open) is set off from the pane's toolbar by a single line above it. Crop the dock,
+  dock; the apply preview (the editor hidden while it is open) is set off from the pane's toolbar by a single line above it. Crop the dock (`screenshot -Id DockContent`),
   both themes.
 - **C-11 [text][input]** (#236) Open a second cluster tab (the demo cluster). `dump` shows a
   `Tab 'Clusters' [TabStrip]` holding one `TabItem` per cluster, named by the cluster, the one in
@@ -164,7 +164,7 @@ clicks are `click -Modifiers shift|ctrl`. Rows have no selected flag in the tree
   still shows both. Cancel; turn the preference back on.
 - **L-17 [look]** (#305) In L-7's run at 1280 px wide, the refused line's sentence wraps under
   itself and is not cut with "…" before "cannot delete resource". Crop the strip.
-- **L-18 [input]** (#367) Ctrl+P, `dump -Within SwitcherList`; then type `qa-` in
+- **L-20 [input]** (#367) Ctrl+P, `dump -Within SwitcherList`; then type `qa-` in
   `SwitcherQueryBox` and dump again; then clear it and dump a third time. Each time every
   ListItem's name names the context drawn in that row (crop one dump's list to compare). A real
   `click` at the bounds reported for `qa-limited` after the filter opens (or selects) the
@@ -237,7 +237,7 @@ real keyboard and the clipboard (click in, Ctrl+A, Ctrl+V), read it back through
   the first unchanged. Reload to discard.
 - **Y-11 [look]** (#316) Y-8's Review at the default dock height: the editor gives way to the
   diff, about six lines show, the footnote sits under them, nothing overlaps. Cancel brings the
-  editor back with the edit still in it. Crop the dock.
+  editor back with the edit still in it. Crop the dock (`screenshot -Id DockContent`).
 - **Y-12 [text][look]** (#316) On `shop-api`: E, change `spec.replicas`, Review…: the panel's
   headline starts "Apply conflict. A force apply would take these fields and make", the
   conflict sentence names `.spec.replicas` and its manager under it, the diff shows the replicas
@@ -289,7 +289,11 @@ SidebarSplitter -DX 300` (and back).
 
 ## Batch G2 — logs against the live API server
 
-Setup: `qa-seed.ps1 -Reset`; `./scripts/qa-netcut.ps1 start` for G-11.
+Setup: `qa-seed.ps1 -Reset`; `./scripts/qa-netcut.ps1 start` for G-11. This batch changes
+`qa-shop` with `kubectl` (`rollout restart`, `create deployment`, `delete pod`, `patch`), which
+the session's permission check refused on 2026-10-13: the VM session needs the allow rules in
+`docs/engineering/desktop-qa.md` ("Batch G2's kubectl"), or a person runs those commands when
+the agent asks.
 
 - **G-10 [text]** (#168) `Logs/shop-web` open, then `kubectl -n qa-shop rollout restart
   deploy/shop-web`: new chips appear ("connecting", then none), old chips read "deleted"
@@ -307,7 +311,7 @@ Setup: `qa-seed.ps1 -Reset`; `./scripts/qa-netcut.ps1 start` for G-11.
 - **G-13 [text]** (#184) `qa-gated`, a pod with `schedulingGates: [{name: kubenimbus.io/qa-hold}]`
   that logs a line every 2 s: its logs say "app has not started — the pod is not scheduled onto
   a node yet (SchedulingGated), so there is no log to read."; remove the gate
-  (`kubectl patch … --type=json -p '[{"op":"remove","path":"/spec/schedulingGates"}]'`) and,
+  (`kubectl -n qa-shop patch pod qa-gated --type=json -p '[{"op":"remove","path":"/spec/schedulingGates"}]'`) and,
   with no click, "INFO gated pod line …" appears within about 30 s; a `container "app" in pod
   "qa-gated" is not available` or `is waiting to start` sentence may show in between, as a wait
   (not in warning colour). Repeat with `Logs (all pods)` on a Deployment whose pod is gated: the chip
@@ -331,12 +335,12 @@ Setup: `qa-seed.ps1 -Reset`; `./scripts/qa-netcut.ps1 start` for G-11.
   Remove the gate: within about 30 s the pane shows the pod's lines and "Selected range loaded —
   this is a snapshot.", and Follow stays **off** (no new line arrives in the next 10 s). Before
   #331 it began following. Delete the pod.
-- **G-18 [text]** (#331) `Logs (all pods)` on `shop-web`, Follow off. `kubectl rollout restart
-  deploy/shop-web -n qa-shop`: each new pod's chip reads "loaded" (a snapshot), never no word
+- **G-18 [text]** (#331) `Logs (all pods)` on `shop-web`, Follow off. `kubectl -n qa-shop rollout restart
+  deploy/shop-web`: each new pod's chip reads "loaded" (a snapshot), never no word
   at all (how a streaming chip looks), and the status line keeps "Log streaming is stopped. Press Follow to start it."
   Press Follow: every chip streams.
-- **G-19 [text]** (#332) `Logs (all pods)` on `shop-web`, Follow on, then `kubectl rollout restart
-  deploy/shop-web -n qa-shop` three times, waiting for each to finish: every old pod's chip ends
+- **G-19 [text]** (#332) `Logs (all pods)` on `shop-web`, Follow on, then `kubectl -n qa-shop rollout restart
+  deploy/shop-web` three times, waiting for each to finish: every old pod's chip ends
   "deleted" with "Pod deleted; its lines are kept." on hover, never "failed" with "the server could not
   find the requested resource". One attempt per restart; the 404 is a race the VM may not hit,
   so a run that never shows "failed" is a PASS.
@@ -382,6 +386,11 @@ and read what ran through the clipboard or a marker file (`echo hi > /tmp/m`,
 - **T-13 [input]** (#337) In the exec terminal run `cat -v`, then press F1, F5 and F12, then Enter:
   no cheat sheet opens and the line echoed back reads `^[OP^[[15~^[[24~`. Ctrl+C. Then Ctrl+Tab out
   of the terminal and press F1: the cheat sheet opens. Close it with its ✕.
+- **T-14 [input]** (#369, a Debug build, which `qa-app.ps1` starts) In the exec terminal run
+  `cat -v`, press F12 twice, then Enter: the line echoed back reads `^[[24~^[[24~`, which shows the
+  Enter reached the shell, and no "Developer Tools Not Installed" dialog sits over the app (a
+  `screenshot -WholeWindow`; on 2026-10-13 F12 opened it and it swallowed the Enter). Ctrl+C.
+  Developer tools now open on Pause, which SendKeys cannot press: not checked here.
 - **T-11 [input]** (#198) Right-click a `shop-api-…` row: "Exec in my terminal" sits under Exec,
   no ellipsis. Click it: a PowerShell window opens in the container (`hostname` prints the pod
   name), and the notice above the list says the terminal opened. Close the window. With
@@ -420,7 +429,10 @@ and read what ran through the clipboard or a marker file (`echo hi > /tmp/m`,
   follows a `kubectl scale` with no refresh; "Re-read the events about this node" works.
   Right-click → "Drain…" (UIA name is its tooltip) arms the strip; **never press Drain**; tick and
   untick "Evict unmanaged pods" and "Delete emptyDir data" and quote the plan line each time
-  ("18 pods will be evicted …", 24, 26, 20, 18 in 0.7.0). Stopping a running drain: UNSURE.
+  ("N pods will be evicted …"). The numbers depend on what runs on the node that minute (0.7.0
+  read 18, 24, 26, 20, 18; 2026-10-13 read 19, 25, 27, 21, 19), so do not compare them with
+  a run's: the check is that ticking an option never lowers the count, unticking it brings back the
+  count before, and both off reads the same as at the start. Stopping a running drain: UNSURE.
 - **P-6 [text][input]** (#183) The `shop-web` Service pane: `kubectl scale deploy/shop-web
   --replicas=2` is followed with no refresh (the HPA, pinned at 3, puts it back within seconds).
   Dropped watch: on `qa-cut`, `qa-netcut.ps1 cut` for 20 s: an error InfoBar "Could not read the
@@ -457,10 +469,17 @@ Setup: "Explore demo cluster". Nothing is mutated.
 - **K-5 [text]** ApplicationSets, `payments-services`: tabs Overview / Applications / Conditions; "5
   generated · 3 out of sync · 2 degraded or missing"; `fraud-detector` first, `checkout` last; each
   chevron opens that Application's pane; three green condition dots [look].
-- **K-6 [text]** AppProjects, `payments`: five cards; "Every namespaced kind except the deny list
-  below."; "Matches applications *. Manual syncs are still allowed."
-- **K-7 [input]** Applications, double-click `checkout`: the "Argo/checkout" pane, not the YAML;
-  right-click → "Edit YAML" opens `Application/checkout`.
+- **K-6 [text]** AppProjects, `payments`: seven section headings in this order, SOURCE
+  REPOSITORIES, APPLICATION NAMESPACES, DESTINATIONS, CLUSTER-SCOPED KINDS, NAMESPACED KINDS, SYNC
+  WINDOWS, ROLES (the groups' borders are not in the UIA tree, so count headings, not boxes);
+  "Every namespaced kind except the deny list below."; "Matches applications *. Manual syncs are
+  still allowed."
+- **K-7 [input]** Applications, click `checkout` (one click opens a row): its page opens (Text
+  `checkout`, and "Demo cluster / payments · Argo CD · …" under it), not the YAML. The list has no
+  context menu, by design (item 8 of `docs/engineering/applications-mode.md`): a right-click
+  opening nothing is a PASS for that half. The page's "Edit YAML…" button opens the YAML editor
+  on the app's workload, after a strip saying Argo CD would revert a manual edit when the app
+  self-heals.
 - **K-8 [text]** (#364) Resources → Argo → Argo CD, select `notification-dispatcher` (a sync is
   running). Applications mode, open `checkout`'s page: Ctrl+K "Argo CD:" lists "Argo CD: sync",
   "Argo CD: sync with prune…" and "Argo CD: refresh from Git", each with `argocd/checkout`, and no
@@ -508,8 +527,10 @@ kubeconfig is merged into the run's. Otherwise all ten are UNSURE "no Argo sandb
 - **A-2** (PR #302) Application `qa-slow` (path `slow`): Sync, reload until Running, "Terminate sync…" →
   "Stop syncing": "Terminate of the sync on … requested"; after reload the last operation is
   Failed, "Operation terminated".
-- **A-3** (#191) On an `app`/`with-removed` Application, Sync and "Refresh from Git" fire on one click
-  with an in-flight line then the result; "Sync with prune…" asks and its confirm prunes.
+- **A-3** (#191) On an `app`/`with-removed` Application, in the Argo CD list's row menu, Sync and
+  "Refresh" (the item's name there; only the palette and the other lists' row menu say "Refresh
+  from Git") fire on one click with no strip and say "… requested."; an in-flight line before it
+  may be too quick to catch. "Sync with prune…" asks and its confirm prunes.
 - **A-4** (#190) `qa-tenant` in `argo-tenant`: "Open in Argo CD" is enabled with a tooltip naming
   `argocd.sandbox.test` and namespace `argocd`; clicking starts a browser for
   `https://argocd.sandbox.test/applications/argo-tenant/qa-tenant`. An Application in a namespace
@@ -617,9 +638,29 @@ Setup: a fresh `qa-app.ps1` start; these check `qa-ui.ps1`, not the app (#314).
 - **Q-2 [text]** `select` on a sidebar kind row (`-Within SidebarItems`) whose selection the app does
   not take: the command fails with "Select changed nothing" rather than printing `selected:`, or
   the kind really opens. A `click` on the same row opens it. The same for a namespace-picker row
-  in its open flyout.
-- **Q-3 [text]** Preferences → General → "Add file…": `find -Dialog -Id 1148` lists an Edit;
-  `set-text -Dialog -Id 1148 -Text <a kubeconfig path>`, `invoke -Dialog -Id 1`: the dialog closes
-  and the file is in the list. With no dialog open, `find -Dialog -Id 1` says "No file dialog is open".
+  in its open flyout: `select -Name default -Type ListItem` fails with "Select changed nothing the
+  app acts on … still open" (2026-10-13 printed `selected:` and the namespace stayed), and a
+  `click` on the row chooses `default` and closes the flyout (#370).
+- **Q-3 [text]** Preferences → General → "Add file…": `find -Dialog -Id 1148` lists it (a Pane on
+  Windows 11). `set-text -Dialog -Id 1148 -Text <a kubeconfig path>` prints `text set:` naming
+  "the edit box inside" it; then `invoke -Dialog -Id 1`: either it prints `invoked (InvokePattern
+  on a button inside …)`, or it fails naming `keys -Dialog -Id 1148 -Keys '{ENTER}'`, and that
+  command commits the name. Either way the dialog closes and the file is in the list (#370). With
+  no dialog open, `find -Dialog -Id 1` says "No file dialog is open".
 - **Q-4 [input]** G-5 again: `click -Id MenuCopy` on the log pane's ⋯ menu hanging past the window's
   bottom edge prints `clicked (real mouse)` and copies.
+- **Q-5 [text]** (#370) `dump -Within SidebarItems -Type Group`: each section header prints
+  `expand=Expanded` or `expand=Collapsed`. With two of `qa-del-a`…`qa-del-c` selected (click,
+  Ctrl+click), `dump -Within ResourceGrid -Type DataItem` prints `selected` on those two rows and
+  `not selected` on the others.
+- **Q-6 [text]** (#370) `collapse -Name Workloads -Within SidebarItems` prints `collapsed:` with
+  `expand=Collapsed`, and `find -Name Deployments -Within SidebarItems` then says "No elements
+  match"; `invoke` on the same header expands it again. `collapse` on a Button fails with "No
+  ExpandCollapse pattern".
+- **Q-7 [input]** (#370) Open `Logs/shop-api`, `click` the Range combo, then `click -Name "Last 5
+  minutes" -Type ListItem` on its drop-down: it prints `clicked (real mouse)` (2026-10-13 refused
+  it with "not on one of the app's windows") and the combo reads "Last 5 minutes".
+- **Q-8 [text]** (#370) With a pod's Overview open in the dock, `find -Id DockContent` lists one
+  `Pane 'Inspector content'` whose bounds start just under `InspectorTabStrip`'s; `screenshot -Id
+  DockContent -Out <file>` prints `saved` and the PNG's width and height
+  (`[System.Drawing.Image]::FromFile(<file>).Size`) are those bounds.

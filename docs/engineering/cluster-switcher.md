@@ -64,7 +64,7 @@ a file moves). Notes for anyone changing it:
   scenario `ux-switcher-filter-uia` (`AutomationPatternChecks.SwitcherAfterFilter`) filters to
   "prod" and clears it, and checks that each drawn row's peer names its own context and no other
   and reports the bounds it is drawn at; it failed before the fix with the row drawn as
-  `prod-ledger` named after the `arn:aws:eks:…search-staging` row. Desktop check L-18.
+  `prod-ledger` named after the `arn:aws:eks:…search-staging` row. Desktop check L-20.
 - **A context added while the app runs is in the unfiltered list after a rescan** (#366). The
   QA run reported it missing until typed, also through UI Automation; the list itself is rebuilt
   from `AvailableContexts` on every `Refresh`, filtered or not, and

@@ -71,6 +71,37 @@ if ($Kubeconfig -and (Test-Path $Kubeconfig)) {
             if ($LASTEXITCODE -eq 0) { Report ok 'qa-shop' ($shop -replace '\s+', ' ') } else { Report WARN 'qa-shop' 'missing. Run ./scripts/qa-seed.ps1' }
         }
     }
+    # --- the sandbox's containers, and WSL's idle stop (#370) ---------------------------
+    # In the 2026-10-13 run WSL stopped its idle VM a minute after `sandbox-up.ps1 -Wsl`, and
+    # both k3s containers with it (Exited (2)); this preflight had already passed. The
+    # containers are read now, and a WSL-hosted sandbox needs the keep-alive sandbox-up.ps1
+    # records beside the kubeconfig, or the same thing happens mid-run.
+    $keepAliveRecord = Join-Path (Split-Path $Kubeconfig -Parent) 'wsl-keepalive.json'
+    $keepAlive = $null
+    if (Test-Path $keepAliveRecord) {
+        $record = try { Get-Content -Raw $keepAliveRecord | ConvertFrom-Json } catch { $null }
+        $process = if ($record) { Get-Process -Id $record.Pid -ErrorAction SilentlyContinue }
+        if ($process -and $process.ProcessName -eq 'wsl' -and $process.StartTime.ToUniversalTime().Ticks -eq [long]$record.StartedTicks) { $keepAlive = $record }
+    }
+    $inWsl = $keepAlive -or (Test-Path $keepAliveRecord) -or ($who -match '^wsl')
+    if ($inWsl) {
+        if ($keepAlive) { Report ok 'WSL keep-alive' "pid $($keepAlive.Pid) holds the $(if ($keepAlive.Distribution) { "'$($keepAlive.Distribution)'" } else { 'default' }) distro up" }
+        else { Report FAIL 'WSL keep-alive' "the sandbox runs in WSL and no keep-alive is running ($keepAliveRecord): WSL stops an idle distro, and the k3s containers with it, about a minute after its last process. Re-run ./scripts/sandbox-up.ps1 -Wsl, which reuses the cluster and starts one." }
+    }
+    $dockerArgs = @('ps', '-a', '--filter', 'name=kubenimbus', '--format', '{{.Names}}|{{.State}}|{{.Status}}')
+    $containers = if ($inWsl) {
+        $wslArgs = @('--exec', 'docker') + $dockerArgs
+        if ($keepAlive -and $keepAlive.Distribution) { $wslArgs = @('-d', $keepAlive.Distribution) + $wslArgs }
+        & wsl.exe @wslArgs 2>$null
+    } elseif (Get-Command docker -ErrorAction SilentlyContinue) { docker @dockerArgs 2>$null }
+    if ($LASTEXITCODE -ne 0 -or -not $containers) { Report WARN 'sandbox containers' 'could not list them through docker; the port check above is all there is' }
+    foreach ($line in @($containers)) {
+        $containerName, $containerState, $containerStatus = $line -split '\|', 3
+        if ($containerState -eq 'running') { Report ok "container $containerName" $containerStatus }
+        elseif ($containerName -eq 'kubenimbus-sandbox') { Report FAIL "container $containerName" "$containerStatus. Start it again with ./scripts/sandbox-up.ps1$(if ($inWsl) { ' -Wsl' })." }
+        else { Report WARN "container $containerName" "$containerStatus (needed only by the checks that use it, such as batch A's Argo sandbox)" }
+    }
+
     # Connection-drop checks use qa-netcut.ps1, which needs no elevation; the old plan's
     # netsh port proxy does, so elevation is information only.
     $elevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole('Administrator')
