@@ -501,7 +501,7 @@ publish/app/kubeNimbus --smoke-test        # Linux: wrap in xvfb-run -a
 - **View-model tests** start no Avalonia app and redirect both stores and the kubeconfig
   search; a test that writes and reads back a setting is `[NotInParallel]`.
 - **The screenshot harness is the XAML smoke test.** Host views in a real `MainWindow`; two
-  runs of one commit must produce the same PNGs.
+  runs of one commit must produce the same PNGs, and CI renders it in shards, so no scenario may depend on another.
 - **The stress mode's budgets are counts**; a list bound to cluster data virtualizes and is
   rebuilt with one notification.
 - **`kn-qa` runs only in the owner's QA VM** (`KUBENIMBUS_QA_VM=1`), never on the owner's

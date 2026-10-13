@@ -495,6 +495,60 @@ machine that was a live connect landing on top of the scenario — the no-kubeco
 rendered "Connecting to kubenimbus-sandbox…" over its own empty state. CI has no
 kubeconfig, which is why it never showed there.
 
+### The smoke test is sharded across five runners (#347, 2026-10-13)
+
+**CI renders the scenario list in five shards, so no scenario may depend on the ones
+rendered before it.** `--shard=<index>/<count>` renders the scenarios whose position in
+the list is `index` modulo `count` (`tools/Screenshot/ShardPlan.cs`). The CI matrix passes
+`strategy.job-index` and `strategy.job-total` rather than its own values, so a matrix that
+grows or shrinks can never leave a position unrendered, and `ShardPlan.Verify` checks on
+every run that each position belongs to exactly one shard and that no two scenarios share
+a name (a mutation that put every position in every shard failed it). A new scenario
+needs nothing: wherever it is added, some shard takes it. Round-robin rather than a hash
+of the name, because the expensive scenarios sit next to each other (the log panes, which
+wait for their replayed streams) and round-robin deals them out. The walks' "not vacuous"
+floors (tooltips probed, automation peers visited, mono elements, selected rows) are held
+to `1/count` of the full-run floor in a shard; a shard's real counts are several times
+that. `XAML stress check` is its own job beside the shards, and a job named
+`XAML smoke test` is green only when all five shards and the stress check are, which keeps
+the name the docs and the release checklist read. It is still not a required check.
+
+Every capture resets both stores and the fonts before it builds (ENG-10), which is what
+makes a scenario's PNG independent of its shard: a scenario rendered in a shard, alone
+through the name filter, and in the full run came out byte-identical, except for an Age
+column that reads the wall clock (`74d` in a run started before midnight, `75d` after),
+which is the same in every mode and predates the sharding.
+
+The harness times itself: each capture is split into phases, and the run ends with the
+totals per phase and theme and the fifteen slowest captures (`HarnessTiming`). The numbers
+behind the split:
+
+| | before (one job, run 38308697508) | after (five shards, run 38358065616) |
+|---|---|---|
+| wall clock, run start to the smoke test's verdict | 15 min 51 s | 3 min 31 s |
+| `Build` step | 31 s | 33–50 s per shard |
+| `Render screenshots` | 14 min 32 s (510 captures) | 1 min 35 s – 2 min 14 s per shard (~100 captures) |
+| `Stress check` | 25 s, after the render | 33 s, in its own job (1 min 33 s with its build) |
+
+Before the split, the time was spread across every capture, not a few slow ones: a median
+of 1.26 s per capture on a hosted runner, light (435 s) and dark (433 s) costing the same,
+and only 34 captures above 5 s (the log panes' settle). So no single fix inside the
+harness could reach six minutes, and none was needed once the captures ran in parallel.
+In a shard (shard 2, 100 captures in 132 s) the phases were: building the scenario's
+view models 41.5 s, the log settle 28.5 s, showing and laying out the window 23.2 s, the
+scenario's checks 6.1 s, PNG encoding 5.8 s, the per-scenario walks 1.1 s, the render
+0.2 s. The slowest captures were `ux-keyboard-walk` (7.1 s per theme) and
+`cluster-tab-dock-many-tabs` (6.2 s). The five shards together rendered in 573 s against
+the single job's 872 s, which suggests a long run also slows as it goes.
+
+Two levers were left alone on purpose. Rendering the dark theme only where something
+reads it would have halved the work but dropped the only check that every view still
+resolves its dark resources. Reusing one `MainWindow` across scenarios would have saved
+part of the 23 s of showing, at the price of the per-capture reset that makes a PNG
+independent of what ran before it. Five shards rather than more because the train runs
+several PRs at once and each extra runner competes for the account's concurrent-job limit;
+the next lever, if the list keeps growing, is a sixth shard.
+
 Its PNGs upload as a CI artifact **only when the render step went red**
 (`if: failure()`, `if-no-files-found: ignore`, `retention-days: 3`). That is
 not stinginess about disk — see the Actions storage budget below — it is what
@@ -528,7 +582,7 @@ Three rules:
   `ItemsControl` gets a `VirtualizingStackPanel`; a wholesale change goes through
   `RangeObservableCollection` (`AddRange`, `RemoveFromFront`, `ReplaceAll`) rather than a
   `Clear()` and an `Add` per item. A new surface of that kind gets a check here.
-- **It runs in CI** after the render in the XAML smoke test job, and was proved against the
+- **It runs in CI** as its own job (`XAML stress check`) beside the smoke test's shards, and was proved against the
   code before each fix: see the pass logs in `docs/status-history.md`. A check's label
   states what it actually loaded ("search keystroke over 2,010 apps"), because a check
   that quietly measured an empty list would pass every budget.
