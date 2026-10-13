@@ -286,10 +286,12 @@ SidebarSplitter -DX 300` (and back).
   `qa-chatty` (about 20 lines a second): "Older lines were trimmed at the 200-line scrollback
   limit." within about ten seconds. Close the tab; scrollback back to 4000. A workload pane
   with a failed or pending pod that also trims has no fixture: UNSURE.
-- **G-25 [text]** (#377) `qa-chatty`'s logs, filter mode (funnel), `.*` on, type `^\S+ (INFO|WARN)`
-  the moment the pane opens: every line the pattern matches is kept from the first keystroke on
-  (compare the counter with the same filter typed again a few seconds later: the counts agree for
-  the lines that were already there). A slow first match no longer hides a matching line.
+- **G-25 [text]** (#377) `qa-chatty`'s logs (lines `INFO chatty line N`; the timestamp is not part
+  of what a pattern sees), filter mode (funnel), `.*` on, type `^INFO chatty line \d+` the moment
+  the pane opens. PASS needs a **non-zero** match count at once, and every visible line matching
+  the pattern; clear the box and type the same pattern again a few seconds later: the count is
+  at least the first one (lines keep arriving). A 0 count either time is a FAIL, not "the counts
+  agree". Before #377 a slow first match counted as no match and hid matching lines silently.
 
 ## Batch G2 — logs against the live API server
 
@@ -501,7 +503,8 @@ Setup: "Explore demo cluster". Nothing is mutated.
   open: Ctrl+K "delete", then "logs", "exec", "port", "yaml": no item names that pod's
   `<namespace>/<name>`, and no "Delete resource", "Exec into a container", "Port-forward" or "Edit YAML" item is
   listed. Open `checkout`'s page: Ctrl+K "yaml" lists "Edit YAML" with subtitle "checkout · its
-  workload", and "restart" lists "Rollout restart" with "checkout · roll its pods"; running the
+  workload" exactly (no " · E" key suffix: the page has no such key), and "restart" lists
+  "Rollout restart" with exactly "checkout · roll its pods" (no " · R"); running the
   restart shows its confirm on the page (Cancel), and Ctrl+K "delete" still lists no Delete item.
   **0.7.x before #373:** the items named and acted on the hidden Resources-mode pod.
 

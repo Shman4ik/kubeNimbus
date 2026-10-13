@@ -1501,13 +1501,18 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             {
                 if (page.CanRestart)
                 {
-                    yield return Catalog(CommandId.RolloutRestart, $"{page.Name} · roll its pods",
+                    // Plain items, not Catalog(): its suffix names the list's R and E keys, and
+                    // the page handles no such key, so the subtitle would promise one that does
+                    // nothing (UI rule 20).
+                    var restart = CommandCatalog.Get(CommandId.RolloutRestart);
+                    yield return new PaletteItem(restart.Title, $"{page.Name} · roll its pods", restart.IconKey,
                         () => page.RestartCommand.Execute(null));
                 }
 
                 if (page.CanEditYaml)
                 {
-                    yield return Catalog(CommandId.EditYaml, $"{page.Name} · its workload",
+                    var edit = CommandCatalog.Get(CommandId.EditYaml);
+                    yield return new PaletteItem(edit.Title, $"{page.Name} · its workload", edit.IconKey,
                         () => page.EditYamlCommand.Execute(null));
                 }
             }

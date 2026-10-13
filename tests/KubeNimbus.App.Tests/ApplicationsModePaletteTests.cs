@@ -71,7 +71,9 @@ public class ApplicationsModePaletteTests
     /// <summary>
     /// With an Application's page open, the palette offers what the page offers — Edit YAML
     /// and Rollout restart, named after the application — and a restart asks on the page's own
-    /// strip, never on the hidden Resources strip. Delete is still not offered.
+    /// strip, never on the hidden Resources strip. Delete is still not offered. The subtitles
+    /// carry no list key: mutation-checked by building them with <c>Catalog()</c> again, which
+    /// appends " · R" and " · E".
     /// </summary>
     [Test]
     public async Task With_a_page_open_the_palette_offers_the_pages_own_actions()
@@ -98,8 +100,10 @@ public class ApplicationsModePaletteTests
 
         var items = Items(shell);
         var restart = items.Single(i => i.Title == Title(CommandId.RolloutRestart));
-        await Assert.That(restart.Subtitle).StartsWith(page!.Name);
-        await Assert.That(items.Single(i => i.Title == Title(CommandId.EditYaml)).Subtitle).StartsWith(page!.Name);
+        // Exact text, with no key suffix: the page handles no R or E key, so the list's
+        // chords must not be advertised here (UI rule 20).
+        await Assert.That(restart.Subtitle).IsEqualTo($"{page!.Name} · roll its pods");
+        await Assert.That(items.Single(i => i.Title == Title(CommandId.EditYaml)).Subtitle).IsEqualTo($"{page!.Name} · its workload");
         await Assert.That(items.Any(i => i.Title == Title(CommandId.DeleteResource))).IsFalse();
 
         restart.Execute!();
