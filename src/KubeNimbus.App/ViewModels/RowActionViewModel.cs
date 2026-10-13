@@ -1017,10 +1017,11 @@ public sealed partial class RowActionViewModel : ObservableObject
                 }
 
                 Message = progress.Message;
-                IsError = progress.Stage is DrainStage.Refused or DrainStage.CompletedWithFailures;
+                IsError = progress.Stage is DrainStage.Refused or DrainStage.CompletedWithFailures or DrainStage.Interrupted;
                 IsSuccess = progress.Stage == DrainStage.Completed;
 
-                if (progress.Stage is DrainStage.Refused or DrainStage.Completed or DrainStage.CompletedWithFailures)
+                if (progress.Stage is DrainStage.Refused or DrainStage.Completed or DrainStage.CompletedWithFailures
+                    or DrainStage.Interrupted)
                 {
                     IsDone = true;
                 }

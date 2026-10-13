@@ -181,6 +181,12 @@ Setup: Pods in `qa-shop`.
   Restarts with the list sorted by Status: the Status arrow stays.
 - **L-13 [text]** Ctrl+K "reset the list": "Reset the list's columns" appears only while a
   column is hidden or dragged.
+- **L-19 [input][look]** (#301) With focus on the Pods list, Ctrl+K, type "columns", Enter on
+  "Choose the list's columns…": the column menu opens under the header row with Namespace
+  highlighted (Name is greyed). Down highlights Ready; Enter: Ready is gone, the menu closed, and
+  the list has focus (its focus ring shows; Down moves the current row). Ctrl+K again, Enter on
+  the same row, then close the menu with its own key: focus is on the list again. Reset columns.
+  On the Argo CD dashboard and in the Applications mode, Ctrl+K "columns" offers no such row.
 - **L-14 [input]** (#280) Services, `shop-web`, F: tab `Forward: svc/shop-web:80`; the row menu's
   Port-forward does the same. Do not press Start. An ExternalName Service does not exist in
   the sandbox: UNSURE.
@@ -567,6 +573,12 @@ kubeconfig is merged into the run's. Otherwise all nine are UNSURE "no Argo sand
   cluster scope`) and "Choose a namespace this account can read from the namespace picker." No
   spinner, no "Watch connection lost" line, and still so a minute later. Choose `qa-shop`: the pods
   load.
+- **M-15 [text]** (#354) Context `qa-limited`, Pods, tick `default` and `kube-system` in the
+  namespace picker (and nothing else): the list reads "This account may not list Pods" with two
+  sentences, one naming `default` and one `kube-system`; not "No Pods found", no spinner, and no
+  warning line repeating them. **0.7.x before #354:** "No Pods found" plus a warning line.
+- **M-16 [text]** (#354) Same context, tick `qa-shop` and `default`: the `qa-shop` pods are listed
+  and a warning line names `default`'s refusal, still there a minute later.
 
 ## Batch Q — the QA driver itself
 

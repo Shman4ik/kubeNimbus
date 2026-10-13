@@ -154,4 +154,35 @@ public class ColumnChooserTests
         await Assert.That(tab.RowNames()).IsEqualTo("b, a");
         await Assert.That(tab.VisibleNames()).IsEqualTo("b, a");
     }
+
+    /// <summary>
+    /// #301: the keyboard's way to the chooser asks the view only where a resource list is on
+    /// screen; on the Argo dashboard (its own grid) or with no kind there is nothing to choose,
+    /// and the palette offers no row. The opening, focus and its return are the harness's
+    /// <c>ux-column-chooser-keyboard</c>.
+    /// </summary>
+    [Test]
+    public async Task The_keyboard_chooser_is_asked_for_only_where_a_list_has_columns()
+    {
+        var tab = PodTab();
+        var asked = 0;
+        tab.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == ClusterTabViewModel.ColumnChooserRequestedProperty)
+            {
+                asked++;
+            }
+        };
+
+        await Assert.That(tab.CanChooseColumns).IsTrue();
+        tab.RequestColumnChooser();
+        await Assert.That(asked).IsEqualTo(1);
+
+        tab.IsArgoView = true;
+        await Assert.That(tab.CanChooseColumns).IsFalse();
+        tab.RequestColumnChooser();
+        await Assert.That(asked).IsEqualTo(1);
+
+        await Assert.That(TestObjects.Tab().CanChooseColumns).IsFalse();
+    }
 }

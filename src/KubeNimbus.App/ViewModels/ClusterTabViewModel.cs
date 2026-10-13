@@ -2948,6 +2948,9 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         var namespaces = WatchNamespaces(descriptor);
         var @namespace = namespaces is [var single] ? single : null;
         _pendingNamespaces.Clear();
+        _watchedNamespaces.Clear();
+        _refusedNamespaces.Clear();
+        _refusedMembers.Clear();
         _fleetNamespaceFilter = null;
 
         if (Client is not { } client)
@@ -3058,6 +3061,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         foreach (var ns in names)
         {
             _pendingNamespaces.Add(ns);
+            _watchedNamespaces.Add(ns);
         }
 
         _ = Task.Run(async () =>
@@ -3084,7 +3088,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                     {
                         if (!token.IsCancellationRequested)
                         {
-                            ConnectionWarning = $"{ns}: {ex.Message}";
+                            EndNamespaceWatch(ns, ex);
                         }
                     }),
                     cancellationToken: token).InBatches(cancellationToken: token))
@@ -3114,10 +3118,57 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }, token);
     }
 
+    // Every namespace a several-namespace watch reads, and the ones that refused it (#354).
+    private readonly HashSet<string> _watchedNamespaces = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _refusedNamespaces = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// One namespace's watch ended for good. A refusal is remembered, so that a list every
+    /// chosen namespace refused says so in the list's place (<see cref="ListRefusal"/>) rather
+    /// than "No Pods found" (UI rule 20, #354); a partial one stays a warning line.
+    /// </summary>
+    internal void EndNamespaceWatch(string @namespace, Exception ex)
+    {
+        _watchedNamespaces.Add(@namespace);
+        if (WatchRefusedException.From(ex) is { } refused)
+        {
+            _refusedNamespaces[@namespace] = refused.Message;
+        }
+
+        ConnectionWarning = $"{@namespace}: {ex.Message}";
+        ConcludeNamespaceRefusals();
+        RecomputeListEmpty();
+    }
+
+    /// <summary>
+    /// Once every namespace has answered: a list with no rows whose every namespace refused it
+    /// is a refusal, stated once in the list's place; some refused and some not is a warning
+    /// that stays, since the rows on screen are not every chosen namespace's.
+    /// </summary>
+    private void ConcludeNamespaceRefusals()
+    {
+        if (_pendingNamespaces.Count > 0 || _refusedNamespaces.Count == 0)
+        {
+            return;
+        }
+
+        if (Rows.Count == 0 && _watchedNamespaces.All(_refusedNamespaces.ContainsKey))
+        {
+            ListRefusalHint = "";
+            ListRefusal = string.Join("\n\n", _refusedNamespaces.Values.Distinct(StringComparer.Ordinal));
+            ConnectionWarning = null;
+        }
+        else
+        {
+            ConnectionWarning = string.Join("; ", _refusedNamespaces.Select(r => $"{r.Key}: {r.Value}"));
+        }
+    }
+
     /// <summary>One event of a several-namespace watch. Internal so the tests can post events the way the watch does.</summary>
     internal void ApplyNamespaced(NamespacedResourceEvent tagged)
     {
         ApplyNamespacedOne(tagged);
+        ConcludeNamespaceRefusals();
         RecomputeListEmpty();
     }
 
@@ -3138,6 +3189,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             _stagedRows = null;
         }
 
+        ConcludeNamespaceRefusals();
         RecomputeListEmpty();
     }
 
@@ -3150,6 +3202,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 // This namespace's rows only, in one pass and one notification — the fleet
                 // view's cluster-scoped Reset, with the namespace in the cluster's place.
                 _pendingNamespaces.Add(tagged.Namespace);
+                _watchedNamespaces.Add(tagged.Namespace);
                 FlushStagedRows();
                 var stale = new HashSet<ResourceRowViewModel>();
                 foreach (var key in _rowsByKey
@@ -3294,6 +3347,13 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                     targets, @namespace,
                     connectionLost: (member, ex) => Dispatcher.UIThread.Post(
                         () => ConnectionWarning = $"{member.ClusterName}: {ex.Message}"),
+                    memberEnded: (member, ex) => Dispatcher.UIThread.Post(() =>
+                    {
+                        if (!token.IsCancellationRequested)
+                        {
+                            EndFleetMemberWatch(member.ClusterName, ex);
+                        }
+                    }),
                     cancellationToken: token).InBatches(cancellationToken: token))
                 {
                     await Dispatcher.UIThread.InvokeAsync(() => ApplyFleetBatch(batch));
@@ -3305,8 +3365,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 {
                     if (!token.IsCancellationRequested)
                     {
-                        IsListLoading = false;
-                        RecomputeListEmpty();
+                        EndFleetWatch(targets.Count);
                     }
                 });
             }
@@ -3328,6 +3387,38 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     // The chosen namespaces a fleet watch keeps, when it reads each cluster whole; null otherwise.
     private HashSet<string>? _fleetNamespaceFilter;
+
+    // The fleet members whose watch was refused (#354), with the server's sentence.
+    private readonly Dictionary<string, string> _refusedMembers = new(StringComparer.Ordinal);
+
+    /// <summary>One fleet member's watch ended for good: said in the warning line, a refusal remembered.</summary>
+    internal void EndFleetMemberWatch(string clusterName, Exception ex)
+    {
+        if (WatchRefusedException.From(ex) is { } refused)
+        {
+            _refusedMembers[clusterName] = refused.Message;
+        }
+
+        ConnectionWarning = $"{clusterName}: {ex.Message}";
+    }
+
+    /// <summary>
+    /// Every member's watch of <paramref name="targets"/> members ended. With no rows and every
+    /// member refused, the list states the refusal in its place, one line per cluster, rather
+    /// than "No Pods found" (UI rule 20, #354); otherwise the wait simply ends.
+    /// </summary>
+    internal void EndFleetWatch(int targets)
+    {
+        if (Rows.Count == 0 && targets > 0 && _refusedMembers.Count >= targets)
+        {
+            ListRefusalHint = "";
+            ListRefusal = string.Join("\n\n", _refusedMembers.Select(r => $"{r.Key}: {r.Value}"));
+            ConnectionWarning = null;
+        }
+
+        IsListLoading = false;
+        RecomputeListEmpty();
+    }
 
     /// <summary>Kinds metrics.k8s.io reports on. Everything else has no usage to show.</summary>
     private static bool IsMeteredKind(ResourceDescriptor descriptor) =>

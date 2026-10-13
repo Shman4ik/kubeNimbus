@@ -66,4 +66,95 @@ public class ListRefusalTests
         tab.EndListWatch(Refused(), new CancellationToken(canceled: true));
         await Assert.That(tab.IsListRefused).IsFalse();
     }
+
+    private static WatchRefusedException RefusedIn(string ns) =>
+        WatchRefusedException.From(new HttpRequestException(
+            $"pods is forbidden: User \"viewer\" cannot list resource \"pods\" in API group \"\" in the namespace \"{ns}\"",
+            null, HttpStatusCode.Forbidden))!;
+
+    /// <summary>
+    /// #354: several namespaces, every one refused. Mutation-checked: with
+    /// <c>ConcludeNamespaceRefusals</c> returning at once, the list lands on "No Pods found"
+    /// plus a warning line, which is what it did before.
+    /// </summary>
+    [Test]
+    public async Task Several_namespaces_all_refused_say_so_in_the_lists_place()
+    {
+        var tab = TestObjects.Tab();
+        tab.SelectedKind = new SidebarKindViewModel(TestObjects.PodDescriptor, "workload");
+        tab.IsListLoading = true;
+        tab.ApplyNamespaced(new("a", ResourceEvent<DynamicResource>.Reset));
+        tab.ApplyNamespaced(new("b", ResourceEvent<DynamicResource>.Reset));
+
+        // What NamespaceWatch does for a namespace whose watch ended: the failure, then its Synced.
+        tab.EndNamespaceWatch("a", RefusedIn("a"));
+        tab.ApplyNamespaced(new("a", ResourceEvent<DynamicResource>.Synced));
+        await Assert.That(tab.IsListRefused).IsFalse();
+
+        tab.EndNamespaceWatch("b", RefusedIn("b"));
+        tab.ApplyNamespaced(new("b", ResourceEvent<DynamicResource>.Synced));
+
+        await Assert.That(tab.IsListLoading).IsFalse();
+        await Assert.That(tab.IsListEmpty).IsFalse();
+        await Assert.That(tab.IsListRefused).IsTrue();
+        await Assert.That(tab.ListRefusal!).Contains("namespace \"a\"");
+        await Assert.That(tab.ListRefusal!).Contains("namespace \"b\"");
+        await Assert.That(tab.ListRefusalHint).IsEqualTo("");
+        await Assert.That(tab.ConnectionWarning).IsNull();
+    }
+
+    [Test]
+    public async Task Several_namespaces_some_refused_keep_the_list_and_a_warning_that_stays()
+    {
+        var tab = TestObjects.Tab();
+        tab.SelectedKind = new SidebarKindViewModel(TestObjects.PodDescriptor, "workload");
+        tab.IsListLoading = true;
+        tab.ApplyNamespaced(new("a", ResourceEvent<DynamicResource>.Reset));
+        tab.ApplyNamespaced(new("b", ResourceEvent<DynamicResource>.Reset));
+        tab.EndNamespaceWatch("a", RefusedIn("a"));
+        tab.ApplyNamespaced(new("a", ResourceEvent<DynamicResource>.Synced));
+        tab.ApplyNamespaced(new("b", ResourceEvent<DynamicResource>.Synced));
+
+        // b answered with nothing: that is a real empty list, and a's refusal stays said.
+        await Assert.That(tab.IsListRefused).IsFalse();
+        await Assert.That(tab.IsListEmpty).IsTrue();
+        await Assert.That(tab.ConnectionWarning!).StartsWith("a: ");
+    }
+
+    /// <summary>
+    /// #354: a fleet list whose every member refused it. Mutation-checked: with
+    /// <c>EndFleetWatch</c> only ending the wait, the list says "No Pods found".
+    /// </summary>
+    [Test]
+    public async Task A_fleet_list_every_member_refused_says_so_one_line_per_cluster()
+    {
+        var tab = TestObjects.Tab();
+        tab.SelectedKind = new SidebarKindViewModel(TestObjects.PodDescriptor, "workload");
+        tab.IsListLoading = true;
+
+        tab.EndFleetMemberWatch("prod-eu", Refused());
+        tab.EndFleetMemberWatch("prod-us", Refused());
+        tab.EndFleetWatch(targets: 2);
+
+        await Assert.That(tab.IsListLoading).IsFalse();
+        await Assert.That(tab.IsListEmpty).IsFalse();
+        await Assert.That(tab.IsListRefused).IsTrue();
+        await Assert.That(tab.ListRefusal!.Split("\n\n")).IsEquivalentTo([$"prod-eu: {Sentence}", $"prod-us: {Sentence}"]);
+        await Assert.That(tab.ConnectionWarning).IsNull();
+    }
+
+    [Test]
+    public async Task A_fleet_list_some_members_refused_is_not_a_refusal()
+    {
+        var tab = TestObjects.Tab();
+        tab.SelectedKind = new SidebarKindViewModel(TestObjects.PodDescriptor, "workload");
+        tab.IsListLoading = true;
+
+        tab.EndFleetMemberWatch("prod-eu", Refused());
+        tab.EndFleetMemberWatch("prod-us", new InvalidOperationException("The watch ended."));
+        tab.EndFleetWatch(targets: 2);
+
+        await Assert.That(tab.IsListRefused).IsFalse();
+        await Assert.That(tab.IsListLoading).IsFalse();
+    }
 }

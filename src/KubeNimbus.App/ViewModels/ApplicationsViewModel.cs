@@ -345,7 +345,9 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
                 await foreach (var batch in client.Watches.WatchAsync(
                     descriptor,
                     @namespace,
-                    connectionLost: ex => OnConnectionLost(client, kind, @namespace, ex, cts),
+                    // A 403 ends the shared watch with a WatchRefusedException (#339), which the
+                    // catch below turns into Refuse; everything reported here is a lost connection.
+                    connectionLost: ex => Dispatcher.UIThread.Post(() => ConnectionWarning = ex.Message),
                     cancellationToken: token).InBatches(cancellationToken: token))
                 {
                     await Dispatcher.UIThread.InvokeAsync(() =>
@@ -371,22 +373,6 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
                 Dispatcher.UIThread.Post(() => Refuse(client, kind, @namespace, FirstLine(ex.Message)));
             }
         }, token);
-    }
-
-    private void OnConnectionLost(ClusterClient client, string kind, string? @namespace, Exception ex, CancellationTokenSource cts)
-    {
-        // A 403 on the list is a KubernetesApiException carrying the server's sentence; on
-        // the watch request itself (list allowed, watch not) it is a bare HttpRequestException.
-        if (ex.InnerException is HttpRequestException { StatusCode: System.Net.HttpStatusCode.Forbidden } forbidden)
-        {
-            // Not a connection problem and not worth a retry loop: stop this watch and say so.
-            cts.Cancel();
-            var reason = (forbidden as KubernetesApiException)?.ServerMessage ?? forbidden.Message;
-            Dispatcher.UIThread.Post(() => Refuse(client, kind, @namespace, reason));
-            return;
-        }
-
-        Dispatcher.UIThread.Post(() => ConnectionWarning = ex.Message);
     }
 
     /// <summary>

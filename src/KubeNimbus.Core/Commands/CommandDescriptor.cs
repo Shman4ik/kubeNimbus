@@ -39,6 +39,7 @@ public enum CommandId
     RefreshList,
     NewYaml,
     ResetListColumns,
+    ChooseListColumns,
 
     // --- Pods ---
     PodLogs,

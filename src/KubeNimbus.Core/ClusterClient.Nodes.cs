@@ -279,7 +279,7 @@ public sealed partial class ClusterClient
             // is asked again even if nothing else on the node moves.
             var remaining = Remaining(plan, failed);
             var retryAt = DateTimeOffset.UtcNow + EvictionRetryInterval;
-            while (remaining > 0)
+            while (remaining > 0 && onNode.EndedWith is null)
             {
                 // A deadline rather than a fresh interval per wake-up: a pod whose status
                 // keeps ticking over must not postpone the retry of a blocked one forever.
@@ -305,6 +305,20 @@ public sealed partial class ClusterClient
             if (remaining == 0)
             {
                 break;
+            }
+
+            if (onNode.EndedWith is { } ended)
+            {
+                // The watch that sees pods leave has ended (#354): waiting on it would wait
+                // for ever behind "eviction accepted". Say so, with the server's sentence, and
+                // what the node is left in.
+                yield return DrainProgress.At(
+                    DrainStage.Interrupted,
+                    $"The drain stopped: it can no longer watch the pods on {nodeName} ({ended}). "
+                    + $"{evicted} pod(s) evicted, {remaining} still on the node at the last look. "
+                    + "The node stays cordoned; run the drain again or uncordon it.")
+                    with { Remaining = remaining, Evicted = evicted, Failed = failed.Count, Plan = plan };
+                yield break;
             }
 
             var problem = onNode.ConnectionProblem is { } lost ? $" {lost}" : "";
@@ -362,6 +376,13 @@ public sealed partial class ClusterClient
         /// </summary>
         public string? ConnectionProblem { get; private set; }
 
+        /// <summary>
+        /// Why the watch ended for good after its initial list (a 403 on the watch with the
+        /// list allowed, #354), or null while it runs. Nothing more will arrive, so the drain
+        /// cannot see a pod leave and ends rather than waiting for ever.
+        /// </summary>
+        public string? EndedWith { get; private set; }
+
         public static PodsOnNodeWatch Start(
             ClusterClient client, ResourceDescriptor podDescriptor, string nodeName, CancellationToken cancellationToken)
         {
@@ -387,7 +408,13 @@ public sealed partial class ClusterClient
             }
             catch (Exception ex)
             {
-                _synced.TrySetException(ex);
+                // Before the initial list: the drain's answer. After it: the watch was refused
+                // (list allowed, watch not, #354) and has stopped; the drain ends on it.
+                if (!_synced.TrySetException(ex))
+                {
+                    EndedWith = ex.Message;
+                    Changed();
+                }
             }
         }
 
@@ -579,6 +606,12 @@ public enum DrainStage
 
     /// <summary>The drain finished, but some pods could not be evicted.</summary>
     CompletedWithFailures,
+
+    /// <summary>
+    /// The watch of the node's pods ended after the drain started (a 403 on the watch, #354),
+    /// so the drain cannot see pods leave and stopped; the node stays cordoned.
+    /// </summary>
+    Interrupted,
 }
 
 /// <summary>

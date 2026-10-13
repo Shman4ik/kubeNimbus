@@ -357,6 +357,21 @@ Seven things are load-bearing:
      one-shot list it replaced did — a 403 on listing pods cluster-wide would otherwise be a
      watch retrying for ever behind a strip that says nothing. After the first list, a lost
      connection is appended to the waiting line while the watch reconnects.
+   - **A watch refused after the first list ends the drain, stated** (#354). A user who may
+     list pods but not watch them gets the plan and the evictions, and then nothing: since
+     #354 a 403 ends a watch instead of retrying it, so no Deleted will ever say an evicted
+     pod has gone, and the loop's wait (no timer unless a budget held a pod back) would never
+     wake with a count that moved. The verifier reproduced exactly that: `Cordoned | Planned |
+     PodEvicted` and then silence, the node cordoned for good. `PodsOnNodeWatch.EndedWith`
+     records the ending, the wait stops on it, and the drain yields a terminal
+     `DrainStage.Interrupted`: "The drain stopped: it can no longer watch the pods on
+     <node> (<the server's sentence>). n pod(s) evicted, m still on the node at the last
+     look. The node stays cordoned; run the drain again or uncordon it." The strip treats it
+     like the other error endings (`RowActionViewModel`: error, done). A Waiting line alone
+     would not do: it would be followed by the same endless wait.
+     `NodeWatchHttpTests.A_drain_whose_pod_watch_is_refused_ends_saying_so_instead_of_waiting_for_ever`
+     (list allowed with one pod, watch 403, eviction 201) hung to its 8 s bound with the
+     `EndedWith` checks removed.
 
    `NodeWatchHttpTests` pins all of it over real HTTP against a stand-in API server that
    holds its watch open: one list and no second one (the old loop's re-list, reinstated as

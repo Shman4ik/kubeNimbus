@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using KubeNimbus.App.ViewModels;
@@ -204,6 +205,100 @@ internal static class ListCreateChecks
         if (menu.Items.OfType<MenuItem>().First(i => i.Header as string == "Restarts").IsChecked != false)
             throw new InvalidOperationException("The chooser does not show Restarts as hidden.");
         Console.WriteLine("Column chooser passed: header right click opens it, unticking hides and remembers.");
+    }
+
+    /// <summary>
+    /// #301: the column chooser by keyboard. The palette's "Choose the list's columns…" opens it
+    /// with focus on the first column that can be hidden, drawn with a focus visual; Down moves
+    /// to the next, Enter hides that column and closes the menu, and focus comes back to the
+    /// list; opened again, Esc closes it and focus comes back to the list too (UI rules 7b, 16b).
+    /// </summary>
+    internal static void ColumnChooserKeyboard(Window window)
+    {
+        var view = window.GetVisualDescendants().OfType<ClusterTabView>().First();
+        var vm = (ClusterTabViewModel)view.DataContext!;
+        var shell = (MainWindowViewModel)window.DataContext!;
+        var grid = view.FindControl<DataGrid>("ResourceGrid")!;
+        var focus = TopLevel.GetTopLevel(window)!.FocusManager!;
+        Settle(window);
+
+        MenuFlyout OpenFromPalette()
+        {
+            shell.Palette.Open();
+            shell.Palette.Query = "columns";
+            var row = shell.Palette.FilteredItems.FirstOrDefault(i => i.Title == "Choose the list's columns…")
+                ?? throw new InvalidOperationException("The palette does not offer the column chooser.");
+            shell.Palette.SelectedItem = row;
+            shell.Palette.ExecuteSelected();
+            Settle(window);
+            Settle(window);
+            var opened = view.OpenColumnChooser;
+            if (opened is not { IsOpen: true })
+                throw new InvalidOperationException("The palette's column chooser row did not open the chooser.");
+            return opened;
+        }
+
+        void Press(Key key, PhysicalKey physical, string? symbol)
+        {
+            window.KeyPress(key, RawInputModifiers.None, physical, symbol);
+            window.KeyRelease(key, RawInputModifiers.None, physical, symbol);
+            Settle(window);
+        }
+
+        void FocusIsBackOnTheList(string after)
+        {
+            if (focus.GetFocusedElement() is not Visual focused || (focused != grid && !grid.IsVisualAncestorOf(focused)))
+                throw new InvalidOperationException(
+                    $"After {after} focus was on {focus.GetFocusedElement()?.GetType().Name ?? "nothing"}, not back on the list.");
+        }
+
+        var menu = OpenFromPalette();
+        var items = menu.Items.OfType<MenuItem>().ToList();
+        var first = items.First(i => i.IsEnabled);
+        if (focus.GetFocusedElement() != first)
+            throw new InvalidOperationException(
+                $"The chooser opened with focus on {focus.GetFocusedElement()?.GetType().Name ?? "nothing"}, not on {first.Header}.");
+        // A menu shows the item the keys are on as its selected item, the same highlight the
+        // pointer draws; that is this control's focus visual (UI rule 7b).
+        var second = items.Where(i => i.IsEnabled).Skip(1).First();
+        if (!ShowsAsCurrent(first, second))
+            throw new InvalidOperationException($"{first.Header} has focus with no highlight to show it (UI rule 7b).");
+
+        Press(Key.Down, PhysicalKey.ArrowDown, null);
+        if (focus.GetFocusedElement() != second || !ShowsAsCurrent(second, first))
+            throw new InvalidOperationException($"Down in the chooser did not move focus and its highlight to {second.Header}.");
+        if (second.Tag is not string secondId)
+            throw new InvalidOperationException($"{second.Header} carries no column id.");
+
+        Press(Key.Enter, PhysicalKey.Enter, "\r");
+        if (!vm.HiddenColumns.Contains(secondId))
+            throw new InvalidOperationException($"Enter on {second.Header} did not hide that column.");
+        if (menu.IsOpen)
+            throw new InvalidOperationException("The chooser stayed open after Enter.");
+        FocusIsBackOnTheList("Enter in the chooser");
+
+        menu = OpenFromPalette();
+        Press(Key.Escape, PhysicalKey.Escape, null);
+        if (menu.IsOpen)
+            throw new InvalidOperationException("Esc did not close the chooser.");
+        FocusIsBackOnTheList("Esc in the chooser");
+
+        // Back to the kind's own columns. The PNG is the list with focus given back to it: a
+        // headless capture draws the window, not the chooser's popup.
+        vm.ResetColumns();
+        Settle(window);
+        Console.WriteLine($"Column chooser by keyboard passed: palette opens it on {first.Header}, Down, Enter hid {second.Header}, Esc closes, focus returns.");
+    }
+
+    /// <summary>
+    /// The item is the menu's selected one and its row is painted differently from
+    /// <paramref name="other"/>'s, which is not: the highlight is drawn, not only flagged.
+    /// </summary>
+    private static bool ShowsAsCurrent(MenuItem item, MenuItem other)
+    {
+        static IBrush? Fill(MenuItem i) => i.GetVisualDescendants().OfType<Border>().FirstOrDefault(b => b.Name == "PART_LayoutRoot")?.Background;
+        return item.IsSelected && !other.IsSelected && Fill(item) is ISolidColorBrush mine
+               && (Fill(other) is not ISolidColorBrush theirs || theirs.Color != mine.Color);
     }
 
     private static MenuFlyout OpenChooserOn(Window window, DataGrid grid, string headerText)

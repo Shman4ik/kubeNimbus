@@ -90,6 +90,27 @@ public sealed partial class ClusterTabViewModel
         OnPropertyChanged(ColumnLayoutChangedProperty);
     }
 
+    /// <summary>
+    /// Raised to ask the view to open the column chooser from the keyboard (#301): over the
+    /// list's header row, focus on its first column that can be hidden, and focus given back
+    /// when it closes. The palette's "Choose the list's columns…" is the way in, since a
+    /// column header is not a keyboard stop. A property name, like
+    /// <see cref="ColumnLayoutChangedProperty"/>.
+    /// </summary>
+    public const string ColumnChooserRequestedProperty = "ColumnChooserRequested";
+
+    /// <summary>Whether the list on screen has columns to choose: a kind is listed, with a stored layout.</summary>
+    public bool CanChooseColumns => IsResourceListVisible && GridLayoutKey is not null;
+
+    /// <summary>Opens the column chooser from the keyboard; nothing when the list has none to choose.</summary>
+    public void RequestColumnChooser()
+    {
+        if (CanChooseColumns)
+        {
+            OnPropertyChanged(ColumnChooserRequestedProperty);
+        }
+    }
+
     /// <summary>Reads the kind's hidden set back as the kind changes (no write: reading a choice is not making one).</summary>
     private void LoadHiddenColumns(GridLayout layout)
     {

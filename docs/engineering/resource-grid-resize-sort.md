@@ -238,6 +238,22 @@ event handled when it came from a `DataGridColumnHeader`, so the row menu (the g
 `ContextFlyout`) does not open as well. `ux-column-chooser` in the screenshot harness right
 clicks the Restarts header, checks that the chooser opened and the row menu did not, that Name
 is ticked and disabled, unticks Restarts through the menu and checks the column went, and leaves
-the chooser open for the PNG. **Not built:** reordering columns, a chooser for the Helm and Argo
-grids, and keyboard access to the chooser (the headers are not focusable; the palette's reset is
-the keyboard's half); they are listed on #301.
+the chooser open for the PNG.
+
+**From the keyboard** (#301, also an accessibility gap of #236): a column header is not a
+keyboard stop, so the palette carries **Choose the list's columns…** wherever a resource list
+is on screen (`ClusterTabViewModel.CanChooseColumns`: a kind is listed, and it is not the Helm
+or Argo grid, nor the Applications mode). It raises `ColumnChooserRequestedProperty`; the view
+opens the same chooser over the first visible header, posted at Background priority so the
+palette has finished closing, and focuses the first column that can be hidden (Name is
+disabled). A menu's focus visual is its selected-item highlight, which the arrow keys move;
+Enter or Space toggles a column and closes the menu, Esc closes it. Either way focus is given
+back (UI rule 16b): to what had it if that is still on screen, otherwise to the list, never to
+nothing, which is where a flyout anchored to a header left it after a palette that has gone.
+The right-click path gives focus back the same way. `ux-column-chooser-keyboard` drives it:
+palette row, focus and highlight on the first hideable column, Down moves both, Enter hides
+that column and closes the menu with focus back on the list, and Esc likewise; it went red
+("focus was on nothing") with the focus return taken out. A headless capture draws the window,
+not the popup, so its PNG is the list with focus given back. `ColumnChooserTests.The_keyboard_chooser_is_asked_for_only_where_a_list_has_columns`
+pins where the palette offers it. **Not built:** reordering columns and a chooser for the Helm
+and Argo grids; they stay on #301.

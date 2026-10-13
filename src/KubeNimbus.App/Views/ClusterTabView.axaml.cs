@@ -404,6 +404,11 @@ public partial class ClusterTabView : UserControl
             // The chooser hid or showed a column, or reset the kind's columns.
             ApplyColumnLayout();
         }
+        else if (e.PropertyName == ClusterTabViewModel.ColumnChooserRequestedProperty)
+        {
+            // After the palette that asked has closed, so its own focus handling is done.
+            Dispatcher.UIThread.Post(OpenColumnChooserFromKeyboard, DispatcherPriority.Background);
+        }
         else if (e.PropertyName == nameof(ClusterTabViewModel.IsSidebarVisible))
         {
             ApplySidebarVisibility();
@@ -890,8 +895,65 @@ public partial class ClusterTabView : UserControl
         }
 
         e.Handled = true;
-        OpenColumnChooser = BuildColumnChooser();
-        OpenColumnChooser.ShowAt(header);
+        ShowColumnChooser(header, focusFirstItem: false);
+    }
+
+    /// <summary>
+    /// The chooser from the keyboard (#301, the palette's "Choose the list's columns…"): a
+    /// column header is not a keyboard stop, so it opens over the first visible header with
+    /// focus on the first column that can be hidden, drawn with its focus ring. The arrow keys
+    /// move through it, Enter or Space toggles a column, Esc closes it (UI rules 7b, 16b).
+    /// </summary>
+    private void OpenColumnChooserFromKeyboard()
+    {
+        if (Vm is not { CanChooseColumns: true } || !ResourceGrid.IsEffectivelyVisible)
+        {
+            return;
+        }
+
+        var anchor = ResourceGrid.GetVisualDescendants().OfType<DataGridColumnHeader>()
+            .FirstOrDefault(h => h.IsEffectivelyVisible && h.Content is string { Length: > 0 });
+        ShowColumnChooser(anchor ?? (Control)ResourceGrid, focusFirstItem: true);
+    }
+
+    /// <summary>
+    /// Opens the chooser and gives focus back when it closes: to what had it, if that is still
+    /// on screen, otherwise to the list — never to nothing, which is where a flyout over a
+    /// header (not a focusable control) would leave it, after a palette that has gone.
+    /// </summary>
+    private void ShowColumnChooser(Control anchor, bool focusFirstItem)
+    {
+        var returnTo = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() as Control;
+        var flyout = BuildColumnChooser();
+        flyout.Closed += (_, _) => Dispatcher.UIThread.Post(() => ReturnFocusAfterChooser(returnTo), DispatcherPriority.Background);
+        if (focusFirstItem)
+        {
+            flyout.Opened += (_, _) => Dispatcher.UIThread.Post(
+                () => flyout.Items.OfType<MenuItem>().FirstOrDefault(i => i.IsEnabled)?.Focus(NavigationMethod.Directional),
+                DispatcherPriority.Background);
+        }
+
+        OpenColumnChooser = flyout;
+        flyout.ShowAt(anchor);
+    }
+
+    private void ReturnFocusAfterChooser(Control? returnTo)
+    {
+        var focused = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() as Visual;
+        if (focused is not null and not TopLevel && focused.IsEffectivelyVisible && TopLevel.GetTopLevel(focused) == TopLevel.GetTopLevel(this))
+        {
+            // Something on the window already has it (a click went elsewhere): leave it there.
+            return;
+        }
+
+        if (returnTo is { IsEffectivelyVisible: true, Focusable: true } && TopLevel.GetTopLevel(returnTo) == TopLevel.GetTopLevel(this))
+        {
+            returnTo.Focus(NavigationMethod.Tab);
+        }
+        else
+        {
+            ResourceGrid.Focus(NavigationMethod.Tab);
+        }
     }
 
     /// <summary>The chooser last opened from a header — what the screenshot harness drives.</summary>

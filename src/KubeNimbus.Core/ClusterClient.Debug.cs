@@ -161,6 +161,12 @@ public sealed partial class ClusterClient
         {
             // The deadline, not the caller: fall through to the timeout verdict.
         }
+        catch (WatchRefusedException refused)
+        {
+            // Allowed to add the container but not to watch the pod: the watch ends rather
+            // than retrying a 403 until the deadline (#354), and the verdict says why.
+            return new DebugContainerState(DebugContainerPhase.Failed, "Forbidden", refused.Message);
+        }
 
         cancellationToken.ThrowIfCancellationRequested();
         var lastWord = last.Reason is null && last.Message is null ? "" : $" Last state: {last.Describe()}.";

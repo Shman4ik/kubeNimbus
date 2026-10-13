@@ -44,4 +44,36 @@ internal static class RefusalScenarios
             CancellationToken.None);
         return tab;
     }
+
+    /// <summary>
+    /// #354: the Argo CD dashboard listed, then refused the watch (list allowed, watch not). The
+    /// rows stay, and the status bar says they no longer update.
+    /// </summary>
+    public static ClusterTabViewModel ArgoStopped()
+    {
+        var tab = DemoTab(k => k.IsArgoDashboard);
+        tab.EndArgoWatch(
+            Refused("applications.argoproj.io is forbidden: User \"system:serviceaccount:payments:viewer\" cannot watch resource \"applications\" in API group \"argoproj.io\" at the cluster scope"),
+            CancellationToken.None);
+        return tab;
+    }
+
+    /// <summary>
+    /// #354: Pods in two chosen namespaces, both refused: the refusal in the list's place, one
+    /// sentence per namespace, rather than "No Pods found".
+    /// </summary>
+    public static ClusterTabViewModel ListNamespaces()
+    {
+        var tab = DemoTab(k => k.Descriptor is { Group: "", Kind: "Pod" });
+        tab.SetNamespaces(["payments", "checkout"]);
+        tab.Apply(ResourceEvent<DynamicResource>.Reset);
+        foreach (var ns in new[] { "payments", "checkout" })
+        {
+            tab.EndNamespaceWatch(ns, Refused(
+                $"pods is forbidden: User \"system:serviceaccount:payments:viewer\" cannot list resource \"pods\" in API group \"\" in the namespace \"{ns}\""));
+            tab.ApplyNamespaced(new(ns, ResourceEvent<DynamicResource>.Synced));
+        }
+
+        return tab;
+    }
 }

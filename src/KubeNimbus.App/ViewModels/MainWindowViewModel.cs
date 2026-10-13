@@ -1355,6 +1355,16 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 () => yamlTab.NewYamlCommand.Execute(null));
         }
 
+        // The column chooser itself (#301): a column header is not a keyboard stop, so this is
+        // the keyboard's way to it, only where a resource list is on screen to choose for.
+        if (!IsApplicationsMode && SelectedTab is { CanChooseColumns: true } chooserTab)
+        {
+            yield return Catalog(
+                CommandId.ChooseListColumns,
+                $"Show or hide {chooserTab.SelectedKind?.DisplayName}'s columns — the menu a right click on a header opens",
+                chooserTab.RequestColumnChooser);
+        }
+
         // The column chooser's way back (FEAT-13), only where the list on screen has a
         // choice to undo.
         if (SelectedTab is { IsResourceListVisible: true, HasCustomColumns: true } columnsTab)

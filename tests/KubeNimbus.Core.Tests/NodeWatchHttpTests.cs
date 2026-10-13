@@ -230,6 +230,64 @@ public class NodeWatchHttpTests
         await Assert.That(failure!.Message).Contains("cannot list resource \"pods\"");
     }
 
+    /// <summary>
+    /// #354: a user who may list pods but not watch them. The watch ends on its 403 (it no
+    /// longer retries), so nothing would ever report the evicted pod leaving: the drain ends
+    /// with <see cref="DrainStage.Interrupted"/> and the server's sentence rather than waiting
+    /// for ever behind "eviction accepted". Mutation-checked: without the
+    /// <c>EndedWith</c> checks in <c>DrainNodeAsync</c> it hangs until the timeout.
+    /// </summary>
+    [Test]
+    public async Task A_drain_whose_pod_watch_is_refused_ends_saying_so_instead_of_waiting_for_ever()
+    {
+        const string Sentence = "pods is forbidden: User \"viewer\" cannot watch resource \"pods\" at the cluster scope";
+        await using var server = new ConcurrentStubServer(async (request, response) =>
+        {
+            switch (request.Method, request.Path, request.IsWatch)
+            {
+                case ("PATCH", "/api/v1/nodes/worker-1", _):
+                    await response.WriteAsync("{}");
+                    return;
+                case ("GET", "/api/v1/pods", false):
+                    await response.WriteAsync(PodList("5", Pod("web-1", "5")));
+                    return;
+                case ("GET", "/api/v1/pods", true):
+                    await response.WriteAsync(
+                        $$"""{"kind":"Status","code":403,"message":{{System.Text.Json.JsonSerializer.Serialize(Sentence)}}}""",
+                        HttpStatusCode.Forbidden);
+                    return;
+                case ("POST", "/api/v1/namespaces/shop/pods/web-1/eviction", _):
+                    await response.WriteAsync("{}", HttpStatusCode.Created);
+                    return;
+                default:
+                    await response.NotFoundAsync();
+                    return;
+            }
+        });
+
+        using var client = server.Connect();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+        var progress = new List<DrainProgress>();
+        var hung = false;
+        try
+        {
+            await foreach (var step in client.DrainNodeAsync(Nodes, Pods, "worker-1", new DrainOptions(false, false), cts.Token))
+            {
+                progress.Add(step);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            hung = true;
+        }
+
+        await Assert.That(hung).IsFalse();
+        await Assert.That(progress[^1].Stage).IsEqualTo(DrainStage.Interrupted);
+        await Assert.That(progress[^1].Message).Contains(Sentence);
+        await Assert.That(progress[^1].Message).Contains("stays cordoned");
+        await Assert.That(progress[^1].Evicted).IsEqualTo(1);
+    }
+
     private static async Task<List<DrainStage>> DrainAsync(ClusterClient client)
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
