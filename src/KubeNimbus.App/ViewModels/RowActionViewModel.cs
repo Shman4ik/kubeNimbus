@@ -1114,7 +1114,9 @@ public sealed partial class RowActionViewModel : ObservableObject
                     break;
 
                 case RowActionKind.Restart:
+#pragma warning disable RS0030 // the restartedAt stamp sent to the cluster is the real instant, not a displayed one
                     var at = DateTimeOffset.UtcNow;
+#pragma warning restore RS0030
                     await client.RestartWorkloadAsync(_descriptor, _namespace, _name, at);
                     Message = $"Restart requested — pod template stamped {WorkloadActions.FormatRestartedAt(at)}.";
                     break;

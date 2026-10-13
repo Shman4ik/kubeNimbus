@@ -30,4 +30,9 @@
     <None Include="Fixtures/**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- The wall clock is banned here: every time on screen reads AppClock (#350). -->
+  <ItemGroup>
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)../../BannedSymbols.Clock.txt" />
+  </ItemGroup>
+
 </Project>

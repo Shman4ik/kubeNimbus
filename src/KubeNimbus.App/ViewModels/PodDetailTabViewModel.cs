@@ -1410,6 +1410,10 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
             {
                 // normal on stop/close
             }
+            catch (Exception ex) when (LogFollowRetry.IsNotFound(ex))
+            {
+                await NotFoundAsync(generation, ex, _client, token);
+            }
             catch (Exception ex)
             {
                 // The API server explains this one properly ("previous terminated
@@ -1497,6 +1501,10 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
             {
                 await WaitForStartAsync(generation, container.Name, follow, FirstLine(ex.Message), client, atStart, token);
             }
+            catch (Exception ex) when (LogFollowRetry.IsNotFound(ex))
+            {
+                await NotFoundAsync(generation, ex, client, token);
+            }
             catch (Exception ex)
             {
                 await EndLogStreamAsync(generation, FirstLine(ex.Message), problem: true);
@@ -1531,6 +1539,54 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         }
 
         await Dispatcher.UIThread.InvokeAsync(() => FollowIfStarted(generation, container, atStart, now));
+    }
+
+    /// <summary>
+    /// A log request answered 404 (#341), the rule the multi-pod pane follows too (#332,
+    /// <see cref="WorkloadLogsTabViewModel.NotFoundVerdict"/>). A pod deleted while its logs
+    /// are open, or replaced by a rollout, answers its follow with "the server could not find
+    /// the requested resource", and the pane used to show that as a problem over lines that
+    /// were simply the pod's last. So the pod is read once: gone or being deleted, and the
+    /// pane says the pod was deleted and keeps its lines; still there, and the 404 is a
+    /// failure, said as before.
+    /// </summary>
+    private async Task NotFoundAsync(int generation, Exception error, ClusterClient client, CancellationToken token)
+    {
+        DynamicResource? now;
+        try
+        {
+            now = await client.ReadResourceAsync(ResourceDescriptor.Pods, PodNamespace, PodName, token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception)
+        {
+            // The read failed too; the 404 is all the pane knows.
+            await EndLogStreamAsync(generation, FirstLine(error.Message), problem: true);
+            return;
+        }
+
+        await Dispatcher.UIThread.InvokeAsync(() => EndNotFound(generation, error, now));
+    }
+
+    /// <summary>
+    /// The second half of <see cref="NotFoundAsync"/>, on the UI thread, given the pod as read
+    /// after the 404. Internal so the view-model tests can deliver that read.
+    /// </summary>
+    internal void EndNotFound(int generation, Exception error, DynamicResource? podNow)
+    {
+        if (LogFollowRetry.IsPodGone(error, podNow))
+        {
+            // Said even when no line had arrived: "no lines in this range" would be a guess
+            // about a pod the cluster has just said is gone.
+            EndLogStream(generation, WorkloadLogsTabViewModel.PodDeletedMessage, problem: false, keepStatus: true);
+        }
+        else
+        {
+            EndLogStream(generation, FirstLine(error.Message), problem: true);
+        }
     }
 
     /// <summary>
@@ -1668,23 +1724,25 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
     }
 
     private async Task EndLogStreamAsync(int generation, string status, bool problem) =>
-        await Dispatcher.UIThread.InvokeAsync(() =>
-        {
-            if (generation != _logGeneration)
-            {
-                return;
-            }
+        await Dispatcher.UIThread.InvokeAsync(() => EndLogStream(generation, status, problem));
 
-            FlushLogLines();
-            StopLogFlushTimer();
-            _streaming = null;
-            _loadingLogRange = false;
-            LogStatus = !IsDemo && !problem && _allLogLines.Count == 0
-                ? SelectedLogRange.EmptyMessage
-                : status;
-            IsLogStatusProblem = problem;
-            SetLogFlags(following: false, previous: IsShowingPreviousLogs);
-        });
+    private void EndLogStream(int generation, string status, bool problem, bool keepStatus = false)
+    {
+        if (generation != _logGeneration)
+        {
+            return;
+        }
+
+        FlushLogLines();
+        StopLogFlushTimer();
+        _streaming = null;
+        _loadingLogRange = false;
+        LogStatus = !keepStatus && !IsDemo && !problem && _allLogLines.Count == 0
+            ? SelectedLogRange.EmptyMessage
+            : status;
+        IsLogStatusProblem = problem;
+        SetLogFlags(following: false, previous: IsShowingPreviousLogs);
+    }
 
     private void StopLogs(string? status = null, bool problem = false)
     {
@@ -2165,7 +2223,7 @@ public sealed class PodConditionViewModel
         ArgumentNullException.ThrowIfNull(condition);
 
         Condition = condition;
-        Age = ConditionSince.Age(condition.LastTransition, now ?? DateTimeOffset.UtcNow);
+        Age = ConditionSince.Age(condition.LastTransition, now ?? AppClock.UtcNow);
         AgeTooltip = ConditionSince.Tooltip(condition.LastTransition);
 
         // Three outcomes, not two. A condition type this app does not classify, and one

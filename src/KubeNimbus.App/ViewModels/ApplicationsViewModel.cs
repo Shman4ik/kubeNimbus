@@ -80,7 +80,7 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
     public ApplicationsViewModel(ClusterTabViewModel tab)
     {
         _tab = tab;
-        Clock = tab.IsDemo ? () => DemoData.Now : () => DateTimeOffset.UtcNow;
+        Clock = tab.IsDemo ? () => DemoData.Now : () => AppClock.UtcNow;
         _selectedNamespaces.UnionWith(tab.SelectedNamespaces);
         tab.PropertyChanged += (_, e) =>
         {

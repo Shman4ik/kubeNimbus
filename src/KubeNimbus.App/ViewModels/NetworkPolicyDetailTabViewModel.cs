@@ -324,7 +324,7 @@ public sealed class MatchedPodViewModel
         NodeName = pod.Raw.TryGetProperty("spec", out var spec) && spec.TryGetProperty("nodeName", out var node)
             ? node.GetString() ?? ""
             : "";
-        AgeText = pod.CreationTimestamp is { } created ? RelativeTime.Compact(DateTimeOffset.UtcNow - created) : "";
+        AgeText = pod.CreationTimestamp is { } created ? RelativeTime.Compact(AppClock.UtcNow - created) : "";
     }
 
     public string Name { get; }

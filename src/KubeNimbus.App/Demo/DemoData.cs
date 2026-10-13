@@ -75,8 +75,9 @@ public static class DemoData
     /// would drift further from the story every day the binary is old. The Applications
     /// mode reads the demo cluster at this moment — the checkout deploy went out fifteen
     /// minutes before it and its pod crashed at 08:54 — and the screenshots are
-    /// deterministic for the same reason. The Resources mode's ages still read the real
-    /// clock, as they always have.
+    /// deterministic for the same reason. In the app the Resources mode's ages still read the
+    /// real clock, as they always have; the screenshot harness stops <c>AppClock</c> at this
+    /// instant, so its ages are read here too (#350).
     /// </summary>
     public static readonly DateTimeOffset Now = new(2026, 7, 30, 8, 56, 0, TimeSpan.Zero);
 

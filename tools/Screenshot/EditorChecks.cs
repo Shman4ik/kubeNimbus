@@ -130,6 +130,15 @@ internal static class EditorChecks
             lines.Add(drawn);
         }
 
+        // An editor with nothing laid out would pass the link check without having drawn
+        // anything, and would fail the marker check below for a reason that has nothing to do
+        // with the marker: a hidden editor has no visual lines. That is how #349 read as "U+202E
+        // drawn invisibly" on Windows when the manifest editor had never been laid out at all.
+        if (!lines.Any(l => l.Contains(Url, StringComparison.Ordinal)) || !lines.Any(l => l.Contains(Email, StringComparison.Ordinal)))
+            throw new InvalidOperationException(
+                $"{what} did not draw the lines holding the URL and the address, so nothing was checked "
+                + $"(visible: {editor.IsEffectivelyVisible}, bounds: {editor.Bounds}).");
+
         if (links.Count > 0)
             throw new InvalidOperationException($"{what} drew {string.Join(" and ", links)} as a link, in Blue over the highlighting.");
 
@@ -141,10 +150,6 @@ internal static class EditorChecks
         if (!marked)
             throw new InvalidOperationException(
                 $"{what} drew U+202E as an invisible character that reorders its line; EditorDefaults should mark it.");
-
-        // An editor with nothing laid out would pass the line above without having drawn anything.
-        if (!lines.Any(l => l.Contains(Url, StringComparison.Ordinal)) || !lines.Any(l => l.Contains(Email, StringComparison.Ordinal)))
-            throw new InvalidOperationException($"{what} did not draw the lines holding the URL and the address, so nothing was checked.");
     }
 
     private static void Settle()

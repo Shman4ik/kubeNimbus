@@ -473,7 +473,9 @@ so the seam is in code: **every local time in `src/KubeNimbus.App` goes through
 it to UTC before anything renders. `LocalZoneCheck` fails the run if a local-time text does
 not follow it, and `LocalTimeTextTests.Every_local_time_follows_the_one_seam` (red with
 `LocalTimeText` calling `ToLocalTime()` itself) pins the same in the unit suite. A new
-`ToLocalTime()` call in the app is the way this comes back; grep for it.
+`ToLocalTime()` call in the app is the way this comes back, and since #350 it is a build
+error (`BannedSymbols.Clock.txt`, below; `LocalTimeText.ToLocal`'s own default is the one
+line that disables it).
 **The merged log panes were the last of them (ENG-53).** Panes that merge several replayed
 streams (`cluster-tab-workload-logs*`, `applications-page-crashloop-merged`,
 `applications-page-rollout`, and `ux-logs-palette`, which ends on a workload's logs) ordered
@@ -482,9 +484,28 @@ replays every stream of a pane from one loop in the order the lines were logged
 ([multi-pod-logs](multi-pod-logs.md)), and `DrainWorkloadLogs` waits for every
 stream to end before a scenario sets its search, which had landed on whichever match was newest
 part-way through. Measured: two full runs of one build, back to back, matched in all 418 PNGs, and three
-filtered runs of the workload-log scenarios matched each other byte for byte. What still moves
-is the clock: the demo's Age column and a restart's "71d ago" are relative to now, so a byte diff
-across a day boundary flags them, which is not a regression.
+filtered runs of the workload-log scenarios matched each other byte for byte.
+**The clock was the other one, and the harness now stops it (#350, 2026-10-13).** Every Age, a
+restart's "(71d ago)", a condition's "since", a certificate's days left and "Applied at" read
+`DateTimeOffset.UtcNow`, so two runs of one commit on either side of midnight rendered `74d` and
+`75d`, and every bundle's re-render of the published screenshots differed in an Age cell. The app
+now reads the time it shows from `AppClock.UtcNow` (a `TimeProvider`, the system clock by
+default), and `Program.cs` sets it to a `FixedClock` at `DemoData.Now` before the first scenario
+builds, the instant the Applications mode already read the demo at. Two things keep it from
+coming back. `BannedSymbols.Clock.txt`, included by the app and the harness only, makes a direct
+read of `DateTimeOffset.UtcNow`/`Now` or `DateTime.UtcNow`/`Now` a build error (RS0030); the
+three reads that measure elapsed time and never reach the screen (the merged log pane's opening
+burst, the restart stamp sent to the cluster, `LogSettle`'s budget) disable it on their line
+with the reason. And `ClockChecks`, run on every scenario, fails a run in which any rendered
+resource row shows an Age other than the one the fixed clock gives it, or in which a scenario
+left the clock replaced; a full Windows run checked 1821 rows. `AppClockTests` pins that a row's
+Age follows the replaced clock (it fails when `RefreshTimes` reads the wall clock again: checked).
+The same file bans `DateTimeOffset.ToLocalTime`, `DateTime.ToLocalTime` and `TimeZoneInfo.Local`,
+so the zone seam above is enforced the same way. Measured before the zone seam merged: two full
+Windows runs of one build, back to back, matched in 499 of 502 PNGs; the three that differed
+(`ux-keyboard-walk` in both themes, the command bar's focus; `ux-log-search-keys.light`, a
+one-pixel caret column) are interaction timing, not a clock. Core is outside the ban (`PrinterColumns` takes `now` from its caller, and
+its other reads are connection timing), which is what `ClockChecks` is for.
 
 When Docker is available (unlike this session — `docker version` succeeds but
 `dockerd` isn't running here), prefer driving the harness against a real
@@ -530,8 +551,9 @@ the name the docs and the release checklist read. It is still not a required che
 Every capture resets both stores and the fonts before it builds (ENG-10), which is what
 makes a scenario's PNG independent of its shard: a scenario rendered in a shard, alone
 through the name filter, and in the full run came out byte-identical, except for an Age
-column that reads the wall clock (`74d` in a run started before midnight, `75d` after),
-which is the same in every mode and predates the sharding.
+column that read the wall clock (`74d` in a run started before midnight, `75d` after),
+which was the same in every mode and predated the sharding; the harness stops the clock
+since #350 (above).
 
 The harness times itself: each capture is split into phases, and the run ends with the
 totals per phase and theme and the fifteen slowest captures (`HarnessTiming`). The numbers

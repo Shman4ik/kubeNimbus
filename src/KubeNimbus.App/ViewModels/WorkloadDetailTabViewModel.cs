@@ -327,7 +327,7 @@ public sealed record WorkloadCondition(
     string Type, string Status, string Reason, string Message, DateTimeOffset? LastTransition = null, DateTimeOffset? Now = null)
 {
     /// <summary>How long ago the condition last changed ("6d"), empty when the server sent no time.</summary>
-    public string Age { get; } = ConditionSince.Age(LastTransition, Now ?? DateTimeOffset.UtcNow);
+    public string Age { get; } = ConditionSince.Age(LastTransition, Now ?? AppClock.UtcNow);
 
     /// <summary>The exact instant of that change, or null.</summary>
     public string? AgeTooltip => ConditionSince.Tooltip(LastTransition);

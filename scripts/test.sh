@@ -31,6 +31,11 @@ if [[ "${1:-}" == "--" ]]; then
   shift
 fi
 
+# Avalonia.BuildServices reports every compile to Avalonia unless this is set. A machine
+# signed in to an Avalonia Accelerate Community or Trial licence overrides it by design
+# (docs/engineering/tech-stack.md, #353).
+export AVALONIA_TELEMETRY_OPTOUT=1
+
 dotnet build "$root/KubeNimbus.slnx" -c "$configuration" -nologo -v q
 
 # Exit code 8 is the runner's "zero tests ran". With no arguments every suite must

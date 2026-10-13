@@ -389,7 +389,7 @@ public sealed partial class ResourceRowViewModel : ObservableObject
 
     private void RefreshPrinterCells()
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = AppClock.UtcNow;
         for (var i = 0; i < PrinterCellCount; i++)
         {
             if (i >= _printerColumns.Count)
@@ -426,7 +426,7 @@ public sealed partial class ResourceRowViewModel : ObservableObject
     /// </summary>
     public void RefreshTimes()
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = AppClock.UtcNow;
         AgeText = CreatedAt is { } created ? RelativeTime.Compact(now - created) : "";
 
         if (IsEvent)

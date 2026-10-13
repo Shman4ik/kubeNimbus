@@ -73,6 +73,13 @@ File.Delete(Path.Combine(WorkspaceStore.DirectoryOverride, "settings.json"));
 // seed them by hand (SeedContexts).
 Kubeconfig.EnvironmentSearchOverride = [];
 
+// And the clock. Every time the app shows reads AppClock, and the harness stops it at the
+// instant the demo dataset describes. Ages read against the wall clock made two runs of one
+// commit differ on either side of midnight ("74d" against "75d"), so every re-render of the
+// published screenshots differed in an Age cell (#350). BannedSymbols.Clock.txt keeps the app
+// and this harness from reading the wall clock past it; ClockChecks checks the rows it rendered.
+AppClock.Time = new FixedClock(KubeNimbus.App.Demo.DemoData.Now);
+
 BuildAvaloniaApp().SetupWithoutStarting();
 
 if (stress)
@@ -554,6 +561,7 @@ TooltipChecks.ThrowIfAnyDead(filtered: filter is not null);
 AutomationChecks.ThrowIfAnyFailed(filtered: filter is not null);
 FontChecks.ThrowIfAnyFailed(filtered: filter is not null);
 SelectionChecks.ThrowIfAnyFailed(filtered: filter is not null);
+ClockChecks.ThrowIfAnyFailed(filtered: filter is not null);
 HarnessTiming.Report();
 if (ShardPlan.Current.IsSharded)
 {
@@ -699,6 +707,7 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     if (theme == ThemeVariant.Light) AutomationChecks.Walk(window, name);
     if (theme == ThemeVariant.Light) FontChecks.Walk(window, name);
     if (theme == ThemeVariant.Light) SelectionChecks.Walk(window, name);
+    if (theme == ThemeVariant.Light) ClockChecks.Walk(window, name);
     timing.Phase("walks");
     using var frame = window.CaptureRenderedFrame();
     timing.Phase("render");

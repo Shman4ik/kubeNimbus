@@ -1,0 +1,22 @@
+// The wall clock, banned in the app and the screenshot harness (RS0030, an error — see
+// Directory.Build.props). Included only by src/KubeNimbus.App and tools/Screenshot; Core and
+// the tests read the clock freely.
+//
+// Every time the app shows (an Age, "(43m ago)", a condition's "since", "Applied at") reads
+// KubeNimbus.App.AppClock.UtcNow, which the harness fixes at DemoData.Now. A direct read made
+// two harness runs of one commit differ across midnight ("74d" against "75d", #350), and every
+// re-render of the published screenshots then differed in an Age cell. A read that measures
+// elapsed time and never reaches the screen (a deadline, a window) disables RS0030 on its line
+// with a comment saying so.
+P:System.DateTimeOffset.UtcNow; Read KubeNimbus.App.AppClock.UtcNow, which the screenshot harness fixes (#350)
+P:System.DateTimeOffset.Now; Read KubeNimbus.App.AppClock.UtcNow, which the screenshot harness fixes (#350)
+P:System.DateTime.UtcNow; Read KubeNimbus.App.AppClock.UtcNow, which the screenshot harness fixes (#350)
+P:System.DateTime.Now; Read KubeNimbus.App.AppClock.UtcNow, which the screenshot harness fixes (#350)
+//
+// And the machine's zone. Every local time the app prints goes through
+// KubeNimbus.App.ViewModels.LocalTimeText.ToLocal, which the harness sets to UTC (#346); a
+// direct conversion rendered the machine's zone, so a PNG depended on who rendered it.
+// LocalTimeText's own default is the one line that disables RS0030 for it.
+M:System.DateTimeOffset.ToLocalTime; Go through LocalTimeText.ToLocal, which the screenshot harness sets to UTC (#346, #350)
+M:System.DateTime.ToLocalTime; Go through LocalTimeText.ToLocal, which the screenshot harness sets to UTC (#346, #350)
+P:System.TimeZoneInfo.Local; Go through LocalTimeText.ToLocal, which the screenshot harness sets to UTC (#346, #350)

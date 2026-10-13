@@ -33,8 +33,10 @@ internal static class LogSettle
             return;
         }
 
+#pragma warning disable RS0030 // a real-time budget for the wait, never shown; AppClock is stopped in the harness
         var deadline = DateTime.UtcNow + Budget;
         while (!IsSettled(shell) && DateTime.UtcNow < deadline)
+#pragma warning restore RS0030
         {
             Dispatcher.UIThread.RunJobs();
             Thread.Sleep(20);

@@ -34,6 +34,11 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 
+# Avalonia.BuildServices reports every compile to Avalonia unless this is set. A machine
+# signed in to an Avalonia Accelerate Community or Trial licence overrides it by design
+# (docs/engineering/tech-stack.md, #353).
+$env:AVALONIA_TELEMETRY_OPTOUT = '1'
+
 dotnet build (Join-Path $root 'KubeNimbus.slnx') -c $Configuration -nologo -v q
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
