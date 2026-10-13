@@ -498,10 +498,14 @@ kubeconfig, which is why it never showed there.
 ### The smoke test is sharded across five runners (#347, 2026-10-13)
 
 **CI renders the scenario list in five shards, so no scenario may depend on the ones
-rendered before it.** `--shard=<index>/<count>` renders the scenarios whose position in
-the list is `index` modulo `count` (`tools/Screenshot/ShardPlan.cs`). The CI matrix passes
-`strategy.job-index` and `strategy.job-total` rather than its own values, so a matrix that
-grows or shrinks can never leave a position unrendered, and `ShardPlan.Verify` checks on
+rendered before it.** `--shard=<number>/<count>` renders the scenarios whose 0-based
+position in the list is `number - 1` modulo `count` (`tools/Screenshot/ShardPlan.cs`). The
+number is 1-based everywhere a reader meets it — the argument, the harness's `Shard 2 of 5`
+line, the job `XAML smoke test (2 of 5)` and the artifact `screenshots-2` — so a red shard's
+log points at the right job. The CI step computes it from `strategy.job-index` and takes the
+count from `strategy.job-total`, and refuses a matrix whose `shard` labels are not 1..n in
+order (expressions have no arithmetic, so the job name has to read the label), so a matrix
+that grows or shrinks can never leave a position unrendered, and `ShardPlan.Verify` checks on
 every run that each position belongs to exactly one shard and that no two scenarios share
 a name (a mutation that put every position in every shard failed it). A new scenario
 needs nothing: wherever it is added, some shard takes it. Round-robin rather than a hash
@@ -527,7 +531,7 @@ behind the split:
 |---|---|---|
 | wall clock, run start to the smoke test's verdict | 15 min 51 s | 3 min 31 s |
 | `Build` step | 31 s | 33–50 s per shard |
-| `Render screenshots` | 14 min 32 s (510 captures) | 1 min 35 s – 2 min 14 s per shard (~100 captures) |
+| `Render screenshots` | 14 min 32 s (510 PNGs: that run was PR #346's merge commit, 255 scenarios) | 1 min 35 s – 2 min 14 s per shard (100 PNGs each: 250 scenarios on `main` then) |
 | `Stress check` | 25 s, after the render | 33 s, in its own job (1 min 33 s with its build) |
 
 Before the split, the time was spread across every capture, not a few slow ones: a median

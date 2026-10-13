@@ -18,7 +18,7 @@ using Nimbus.Ui.Fonts;
 // screenshot loop when developing in an environment with no display — see
 // CLAUDE.md "Headless screenshot harness".
 
-// `--shard=<index>/<count>` renders only that shard's scenarios (ShardPlan): CI splits the
+// `--shard=<number>/<count>` (1-based) renders only that shard's scenarios (ShardPlan): CI splits the
 // list across a job matrix (#347). It may appear anywhere in the arguments.
 (ShardPlan.Current, args) = ShardPlan.Parse(args);
 
@@ -538,7 +538,7 @@ SelectionChecks.ThrowIfAnyFailed(filtered: filter is not null);
 HarnessTiming.Report();
 if (ShardPlan.Current.IsSharded)
 {
-    Console.WriteLine($"Shard {ShardPlan.Current.Index}/{ShardPlan.Current.Count}: {selected} of {scenarios.Length} scenarios.");
+    Console.WriteLine($"Shard {ShardPlan.Current.Number} of {ShardPlan.Current.Count}: {selected} of {scenarios.Length} scenarios.");
 }
 
 Console.WriteLine($"Wrote screenshots to {Path.GetFullPath(outDir)}");
