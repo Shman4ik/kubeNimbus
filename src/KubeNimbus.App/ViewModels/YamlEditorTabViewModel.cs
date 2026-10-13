@@ -264,7 +264,7 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
             _ = RefreshFromServerAsync();
         }
 
-        RefreshCertificates(DateTimeOffset.UtcNow);
+        RefreshCertificates(AppClock.UtcNow);
 
         _previewsApplies = App.LoadSettings().PreviewApplies;
         PreviewPreferenceChanged += OnPreviewPreferenceChanged;
@@ -296,7 +296,7 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
         timer.Tick += (_, _) =>
         {
             RefreshRevealedValues();
-            RefreshCertificates(DateTimeOffset.UtcNow);
+            RefreshCertificates(AppClock.UtcNow);
         };
         return timer;
     }
@@ -971,7 +971,7 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
             YamlText = ForEditor(applied.ToYaml());
             IsDirty = false;
             StaleNotice = null;
-            StatusMessage = $"Applied at {LocalTimeText.Clock(DateTimeOffset.UtcNow)}.{LooseValidationSuffix}";
+            StatusMessage = $"Applied at {LocalTimeText.Clock(AppClock.UtcNow)}.{LooseValidationSuffix}";
             if (IsNewDocument)
             {
                 MarkNewDocumentApplied();

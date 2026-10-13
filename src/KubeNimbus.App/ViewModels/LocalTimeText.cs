@@ -21,7 +21,9 @@ public static class LocalTimeText
     /// published screenshot reads the same whichever machine renders it, and tests pin a zone
     /// that is not the machine's. Nothing in the app assigns it.
     /// </summary>
+#pragma warning disable RS0030 // the one conversion BannedSymbols.Clock.txt leaves open
     internal static Func<DateTimeOffset, DateTimeOffset> ToLocal { get; set; } = at => at.ToLocalTime();
+#pragma warning restore RS0030
 
     /// <summary>The instant in the app's local time (<see cref="ToLocal"/>).</summary>
     public static DateTimeOffset Local(DateTimeOffset at) => ToLocal(at);

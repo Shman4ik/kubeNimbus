@@ -66,6 +66,6 @@ public sealed partial class HelmReleaseRowViewModel : ObservableObject
     public HelmReleaseRowViewModel(HelmRelease release)
     {
         Release = release;
-        RefreshTimes(DateTimeOffset.UtcNow);
+        RefreshTimes(AppClock.UtcNow);
     }
 }

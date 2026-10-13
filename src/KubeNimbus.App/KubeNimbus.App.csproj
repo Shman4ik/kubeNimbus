@@ -85,4 +85,9 @@
     <AvaloniaResource Include="Assets\*.ico" />
   </ItemGroup>
 
+  <!-- The wall clock is banned here: every time on screen reads AppClock (#350). -->
+  <ItemGroup>
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)../../BannedSymbols.Clock.txt" />
+  </ItemGroup>
+
 </Project>

@@ -50,6 +50,53 @@ which now have a page of their own in this directory.
   `EditorChecks` (scenarios `ux-yaml-editor-links` and `ux-helm-editor-links`) reads each
   editor's visual lines for a `VisualLineLinkText`, checks the scroll rule, and fails for
   any editor in those two views that skipped the helper.
+  **#349 (2026-10-13): the Helm check failed on Windows only, and the editor was not the
+  cause.** It reported "ManifestEditor drew U+202E as an invisible character", but the
+  manifest editor had no visual lines at all: bounds 0×0, not effectively visible. The
+  `HelmReleaseDetail` fixture builds its tab on the offline client (`127.0.0.1:1`), waited
+  one second for that load to fail, then filled the tab and cleared the error. A refused
+  connection to a closed loopback port fails at once on Linux and takes about two seconds on
+  Windows (measured: 2058 ms, the stack retries a refused SYN), so on Windows the
+  "Could not read release" error landed after the fixture had cleared it, the view hid its
+  tab control, and the manifest editor was never laid out; the values editor still had the
+  visual lines of its first layout, which is why only the second editor failed. The fixture
+  now waits up to ten seconds and throws if the load has not ended, and `NoLinks` checks
+  that the editor drew its lines before it judges the marker, so a hidden editor is named
+  as one. `InvisibleCharacterGenerator` marks U+202E on Windows as it does on Linux (the
+  values editor's line 8 carried its `FormattedTextElement` in the failing run).
+- **Avalonia reports every build of this repo to Avalonia unless told not to, and on a machine
+  signed in to Avalonia Accelerate Community it cannot be told** (#353, 2026-10-13). The
+  `Avalonia` package's `Avalonia.props` adds `AvaloniaUI` to `UsedAvaloniaProducts`, which arms
+  the `AvaloniaStats` target of its dependency `Avalonia.BuildServices` (11.3.2 under Avalonia
+  12.1.x) before every `CoreCompile` that is not a design-time build. The task writes a record
+  under `%LOCALAPPDATA%\AvaloniaUI\BuildServices` and starts a background collector that posts it
+  to `https://av-build-tel-api-v1.avaloniaui.net/api/usage`. The package's README says what a
+  record holds: the build time, the project name hashed (SHA-256), output type, target framework
+  and RID, the Avalonia version, the Accelerate licence tier, an anonymous machine GUID and the
+  machine name hashed, the IDE or CLI, the OS and architecture, and which CI system runs it; not
+  source, paths or personal data. It is build time only: nothing of it is in the shipped app, so
+  the app's no-telemetry statements (`README.md`, `SECURITY.md`, `PRIVACY.md`, which speak about
+  the app) stay true and are unchanged.
+  The documented opt-out is the environment variable `AVALONIA_TELEMETRY_OPTOUT` (the README
+  says `=1`; the task tests only that the variable exists). There is no MSBuild property, so
+  `Directory.Build.props` cannot carry it: every workflow that builds (`ci.yml`, `release.yml`,
+  `codeql.yml`, `warm-cache.yml`) sets it in its top-level `env`, and `scripts/test.ps1` and
+  `scripts/test.sh` set it before they build. **The opt-out is ignored on a machine holding an
+  Accelerate Community or Trial licence.** The task's source
+  ([AvaloniaUI/Avalonia.BuildServices](https://github.com/AvaloniaUI/Avalonia.BuildServices),
+  `BuildTask/AvaloniaStatsTask.cs` at `a6a4257`) resolves a tier from the project's
+  `AvaloniaUILicenseKey` items *and from the tickets an Avalonia tool sign-in leaves on the
+  machine* (`AccelerateTierHelper`); for Community or Trial it prints "Avalonia Accelerate
+  Community requires telemetry. To opt out, please upgrade to a paid tier." and sends anyway,
+  and only with no licence does it respect the variable ("respect opt-out for FOSS users").
+  This repository declares no licence key, so a CI runner, which has no tickets, resolves no
+  tier and the opt-out holds. The owner's machine is signed in to Accelerate Community (the
+  Avalonia DevTools), and a build there with the variable set still printed that line and wrote
+  its record (checked 2026-10-13, `dotnet build src/KubeNimbus.App -v:n`, with and without the
+  variable); that is the licence's term, and the only ways out it offers are a paid tier or not
+  being signed in. Disabling the target by clearing `UsedAvaloniaProducts` would also silence
+  it, and is deliberately not done: it would sidestep the licence's condition rather than use
+  the opt-out Avalonia documents.
 - **KubeNimbus.Core.Tests** — TUnit on Microsoft.Testing.Platform. **NEVER add
   `Microsoft.NET.Test.Sdk` to a TUnit project — it breaks discovery.** The
   runner is pinned in `global.json` (`test.runner = Microsoft.Testing.Platform`).

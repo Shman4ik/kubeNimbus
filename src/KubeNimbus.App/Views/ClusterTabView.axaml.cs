@@ -337,7 +337,7 @@ public partial class ClusterTabView : UserControl
             }
 
             // The Helm list's Updated column and a release's history are ages too (FEAT-72).
-            var now = DateTimeOffset.UtcNow;
+            var now = AppClock.UtcNow;
             foreach (var release in vm.HelmReleases)
             {
                 release.RefreshTimes(now);

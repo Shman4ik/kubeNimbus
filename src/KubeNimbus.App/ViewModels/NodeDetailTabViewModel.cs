@@ -310,7 +310,7 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
         // Rebuilt only when something in it changed: the rows are SelectableTextBlocks,
         // and replacing the list on every watch tick would drop a selection someone is
         // in the middle of copying an IP out of.
-        var systemRows = BuildSystemRows(Info, DateTimeOffset.UtcNow);
+        var systemRows = BuildSystemRows(Info, AppClock.UtcNow);
         if (!systemRows.SequenceEqual(SystemRows))
         {
             SystemRows = systemRows;
@@ -1086,7 +1086,7 @@ public sealed partial class NodePodViewModel : ObservableObject
         MemoryRequestText = NodeDetailTabViewModel.FormatBytes(MemoryRequest);
         CreatedAt = pod.CreationTimestamp;
         AgeText = pod.CreationTimestamp is { } created
-            ? RelativeTime.Compact(DateTimeOffset.UtcNow - created)
+            ? RelativeTime.Compact(AppClock.UtcNow - created)
             : "";
     }
 }
@@ -1104,7 +1104,7 @@ public sealed class NodeConditionViewModel
         ArgumentNullException.ThrowIfNull(condition);
 
         Condition = condition;
-        Age = ConditionSince.Age(condition.LastTransition, now ?? DateTimeOffset.UtcNow);
+        Age = ConditionSince.Age(condition.LastTransition, now ?? AppClock.UtcNow);
         AgeTooltip = ConditionSince.Tooltip(condition.LastTransition);
         Health = condition switch
         {

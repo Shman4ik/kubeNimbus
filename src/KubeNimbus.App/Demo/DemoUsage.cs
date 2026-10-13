@@ -154,7 +154,7 @@ public static class DemoUsage
     }
 
     private static DateTimeOffset TickAt(int tick, DateTimeOffset? now) =>
-        (now ?? DateTimeOffset.UtcNow) - PollInterval * (SampleCount - 1 - tick);
+        (now ?? AppClock.UtcNow) - PollInterval * (SampleCount - 1 - tick);
 
     /// <summary>
     /// A deterministic 0.5–1.1× wobble around the reading. Two sines of different

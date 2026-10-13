@@ -1036,7 +1036,9 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
     {
         lock (_pendingLock)
         {
+#pragma warning disable RS0030 // a deadline for the opening burst, never shown: the harness's fixed AppClock would hold it forever
             _primeUntil ??= DateTimeOffset.UtcNow + PrimeWindow;
+#pragma warning restore RS0030
             _pending.Add((rawLine, source));
         }
     }
@@ -1069,7 +1071,9 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
 
             // The opening burst is held so that N pods' tails are sorted together rather
             // than shown one pod after another. Every later tick flushes immediately.
+#pragma warning disable RS0030 // the deadline above, read against the same real clock
             if (!force && _primeUntil is { } until && DateTimeOffset.UtcNow < until)
+#pragma warning restore RS0030
             {
                 return;
             }

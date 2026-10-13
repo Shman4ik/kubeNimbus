@@ -281,4 +281,34 @@ public class LogFollowRetryTests
         await Assert.That(detail.FollowIfStarted(generation, "model-server", null, Running)).IsTrue();
         await Assert.That(detail.IsFollowingLogs).IsFalse();
     }
+
+    /// <summary>
+    /// #341: pod detail reads a 404 the way the multi-pod pane does (#332). A pod deleted, or
+    /// being deleted, while its logs are open ends the pane with "Pod deleted" and no problem;
+    /// it used to show "could not find the requested resource" as an error.
+    /// </summary>
+    [Test]
+    public async Task Pod_detail_ends_a_404_for_a_deleted_pod_as_deleted_not_as_a_problem()
+    {
+        var notFound = Refusal(HttpStatusCode.NotFound);
+
+        foreach (var podNow in new[] { null, Deleting() })
+        {
+            var detail = Detail();
+            detail.EndNotFound(detail.LogGeneration, notFound, podNow);
+            await Assert.That(detail.LogStatus).IsEqualTo(WorkloadLogsTabViewModel.PodDeletedMessage);
+            await Assert.That(detail.IsLogStatusProblem).IsFalse();
+        }
+
+        // Still there and not being deleted: the 404 is a failure, said as one.
+        var running = Detail();
+        running.EndNotFound(running.LogGeneration, notFound, Pod("running"));
+        await Assert.That(running.IsLogStatusProblem).IsTrue();
+        await Assert.That(running.LogStatus).IsNotEqualTo(WorkloadLogsTabViewModel.PodDeletedMessage);
+
+        // A verdict for a stream the reader has since replaced changes nothing.
+        var moved = Detail();
+        moved.EndNotFound(moved.LogGeneration - 1, notFound, null);
+        await Assert.That(moved.LogStatus).IsNotEqualTo(WorkloadLogsTabViewModel.PodDeletedMessage);
+    }
 }

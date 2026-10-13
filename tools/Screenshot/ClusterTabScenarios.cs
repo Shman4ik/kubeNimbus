@@ -596,7 +596,7 @@ internal static class ClusterTabScenarios
         tab.IsFleetView = true;
         tab.FleetSummary = "2 of 2 clusters serve Event";
 
-        var now = DateTimeOffset.UtcNow;
+        var now = AppClock.UtcNow;
         string At(TimeSpan ago) => (now - ago).ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture);
 
         foreach (var e in FixtureData.Events.Where(e => e.Namespace == "payments").Take(3))
@@ -1996,10 +1996,21 @@ internal static class ClusterTabScenarios
 
         var helmTab = new HelmReleaseTabViewModel(client, release);
 
-        for (var i = 0; i < 100 && helmTab.IsLoading; i++)
+        // The offline client's load has to fail before the fixture fills the tab, or its
+        // "Could not read release" lands afterwards and hides the editors. On Linux the
+        // refused connection to 127.0.0.1:1 fails at once; on Windows it takes about two
+        // seconds (the stack retries a refused SYN), so a one-second wait here let the error
+        // land after the capture had begun: the manifest editor was never laid out and
+        // EditorChecks.HelmReleaseLinks failed on Windows only (#349).
+        for (var i = 0; i < 1000 && helmTab.IsLoading; i++)
         {
             Dispatcher.UIThread.RunJobs();
             Thread.Sleep(10);
+        }
+
+        if (helmTab.IsLoading)
+        {
+            throw new InvalidOperationException("The Helm release fixture's offline load did not end within 10 s.");
         }
 
         helmTab.IsPreview = false;

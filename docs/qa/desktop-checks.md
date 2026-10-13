@@ -328,6 +328,12 @@ Setup: `qa-seed.ps1 -Reset`; `./scripts/qa-netcut.ps1 start` for G-11.
   "deleted" with "Pod deleted; its lines are kept." on hover, never "failed" with "the server could not
   find the requested resource". One attempt per restart; the 404 is a race the VM may not hit,
   so a run that never shows "failed" is a PASS.
+- **G-20 [text]** (#341) Open a `shop-web` pod's logs in pod detail, Follow on, then
+  `kubectl -n qa-shop delete pod <that pod>`: the pane ends with "Pod deleted; its lines are kept."
+  in an ordinary notice (not in warning colour), and the lines it had stay. Never "the server could
+  not find the requested resource" as a problem. The 404 is a race the VM may not hit (the stream
+  may end cleanly first, with the container's exit); one attempt, and a run that never shows the
+  404 as a problem is a PASS.
 
 ## Batch T — terminal, exec and copy
 

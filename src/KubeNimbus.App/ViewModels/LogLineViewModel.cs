@@ -258,7 +258,7 @@ public sealed partial class LogLineViewModel : ObservableObject
     {
         get
         {
-            var offset = ToLocal(DateTimeOffset.UtcNow).Offset;
+            var offset = ToLocal(AppClock.UtcNow).Offset;
             var local = $"UTC{(offset < TimeSpan.Zero ? "-" : "+")}{offset:hh\\:mm}";
             return $"Show timestamps in UTC, as the server sent them. Off: local time ({local}). "
                 + "Copy and Download always write the server's own UTC line.";

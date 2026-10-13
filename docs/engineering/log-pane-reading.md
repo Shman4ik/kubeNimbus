@@ -344,6 +344,24 @@ includes a pod a rollout adds while Follow is off, which used to be followed alo
 streaming is stopped". `LogFollowRetryTests` pins both panes; reverting either retry to a bare
 `StartLogs()` / `StartStream(source)` turns its test red (checked).
 
+**A 404 for a pod that is gone is its end, in both panes (#332, #341).** The one rule:
+when a log request is answered 404, the pane reads the pod once, and
+`LogFollowRetry.IsPodGone` decides. The pod is gone, or carries a `deletionTimestamp`: the
+stream ended because the pod did, so the pane says "Pod deleted; its lines are kept." as an
+ordinary end, never a problem, and keeps every line it had. The pod is still there and not being
+deleted: the 404 is a failure and is shown as one, in the server's words. The read itself failing
+leaves the 404 as the failure it is. Only a 404 counts; a 400 or a 403 is never read as a pod
+going away. Bundle T gave the multi-pod pane this rule (the source ends `Gone`); pod detail
+still showed "the server could not find the requested resource" as a problem over a pod a
+rollout had replaced (#341), and now goes through the same method for its follow, its range
+loads and Previous (`PodDetailTabViewModel.NotFoundAsync` / `EndNotFound`). Pod detail says the
+sentence even when no line had arrived, where an ordinary end with no lines says the range was
+empty: the cluster has just said the pod is gone, and "no lines in this range" would be a guess.
+`LogFollowRetryTests` pins both panes (`A_404_for_a_pod_that_is_gone_or_being_deleted_ends_the_source_as_deleted`,
+`Pod_detail_ends_a_404_for_a_deleted_pod_as_deleted_not_as_a_problem`); the `catch` that sends
+pod detail's 404 there and its pod read are not driven by a test (the view-model tests have no
+client) and are desktop check G-20.
+
 ## While the pane holds lines, its state is still said (#319)
 
 The snapshot, Previous and Cleared messages, and how a stream ended, were drawn only as the
