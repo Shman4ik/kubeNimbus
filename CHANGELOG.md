@@ -12,6 +12,23 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+### Added
+
+- **Cluster tabs are real tabs.** The cluster tabs in the command bar are one Tab stop: the
+  arrow keys, Home and End switch cluster, screen readers read them as tabs, and Delete closes
+  the focused cluster tab or dock tab. Screen readers also hear whether a sidebar section is open,
+  can tick the namespace pickers' boxes, read which grid rows are selected and by name, and hear
+  menu items by their labels (#236).
+- **"Exec in my terminal" and "Node shell in my terminal" in the resource list's right-click
+  menu**, beside the ones in the exec pane and node detail, so a pod or a node can be handed to
+  your own terminal without opening it first (#198).
+- **ResourceQuota rows say whether a namespace is out of room.** "Full: pods" or "Almost full:
+  limits.memory 98%" shows in the Status column, and kubectl's used/hard figures in Details. It
+  works with only the `view` role in the namespace (#308).
+- **"Choose the list's columns…" in the command palette** opens the column chooser from the
+  keyboard. Focus starts on the first column you can hide and returns to the list when the menu
+  closes (#301).
+
 ### Changed
 
 - **The Linux AppImage has a new name and updates itself.** It is now
@@ -28,6 +45,25 @@ it as the GitHub Release body, so headings must match tags exactly
   by both modes, so the Resources list of Pods, Deployments and the other kinds the
   Applications mode reads appears at once, and the last five kinds you left stay live: going
   back to one shows current rows with no new list. Refresh still reads the cluster again.
+- **With several rows selected, actions that act on one object are disabled**, and their tooltip
+  says why. Delete acts on all of the selected rows and always asks first, whatever "Confirm
+  before deleting" says, and a refused bulk delete's reason wraps instead of being cut (#305).
+- **The Argo CD dashboard is live.** A sync started from `kubectl` or Argo's own UI, a health
+  change or a new Application shows without a reload, on one cluster and in the "All clusters"
+  list alike (#303, #336).
+- **Inspector panes have one grouping device per group.** Pod, node, Service, NetworkPolicy and
+  AppProject detail draw headed sections instead of a bordered card per group, the log, terminal,
+  YAML, Helm and Env panes no longer sit in a box inside the dock, and the apply preview is set off
+  from the pane's toolbar by a single rule (#215).
+- **The exec terminal keeps more keys for the shell.** With focus in it, F1 to F12 go to the shell
+  (htop's F5, mc's F1, vim mappings) instead of opening the cheat sheet, and F11 and F12 now reach
+  the shell at all; F1 opens the cheat sheet everywhere else. Ctrl+Shift+L is the shell's (`^L`)
+  and no longer opens the logs palette, and Ctrl+K, Ctrl+P and Ctrl+Shift+N reach the shell too:
+  press Ctrl+Tab to leave the terminal first (#337, #222).
+- **A row action's question no longer starts with a button-like icon.** The verb's glyph is drawn
+  bare, level with the sentence, because on an Argo sync's result line it looked like a refresh
+  button although it has no command (#329).
+- Avalonia 12.1.4 and SvcSystems.UI.Terminal 2.2.2 (#344).
 
 ### Fixed
 
@@ -35,6 +71,76 @@ it as the GitHub Release body, so headings must match tags exactly
   Ubuntu 24.04, and a NativeAOT binary asks for the glibc version of the machine it was built on,
   so an older distribution could refuse to start it with a "GLIBC_2.38 not found" error. They are
   now built on Ubuntu 22.04, and the release fails if a binary needs a glibc newer than 2.35.
+- **A log pane opened on a pod that was not running yet starts streaming once the container
+  runs.** A pod held by a scheduling gate, or still creating its container, used to keep
+  "container … is not available (400 Bad Request)" or "waiting to start" beside a running pod.
+  This applies to pod detail and the multi-pod pane (#184, #309), and with Follow off a container
+  that comes up after being refused is no longer followed on its own: a range load comes back as
+  a range, and a pod a rollout adds is loaded, not followed (#331).
+- **A log pane says what it is showing while it holds lines.** A snapshot, the previous run, a
+  stopped or ended stream and cleared lines are named in a bar above the lines; these messages
+  used to show only while the pane was empty (#319).
+- **A pod deleted mid-rollout ends as "deleted" with its lines kept** in the multi-pod pane and in
+  pod detail's log pane, instead of "failed" with "the server could not find the requested
+  resource" (#332, #341).
+- **An account that may not read metrics (403) gets no empty CPU and Memory columns.** The
+  list hides them, gives the reason in the status bar and stops asking; they used to show dashes
+  indefinitely (#310).
+- **A list this account may not read no longer spins behind "Watch connection lost … retrying".**
+  The Resources list and the Argo CD dashboard say the account may not list it, in the API
+  server's words, and the Resources list suggests a namespace when it asked the whole cluster
+  (#339). A list of several namespaces, or a fleet list, that every namespace or cluster refuses
+  says so with the server's reasons instead of "No … found", and a refusal from only some of them
+  stays on the warning line. The watches behind a workload's, a Service's and a node's pods, a
+  logs pane's pods and the debug container stop at a 403 and say why (#354).
+- **A relist of the Argo CD dashboard no longer shows a growing subset of the Applications.** The
+  list swaps once the relist is complete (#339).
+- **The YAML editor refuses a second pasted document** instead of applying only the first, and
+  after New YAML creates an object, E on it focuses that editor instead of opening a second one
+  (#300).
+- **The apply preview is readable at the dock's default height.** The diff takes the editor's
+  place and shows a readable run of lines, and a Review that ends in a field-manager conflict
+  shows what a force apply would change beside the conflict (#316).
+- **`workspace.json` stores a column layout once.** Hidden columns and widths are no longer
+  written twice, and a stale `IsAdvancedView` is no longer written (#318). Hiding the column a
+  list is sorted by clears the sort instead of leaving the list in an order no header shows
+  (#301).
+- **A ConfigMap value containing a carriage return survives the YAML editor**, and the Helm and
+  Argo views start no reads behind a failed reconnect (#311). A successful Argo fleet reload no
+  longer clears an unrelated warning (#306). Closing a New YAML editor while its first apply reads
+  the cluster's kinds stops that read (#342).
+- **In the exec terminal, Alt+B and Alt+F reach the shell as Meta-b and Meta-f** (ESC and the
+  lower-case letter), so readline word motion works and no stray letter is typed (#315).
+- **Condition rows in pod and node Overview line up with their section header**, the status dot
+  sitting in the margin (#237). The arrow keys along a pane's tab strip (pod detail's
+  Overview/Logs/…, the diff's views, the mode switch, the preferences tabs) keep the focus ring on
+  the tab they reach (#297).
+- **A vertical mouse wheel over the dock's tab strip and the cluster tabs scrolls it sideways**
+  (#313). A kind listed in Recent and in its own section is drawn selected once, in the row on
+  screen (#317).
+- **Smaller pane text fixes.** Node detail says what each pod count counts ("Active pods", "N pods
+  on this node, M active"); exact times on tooltips carry their UTC offset; the pod Usage tab
+  shows the first container at the default dock height and prints small shares of a limit as a
+  figure; a cut column header ends in an ellipsis with the full name on a tooltip; a drag that
+  starts on a column header no longer sorts (#320). The managed-fields chip no longer stays pressed
+  when a UI Automation toggle is refused (#236).
+
+### Development
+
+These changes touch the build, the tests and the repository's tooling, not the app.
+
+- **A `nimbusUi drift` job fails a PR when `shared/nimbusUi` differs from nimbusUi's `main`**
+  (#343; paired with pgNimbus's own check).
+- **The XAML smoke test runs as five parallel shards plus a separate stress job**, behind one
+  `XAML smoke test` summary check. A PR's run took 15 min 51 s before and 3 min 31 s after, with
+  every scenario still rendered in both themes (#347).
+- **The screenshot harness stops the clock**, so two runs of one commit render the same ages
+  (#350). The Windows-only `EditorChecks.HelmReleaseLinks` failure was the Helm fixture racing a
+  two-second refused connect, not the editor, and is fixed (#349).
+- **`AVALONIA_TELEMETRY_OPTOUT` is set in every building workflow and the test scripts** (#353).
+- **`scripts/qa-ui.ps1` reads pattern actions back, gets `resize` and `move` handles from UI
+  Automation and drives a file dialog with `-Dialog`**, and `docs/qa/desktop-checks.md` has
+  the checks for this release's changes.
 
 ## [0.7.0] - 2026-10-11
 
