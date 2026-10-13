@@ -115,7 +115,9 @@ public sealed partial class ClusterTabViewModel
 
     /// <summary>
     /// The dashboard's watch on this tab's cluster ended. A refusal is stated in the dashboard's
-    /// place (<see cref="ArgoRefusal"/>); anything else is a warning over whatever rows there are.
+    /// place (<see cref="ArgoRefusal"/>) when there are no rows; with rows already listed (list
+    /// allowed, watch not) they stay and the status bar says live updates stopped. Anything else
+    /// is a warning over whatever rows there are.
     /// Either way the wait is over (UI rule 18).
     /// </summary>
     internal void EndArgoWatch(Exception ex, CancellationToken token)
@@ -125,7 +127,14 @@ public sealed partial class ClusterTabViewModel
             return;
         }
 
-        if (WatchRefusedException.From(ex) is { } refused)
+        var refused = WatchRefusedException.From(ex);
+        if (refused is not null && ArgoApplications.Count > 0)
+        {
+            // Listed, then refused the watch (list allowed, watch not): the rows are real and
+            // stay, and the status bar says they no longer update, as the Resources list does.
+            Status = $"Live updates stopped: {refused.Message}";
+        }
+        else if (refused is not null)
         {
             ArgoRefusal = refused.Message;
             if (ConnectionWarning?.StartsWith(ArgoReadWarning, StringComparison.Ordinal) == true)

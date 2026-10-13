@@ -249,6 +249,32 @@ public class ArgoFleetRoutingTests
     }
 
     /// <summary>
+    /// #339, list allowed and watch refused: the dashboard has listed, so its rows are real and
+    /// stay; the not-permitted panel must not print over them, and the status bar says live
+    /// updates stopped, as the Resources list does. Mutation-checked: without the rows branch in
+    /// <c>EndArgoWatch</c> the refusal panel shows over the rows and nothing says they stopped.
+    /// </summary>
+    [Test]
+    public async Task A_watch_refused_after_the_list_keeps_the_rows_and_says_updates_stopped()
+    {
+        var tab = ArgoTab(own: null, members: null);
+        var table = new ArgoApplicationTable();
+        tab.ApplyArgoBatch(
+            table,
+            [ResourceEvent<DynamicResource>.Reset, Event("", ResourceEventType.Added).Event, ResourceEvent<DynamicResource>.Synced],
+            ApplicationDescriptor);
+        await Assert.That(tab.ArgoApplications.Count).IsEqualTo(1);
+
+        tab.EndArgoWatch(new WatchRefusedException(Refusal), CancellationToken.None);
+
+        await Assert.That(tab.ArgoApplications.Count).IsEqualTo(1);
+        await Assert.That(tab.IsArgoRefused).IsFalse();
+        await Assert.That(tab.IsArgoEmpty).IsFalse();
+        await Assert.That(tab.IsArgoLoading).IsFalse();
+        await Assert.That(tab.Status).IsEqualTo($"Live updates stopped: {Refusal}");
+    }
+
+    /// <summary>
     /// #339 in the fleet: a refused member has answered, so the list stops waiting for it and
     /// names it in the warning while the others' rows show; when every member is refused, the
     /// refusal is the dashboard's state instead of a warning.

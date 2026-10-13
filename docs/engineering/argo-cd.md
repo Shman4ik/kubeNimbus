@@ -207,7 +207,11 @@ the `Relist` call the test times out on one).
   refused entry with a `WatchRefusedException` carrying the server's sentence (see
   [aot-watch-and-discovery](aot-watch-and-discovery.md)), and the dashboard says "This account
   may not read Argo CD Applications" with that sentence in the list's place: not the "No Argo CD
-  Applications" empty state, and not a warning. Nothing asks again until Refresh, a reconnect or
+  Applications" empty state, and not a warning. When the list was allowed and only the watch is
+  refused, the dashboard already holds rows that are real: they stay, the panel does not print
+  over them, and the status bar says "Live updates stopped: <the sentence>", as the Resources
+  list does (`A_watch_refused_after_the_list_keeps_the_rows_and_says_updates_stopped`,
+  mutation-checked: without that branch the panel covered the rows). Nothing asks again until Refresh, a reconnect or
   the kind is chosen again. `ArgoFleetRoutingTests.A_refused_dashboard_says_so_in_the_servers_words`
   pins the state (mutation-checked: an `EndArgoWatch` that treats every ending as a warning fails
   it); the live test below pins the engine half against a real API server.
