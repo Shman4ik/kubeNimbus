@@ -22,6 +22,12 @@ using Nimbus.Ui.Fonts;
 // list across a job matrix (#347). It may appear anywhere in the arguments.
 (ShardPlan.Current, args) = ShardPlan.Parse(args);
 
+// `--twice` renders every ux-* scenario a second time and fails the run when the two PNGs differ
+// (#360, HarnessDeterminism). The nightly workflow passes it; a PR's smoke test does not, so it
+// costs a PR nothing. It may appear anywhere in the arguments.
+HarnessDeterminism.Twice = args.Contains("--twice");
+args = [.. args.Where(a => a != "--twice")];
+
 // `-- --stress` runs StressChecks instead of rendering: every data surface fed a large
 // cluster's worth of objects, with its visuals, collection notifications and time checked
 // against a budget. Exits non-zero when anything is over.
@@ -81,6 +87,14 @@ Kubeconfig.EnvironmentSearchOverride = [];
 AppClock.Time = new FixedClock(KubeNimbus.App.Demo.DemoData.Now);
 
 BuildAvaloniaApp().SetupWithoutStarting();
+
+// And the transitions (#360). A brush transition (nimbusUi's .soft buttons have one) runs on the
+// render clock, which in the headless platform advances with the wall clock between forced
+// ticks, so a capture taken while one is in flight would land at a different fraction of it on
+// every run. The differences #360 measured had another cause, the partial repaints
+// HarnessDeterminism.RepaintWhole removes before each capture; HarnessDeterminism also renders
+// each interaction scenario twice and fails the run on a difference.
+HarnessDeterminism.StopTransitions(Application.Current!);
 
 if (stress)
 {
@@ -305,6 +319,9 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // #320: at 960px a cut header ends in an ellipsis with its name on a tooltip, and a press
     // dragged off a header does not sort (PaneTextChecks.CrdHeadersAt960).
     ("cluster-tab-crd-printer-columns-960", () => HostInMainWindow(ClusterTabScenarios.DemoCrdPrinterColumns(), width: 960)),
+    // #362: a CRD column widened by a drag keeps its width across a switch to Pods and back
+    // (ColumnWidthChecks.CrdWidthKeptAcrossKinds).
+    ("ux-crd-column-width-kept", () => HostInMainWindow(ClusterTabScenarios.DemoCrdPrinterColumns())),
     ("cluster-tab-demo-scale-unavailable", () => HostInMainWindow(ClusterTabScenarios.DemoScaleUnavailable())),
     // FEAT-8 — a CronJob's run-now and resume on the shared strip, the created-Job state
     // with its "Open Job" follow-up, and a Job opened in the workload pane.
@@ -561,6 +578,13 @@ for (var position = 0; position < scenarios.Length; position++)
     foreach (var theme in new[] { ThemeVariant.Light, ThemeVariant.Dark })
     {
         Capture(name, theme, build);
+
+        // #360, with --twice: an interaction scenario is rendered a second time and must come out
+        // byte-identical.
+        if (HarnessDeterminism.RendersTwice(name))
+        {
+            Capture(name, theme, build, again: true);
+        }
     }
 }
 
@@ -569,6 +593,7 @@ AutomationChecks.ThrowIfAnyFailed(filtered: filter is not null);
 FontChecks.ThrowIfAnyFailed(filtered: filter is not null);
 SelectionChecks.ThrowIfAnyFailed(filtered: filter is not null);
 ClockChecks.ThrowIfAnyFailed(filtered: filter is not null);
+HarnessDeterminism.ThrowIfAnyDiffered();
 HarnessTiming.Report();
 if (ShardPlan.Current.IsSharded)
 {
@@ -586,7 +611,7 @@ catch (IOException)
 }
 return;
 
-void Capture(string name, ThemeVariant theme, Func<Control> build)
+void Capture(string name, ThemeVariant theme, Func<Control> build, bool again = false)
 {
     Application.Current!.RequestedThemeVariant = theme;
 
@@ -664,6 +689,7 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
 
     if (name == "ux-automation-patterns") AutomationPatternChecks.Patterns(window);
     if (name == "cluster-tab-crd-printer-columns-960") PaneTextChecks.CrdHeadersAt960(window);
+    if (name == "ux-crd-column-width-kept") ColumnWidthChecks.CrdWidthKeptAcrossKinds(window);
     if (name == "cluster-tab-pod-detail-usage-docked") PaneTextChecks.UsageFirstContainerVisible(window);
     if (name == "ux-dock-tab-delete") AutomationPatternChecks.DockTabDelete(window);
     if (name == "ux-managed-fields-uia") AutomationPatternChecks.ManagedFieldsToggle(window);
@@ -712,15 +738,28 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
 
     // Every scenario, once: the pointer over each tooltip has to reach its element
     // (DESIGN.md rule 21). Reported together after the last scenario.
-    if (theme == ThemeVariant.Light) TooltipChecks.Reach(window, name);
-    if (theme == ThemeVariant.Light) AutomationChecks.Walk(window, name);
-    if (theme == ThemeVariant.Light) FontChecks.Walk(window, name);
-    if (theme == ThemeVariant.Light) SelectionChecks.Walk(window, name);
-    if (theme == ThemeVariant.Light) ClockChecks.Walk(window, name);
+    // Once per scenario: the second render of an interaction scenario (#360) is only compared.
+    var walk = theme == ThemeVariant.Light && !again;
+    if (walk) TooltipChecks.Reach(window, name);
+    if (walk) AutomationChecks.Walk(window, name);
+    if (walk) FontChecks.Walk(window, name);
+    if (walk) SelectionChecks.Walk(window, name);
+    if (walk) ClockChecks.Walk(window, name);
     timing.Phase("walks");
+    HarnessDeterminism.RepaintWhole(window);
     using var frame = window.CaptureRenderedFrame();
     timing.Phase("render");
     var path = Path.Combine(outDir, $"{name}.{themeLabel}.png");
+    if (again)
+    {
+        using var second = new MemoryStream();
+        frame?.Save(second, new Avalonia.Media.Imaging.PngBitmapEncoderOptions());
+        HarnessDeterminism.Compare(path, File.ReadAllBytes(path), second.ToArray());
+        window.Close();
+        timing.End();
+        return;
+    }
+
     frame?.Save(path, new Avalonia.Media.Imaging.PngBitmapEncoderOptions());
     window.Close();
     timing.Phase("save");

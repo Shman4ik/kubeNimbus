@@ -40,6 +40,24 @@ public class GridLayoutStoreTests
         await Assert.That(layout.Widths.Count).IsEqualTo(0);
     }
 
+    /// <summary>
+    /// #362: a CRD printer column is <c>1*</c>, and the QA run's drag from 111 to 151 px moved
+    /// it to about <c>1.36*</c>. The release compared both shapes against half a unit, so the
+    /// ratio's change counted as no change and no CRD column width was ever stored.
+    /// </summary>
+    [Test]
+    public async Task A_drag_is_measured_in_the_columns_own_unit()
+    {
+        var star = new GridColumnWidth(GridColumnWidth.Star, 1);
+        var pixels = new GridColumnWidth(GridColumnWidth.Pixels, 111);
+
+        await Assert.That(new GridColumnWidth(GridColumnWidth.Star, 1.3061).DiffersFrom(star)).IsTrue();
+        await Assert.That(new GridColumnWidth(GridColumnWidth.Star, 1.0004).DiffersFrom(star)).IsFalse();
+        await Assert.That(new GridColumnWidth(GridColumnWidth.Pixels, 151).DiffersFrom(pixels)).IsTrue();
+        await Assert.That(new GridColumnWidth(GridColumnWidth.Pixels, 111.3).DiffersFrom(pixels)).IsFalse();
+        await Assert.That(new GridColumnWidth(GridColumnWidth.Pixels, 1).DiffersFrom(star)).IsTrue();
+    }
+
     [Test]
     public async Task Widths_and_sort_round_trip()
     {

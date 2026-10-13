@@ -165,16 +165,7 @@ public sealed partial class ClusterTabViewModel
                 // reads, or one this list showed a moment ago, is given its rows at once.
                 await foreach (var batch in client.Watches.WatchAsync(
                     descriptor, @namespace,
-                    connectionLost: ex => Dispatcher.UIThread.Post(() =>
-                    {
-                        ConnectionWarning = ex.Message;
-
-                        // After the warning, which resets it: a lost or refused watch is
-                        // the one warning a reconnect can actually do something about. An
-                        // object the app could not read is not — the watch is still up, and
-                        // a reconnect would read the same object again.
-                        ConnectionWarningOffersReconnect = ex is not UnreadableObjectException;
-                    }),
+                    connectionLost: ex => Dispatcher.UIThread.Post(() => OnListConnectionLost(ex)),
                     cancellationToken: token).InBatches(cancellationToken: token))
                 {
                     await Dispatcher.UIThread.InvokeAsync(() => ApplyBatch(batch));
@@ -195,6 +186,21 @@ public sealed partial class ClusterTabViewModel
         }, token);
 
         StartMetricsPolling(descriptor, [("", client)], namespaces, token);
+    }
+
+    /// <summary>What the list's watch reports between frames: a lost connection, or an object it could not read.</summary>
+    internal void OnListConnectionLost(Exception ex)
+    {
+        ConnectionWarning = ex.Message;
+
+        // Remembered so the Synced that follows a reconnect clears this line and nothing
+        // else (#363).
+        _lostWatchWarning = ex is WatchConnectionException ? ex.Message : null;
+
+        // After the warning, which resets it: a lost or refused watch is the one warning a
+        // reconnect can actually do something about. An object the app could not read is
+        // not — the watch is still up, and a reconnect would read the same object again.
+        ConnectionWarningOffersReconnect = ex is not UnreadableObjectException;
     }
 
     /// <summary>

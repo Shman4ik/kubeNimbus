@@ -95,6 +95,16 @@ Twelve things are load-bearing.
    snapshot every column on pointer press, compare on release, store the difference.
    Storing every column instead would pin the Auto columns to whatever their content
    happened to measure at that moment, which is a choice nobody made.
+   **"Changed" is measured in the column's own unit** (`GridColumnWidth.DiffersFrom`): more
+   than half a pixel for a pixel width, more than 0.001 for a star ratio. The comparison used
+   to be half a unit for both, and a CRD printer column is `1*`: the QA VM run widened Widgets'
+   `SKU` from 111 to 151 px with a real drag, which moved it to about `1.36*`, under the
+   threshold, so no CRD column width was ever stored and the kind switch put back the default
+   (#362, check P-4). A drag on a star column also rewrites the star columns after it (the
+   neighbours shrink to `0.898*` in the harness), and those are stored too, because that is the
+   layout the drag produced. `ux-crd-column-width-kept` drags a printer column's header edge
+   through the header's own pointer handling, switches to Pods and back, and fails if the width
+   was not stored or not put back; it failed before the fix with "nothing was stored".
 11. **Widths and sort are one record with two writers, and neither may drop the other's
    half.** Pixels are not view-model state, so the view owns the widths; the sort is
    what orders the rows, so the view model owns it. Both go through

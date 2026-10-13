@@ -784,8 +784,9 @@ public partial class ClusterTabView : UserControl
         var changed = new Dictionary<string, GridColumnWidth>(StringComparer.Ordinal);
         foreach (var (id, width) in CurrentWidths())
         {
-            if (!before.TryGetValue(id, out var was) || was.Unit != width.Unit
-                || Math.Abs(was.Value - width.Value) > 0.5)
+            // In the column's own unit (#362): a CRD printer column is 1*, and a drag that
+            // widens it by a third changes its ratio by 0.3, under a half-pixel threshold.
+            if (!before.TryGetValue(id, out var was) || width.DiffersFrom(was))
             {
                 changed[id] = width;
             }

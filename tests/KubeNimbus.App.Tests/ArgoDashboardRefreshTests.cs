@@ -8,7 +8,7 @@ namespace KubeNimbus.App.Tests;
 /// Refresh has to relist that entry. Re-subscribing alone is answered from the cache, and a
 /// stale or wedged Applications watch would survive the Refresh button. A real
 /// <see cref="ClusterClient"/> talks to a fake API server that counts the Application list
-/// requests: Refresh with the dashboard open must cause a second one.
+/// requests: Refresh with the dashboard open must cause at least one more list than before the press.
 /// </summary>
 public class ArgoDashboardRefreshTests
 {
@@ -35,10 +35,13 @@ public class ArgoDashboardRefreshTests
         // so a reader that re-subscribes would be replayed what it holds with no new list.
         await WaitAsync(() => server.Lists >= 1 && server.Watches >= 1, "the dashboard's first list and watch");
 
+        // #357: the count before the press, not an exact total after it. A relist or reconnect
+        // racing the refresh can add a list of its own, so the promise is "at least one more".
+        var listsBefore = server.Lists;
         tab.RefreshCommand.Execute(null);
 
-        await WaitAsync(() => server.Lists >= 2, "Refresh to list the Applications again");
-        await Assert.That(server.Lists).IsEqualTo(2);
+        await WaitAsync(() => server.Lists > listsBefore, "Refresh to list the Applications again");
+        await Assert.That(server.Lists).IsGreaterThan(listsBefore);
     }
 
     private static async Task WaitAsync(Func<bool> condition, string what)

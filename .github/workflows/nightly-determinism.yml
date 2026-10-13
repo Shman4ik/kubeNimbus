@@ -1,0 +1,73 @@
+name: Harness determinism
+
+# Two renders of one commit must produce the same PNGs (docs/engineering/verification.md,
+# #360). The interaction scenarios (ux-*) are the ones that broke that, so this renders each of
+# them twice in one run with `--twice` and fails on any byte difference.
+#
+# Nightly on main rather than on every PR: the second render is a full rebuild of each
+# scenario and measured about a minute per XAML smoke shard, against a PR's ~3.5 min of CI
+# (the owner's call on PR #381). A PR still renders every scenario once, with the fixes that
+# made the renders stable (a whole-window repaint before each capture, no caret blink, no
+# transitions). The trade, stated: a scenario that turns nondeterministic is reported the
+# night after its PR merges, not on the PR.
+#
+# Not a required check, and it never runs on a PR or a push.
+on:
+  schedule:
+    # 03:43 UTC daily. Off the hour on purpose: scheduled workflows queue behind everyone
+    # else's on the hour.
+    - cron: '43 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: harness-determinism-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Avalonia.BuildServices reports every compile to Avalonia unless this is set; a runner has
+  # no Accelerate licence, so the opt-out is honoured (docs/engineering/tech-stack.md, #353).
+  AVALONIA_TELEMETRY_OPTOUT: '1'
+
+jobs:
+  twice:
+    name: Interaction scenarios rendered twice
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      # Read-only, the same key as ci.yml; warm-cache.yml is the only writer.
+      - name: Restore NuGet cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Build
+        run: dotnet build tools/Screenshot -c Release
+
+      - name: Render the ux-* scenarios twice
+        id: render
+        run: dotnet run --project tools/Screenshot -c Release --no-build -- "${{ runner.temp }}/screenshots" ux- --twice
+
+      # On failure only, and for three days (the 0.5 GB storage budget, release skill): the
+      # renders, with a `*.second.png` beside each one that differed, to compare pixel by pixel.
+      - name: Upload the differing renders
+        if: ${{ failure() && steps.render.outcome == 'failure' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: harness-determinism
+          path: ${{ runner.temp }}/screenshots
+          if-no-files-found: ignore
+          retention-days: 3

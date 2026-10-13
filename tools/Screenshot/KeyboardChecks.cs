@@ -442,6 +442,9 @@ internal static class KeyboardChecks
         Press(Key.C, PhysicalKey.C, "c", box);
 
         // The fixture's own log may or may not carry errors; give the pane two it cannot miss.
+        // After the demo replay has ended (#360): enqueued while it was still running, the three
+        // lines landed among its last ones at a different place on every run.
+        LogSettle.Run(window);
         vm.Enqueue("2026-10-01T10:00:00.000Z ERROR first failure");
         vm.Enqueue("2026-10-01T10:00:01.000Z INFO between");
         vm.Enqueue("2026-10-01T10:00:02.000Z ERROR second failure");

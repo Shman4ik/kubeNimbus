@@ -18,6 +18,18 @@ public sealed record GridColumnWidth(string Unit, double Value)
 {
     public const string Star = "star";
     public const string Pixels = "px";
+
+    /// <summary>
+    /// Whether a drag moved this column, in the unit it is measured in. Half a pixel is noise
+    /// for a pixel width, but a star value is a ratio: a CRD printer column is <c>1*</c>, and
+    /// the QA run's drag from 111 to 151 px made it about <c>1.36*</c>. A half-unit threshold
+    /// applied to both shapes threw that change away, so no CRD column width was ever stored
+    /// (#362). Star values are rounded to four places when read, so a change past 0.001 is one
+    /// the grid made.
+    /// </summary>
+    public bool DiffersFrom(GridColumnWidth other) =>
+        Unit != other.Unit
+        || Math.Abs(Value - other.Value) > (Unit == Star ? 0.001 : 0.5);
 }
 
 /// <summary>

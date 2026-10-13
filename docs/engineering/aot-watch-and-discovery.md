@@ -61,6 +61,26 @@ with `HttpCompletionOption.ResponseHeadersRead`:
   paginated initial list (Reset + Added per item) → resumable watch →
   relist on `ERROR` frame / 410 Gone → exponential backoff with
   `connectionLost` callback on transient failures.
+- **A resumed watch that is answered after a lost connection is followed by a `Synced`**
+  (#363). The retry resumes from the last resourceVersion, and a reader clears its "Watch
+  connection lost …; retrying in Ns." line on the next frame, but a resumed watch on a quiet
+  collection sends none. The QA VM run cut and restored the connection under a Service pane: the
+  watch failed twice in a row (the second time as an `IOException` mid-stream while
+  reconnecting), the retry after that succeeded, and the pane said "retrying in 16s" for minutes
+  with a healthy watch behind it. So `PumpAsync` marks the stream as reconnecting when a
+  connection is lost and writes a `Synced` once the next watch's response headers arrive. It
+  does **not** relist: the first fix did, and a relist starts with a `Reset`, on which every list
+  clears its rows, its selection and its warning, so an outage blanked the list and showed the
+  spinner at every backoff (1, 2, 4 … 30 s) where it used to keep the rows under an error line
+  (the verifier's finding on PR #381, UI rule 18). The resource list clears only the line the
+  watch itself posted (`ClusterTabViewModel.OnListConnectionLost` remembers it), so another
+  warning survives a reconnect. `WatchReconnectTests` resets the first watch connection before
+  an answer and the second one mid-stream on a raw socket (an `HttpListenerResponse.Abort()`
+  did not reach the client as a failure on the Linux runner, so the first version of the test
+  passed on Windows only), holds the third open and quiet, and requires a `Synced` after the
+  second warning with exactly one `Reset` and one list in the run (mutation-checked: without the
+  `Synced` it times out with "Reset, Synced, lost, lost"). `ClusterTabReconnectTests` pins the
+  list's half: rows and selection unchanged, the line cleared, another warning kept.
 - **A 401 is not a transient failure.** It means the credential expired or was revoked,
   and retrying with it fails the same way for ever — which the loop used to do. On a 401
   it calls `ClusterClient.RefreshCredentialsAsync` (re-read the kubeconfig, re-run the
