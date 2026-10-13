@@ -307,7 +307,9 @@ which now have a page of their own in this directory.
      what is on screen — the two ways of getting this wrong (filtering in
      `RebuildVisibleRows`, or dropping non-matching rows in the watch-apply path)
      were both written into the code and confirmed to turn the suite red before the
-     tests were called done.
+     tests were called done. The mirror, the filter, Unhealthy only and the sort live
+     together in `ClusterTabViewModel.VisibleRows.cs` (ENG-13, #239), and the
+     watch-apply path they must not leak into is `ClusterTabViewModel.RowEvents.cs`.
    - **It matches what identifies an object** — name, namespace, and cluster in fleet
      mode (`ResourceRowViewModel.Matches`) — and deliberately not the status, which
      would make "Running" match most of a healthy list. **Events add Reason, Object and
