@@ -124,10 +124,58 @@ it as the GitHub Release body, so headings must match tags exactly
   figure; a cut column header ends in an ellipsis with the full name on a tooltip; a drag that
   starts on a column header no longer sorts (#320). The managed-fields chip no longer stays pressed
   when a UI Automation toggle is refused (#236).
+- **In the Applications mode, the command palette acts on what is on screen.** Its Argo CD
+  actions (sync, sync with prune, refresh, terminate) name and act on the Application that is
+  open, or else the selected row, instead of the one last selected in Resources, and their
+  confirm or result appears on that Application's page; an application Argo CD does not track
+  offers none (#364). The palette no longer offers logs, exec, port-forward, Edit YAML, delete or
+  the other actions on the Resources list's selected row, which that mode hides; with an
+  application's page open it offers that page's Edit YAML and Rollout restart (#373). "Show only
+  unhealthy rows", "Show every row, healthy ones too" and "Reset the list's columns" are not
+  offered either, because they changed a list that is not on screen (#380).
+- **A pane opened for another cluster's Argo CD Application, ApplicationSet or AppProject ends
+  its title in that cluster's name**, for example from Events across all clusters, like every other
+  pane (#365).
+- **Screen readers and UI Automation name the cluster switcher's rows after the cluster each row
+  shows once the filter changes.** A recycled row used to keep its first name, so a click at the
+  position reported for one cluster could open another. The fix covers every list whose rows are
+  named from their text (#367).
+- **A regular-expression log filter no longer hides a matching line when the match is slow.** The
+  match timeout counted as "no match"; the linear-time engine already bounds every match, so there
+  is no timeout now (#377).
+- **A CRD column widened by dragging keeps its width** when you switch to another kind and back
+  (#362).
+- **After a dropped watch connection comes back, panes clear their "Watch connection lost …
+  retrying" line on their own**, even when nothing in the list changes. The watch resumes where it
+  stopped without listing again, so the rows and the selection stay while the connection is down
+  (#363).
 
 ### Development
 
 These changes touch the build, the tests and the repository's tooling, not the app.
+
+- **In a Debug build, Avalonia's developer tools open on Pause instead of F12**, because F12 in
+  the exec terminal reaches the shell and also opened them. Release builds do not include them
+  (#369).
+- **QA tooling after the 2026-10-13 VM run** (#370). `scripts/qa-ui.ps1` refuses a `select` that
+  leaves its popup list open, reaches the Edit box and the buttons inside a file dialog, prints
+  every pattern state in `dump`, has a `collapse` command and clicks a drop-down's items. The
+  dock's content area is named "Inspector content" with the AutomationId `DockContent`, so a
+  check can crop the open pane. `sandbox-up.ps1 -Wsl` and the new `argo-sandbox-up.ps1 -Wsl` keep
+  WSL from stopping the sandbox when idle, and `qa-preflight.ps1` checks that and the sandbox
+  containers' state. The desktop checks' text is corrected and batch G2's `kubectl` allow rule
+  for the VM is documented.
+- **`sandbox-down.ps1 -Wsl` stops the WSL keep-alive** and deletes `wsl-keepalive.json` once no
+  `kubenimbus*` container is left (#376).
+- **`sandbox-down` no longer deletes another sandbox's kubeconfig.** Without `-Kubeconfig`, tearing
+  down the Argo sandbox takes the file the up scripts write for that name, and a kubeconfig is
+  deleted only when its current context is the sandbox being torn down (#379).
+- **The screenshot harness repaints the whole window before each capture** and turns control
+  transitions and the caret blink off, so the interaction scenarios render the same from run to
+  run. `--twice` renders every `ux-*` scenario twice and fails when the two PNGs differ; it runs
+  nightly on `main` in `.github/workflows/nightly-determinism.yml`, not on a PR (#360). The flaky
+  `ArgoDashboardRefreshTests` asserts at least one more list after the press instead of an exact
+  total (#357).
 
 - **A `nimbusUi drift` job fails a PR when `shared/nimbusUi` differs from nimbusUi's `main`**
   (#343; paired with pgNimbus's own check).
