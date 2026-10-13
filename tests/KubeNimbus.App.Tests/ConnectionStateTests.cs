@@ -589,7 +589,6 @@ public class KubeconfigShellTests
         }
     }
 
-    /// <summary>A kubeconfig with one context on a loopback port nothing listens on, and a token.</summary>
     /// <summary>
     /// #366, as the QA run described it: the switcher opened once, a context added to the
     /// kubeconfig while the app runs, a rescan. The new context is in the unfiltered list both
@@ -637,6 +636,7 @@ public class KubeconfigShellTests
         }
     }
 
+    /// <summary>A kubeconfig with one context on a loopback port nothing listens on, and a token.</summary>
     private static string KubeconfigText(string name, bool current) => $"""
         apiVersion: v1
         kind: Config

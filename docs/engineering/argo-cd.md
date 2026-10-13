@@ -146,9 +146,21 @@ Resources, which nobody was looking at, and sync, prune and refresh named it too
 stamps `IsApplicationsModeShown` on every tab, and in the Applications mode the target is the open
 page's Application, or else the list's selected row, read from its `ApplicationEntry.Argo`; a row
 no Argo Application tracks offers no Argo item at all. Terminate there follows that
-Application's own operation phase. `ArgoPaletteTargetTests` drives the real shell and demo tab
-through the QA run's sequence; mutation check: with the Applications-mode branch removed, all
-three tests fail and the items name `notification-dispatcher` again. Desktop check K-8.
+Application's own operation phase.
+
+**And it acts where it is seen.** The tab's own strip (`PendingRowAction`) is drawn only by
+the Resources view, which the Applications mode hides, so in that mode a palette item is armed on
+the Application page's strip instead (`ApplicationPageViewModel.ArmArgo`, the strip its Sync arrow
+uses): the open page, or the selected row's page, opened for it as a click on the row would. The
+first version of the #364 fix named the right Application and armed the hidden strip, so a prune
+or terminate asked where nobody could see it (verifier, fix round 1).
+
+`ArgoPaletteTargetTests` drives the real shell and demo tab through the QA run's sequence and
+runs the items, asserting the page's `PendingAction` and an empty `PendingRowAction`. Mutation
+checks: with the Applications-mode branch of `ArgoActionTarget` removed, all three tests fail and
+the items name `notification-dispatcher` again; with the Applications-mode branch of
+`ArmArgoAction` removed, two fail on the hidden strip being armed. Desktop check K-8 runs the
+items and reads the page's strip.
 
 ## Another cluster's pane names that cluster
 

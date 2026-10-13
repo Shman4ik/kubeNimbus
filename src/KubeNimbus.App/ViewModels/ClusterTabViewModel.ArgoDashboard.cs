@@ -241,6 +241,21 @@ public sealed partial class ClusterTabViewModel
             return;
         }
 
+        // The Applications mode hides the Resources view and the strip on it, so an action
+        // armed there would ask, or report, where nobody can see it (#364, UI rules 9 and 17).
+        // It goes to the Application's page instead, whose own strip is on screen: the open
+        // page, or the selected row's, opened for it, as a click on the row would.
+        if (IsApplicationsModeShown?.Invoke() == true)
+        {
+            if (Applications.Page is null && Applications.SelectedRow is { } row)
+            {
+                Applications.Open(row);
+            }
+
+            Applications.Page?.ArmArgo(kind);
+            return;
+        }
+
         // Null only on the demo cluster, where the strip renders its refusal in place rather
         // than the action silently doing nothing (demo rule 5).
         if (target.Client is null && !IsDemo)

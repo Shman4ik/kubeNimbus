@@ -420,6 +420,23 @@ public sealed partial class ApplicationPageViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanTerminateSync))]
     private void TerminateSync() => ArmSync(RowActionKind.ArgoTerminate);
 
+    /// <summary>
+    /// An Argo CD action from the palette (#364): armed on this page's own strip, the one the
+    /// Applications mode draws, never on the hidden Resources view's. Terminate only while
+    /// Argo reports the sync running, as the Sync arrow offers it.
+    /// </summary>
+    internal void ArmArgo(RowActionKind kind)
+    {
+        if (kind is not (RowActionKind.ArgoSync or RowActionKind.ArgoSyncPrune or RowActionKind.ArgoRefresh or RowActionKind.ArgoTerminate)
+            || !CanSync
+            || (kind == RowActionKind.ArgoTerminate && !CanTerminateSync))
+        {
+            return;
+        }
+
+        ArmSync(kind);
+    }
+
     private void ArmSync(RowActionKind kind)
     {
         if (Entry.Argo is { } argo && ArgoDescriptor() is { } d)

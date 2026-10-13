@@ -466,8 +466,14 @@ Setup: "Explore demo cluster". Nothing is mutated.
   "Argo CD: sync with prune…" and "Argo CD: refresh from Git", each with `argocd/checkout`, and no
   "terminate sync…". Back to the list, select the `notification-dispatcher` row: the items name
   `argocd/notification-dispatcher` and "Argo CD: terminate sync…" is listed. Select an application
-  whose source column reads "…, no Argo": Ctrl+K "Argo CD:" lists none. **0.7.x before #364:** every
-  item named the Resources mode's `notification-dispatcher`.
+  whose source column reads "…, no Argo": Ctrl+K "Argo CD:" lists none. Then run items, all in the
+  Applications mode: with `checkout`'s page open, Ctrl+K → "Argo CD: sync with prune…" shows the
+  confirm on that page ("Sync and prune", demo notice) and Cancel closes it; Ctrl+K → "Argo CD:
+  sync" shows its result line on the page, naming `checkout` and the demo cluster. Back to the
+  list, select `notification-dispatcher`, Ctrl+K → "Argo CD: terminate sync…": its page opens with
+  the "Stop syncing" confirm on it; Cancel. **0.7.x before #364:** every item named the Resources
+  mode's `notification-dispatcher`, and a run item armed the hidden Resources view's strip, so
+  nothing appeared.
 
 ## Batch S — preferences
 

@@ -37,8 +37,10 @@ public class ArgoPaletteTargetTests
     /// The QA run's own sequence (check K-4): an Application with a running sync selected on
     /// the Resources mode's dashboard, then another one opened in the Applications mode. Every
     /// Argo item names the one on screen, terminate is gone (its sync is not running), and a
-    /// sync acts on it. Mutation-checked by removing the Applications-mode branch of
-    /// <c>ArgoActionTarget</c>: the items name notification-dispatcher again.
+    /// sync and a prune land on the page's own strip, which this mode draws. Mutation-checked
+    /// twice: removing the Applications-mode branch of <c>ArgoActionTarget</c> makes the items
+    /// name notification-dispatcher again; removing the Applications-mode branch of
+    /// <c>ArmArgoAction</c> arms the hidden Resources strip and leaves the page's empty.
     /// </summary>
     [Test]
     public async Task In_the_applications_mode_the_palette_acts_on_the_open_application()
@@ -60,15 +62,27 @@ public class ArgoPaletteTargetTests
             ["Argo CD: sync", "Argo CD: sync with prune…", "Argo CD: refresh from Git"]);
         await Assert.That(applications.All(i => i.Subtitle.StartsWith("argocd/checkout", StringComparison.Ordinal))).IsTrue();
 
+        // The action lands on the page's own strip, the one this mode draws; the Resources
+        // view's strip is hidden here and must stay empty.
+        var page = tab.Applications.Page!;
         applications.First(i => i.Title == "Argo CD: sync").Execute!();
-        await Assert.That(tab.PendingRowAction!.Kind).IsEqualTo(RowActionKind.ArgoSync);
-        await Assert.That(tab.PendingRowAction!.Message).Contains("checkout");
-        await Assert.That(tab.PendingRowAction!.Message).DoesNotContain("notification-dispatcher");
+        await Assert.That(tab.PendingRowAction).IsNull();
+        await Assert.That(page.PendingAction!.Kind).IsEqualTo(RowActionKind.ArgoSync);
+        await Assert.That(page.PendingAction!.Message).Contains("checkout");
+        await Assert.That(page.PendingAction!.Message).DoesNotContain("notification-dispatcher");
+
+        page.PendingAction = null;
+        ArgoItems(shell).First(i => i.Title == "Argo CD: sync with prune…").Execute!();
+        await Assert.That(tab.PendingRowAction).IsNull();
+        await Assert.That(page.PendingAction!.Kind).IsEqualTo(RowActionKind.ArgoSyncPrune);
+        await Assert.That(page.PendingAction!.IsQuestionVisible).IsTrue();
+        await Assert.That(page.PendingAction!.Question).Contains("checkout");
     }
 
     /// <summary>
     /// With no page open the selected row is what is on screen, and terminate follows that
-    /// row's own operation phase.
+    /// row's own operation phase. The list has no strip, so running an item opens that row's
+    /// page (what a click on the row does) and asks there.
     /// </summary>
     [Test]
     public async Task With_no_page_open_the_selected_row_is_the_target()
@@ -80,6 +94,13 @@ public class ArgoPaletteTargetTests
 
         await Assert.That(items.Any(i => i.Title == "Argo CD: terminate sync…")).IsTrue();
         await Assert.That(items.All(i => i.Subtitle.StartsWith("argocd/notification-dispatcher", StringComparison.Ordinal))).IsTrue();
+
+        items.First(i => i.Title == "Argo CD: terminate sync…").Execute!();
+
+        await Assert.That(tab.PendingRowAction).IsNull();
+        await Assert.That(tab.Applications.Page!.Entry.Argo!.Name).IsEqualTo("notification-dispatcher");
+        await Assert.That(tab.Applications.Page!.PendingAction!.Kind).IsEqualTo(RowActionKind.ArgoTerminate);
+        await Assert.That(tab.Applications.Page!.PendingAction!.IsQuestionVisible).IsTrue();
     }
 
     /// <summary>
