@@ -33,6 +33,12 @@ if (!stress)
     Directory.CreateDirectory(outDir);
 }
 
+// Every local time the app prints goes through LocalTimeText.ToLocal; render them in UTC, so
+// a published screenshot reads the same on every machine (#346: .NET on Windows ignores TZ,
+// and the application page's exit line and timeline printed the renderer's own offset).
+LocalTimeText.ToLocal = at => at.ToUniversalTime();
+LocalZoneCheck.Run();
+
 // Scenarios construct real MainWindowViewModels, which read the workspace on
 // construction and save it whenever a cluster is pinned. Point that at a scratch
 // directory so rendering fixtures can't read — or clobber — the developer's own

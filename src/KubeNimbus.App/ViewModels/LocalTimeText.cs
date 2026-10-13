@@ -11,6 +11,21 @@ namespace KubeNimbus.App.ViewModels;
 /// </summary>
 public static class LocalTimeText
 {
+    /// <summary>
+    /// The app's one way of turning an instant into local time: every local time the app
+    /// prints goes through it (the tooltips here, the timeline's ticks, the log pane's
+    /// timestamps through <c>LogLineViewModel.ToLocal</c>, the YAML editor's "Applied at").
+    /// <see cref="DateTimeOffset.ToLocalTime"/> rather than a <c>TimeZoneInfo</c> lookup by id,
+    /// which wants tzdata a NativeAOT binary on Linux may not have. A seam because .NET on
+    /// Windows ignores <c>TZ</c>: the screenshot harness sets it to UTC at startup, so a
+    /// published screenshot reads the same whichever machine renders it, and tests pin a zone
+    /// that is not the machine's. Nothing in the app assigns it.
+    /// </summary>
+    internal static Func<DateTimeOffset, DateTimeOffset> ToLocal { get; set; } = at => at.ToLocalTime();
+
+    /// <summary>The instant in the app's local time (<see cref="ToLocal"/>).</summary>
+    public static DateTimeOffset Local(DateTimeOffset at) => ToLocal(at);
+
     /// <summary>The instant in local time, with its offset from UTC.</summary>
     public static string Exact(DateTimeOffset at) => Format(at, "yyyy-MM-dd HH:mm:ss");
 
@@ -23,7 +38,7 @@ public static class LocalTimeText
 
     private static string Format(DateTimeOffset at, string pattern)
     {
-        var local = at.ToLocalTime();
+        var local = ToLocal(at);
         var offset = local.Offset;
         var sign = offset < TimeSpan.Zero ? "-" : "+";
         var zone = offset == TimeSpan.Zero

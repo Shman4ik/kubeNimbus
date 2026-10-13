@@ -21,12 +21,14 @@ public enum LogSeverity
 public sealed partial class LogLineViewModel : ObservableObject
 {
     /// <summary>
-    /// How a server instant becomes this machine's local time. <see cref="DateTimeOffset.ToLocalTime"/>
-    /// rather than a <c>TimeZoneInfo</c> lookup by id, which wants tzdata a NativeAOT
-    /// binary on Linux may not have. A seam only so the tests can pin a zone that is not
-    /// the machine's; nothing in the app assigns it.
+    /// How a server instant becomes local time: the app's one seam,
+    /// <see cref="LocalTimeText.ToLocal"/>, under the name the log tests already use.
     /// </summary>
-    internal static Func<DateTimeOffset, DateTimeOffset> ToLocal { get; set; } = at => at.ToLocalTime();
+    internal static Func<DateTimeOffset, DateTimeOffset> ToLocal
+    {
+        get => LocalTimeText.ToLocal;
+        set => LocalTimeText.ToLocal = value;
+    }
 
     /// <summary>
     /// The server's own line, timestamp included, with terminal escape sequences removed

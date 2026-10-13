@@ -73,7 +73,7 @@ public sealed class TimelineStrip : Control
         {
             var at = window.Start + window.Span * (i / 3.0);
             // The zone once, on the "now" tick: four offsets on one axis would repeat it (#320).
-            var label = i == 3 ? $"now {LocalTimeText.Clock(at, seconds: false)}" : at.ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture);
+            var label = i == 3 ? $"now {LocalTimeText.Clock(at, seconds: false)}" : LocalTimeText.Local(at).ToString("HH:mm", CultureInfo.InvariantCulture);
             var formatted = new FormattedText(label, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, typeface, 10.5, text);
             var x = X(window, at) - formatted.Width / 2;
             x = Math.Clamp(x, 0, Bounds.Width - formatted.Width);

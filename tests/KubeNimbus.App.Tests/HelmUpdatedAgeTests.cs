@@ -9,6 +9,7 @@ namespace KubeNimbus.App.Tests;
 /// <c>DateTimeOffset</c> itself and was cut in the middle of its offset at 1280px. The sort
 /// stays on the instant (<see cref="HelmArgoSortTests"/>).
 /// </summary>
+[NotInParallel(nameof(LogLineViewModel.ToLocal))]
 public class HelmUpdatedAgeTests
 {
     private static HelmReleaseRowViewModel Row(DateTimeOffset? updated) =>
