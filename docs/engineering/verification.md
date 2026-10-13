@@ -464,6 +464,16 @@ directory itself was one fixed name under `%TEMP%`, so two harness runs at once 
 worktrees, two agents — wrote each other's `settings.json` mid-render; measured, that
 alone made 189 of 272 PNGs differ between two runs (sidebar sections expanded in one and
 collapsed in the other). Each run now gets its own directory and removes it at the end.
+(5) **The renderer's time zone** (#346). Local times printed in a PNG — the Applications
+page's exit line ("… at 08:54:36 UTC") and its timeline's "now" tick, the log pane's
+timestamps — came out in the zone of whoever rendered them, so a re-render from another
+machine changed the published application-page screenshots. .NET on Windows ignores `TZ`,
+so the seam is in code: **every local time in `src/KubeNimbus.App` goes through
+`LocalTimeText.ToLocal`** (`LogLineViewModel.ToLocal` forwards to it), and `Program.cs` sets
+it to UTC before anything renders. `LocalZoneCheck` fails the run if a local-time text does
+not follow it, and `LocalTimeTextTests.Every_local_time_follows_the_one_seam` (red with
+`LocalTimeText` calling `ToLocalTime()` itself) pins the same in the unit suite. A new
+`ToLocalTime()` call in the app is the way this comes back; grep for it.
 **The merged log panes were the last of them (ENG-53).** Panes that merge several replayed
 streams (`cluster-tab-workload-logs*`, `applications-page-crashloop-merged`,
 `applications-page-rollout`, and `ux-logs-palette`, which ends on a workload's logs) ordered

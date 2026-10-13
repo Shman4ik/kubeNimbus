@@ -8,6 +8,7 @@ namespace KubeNimbus.App.Tests;
 /// as an age in the list's Age format with the exact instant on the tooltip, and nothing when
 /// the server sent no <c>lastTransitionTime</c>.
 /// </summary>
+[NotInParallel(nameof(LogLineViewModel.ToLocal))]
 public class ConditionSinceTests
 {
     private static readonly DateTimeOffset Now = new(2026, 10, 10, 19, 1, 54, TimeSpan.Zero);
@@ -23,7 +24,7 @@ public class ConditionSinceTests
 
         await Assert.That(row.Age).IsEqualTo("6d");
         await Assert.That(row.AgeTooltip).IsEqualTo(
-            $"Last transition {SixDaysAgo.ToLocalTime():yyyy-MM-dd HH:mm:ss}");
+            $"Last transition {LocalTimeText.Exact(SixDaysAgo)}");
     }
 
     [Test]

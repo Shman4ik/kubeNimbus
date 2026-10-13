@@ -114,7 +114,7 @@
                 <ItemsControl ItemsSource="{Binding ResourceLines}" IsVisible="{Binding HasResourceSummary}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:NodeResourceLineViewModel">
-                      <Grid ColumnDefinitions="62,*,76,12,76,46,168" Margin="0,3" ToolTip.Tip="{Binding Tooltip}">
+                      <Grid ColumnDefinitions="76,*,76,12,76,46,168" Margin="0,3" ToolTip.Tip="{Binding Tooltip}">
                         <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="12" VerticalAlignment="Center" />
 
                         <!-- One track carrying both figures, not two stacked bars: a

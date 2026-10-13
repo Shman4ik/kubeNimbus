@@ -23,9 +23,16 @@ Six things are load-bearing.
    before they were called done.
 2. **The percentage is offered only where there is a limit and a reading.** `Quantity
    .Percent` already returns null for a zero or absent denominator; what is added here is
-   that anything above zero and under one percent prints `<1%` rather than rounding to
+   that a small share keeps a decimal (`0.2% of limit`) rather than rounding to
    `0% of limit`, which reads as "measured nothing" for the ordinary case of a container
    idling under a generous cap.
+   Until #320 (2026-10) everything under one percent printed `<1%`, which the QA run read
+   as no figure at all; only what one decimal cannot show (under 0.05%) prints `<0.1%` now.
+   On the same pass the two pod-total charts went side by side and 32px tall: stacked full
+   width at 72px they filled the Usage tab at the default ~300px dock, and every container's
+   figures needed a scroll. `cluster-tab-pod-detail-usage-docked` fails when the first
+   container's requests-and-limits line ends below the tab's viewport at the default dock
+   height (y=200 of 176 with the charts side by side at 48px, y=168 at 32px).
 3. **The declared line does not follow the metrics gate, and that is the whole point.**
    Requests and limits come from the pod spec, so they are readable on a cluster that
    serves no `metrics.k8s.io` at all — the case where they are worth *most*, because

@@ -185,8 +185,12 @@ public class ContainerResourceTextTests
 
         app.ApplyUsage(1_000_000L, 1024L * 1024);
 
-        await Assert.That(app.CpuResourceText).IsEqualTo("request 250m · limit 500m · <1% of limit");
-        await Assert.That(app.MemoryResourceText).IsEqualTo("request 256 MiB · limit 512 MiB · <1% of limit");
+        await Assert.That(app.CpuResourceText).IsEqualTo("request 250m · limit 500m · 0.2% of limit");
+        await Assert.That(app.MemoryResourceText).IsEqualTo("request 256 MiB · limit 512 MiB · 0.2% of limit");
+
+        // #320: only what one decimal cannot show is a bound rather than a figure.
+        app.ApplyUsage(100_000L, 1024L * 1024);
+        await Assert.That(app.CpuResourceText).IsEqualTo("request 250m · limit 500m · <0.1% of limit");
     }
 
     /// <summary>

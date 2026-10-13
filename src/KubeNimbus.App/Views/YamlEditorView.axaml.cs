@@ -1,7 +1,9 @@
 using System.ComponentModel;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using KubeNimbus.Core.Commands;
 using KubeNimbus.App.Editing;
 using KubeNimbus.App.ViewModels;
@@ -31,6 +33,22 @@ public partial class YamlEditorView : UserControl
         // the key first and would otherwise never pass it on. The shortcut sheet and the docs
         // page listed it for a long time with nothing bound to it (found by the 0.5.1 pass).
         AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
+
+        // The view model can refuse the managed-fields chip (text that is not one YAML
+        // document): it sets the flag straight back inside the binding's own write, and a
+        // binding does not take a value back while it is writing one. A click happened to
+        // come out right; a Toggle through UI Automation left the chip pressed over a refusal
+        // (#236, QA check M-8). So once the write is over, the chip is put back to what the
+        // view model kept. SetCurrentValue, so the two-way binding stays.
+        ManagedFieldsChip.IsCheckedChanged += (_, _) => Dispatcher.UIThread.Post(SyncManagedFieldsChip);
+    }
+
+    private void SyncManagedFieldsChip()
+    {
+        if (_vm is { } vm && ManagedFieldsChip.IsChecked != vm.ShowManagedFields)
+        {
+            ManagedFieldsChip.SetCurrentValue(ToggleButton.IsCheckedProperty, vm.ShowManagedFields);
+        }
     }
 
     private void OnKeyDown(object? sender, KeyEventArgs e)

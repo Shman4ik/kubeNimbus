@@ -58,11 +58,13 @@
                            chooses it alone. A drawn check, not a CheckBox, so the view model is
                            the one writer (see ApplicationNamespaceChoice). -->
                       <Grid ColumnDefinitions="Auto,*,Auto">
-                        <Border Classes="nsCheckHit" ToolTip.Tip="Add this namespace to the list, or take it out">
+                        <controls:CheckMark Classes="nsCheckHit" ToolTip.Tip="Add this namespace to the list, or take it out"
+                                             AutomationProperties.Name="{Binding Name}" IsChecked="{Binding IsChecked}"
+                                             ToggleRequested="OnNamespaceCheckToggleRequested">
                           <Border Classes="nsCheck" Classes.checked="{Binding IsChecked}">
                             <PathIcon Data="{StaticResource CheckIconGeometry}" Width="9" Height="9" IsVisible="{Binding IsChecked}" />
                           </Border>
-                        </Border>
+                        </controls:CheckMark>
                         <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}"
                                    VerticalAlignment="Center" />
                         <TextBlock Grid.Column="2" Text="{Binding CountText}" Opacity="0.45" Margin="12,0,0,0" Classes="mono"

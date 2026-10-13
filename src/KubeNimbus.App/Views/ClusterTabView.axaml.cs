@@ -55,6 +55,13 @@ public partial class ClusterTabView : UserControl
         e.Handled = true;
     }
 
+    /// <summary>UI Automation's Toggle on a namespace's check box: what a click on the box does (#236).</summary>
+    private void OnNamespaceCheckToggleRequested(object? sender, EventArgs e)
+    {
+        if (sender is Control { DataContext: NamespaceChoice choice } && DataContext is ClusterTabViewModel vm)
+            vm.ToggleNamespace(choice);
+    }
+
     private void OnNamespaceKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter) { ChooseNamespace(); e.Handled = true; }
@@ -173,6 +180,9 @@ public partial class ClusterTabView : UserControl
         // focuses the next tab with no navigation method, which Avalonia does not count as
         // keyboard focus, so the tab the keys had reached drew no focus ring.
         InspectorTabStrip.AddHandler(KeyDownEvent, OnInspectorTabStripKeyDown, RoutingStrategies.Tunnel);
+
+        // …and with a plain vertical wheel (#313), which its scroll viewer ignored.
+        HorizontalWheel.Install(InspectorTabStrip);
 
         // A drag of the dock's splitter gives focus back to whatever had it (#266): the
         // splitter takes focus on the press, and the exec terminal it was taken from read
@@ -678,6 +688,12 @@ public partial class ClusterTabView : UserControl
     {
         e.Handled = true;
 
+        // A press that moved is a drag that missed the resize grip, not a click (#320).
+        if (HeaderDragGuard.IsDrag)
+        {
+            return;
+        }
+
         if (Vm is { } vm && ColumnId(e.Column) is { } id && id != ResourceColumn.Health)
         {
             vm.ToggleSort(id);
@@ -1016,6 +1032,15 @@ public partial class ClusterTabView : UserControl
         if (sender is Border { DataContext: SidebarSectionViewModel section })
         {
             section.ToggleExpandedCommand.Execute(null);
+        }
+    }
+
+    /// <summary>UI Automation's Expand or Collapse on a section header (#236).</summary>
+    private void OnSidebarSectionExpandRequested(object? sender, bool expand)
+    {
+        if (sender is Control { DataContext: SidebarSectionViewModel section })
+        {
+            section.IsExpanded = expand;
         }
     }
 
@@ -1370,6 +1395,17 @@ public partial class ClusterTabView : UserControl
 
         var count = vm.InspectorTabs.Count;
         var current = InspectorTabStrip.IndexFromContainer(from);
+
+        // Delete closes the focused tab (#236): its close button is a pointer target only.
+        // Focus moves to the tab that came to the front, so the keys keep working on the
+        // strip; with the last tab gone the dock closes and focus goes where Tab finds it.
+        if (CommandBindings.Matches(CommandId.CloseFocusedTab, e) && from.DataContext is InspectorTabViewModelBase closing)
+        {
+            e.Handled = true;
+            _ = CloseFocusedDockTabAsync(vm, closing);
+            return;
+        }
+
         int? target = e.Key switch
         {
             Key.Left or Key.Up => Math.Max(current - 1, 0),
@@ -1391,6 +1427,20 @@ public partial class ClusterTabView : UserControl
             container.Focus(NavigationMethod.Directional);
             container.BringIntoView();
         }
+    }
+
+    private async Task CloseFocusedDockTabAsync(ClusterTabViewModel vm, InspectorTabViewModelBase closing)
+    {
+        await vm.CloseInspectorTabCommand.ExecuteAsync(closing);
+
+        // After layout, so the container of the tab now in front exists.
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            if (vm.SelectedInspectorTab is { } front && InspectorTabStrip.ContainerFromItem(front) is { } next)
+            {
+                next.Focus(NavigationMethod.Directional);
+            }
+        }, DispatcherPriority.Loaded);
     }
 
     /// <summary>What held keyboard focus when the dock's splitter was pressed (#266).</summary>

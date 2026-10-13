@@ -33,6 +33,12 @@ if (!stress)
     Directory.CreateDirectory(outDir);
 }
 
+// Every local time the app prints goes through LocalTimeText.ToLocal; render them in UTC, so
+// a published screenshot reads the same on every machine (#346: .NET on Windows ignores TZ,
+// and the application page's exit line and timeline printed the renderer's own offset).
+LocalTimeText.ToLocal = at => at.ToUniversalTime();
+LocalZoneCheck.Run();
+
 // Scenarios construct real MainWindowViewModels, which read the workspace on
 // construction and save it whenever a cluster is pinned. Point that at a scratch
 // directory so rendering fixtures can't read — or clobber — the developer's own
@@ -130,6 +136,8 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-pod-detail-overview-disrupted",
         () => HostInMainWindow(ClusterTabScenarios.PodDetailOverviewDisrupted(), height: 1000)),
     ("cluster-tab-pod-detail-usage", () => HostInMainWindow(ClusterTabScenarios.PodDetailUsage(), height: 1000)),
+    // #320: the Usage tab at the default dock height shows the first container without a scroll.
+    ("cluster-tab-pod-detail-usage-docked", () => HostInMainWindow(ClusterTabScenarios.PodDetailUsageDocked())),
     ("cluster-tab-pod-detail-usage-unavailable", () => HostInMainWindow(ClusterTabScenarios.PodDetailUsageUnavailable())),
     ("cluster-tab-pod-detail-usage-unset", () => HostInMainWindow(ClusterTabScenarios.PodDetailUsageUnset())),
     ("cluster-tab-yaml-editor", () => HostInMainWindow(ClusterTabScenarios.YamlEditor())),
@@ -287,6 +295,9 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // The CRD printer-column pair: the same Certificate list without and with the
     // advanced view, which is where the CRD's own `priority: 1` columns live.
     ("cluster-tab-crd-printer-columns", () => HostInMainWindow(ClusterTabScenarios.DemoCrdPrinterColumns())),
+    // #320: at 960px a cut header ends in an ellipsis with its name on a tooltip, and a press
+    // dragged off a header does not sort (PaneTextChecks.CrdHeadersAt960).
+    ("cluster-tab-crd-printer-columns-960", () => HostInMainWindow(ClusterTabScenarios.DemoCrdPrinterColumns(), width: 960)),
     ("cluster-tab-demo-scale-unavailable", () => HostInMainWindow(ClusterTabScenarios.DemoScaleUnavailable())),
     // FEAT-8 — a CronJob's run-now and resume on the shared strip, the created-Job state
     // with its "Open Job" follow-up, and a Job opened in the workload pane.
@@ -461,6 +472,12 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("ux-dock-splitter-focus", () => HostInMainWindow(ClusterTabScenarios.Exec())),
     // #269: ten open tabs stay on one row of the dock's strip at 1280px (LayoutChecks.DockTabsOneRow).
     ("cluster-tab-dock-many-tabs", () => HostInMainWindow(ClusterTabScenarios.DemoDockTabs(10))),
+    // #236: UI Automation patterns on the sidebar headers, grid rows, menu items, namespace
+    // boxes and cluster tabs; Delete on a focused dock tab; a refused managed-fields toggle
+    // through UI Automation (AutomationPatternChecks).
+    ("ux-automation-patterns", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
+    ("ux-dock-tab-delete", () => HostInMainWindow(ClusterTabScenarios.DemoDockTabs(), height: 1000)),
+    ("ux-managed-fields-uia", () => HostInMainWindow(ClusterTabScenarios.YamlEditorManagedFields(shown: false))),
     // #267: a copy trims the blank cells at the end of each line (KeyboardChecks.ExecCopy).
     ("ux-exec-copy", () => HostInMainWindow(ClusterTabScenarios.Exec())),
     // #265: Ctrl+Shift+C pressed as a keyboard sends it, after Select all and after a drag (ClipboardChecks).
@@ -622,7 +639,17 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     if (name == "ux-exec-copy") KeyboardChecks.ExecCopy(window);
     if (name == "ux-exec-copy-keys") ClipboardChecks.ExecCopyRealKeys(window);
     if (name == "ux-dock-splitter-focus") KeyboardChecks.DockSplitterKeepsFocus(window);
-    if (name == "cluster-tab-dock-many-tabs") LayoutChecks.DockTabsOneRow(window);
+    if (name == "cluster-tab-dock-many-tabs")
+    {
+        LayoutChecks.DockTabsOneRow(window);
+        AutomationPatternChecks.DockStripWheel(window);
+    }
+
+    if (name == "ux-automation-patterns") AutomationPatternChecks.Patterns(window);
+    if (name == "cluster-tab-crd-printer-columns-960") PaneTextChecks.CrdHeadersAt960(window);
+    if (name == "cluster-tab-pod-detail-usage-docked") PaneTextChecks.UsageFirstContainerVisible(window);
+    if (name == "ux-dock-tab-delete") AutomationPatternChecks.DockTabDelete(window);
+    if (name == "ux-managed-fields-uia") AutomationPatternChecks.ManagedFieldsToggle(window);
     if (name == "cluster-tab-exec") LayoutChecks.ExecHasNoStatusDot(window);
     // #215 / #237: one grouping device per group, nothing boxed inside the dock's card.
     if (name is "cluster-tab-node-detail-cordoned" or "cluster-tab-pod-detail-overview" or "cluster-tab-pod-detail"

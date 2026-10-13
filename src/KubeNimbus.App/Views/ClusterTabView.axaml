@@ -68,8 +68,11 @@
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:SidebarSectionViewModel">
               <StackPanel Margin="0,0,0,8" IsVisible="{Binding IsSectionVisible}">
-                <Border Classes="sectionHeaderRow" Tapped="OnSidebarSectionTapped" Focusable="True"
-                        AutomationProperties.Name="{Binding Title}">
+                <!-- A Border with an ExpandCollapse automation peer (#236), so a screen reader
+                     hears whether the section's kinds are showing. -->
+                <controls:SidebarSectionHeader Classes="sectionHeaderRow" Tapped="OnSidebarSectionTapped" Focusable="True"
+                        AutomationProperties.Name="{Binding Title}" IsExpanded="{Binding ShowKinds}"
+                        ExpandRequested="OnSidebarSectionExpandRequested">
                   <Grid ColumnDefinitions="Auto,*,Auto">
                     <PathIcon Grid.Column="0" Data="{StaticResource ChevronRightIconGeometry}" Width="10" Height="10"
                               Opacity="0.5" Margin="0,0,4,0" VerticalAlignment="Center"
@@ -85,7 +88,7 @@
                     <TextBlock Grid.Column="2" Classes="sectionHeader" Text="{Binding KindCount}" Opacity="0.4"
                                VerticalAlignment="Center" IsVisible="{Binding ShowKindCount}" />
                   </Grid>
-                </Border>
+                </controls:SidebarSectionHeader>
                 <ItemsControl ItemsSource="{Binding Kinds}" IsVisible="{Binding ShowKinds}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:SidebarKindViewModel">
@@ -260,11 +263,13 @@
                            the row chooses it alone. A drawn check, not a CheckBox, so the
                            tab is the only writer of IsChecked. -->
                       <Grid ColumnDefinitions="Auto,*,Auto">
-                        <Border Classes="nsCheckHit" ToolTip.Tip="Add this namespace to the list, or take it out">
+                        <controls:CheckMark Classes="nsCheckHit" ToolTip.Tip="Add this namespace to the list, or take it out"
+                                             AutomationProperties.Name="{Binding Name}" IsChecked="{Binding IsChecked}"
+                                             ToggleRequested="OnNamespaceCheckToggleRequested">
                           <Border Classes="nsCheck" Classes.checked="{Binding IsChecked}">
                             <PathIcon Data="{StaticResource CheckIconGeometry}" Width="9" Height="9" IsVisible="{Binding IsChecked}"/>
                           </Border>
-                        </Border>
+                        </controls:CheckMark>
                         <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}"
                                    VerticalAlignment="Center"/>
                         <TextBlock Grid.Column="2" Text="Recent" IsVisible="{Binding IsRecent}" Opacity="0.45" Margin="12,0,0,0" VerticalAlignment="Center"/>
@@ -1363,7 +1368,7 @@
                         <!-- Not a Tab stop: Shift+Tab into the strip landed on it rather than on
                              the tab, so the strip was two stops one way and one the other. -->
                         <Button Classes="chip" Padding="0" MinWidth="14" MinHeight="14" IsTabStop="False"
-                                ToolTip.Tip="Close tab" AutomationProperties.Name="{Binding Title, StringFormat='Close {0}'}"
+                                ToolTip.Tip="Close tab" AutomationProperties.Name="{Binding Title, StringFormat='Close {0}', FallbackValue='Close tab', TargetNullValue='Close tab'}"
                                 Command="{Binding $parent[UserControl].((vm:ClusterTabViewModel)DataContext).CloseInspectorTabCommand}"
                                 CommandParameter="{Binding}">
                           <PathIcon Data="{StaticResource CloseIconGeometry}" Width="9" Height="9" />

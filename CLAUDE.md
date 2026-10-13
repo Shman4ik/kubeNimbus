@@ -202,8 +202,9 @@ before changing a view.** Docs and code cite these numbers.
 5. **Opening a resource/YAML never overwrites an active editor tab.**
 6. **The sidebar filters and collapses**, because a catalog runs past 100 kinds: sections by
    API group (Kind decides only in the core group), Config/Cluster/CRDs collapsed by default,
-   a filter on name, group and short names, Recent (5, per cluster), exactly one kind drawn
-   selected (derived in `MarkSelectedKind`), synthetic Helm/Argo rows only with evidence.
+   a filter on name, group and short names, Recent (5, per cluster), exactly one row drawn
+   selected (derived in `MarkSelectedKind`; the Recent copy only while the kind's own row is
+   off screen), synthetic Helm/Argo rows only with evidence.
 7. **The inspector docks along the bottom, full width**, so logs read on long lines. The dock
    states live in code-behind `ApplyDockState`, because a `GridSplitter` fights a binding.
    Its tab strip is a `ListBox` the keyboard and UI Automation reach as tabs, its selection

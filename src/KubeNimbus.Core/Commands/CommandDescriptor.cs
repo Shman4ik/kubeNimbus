@@ -70,6 +70,7 @@ public enum CommandId
     ToggleAdvancedView,
     ToggleSidebar,
     MaximizeInspector,
+    CloseFocusedTab,
     LeaveEditor,
     ToggleTheme,
     Preferences,

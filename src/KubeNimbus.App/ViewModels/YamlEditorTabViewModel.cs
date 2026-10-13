@@ -971,7 +971,7 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
             YamlText = ForEditor(applied.ToYaml());
             IsDirty = false;
             StaleNotice = null;
-            StatusMessage = $"Applied at {DateTimeOffset.Now:T}.{LooseValidationSuffix}";
+            StatusMessage = $"Applied at {LocalTimeText.Clock(DateTimeOffset.UtcNow)}.{LooseValidationSuffix}";
             if (IsNewDocument)
             {
                 MarkNewDocumentApplied();

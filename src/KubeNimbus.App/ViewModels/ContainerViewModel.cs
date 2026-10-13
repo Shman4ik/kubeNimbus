@@ -1,3 +1,4 @@
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using KubeNimbus.Core;
 
@@ -202,13 +203,15 @@ public sealed partial class ContainerViewModel(string name, string image) : Obse
     /// <summary>
     /// A container using a fraction of a generous limit is the ordinary case, and
     /// rounding it to "0%" reads as "measured nothing" rather than as "barely touching
-    /// it" — so anything above zero and under one percent says so instead.
+    /// it". Under ten percent the figure keeps one decimal, so "0.2% of limit" is a
+    /// figure; it used to print "&lt;1%" for anything under one percent, which the QA run
+    /// read as no figure at all (#320). Only what one decimal cannot show says "&lt;0.1%".
     /// </summary>
     private static string FormatPercent(double percent) => percent switch
     {
-        > 0 and < 1 => "<1%",
-        < 10 => $"{percent:0.#}%",
-        _ => $"{percent:0}%",
+        > 0 and < 0.05 => "<0.1%",
+        < 10 => string.Create(CultureInfo.InvariantCulture, $"{percent:0.#}%"),
+        _ => string.Create(CultureInfo.InvariantCulture, $"{percent:0}%"),
     };
 
     /// <summary>Usage against requests/limits, for the container row's tooltip.</summary>

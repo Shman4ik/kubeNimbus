@@ -167,7 +167,7 @@ public sealed partial class ApplicationRowViewModel : ObservableObject
             LastDeployAge = deploy.At is { } age ? $" · {AppTime.Ago(now, age)}" : "";
             IsRecentDeploy = deploy.At is { } t && now - t < TimeSpan.FromHours(1);
             LastDeployTip = deploy.At is { } when
-                ? $"{deploy.Source}: {deploy.Revision} at {when.ToLocalTime():yyyy-MM-dd HH:mm:ss}"
+                ? $"{deploy.Source}: {deploy.Revision} at {LocalTimeText.Exact(when)}"
                 : $"{deploy.Source}: {deploy.Revision}";
         }
         else

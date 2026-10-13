@@ -54,6 +54,16 @@ is only their result line. The drain asks, with its plan (2026-10-07; both used 
     `Limit: null` is that line's normal case, not missing data, so there is no marker, no
     extent, no caption and no dangling separator. A row that silently differs in *shape*
     from the two above it is a bug; `NodeResourceLineTests` pins both halves.
+  - **The pods row is labelled "Active pods", and the header's count says how many are
+    active** (#320, 2026-10). The row counts what `Summarize` counts, the pods not yet
+    Succeeded or Failed (the ones that hold a slot, as `kubectl describe node` counts them),
+    while the header's caption counts every pod bound to the node, the list on the Pods tab.
+    The QA run read "Pods 28 / 110" beside "39 pods on this node" as a contradiction (UI rule
+    20). The caption now says "39 pods on this node, 28 active" when some have finished, and
+    the plain count when none have; the label column is 76px for the longer label.
+    `NodePodsLiveTests.The_pod_count_says_how_many_are_active_when_some_have_finished` pins
+    it, and the demo's worker-1, which holds a finished Job pod, renders it on
+    `cluster-tab-node-detail`.
   - **Overcommitted limits do not make the row read as tight.** `IsTight` stays
     `RequestedPercent > 90` — "the scheduler is nearly out of room", which is what a drain
     of the neighbouring node depends on — and overcommit gets its own flag on the limits

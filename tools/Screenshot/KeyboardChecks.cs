@@ -731,7 +731,8 @@ internal static class KeyboardChecks
 
         return stop is ListBoxItem { IsSelected: true } item
                && item.FindAncestorOfType<ListBox>() is { } list
-               && !list.Classes.Contains("segmented") && !list.Classes.Contains("strip") && !list.Classes.Contains("dockTabs");
+               && !list.Classes.Contains("segmented") && !list.Classes.Contains("strip") && !list.Classes.Contains("dockTabs")
+               && !list.Classes.Contains("clusterTabs");
     }
 
     private static T Named<T>(Visual root, string name) where T : Control =>

@@ -1801,6 +1801,21 @@ internal static class ClusterTabScenarios
     }
 
     /// <summary>
+    /// #320: the Usage tab at the default dock height, not maximized. The pod totals sit
+    /// side by side so the first container's figures are on screen without a scroll.
+    /// </summary>
+    public static ClusterTabViewModel PodDetailUsageDocked()
+    {
+        var tab = PodDetail();
+        if (tab.SelectedInspectorTab is PodDetailTabViewModel detail)
+        {
+            detail.SelectedDetailTabIndex = 3;
+        }
+
+        return tab;
+    }
+
+    /// <summary>
     /// A container that declares neither a request nor a limit, on a pod that has never
     /// run (the dataset's unschedulable fraud-detector, so no metrics of its own). Both
     /// halves of the declared line therefore have to say so in words — the state UI rule 9

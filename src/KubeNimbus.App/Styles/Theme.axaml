@@ -2,7 +2,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:chrome="using:Avalonia.Controls.Chrome"
         xmlns:controls="using:KubeNimbus.App.Controls"
-        xmlns:nimbus="using:Nimbus.Ui.Controls">
+        xmlns:nimbus="using:Nimbus.Ui.Controls"
+        xmlns:nconv="using:Nimbus.Ui.Converters">
 
     <!--
         kubeNimbus's own styles. Everything both Nimbus apps share — the palette,
@@ -236,6 +237,40 @@
             </FocusAdornerTemplate>
         </Setter>
     </Style>
+    <!-- The command bar's cluster tabs, a ListBox since #236 for the dock strip's reason: the
+         item and its presenter stay transparent and Border.clusterTab inside keeps drawing
+         hover, press and the active fill, so the tab looks as it did; the keyboard gets the
+         shared focus ring. The strip sits in the bar's own scroll viewer, so its own scrolls
+         nothing. -->
+    <Style Selector="ListBox.clusterTabs">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
+        <Setter Property="ItemsPanel">
+            <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" Spacing="3" />
+            </ItemsPanelTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="ListBox.clusterTabs ListBoxItem">
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="AutomationProperties.ControlTypeOverride" Value="TabItem" />
+        <Setter Property="FocusAdorner">
+            <FocusAdornerTemplate>
+                <nimbus:FocusRing />
+            </FocusAdornerTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="ListBox.clusterTabs ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+    </Style>
     <Style Selector="ListBox.dockTabs ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}" />
@@ -253,6 +288,34 @@
     <Style Selector="Border.dockTab.active">
         <Setter Property="Background" Value="{StaticResource AppSelectionBrush}" />
         <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
+    </Style>
+
+    <!-- A column header too narrow for its name ends in an ellipsis, with the whole name on
+         a tooltip while it is cut (#320): at 960px a CRD's Namespace header was cut to
+         "Names" with nothing saying so. Every header in the app is a string, which the
+         header's presenter draws in a TextBlock of its own; that block gets the shared
+         status line's treatment (DESIGN.md rule 21: one line, an ellipsis, the whole text on
+         a tooltip only while it is cut). A ContentTemplate cannot do it: the grid sets each
+         header's template from its column, over any style. App-level for now: the rule
+         belongs beside the shared header style in nimbusUi (listed on the PR). -->
+    <Style Selector="DataGridColumnHeader TextBlock">
+        <Setter Property="MaxLines" Value="1" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="ToolTip.Tip">
+            <MultiBinding Converter="{x:Static nconv:CutTextTip.Instance}">
+                <Binding Path="$self" />
+                <Binding Path="$self.Text" />
+                <Binding Path="$self.Bounds.Width" />
+            </MultiBinding>
+        </Setter>
+    </Style>
+
+    <!-- A selected grid row says so to UI Automation (#236). The grid's row peer has no
+         selection pattern, so a screen reader could not tell which rows a multi-row
+         selection held; the item status is the property UIA has for a state like this. The
+         row's name is set in AutomationNames. -->
+    <Style Selector="DataGridRow:selected">
+        <Setter Property="AutomationProperties.ItemStatus" Value="Selected" />
     </Style>
 
     <!-- DataGrid cells get a gutter on BOTH sides. Fluent's cell padding is

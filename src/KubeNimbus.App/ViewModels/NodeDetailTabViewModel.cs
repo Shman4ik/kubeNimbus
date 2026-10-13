@@ -256,15 +256,34 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
 
     public bool HasPodsError => !string.IsNullOrEmpty(PodsError);
 
-    /// <summary>Loading / empty / counted — three states, never a blank rectangle (UI rule 9).</summary>
-    public string PodsCaption => IsLoadingPods
-        ? "Reading the pods on this node…"
-        : Pods.Count switch
+    /// <summary>
+    /// Loading / empty / counted — three states, never a blank rectangle (UI rule 9). The
+    /// count is every pod bound to the node; when some have finished it also says how many
+    /// are active, the figure the Overview's "Active pods" line counts against the node's
+    /// pod limit (#320: "39 pods on this node" beside an unlabelled "Pods 28 / 110" read as
+    /// a contradiction).
+    /// </summary>
+    public string PodsCaption
+    {
+        get
         {
-            0 => "No pods are scheduled on this node.",
-            1 => "1 pod on this node",
-            var n => $"{n} pods on this node",
-        };
+            if (IsLoadingPods)
+            {
+                return "Reading the pods on this node…";
+            }
+
+            var count = Pods.Count;
+            var all = count switch
+            {
+                0 => "No pods are scheduled on this node.",
+                1 => "1 pod on this node",
+                var n => $"{n} pods on this node",
+            };
+            return _summary is { PodCount: var active } && count > 0 && active < count
+                ? $"{all}, {active} active"
+                : all;
+        }
+    }
 
     private void OnRowChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -797,7 +816,9 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
         {
             new NodeResourceLineViewModel("CPU", summary.Cpu, FormatCores),
             new NodeResourceLineViewModel("Memory", summary.Memory, FormatBytes),
-            new NodeResourceLineViewModel("Pods", summary.Pods, static v => v.ToString("0", CultureInfo.InvariantCulture)),
+            // "Active": finished pods hold no slot and are not counted here, while the Pods
+            // tab lists every pod on the node, so the two figures say what each counts (#320).
+            new NodeResourceLineViewModel("Active pods", summary.Pods, static v => v.ToString("0", CultureInfo.InvariantCulture)),
         };
 
         ResourceLines.Clear();
@@ -807,6 +828,7 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
         }
 
         UpdateUsageShares();
+        OnPropertyChanged(nameof(PodsCaption));
     }
 
     /// <summary>

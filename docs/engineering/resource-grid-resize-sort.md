@@ -165,6 +165,22 @@ pointer; `ux-node-pods-sort` sorts by CPU req. `DetailPodSortTests` pins the ord
 states and the selection kept through a move; `HelmArgoSortTests` the Helm and Argo orders and a
 sort kept through a reload; `ux-helm-sort` and `ux-argo-sort` sort by pointer.
 
+**A dragged press is not a click** (#320, QA check P-4). A drag that starts a pixel off a
+header's resize grip lands on the header, and the grid, with column reordering off, sorts on
+the release however far the pointer went. `HeaderDragGuard` (class handlers on
+`DataGridColumnHeader`, installed from `App.Initialize`) marks a press that moves more than
+4 DIPs; both sort handlers (`ClusterTabView.OnGridSorting`, `GridSortHeaders.OnSorting`) skip
+the sort when it is marked, and the next press clears it. Clearing it from the release did
+not work: a reset posted there ran before the grid's `Sorting`, and the dragged press still
+sorted in the harness. **A cut header ends in an ellipsis** with its whole name on a tooltip
+while it is cut: the header's own text block takes the shared status line's treatment
+(`DataGridColumnHeader TextBlock` in `Theme.axaml`, `CutTextTip`); a `ContentTemplate` style
+does not reach it, because the grid sets each header's template from its column. At 960px
+the QA run saw a CRD's Namespace header cut to "Names" with no ellipsis.
+`cluster-tab-crd-printer-columns-960` narrows the Namespace column to 52px, fails a header
+clipped without an ellipsis or a cut one without the tooltip, then drags a press 30px off the
+Name header (no sort) and clicks it (a sort).
+
 ## Hidden columns: the column chooser (FEAT-13)
 
 A right click on any column header of the resource list opens the column chooser: one

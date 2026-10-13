@@ -546,6 +546,20 @@ public static class CommandCatalog
         },
         new()
         {
+            // A tab's close button is a pointer target and not a Tab stop (it made each tab
+            // two stops one way and one the other), so the keyboard closes the tab that has
+            // focus instead (#236). Handled by the two strips' own key handlers, so a bare
+            // Delete anywhere else keeps its meaning (the list's Delete arms a confirm).
+            Id = CommandId.CloseFocusedTab,
+            Title = "Close the focused tab",
+            CheatTitle = "Close the focused cluster tab or dock tab",
+            Category = CommandCategory.View,
+            IconKey = "CloseIconGeometry",
+            Chord = new(CommandKey.Delete),
+            Surfaces = SheetOnly,
+        },
+        new()
+        {
             // The YAML editor indents on Tab and the exec terminal sends Tab to the shell
             // (completion), so Tab can never leave either, and a keyboard-only user had no
             // way out of them (ENG-4). Ctrl+Tab is the convention for leaving a control

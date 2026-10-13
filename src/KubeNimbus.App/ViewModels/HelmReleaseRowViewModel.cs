@@ -42,7 +42,7 @@ public sealed partial class HelmReleaseRowViewModel : ObservableObject
 
     /// <summary>The exact instant, local time, on the cell's tooltip — as Age's "Created …" is.</summary>
     public string UpdatedTooltip => Updated is { } at
-        ? $"Updated {at.ToLocalTime():yyyy-MM-dd HH:mm:ss}"
+        ? $"Updated {LocalTimeText.Exact(at)}"
         : "Helm recorded no time for this revision";
 
     public void RefreshTimes(DateTimeOffset now) =>

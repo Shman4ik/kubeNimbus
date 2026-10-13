@@ -63,6 +63,19 @@ public sealed partial class ResourceRowViewModel : ObservableObject
     public bool IsUnhealthy => ResourceHealth.IsUnhealthy(StatusHealth);
 
     /// <summary>
+    /// The row's accessible name (#236): what identifies it — name, namespace, and the
+    /// cluster in a fleet list. The grid's rows had no name, so a screen reader could not
+    /// say which row it was on. Identity only, not the status: the grid names a row when
+    /// the row is bound to it, and a status read then would go stale while the row updates
+    /// in place; the cells carry the status.
+    /// </summary>
+    public override string ToString()
+    {
+        var where = string.Join(", ", new[] { Namespace, ClusterName }.Where(s => !string.IsNullOrEmpty(s)));
+        return where.Length == 0 ? Name : $"{Name}, {where}";
+    }
+
+    /// <summary>
     /// Whether this row gets the logs icon in its Name cell (shown on hover and on the
     /// selected row). Recomputed on every update, because the evidence is the object's own
     /// selector — see <see cref="LogTarget.CanOpen"/>.
@@ -284,7 +297,7 @@ public sealed partial class ResourceRowViewModel : ObservableObject
         Name = resource.Name;
         CreatedAt = resource.CreationTimestamp;
         AgeTooltip = resource.CreationTimestamp is { } created
-            ? $"Created {created.ToLocalTime():yyyy-MM-dd HH:mm:ss}"
+            ? $"Created {LocalTimeText.Exact(created)}"
             : "";
 
         var summary = ResourceStatusSummary.Summarize(resource);
@@ -424,8 +437,8 @@ public sealed partial class ResourceRowViewModel : ObservableObject
             LastSeenText = EventLastSeen is { } seen ? RelativeTime.Compact(now - seen) : "—";
             LastSeenTooltip = EventLastSeen is { } at
                 ? EventCount > 1 && _eventFirstSeen is { } first && first < at
-                    ? $"Last seen {at.ToLocalTime():yyyy-MM-dd HH:mm:ss} · first seen {first.ToLocalTime():yyyy-MM-dd HH:mm:ss} ({EventCount} times)"
-                    : $"Last seen {at.ToLocalTime():yyyy-MM-dd HH:mm:ss}"
+                    ? $"Last seen {LocalTimeText.Exact(at)} · first seen {LocalTimeText.Exact(first)} ({EventCount} times)"
+                    : $"Last seen {LocalTimeText.Exact(at)}"
                 : "This event carries no timestamp";
         }
         RestartsText = _restarts == 0

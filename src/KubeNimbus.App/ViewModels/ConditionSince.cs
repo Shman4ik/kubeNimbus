@@ -16,10 +16,10 @@ public static class ConditionSince
     public static string Age(DateTimeOffset? lastTransition, DateTimeOffset now) =>
         lastTransition is { } at ? RelativeTime.Compact(now - at) : "";
 
-    /// <summary>The exact instant, in local time, or null (no tooltip) when there is none.</summary>
+    /// <summary>The exact instant, in local time with its UTC offset, or null (no tooltip) when there is none.</summary>
     public static string? Tooltip(DateTimeOffset? lastTransition) =>
         lastTransition is { } at
-            ? $"Last transition {at.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)}"
+            ? $"Last transition {LocalTimeText.Exact(at)}"
             : null;
 
     /// <summary>Reads a <c>lastTransitionTime</c> string; null when it is absent or unreadable.</summary>
