@@ -3085,3 +3085,100 @@ live dashboard and fleet), M-11 to M-16 (the metrics 403 and the stated refusals
 re-recorded after the look changed (#334); the cost of five idle watches against a large real
 cluster (#338), which was reasoned and not measured; and the open chooser's highlight, which
 nobody has looked at with eyes.
+
+### Backlog train after the 2026-10-13 QA VM run (2026-10-13)
+
+The QA VM run on `main` at 0b3c20b (reported on #327) produced a second train, tracked in #371. One
+session orchestrated; six `kn-bundle` agents each built a bundle in their own worktree, `kn-verifier`
+checked each one, and the PRs were merged one at a time, squash, with CI green on the head. They
+merged in this order: B (#372), A (#375), E (#378), F (#382), C (#381) and D (#387). No release was
+cut at the end of the train.
+
+What shipped, by bundle:
+
+- **B, the Argo palette and the switcher (#372; #364, #365, #367).** In the Applications mode the
+  palette's Argo CD items name and act on the open Application page, or else the list's selected
+  row, instead of whatever Resources last selected (`ArgoActionTarget`, with `IsApplicationsModeShown`
+  stamped on every tab by the shell). The verifier's fix round showed that the tab's own strip is
+  drawn only by the Resources view, so a run item now arms the page's own strip
+  (`ApplicationPageViewModel.ArmArgo`). `Argo/…`, `ApplicationSet/…` and `AppProject/…` pane titles
+  end in "· <cluster>" for another cluster's object. `AutomationNames.NameFromContentText` marks a
+  name it took from content and takes it again when the content changes, because a virtualizing list
+  recycles its containers and each kept the name of the row it first drew; the harness scenario
+  `ux-switcher-filter-uia` failed on the unfixed code and passes now. #366 (a new context missing from
+  the unfiltered switcher) was not reproduced in a view-model test and stays open, waiting on desktop
+  check M-17.
+- **A, QA tooling and the developer-tools key (#375; #370, #369).** `qa-ui.ps1` refuses a `select`
+  that leaves its popup open, reaches the Edit box and buttons inside a file dialog, prints every
+  pattern state in `dump`, has `collapse` and can click a drop-down's items; the dock's content area is
+  the `DockContent` Pane; `wsl-docker.ps1` holds the WSL routing and a recorded keep-alive, and
+  `qa-preflight.ps1` checks the keep-alive and the sandbox containers; the check text is corrected
+  and batch G2's VM-only `kubectl` allow rule is documented (and `.gitignore` names
+  `settings.local.json`). Avalonia's developer tools read their gesture from the raw input stream,
+  ahead of every binding, so F12 in the exec terminal could never be the terminal's first; they now
+  open on Pause (`Hotkeys.DeveloperTools`), pinned by `TerminalChordYieldTests` and `ux-exec-keys`.
+- **E, palette items and two script and log fixes (#378; #373, #377, #376).** In the Applications mode
+  `BuildPaletteItems` offers none of the selected-row items of the hidden Resources list, and an open
+  page contributes its own Edit YAML and Rollout restart, as plain items without the list's key
+  suffix. `LogQuery` builds every pattern with `Regex.InfiniteMatchTimeout`: a timed-out match used to
+  count as "no match", which hid matching lines and made two `LogViewerTests` flaky.
+  `sandbox-down.ps1 -Wsl` stops the keep-alive once no `kubenimbus*` container is left.
+- **F, two small items (#382; #379, #380).** `sandbox-down` derives its default kubeconfig from
+  `-Name` and deletes a kubeconfig only when its current context is the sandbox being torn down, so
+  tearing down the Argo sandbox no longer removes the main sandbox's file. "Show only unhealthy rows",
+  its way out and "Reset the list's columns" are not offered in the Applications mode.
+- **C, the list, the watch and the harness (#381; #362, #363, #357, #360).** A star column's drag was
+  compared against half a pixel and never stored; `GridColumnWidth.DiffersFrom` now measures in the
+  column's own unit (`ux-crd-column-width-kept`). A watch that lost its connection resumes from its
+  last resourceVersion without a relist: `PumpAsync` writes a `Synced` when the next watch's response
+  headers arrive, so the list keeps its rows and selection and clears only the retry line its own
+  watch posted. The first version relisted, and the verifier found that it blanked every list at
+  each backoff during an outage; the PR's squash title still says "relists" because it was written
+  before that fix round. `ArgoDashboardRefreshTests` no longer asserts an exact total. The harness
+  repaints the whole window before each capture and turns transitions and the caret blink off, and
+  `--twice` renders every `ux-*` scenario twice and fails on a difference; by the owner's decision it
+  runs nightly on `main` in `nightly-determinism.yml` and not on a PR. #368 (multi-pod log chips
+  ending in "The connection closed") was investigated and left open: five follows against the
+  sandbox stayed open for 180 s, so the VM's WSL relay is the suspect, and desktop check G-21 runs
+  `kubectl logs -f` beside the pane to tell the two apart.
+- **D, ENG-13's second half (#387; #361).** The terminal notice, the Helm release browser and the
+  list's metrics poller are child view models of the cluster tab (`TerminalNoticeViewModel` as
+  `Terminal`, `HelmBrowserViewModel` as `Helm`, `ListMetricsViewModel` as `Metrics`), each reaching the
+  tab only through a small host interface (`IHelmBrowserHost`, `IListMetricsHost`) and each with its
+  own tests (3, 7 and 8). Bindings moved to `Terminal.*`, `Helm.*` and `SelectedTab.Metrics.Notice`
+  with no forwarding members left. The harness renders of the touched scenarios and of the 18
+  published screenshots were byte-identical before and after. It has no release note.
+
+Issues. Closed by these PRs: #364, #365, #367, #370, #369, #373, #377, #376, #379, #380, #362, #363,
+#357, #360 and #361. #374 (Helm release tabs naming their cluster) was closed as not planned by the
+owner: a Helm release tab always belongs to its own cluster tab, and there is no fleet Helm list, so a
+title without a cluster suffix is correct today; it comes back only if the Helm view gains a list of
+rows from several clusters. #366 and #368 stay open, each waiting on a desktop check (M-17 and G-21).
+
+What was verified. Every bundle got a `kn-verifier` verdict, and B, A, E and C each needed one fix
+round; F and D passed the first time. CI's counts at the last merge (#387) were Core 1088 total, 986
+succeeded and 102 skipped (the live Argo CD tests and the platform-specific ones, with no sandbox on
+CI), and App 791 total, 791 succeeded. On the bundles' own machines, with the sandbox up, Core ran
+1088 total, 1077 succeeded and 11 skipped, and App 791 of 791. The central test of each fix was
+mutation-checked: the palette's mode branches, the regex timeout, both palette gates, the
+star-column threshold, the reconnect `Synced` (a relist would also fail its assertions), the
+switcher's name refresh and the metrics poller's remembered refusal. `ArgoDashboardRefreshTests`
+passed 50 of 50 runs, the `ux-*` scenarios passed the double render twice with matching PNGs, and
+`WatchReconnectTests` uses a raw socket so that it fails the connection the same way on Windows and
+Linux.
+
+What is left unverified. Everything that needs a real window, pointer, keyboard or screen reader is
+owed to the QA VM and is written down as checks in `docs/qa/desktop-checks.md`; none of them has been
+run: K-8, A-10, L-20 and M-17 (the Argo palette, the fleet title, the switcher's names and #366),
+Q-2, Q-3, Q-5 to Q-8 and T-14 (every `qa-ui.ps1` change against a live app, the `DockContent` pane
+and Pause in the exec terminal), K-9 and G-25 (the Applications-mode palette and the regex filter),
+K-10 (the unhealthy-only and column items), and P-9, P-10 and G-21 (the dragged CRD width, the retry
+line clearing after `qa-netcut.ps1 restore`, and #368). Bundle D added no check, only four
+regression steps in its PR. Also unverified: `sandbox-up.ps1 -Wsl`, `argo-sandbox-up.ps1 -Wsl` and
+`sandbox-down.ps1 -Wsl` end to end, because they would disturb the shared Docker Desktop sandbox;
+the Windows UI Automation provider itself, which the headless peers do not stand in for; the nightly
+determinism workflow, which has not run yet and is the first time the `ux-*` scenarios are compared
+on Linux; and the NativeAOT publish, which ran only in CI. Known and not fixed: the harness
+scenario `cluster-tab-node-drain-running` renders differently from run to run on `main` itself, an
+`ApplyLiveTests` force-apply case failed once with a 409 race against the Deployment controller, and
+`sandbox-up` still defaults its kubeconfig to the shared file for every `-Name`.

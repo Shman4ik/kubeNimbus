@@ -407,7 +407,8 @@ for the life of the tab.
   went red with either the guard or the `Suspend` call taken out. The Helm and Argo views are
   one-shot reads rather than watches, so `RestartWatch`'s guard did not cover them: a namespace
   change or a refresh behind the view re-read releases or Applications through the client that
-  had just failed. `RefreshHelmReleasesAsync` and `ReloadArgoAsync` start nothing while
+  had just failed. `Helm.RefreshAsync` (on the tab's `HelmBrowserViewModel`, which asks the tab through
+  `IHelmBrowserHost.IsBehindFailedReconnect`) and the tab's `ReloadArgoAsync` start nothing while
   `_reconnectFailed` is set either (#311); the successful Reconnect's `Refresh` reads them again.
   `ReconnectFailedReadsTests` counts the requests a stub server receives after the failure, for
   each view, and went red (Helm) with the guard taken out. It is offered on the failure view, beside the list's
