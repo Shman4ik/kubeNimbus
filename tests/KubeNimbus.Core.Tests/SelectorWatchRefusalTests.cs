@@ -79,7 +79,10 @@ public class SelectorWatchRefusalTests
 
         var (ended, warnings) = await ReadToEndAsync(client);
 
+        // The watch's own 403 body is read, so the server's sentence survives (not "Response
+        // status code does not indicate success: 403").
         await Assert.That(ended).IsTypeOf<WatchRefusedException>();
+        await Assert.That(ended!.Message).IsEqualTo(Sentence);
         await Assert.That(warnings).IsEmpty();
         await Task.Delay(1500);
         await Assert.That(server.Requests.Count(r => r is { Path: "/api/v1/namespaces/team/pods", IsWatch: true })).IsEqualTo(1);

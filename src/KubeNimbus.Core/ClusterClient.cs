@@ -574,6 +574,14 @@ public sealed partial class ClusterClient : IDisposable
             return true;
         }
 
+        if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+        {
+            // A refused watch (list allowed, watch not) ends the stream (#354): read the
+            // Status body so the refusal is stated in the server's words, which name the user
+            // and the verb, rather than as "Response status code does not indicate success".
+            await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
+        }
+
         response.EnsureSuccessStatusCode();
 
         await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);

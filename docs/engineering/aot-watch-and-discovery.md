@@ -200,12 +200,17 @@ list on every flip.
   `WatchCache` looked for one. `PumpAsync` now catches a 403 itself (after the 410 catch, before
   the 401 and the general ones) and completes the stream with the `WatchRefusedException`, so
   every reader's existing "the watch ended" path states the server's sentence once; `WatchCache`
-  sees the same exception end its source and fails the entry as before. Two readers needed a
-  line: the debug container's wait returns `Failed` with reason `Forbidden` instead of throwing
-  (it used to wait out its deadline), and the drain's pods-on-node watch, refused after its
-  initial list, says so on its waiting line. `SelectorWatchRefusalTests` pins it over HTTP (a
-  refused list and a refused watch after an allowed list each end after one request, with no
-  "connection lost" report; mutation-checked: without the catch both run to the test's timeout)
+  sees the same exception end its source and fails the entry as before. A 403 on the watch
+  request itself (list allowed, watch not) now has its `Status` body read (`EnsureSuccessAsync`
+  in `StreamWatchAsync`), so that case too carries the server's sentence rather than "Response
+  status code does not indicate success: 403". Two readers needed more: the debug container's
+  wait returns `Failed` with reason `Forbidden` instead of throwing (it used to wait out its
+  deadline), and the drain, whose pods-on-node watch refused after its initial list can no
+  longer see an evicted pod leave, ends with `DrainStage.Interrupted` and the sentence instead
+  of waiting for ever ([node-operations](node-operations.md)). `SelectorWatchRefusalTests` pins
+  it over HTTP (a refused list and a refused watch after an allowed list each end after one
+  request with the server's sentence and no "connection lost" report; mutation-checked: without
+  the catch both run to the test's timeout)
   and live, against the sandbox with its own kubeconfig impersonating a service account no role
   is bound to (nothing is created on the shared cluster).
 - **Not replayed**: a connection warning or an unreadable object reaches the readers present
