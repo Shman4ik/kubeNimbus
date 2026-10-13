@@ -387,7 +387,13 @@ public sealed partial class ClusterClient
             }
             catch (Exception ex)
             {
-                _synced.TrySetException(ex);
+                // Before the initial list: the drain's answer. After it: the watch was refused
+                // (list allowed, watch not, #354) and has stopped, which the waiting line says.
+                if (!_synced.TrySetException(ex))
+                {
+                    ConnectionProblem = ex.Message;
+                    Changed();
+                }
             }
         }
 

@@ -432,6 +432,16 @@ public sealed partial class ClusterClient : IDisposable
                 {
                     needRelist = true;
                 }
+                catch (Exception ex) when (WatchRefusedException.From(ex) is { } refused)
+                {
+                    // A 403 is an answer, not a lost connection: asking again every backoff
+                    // changes nothing (#339). The stream ends with the server's sentence, so a
+                    // selector watch that does not go through WatchCache (a workload's pods, a
+                    // Service's endpoints, the pods on a node) stops too, and its reader states
+                    // the refusal the way it states any other ending (#354).
+                    writer.Complete(refused);
+                    return;
+                }
                 catch (WatchFrameTooLargeException ex)
                 {
                     // Said in its own words rather than as a lost connection, and relisted after

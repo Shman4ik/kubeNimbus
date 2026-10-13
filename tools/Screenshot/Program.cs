@@ -322,6 +322,8 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-bulk-delete-partial", () => HostInMainWindow(ListCreateChecks.BulkDeletePartial())),
     ("ux-bulk-delete", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
     ("ux-column-chooser", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
+    // #301: the chooser by keyboard, from the palette, with focus shown and given back.
+    ("ux-column-chooser-keyboard", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
     ("cluster-tab-yaml-new", () => HostInMainWindow(ListCreateChecks.NewYaml())),
 
     // FEAT-4 — the node surface. All on the demo cluster, which is where the node
@@ -380,6 +382,9 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-argo-fleet", () => HostInMainWindow(ArgoScenarios.Fleet())),
     ("cluster-tab-argo-refused", () => HostInMainWindow(RefusalScenarios.Argo())),
     ("cluster-tab-list-refused", () => HostInMainWindow(RefusalScenarios.List())),
+    // #354: the Argo rows kept with "Live updates stopped", and every chosen namespace refused.
+    ("cluster-tab-argo-watch-stopped", () => HostInMainWindow(RefusalScenarios.ArgoStopped())),
+    ("cluster-tab-list-refused-namespaces", () => HostInMainWindow(RefusalScenarios.ListNamespaces())),
     // L1 — the palette's log rows. On the demo cluster, which is the one place the rows
     // come from a real listing (the dataset) rather than a fixture; the states a sandbox
     // cannot produce on demand (in flight, refused, capped, a fleet) are written in
@@ -685,6 +690,7 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     if (name == "ux-bulk-delete") ListCreateChecks.BulkDelete(window);
     if (name == "cluster-tab-bulk-delete-partial") ListCreateChecks.BulkRefusalWraps(window);
     if (name == "ux-column-chooser") ListCreateChecks.ColumnChooser(window);
+    if (name == "ux-column-chooser-keyboard") ListCreateChecks.ColumnChooserKeyboard(window);
 
     // Last, so a pane a check just opened settles too: capture when the log streams have
     // stopped moving, not whenever the builder happened to return (ENG-10).

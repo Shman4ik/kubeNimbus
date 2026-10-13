@@ -632,6 +632,16 @@ public static class CommandCatalog
         },
         new()
         {
+            // #301: the column chooser from the keyboard. A right click on a column header
+            // opens it too, but a header is not a keyboard stop.
+            Id = CommandId.ChooseListColumns,
+            Title = "Choose the list's columns…",
+            Category = CommandCategory.Resources,
+            IconKey = "EyeIconGeometry",
+            Surfaces = PaletteOnly,
+        },
+        new()
+        {
             // FEAT-13: the column chooser's way back, for the list on screen. The chooser
             // itself is a right click on a column header.
             Id = CommandId.ResetListColumns,

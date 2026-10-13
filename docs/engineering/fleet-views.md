@@ -57,7 +57,10 @@ member through `ClusterFleet.WatchAsync` since #336, as the resource list is;
 row's actions take the member's client from the shell's member list rather than from the
 resource list's fleet targets. A member whose watch ends for good (a 403 since #339, which no
 longer retries) is named in the warning line, and once every member has ended the list stops
-waiting. `MainWindowViewModel` owns the member list and
+waiting. When every member refused and no row arrived, the list says "This account may not
+list Pods" in its place with one sentence per cluster, rather than "No Pods found", a fact it
+does not have (UI rule 20, #354; `ListRefusalTests.A_fleet_list_every_member_refused_says_so_one_line_per_cluster`,
+mutation-checked). Some refused and some not stays a warning over whatever rows there are. `MainWindowViewModel` owns the member list and
 makes cluster names unique (two tabs on one context would otherwise merge into
 one apparent cluster) and re-fans active aggregated watches when a tab opens or
 closes, so no tab keeps watching a disposed client.

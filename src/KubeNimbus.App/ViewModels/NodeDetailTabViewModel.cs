@@ -670,9 +670,10 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
                 NodeName,
                 connectionLost: ex => Dispatcher.UIThread.Post(() =>
                 {
-                    // An RBAC 403 on listing pods is the common one, and its sentence names
-                    // the subject and the verb; the pane says so rather than showing an
-                    // empty node. The watch keeps retrying, and the next frame clears it.
+                    // A lost connection: the pane says so rather than showing an empty node,
+                    // the watch keeps retrying, and the next frame clears it. An RBAC 403 is
+                    // not one of these: it ends the watch (#354) and lands in the catch below
+                    // with the server's sentence, which names the subject and the verb.
                     if (!token.IsCancellationRequested)
                     {
                         PodsError = (ex.InnerException as KubernetesApiException)?.ServerMessage ?? ex.Message;

@@ -65,7 +65,12 @@ each of them and not the cluster.
   row or when every namespace has delivered `Synced`. The first namespace to come back empty
   is not "No pods found" while another is still being read. A namespace whose watch fails
   answers with a `Synced` of its own (`NamespaceWatch.TagAsync`), and a 403 does too, so one
-  refused namespace cannot hold the spinner up for ever; the warning names it.
+  refused namespace cannot hold the spinner up for ever; the warning names it, and stays named
+  after the others answer (it used to be cleared by the last `Synced`). When every chosen
+  namespace refused and no row arrived, the list says "This account may not list Pods" in its
+  place, each namespace's sentence once, instead of "No Pods found" (UI rule 20, #354;
+  `ListRefusalTests.Several_namespaces_all_refused_say_so_in_the_lists_place`, mutation-checked,
+  and the harness's `cluster-tab-list-refused-namespaces`).
 - **Fleet mode reads each cluster whole and keeps the chosen namespaces' rows**
   (`_fleetNamespaceFilter`) rather than running clusters × namespaces watches. One namespace,
   or none, still goes to the server as before. Under narrow RBAC a cluster-wide fleet read is
