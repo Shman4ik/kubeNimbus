@@ -324,12 +324,12 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         // straight back would turn every kind ever opened into a stored layout. No stored
         // choice means the kind's own default (the Events list opens newest first);
         // Unsorted is a stored choice of arrival order on a kind that has a default.
-        var (sortColumn, sortDescending) = layout.SortColumn switch
+        var (sortColumn, sortDescending) = ShownSort(layout.SortColumn switch
         {
             null => DefaultSortFor(value?.Descriptor),
             ResourceColumn.Unsorted => (null, false),
             var column => (column, layout.SortDescending),
-        };
+        });
         SetSort(sortColumn, sortDescending, persist: false);
         OnPropertyChanged(nameof(IsEventList));
         OnPropertyChanged(nameof(RowFilterPlaceholder));
@@ -1383,6 +1383,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         // it has to survive the advanced view being switched off mid-aggregation.
         OnPropertyChanged(nameof(IsFleetToggleVisible));
         FleetSummary = null;
+        NotifyTerminalHandoffs();
         ReloadForFleetChange();
     }
 

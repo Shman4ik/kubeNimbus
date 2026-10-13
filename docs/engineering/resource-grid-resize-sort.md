@@ -207,6 +207,15 @@ load-bearing.
    the attribute taken off `Hidden`; `A_file_with_both_spellings_still_loads` pins the old file.
 7. **`Rows` stays the watch's list.** Hiding a column changes the grid and nothing else
    (UI rule 13); `ColumnChooserTests.Rows_stay_the_watchs_list_when_a_column_is_hidden`.
+8. **Hiding the column the list is sorted by clears the sort** (#301). The arrow is drawn into
+   its column's header, so a list sorted by a hidden column was in an order nothing on screen
+   explained (UI rule 20). `SetColumnHidden` clears it the way the third header click does,
+   and stores that; a stored or default sort whose column is hidden is not applied when the
+   kind opens (`ShownSort`), which covers a file written before this and a hand edit. Showing
+   the column again does not bring the old sort back: by then the reader has looked at the
+   list in another order, and re-sorting it under them would move rows unasked.
+   `ColumnChooserTests.Hiding_the_sorted_column_clears_the_sort` went red with the clear
+   removed from `SetColumnHidden`.
 
 The chooser opens from a **Tunnel** `ContextRequested` handler on the grid, which marks the
 event handled when it came from a `DataGridColumnHeader`, so the row menu (the grid's own
@@ -215,5 +224,4 @@ clicks the Restarts header, checks that the chooser opened and the row menu did 
 is ticked and disabled, unticks Restarts through the menu and checks the column went, and leaves
 the chooser open for the PNG. **Not built:** reordering columns, a chooser for the Helm and Argo
 grids, and keyboard access to the chooser (the headers are not focusable; the palette's reset is
-the keyboard's half). Hiding the column the list is sorted by leaves the sort in place, with no
-arrow to show it, until the column comes back or the sort is changed.
+the keyboard's half); they are listed on #301.

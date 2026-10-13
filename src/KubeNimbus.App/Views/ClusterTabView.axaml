@@ -452,6 +452,24 @@
                     <PathIcon Data="{StaticResource ConsoleIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
+                <!-- #198: the same exec, and a node's shell, handed to the machine's own
+                     terminal. They fire on the click (UI rule 17), so no ellipsis; the outcome
+                     lands in the tab's terminal notice above the list. Disabled in a fleet
+                     list, whose rows belong to other tabs' clusters. -->
+                <MenuItem Header="Exec in my terminal" Command="{Binding ExecInMyTerminalCommand}"
+                          ToolTip.ShowOnDisabled="True"
+                          ToolTip.Tip="{Binding SingleRowActionTip, TargetNullValue='kubectl exec -it into this pod, in your own terminal, with this cluster pinned'}">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource OpenInNewIconGeometry}" Width="13" Height="13" />
+                  </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="Node shell in my terminal" Command="{Binding NodeShellInMyTerminalCommand}"
+                          IsVisible="{Binding OffersNodeShellOnRow}" ToolTip.ShowOnDisabled="True"
+                          ToolTip.Tip="{Binding SingleRowActionTip, TargetNullValue='kubectl debug node/ in your own terminal: host namespaces, the node filesystem at /host'}">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource ConsoleIconGeometry}" Width="13" Height="13" />
+                  </MenuItem.Icon>
+                </MenuItem>
                 <MenuItem Header="Port-forward" Command="{Binding PortForwardSelectedCommand}" InputGesture="F"
                           ToolTip.Tip="{Binding SingleRowActionTip}" ToolTip.ShowOnDisabled="True">
                   <MenuItem.Icon>

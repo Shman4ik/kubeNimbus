@@ -305,6 +305,14 @@ are load-bearing.
    shorten), with the manifest's own version, as kubectl sends it. A kind the cluster does not
    serve is refused before anything is sent, naming the group, rather than reaching the server as
    a 404 on a guessed path.
+   **Closing the editor stops that read** (#342, hard rule 2): the resolver takes a
+   `CancellationToken` from a source the editor cancels in `OnClosingAsync`, and the tab's
+   resolver passes it to `GetResourceCatalogAsync`. A cancelled read ends the press quietly, with
+   nothing sent and nothing said to a closed tab. The catalog is cached after the first read, so
+   this matters for the first press on a slow or unreachable API server.
+   `NewYamlTests.Closing_the_editor_cancels_the_catalog_read_its_apply_started` holds the
+   discovery request in a stub server and closes the editor; it went red (the apply waited past
+   the timeout) with the token dropped from the catalog read.
 2. **A namespaced object without a namespace goes to the list's namespace** — the first, when the
    list shows several — else the context's, else `default` (kubectl's order), and the InfoBar over
    the empty editor says which. The manifest is sent as typed, without a namespace, to that path;

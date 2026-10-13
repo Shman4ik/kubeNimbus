@@ -147,7 +147,8 @@ Three rules about it:
    the graphs differ. Sync by copying files: `git worktree add --detach <tmp>
    nimbusui/main`, copy the changed files in, commit and open the nimbusUi PR, then
    copy the same files into each app as a "Take nimbusUi: …" commit. Check that the
-   three copies match with `tr -d '\r' | md5sum` (line endings differ between repos).
+   three copies match with `tr -d '\r' | md5sum` (line endings differ between repos); CI's
+   `nimbusUi drift` job checks each app against nimbusUi's `main` on every PR (CONTRIBUTING.md).
 2. **The membership test is "can it be described without naming Kubernetes?"**
    If yes it probably belongs up there; if no it stays here. When in doubt leave
    it here — a wrong thing pulled up has to be un-shared against two consumers.
@@ -530,7 +531,7 @@ in unnoticed.
 
 The release workflow, installers, Microsoft Store (MSIX) identity, the assembly-name coupling and the 0.5 GB Actions storage budget are in the `release` skill ([`.claude/skills/release/SKILL.md`](.claude/skills/release/SKILL.md)). Load it before cutting a release or touching `.github/workflows`, `installer/` or the packaging scripts. Rules that must not wait for it: **every `upload-artifact` sets `retention-days`**, **the MSIX identity in `installer/msix/Package.appxmanifest` is never edited**, **every `actions/checkout` sets `persist-credentials: false`** (no step runs git against the remote; `gh` takes `GH_TOKEN` from env), **a tool a release downloads and runs is pinned by version and SHA-256 and checked before it runs** (appimagetool and the AppImage runtime it embeds, in `scripts/linux/build-packages.sh`), and **packages come from nuget.org only**, through the root `nuget.config` (`<clear />` plus a source mapping), so a developer's own feeds cannot supply one. Provenance is attested in the `release` job only, and a real release is dispatched from `main` only; the skill says why (2026-10, security audit block 5). The Windows direct download is a portable zip since 2026-10-04 (the MSI is gone), and NativeAOT is deliberately not compiled for size (`OptimizationPreference=Size` was measured: 1.2 MB off the download for slower startup and about 20 MB more memory); both are reasoned in the skill.
 
-**Repository settings are kept the same in kubeNimbus and pgNimbus** (2026-09-30; nimbusUi carries the security half). On `main`: the required checks (`Build & test` and `dependency-review`), resolved threads, no force push or deletion, and **no required approval** (CODEOWNERS only names who is asked). `v*` tags sit under a `Release tags` ruleset (create, never move or delete), releases are immutable, every `uses:` is pinned to a commit SHA (`sha_pinning_required`), Dependabot alerts and security updates, secret scanning with push protection and private vulnerability reporting are on, and merged branches are deleted. A change to one repo's settings is made to the other in the same session.
+**Repository settings are kept the same in kubeNimbus and pgNimbus** (2026-09-30; nimbusUi carries the security half). On `main`: the required checks (`Build & test`, `dependency-review` and `nimbusUi drift`; pgNimbus names its build `build-test`), resolved threads, no force push or deletion, and **no required approval** (CODEOWNERS only names who is asked). `v*` tags sit under a `Release tags` ruleset (create, never move or delete), releases are immutable, every `uses:` is pinned to a commit SHA (`sha_pinning_required`), Dependabot alerts and security updates, secret scanning with push protection and private vulnerability reporting are on, and merged branches are deleted. A change to one repo's settings is made to the other in the same session.
 
 ## History
 

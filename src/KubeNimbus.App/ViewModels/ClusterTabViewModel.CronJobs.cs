@@ -139,6 +139,9 @@ public sealed partial class ClusterTabViewModel
         CordonSelectedCommand.NotifyCanExecuteChanged();
         UncordonSelectedCommand.NotifyCanExecuteChanged();
 
+        // The terminal hand-offs (#198): a node's OS and the row's kind decide them.
+        NotifyTerminalHandoffs();
+
         // A claim that binds while it is selected gains its volume link the same way.
         NotifyStorageBinding();
     }

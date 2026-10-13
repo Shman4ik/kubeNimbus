@@ -8,8 +8,15 @@ namespace KubeNimbus.App.ViewModels;
 // against this cluster's discovery, and the namespace defaults to the tab's current one.
 public sealed partial class YamlEditorTabViewModel
 {
-    /// <summary>Resolves a group and kind to this cluster's descriptor, or null when discovery has no such kind.</summary>
-    private readonly Func<string, string, Task<ResourceDescriptor?>>? _resolveKind;
+    /// <summary>
+    /// Resolves a group and kind to this cluster's descriptor, or null when discovery has no such
+    /// kind. It takes <see cref="_closed"/>'s token, so closing the editor while the catalog is
+    /// read stops the read (#342, hard rule 2).
+    /// </summary>
+    private readonly Func<string, string, CancellationToken, Task<ResourceDescriptor?>>? _resolveKind;
+
+    /// <summary>Cancelled when the editor closes: what a press started reading is no longer wanted.</summary>
+    private readonly CancellationTokenSource _closed = new();
 
     /// <summary>The namespace a namespaced object without one is applied to: the tab's, when it was opened.</summary>
     private readonly string _defaultNamespace = "";
@@ -22,7 +29,7 @@ public sealed partial class YamlEditorTabViewModel
     /// nothing about it is known until its text is applied.
     /// </summary>
     public YamlEditorTabViewModel(
-        ClusterClient? client, Func<string, string, Task<ResourceDescriptor?>> resolveKind, string defaultNamespace, int number)
+        ClusterClient? client, Func<string, string, CancellationToken, Task<ResourceDescriptor?>> resolveKind, string defaultNamespace, int number)
         : base(NewDocumentTitle(number), isDemo: client is null)
     {
         _client = client;
@@ -86,7 +93,12 @@ public sealed partial class YamlEditorTabViewModel
         ResourceDescriptor? known;
         try
         {
-            known = _resolveKind is null ? null : await _resolveKind(identity.Group, identity.Kind);
+            known = _resolveKind is null ? null : await _resolveKind(identity.Group, identity.Kind, _closed.Token);
+        }
+        catch (OperationCanceledException) when (_closed.IsCancellationRequested)
+        {
+            // The editor was closed mid-read: nobody is left to tell, and nothing was sent.
+            return false;
         }
         catch (Exception ex)
         {

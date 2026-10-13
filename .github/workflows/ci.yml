@@ -131,6 +131,33 @@ jobs:
         with:
           fail-on-severity: moderate
 
+  # shared/nimbusUi is a copy of nimbusUi, and pgNimbus holds another (CLAUDE.md, "The
+  # sibling project"). Nothing else in CI can see the copies drift apart, so #238's drift was
+  # found a cycle later by hand (#343). This compares every tracked file with nimbusUi's main,
+  # line endings ignored, on every PR whatever `changes` says: nimbusUi's main moves on its
+  # own, so a PR that touches nothing shared still reports a drift someone else left.
+  # Read-only: nimbusUi is public, the checkout keeps no credentials, and the job writes
+  # nothing. A required check, so the job has no `if:` and always reports; a
+  # "Take nimbusUi" PR is red until its nimbusUi PR has
+  # merged; re-run this job then, before merging (CONTRIBUTING.md). pgNimbus runs the same job.
+  nimbusui-drift:
+    name: nimbusUi drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check out nimbusUi main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Shman4ik/nimbusUi
+          ref: main
+          path: .nimbusui-main
+          persist-credentials: false
+      - name: Compare shared/nimbusUi with nimbusUi main
+        run: bash scripts/check-nimbusui-drift.sh .nimbusui-main shared/nimbusUi
+
   build:
     name: Build & test
     needs: changes
@@ -194,15 +221,21 @@ jobs:
   # without a display.
   #
   # Its own job, in parallel with `Build & test`, because it was the slow half
-  # of that job: ~90 s for ~236 renders, against ~40 s for everything else once
-  # restore is cached. Paying a second compile of the harness here is cheaper
-  # than making the build wait for the renders, since the two now overlap.
+  # of that job (~90 s for ~236 renders when it was split out). Paying a second
+  # compile of the harness here is cheaper than making the build wait for the
+  # renders, since the two overlap.
+  #
+  # Observed runtime: about 15–20 min per run in October 2026, as the harness
+  # grew its scenarios and interaction checks. The timeout is a backstop for a
+  # hang, not a budget: at 20 min, green runs were reaching the ceiling and one
+  # (#345) was cancelled at 20m19s with nothing wrong, so it sits well above the
+  # observed time.
   screenshots:
     name: XAML smoke test
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
