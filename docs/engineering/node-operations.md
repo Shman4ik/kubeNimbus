@@ -229,6 +229,43 @@ without Prometheus, and this needs nothing but the API server, degrading part by
   `cluster-tab-node-capacity-narrow-rbac`. The demo cluster drives it through production code:
   its nodes, the usage `DemoUsage` seeds and its pods (demo rule 4).
 
+### A namespace out of room: ResourceQuota rows (#308)
+
+The strip answers "is this cluster out of room" for a reader who may list nodes and every pod.
+The reader the owner expects — narrow RBAC, one or a few namespaces — may do neither, and sees
+"requests not permitted" or no Nodes list at all. What decides whether *their* namespace has room
+is its ResourceQuota: a pod that would take a quota past its hard limit is refused at creation
+("exceeded quota"), which is how a rollout stalls with nothing wrong in any pod. A ResourceQuota is
+readable under the built-in `view` role, so the slice of #308 built is the ResourceQuota list:
+
+- **Details is kubectl's REQUEST and LIMIT columns in one**, `name: used/hard` sorted by name.
+  Against the sandbox (k3s v1.33, `bundle-t`, a quota of 2 pods, 1 CPU, 1Gi of limits and no load
+  balancers, full after two pods and refusing a third) `kubectl get quota` printed
+  `pods: 2/2, requests.cpu: 1/1, services.loadbalancers: 0/0` and `limits.memory: 1Gi/1Gi`, and the
+  row prints the same four, joined.
+- **The status is a deterministic verdict.** **Full** (error) names every resource whose use has
+  reached its hard limit — the next pod or object needing any of it is refused. Otherwise
+  **Almost full** (warn) names the fullest resource from 90 %, kube-prometheus's
+  `KubeQuotaAlmostFull` threshold, so the row turns at the point the common alert does; otherwise
+  **Within quota**. Both unhealthy verdicts are what the list's Unhealthy-only chip keeps.
+- **A hard limit of 0 forbids a resource rather than budgeting it** (`services.loadbalancers: 0`
+  is the common policy), so it is listed but never makes the quota full; without that, every
+  namespace with such a policy would read red.
+- **A limit with no used figure is never counted as within.** Before the quota controller has
+  counted (no `status.used`, an empty one, or one missing a limit) that limit is listed as `—`.
+  Full and Almost full still stand on the limits that were counted, but "Within quota" is a claim
+  about every limit, so without a count for each the row claims nothing (UI rule 20).
+- **The demo's quotas count the demo's own objects** (13 live pods and 1 claim in `payments`, 2
+  pods in `monitoring`, and the payments pods' summed requests and limits), with the hard limits set
+  so one is full and one almost full; `The_demo_quotas_count_the_demos_own_objects` keeps the
+  counts honest.
+- `ResourceQuotaSummaryTests` pins the verdicts with the sandbox's own object; making the Full
+  check `> 100` instead of `>= 100` turns the full-quota test red (checked). Screenshot:
+  `cluster-tab-resource-quotas`, from three demo quotas (almost full, full, with room).
+- **Left on #308:** a per-node capacity view or an overview page, a fleet capacity summary, and
+  namespace-scoped requests on the strip for a reader who may list pods in some namespaces only.
+  Cluster-level limits stay unbuilt for the reason above.
+
 ### Cordon, and the one honest exception to "capability from discovery"
 
 Cordon is a one-field merge patch of `spec.unschedulable`, structurally identical to

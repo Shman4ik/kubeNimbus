@@ -1177,6 +1177,20 @@ internal static class ClusterTabScenarios
         return tab;
     }
 
+    /// <summary>
+    /// #308: the demo's ResourceQuotas, one per state — payments almost out of limits.memory,
+    /// payments' storage quota full, monitoring with room — each with kubectl's REQUEST and
+    /// LIMIT columns in Details.
+    /// </summary>
+    public static ClusterTabViewModel ResourceQuotas()
+    {
+        var tab = DemoTab();
+        var section = tab.SidebarSections.First(s => s.Kinds.Any(k => k.Descriptor is { Group: "", Kind: "ResourceQuota" }));
+        section.IsExpanded = true;
+        tab.SelectKindCommand.Execute(section.Kinds.First(k => k.Descriptor is { Group: "", Kind: "ResourceQuota" }));
+        return tab;
+    }
+
     // ------------------------------------------------------------------ nodes
     //
     // Every one of these runs on the demo cluster, which is where the node dataset lives

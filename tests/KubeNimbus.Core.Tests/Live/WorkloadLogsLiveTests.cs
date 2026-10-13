@@ -58,6 +58,7 @@ public class WorkloadLogsLiveTests
         var added = new ConcurrentBag<string>();
         var refusals = new ConcurrentBag<string>();
         var earlyEnds = new ConcurrentBag<string>();
+        var gone = new ConcurrentBag<string>();
         var deleted = new ConcurrentBag<string>();
         var initial = new List<string>();
         var synced = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -129,6 +130,33 @@ public class WorkloadLogsLiveTests
                     // yet completed and was dropped — the same lost wake-up as #309, in the
                     // test's own copy of the pane.
                     var refusal = $"threw {ex.GetType().Name}: pod {p}: {ex.Message}";
+
+                    // A 404 for a pod deleted mid-rollout — before its request, or while its
+                    // node tore it down — is that pod's stated end, as the pane takes it (#332):
+                    // the pod is read once and, gone or being deleted, ends "gone". Which of
+                    // the delete and the last request comes first is the rollout's business,
+                    // so the test may not depend on it.
+                    if (LogFollowRetry.IsNotFound(ex))
+                    {
+                        DynamicResource? podNow;
+                        try
+                        {
+                            podNow = await client.ReadResourceAsync(ResourceDescriptor.Pods, LiveCluster.Namespace, p, paneCts.Token);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            return "cancelled";
+                        }
+
+                        if (LogFollowRetry.IsPodGone(ex, podNow))
+                        {
+                            gone.Add(p);
+                            return "gone";
+                        }
+
+                        return refusal;
+                    }
+
                     var atStartRun = atStart is null ? null : PodDetails.ContainerRunOf(atStart.Raw, "app");
                     if (!LogFollowRetry.IsNotStartedRefusal(ex, atStartRun))
                     {
@@ -169,9 +197,32 @@ public class WorkloadLogsLiveTests
                     return "ended";
                 }
 
-                await Task.Delay(1000, paneCts.Token);
-                var now = await client.ReadResourceAsync(ResourceDescriptor.Pods, LiveCluster.Namespace, p, paneCts.Token);
-                if (now is null || PodDetails.ContainerRunOf(now.Raw, "app") is not { State: ContainerRunState.Running })
+                // Read until the container runs, not once: a container can take longer than a
+                // second from created to started under load, and one read that found it still
+                // starting ended a new pod's stream with no lines (#332, run 18 of the first
+                // 20-run loop). The pane does not give up there either: its chip reads "not
+                // started" and the pod watch re-opens it once the container has a run.
+                var running = false;
+                try
+                {
+                    for (var attempt = 0; attempt < 60 && !running; attempt++)
+                    {
+                        await Task.Delay(1000, paneCts.Token);
+                        var now = await client.ReadResourceAsync(ResourceDescriptor.Pods, LiveCluster.Namespace, p, paneCts.Token);
+                        if (now is null)
+                        {
+                            return "ended";
+                        }
+
+                        running = PodDetails.ContainerRunOf(now.Raw, "app") is { State: ContainerRunState.Running };
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    return "cancelled";
+                }
+
+                if (!running)
                 {
                     return "ended";
                 }
@@ -226,10 +277,19 @@ public class WorkloadLogsLiveTests
         var at = DateTimeOffset.UtcNow;
         await client.RestartWorkloadAsync(LiveCluster.Deployments, LiveCluster.Namespace, name, at, ct);
 
+        // The two pods the rollout ends on. A replica the rollout created and deleted again
+        // on the way is not one of them, and need not have logged anything (#332).
+        var survivors = new List<string>();
         await LiveCluster.WaitUntilAsync(async () =>
         {
             var pods = (await LiveCluster.PodsOfAsync(client, name, ct)).Where(p => p.Name != decoy).ToList();
-            return pods.Count == 2 && pods.All(p => !initial.Contains(p.Name) && LiveCluster.IsReady(p));
+            var done = pods.Count == 2 && pods.All(p => !initial.Contains(p.Name) && LiveCluster.IsReady(p));
+            if (done)
+            {
+                survivors = pods.Select(p => p.Name).ToList();
+            }
+
+            return done;
         }, TimeSpan.FromSeconds(150), "the restart to replace both pods", ct);
 
         // Old pods' streams end on their own when their containers stop — they are not
@@ -253,15 +313,17 @@ public class WorkloadLogsLiveTests
         var report = string.Join("; ", replacements.Select(p =>
             $"{p}: {(streams.TryGetValue(p, out var s) ? (s.IsCompleted ? s.Result : "running") : "never started")}, "
             + $"{(lines.TryGetValue(p, out var q) ? q.Count : 0)} lines, refusals [{string.Join(" | ", refusals)}], "
-            + $"followed again after an empty early end: [{string.Join(", ", earlyEnds)}]"));
+            + $"followed again after an empty early end: [{string.Join(", ", earlyEnds)}], "
+            + $"ended by a 404 as gone: [{string.Join(", ", gone)}]"));
         Console.WriteLine(report);
-        foreach (var fresh in replacements)
+        foreach (var fresh in survivors)
         {
             await Assert.That(lines.TryGetValue(fresh, out var q) && !q.IsEmpty).IsTrue().Because(report);
         }
 
         // A stream refused because its pod was still starting is refused in the server's
-        // own sentence, the one the pane prints until the retry succeeds.
+        // own sentence, the one the pane prints until the retry succeeds. A 404 for a pod
+        // going away is not a refusal: it ended that pod's stream as "gone" above.
         foreach (var refusal in refusals)
         {
             await Assert.That(refusal.Contains("is waiting to start", StringComparison.Ordinal)
@@ -271,7 +333,7 @@ public class WorkloadLogsLiveTests
         // One stream: sorted by the server's own timestamps, the old pods were still
         // logging after the first new pod had started (maxUnavailable: 0 keeps them
         // running until a replacement is Ready), so the merged output interleaves.
-        var firstNew = replacements.Min(p => lines[p].Min(l => l.At));
+        var firstNew = survivors.Min(p => lines[p].Min(l => l.At));
         var lastOld = initial.Max(p => lines[p].Max(l => l.At));
         await Assert.That(lastOld).IsGreaterThan(firstNew);
 

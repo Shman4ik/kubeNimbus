@@ -83,6 +83,12 @@ public sealed partial class LogSourceViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(Tooltip))]
     private LogSourceState _state = LogSourceState.Starting;
 
+    /// <summary>
+    /// Whether the source's last request was a live follow or a range snapshot — the
+    /// pane's Follow choice when it was opened, never a retry's own (#331).
+    /// </summary>
+    internal bool Follows { get; set; }
+
     /// <summary>Why the stream ended, when it ended for a reason worth stating.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Tooltip))]

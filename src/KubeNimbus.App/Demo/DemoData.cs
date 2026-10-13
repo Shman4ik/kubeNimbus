@@ -531,6 +531,8 @@ public static class DemoData
             // A bound claim and its volume, plus a volume nothing has claimed — the two
             // ends FEAT-47's links join, and the one that has nothing to link to.
             { Group: "", Kind: "PersistentVolumeClaim" or "PersistentVolume" } => OfKind(descriptor.Kind),
+            // #308: one quota almost full, one full, one with room — a namespace out of room.
+            { Group: "", Kind: "ResourceQuota" } => OfKind(descriptor.Kind),
             _ => [],
         };
 

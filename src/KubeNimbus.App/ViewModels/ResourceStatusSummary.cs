@@ -116,6 +116,11 @@ public static class ResourceStatusSummary
             return SummarizeJob(spec, status, details);
         }
 
+        if (group.Length == 0 && kind == "ResourceQuota")
+        {
+            return SummarizeResourceQuota(spec, status);
+        }
+
         // Workload controllers (Deployment/ReplicaSet/StatefulSet/DaemonSet, and any
         // CRD that copies the convention). The Status column says something the Ready
         // column doesn't — repeating "2/3" in both would waste the width.
@@ -442,6 +447,73 @@ public static class ResourceStatusSummary
 
         var text = Int(status, "active") > 0 ? "Running" : "Pending";
         return new ResourceSummary(text, ResourceHealth.Warn, readyText, 0, null, details);
+    }
+
+    /// <summary>The share of a quota at which it reads "almost full" — kube-prometheus's KubeQuotaAlmostFull.</summary>
+    internal const double QuotaAlmostFullPercent = 90;
+
+    /// <summary>
+    /// Whether a namespace is out of room (#308), for the reader who can see only their own
+    /// namespaces: a ResourceQuota is readable under the built-in <c>view</c> role where nodes
+    /// and other namespaces' pods are not. Details is kubectl's REQUEST and LIMIT columns in
+    /// one, <c>name: used/hard</c> sorted by name. The status says which resources are
+    /// <b>Full</b> (error) — use has reached the hard limit, so the next pod or object that
+    /// needs any of it is refused — or else the fullest one when it is <b>Almost full</b>
+    /// (warn, from <see cref="QuotaAlmostFullPercent"/>); otherwise <b>Within quota</b>. A hard limit of 0
+    /// forbids a resource rather than budgeting it (<c>services.loadbalancers: 0</c>), so it
+    /// is listed but never makes the quota full. A limit with no used figure — no
+    /// <c>status.used</c> yet, an empty one, or one missing that limit — is shown as <c>—</c>
+    /// and never counted as within: Full and Almost full still stand on the limits that were
+    /// counted, but "Within quota" needs every limit counted, else the row claims nothing.
+    /// </summary>
+    private static ResourceSummary SummarizeResourceQuota(JsonElement spec, JsonElement status)
+    {
+        var hard = Obj(status, "hard");
+        if (hard.ValueKind != JsonValueKind.Object)
+        {
+            hard = Obj(spec, "hard");
+        }
+
+        if (hard.ValueKind != JsonValueKind.Object)
+        {
+            return ResourceSummary.None;
+        }
+
+        var used = Obj(status, "used");
+        var entries = new List<(string Name, string Used, string Hard, bool Counted, double? Percent)>();
+        foreach (var limit in hard.EnumerateObject())
+        {
+            var hardText = limit.Value.ValueKind == JsonValueKind.String ? limit.Value.GetString() ?? "" : limit.Value.ToString();
+            var usedText = Str(used, limit.Name);
+            var hardAmount = Quantity.Parse(hardText);
+            var usedAmount = Quantity.Parse(usedText);
+            var percent = hardAmount is { } h && h > 0 && usedAmount is { } u ? u * 100d / h : (double?)null;
+            entries.Add((limit.Name, usedText.Length > 0 ? usedText : "—", hardText,
+                hardAmount is not null && usedAmount is not null, percent));
+        }
+
+        entries.Sort((a, b) => string.CompareOrdinal(a.Name, b.Name));
+        var details = string.Join(", ", entries.Select(e => $"{e.Name}: {e.Used}/{e.Hard}"));
+
+        // What has been counted can be full or almost full on its own evidence.
+        var full = entries.Where(e => e.Percent >= 100).Select(e => e.Name).ToList();
+        if (full.Count > 0)
+        {
+            return new ResourceSummary($"Full: {string.Join(", ", full)}", ResourceHealth.Error, "", 0, null, details);
+        }
+
+        var fullest = entries.Where(e => e.Percent is not null).OrderByDescending(e => e.Percent).FirstOrDefault();
+        if (fullest.Percent >= QuotaAlmostFullPercent)
+        {
+            return new ResourceSummary(
+                $"Almost full: {fullest.Name} {Math.Floor(fullest.Percent.Value):0}%", ResourceHealth.Warn, "", 0, null, details);
+        }
+
+        // "Within quota" is a claim about every limit, so it needs a count for every one: a
+        // limit with no (or an unreadable) used figure leaves the row claiming nothing.
+        return entries.Count > 0 && entries.All(e => e.Counted)
+            ? new ResourceSummary("Within quota", ResourceHealth.Ok, "", 0, null, details)
+            : new ResourceSummary("", ResourceHealth.Idle, "", 0, null, details);
     }
 
     /// <summary>
@@ -772,6 +844,7 @@ public static class ResourceStatusSummary
         "/ConfigMap", "/Secret", "/Service", "/Node", "/PersistentVolumeClaim", "/PersistentVolume",
         "batch/CronJob", "networking.k8s.io/Ingress",
         "/Endpoints", "discovery.k8s.io/EndpointSlice", "networking.k8s.io/NetworkPolicy",
+        "/ResourceQuota",
     };
 
     private static string KeyOf(ResourceDescriptor descriptor) => $"{descriptor.Group}/{descriptor.Kind}";

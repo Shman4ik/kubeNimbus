@@ -241,3 +241,27 @@ the follow never had a run to lose lines from, and the new one backfills with th
 tail. It cannot loop: the restarted follow starts from a running container. The single-pod
 pane is unchanged; it is opened on a pod someone chose, not the instant one appears.
 `LogStreamStartRaceTests` (App) pins the predicate.
+
+**A 404 for the log of a pod going away is that pod's end, not a failure (#332).** A 20-run
+loop of `Live/WorkloadLogsLiveTests` failed once on `the server could not find the requested
+resource ( pods/log logger-…)` (404) during a rollout: a log request landed after its pod had left
+the node. A 404 on `pods/log` comes in two shapes. The API server's own, `pods "x" not found`, once
+the object is deleted — read on the sandbox by deleting a running pod and asking for its log every
+100 ms: the log, then "unable to retrieve container logs" for a moment, then the 404. And the
+kubelet's, relayed through the API server's response checker as the generic sentence with
+`( pods/log x)`, when the node no longer has a pod whose status still says its container ran. Neither
+is a pod coming up: the API server answers a container that has not run from the pod's status, with
+the 400 the not-started wait reads (twelve pods asked for their log from the moment they were
+created all got that 400 and never a 404). So on a 404 the pane reads the pod once
+(`LogFollowRetry.IsPodGone`): gone, or carrying a `deletionTimestamp`, and the source takes the
+state the Deleted event gives it — `Gone`, the chip reading **deleted**, "Pod deleted; its lines
+are kept." — rather than
+**failed** with the server's sentence until the event caught up, or for good if the event had come
+first. A pod that is still there and not being deleted keeps the failure, said, and is retried on its
+next Modified event as before. `LogFollowRetryTests` pins the verdict (`NotFoundVerdict`; turning
+the gone verdict into Failed turns it red, checked). The live test takes a 404 the same way, reads
+the pods it checks for lines from the rollout's end state rather than from every pod that was ever
+added, and waits for an empty follow's container to start for as long as the refusal wait does
+rather than one read a second later (the other failure of the first loop: a new pod still starting
+after a second, its stream ended with no lines). After both changes, two loops of 20 against the
+sandbox (k3s v1.33) passed 20/20 each; neither hit the 404 race, which the unit test therefore pins.
