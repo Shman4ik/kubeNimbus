@@ -99,6 +99,22 @@ Re-running reuses a live container and re-applies the manifests. `-Name`/`-Port`
 the fleet views for real. See [`scripts/README.md`](../../scripts/README.md) for the
 full flag table.
 
+**Tearing down one sandbox never deletes another's kubeconfig** (#379). `sandbox-down`
+used to fall back to `.sandbox/kubeconfig.yaml` whatever `-Name` said, and the README's own
+line for the Argo sandbox (`sandbox-down.ps1 -Name kubenimbus-argo`, no `-Kubeconfig`) deleted
+the running shared sandbox's file, taking the live tests' and the QA seed's cluster with it.
+Both `sandbox-down` scripts now default to the file the up scripts write for that name
+(`.sandbox/argo-kubeconfig.yaml` for `kubenimbus-argo`, as `argo-sandbox-up.ps1` assumes), and
+delete a kubeconfig only when its `current-context` is `-Name`, which holds for every file
+`sandbox-up` writes because it renames k3s's `default` context to the container name; any other
+file is kept with a warning. Checked with a `docker` shim (so no real container was touched)
+against scratch files in a worktree's `.sandbox/`: `-Name kubenimbus-argo` removed only
+`argo-kubeconfig.yaml`; the same with `-Kubeconfig` pointed at the shared file, and
+`-Name kubenimbus-sandbox-b` with no `-Kubeconfig`, kept it with the warning; the plain default
+still removed `kubeconfig.yaml`; a file with no `current-context` was kept. The `.sh` twin was
+checked the same way. `-Wsl` was not exercised: its keep-alive record sits beside the kubeconfig,
+which for the Argo sandbox is the same `.sandbox/` directory as before.
+
 **Docker Desktop is not required.** `-Wsl` on both `.ps1` scripts routes every
 docker call through `wsl.exe --exec docker ...` instead — for Docker Engine installed
 directly inside a WSL2 distro

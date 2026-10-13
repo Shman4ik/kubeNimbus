@@ -2,6 +2,9 @@
 # Tears down a sandbox cluster started by sandbox-up.sh.
 #
 #   ./scripts/sandbox-down.sh [--name N] [--kubeconfig PATH] [--keep-kubeconfig]
+#
+# The kubeconfig defaults to .sandbox/argo-kubeconfig.yaml for kubenimbus-argo and
+# .sandbox/kubeconfig.yaml otherwise, and is deleted only when its current-context is N (#379).
 set -euo pipefail
 
 NAME=kubenimbus-sandbox
@@ -13,13 +16,18 @@ while [ $# -gt 0 ]; do
     --name)             NAME="$2"; shift 2 ;;
     --kubeconfig)       KUBECONFIG_PATH="$2"; shift 2 ;;
     --keep-kubeconfig)  KEEP=1; shift ;;
-    -h|--help)          sed -n '2,4p' "$0"; exit 0 ;;
+    -h|--help)          sed -n '2,7p' "$0"; exit 0 ;;
     *)                  echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-: "${KUBECONFIG_PATH:=$(dirname "$SCRIPT_DIR")/.sandbox/kubeconfig.yaml}"
+# The Argo sandbox has its own file; falling back to the shared one deleted the running
+# kubenimbus-sandbox's kubeconfig on `--name kubenimbus-argo` (#379).
+if [ -z "$KUBECONFIG_PATH" ]; then
+  if [ "$NAME" = kubenimbus-argo ]; then FILE=argo-kubeconfig.yaml; else FILE=kubeconfig.yaml; fi
+  KUBECONFIG_PATH="$(dirname "$SCRIPT_DIR")/.sandbox/$FILE"
+fi
 
 if [ -n "$(docker ps -a --filter "name=^/${NAME}$" --format '{{.Names}}')" ]; then
   docker rm -f "$NAME" >/dev/null
@@ -29,8 +37,14 @@ else
 fi
 
 if [ "$KEEP" = 0 ] && [ -f "$KUBECONFIG_PATH" ]; then
-  rm -f "$KUBECONFIG_PATH"
-  echo "Removed $KUBECONFIG_PATH."
+  # sandbox-up names the context after the container; another sandbox's file is never ours.
+  CONTEXT="$(awk '/^current-context:/ { v = $2; gsub(/["'"'"']/, "", v); print v; exit }' "$KUBECONFIG_PATH")"
+  if [ "$CONTEXT" != "$NAME" ]; then
+    echo "Warning: kept $KUBECONFIG_PATH: its current context is '$CONTEXT', not '$NAME'. Pass the sandbox's own file with --kubeconfig, or delete it by hand." >&2
+  else
+    rm -f "$KUBECONFIG_PATH"
+    echo "Removed $KUBECONFIG_PATH."
+  fi
 fi
 
 # A copy installed by --install-kubeconfig is not ours to delete (the user may

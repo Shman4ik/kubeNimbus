@@ -6,9 +6,16 @@
 .PARAMETER Name
     Docker container name. Default: kubenimbus-sandbox.
 
+.PARAMETER Kubeconfig
+    The sandbox's kubeconfig, deleted after the container (it points at a cluster that no
+    longer exists). Default: derived from -Name, the way the up scripts write it:
+    .sandbox/argo-kubeconfig.yaml for kubenimbus-argo, .sandbox/kubeconfig.yaml otherwise.
+    The file is deleted only when its current-context is -Name (sandbox-up renames k3s's
+    `default` context to the container name), so tearing down one sandbox never deletes
+    another one's kubeconfig (#379).
+
 .PARAMETER KeepKubeconfig
-    Leave .sandbox/kubeconfig.yaml in place (default is to delete it, since it
-    points at a cluster that no longer exists).
+    Leave the kubeconfig in place.
 
 .PARAMETER Wsl
     Route docker through `wsl.exe --exec docker ...` — pass this if the sandbox was
@@ -34,7 +41,20 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-if (-not $Kubeconfig) { $Kubeconfig = Join-Path $repoRoot '.sandbox/kubeconfig.yaml' }
+# The Argo sandbox writes its own file (argo-sandbox-up.ps1 and the documented sandbox-up line
+# use .sandbox/argo-kubeconfig.yaml); falling back to the shared file here deleted the running
+# kubenimbus-sandbox's kubeconfig on `sandbox-down.ps1 -Name kubenimbus-argo` (#379).
+if (-not $Kubeconfig) {
+    $file = if ($Name -eq 'kubenimbus-argo') { 'argo-kubeconfig.yaml' } else { 'kubeconfig.yaml' }
+    $Kubeconfig = Join-Path $repoRoot ".sandbox/$file"
+}
+
+# The context a kubeconfig selects, read as text (no YAML parser in a bare pwsh); $null when
+# the file has no top-level current-context line.
+function Get-CurrentContext([string] $Path) {
+    $line = Select-String -Path $Path -Pattern '^current-context:\s*["'']?([^"''\s]+)' | Select-Object -First 1
+    if ($line) { $line.Matches[0].Groups[1].Value } else { $null }
+}
 
 # The same `docker` shadow and keep-alive functions sandbox-up.ps1 -Wsl uses.
 if ($Wsl) { . (Join-Path $PSScriptRoot 'wsl-docker.ps1') }
@@ -63,8 +83,15 @@ if ($Wsl) {
 }
 
 if (-not $KeepKubeconfig -and (Test-Path $Kubeconfig)) {
-    Remove-Item $Kubeconfig -Force
-    Write-Host "Removed $Kubeconfig." -ForegroundColor Green
+    $context = Get-CurrentContext $Kubeconfig
+    if ($context -ne $Name) {
+        # Another sandbox's file (or one this script did not write): never ours to delete.
+        Write-Warning "Kept ${Kubeconfig}: its current context is '$context', not '$Name'. Pass the sandbox's own file with -Kubeconfig, or delete it by hand."
+    }
+    else {
+        Remove-Item $Kubeconfig -Force
+        Write-Host "Removed $Kubeconfig." -ForegroundColor Green
+    }
 }
 
 # A copy installed by -InstallKubeconfig is not ours to delete (the user may have

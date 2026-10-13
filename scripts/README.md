@@ -115,6 +115,15 @@ Tear down with `./scripts/sandbox-down.ps1` (or `.sh`). Re-running `sandbox-up`
 reuses a live container and re-applies the manifests; `-Recreate` / `--recreate`
 starts from scratch.
 
+`sandbox-down` deletes the sandbox's kubeconfig after the container, unless
+`-KeepKubeconfig` / `--keep-kubeconfig` is passed. Without `-Kubeconfig` it takes the file
+the up scripts write for that name: `.sandbox/argo-kubeconfig.yaml` for `kubenimbus-argo`,
+`.sandbox/kubeconfig.yaml` for any other. It deletes the file only when the file's
+`current-context` is the `-Name` it tears down (`sandbox-up` names the context after the
+container), and otherwise keeps it with a warning. So tearing down a second sandbox never
+deletes the shared one's kubeconfig (#379); pass the second sandbox's own file with
+`-Kubeconfig` when it is not the Argo one.
+
 | Flag | Default | |
 |---|---|---|
 | `-Name` / `--name` | `kubenimbus-sandbox` | container name — vary it to run a second cluster and exercise multi-cluster/fleet views |
@@ -140,7 +149,7 @@ names), and skip with the reason without it:
 ```powershell
 ./scripts/sandbox-up.ps1 -Name kubenimbus-argo -Port 6551 -SkipApps -Kubeconfig .sandbox/argo-kubeconfig.yaml
 ./scripts/argo-sandbox-up.ps1                     # refuses the shared kubenimbus-sandbox
-./scripts/sandbox-down.ps1 -Name kubenimbus-argo  # when done
+./scripts/sandbox-down.ps1 -Name kubenimbus-argo  # when done; removes only .sandbox/argo-kubeconfig.yaml
 ```
 
 `argo-sandbox-up.ps1` downloads `install.yaml` of **Argo CD v3.5.4** from the release tag and
