@@ -66,10 +66,17 @@ internal static class HarnessDeterminism
     }
 
     /// <summary>
-    /// The scenarios rendered twice in one run: the interaction ones, which press keys, move
-    /// the pointer or the focus before the capture, and so are the ones that differed.
+    /// Set by <c>--twice</c>: the nightly run (<c>.github/workflows/nightly-determinism.yml</c>)
+    /// renders the interaction scenarios twice. A PR's smoke test renders each once, because the
+    /// second render is a full rebuild of the scenario and cost about a minute per shard.
     /// </summary>
-    internal static bool RendersTwice(string name) => name.StartsWith("ux-", StringComparison.Ordinal);
+    internal static bool Twice { get; set; }
+
+    /// <summary>
+    /// The scenarios rendered twice in a <c>--twice</c> run: the interaction ones, which press
+    /// keys, move the pointer or the focus before the capture, and so are the ones that differed.
+    /// </summary>
+    internal static bool RendersTwice(string name) => Twice && name.StartsWith("ux-", StringComparison.Ordinal);
 
     /// <summary>
     /// Records the second render of <paramref name="path"/> when it is not byte-identical to the

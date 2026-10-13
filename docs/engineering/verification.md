@@ -519,10 +519,17 @@ invalidates every visual and ticks the renderer before each capture. The harness
 every control's `Transitions` off (a style added after the app's), so a capture can never land
 part-way through a brush transition such as nimbusUi's `.soft` buttons have, and sets every
 `TextBox`'s `CaretBlinkInterval` to zero, so a focused box always draws its caret instead of
-whichever half of the blink the wall clock had reached. And **every `ux-*` scenario is rendered
-twice in one run and the run fails if the two PNGs differ** (`HarnessDeterminism.Compare`; the
-second render skips the walks, and is written as `*.second.png` beside the first only when it
-differs). The in-run check found one more: `ux-log-search-keys` enqueued its three test lines
+whichever half of the blink the wall clock had reached. And **with `--twice`, every `ux-*`
+scenario is rendered twice in one run and the run fails if the two PNGs differ**
+(`HarnessDeterminism.Compare`; the second render skips the walks, and is written as
+`*.second.png` beside the first only when it differs). **A PR renders each scenario once; the
+double render runs nightly** on `main` (`.github/workflows/nightly-determinism.yml`, 03:43 UTC
+and by hand, not a required check), because the second render is a full rebuild of the scenario
+and measured about 340 s for the 50 `ux-*` scenarios on Windows, roughly a minute per XAML
+smoke shard against a PR's ~3.5 min (the owner's call on PR #381). On failure it uploads the
+renders with their `*.second.png` for three days. A scenario that turns nondeterministic is
+therefore reported the night after its PR merges. Locally: `dotnet run --project
+tools/Screenshot -- <dir> ux- --twice` (any filter works; `--twice` may go anywhere). The in-run check found one more: `ux-log-search-keys` enqueued its three test lines
 while the demo replay was still delivering, so they landed among its last lines at a different
 place each run; `KeyboardChecks.LogSearchKeys` now waits for `LogSettle` first. Measured: before
 the repaint, the in-run check failed `ux-keyboard-walk` on every run; after the fixes, two full

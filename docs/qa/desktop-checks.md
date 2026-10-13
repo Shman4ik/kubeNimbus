@@ -465,11 +465,13 @@ and read what ran through the clipboard or a marker file (`echo hi > /tmp/m`,
   caption Close's name: aim by bounds.
 - **P-9 [input]** (#362) Window 1280 DIP, `Widgets` in `demo-shop`: `drag` the right edge of the
   `SKU` header 40 px right and read its width; switch to Pods, then back to `Widgets`: `SKU` has the
-  dragged width (within 1 px), not the one before the drag. Quit and start the app again, open
-  `Widgets`: still the dragged width. Reset columns (header right-click) puts it back.
+  dragged width (within 1 px), not the one before the drag. Reset columns (header right-click) puts
+  it back. Not across a restart: `qa-app.ps1 -Stop` deletes the profile and its `workspace.json`.
 - **P-10 [text]** (#363) On `qa-cut`, open the `shop-web` Service pane, `qa-netcut.ps1 cut`, wait for
-  "Could not read the pods: Watch connection lost (…); retrying in …", then `restore` and touch
-  nothing. Within the retry's own seconds plus about five more (at most 35 s after `restore`), the
+  "Could not read the pods: Watch connection lost (…); retrying in …". While it is cut the pane
+  keeps its backends and the selected one (`dump` them before the cut and during it), with no
+  "Reading the pods…" between retries; do the same on the Pods list (`qa-cut`, `qa-shop`), whose
+  rows and selected row stay. Then `restore` and touch nothing. Within the retry's own seconds plus about five more (at most 35 s after `restore`), the
   InfoBar is gone and the verdict is back. Repeat with the cut held until the line reads "retrying
   in 16s" or more before `restore`. FAIL is the line still on screen a minute after `restore`.
 

@@ -22,6 +22,12 @@ using Nimbus.Ui.Fonts;
 // list across a job matrix (#347). It may appear anywhere in the arguments.
 (ShardPlan.Current, args) = ShardPlan.Parse(args);
 
+// `--twice` renders every ux-* scenario a second time and fails the run when the two PNGs differ
+// (#360, HarnessDeterminism). The nightly workflow passes it; a PR's smoke test does not, so it
+// costs a PR nothing. It may appear anywhere in the arguments.
+HarnessDeterminism.Twice = args.Contains("--twice");
+args = [.. args.Where(a => a != "--twice")];
+
 // `-- --stress` runs StressChecks instead of rendering: every data surface fed a large
 // cluster's worth of objects, with its visuals, collection notifications and time checked
 // against a budget. Exits non-zero when anything is over.
@@ -573,7 +579,8 @@ for (var position = 0; position < scenarios.Length; position++)
     {
         Capture(name, theme, build);
 
-        // #360: an interaction scenario is rendered a second time and must come out byte-identical.
+        // #360, with --twice: an interaction scenario is rendered a second time and must come out
+        // byte-identical.
         if (HarnessDeterminism.RendersTwice(name))
         {
             Capture(name, theme, build, again: true);

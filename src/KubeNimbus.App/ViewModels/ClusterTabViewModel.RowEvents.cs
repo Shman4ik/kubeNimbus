@@ -17,6 +17,9 @@ public sealed partial class ClusterTabViewModel
     /// Internal rather than private only so that test can drive this path for real;
     /// nothing else in the app calls it.
     /// </summary>
+    /// <summary>The list watch's last "connection lost" line, cleared by the Synced after a reconnect.</summary>
+    private string? _lostWatchWarning;
+
     internal void Apply(ResourceEvent<DynamicResource> evt)
     {
         ApplyOne(evt);
@@ -117,6 +120,17 @@ public sealed partial class ClusterTabViewModel
                 // an empty namespace this is the only frame that ever arrives, so it is
                 // what settles "no objects" against "not there yet".
                 IsListLoading = false;
+
+                // A Synced with no Reset before it is a resumed watch the server answered after
+                // a lost connection (#363): the rows stay as they are, and the "connection
+                // lost; retrying" line goes, because the retry has happened. Only that line: a
+                // warning from anywhere else is not the watch's to clear.
+                if (_lostWatchWarning is { } lost && ConnectionWarning == lost)
+                {
+                    ConnectionWarning = null;
+                }
+
+                _lostWatchWarning = null;
                 break;
 
             case ResourceEventType.Added or ResourceEventType.Modified when evt.Resource is { } resource:

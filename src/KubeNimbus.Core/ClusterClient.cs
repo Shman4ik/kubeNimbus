@@ -393,6 +393,10 @@ public sealed partial class ClusterClient : IDisposable
             string? resourceVersion = null;
             var needRelist = true;
 
+            // Set when a connection is lost and cleared by the next frame that says the stream is
+            // back (#363); see the lost-connection catch below.
+            var reconnecting = false;
+
             while (!ct.IsCancellationRequested)
             {
                 try
@@ -410,12 +414,23 @@ public sealed partial class ClusterClient : IDisposable
                         // list request is still in flight (UI rule 18).
                         await writer.WriteAsync(ResourceEvent<T>.Synced, ct).ConfigureAwait(false);
                         needRelist = false;
+                        reconnecting = false;
                         backoff = InitialBackoff;
                     }
 
                     var relist = await StreamWatchAsync(
                         listPath, resourceVersion!, deserialize, resourceVersionOf, writer,
-                        rv => resourceVersion = rv, extraQuery, connectionLost, ct).ConfigureAwait(false);
+                        rv => resourceVersion = rv, extraQuery, connectionLost, ct,
+                        opened: () =>
+                        {
+                            if (reconnecting)
+                            {
+                                // The server answered the resumed watch: the reader is as up to
+                                // date as a resumed watch makes it, which is what Synced says.
+                                reconnecting = false;
+                                writer.TryWrite(ResourceEvent<T>.Synced);
+                            }
+                        }).ConfigureAwait(false);
                     if (relist)
                     {
                         needRelist = true;
@@ -489,14 +504,15 @@ public sealed partial class ClusterClient : IDisposable
                     connectionLost?.Invoke(new WatchConnectionException(
                         $"Watch connection lost ({Describe(ex)}); retrying in {backoff.TotalSeconds:0}s.", ex));
 
-                    // The retry relists rather than resuming from the last resourceVersion
-                    // (#363). A reader clears its "connection lost" line when the next frame
-                    // arrives, and a resumed watch on a quiet collection sends none: the QA run
-                    // left a Service pane on "retrying in 16s" for minutes after the network
-                    // came back, with the watch itself healthy. The relist's Reset and Synced
-                    // are the frames that say the connection is back, and they also cover
-                    // whatever changed while it was down.
-                    needRelist = true;
+                    // The retry resumes from the last resourceVersion and keeps what the reader
+                    // holds: a relist would start with a Reset, and every list clears its rows
+                    // and selection on one, at every backoff of an outage. But a reader clears
+                    // its "connection lost" line on the next frame, and a resumed watch on a
+                    // quiet collection sends none: the QA run left a Service pane on "retrying in
+                    // 16s" for minutes with a healthy watch behind it (#363). So the first
+                    // resumed watch the server answers after a loss is followed by a Synced,
+                    // the frame that says the reader is current again.
+                    reconnecting = true;
                     await Task.Delay(backoff, ct).ConfigureAwait(false);
                     backoff = backoff * 2 > MaxBackoff ? MaxBackoff : backoff * 2;
                 }
@@ -572,7 +588,8 @@ public sealed partial class ClusterClient : IDisposable
         Action<string?> updateResourceVersion,
         string extraQuery,
         Action<Exception>? connectionLost,
-        CancellationToken ct)
+        CancellationToken ct,
+        Action? opened = null)
         where T : class
     {
         var query = $"?watch=true&allowWatchBookmarks=true&resourceVersion={Uri.EscapeDataString(resourceVersion)}{extraQuery}";
@@ -592,6 +609,7 @@ public sealed partial class ClusterClient : IDisposable
         }
 
         response.EnsureSuccessStatusCode();
+        opened?.Invoke();
 
         await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
         var reader = new BoundedLineReader(stream, MaxWatchFrameBytes, discardOverflow: false);
