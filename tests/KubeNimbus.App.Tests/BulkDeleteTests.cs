@@ -261,7 +261,7 @@ public class BulkDeleteTests
     {
         using var server = new StubApiServer();
         var tab = PodTab(server.Connect());
-        var shell = new MainWindowViewModel();
+        var shell = new MainWindowViewModel { Mode = ShellMode.Resources };
         shell.Tabs.Add(tab);
         shell.SelectedTab = tab;
 

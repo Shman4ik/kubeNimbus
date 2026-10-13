@@ -204,8 +204,9 @@ Two ways to drive it from there:
   k3s containers with it, so `-Wsl` also starts a hidden `wsl.exe --exec sleep
   infinity` and records its pid in `wsl-keepalive.json` beside the kubeconfig
   (`scripts/wsl-docker.ps1`); a live one is reused. `qa-preflight.ps1` fails a
-  WSL-hosted sandbox without it. Stop it with `Stop-Process -Id <pid>` when done:
-  `sandbox-down.ps1` leaves it, since the Argo sandbox may still need the distro.
+  WSL-hosted sandbox without it. `sandbox-down.ps1 -Wsl` stops it and deletes the
+  record once no `kubenimbus*` container is left in the distro; while the Argo sandbox
+  (or another one) is still there, it leaves it running.
 
 ## The classic path (`~/.kube/config`)
 

@@ -1489,7 +1489,30 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         // With several rows selected, only Delete, which acts on all of them (#305): every
         // entry below acts on one object, and the palette runs a command's Execute, which
         // does not consult CanExecute, so leaving them listed would act on the current row.
-        if (SelectedTab is { HasMultipleSelection: true } selectionTab)
+        //
+        // The Applications mode hides the Resources view, its selection and its confirm strip,
+        // so none of these may act on that selection there (#373, UI rule 20: "Delete" offered
+        // for a row nobody can see). There the palette offers what the open Application page
+        // itself offers and which lands on its own strip or editor; logs are already on the
+        // page, and exec, port-forward and delete are not page actions, so they are not offered.
+        if (IsApplicationsMode)
+        {
+            if (SelectedTab?.Applications.Page is { } page)
+            {
+                if (page.CanRestart)
+                {
+                    yield return Catalog(CommandId.RolloutRestart, $"{page.Name} · roll its pods",
+                        () => page.RestartCommand.Execute(null));
+                }
+
+                if (page.CanEditYaml)
+                {
+                    yield return Catalog(CommandId.EditYaml, $"{page.Name} · its workload",
+                        () => page.EditYamlCommand.Execute(null));
+                }
+            }
+        }
+        else if (SelectedTab is { HasMultipleSelection: true } selectionTab)
         {
             if (selectionTab.CanDeleteSelectedRow)
             {
@@ -1703,7 +1726,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 "RBAC · scan every subject", "AccountMultipleIconGeometry",
                 () => connected.OpenWhoCanCommand.Execute(null));
 
-            if (connected.SelectedRowAsSubject is { } subject)
+            // A ServiceAccount row of the Resources list, which the Applications mode hides (#373).
+            if (!IsApplicationsMode && connected.SelectedRowAsSubject is { } subject)
             {
                 yield return new PaletteItem(
                     $"Access review: {subject.Name}",
