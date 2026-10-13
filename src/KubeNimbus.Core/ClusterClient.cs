@@ -488,6 +488,15 @@ public sealed partial class ClusterClient : IDisposable
                 {
                     connectionLost?.Invoke(new WatchConnectionException(
                         $"Watch connection lost ({Describe(ex)}); retrying in {backoff.TotalSeconds:0}s.", ex));
+
+                    // The retry relists rather than resuming from the last resourceVersion
+                    // (#363). A reader clears its "connection lost" line when the next frame
+                    // arrives, and a resumed watch on a quiet collection sends none: the QA run
+                    // left a Service pane on "retrying in 16s" for minutes after the network
+                    // came back, with the watch itself healthy. The relist's Reset and Synced
+                    // are the frames that say the connection is back, and they also cover
+                    // whatever changed while it was down.
+                    needRelist = true;
                     await Task.Delay(backoff, ct).ConfigureAwait(false);
                     backoff = backoff * 2 > MaxBackoff ? MaxBackoff : backoff * 2;
                 }

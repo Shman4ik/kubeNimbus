@@ -506,6 +506,29 @@ Windows runs of one build, back to back, matched in 499 of 502 PNGs; the three t
 (`ux-keyboard-walk` in both themes, the command bar's focus; `ux-log-search-keys.light`, a
 one-pixel caret column) are interaction timing, not a clock. Core is outside the ban (`PrinterColumns` takes `now` from its caller, and
 its other reads are connection timing), which is what `ClockChecks` is for.
+**The interaction scenarios were painted in patches, and are now repainted whole (#360,
+2026-10-13).** `ux-keyboard-walk`'s light render came out in four versions over a few runs of
+one build, each a couple of dozen pixels ±1 in one colour channel, along the demo bar's rounded
+edges, the Resources pill's edge or the help icon's, and once down a straight seam inside the
+demo bar. Two captures of the same window a second apart were identical, so nothing was still
+moving: the compositor redraws only what was invalidated, the frame is a patchwork of passes
+clipped to different dirty rectangles, and an edge anti-aliased across a clip boundary comes out a
+shade different depending on which passes ran, which a focus walk decides by timing. Invalidating
+the window alone did nothing (it draws nothing itself), so `HarnessDeterminism.RepaintWhole`
+invalidates every visual and ticks the renderer before each capture. The harness also turns
+every control's `Transitions` off (a style added after the app's), so a capture can never land
+part-way through a brush transition such as nimbusUi's `.soft` buttons have, and sets every
+`TextBox`'s `CaretBlinkInterval` to zero, so a focused box always draws its caret instead of
+whichever half of the blink the wall clock had reached. And **every `ux-*` scenario is rendered
+twice in one run and the run fails if the two PNGs differ** (`HarnessDeterminism.Compare`; the
+second render skips the walks, and is written as `*.second.png` beside the first only when it
+differs). The in-run check found one more: `ux-log-search-keys` enqueued its three test lines
+while the demo replay was still delivering, so they landed among its last lines at a different
+place each run; `KeyboardChecks.LogSearchKeys` now waits for `LogSettle` first. Measured: before
+the repaint, the in-run check failed `ux-keyboard-walk` on every run; after the fixes, two full
+runs of all 49 `ux-*` scenarios (each rendered twice per theme) passed the check and matched
+each other byte for byte, and the 18 published screenshots rendered byte-identical to the
+committed ones.
 
 When Docker is available (unlike this session — `docker version` succeeds but
 `dockerd` isn't running here), prefer driving the harness against a real

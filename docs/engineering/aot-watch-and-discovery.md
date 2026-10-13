@@ -61,6 +61,18 @@ with `HttpCompletionOption.ResponseHeadersRead`:
   paginated initial list (Reset + Added per item) → resumable watch →
   relist on `ERROR` frame / 410 Gone → exponential backoff with
   `connectionLost` callback on transient failures.
+- **The retry after a lost connection relists** (#363). It used to resume from the last
+  resourceVersion, which is cheaper, but a reader clears its "Watch connection lost …;
+  retrying in Ns." line when the next frame arrives, and a resumed watch on a quiet collection
+  sends none. The QA VM run cut and restored the connection under a Service pane: the watch
+  failed twice in a row (the second time as an `IOException` mid-stream while reconnecting),
+  the retry after that succeeded, and the pane said "retrying in 16s" for minutes afterwards
+  with a healthy watch behind it. The relist's `Reset` and `Synced` are the frames that tell
+  every reader the connection is back, and they also cover what changed while it was down.
+  A clean close (the server's own watch timeout) still resumes without a relist.
+  `WatchReconnectTests` fails the watch twice in a row and then holds a quiet one open, and
+  waits for a `Synced` after the second warning (mutation-checked: without the relist it times
+  out with "Reset, Synced, lost, lost").
 - **A 401 is not a transient failure.** It means the credential expired or was revoked,
   and retrying with it fails the same way for ever — which the loop used to do. On a 401
   it calls `ClusterClient.RefreshCredentialsAsync` (re-read the kubeconfig, re-run the

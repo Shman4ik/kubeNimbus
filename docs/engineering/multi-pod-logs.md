@@ -224,6 +224,18 @@ missing. Restarting the stream is one press of Follow, and the sentence says so.
 `LogStreamEndTests` pins the verdicts; the real status shapes (running, waiting
 CrashLoopBackOff, 404) were read from the sandbox. Not observed: a real idle-timeout drop.
 
+**The sandbox does not close follows (#368, 2026-10-13).** The QA VM run saw one or two of
+`shop-web`'s chips read "The connection closed, not the container" within a minute, with
+Follow on. Five follows through one `ClusterClient` against the k3s v1.33.4 sandbox from the
+host — a container that printed one line and then slept, and both containers of both
+`demo-shop/shop-web` pods (a probe every 10 s and a heartbeat every 3 s) — were all still open
+after 180 s. So neither k3s nor the client ends a quiet or a chatty follow within minutes, and
+the verdict the chips printed was a true one: the connection closed while the container ran.
+In the VM the sandbox runs inside the VM's own WSL and the app reaches it through WSL's
+localhost relay, which this machine does not have; that path is the suspect, and desktop check
+G-21 runs `kubectl logs -f` through it beside the pane to tell. The pane still does not reconnect on its own,
+for the reason above.
+
 **The one exception: a follow opened before its container started.** A real kubelet
 answers a follow requested between a container being *created* and *started* with a 200
 and an empty body that closes at once — it ends a follow at the end of the log of a

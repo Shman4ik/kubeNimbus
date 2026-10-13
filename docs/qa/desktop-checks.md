@@ -292,6 +292,13 @@ SidebarSplitter -DX 300` (and back).
   the pattern; clear the box and type the same pattern again a few seconds later: the count is
   at least the first one (lines keep arriving). A 0 count either time is a FAIL, not "the counts
   agree". Before #377 a slow first match counted as no match and hid matching lines silently.
+- **G-21 [text][timing]** (#368) `Logs (all pods)` on `shop-web`, Follow on, and leave it for three
+  minutes with nothing clicked; in a terminal beside it run `kubectl -n qa-shop logs -f
+  deploy/shop-web -c access-log-tailer --timestamps` for the same three minutes. Record the time each
+  chip that reads "The connection closed, not the container" changed, and whether kubectl's stream
+  ended on its own (and when). PASS when no chip ends; when chips end, kubectl's stream ending too
+  says the VM's path to the sandbox closes long connections, and kubectl still running says the app
+  does: quote both either way. The host sandbox kept five follows open for 180 s (#368).
 
 ## Batch G2 — logs against the live API server
 
@@ -456,6 +463,15 @@ and read what ran through the clipboard or a marker file (`echo hi > /tmp/m`,
   `qa-limited` Suspend fails with `cronjobs.batch "qa-tick" is forbidden: … cannot patch resource
   "cronjobs" … (403 Forbidden)` and `.spec.suspend` is unchanged. The strip's Close has the
   caption Close's name: aim by bounds.
+- **P-9 [input]** (#362) Window 1280 DIP, `Widgets` in `demo-shop`: `drag` the right edge of the
+  `SKU` header 40 px right and read its width; switch to Pods, then back to `Widgets`: `SKU` has the
+  dragged width (within 1 px), not the one before the drag. Quit and start the app again, open
+  `Widgets`: still the dragged width. Reset columns (header right-click) puts it back.
+- **P-10 [text]** (#363) On `qa-cut`, open the `shop-web` Service pane, `qa-netcut.ps1 cut`, wait for
+  "Could not read the pods: Watch connection lost (…); retrying in …", then `restore` and touch
+  nothing. Within the retry's own seconds plus about five more (at most 35 s after `restore`), the
+  InfoBar is gone and the verdict is back. Repeat with the cut held until the line reads "retrying
+  in 16s" or more before `restore`. FAIL is the line still on screen a minute after `restore`.
 
 ## Batch K — Argo CD on the demo cluster
 

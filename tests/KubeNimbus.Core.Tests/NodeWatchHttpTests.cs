@@ -349,6 +349,20 @@ public class NodeWatchHttpTests
         }
 
         public CancellationToken Closing { get; init; }
+
+        /// <summary>Drops the connection with a reset, the way a cut network ends a watch.</summary>
+        public void Abort() => response.Abort();
+
+        /// <summary>Sends the headers of a watch, then drops the connection mid-stream.</summary>
+        public async Task StreamThenAbortAsync()
+        {
+            response.StatusCode = 200;
+            response.ContentType = "application/json";
+            response.SendChunked = true;
+            await response.OutputStream.FlushAsync();
+            await Task.Delay(50);
+            response.Abort();
+        }
     }
 
     /// <summary>
