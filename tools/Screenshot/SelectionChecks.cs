@@ -67,7 +67,7 @@ internal static class SelectionChecks
                 + string.Join(Environment.NewLine, Failures.Distinct()));
         }
 
-        if (!filtered && _probed < 20)
+        if (!filtered && _probed < ShardPlan.Current.Floor(20))
         {
             throw new InvalidOperationException($"Only {_probed} selected rows were checked; the walk is not finding them.");
         }

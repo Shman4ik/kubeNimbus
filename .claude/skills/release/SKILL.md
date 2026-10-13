@@ -73,9 +73,11 @@ unconditionally. So:
    the check, and the PR would wait for it forever, while a job skipped by its
    own `if:` reports success. The consumers test `!= 'false'`, so a failed
    classifier makes everything run — it can cost time, never coverage.
-   The XAML smoke test (the screenshot render, ~90 s) is its own job in
-   parallel with `Build & test` rather than a step at the end of it, which is
-   what took the required check from 2.5–4 min to about one.
+   The XAML smoke test (the screenshot render) runs in parallel with
+   `Build & test` rather than as a step at the end of it, which is what took
+   the required check from 2.5–4 min to about one. Since #347 it is five
+   shards and a stress job, about 3.5 min instead of 15–20
+   (`docs/engineering/verification.md`).
    Caches are scoped to the ref that saved them, so a PR's saved cache is
    invisible to the next PR. `warm-cache.yml` is therefore the **only writer**:
    on `main`, when a `*.csproj`, `Directory.Build.props` or `global.json`

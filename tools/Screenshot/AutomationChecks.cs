@@ -138,7 +138,7 @@ internal static class AutomationChecks
                 "Controls whose automation peer throws:" + Environment.NewLine + string.Join(Environment.NewLine, Failures.Distinct()));
         }
 
-        if (!filtered && _visited < 5000)
+        if (!filtered && _visited < ShardPlan.Current.Floor(5000))
         {
             throw new InvalidOperationException($"Only {_visited} automation peers were visited; the walk is not finding them.");
         }

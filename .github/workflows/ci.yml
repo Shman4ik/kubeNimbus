@@ -218,24 +218,35 @@ jobs:
   # Renders every real View headlessly. A compiling build can still fail to load
   # XAML at runtime — a bad `avares://` URI, a missing resource, a DataTemplate
   # that no longer resolves — and this is the only check that catches that
-  # without a display.
+  # without a display. Every scenario in both themes, with its `ux-`, layout,
+  # tooltip, automation, font and selection checks, on every PR.
   #
-  # Its own job, in parallel with `Build & test`, because it was the slow half
-  # of that job (~90 s for ~236 renders when it was split out). Paying a second
-  # compile of the harness here is cheaper than making the build wait for the
-  # renders, since the two overlap.
+  # Split across a matrix of runners (#347). One runner took 15–20 minutes by
+  # 2026-10 (the measured run, PR #346's merge commit, wrote 510 PNGs for 255
+  # scenarios; main had 250 when this was split), at ~1.3 s a capture on a hosted
+  # runner, spread across every capture rather than a few slow ones, and the job
+  # had started hitting its timeout. `--shard=i/n` (1-based: 1/5 … 5/5, the same
+  # number as the job name and the artifact) renders the scenarios whose 0-based
+  # position in the list is i-1 modulo n (tools/Screenshot/ShardPlan.cs), and the
+  # index and count come from `strategy`, not from the matrix values, so a
+  # matrix that grows or shrinks can never leave a scenario unrendered. Each
+  # shard compiles the harness itself: ~30 s, against a shared build that would
+  # have to travel as an artifact through the 0.5 GB storage budget.
   #
-  # Observed runtime: about 15–20 min per run in October 2026, as the harness
-  # grew its scenarios and interaction checks. The timeout is a backstop for a
-  # hang, not a budget: at 20 min, green runs were reaching the ceiling and one
-  # (#345) was cancelled at 20m19s with nothing wrong, so it sits well above the
-  # observed time.
+  # Five shards, not more: the train runs several PRs at once, and every extra
+  # runner per PR competes for the account's concurrent-job limit with the
+  # other PRs' jobs. The measurements are in docs/engineering/verification.md.
   screenshots:
-    name: XAML smoke test
+    name: XAML smoke test (${{ matrix.shard }} of ${{ strategy.job-total }})
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 12
+    strategy:
+      # Every shard's verdict, even when one goes red.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -258,37 +269,104 @@ jobs:
       - name: Build
         run: dotnet build tools/Screenshot -c Release
 
+      # The shard number is the job's position in the matrix plus one, so it is the
+      # number in the job's name and artifact. Expressions have no arithmetic, so the
+      # name reads `matrix.shard`, and this step refuses a matrix whose values are not
+      # 1..n in order: a repeated or missing value would otherwise leave a shard's
+      # scenarios unrendered without a red job.
       - name: Render screenshots
         id: render
-        run: dotnet run --project tools/Screenshot -c Release --no-build -- "${{ runner.temp }}/screenshots"
+        env:
+          SHARD_LABEL: ${{ matrix.shard }}
+          JOB_INDEX: ${{ strategy.job-index }}
+          JOB_TOTAL: ${{ strategy.job-total }}
+        run: |
+          shard=$((JOB_INDEX + 1))
+          if [ "$SHARD_LABEL" != "$shard" ]; then
+            echo "::error::matrix.shard is $SHARD_LABEL but this is job $shard of $JOB_TOTAL; the matrix must list 1..$JOB_TOTAL in order."
+            exit 1
+          fi
+          dotnet run --project tools/Screenshot -c Release --no-build -- "${{ runner.temp }}/screenshots" "--shard=$shard/$JOB_TOTAL"
 
-      # Every surface that shows cluster data, fed a large cluster's worth of it (5,000
-      # pods, 200,000 log lines, 3,000 Argo resources, a 5,000-key diff), with the
-      # visuals left in the window, the collection notifications raised and the time
-      # taken checked against a budget (tools/Screenshot/StressChecks.cs). A fixture of a
-      # dozen rows is fast whatever the code does, which is how a log pane that realized
-      # 37,000 controls shipped. Runs even when the render went red: the two find
-      # different things, and one red step should not hide the other's verdict.
-      - name: Stress check
-        if: ${{ !cancelled() }}
-        run: dotnet run --project tools/Screenshot -c Release --no-build -- --stress
-
-      # Only when the render step itself went red (not the stress check, whose table
-      # in the log is its own diagnostic). The images are a smoke-test
+      # Only when the render step itself went red. The images are a smoke-test
       # by-product, not a deliverable: on a green run nobody opens them, and at
       # ~14 MB a run this single artifact was holding over a gigabyte against a
       # 0.5 GB Actions storage allowance. if-no-files-found is "ignore" for the
       # same reason the condition is failure(): the usual failure is the render
       # itself throwing, which leaves the directory empty, and a missing
-      # diagnostic must not turn one red step into two.
+      # diagnostic must not turn one red step into two. One artifact per shard,
+      # each holding only that shard's PNGs, so a red run stores no more than
+      # the single job did.
       - name: Upload screenshots
         if: ${{ failure() && steps.render.outcome == 'failure' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: screenshots
+          name: screenshots-${{ matrix.shard }}
           path: ${{ runner.temp }}/screenshots
           if-no-files-found: ignore
           retention-days: 3
+
+  # Every surface that shows cluster data, fed a large cluster's worth of it (5,000
+  # pods, 200,000 log lines, 3,000 Argo resources, a 5,000-key diff), with the
+  # visuals left in the window, the collection notifications raised and the time
+  # taken checked against a budget (tools/Screenshot/StressChecks.cs). A fixture of a
+  # dozen rows is fast whatever the code does, which is how a log pane that realized
+  # 37,000 controls shipped. Its own job beside the shards since #347: it shares no
+  # state with the renders, and one red verdict should not hide the other's.
+  stress:
+    name: XAML stress check
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Restore NuGet cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Build
+        run: dotnet build tools/Screenshot -c Release
+
+      - name: Stress check
+        run: dotnet run --project tools/Screenshot -c Release --no-build -- --stress
+
+  # One check named `XAML smoke test`, green only when every shard and the stress
+  # check are: the name the docs and the release checklist read, and the one to put
+  # on the ruleset's required list if the smoke test ever becomes required (it is
+  # not today; adding it is a change to both repositories' rulesets together).
+  # A shard that was skipped because the PR cannot affect the harness counts as
+  # green, the same as the jobs it summarizes.
+  smoke:
+    name: XAML smoke test
+    needs: [changes, screenshots, stress]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Every shard and the stress check passed
+        env:
+          SHARDS: ${{ needs.screenshots.result }}
+          STRESS: ${{ needs.stress.result }}
+        run: |
+          echo "shards: $SHARDS, stress: $STRESS"
+          for result in "$SHARDS" "$STRESS"; do
+            case "$result" in
+              success|skipped) ;;
+              *) exit 1 ;;
+            esac
+          done
 
   aot:
     name: NativeAOT publish (linux-x64)

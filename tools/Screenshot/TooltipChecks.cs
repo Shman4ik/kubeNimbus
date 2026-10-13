@@ -54,7 +54,7 @@ internal static class TooltipChecks
         }
 
         // Not vacuous: a full run has to find the tooltips it is checking.
-        if (!filtered && _probed < 40)
+        if (!filtered && _probed < ShardPlan.Current.Floor(40))
         {
             throw new InvalidOperationException($"Only {_probed} tooltips were probed; the walk is not finding them.");
         }
