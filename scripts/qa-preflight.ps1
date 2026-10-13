@@ -83,7 +83,14 @@ if ($Kubeconfig -and (Test-Path $Kubeconfig)) {
         $process = if ($record) { Get-Process -Id $record.Pid -ErrorAction SilentlyContinue }
         if ($process -and $process.ProcessName -eq 'wsl' -and $process.StartTime.ToUniversalTime().Ticks -eq [long]$record.StartedTicks) { $keepAlive = $record }
     }
-    $inWsl = $keepAlive -or (Test-Path $keepAliveRecord) -or ($who -match '^wsl')
+    # Whether the sandbox is WSL-hosted is read from what serves its port (`wslrelay` for a
+    # container in WSL's own Docker Engine) or a live keep-alive, never from the record alone:
+    # sandbox-down.ps1 leaves the record, and after a reboot or with a Docker Desktop sandbox
+    # a stale one would fail the run for nothing.
+    $inWsl = $keepAlive -or ($who -match '^wsl')
+    if ((Test-Path $keepAliveRecord) -and -not $keepAlive -and -not $inWsl) {
+        Report ok 'WSL keep-alive' "a stale record at $keepAliveRecord is ignored: its process is gone and the sandbox is not served from WSL"
+    }
     if ($inWsl) {
         if ($keepAlive) { Report ok 'WSL keep-alive' "pid $($keepAlive.Pid) holds the $(if ($keepAlive.Distribution) { "'$($keepAlive.Distribution)'" } else { 'default' }) distro up" }
         else { Report FAIL 'WSL keep-alive' "the sandbox runs in WSL and no keep-alive is running ($keepAliveRecord): WSL stops an idle distro, and the k3s containers with it, about a minute after its last process. Re-run ./scripts/sandbox-up.ps1 -Wsl, which reuses the cluster and starts one." }

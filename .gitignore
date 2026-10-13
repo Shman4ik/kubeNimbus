@@ -8,6 +8,10 @@ TestResults/
 # Agent worktrees (.claude/worktrees/** are throwaway checkouts of this repo)
 .claude/worktrees/
 
+# A machine's own Claude Code permissions: the QA VM's allow rules for batch G2's kubectl
+# (docs/engineering/desktop-qa.md) must never be committed, since settings.json loads everywhere.
+.claude/settings.local.json
+
 # IDE
 .vs/
 .idea/

@@ -63,17 +63,28 @@ UNSURE, or into a FAIL that said nothing about the app (#370):
 
 G2 restarts, creates, patches and deletes in `qa-shop`, and an agent's mutating `kubectl` is
 refused by default. Every G2 command in the suite is written `kubectl -n qa-shop …`, with the
-namespace first, so one pair of rules covers them and nothing outside the namespace. The owner
-adds them to the VM checkout's **`.claude/settings.local.json`** (git-ignored), never to the
-committed `.claude/settings.json`: that file also loads on the owner's own desktop, where
-`kubectl` points at real clusters.
+namespace first, so one pair of prefix rules covers them. The owner adds them to the VM
+checkout's **`.claude/settings.local.json`**, which the repository's `.gitignore` names so a
+`git add -A` in the VM cannot commit it, and never to the committed `.claude/settings.json`:
+that file also loads on the owner's own desktop, where `kubectl` points at real clusters.
 
 ```json
 { "permissions": { "allow": [ "PowerShell(kubectl -n qa-shop *)", "Bash(kubectl -n qa-shop *)" ] } }
 ```
 
-The preflight already refuses a kubeconfig that names a server other than the VM's loopback,
-so in the VM these reach only the sandbox. Without the rules, the agent stops at each G2
+**What the rules let through is wider than G2.** The `*` takes any verb and any further
+argument, so `kubectl -n qa-shop delete ns <x>`, `… get pods -A`, `… --context <other>` and
+`… --kubeconfig <other file>` all pass. Narrowing them to G2's exact commands does not help:
+every command with a variable part (a pod name, the gated pod's manifest) needs a `*`, and a
+`*` admits the same extra flags. The preflight's loopback check reads only the kubeconfig it is
+given, not what an agent passes to `kubectl`. So the rules are safe only because of what the
+VM holds: **the sandbox's kubeconfig is the only one on the VM**, and every context in it
+(`kubectl config get-contexts`: the sandbox's and `qa-seed.ps1`'s `qa-prod`, `qa-limited`,
+`qa-cut`) points at the VM's own loopback. The owner checks that before adding the rules, and
+removes them again if a real cluster's kubeconfig ever lands on the VM. The worst a rule can
+then do is break the throwaway sandbox, which `sandbox-up.ps1 -Recreate` puts back.
+
+Without the rules, the agent stops at each G2
 mutation and a person runs it: G-10, G-18 and G-19's `rollout restart deploy/shop-web`, G-12's
 `create deployment qa-many` and its delete, G-13's gated pod and its `patch`, and G-20's
 `delete pod`.

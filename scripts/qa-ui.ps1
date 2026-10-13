@@ -18,7 +18,7 @@
       which is exactly what the pattern actions cannot prove.
     A pattern action reads its state back: `select` fails when the item is not selected
     afterwards, or when it sits in a popup list that is still open (the namespace picker's
-    list only moves its highlight on a selection), `toggle` when the state did not change,
+    list only moves its highlight on a selection) and refuses an item not on the app's windows, `toggle` when the state did not change,
     `collapse` when the element is not collapsed, `set-text` when the box does not read the
     text back, and `invoke` says which pattern it used and, for InvokePattern (which has no
     state), that the effect is for the caller to check. A list that only acts on a pointer
@@ -148,6 +148,8 @@ Add-Type -Namespace QaNative -Name Win32 -MemberDefinition @'
 [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
 [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
 [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+[StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
+[DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
 '@
 
 $A = [System.Windows.Automation.AutomationElement]
@@ -331,6 +333,22 @@ function Get-PopupWindow($element) {
     $root
 }
 
+# Whether the element's centre is on one of the app's own windows, which is what lets
+# Get-PopupWindow tell "in the main window" from "in a popup". An item with no bounds, or one
+# under another application's window, could be either.
+function Test-OnApp($element) {
+    $r = $element.Current.BoundingRectangle
+    -not $r.IsEmpty -and (Test-LandsOnApp ($r.X + $r.Width / 2) ($r.Y + $r.Height / 2))
+}
+
+# Whether a UIA rectangle lies inside a native window's rectangle (2 px of rounding allowed).
+function Test-InsideWindowRect($bounds, [IntPtr]$hwnd) {
+    $w = New-Object QaNative.Win32+RECT
+    if (-not [QaNative.Win32]::GetWindowRect($hwnd, [ref]$w)) { return $false }
+    $bounds.Left -ge $w.Left - 2 -and $bounds.Top -ge $w.Top - 2 -and
+        $bounds.Right -le $w.Right + 2 -and $bounds.Bottom -le $w.Bottom + 2
+}
+
 # An element scrolled out of its list is in the tree but has no usable bounds and cannot
 # be clicked. Scroll it into view first when its container supports that. (Items inside a
 # collapsed sidebar section are not realized at all — use a filter box to reach those.)
@@ -348,8 +366,13 @@ function Test-InWindow($element, [double]$px = [double]::NaN, [double]$py = [dou
     # Only an ancestor drawn in the same native window as the point can clip it: a ComboBox
     # has the Scroll pattern and its bounds are the closed box in the main window, while its
     # items are in the drop-down's popup window, so judging them by the box refused every
-    # Range item in the 2026-10-13 run (#370).
+    # Range item in the 2026-10-13 run (#370). Which window an ancestor is in is read from
+    # where the point is, never from what is drawn at the ancestor's centre (a flyout over
+    # the middle of the sidebar would hide the sidebar's viewport): a point in the main
+    # window is clipped by every scrolling ancestor; a point in a popup (or the file dialog)
+    # only by the ancestors that lie inside that popup's window.
     $pointRoot = Get-RootAt $x $y
+    $inPopup = $pointRoot -ne (Get-MainHandle)
     $walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
     $node = $walker.GetParent($element)
     while ($node -and -not [System.Windows.Automation.Automation]::Compare($node, $window)) {
@@ -357,14 +380,13 @@ function Test-InWindow($element, [double]$px = [double]::NaN, [double]$py = [dou
         try { $null = $node.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern); $scrolls = $true } catch { }
         if ($scrolls) {
             $v = $node.Current.BoundingRectangle
-            $sameWindow = -not $v.IsEmpty -and (Get-RootAt ($v.X + $v.Width / 2) ($v.Y + $v.Height / 2)) -eq $pointRoot
-            # An open drop-down is never clipped by its own closed box, whichever window is
-            # at the box's centre.
+            $clips = -not $v.IsEmpty -and (-not $inPopup -or (Test-InsideWindowRect $v $pointRoot))
+            # An open drop-down is never clipped by its own closed box.
             try {
                 $dropDown = $node.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern)
-                if ($dropDown.Current.ExpandCollapseState -eq [System.Windows.Automation.ExpandCollapseState]::Expanded) { $sameWindow = $false }
+                if ($dropDown.Current.ExpandCollapseState -eq [System.Windows.Automation.ExpandCollapseState]::Expanded) { $clips = $false }
             } catch { }
-            if ($sameWindow -and ($x -lt $v.Left -or $x -gt $v.Right -or $y -lt $v.Top -or $y -gt $v.Bottom)) { return $false }
+            if ($clips -and ($x -lt $v.Left -or $x -gt $v.Right -or $y -lt $v.Top -or $y -gt $v.Bottom)) { return $false }
         }
         $node = $walker.GetParent($node)
     }
@@ -520,7 +542,12 @@ function Invoke-Select($element, $pattern) {
     # namespace picker's list selects a candidate and chooses on a press or Enter, so a
     # Select read back "selected" in the 2026-10-13 run while the namespace stayed where it
     # was (Q-2, #370). A popup that closes, as a combo's drop-down does when its choice is
-    # taken, passes.
+    # taken, passes. An item whose centre is not on the app (no bounds, unrealized, under
+    # another window) cannot be told apart from a popup row, so it is refused before the
+    # Select rather than reported on a guess.
+    if (-not (Test-OnApp $element)) {
+        throw "Select refused: $(Format-Element $element 0) is not on one of the app's windows, so whether it sits in an open popup list (where a selection only moves the highlight) cannot be read. Bring it into view (filter the list) or use click."
+    }
     $popup = Get-PopupWindow $element
     $pattern.Select()
     Start-Sleep -Milliseconds $SettleMs
