@@ -221,15 +221,21 @@ jobs:
   # without a display.
   #
   # Its own job, in parallel with `Build & test`, because it was the slow half
-  # of that job: ~90 s for ~236 renders, against ~40 s for everything else once
-  # restore is cached. Paying a second compile of the harness here is cheaper
-  # than making the build wait for the renders, since the two now overlap.
+  # of that job (~90 s for ~236 renders when it was split out). Paying a second
+  # compile of the harness here is cheaper than making the build wait for the
+  # renders, since the two overlap.
+  #
+  # Observed runtime: about 15–20 min per run in October 2026, as the harness
+  # grew its scenarios and interaction checks. The timeout is a backstop for a
+  # hang, not a budget: at 20 min, green runs were reaching the ceiling and one
+  # (#345) was cancelled at 20m19s with nothing wrong, so it sits well above the
+  # observed time.
   screenshots:
     name: XAML smoke test
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
