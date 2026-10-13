@@ -160,6 +160,24 @@ internal static class KeyboardChecks
             Expect(Press(Key.P, RawInputModifiers.Control, PhysicalKey.P, "p"), [0x10], "Ctrl+P");
             Expect(Press(Key.N, RawInputModifiers.Control | RawInputModifiers.Shift, PhysicalKey.N, "N"), [0x0E], "Ctrl+Shift+N");
 
+            // F1–F12 are the shell's inside the terminal too (#337): htop's F5, mc's F1. Without
+            // the yield F1 opened the cheat sheet and sent nothing. xterm's sequences: SS3 P–S
+            // for F1–F4, CSI n ~ for F5–F12.
+            var shell = (MainWindowViewModel)window.DataContext!;
+            string[] fkeys =
+            [
+                "\u001bOP", "\u001bOQ", "\u001bOR", "\u001bOS", "\u001b[15~", "\u001b[17~",
+                "\u001b[18~", "\u001b[19~", "\u001b[20~", "\u001b[21~", "\u001b[23~", "\u001b[24~",
+            ];
+            for (var i = 0; i < fkeys.Length; i++)
+            {
+                Expect(Press(Key.F1 + i, RawInputModifiers.None, PhysicalKey.F1 + i, null),
+                    System.Text.Encoding.ASCII.GetBytes(fkeys[i]), $"F{i + 1}");
+            }
+
+            if (shell.IsShortcutsOpen || palette.IsOpen)
+                throw new InvalidOperationException("A function key inside the exec terminal opened the cheat sheet or the palette; the key belongs to the shell.");
+
             var copy = Press(Key.C, RawInputModifiers.Control | RawInputModifiers.Shift, PhysicalKey.C, "C");
             if (copy.Contains((byte)0x03))
                 throw new InvalidOperationException("Ctrl+Shift+C reached the pod as ^C; it is the terminal's Copy.");
@@ -178,13 +196,25 @@ internal static class KeyboardChecks
                     $"Ctrl+Shift+L outside the terminal left the palette {(palette.IsOpen ? $"open on '{palette.Query}'" : "shut")} and sent {sent.Count} bytes; it should open on '{CommandPaletteViewModel.LogsPrefix}'.");
             palette.IsOpen = false;
             Dispatcher.UIThread.RunJobs();
+
+            // And F1 outside the terminal still opens the cheat sheet.
+            outside.Focus();
+            Dispatcher.UIThread.RunJobs();
+            window.KeyPress(Key.F1, RawInputModifiers.None, PhysicalKey.F1, null);
+            window.KeyRelease(Key.F1, RawInputModifiers.None, PhysicalKey.F1, null);
+            Dispatcher.UIThread.RunJobs();
+            if (!shell.IsShortcutsOpen || sent.Count > 0)
+                throw new InvalidOperationException(
+                    $"F1 outside the terminal left the cheat sheet {(shell.IsShortcutsOpen ? "open" : "shut")} and sent {sent.Count} bytes; it should open the sheet.");
+            shell.IsShortcutsOpen = false;
+            Dispatcher.UIThread.RunJobs();
         }
         finally
         {
             exec.Terminal.UserInput -= OnInput;
         }
 
-        Console.WriteLine("Exec terminal key mapping passed (^C 0x03, ^D 0x04, Tab 0x09, Ctrl+Shift+C not ^C, Alt+B ESC b, Ctrl+Shift+L ^L in the terminal and the logs palette outside it, Ctrl+K ^K, Ctrl+P ^P, Ctrl+Shift+N ^N).");
+        Console.WriteLine("Exec terminal key mapping passed (^C 0x03, ^D 0x04, Tab 0x09, Ctrl+Shift+C not ^C, Alt+B ESC b, Ctrl+Shift+L ^L in the terminal and the logs palette outside it, Ctrl+K ^K, Ctrl+P ^P, Ctrl+Shift+N ^N, F1-F12 as xterm sequences in the terminal and F1 the cheat sheet outside it).");
     }
 
     /// <summary>

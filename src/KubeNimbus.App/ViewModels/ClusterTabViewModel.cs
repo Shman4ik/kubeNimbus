@@ -935,9 +935,64 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
     partial void OnIsListLoadingChanged(bool value) => RecomputeListEmpty();
 
+    /// <summary>
+    /// The server's sentence when this user may not list the kind here (a 403 on the list's
+    /// watch, #339), or null. Its own state in the list's place, never "No pods found" (which
+    /// states a fact the app does not have) and never a "connection lost" warning over a
+    /// spinner: the shared watch ends a refused list instead of retrying it.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsListRefused))]
+    private string? _listRefusal;
+
+    public bool IsListRefused => ListRefusal is not null;
+
+    /// <summary>
+    /// What to try instead, under the refusal: a namespace, when the refused list was the whole
+    /// cluster's of a namespaced kind (narrow RBAC grants namespaces, not the cluster).
+    /// </summary>
+    [ObservableProperty]
+    private string _listRefusalHint = "";
+
+    /// <summary>
+    /// The list's watch ended. A refusal is stated in the list's place (<see cref="ListRefusal"/>);
+    /// anything else is said in the status bar. Either way the wait is over (UI rule 18).
+    /// </summary>
+    internal void EndListWatch(Exception ex, CancellationToken token)
+    {
+        if (token.IsCancellationRequested)
+        {
+            return;
+        }
+
+        var refused = WatchRefusedException.From(ex);
+        if (refused is not null && Rows.Count > 0)
+        {
+            // Listed, then refused the watch (list allowed, watch not): the rows are real, and
+            // the status bar says they no longer update.
+            Status = $"Live updates stopped: {refused.Message}";
+        }
+        else if (refused is not null)
+        {
+            ListRefusalHint = SelectedKind?.Descriptor.Namespaced == true && WatchNamespaces(SelectedKind.Descriptor) is [null]
+                ? "Choose a namespace this account can read from the namespace picker."
+                : "";
+            ListRefusal = refused.Message;
+        }
+        else
+        {
+            Status = $"Watch ended: {ex.Message}";
+        }
+
+        IsListLoading = false;
+        RecomputeListEmpty();
+    }
+
+    partial void OnListRefusalChanged(string? value) => RecomputeListEmpty();
+
     private void RecomputeListEmpty()
     {
-        IsListEmpty = Rows.Count == 0 && !IsListLoading;
+        IsListEmpty = Rows.Count == 0 && !IsListLoading && ListRefusal is null;
 
         // Loading wins over every verdict (UI rule 18), and an empty list is its own
         // state; the other two only apply to a list that has rows but shows none.
@@ -1388,7 +1443,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     }
 
     /// <summary>
-    /// The Argo dashboard moves between its own cluster's watch and the fleet's read, so a
+    /// The Argo dashboard moves between its own cluster's watch and the fleet's per-member watches, so a
     /// fleet change reloads it; everything else re-fans its watch.
     /// </summary>
     private void ReloadForFleetChange()
@@ -2416,100 +2471,63 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// picker would be empty everywhere except the one place nobody browses.
     /// </summary>
     [RelayCommand]
-    private async Task ReloadArgoAsync()
+    private Task ReloadArgoAsync()
     {
         // Not behind a failed reconnect's view (#311), for the reason RefreshHelmReleasesAsync gives.
         if ((Client is null && !IsDemo) || _reconnectFailed)
         {
-            return;
+            return Task.CompletedTask;
         }
 
         if (ArgoApplicationDescriptor() is not { } descriptor)
         {
             StopWatch();
+            ArgoRefusal = null;
             IsArgoEmpty = true;
-            return;
+            return Task.CompletedTask;
         }
-
-        // This cluster's own dashboard is a watch (#303, ClusterTabViewModel.ArgoWatch.cs); the
-        // fleet list and the demo cluster are still the read below.
-        if (Client is { } client && !(IsFleetView && FleetMembersProvider?.Invoke() is { Count: > 0 }))
-        {
-            if (ConnectionWarning?.StartsWith(ArgoReadWarning, StringComparison.Ordinal) == true)
-            {
-                ConnectionWarning = null;
-            }
-
-            StartArgoWatch(client, descriptor);
-            return;
-        }
-
-        StopWatch();
-        IsArgoLoading = true;
-        IsArgoEmpty = false;
-        var previous = SelectedArgoApplication is { } selected ? (selected.ClusterName, selected.Application.Key) : default;
-        ArgoApplications.Clear();
 
         // Only the warning this method set itself is cleared (#306): the tab's warning line
-        // carries others too (a reconnect notice, a watch that dropped), and a successful
-        // Argo read says nothing about them.
+        // carries others too (a reconnect notice, a watch that dropped), and a new Argo watch
+        // says nothing about them.
         if (ConnectionWarning?.StartsWith(ArgoReadWarning, StringComparison.Ordinal) == true)
         {
             ConnectionWarning = null;
         }
 
-        try
+        // The fleet list (#336) and this cluster's own dashboard (#303) are watches
+        // (ClusterTabViewModel.ArgoWatch.cs). The fleet list is one merged list with a Cluster
+        // column and the counts summed (owner decision on #195); each row carries its own
+        // cluster's descriptor and reaches its own cluster's client through ClientForArgoRow.
+        if (IsFleetView && FleetMembersProvider?.Invoke() is { Count: > 0 } members)
         {
-            IReadOnlyList<ArgoApplicationRowViewModel> rows;
-            if (IsFleetView && FleetMembersProvider?.Invoke() is { Count: > 0 } members)
-            {
-                // One merged list with a Cluster column, the counts summed across the fleet
-                // (owner decision on #195). Each row carries its own cluster's descriptor and
-                // reaches its own cluster's client through ClientForCluster.
-                var read = await ClusterFleet.ListArgoApplicationsAsync(members);
-                rows = [.. read.Applications.Select(a => new ArgoApplicationRowViewModel(a.Application, a.Descriptor, a.ClusterName))];
-                ArgoCounts = read.Counts;
-                FleetSummary = read.Summary;
-                if (read.Failed.Count > 0)
-                {
-                    ConnectionWarning = $"{ArgoReadWarning} on {string.Join(", ", read.Failed.Select(f => f.Cluster))}: "
-                        + read.Failed[0].Error.Message;
-                }
-            }
-            else
-            {
-                var applications = Client is null
-                    ? Demo.DemoData.ArgoApplications
-                    : await Client.ListArgoApplicationsAsync(descriptor);
-
-                // No cluster name: the dashboard is this tab's own cluster.
-                rows = [.. applications.Select(a => new ArgoApplicationRowViewModel(a, descriptor))];
-                ArgoCounts = ArgoSummary.Of(applications);
-            }
-
-            // In the order the header sort names, which is most urgent first until a header
-            // is clicked.
-            foreach (var row in rows.Order(ArgoSort.Comparer))
-            {
-                ArgoApplications.Add(row);
-            }
-
-            // A refresh must not move the selection: somebody reading one Application's
-            // detail while the list reloads has not asked to be moved to the worst one.
-            SelectedArgoApplication =
-                ArgoApplications.FirstOrDefault(a => (a.ClusterName, a.Application.Key) == previous)
-                ?? ArgoApplications.FirstOrDefault();
+            StartArgoFleetWatch(members);
+            return Task.CompletedTask;
         }
-        catch (Exception ex)
+
+        if (Client is { } client)
         {
-            ConnectionWarning = $"{ArgoReadWarning}: {ex.Message}";
+            StartArgoWatch(client, descriptor);
+            return Task.CompletedTask;
         }
-        finally
+
+        // The demo cluster: its dataset, read once.
+        StopWatch();
+        var previous = SelectedArgoApplication is { } selected ? selected.Application.Key : null;
+        ArgoRefusal = null;
+        ArgoApplications.Clear();
+        var applications = Demo.DemoData.ArgoApplications;
+        foreach (var row in applications.Select(a => new ArgoApplicationRowViewModel(a, descriptor)).Order(ArgoSort.Comparer))
         {
-            IsArgoLoading = false;
-            IsArgoEmpty = ArgoApplications.Count == 0;
-            OnPropertyChanged(nameof(ArgoAttentionSummary));
+            ArgoApplications.Add(row);
         }
+
+        SelectedArgoApplication = ArgoApplications.FirstOrDefault(a => a.Application.Key == previous) ?? ArgoApplications.FirstOrDefault();
+        ArgoCounts = ArgoSummary.Of(applications);
+        IsArgoLoading = false;
+        IsArgoEmpty = ArgoApplications.Count == 0;
+        OnPropertyChanged(nameof(ArgoAttentionSummary));
+        return Task.CompletedTask;
     }
 
     /// <summary>How every warning <see cref="ReloadArgoAsync"/> sets begins, so it clears only its own.</summary>
@@ -2518,8 +2536,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     private bool HasSelectedArgoApplication => SelectedArgoApplication is not null;
 
     /// <summary>
-    /// The client of the cluster an Argo row came from. The dashboard's fleet list is a read,
-    /// not the fleet watch, so <see cref="ClientForCluster"/>'s targets do not know its
+    /// The client of the cluster an Argo row came from. The dashboard's fleet list has its own
+    /// watch, not the resource list's, so <see cref="ClientForCluster"/>'s targets do not know its
     /// clusters; the shell's members do. A row whose cluster has left the fleet since gets
     /// null — never this tab's own client, which would sync somebody else's namesake.
     /// </summary>
@@ -2842,7 +2860,14 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         {
             // The dashboard reads the shared watch too: relist it, or a refresh is answered
             // with what the cache already holds.
-            if (Client is { } argoClient && !IsFleetView && ArgoApplicationDescriptor() is { } applications)
+            if (IsFleetView)
+            {
+                foreach (var target in _argoFleetTargets)
+                {
+                    target.Member.Client.Watches.Relist(target.Descriptor);
+                }
+            }
+            else if (Client is { } argoClient && ArgoApplicationDescriptor() is { } applications)
             {
                 argoClient.Watches.Relist(applications);
             }
@@ -2901,6 +2926,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         // dismissed the same way, which is correct: the answer was already read.
         PendingRowAction = null;
 
+        // A refusal was about the list being torn down; the next one asks again (#339).
+        ListRefusal = null;
         Rows.Clear();
         _rowsByKey.Clear();
         _fleetTargets.Clear();
@@ -3000,12 +3027,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 // spinner up here would turn a reported failure into a window that looks
                 // busy forever, which is the same lie the empty-list state used to tell
                 // in the other direction (UI rule 18).
-                Dispatcher.UIThread.Post(() =>
-                {
-                    Status = $"Watch ended: {ex.Message}";
-                    IsListLoading = false;
-                    RecomputeListEmpty();
-                });
+                Dispatcher.UIThread.Post(() => EndListWatch(ex, token));
             }
         }, token);
 
@@ -3053,14 +3075,11 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
                         ConnectionWarning = $"{ns}: {ex.Message}";
                         ConnectionWarningOffersReconnect = ex is not UnreadableObjectException;
-
-                        // A refusal is an answer, and the list must not wait for it for ever.
-                        if (ex.InnerException is HttpRequestException { StatusCode: System.Net.HttpStatusCode.Forbidden }
-                            or HttpRequestException { StatusCode: System.Net.HttpStatusCode.Forbidden })
-                        {
-                            ApplyNamespaced(new NamespacedResourceEvent(ns, ResourceEvent<DynamicResource>.Synced));
-                        }
                     }),
+
+                    // A refusal (#339) ends that namespace's shared watch: it arrives here, and
+                    // NamespaceWatch follows it with that namespace's Synced, so the list does
+                    // not wait for it for ever.
                     sourceFailed: (ns, ex) => Dispatcher.UIThread.Post(() =>
                     {
                         if (!token.IsCancellationRequested)
@@ -3279,6 +3298,17 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 {
                     await Dispatcher.UIThread.InvokeAsync(() => ApplyFleetBatch(batch));
                 }
+
+                // Every member's watch ended (each refused, #339, or failed for good): each said
+                // so in the warning line, and nothing more is coming, so the wait is over.
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (!token.IsCancellationRequested)
+                    {
+                        IsListLoading = false;
+                        RecomputeListEmpty();
+                    }
+                });
             }
             catch (OperationCanceledException)
             {

@@ -37,3 +37,37 @@ public sealed class WatchConnectionException(string message, Exception? inner = 
 {
     public bool CredentialsRejected => credentialsRejected;
 }
+
+/// <summary>
+/// The API server refused a list or watch (403): this user may not read the collection. Ends a
+/// shared watch (<see cref="WatchCache"/>) instead of retrying it, because a refusal is an
+/// answer, not a lost connection, and asking again every backoff changes nothing (#339).
+/// <see cref="Exception.Message"/> is the server's own sentence, which names the user, the verb
+/// and the resource.
+/// </summary>
+public sealed class WatchRefusedException(string message, Exception? inner = null) : Exception(message, inner)
+{
+    /// <summary>
+    /// The refusal in <paramref name="ex"/>, as a <see cref="WatchRefusedException"/>, or null when
+    /// it is not a 403. A 403 on the list is a <see cref="KubernetesApiException"/> carrying the
+    /// server's sentence; on the watch request (list allowed, watch not) a bare
+    /// <see cref="HttpRequestException"/>; either may arrive wrapped in a
+    /// <see cref="WatchConnectionException"/>.
+    /// </summary>
+    public static WatchRefusedException? From(Exception? ex)
+    {
+        for (var current = ex; current is not null; current = current.InnerException)
+        {
+            switch (current)
+            {
+                case WatchRefusedException refused:
+                    return refused;
+                case HttpRequestException { StatusCode: System.Net.HttpStatusCode.Forbidden } forbidden:
+                    return new WatchRefusedException(
+                        (forbidden as KubernetesApiException)?.ServerMessage ?? forbidden.Message, forbidden);
+            }
+        }
+
+        return null;
+    }
+}

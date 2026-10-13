@@ -164,7 +164,7 @@ public static class CommandBindings
     /// </para>
     ///
     /// <para>
-    /// <b>A chord the shell owns yields to the exec terminal</b> (#222). A window's key
+    /// <b>A chord the shell owns yields to the exec terminal</b> (#222, #337). A window's key
     /// bindings run before the key reaches the focused control, so with focus in the exec
     /// terminal Ctrl+Shift+L opened the logs palette (QA G-14) and Ctrl+K the command
     /// palette, and neither reached the shell. A binding whose gesture <see
@@ -207,13 +207,20 @@ public static class CommandBindings
     }
 
     /// <summary>
-    /// True for a chord a shell reads as a control character: literal Ctrl, with or without
-    /// Shift, on a letter. Cmd (macOS) and Alt chords are not the shell's, and neither are
-    /// Ctrl+Tab (which leaves the terminal), Ctrl+digit or the function keys.
+    /// True for a key the shell reads: literal Ctrl, with or without Shift, on a letter (a
+    /// control character), and F1–F12 with any modifiers (an escape sequence that htop, mc
+    /// and vim give meaning to; the owner's decision on #337). Cmd (macOS) and Alt chords on
+    /// a letter are not the shell's, and neither are Ctrl+Tab (which leaves the terminal) or
+    /// Ctrl+digit.
     /// </summary>
     public static bool ShellOwns(KeyGesture gesture)
     {
         ArgumentNullException.ThrowIfNull(gesture);
+        if (gesture.Key is >= Key.F1 and <= Key.F12)
+        {
+            return true;
+        }
+
         var modifiers = gesture.KeyModifiers;
         return modifiers.HasFlag(KeyModifiers.Control)
                && !modifiers.HasFlag(KeyModifiers.Alt)

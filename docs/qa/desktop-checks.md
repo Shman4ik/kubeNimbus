@@ -361,6 +361,9 @@ and read what ran through the clipboard or a marker file (`echo hi > /tmp/m`,
   palette opens. Ctrl+P: the cluster switcher does not open. Then Ctrl+Tab out of the terminal and
   Ctrl+Shift+L: the palette opens prefilled `logs `. Close it.
 - **T-8 [opt]** (PR #286) The cordon one-click strip: not allowed on the shared node. UNSURE.
+- **T-13 [input]** (#337) In the exec terminal run `cat -v`, then press F1, F5 and F12, then Enter:
+  no cheat sheet opens and the line echoed back reads `^[OP^[[15~^[[24~`. Ctrl+C. Then Ctrl+Tab out
+  of the terminal and press F1: the cheat sheet opens. Close it with its ✕.
 - **T-11 [input]** (#198) Right-click a `shop-api-…` row: "Exec in my terminal" sits under Exec,
   no ellipsis. Click it: a PowerShell window opens in the container (`hostname` prints the pod
   name), and the notice above the list says the terminal opened. Close the window. With
@@ -467,7 +470,7 @@ preflight's `display` line says what it is; otherwise both are UNSURE "the VM do
 
 Runs only if the owner has the Argo sandbox up (`sandbox-up.ps1 -Name kubenimbus-argo -Port 6551
 -SkipApps -Kubeconfig .sandbox/argo-kubeconfig.yaml`, then `argo-sandbox-up.ps1`) and its
-kubeconfig is merged into the run's. Otherwise all seven are UNSURE "no Argo sandbox".
+kubeconfig is merged into the run's. Otherwise all nine are UNSURE "no Argo sandbox".
 
 - **A-1** (PR #302) "All clusters": a Cluster column first, "2 of 2 clusters run Argo CD", counts equal
   the two dashboards' sum; Sync on the other cluster's row names that cluster and lands there.
@@ -491,6 +494,17 @@ kubeconfig is merged into the run's. Otherwise all seven are UNSURE "no Argo san
   no reload, the row's tooltip "Last operation:" reads Running and then Succeeded within about a
   minute, and the selection stays on that row. `kubectl delete application <name> -n argocd`: the
   row leaves and the counts drop by one.
+- **A-8 [text]** (#336) "All clusters" on the dashboard with the Argo cluster and the sandbox both
+  connected. Repeat A-7's `kubectl patch` on an Application of the Argo cluster: with no click and no
+  reload, that row's "Last operation:" tooltip reads Running and then Succeeded, and no other row
+  changes. Close the Argo cluster's tab: its rows leave the fleet list and the header no longer
+  counts it.
+- **A-9 [text]** (#339) A context for a ServiceAccount `qa-argo-narrow` in `argocd` with a Role on
+  `applications` get/list/watch in `argocd` only (delete the three objects after). Its Argo CD
+  dashboard shows "This account may not read Argo CD Applications" with the server's sentence
+  (`… cannot list resource "applications" … at the cluster scope`), no spinner and no "Watch
+  connection lost" line, within a few seconds, and still so a minute later. **0.7.x:** "Watch
+  connection lost … retrying" over a spinner that never ended.
 
 ## Batch M — capacity strip, managed fields, failed reconnect
 
@@ -542,6 +556,11 @@ kubeconfig is merged into the run's. Otherwise all seven are UNSURE "no Argo san
   not read pod usage (pods.metrics.k8s.io is forbidden: …)." Switch to Deployments and back to Pods:
   the same, at once (the refusal is remembered; no "—" columns appear first). Reconnect the tab:
   asked once more, same result. **0.7.0:** the columns read "—" for ever.
+- **M-14 [text]** (#339) Context `qa-limited`, Pods with All namespaces: within a few seconds the
+  list reads "This account may not list Pods", the server's sentence (`pods is forbidden: … at the
+  cluster scope`) and "Choose a namespace this account can read from the namespace picker." No
+  spinner, no "Watch connection lost" line, and still so a minute later. Choose `qa-shop`: the pods
+  load.
 
 ## Batch Q — the QA driver itself
 

@@ -109,65 +109,31 @@ public static class ClusterFleet
     }
 
     /// <summary>
-    /// Every Argo CD Application on every member that serves the kind, read once and in
-    /// parallel — the fleet half of the Argo dashboard, which is a read rather than a watch on
-    /// one cluster too. Each member resolves its own descriptor (<see cref="ResolveAsync"/>),
-    /// and a member that cannot be read is reported in <see cref="ArgoFleetRead.Failed"/> while
-    /// the rest are returned: partial is the normal state of a fleet, and the caller says so.
-    /// </summary>
-    public static async Task<ArgoFleetRead> ListArgoApplicationsAsync(
-        IReadOnlyList<FleetMember> members, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(members);
-
-        var failed = new List<(string Cluster, Exception Error)>();
-        var targets = await ResolveAsync(
-            members, ArgoCd.Group, "Application",
-            (member, ex) => { lock (failed) failed.Add((member.ClusterName, ex)); },
-            cancellationToken).ConfigureAwait(false);
-
-        var reads = await Task.WhenAll(targets.Select(async target =>
-        {
-            try
-            {
-                var applications = await target.Member.Client
-                    .ListArgoApplicationsAsync(target.Descriptor, cancellationToken: cancellationToken)
-                    .ConfigureAwait(false);
-                return applications.Select(a => new ArgoFleetApplication(target.Member.ClusterName, target.Descriptor, a)).ToList();
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                lock (failed)
-                {
-                    failed.Add((target.Member.ClusterName, ex));
-                }
-
-                return [];
-            }
-        })).ConfigureAwait(false);
-
-        return new ArgoFleetRead([.. reads.SelectMany(r => r)], targets.Count, members.Count, failed);
-    }
-
-    /// <summary>
     /// Runs one list+watch per target and interleaves them. Each event carries its
     /// cluster name, and a <see cref="ResourceEventType.Reset"/> applies to that
     /// cluster alone — consumers must clear only that cluster's rows, never the
     /// whole aggregated list, or one cluster's reconnect wipes the others.
     /// </summary>
+    /// <param name="memberEnded">
+    /// Called when a member's stream ends for good (a refusal, <see cref="WatchRefusedException"/>,
+    /// or a failure), after which that member contributes nothing more. Without it the ending is
+    /// reported through <paramref name="connectionLost"/>, like a dropped connection.
+    /// </param>
     public static IAsyncEnumerable<FleetResourceEvent> WatchAsync(
         IReadOnlyList<FleetTarget> targets,
         string? @namespace = null,
         Action<FleetMember, Exception>? connectionLost = null,
+        Action<FleetMember, Exception>? memberEnded = null,
         CancellationToken cancellationToken = default) =>
         AsyncMerge.Merge(
-            targets.Select(target => TagAsync(target, @namespace, connectionLost, cancellationToken)),
+            targets.Select(target => TagAsync(target, @namespace, connectionLost, memberEnded ?? connectionLost, cancellationToken)),
             cancellationToken: cancellationToken);
 
     private static async IAsyncEnumerable<FleetResourceEvent> TagAsync(
         FleetTarget target,
         string? @namespace,
         Action<FleetMember, Exception>? connectionLost,
+        Action<FleetMember, Exception>? memberEnded,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var stream = target.Member.Client.Watches.WatchAsync(
@@ -199,7 +165,7 @@ public static class ClusterFleet
             }
             catch (Exception ex)
             {
-                connectionLost?.Invoke(target.Member, ex);
+                memberEnded?.Invoke(target.Member, ex);
                 break;
             }
 

@@ -100,6 +100,44 @@ public class TerminalChordYieldTests
         await Assert.That(CommandBindings.ShellOwns(new KeyGesture(Key.L, KeyModifiers.Meta | KeyModifiers.Shift))).IsFalse();
         await Assert.That(CommandBindings.ShellOwns(new KeyGesture(Key.Tab, KeyModifiers.Control))).IsFalse();
         await Assert.That(CommandBindings.ShellOwns(new KeyGesture(Key.D1, KeyModifiers.Control))).IsFalse();
-        await Assert.That(CommandBindings.ShellOwns(new KeyGesture(Key.F5))).IsFalse();
+    }
+
+    [Test]
+    public async Task The_shell_owns_every_function_key()
+    {
+        for (var key = Key.F1; key <= Key.F12; key++)
+        {
+            await Assert.That(CommandBindings.ShellOwns(new KeyGesture(key))).IsTrue();
+            await Assert.That(CommandBindings.ShellOwns(new KeyGesture(key, KeyModifiers.Shift))).IsTrue();
+        }
+
+        await Assert.That(CommandBindings.ShellOwns(new KeyGesture(Key.F13))).IsFalse();
+    }
+
+    [Test]
+    public async Task F1_stands_aside_only_while_the_terminal_has_focus()
+    {
+        // #337: htop's F5, mc's F1 and vim mappings need the key; the cheat sheet is one
+        // Ctrl+Tab away.
+        try
+        {
+            Nimbus.Ui.Hotkeys.Initialize("windows");
+            var inTerminal = true;
+            var bindings = new List<KeyBinding>();
+            var command = new CountingCommand();
+            CommandBindings.RebuildWindowBindings(bindings, _ => command, _ => new CountingCommand(), () => inTerminal);
+
+            var sheet = Binding(bindings, Key.F1, KeyModifiers.None).Command!;
+            await Assert.That(sheet.CanExecute(null)).IsFalse();
+
+            inTerminal = false;
+            await Assert.That(sheet.CanExecute(null)).IsTrue();
+            sheet.Execute(null);
+            await Assert.That(command.Runs).IsEqualTo(1);
+        }
+        finally
+        {
+            Nimbus.Ui.Hotkeys.Initialize("auto");
+        }
     }
 }

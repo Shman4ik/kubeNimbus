@@ -317,4 +317,125 @@ public class WatchCacheTests
         await Assert.That((await reader.WaitForAsync(e => e.Count > 0)).Single()).IsEqualTo("Failed:forbidden");
         await Assert.That(cache.RunningPaths).IsEmpty();
     }
+
+    /// <summary>
+    /// #339: a source that reports a 403 and would retry it for ever (what
+    /// <c>ClusterClient</c>'s list+watch does) is stopped at the first report, its readers end
+    /// with the server's sentence instead of a "connection lost" warning, and nothing is kept,
+    /// so the next reader asks again. Mutation-checked: without the refusal branch in
+    /// <c>Broadcast</c> the reader never ends and the source keeps reporting.
+    /// </summary>
+    [Test]
+    public async Task A_refused_source_is_stopped_at_its_first_report_and_its_readers_end_with_the_refusal()
+    {
+        const string Sentence = "applications.argoproj.io is forbidden: User \"narrow\" cannot list resource \"applications\"";
+        var starts = 0;
+        var reports = 0;
+        var cancelled = 0;
+        async IAsyncEnumerable<ResourceEvent<DynamicResource>> Refusing(
+            ResourceDescriptor descriptor, string? @namespace, Action<Exception> connectionLost,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref starts);
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                Interlocked.Increment(ref reports);
+                connectionLost(new WatchConnectionException(
+                    "Watch connection lost (forbidden); retrying in 1s.",
+                    new HttpRequestException(Sentence, null, System.Net.HttpStatusCode.Forbidden)));
+                try
+                {
+                    await Task.Delay(20, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    Interlocked.Increment(ref cancelled);
+                }
+            }
+
+            yield break;
+        }
+
+        using var cache = new WatchCache(Refusing);
+        var warnings = new List<Exception>();
+        var read = Task.Run(async () =>
+        {
+            try
+            {
+                await foreach (var _ in cache.WatchAsync(Pods, connectionLost: warnings.Add))
+                {
+                }
+            }
+            catch (Exception ex)
+            {
+                return ex;
+            }
+
+            return null;
+        });
+
+        var ended = await read.WaitAsync(TimeSpan.FromSeconds(5));
+        await Assert.That(ended).IsTypeOf<WatchRefusedException>();
+        await Assert.That(ended!.Message).IsEqualTo(Sentence);
+        await Assert.That(warnings).IsEmpty();
+        await WaitUntilAsync(() => Volatile.Read(ref cancelled) == 1);
+        await Task.Delay(100);
+        await Assert.That(Volatile.Read(ref cancelled)).IsEqualTo(1);
+        await Assert.That(Volatile.Read(ref reports)).IsEqualTo(1);
+        await Assert.That(cache.RunningPaths).IsEmpty();
+
+        // Asking again is a new attempt, not the old refusal replayed.
+        await using var again = new Reader(cache, Pods, null);
+        await again.WaitForAsync(e => e.Count > 0);
+        await Assert.That(Volatile.Read(ref starts)).IsEqualTo(2);
+    }
+
+    /// <summary>
+    /// #339 over real HTTP: a <see cref="ClusterClient"/> whose list is refused (403) used to
+    /// retry it every backoff behind "Watch connection lost". Through its shared watches the
+    /// stream now ends with the server's sentence after one request, with no "connection lost".
+    /// </summary>
+    [Test]
+    public async Task A_real_clients_refused_list_ends_its_shared_watch_after_one_request()
+    {
+        const string Sentence = "pods is forbidden: User \"viewer\" cannot list resource \"pods\" in API group \"\" at the cluster scope";
+        await using var server = new NodeWatchHttpTests.ConcurrentStubServer(async (request, response) =>
+            await response.WriteAsync(
+                $$"""{"kind":"Status","code":403,"reason":"Forbidden","message":{{JsonSerializer.Serialize(Sentence)}}}""",
+                System.Net.HttpStatusCode.Forbidden));
+        using var client = server.Connect();
+        var warnings = new List<Exception>();
+
+        Exception? ended = null;
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        try
+        {
+            await foreach (var _ in client.Watches.WatchAsync(Pods, connectionLost: warnings.Add, cancellationToken: timeout.Token))
+            {
+            }
+        }
+        catch (Exception ex)
+        {
+            ended = ex;
+        }
+
+        await Assert.That(ended).IsTypeOf<WatchRefusedException>();
+        await Assert.That(ended!.Message).IsEqualTo(Sentence);
+        await Assert.That(warnings).IsEmpty();
+
+        // The first retry would have come after a one-second backoff.
+        await Task.Delay(1500);
+        await Assert.That(server.Requests.Count(r => r.Path == "/api/v1/pods")).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task WatchRefusedException_finds_a_403_however_it_is_wrapped_and_nothing_else()
+    {
+        var bare = new HttpRequestException("forbidden", null, System.Net.HttpStatusCode.Forbidden);
+        await Assert.That(WatchRefusedException.From(new WatchConnectionException("lost", bare))!.Message).IsEqualTo("forbidden");
+        await Assert.That(WatchRefusedException.From(bare)).IsNotNull();
+        await Assert.That(WatchRefusedException.From(new WatchConnectionException("lost",
+            new HttpRequestException("down", null, System.Net.HttpStatusCode.ServiceUnavailable)))).IsNull();
+        await Assert.That(WatchRefusedException.From(new WatchConnectionException("lost", new IOException("reset")))).IsNull();
+    }
 }

@@ -186,17 +186,36 @@ from the cache. `ArgoDashboardRefreshTests` pins that against a fake API server 
 Application lists: Refresh with the dashboard open is a second list (mutation-checked: without
 the `Relist` call the test times out on one).
 
-- **Loading ends at the first row or at Synced, never at Reset** (UI rule 18). A Reset in the
-  middle of the stream (a relist after 410 Gone) keeps the rows on screen until the relist has
-  something to show, so the grid does not blink empty.
+- **Loading ends at the first row or at Synced, never at Reset** (UI rule 18).
+- **A relist swaps at Synced** (#339). A Reset after the table has synced once (a relist after
+  410 Gone, or Refresh on a running entry) keeps the last complete list as the table's
+  `Applications` until the new list's Synced, so a large relist is one swap. Before, the old rows
+  stayed until the first re-added row, and then the grid showed a growing subset until Synced. The
+  first list still shows as it arrives, so its first row ends the wait. `ArgoApplicationTableTests`
+  pins it (mutation-checked: without the snapshot taken at Reset, the table mid-relist holds only
+  the rows re-added so far).
 - **A status update replaces only its own row.** An unchanged Application keeps the same
   `ArgoApplication` instance in the table, so when a batch leaves the order alone only the rows
   whose object changed are replaced, and the reader's scroll position and selection stay. An
   Application added, deleted or moved by the sort rebuilds the list; the selection follows the
-  same `namespace/name` either way. `ArgoDashboardWatchTests` pins it (mutation-checked: always
-  rebuilding fails the "same row object" assertion).
-- **The fleet list and the demo cluster are still reads.** The fleet list's per-member watch
-  belongs with the Argo fleet work (#306); the demo has no client.
+  same cluster and `namespace/name` either way, across a Refresh too. `ArgoDashboardWatchTests`
+  pins it (mutation-checked: always rebuilding fails the "same row object" assertion).
+- **A 403 ends the wait, stated** (#339). Under narrow RBAC, the expected case, a user who may
+  read Applications in `argocd` only is refused the dashboard's cluster-wide watch. The shared
+  watch engine retried that for ever, so the dashboard sat behind "Could not read Argo CD
+  Applications: Watch connection lost…" and a spinner that never ended. `WatchCache` now ends a
+  refused entry with a `WatchRefusedException` carrying the server's sentence (see
+  [aot-watch-and-discovery](aot-watch-and-discovery.md)), and the dashboard says "This account
+  may not read Argo CD Applications" with that sentence in the list's place: not the "No Argo CD
+  Applications" empty state, and not a warning. When the list was allowed and only the watch is
+  refused, the dashboard already holds rows that are real: they stay, the panel does not print
+  over them, and the status bar says "Live updates stopped: <the sentence>", as the Resources
+  list does (`A_watch_refused_after_the_list_keeps_the_rows_and_says_updates_stopped`,
+  mutation-checked: without that branch the panel covered the rows). Nothing asks again until Refresh, a reconnect or
+  the kind is chosen again. `ArgoFleetRoutingTests.A_refused_dashboard_says_so_in_the_servers_words`
+  pins the state (mutation-checked: an `EndArgoWatch` that treats every ending as a warning fails
+  it); the live test below pins the engine half against a real API server.
+- **Only the demo cluster is still a read**: it has no client.
 
 Live proof, against the Argo sandbox (`Live/ArgoLiveTests`,
 `The_dashboard_watch_shows_a_sync_started_with_kubectl_without_a_reload`): the watch was opened
@@ -209,12 +228,30 @@ the table saw the phase go `(none)`, `Running`, `Succeeded` with exactly one Res
 
 **One merged list with a Cluster column, the counts summed** (owner decision on #195,
 2026-10-10). The fleet toggle, hidden on the dashboard before, shows there with more than one
-cluster connected. `ClusterFleet.ListArgoApplicationsAsync` resolves the Application kind on
-each member's own discovery, reads every member in parallel and returns an `ArgoFleetRead`; the
-seven counts are `ArgoSummary` over all of them, the header says "n of m clusters run Argo CD",
-and a member that could not be read is named in the inline warning while the rest show. The
-fleet list is still a read, not a watch (the one-cluster dashboard is a watch since #303, below),
-so the toggle and a cluster tab opening or closing re-read it. **A fleet row acts on its own cluster**: `ClientForArgoRow` takes the member's client from
+cluster connected. The seven counts are `ArgoSummary` over every member's Applications, the
+header says "n of m clusters run Argo CD", and a member that could not be read is named in the
+inline warning while the rest show.
+
+**The fleet list is a watch per member** (#336). It was a one-shot read
+(`ClusterFleet.ListArgoApplicationsAsync`, now gone) after the one-cluster dashboard became a
+watch, because the fleet half belonged to another bundle at the time. Now
+`StartArgoFleetWatch` resolves the Application kind on each member's own discovery
+(`ClusterFleet.ResolveAsync`), then runs `ClusterFleet.WatchAsync` over the members that serve
+it: one shared watch per member through that member's `ClusterClient.Watches`, the same entry
+that member's own tab and Applications mode read. The tagged events fold into an
+`ArgoFleetTable` (Core), one `ArgoApplicationTable` per member, so a member's Reset clears only
+its own rows (and, as above, keeps them until it has relisted), and every row carries its own
+member's descriptor. A member whose watch ends for good, refused or failed, is reported through
+`WatchAsync`'s new `memberEnded` callback: it has answered, its rows leave the list (a list that
+no longer updates must not sit among live ones), and it is named in the warning line; when every
+member was refused, the refusal is the dashboard's state, as on one cluster. The toggle and a
+cluster tab opening or closing restart the watch (`RefreshFleetMembership`), so a member that
+left is no longer read: its subscription ends, and its own connection, which closing the tab
+disposes, holds nothing for it after that. Refresh relists every member's entry.
+`ArgoFleetRoutingTests` drives the batches through the view model (a change on one member
+replaces only that member's row; a member leaving restarts the watch without it, and its stub
+server is not asked again; a refused member is named while the rest show).
+**A fleet row acts on its own cluster**: `ClientForArgoRow` takes the member's client from
 the shell's member list, and a row whose cluster has left the fleet gets no client rather than
 this tab's (which would sync a namesake on the wrong cluster); the detail pane opens on the same
 client. Rows with the same `namespace/name` on two clusters order by cluster, so they no longer
@@ -222,15 +259,23 @@ swap on a reload.
 
 That property is now a test rather than a reading of the code (#306):
 `ArgoFleetRoutingTests.A_fleet_rows_sync_goes_to_its_own_cluster_and_to_none_once_it_left`
-reads two stub API servers through `ClusterFleet.ListArgoApplicationsAsync` (aggregated
-discovery serving `argoproj.io/Application`, one `argocd/checkout` on each), syncs the west row
-and sees the PATCH reach the west server only, then drops west from the members and sees the
-sync arm nothing and reach no server. It went red with `ClientForArgoRow` returning the tab's own
-client. **A fleet read clears only its own warning**: the reload clears the tab's warning line
-only when it begins with `ArgoReadWarning` ("Could not read Argo CD Applications"), for the
-fleet and the single-cluster read alike. Before, a fleet read with no failures set it to null and
-erased whatever else the line carried (a reconnect notice, a dropped watch);
-`…keeps_an_unrelated_warning_and_clears_its_own` went red with that restored.
+gives the fleet table one `argocd/checkout` on each of two members backed by stub API servers,
+syncs the west row and sees the PATCH reach the west server only, then drops west from the
+members and sees the sync arm nothing and reach no server. It went red with `ClientForArgoRow`
+returning the tab's own client (#306, against the read it replaced; the client routing it pins
+did not change). **The fleet list clears only its own warning**: the reload and a batch clear
+the tab's warning line only when it begins with `ArgoReadWarning` ("Could not read Argo CD
+Applications"), for the fleet and the single cluster alike. Before #306, a fleet read with no
+failures set it to null and erased whatever else the line carried (a reconnect notice, a dropped
+watch); `A_fleet_batch_keeps_an_unrelated_warning_and_clears_its_own` holds it.
+
+Live proof for the fleet, against the Argo sandbox
+(`The_fleet_watch_shows_a_sync_on_every_member_and_lets_go_of_one_that_left`): two members are two
+connections to the one sandbox, which is what two tabs on one cluster are. Both watches synced, a
+new Application reached both through their watches, a `kubectl`-style sync's phase reached
+`Succeeded` on both members' rows with one Reset each (no relist), and after the fleet was watched
+again over east alone, west's shared watch had no reader and the new stream carried east only
+(Argo CD v3.5.4, 2026-10-13).
 
 ## A real Argo CD in a sandbox
 
@@ -248,6 +293,8 @@ the argocd image serving the test repository. `scripts/README.md` has the detail
 | dashboard watch | delivered a new Application and a `kubectl`-style sync's phases (`Running`, then `Succeeded`) to the dashboard's Applications watch, with one Reset and no relist (#303) |
 | deny window | held a manual sync under a deny window with `manualSync: false`, its operation message saying it is "blocked by sync window", and applied nothing |
 | 403 | refused sync and terminate from a user with only get/list/watch, with the API server's own sentence (`cannot patch resource "applications"`), and nothing was written |
+| 403 on the watch | a user with a Role on `argocd` only was refused the cluster-wide Applications watch: the shared watch ended with `WatchRefusedException` (`cannot list resource "applications"`) after one list, with no "connection lost" report, and the same user's `argocd` watch synced (#339) |
+| fleet watch | two members' watches each delivered a new Application and a `kubectl`-style sync to `Succeeded` with one Reset each; watched again without west, west's entry had no reader (#336) |
 | terminate | `/status` patch is a 404; the object patch stopped a sync waiting on its PreSync hook, ended `Failed` / "Operation terminated", and never applied what came after the hook; a second terminate found nothing running (422) |
 | Open in Argo CD | wrote `status.controllerNamespace: argocd` on a tenant Application in `argo-tenant`, which links to `https://argocd.sandbox.test/applications/argo-tenant/<name>`; left alone an Application in an unwatched namespace whose author wrote its own namespace into that field beside an `argocd-cm` of their own, which gets no link |
 

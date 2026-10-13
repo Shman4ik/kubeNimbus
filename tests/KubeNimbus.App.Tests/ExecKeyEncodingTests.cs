@@ -51,6 +51,18 @@ public class ExecKeyEncodingTests
         await Assert.That(ExecView.EncodeKey(Key.B, KeyModifiers.None, altIsMeta: true)).IsNull();
         await Assert.That(ExecView.EncodeKey(Key.Tab, KeyModifiers.Control | KeyModifiers.Shift, altIsMeta: true)).IsNull();
         await Assert.That(ExecView.EncodeKey(Key.D1, KeyModifiers.Alt, altIsMeta: true)).IsNull();
+        await Assert.That(ExecView.EncodeKey(Key.F1, KeyModifiers.None, altIsMeta: true)).IsNull();
+        await Assert.That(ExecView.EncodeKey(Key.F10, KeyModifiers.None, altIsMeta: true)).IsNull();
+    }
+
+    [Test]
+    public async Task F11_and_F12_are_xterm_s_sequences()
+    {
+        // #337: the control sends nothing for these two.
+        await Assert.That(ExecView.EncodeKey(Key.F11, KeyModifiers.None, altIsMeta: true)).IsEqualTo("\u001b[23~");
+        await Assert.That(ExecView.EncodeKey(Key.F12, KeyModifiers.None, altIsMeta: true)).IsEqualTo("\u001b[24~");
+        await Assert.That(ExecView.EncodeKey(Key.F12, KeyModifiers.Shift, altIsMeta: true)).IsEqualTo("\u001b[24;2~");
+        await Assert.That(ExecView.EncodeKey(Key.F11, KeyModifiers.Control | KeyModifiers.Alt, altIsMeta: true)).IsEqualTo("\u001b[23;7~");
     }
 
     [Test]
