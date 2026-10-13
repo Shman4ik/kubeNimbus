@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using KubeNimbus.App.ViewModels;
 using KubeNimbus.Core.Applications;
 
 namespace KubeNimbus.App.Controls;
@@ -71,7 +72,8 @@ public sealed class TimelineStrip : Control
         for (var i = 0; i <= 3; i++)
         {
             var at = window.Start + window.Span * (i / 3.0);
-            var label = i == 3 ? $"now {at.ToLocalTime():HH:mm}" : at.ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture);
+            // The zone once, on the "now" tick: four offsets on one axis would repeat it (#320).
+            var label = i == 3 ? $"now {LocalTimeText.Clock(at, seconds: false)}" : at.ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture);
             var formatted = new FormattedText(label, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, typeface, 10.5, text);
             var x = X(window, at) - formatted.Width / 2;
             x = Math.Clamp(x, 0, Bounds.Width - formatted.Width);
@@ -125,6 +127,6 @@ public sealed class TimelineStrip : Control
             TimelineKind.Termination => "Container ended",
             _ => "Warning event",
         };
-        ToolTip.SetTip(this, $"{kind} · {nearest.Item.At.ToLocalTime():HH:mm:ss}\n{nearest.Item.Detail}");
+        ToolTip.SetTip(this, $"{kind} · {LocalTimeText.Clock(nearest.Item.At)}\n{nearest.Item.Detail}");
     }
 }

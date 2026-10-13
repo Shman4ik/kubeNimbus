@@ -374,7 +374,8 @@ and read what ran through the clipboard or a marker file (`echo hi > /tmp/m`,
 - **P-1 [text]** (#268, #172) `demo-broken/never-ready-…` Overview Conditions rows show an age; its
   tooltip is "Last transition YYYY-MM-DD HH:MM:SS UTC-07:00" (local time with its offset, #320;
   the VM's own offset, "UTC" when it is zero). A row's Age tooltip ("Created …") and an event's
-  "Last seen …" carry the offset too. Same on the node's
+  "Last seen …" carry the offset too, and so do an application page's exit line ("… at
+  HH:MM:SS UTC-07:00"), its timeline's "now" tick and a timeline mark's tooltip. Same on the node's
   Overview and "Since" in `shop-web`'s Conditions tab.
 - **P-2 [text]** (#171, #320) A `shop-web-…` pod, dock not maximized, Usage tab: the pod's CPU and
   memory totals side by side, and BY CONTAINER's first container on screen with no scroll. `web`

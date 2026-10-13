@@ -315,10 +315,11 @@ public sealed partial class ApplicationPageViewModel : ObservableObject
             ? "No logs: none of this application's workloads exists in the cluster."
             : "No logs: this application's workloads declare no pod selector to read logs through.";
 
-    private static string ExitLine(string container, TerminatedState ended) =>
+    /// <summary>A container's last exit as one line; the time carries its UTC offset (#320).</summary>
+    internal static string ExitLine(string container, TerminatedState ended) =>
         $"Container {container} exited with {(ended.ExitCode is { } code ? $"code {code}" : "no exit code")}"
         + (ended.Reason.Length > 0 ? $" ({ended.Reason})" : "")
-        + (ended.FinishedAt is { } at ? $" at {at.ToLocalTime():HH:mm:ss}" : "");
+        + (ended.FinishedAt is { } at ? $" at {LocalTimeText.Clock(at)}" : "");
 
     // ---------------------------------------------------------------- linked
 
