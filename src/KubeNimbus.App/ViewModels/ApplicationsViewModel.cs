@@ -481,7 +481,8 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
                 break;
 
             case ResourceEventType.Synced:
-                // A reconnect ends in a relist, and the relist ends here.
+                // A reconnect ends here: a resumed watch sends a Synced with no relist before
+                // it (#363), and a 410 relist ends in one too.
                 ConnectionWarning = null;
                 _pending.Remove(scope);
                 if (_kinds.TryGetValue(kind, out var synced) && @namespace is null)

@@ -30,7 +30,7 @@ public sealed partial class ClusterTabViewModel
     [RelayCommand]
     private Task ReloadArgoAsync()
     {
-        // Not behind a failed reconnect's view (#311), for the reason RefreshHelmReleasesAsync gives.
+        // Not behind a failed reconnect's view (#311), for the reason HelmBrowserViewModel.RefreshAsync gives.
         if ((Client is null && !IsDemo) || _reconnectFailed)
         {
             return Task.CompletedTask;

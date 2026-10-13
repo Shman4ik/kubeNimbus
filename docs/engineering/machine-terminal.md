@@ -74,13 +74,16 @@ Seven things are load-bearing:
    nothing is written or started and the outcome (`TerminalLaunchOutcome.NoKubectl`) says
    what would have run and where kubectl was looked for.
 6. **Every outcome lands in one dismissible `infoBar` above the list**
-   (`ClusterTabViewModel.TerminalNotice`, UI rules 9 and 11), and it exists because this
+   (`TerminalNoticeViewModel.Notice`, the tab's `Terminal` child since ENG-13's second half,
+   #361; UI rules 9 and 11), and it exists because this
    command's own feedback — a window — **opens in front of the app**. Success, opened-
    without-kubectl, nothing-could-be-opened and the demo refusal all land there;
-   `DescribeTerminalLaunch` is a public static so both the tests and the screenshot
+   `TerminalNoticeViewModel.DescribeTerminalLaunch` is a public static so both the tests and the screenshot
    harness render the app's real words rather than a paraphrase. The no-terminal case
    prints the exact `KUBECONFIG` value in selectable text, because that is what makes
-   the gesture completable by hand. Two entry points and no new always-visible control
+   the gesture completable by hand. The row and palette hand-offs (below) report into the
+   same child through `Terminal.Show`, and the connection-failure view follows its
+   `Notice` rather than the tab's. Two entry points and no new always-visible control
    (UI rules 1 and 15): the ☰ menu and a Ctrl/Cmd+K entry.
 7. **Nothing is started by a bare name (B4-1, ENG-58).** With `UseShellExecute = false`, .NET
    looks for a name with no directory in it in the app's own folder and then the *current

@@ -6,6 +6,9 @@ namespace KubeNimbus.App.ViewModels;
 // fleet member. Nothing here consults the row filter; VisibleRows follows Rows by itself.
 public sealed partial class ClusterTabViewModel
 {
+    /// <summary>The list watch's last "connection lost" line, cleared by the Synced after a reconnect.</summary>
+    private string? _lostWatchWarning;
+
     /// <summary>
     /// Applies one watch event to <see cref="Rows"/> by key. Nothing here consults the
     /// row filter, and that is the invariant, not an omission: <c>Rows</c> is the
@@ -17,9 +20,6 @@ public sealed partial class ClusterTabViewModel
     /// Internal rather than private only so that test can drive this path for real;
     /// nothing else in the app calls it.
     /// </summary>
-    /// <summary>The list watch's last "connection lost" line, cleared by the Synced after a reconnect.</summary>
-    private string? _lostWatchWarning;
-
     internal void Apply(ResourceEvent<DynamicResource> evt)
     {
         ApplyOne(evt);
@@ -149,7 +149,7 @@ public sealed partial class ClusterTabViewModel
                     var row = new ResourceRowViewModel(resource);
                     row.SetPrinterColumns(VisiblePrinterColumns);
                     _rowsByKey[resource.Key] = row;
-                    ApplyLastUsage(resource.Key, row);
+                    Metrics.ApplyLastSample(resource.Key, row);
                     AddRow(row);
                 }
 
@@ -242,7 +242,7 @@ public sealed partial class ClusterTabViewModel
                     var row = new ResourceRowViewModel(added, cluster);
                     row.SetPrinterColumns(VisiblePrinterColumns);
                     _rowsByKey[addedKey] = row;
-                    ApplyLastUsage(addedKey, row);
+                    Metrics.ApplyLastSample(addedKey, row);
                     AddRow(row);
                 }
 

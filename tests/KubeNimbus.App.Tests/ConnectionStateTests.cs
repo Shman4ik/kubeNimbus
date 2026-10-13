@@ -55,7 +55,7 @@ public class ConnectionStateTests
         first.PropertyChanged += (_, _) => notified++;
 
         await tab.ReconnectCommand.ExecuteAsync(null);
-        tab.TerminalNotice = "something happened";
+        tab.Terminal.Notice = "something happened";
 
         await Assert.That(tab.ConnectionFailure).IsNotNull();
         await Assert.That(ReferenceEquals(tab.ConnectionFailure, first)).IsFalse();

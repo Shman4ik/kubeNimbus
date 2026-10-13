@@ -130,7 +130,7 @@ public static class DemoUsage
         }
 
         // Nodes are cluster-scoped, so their DynamicResource key is "/<name>" — the same
-        // shape ClusterTabViewModel.StartMetricsPolling builds for a real NodeMetrics.
+        // shape ListMetricsViewModel.Start builds for a real NodeMetrics.
         foreach (var node in DemoData.NodeUsage)
         {
             byKey[$"/{node.Name}"] = (node.CpuNanocores, node.MemoryBytes);

@@ -66,17 +66,14 @@ public sealed partial class ClusterTabViewModel
     /// </summary>
     private async Task HandOffToTerminalAsync(Func<TerminalCommand> build, string? openedSuffix = null)
     {
-        TerminalNotice = "Opening your terminal…";
-        TerminalNoticeIsWarning = false;
-        TerminalNoticeIsError = false;
+        Terminal.Show("Opening your terminal…");
 
         var result = await TerminalHandoff.OpenAsync(Context, build);
         var (message, warning, error) = TerminalHandoff.Describe(result);
-        TerminalNotice = result.Outcome == TerminalLaunchOutcome.Opened && openedSuffix is not null
-            ? message + openedSuffix
-            : message;
-        TerminalNoticeIsWarning = warning;
-        TerminalNoticeIsError = error;
+        Terminal.Show(
+            result.Outcome == TerminalLaunchOutcome.Opened && openedSuffix is not null ? message + openedSuffix : message,
+            warning,
+            error);
     }
 
     /// <summary>Re-asks both hand-offs; called wherever the other single-row actions are re-asked.</summary>

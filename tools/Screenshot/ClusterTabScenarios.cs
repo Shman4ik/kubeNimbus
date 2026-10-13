@@ -962,7 +962,7 @@ internal static class ClusterTabScenarios
     /// <para>
     /// The launch is not run: this harness has no terminal emulator, and a scenario that
     /// spawned processes would be a different kind of thing entirely. What is run is the
-    /// app's own <see cref="ClusterTabViewModel.DescribeTerminalLaunch"/>, so the words
+    /// app's own <see cref="TerminalNoticeViewModel.DescribeTerminalLaunch"/>, so the words
     /// on the screenshot are the words the app produces, not a fixture's paraphrase of
     /// them. The paths are obviously-synthetic, like every other fixture value.
     /// </para>
@@ -980,10 +980,10 @@ internal static class ClusterTabScenarios
             Tried: ["xdg-terminal-exec", "gnome-terminal"],
             Error: null);
 
-        var (message, warning, error) = ClusterTabViewModel.DescribeTerminalLaunch(result);
-        tab.TerminalNotice = message;
-        tab.TerminalNoticeIsWarning = warning;
-        tab.TerminalNoticeIsError = error;
+        var (message, warning, error) = TerminalNoticeViewModel.DescribeTerminalLaunch(result);
+        tab.Terminal.Notice = message;
+        tab.Terminal.IsWarning = warning;
+        tab.Terminal.IsError = error;
         return tab;
     }
 
@@ -995,7 +995,7 @@ internal static class ClusterTabScenarios
     public static ClusterTabViewModel DemoTerminalUnavailable()
     {
         var tab = DemoTab();
-        tab.OpenInTerminalCommand.Execute(null);
+        tab.Terminal.OpenInTerminalCommand.Execute(null);
         return tab;
     }
 
@@ -1969,11 +1969,11 @@ internal static class ClusterTabScenarios
 
         foreach (var release in FixtureData.HelmReleases)
         {
-            tab.HelmReleases.Add(new HelmReleaseRowViewModel(release));
+            tab.Helm.Releases.Add(new HelmReleaseRowViewModel(release));
         }
 
-        tab.SelectedHelmRelease = tab.HelmReleases.FirstOrDefault();
-        tab.IsHelmEmpty = tab.HelmReleases.Count == 0;
+        tab.Helm.SelectedRelease = tab.Helm.Releases.FirstOrDefault();
+        tab.Helm.IsEmpty = tab.Helm.Releases.Count == 0;
         return tab;
     }
 

@@ -14,7 +14,7 @@ public sealed partial class ClusterTabViewModel
     {
         if (IsHelmView)
         {
-            _ = RefreshHelmReleasesAsync();
+            _ = Helm.RefreshAsync();
         }
         else if (IsArgoView)
         {
@@ -66,8 +66,7 @@ public sealed partial class ClusterTabViewModel
     /// <summary>Cancels the current list watch (and the metrics poll riding on its token).</summary>
     private void StopWatch()
     {
-        _lastUsage = null;
-        MetricsNotice = null;
+        Metrics.ForgetList();
         _capacityActive = false;
         Capacity.Hide();
         _watchCts?.Cancel();
@@ -147,13 +146,13 @@ public sealed partial class ClusterTabViewModel
             return;
         }
 
-        AreMetricsVisible = _metricsApiAvailable && IsMeteredKind(descriptor);
+        AreMetricsVisible = Metrics.IsApiAvailable && IsMeteredKind(descriptor);
         StartCapacity(client, token);
 
         if (namespaces.Count > 1)
         {
             StartNamespacesWatch(client, descriptor, namespaces, token);
-            StartMetricsPolling(descriptor, [("", client)], namespaces, token);
+            Metrics.Start(descriptor, [("", client)], namespaces, token);
             return;
         }
 
@@ -185,7 +184,7 @@ public sealed partial class ClusterTabViewModel
             }
         }, token);
 
-        StartMetricsPolling(descriptor, [("", client)], namespaces, token);
+        Metrics.Start(descriptor, [("", client)], namespaces, token);
     }
 
     /// <summary>What the list's watch reports between frames: a lost connection, or an object it could not read.</summary>
@@ -503,7 +502,7 @@ public sealed partial class ClusterTabViewModel
                     return;
                 }
 
-                StartMetricsPolling(
+                Metrics.Start(
                     descriptor,
                     targets.Select(t => (t.Member.ClusterName, t.Member.Client)).ToArray(),
                     namespaces,

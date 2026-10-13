@@ -28,7 +28,7 @@ public class ClusterTabTerminalTests
     [Test]
     public async Task OpeningSuccessfullyNamesTheClusterAndTheKubeconfigChain()
     {
-        var (message, warning, error) = ClusterTabViewModel.DescribeTerminalLaunch(
+        var (message, warning, error) = TerminalNoticeViewModel.DescribeTerminalLaunch(
             Result(TerminalLaunchOutcome.Opened));
 
         await Assert.That(message).Contains("payments-prod");
@@ -48,7 +48,7 @@ public class ClusterTabTerminalTests
         const string refused = "Preferred terminal (wt): Windows Terminal opens its tabs from a process of its own";
         var result = Result(TerminalLaunchOutcome.Opened, terminal: "Windows PowerShell") with { PassedOver = [refused] };
 
-        var (message, warning, error) = ClusterTabViewModel.DescribeTerminalLaunch(result);
+        var (message, warning, error) = TerminalNoticeViewModel.DescribeTerminalLaunch(result);
         await Assert.That(message).StartsWith("Opened Windows PowerShell on payments-prod.");
         await Assert.That(message).Contains(refused);
         await Assert.That(warning).IsTrue();
@@ -58,7 +58,7 @@ public class ClusterTabTerminalTests
         await Assert.That(handoff).Contains(refused);
         await Assert.That(handoffWarning).IsTrue();
 
-        var (plain, _, _) = ClusterTabViewModel.DescribeTerminalLaunch(Result(TerminalLaunchOutcome.Opened));
+        var (plain, _, _) = TerminalNoticeViewModel.DescribeTerminalLaunch(Result(TerminalLaunchOutcome.Opened));
         await Assert.That(plain).DoesNotContain("preferred");
     }
 
@@ -81,7 +81,7 @@ public class ClusterTabTerminalTests
     [Test]
     public async Task AMissingKubectlIsStatedAsAWarningAndNotAFailure()
     {
-        var (message, warning, error) = ClusterTabViewModel.DescribeTerminalLaunch(
+        var (message, warning, error) = TerminalNoticeViewModel.DescribeTerminalLaunch(
             Result(TerminalLaunchOutcome.Opened, kubectl: null));
 
         await Assert.That(message).Contains("kubectl was not found");
@@ -97,7 +97,7 @@ public class ClusterTabTerminalTests
     [Test]
     public async Task NoTerminalListsWhatWasTriedAndHandsOverTheValue()
     {
-        var (message, warning, error) = ClusterTabViewModel.DescribeTerminalLaunch(
+        var (message, warning, error) = TerminalNoticeViewModel.DescribeTerminalLaunch(
             Result(TerminalLaunchOutcome.NoTerminal, terminal: null, kubectl: null));
 
         await Assert.That(message).Contains("xdg-terminal-exec");
@@ -110,7 +110,7 @@ public class ClusterTabTerminalTests
     [Test]
     public async Task APreparationFailureCarriesTheUnderlyingReason()
     {
-        var (message, _, error) = ClusterTabViewModel.DescribeTerminalLaunch(
+        var (message, _, error) = TerminalNoticeViewModel.DescribeTerminalLaunch(
             Result(TerminalLaunchOutcome.Failed, error: "Permission denied"));
 
         await Assert.That(message).Contains("Permission denied");
@@ -125,7 +125,7 @@ public class ClusterTabTerminalTests
     [Test]
     public async Task TheDemoClusterRefusesInPlaceAndSaysWhy()
     {
-        var (message, warning, error) = ClusterTabViewModel.DescribeTerminalLaunch(
+        var (message, warning, error) = TerminalNoticeViewModel.DescribeTerminalLaunch(
             new TerminalLaunchResult(
                 TerminalLaunchOutcome.NoKubeconfig, null, null, "", ClusterContext.Demo.Name, [], null));
 
@@ -146,14 +146,14 @@ public class ClusterTabTerminalTests
         TestObjects.RedirectStores();
         var tab = new ClusterTabViewModel(ClusterContext.Demo);
 
-        await tab.OpenInTerminalCommand.ExecuteAsync(null);
+        await tab.Terminal.OpenInTerminalCommand.ExecuteAsync(null);
 
-        await Assert.That(tab.TerminalNotice).IsNotNull();
-        await Assert.That(tab.TerminalNotice!).Contains("demo cluster");
-        await Assert.That(tab.TerminalNoticeIsWarning).IsTrue();
-        await Assert.That(tab.TerminalNoticeIsError).IsFalse();
+        await Assert.That(tab.Terminal.Notice).IsNotNull();
+        await Assert.That(tab.Terminal.Notice!).Contains("demo cluster");
+        await Assert.That(tab.Terminal.IsWarning).IsTrue();
+        await Assert.That(tab.Terminal.IsError).IsFalse();
 
-        tab.DismissTerminalNoticeCommand.Execute(null);
-        await Assert.That(tab.TerminalNotice).IsNull();
+        tab.Terminal.DismissCommand.Execute(null);
+        await Assert.That(tab.Terminal.Notice).IsNull();
     }
 }

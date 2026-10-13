@@ -20,13 +20,21 @@ container) and node usage. Three things are deliberate:
 - **A row that arrives after a poll takes that poll's sample (ENG-55, #252).** The first poll
   and the initial list race: when the poll won, it was applied to no rows and kept nowhere,
   so every row read "—" until the next poll, up to an interval (15 s) later — measured in the
-  0.5.1 pre-release pass. `ClusterTabViewModel` keeps the last poll's samples
-  (`_lastUsage`, memory only), and a new row in `ApplyOne`/`ApplyFleetOne` takes its key's
-  sample before it is added, so a CPU-sorted list places it correctly too. `StopWatch` drops
-  them, so a sample never outlives the kind and namespaces it was read for, and a poll that
+  0.5.1 pre-release pass. The tab's `Metrics` child keeps the last poll's samples
+  (`ListMetricsViewModel.KeepLastPoll`, memory only), and a new row in `ApplyOne`/`ApplyFleetOne`
+  takes its key's sample (`Metrics.ApplyLastSample`) before it is added, so a CPU-sorted list
+  places it correctly too. `StopWatch` drops them (`Metrics.ForgetList`), so a sample never outlives the kind and namespaces it was read for, and a poll that
   finishes after its watch was cancelled is neither applied nor kept.
   `MetricsLastSampleTests` pins all three; the first goes red without the new-row step
   (checked).
+- **The poller is the tab's child view model (ENG-13's second half, #361).**
+  `ListMetricsViewModel`, reached as `ClusterTabViewModel.Metrics`, owns the poll loop
+  (`Start`), the connect-time probe (`DetectAsync`, `IsApiAvailable`), the remembered refusals,
+  the status-bar notice (`Metrics.Notice`) and the last poll. What stays on the tab is what the
+  watch, the capacity strip and the sort also read: `AreMetricsVisible` and `ApplyUsage`, which
+  pushes a poll's samples onto the rows. The child reaches them through `IListMetricsHost`,
+  which the tab implements, so `ListMetricsViewModelTests` drives the child with a stand-in host
+  and no tab.
 
 - **The Nodes list's poll also feeds the capacity strip (#206)**: a successful poll marks usage
   readable, the "no metrics API" path says so, and a 403 on node metrics is reported to the strip
@@ -51,13 +59,15 @@ container) and node usage. Three things are deliberate:
   columns kept their dashes beside the strip's "usage not permitted". Now a poll in which every
   cluster in scope refused (or has no metrics API) hides the columns the way a cluster without
   metrics-server does, hands the refusal to the strip, and returns. The refusal is remembered per
-  kind (`_metricsRefused`) for the tab's connection, so going back to the list asks nothing; it is
+  kind (`ListMetricsViewModel.IsRefused`) for the tab's connection, so going back to the list asks nothing; it is
   cleared on connect, the one moment the user's permissions can have changed. The reason goes in
-  the status bar (`MetricsNotice`, "CPU and memory are hidden: this user may not read pod usage
+  the status bar (`Metrics.Notice`, "CPU and memory are hidden: this user may not read pod usage
   (…server's sentence…)."), except on the Nodes list, whose strip already says it (UI rule 20).
   A refused kind is per kind: a user may read node usage and not pod usage, or the reverse. In
   fleet mode a refusal hides the columns for that watch only, since it is about one member.
-  `MetricsRefusedTests` pins the hide, the notice and the memo; `ClusterCapacityLiveTests` reads
+  `MetricsRefusedTests` pins the hide, the notice and the memo through the tab, and
+  `ListMetricsViewModelTests` pins them on the child, with the remembered answer given at once
+  and no request made (red without the early return, checked); `ClusterCapacityLiveTests` reads
   the real 403 on pod metrics as a narrow ServiceAccount and checks it is the
   `HttpRequestException` with `Forbidden` the poll catches. The poll loop itself (that it returns)
   has no test: it needs a live client on the UI thread.

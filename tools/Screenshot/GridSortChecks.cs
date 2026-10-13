@@ -83,7 +83,7 @@ internal static class GridSortChecks
         var view = window.GetVisualDescendants().OfType<ClusterTabView>().First(v => v.IsEffectivelyVisible);
         var vm = (ClusterTabViewModel)view.DataContext!;
         var grid = view.FindControl<DataGrid>(gridName)!;
-        var sort = gridName == "HelmGrid" ? (IGridSort)vm.HelmSort : vm.ArgoSort;
+        var sort = gridName == "HelmGrid" ? (IGridSort)vm.Helm.Sort : vm.ArgoSort;
 
         Pause();
         ClickHeader(window, grid, label);

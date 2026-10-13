@@ -4,19 +4,28 @@ using KubeNimbus.Core;
 
 namespace KubeNimbus.App.ViewModels;
 
-// "Open a terminal here": the user's own terminal, handed KUBECONFIG and a pinned context, and
-// the notice that says how the launch went (machine-terminal.md).
-public sealed partial class ClusterTabViewModel
+/// <summary>
+/// "Open a terminal here" for one cluster tab, and the notice that says how the launch went
+/// (machine-terminal.md). A child of <see cref="ClusterTabViewModel"/>, reached as
+/// <see cref="ClusterTabViewModel.Terminal"/>; the tab's own hand-offs (kubectl exec and a
+/// node shell in the user's terminal) report through <see cref="Show"/> into the same notice.
+/// </summary>
+/// <remarks>
+/// It is the user's own terminal, handed KUBECONFIG and a pinned current-context, not a shell
+/// inside kubeNimbus: that would need a PTY dependency and would still not be the user's
+/// terminal, with their prompt, their fonts and their tools. See <see cref="TerminalLauncher"/>
+/// for how the context is pinned without ever writing to the user's kubeconfig, and for why
+/// Windows starts a shell directly rather than going through wt.exe.
+/// </remarks>
+public sealed partial class TerminalNoticeViewModel : ObservableObject
 {
-    // ----------------------------------------------------- the machine's terminal
-    //
-    // "Open a terminal here" — the daily gesture people leave a GUI for, and the one
-    // thing this app had no answer to at all. It is not a shell *inside* kubeNimbus
-    // (that would need a PTY dependency and would still not be the user's terminal,
-    // with their prompt, their fonts and their tools); it is the user's own terminal,
-    // handed KUBECONFIG and a pinned current-context. See TerminalLauncher for how the
-    // context is pinned without ever writing to the user's kubeconfig, and for why
-    // Windows starts a shell directly rather than going through wt.exe.
+    private readonly ClusterContext _context;
+
+    public TerminalNoticeViewModel(ClusterContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        _context = context;
+    }
 
     /// <summary>
     /// The result of the last "open in terminal", or null when there is nothing to say.
@@ -27,13 +36,21 @@ public sealed partial class ClusterTabViewModel
     /// window opens behind the app is exactly the kind that otherwise fails silently.
     /// </summary>
     [ObservableProperty]
-    private string? _terminalNotice;
+    private string? _notice;
 
     [ObservableProperty]
-    private bool _terminalNoticeIsWarning;
+    private bool _isWarning;
 
     [ObservableProperty]
-    private bool _terminalNoticeIsError;
+    private bool _isError;
+
+    /// <summary>Puts one sentence in the notice with its severity (UI rule 11).</summary>
+    internal void Show(string message, bool warning = false, bool error = false)
+    {
+        Notice = message;
+        IsWarning = warning;
+        IsError = error;
+    }
 
     /// <summary>
     /// Sentence for each outcome. Static and public so the wording — which is the whole
@@ -100,30 +117,25 @@ public sealed partial class ClusterTabViewModel
     [RelayCommand]
     private async Task OpenInTerminalAsync()
     {
-        TerminalNotice = "Opening a terminal…";
-        TerminalNoticeIsWarning = false;
-        TerminalNoticeIsError = false;
+        Show("Opening a terminal…");
 
         TerminalLaunchResult result;
         try
         {
-            result = await TerminalLauncher.OpenAsync(Context);
+            result = await TerminalLauncher.OpenAsync(_context);
         }
         catch (Exception ex)
         {
             // The launcher answers ordinary failures with an outcome; anything that gets
             // here is unexpected, and still must not take the tab down.
-            TerminalNotice = $"Could not open a terminal: {ex.Message}";
-            TerminalNoticeIsError = true;
+            Show($"Could not open a terminal: {ex.Message}", error: true);
             return;
         }
 
         var (message, warning, error) = DescribeTerminalLaunch(result);
-        TerminalNotice = message;
-        TerminalNoticeIsWarning = warning;
-        TerminalNoticeIsError = error;
+        Show(message, warning, error);
     }
 
     [RelayCommand]
-    private void DismissTerminalNotice() => TerminalNotice = null;
+    private void Dismiss() => Notice = null;
 }

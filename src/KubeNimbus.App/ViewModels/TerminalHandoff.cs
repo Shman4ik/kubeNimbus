@@ -88,7 +88,7 @@ public static class TerminalHandoff
 
         if (result.Command is not { } command)
         {
-            return ClusterTabViewModel.DescribeTerminalLaunch(result);
+            return TerminalNoticeViewModel.DescribeTerminalLaunch(result);
         }
 
         return result.Outcome switch
@@ -105,10 +105,10 @@ public static class TerminalHandoff
             TerminalLaunchOutcome.Opened => (
                 $"Opened {result.TerminalLabel} on {result.ContextName}, running {command}. "
                 + "If kubectl is refused (RBAC, Pod Security), it says so in that window."
-                + ClusterTabViewModel.PassedOverSentence(result),
+                + TerminalNoticeViewModel.PassedOverSentence(result),
                 result.PassedOver.Count > 0, false),
 
-            _ => ClusterTabViewModel.DescribeTerminalLaunch(result),
+            _ => TerminalNoticeViewModel.DescribeTerminalLaunch(result),
         };
     }
 

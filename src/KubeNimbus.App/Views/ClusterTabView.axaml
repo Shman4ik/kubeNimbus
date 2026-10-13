@@ -197,20 +197,20 @@
              State in an InfoBar rather than a status dot, UI rule 11; severity as a
              bound class, same as the row action strip's. -->
         <Border DockPanel.Dock="Top" Classes="infoBar" Margin="0,0,0,8"
-                Classes.warn="{Binding TerminalNoticeIsWarning}"
-                Classes.error="{Binding TerminalNoticeIsError}"
-                IsVisible="{Binding TerminalNotice, Converter={x:Static aconv:ObjectConverters.IsNotNull}}">
+                Classes.warn="{Binding Terminal.IsWarning}"
+                Classes.error="{Binding Terminal.IsError}"
+                IsVisible="{Binding Terminal.Notice, Converter={x:Static aconv:ObjectConverters.IsNotNull}}">
           <DockPanel>
             <PathIcon DockPanel.Dock="Left" Data="{StaticResource ConsoleIconGeometry}" Width="12" Height="12"
                       VerticalAlignment="Top" Margin="0,2,8,0" />
             <Button DockPanel.Dock="Right" Classes="chip" Padding="0" MinWidth="18" MinHeight="18"
                     Margin="8,0,0,0" VerticalAlignment="Top"
-                    Command="{Binding DismissTerminalNoticeCommand}" ToolTip.Tip="Dismiss">
+                    Command="{Binding Terminal.DismissCommand}" ToolTip.Tip="Dismiss">
               <PathIcon Data="{StaticResource CloseIconGeometry}" Width="9" Height="9" />
             </Button>
             <!-- Selectable: the KUBECONFIG value is the thing to copy when no terminal
                  could be opened, which is precisely when it is being read. -->
-            <SelectableTextBlock Text="{Binding TerminalNotice}" TextWrapping="Wrap" FontSize="12" />
+            <SelectableTextBlock Text="{Binding Terminal.Notice}" TextWrapping="Wrap" FontSize="12" />
           </DockPanel>
         </Border>
 
@@ -1061,7 +1061,7 @@
              synthetic Helm sidebar entry is selected. Read-only. -->
         <Grid Grid.Row="1" IsVisible="{Binding IsHelmView}" Margin="1">
           <DataGrid Name="HelmGrid"
-                     ItemsSource="{Binding HelmReleases}" SelectedItem="{Binding SelectedHelmRelease}"
+                     ItemsSource="{Binding Helm.Releases}" SelectedItem="{Binding Helm.SelectedRelease}"
                      IsReadOnly="True" GridLinesVisibility="Horizontal" CanUserResizeColumns="True"
                      DoubleTapped="OnHelmRowDoubleTapped">
             <DataGrid.Columns>
@@ -1132,10 +1132,10 @@
 
           <TextBlock Text="Reading Helm releases…" Opacity="0.5" FontSize="13"
                      HorizontalAlignment="Center" VerticalAlignment="Center"
-                     IsVisible="{Binding IsHelmLoading}" />
+                     IsVisible="{Binding Helm.IsLoading}" />
 
           <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" MaxWidth="340"
-                      IsVisible="{Binding IsHelmEmpty}">
+                      IsVisible="{Binding Helm.IsEmpty}">
             <PathIcon Data="{StaticResource LayersIconGeometry}" Width="28" Height="28" Opacity="0.25" HorizontalAlignment="Center" />
             <TextBlock Text="No Helm releases found" FontWeight="SemiBold" FontSize="13" HorizontalAlignment="Center" Opacity="0.7" />
             <TextBlock Text="{Binding NamespaceDisplay, StringFormat='in {0}'}" FontSize="12" Opacity="0.5" HorizontalAlignment="Center" />

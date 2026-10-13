@@ -51,7 +51,7 @@ public class TerminalHandoffTests
     {
         var noTerminal = Result(TerminalLaunchOutcome.NoTerminal);
 
-        await Assert.That(TerminalHandoff.Describe(noTerminal)).IsEqualTo(ClusterTabViewModel.DescribeTerminalLaunch(noTerminal));
+        await Assert.That(TerminalHandoff.Describe(noTerminal)).IsEqualTo(TerminalNoticeViewModel.DescribeTerminalLaunch(noTerminal));
         await Assert.That(TerminalHandoff.Describe(Result(TerminalLaunchOutcome.Failed)).Message)
             .IsEqualTo("Could not prepare the terminal: disk full");
     }
@@ -176,8 +176,8 @@ public class TerminalHandoffTests
         await Assert.That(Find("Node shell in my terminal")).IsNull();
 
         exec!.Execute!();
-        await WaitFor(() => tab.TerminalNotice?.Contains("demo cluster") == true);
-        await Assert.That(tab.TerminalNoticeIsWarning).IsTrue();
+        await WaitFor(() => tab.Terminal.Notice?.Contains("demo cluster") == true);
+        await Assert.That(tab.Terminal.IsWarning).IsTrue();
 
         tab.SelectKindCommand.Execute(tab.SidebarSections.SelectMany(s => s.Kinds).First(k => k.Descriptor is { Group: "", Kind: "Node" }));
         tab.SelectedRow = tab.Rows.First();
@@ -209,8 +209,8 @@ public class TerminalHandoffTests
         await Assert.That(tab.NodeShellInMyTerminalCommand.CanExecute(null)).IsFalse();
 
         await tab.ExecInMyTerminalCommand.ExecuteAsync(null);
-        await Assert.That(tab.TerminalNotice).Contains("demo cluster");
-        await Assert.That(tab.TerminalNoticeIsWarning).IsTrue();
+        await Assert.That(tab.Terminal.Notice).Contains("demo cluster");
+        await Assert.That(tab.Terminal.IsWarning).IsTrue();
 
         tab.SetSelectedRows([tab.Rows[0], tab.Rows[1]]);
         await Assert.That(tab.ExecInMyTerminalCommand.CanExecute(null)).IsFalse();
