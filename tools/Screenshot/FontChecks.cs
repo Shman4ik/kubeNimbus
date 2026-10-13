@@ -167,7 +167,7 @@ internal static class FontChecks
         }
 
         // Not vacuous: a full run has to find the code it is checking.
-        if (!filtered && _monoProbed < 200)
+        if (!filtered && _monoProbed < ShardPlan.Current.Floor(200))
         {
             throw new InvalidOperationException($"Only {_monoProbed} mono elements were checked; the walk is not finding them.");
         }

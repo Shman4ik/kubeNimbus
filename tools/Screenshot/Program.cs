@@ -18,6 +18,10 @@ using Nimbus.Ui.Fonts;
 // screenshot loop when developing in an environment with no display — see
 // CLAUDE.md "Headless screenshot harness".
 
+// `--shard=<index>/<count>` renders only that shard's scenarios (ShardPlan): CI splits the
+// list across a job matrix (#347). It may appear anywhere in the arguments.
+(ShardPlan.Current, args) = ShardPlan.Parse(args);
+
 // `-- --stress` runs StressChecks instead of rendering: every data surface fed a large
 // cluster's worth of objects, with its visuals, collection notifications and time checked
 // against a budget. Exits non-zero when anything is over.
@@ -508,12 +512,18 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-node-shell-no-kubectl", () => HostInMainWindow(ClusterTabScenarios.NodeShellNoKubectl(), height: 1000)),
 };
 
-foreach (var (name, build) in scenarios)
+ShardPlan.Current.Verify(scenarios.Select(s => s.Name).ToList());
+var selected = 0;
+for (var position = 0; position < scenarios.Length; position++)
 {
-    if (filter is not null && !name.Contains(filter, StringComparison.OrdinalIgnoreCase))
+    var (name, build) = scenarios[position];
+    if (!ShardPlan.Current.Contains(position)
+        || (filter is not null && !name.Contains(filter, StringComparison.OrdinalIgnoreCase)))
     {
         continue;
     }
+
+    selected++;
 
     foreach (var theme in new[] { ThemeVariant.Light, ThemeVariant.Dark })
     {
@@ -525,6 +535,12 @@ TooltipChecks.ThrowIfAnyDead(filtered: filter is not null);
 AutomationChecks.ThrowIfAnyFailed(filtered: filter is not null);
 FontChecks.ThrowIfAnyFailed(filtered: filter is not null);
 SelectionChecks.ThrowIfAnyFailed(filtered: filter is not null);
+HarnessTiming.Report();
+if (ShardPlan.Current.IsSharded)
+{
+    Console.WriteLine($"Shard {ShardPlan.Current.Index}/{ShardPlan.Current.Count}: {selected} of {scenarios.Length} scenarios.");
+}
+
 Console.WriteLine($"Wrote screenshots to {Path.GetFullPath(outDir)}");
 try
 {
@@ -561,7 +577,10 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     // window, so a scenario that changes one would otherwise reach every later capture.
     App.ApplyFonts(App.LoadSettings());
 
+    var themeLabel = theme == ThemeVariant.Dark ? "dark" : "light";
+    var timing = new HarnessTiming.Capture(name, themeLabel);
     var content = build();
+    timing.Phase("build");
     var window = content as Window ?? new Window
     {
         Width = 1280,
@@ -573,6 +592,7 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     Dispatcher.UIThread.RunJobs();
     AvaloniaHeadlessPlatform.ForceRenderTimerTick();
     Dispatcher.UIThread.RunJobs();
+    timing.Phase("show");
 
     if (name == "ux-namespace-picker") UxInteractionChecks.NamespacePicker(window);
     if (name == "cluster-tab-namespace-picker-several") UxInteractionChecks.NamespacePickerSeveral(window);
@@ -631,7 +651,9 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
 
     // Last, so a pane a check just opened settles too: capture when the log streams have
     // stopped moving, not whenever the builder happened to return (ENG-10).
+    timing.Phase("checks");
     LogSettle.Run(window);
+    timing.Phase("settle");
 
     // After the settle, so every line has arrived before the pane is scrolled to its end.
     if (name.StartsWith("ux-log-end-gap", StringComparison.Ordinal)) LayoutChecks.LogEndClearsScrollBar(window);
@@ -648,11 +670,14 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
     if (theme == ThemeVariant.Light) AutomationChecks.Walk(window, name);
     if (theme == ThemeVariant.Light) FontChecks.Walk(window, name);
     if (theme == ThemeVariant.Light) SelectionChecks.Walk(window, name);
+    timing.Phase("walks");
     using var frame = window.CaptureRenderedFrame();
-    var themeLabel = theme == ThemeVariant.Dark ? "dark" : "light";
+    timing.Phase("render");
     var path = Path.Combine(outDir, $"{name}.{themeLabel}.png");
     frame?.Save(path, new Avalonia.Media.Imaging.PngBitmapEncoderOptions());
     window.Close();
+    timing.Phase("save");
+    timing.End();
     Console.WriteLine(frame is null ? $"FAILED (no frame): {path}" : $"Wrote {path}");
 }
 
