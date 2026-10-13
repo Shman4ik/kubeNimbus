@@ -715,4 +715,238 @@ public class ArgoLiveTests
             await CleanUpAsync(argo, [(ArgoNamespace, name)], destination);
         }
     }
+
+    /// <summary>
+    /// #339 against a real API server: an account that may read Applications in <c>argocd</c>
+    /// only (a Role, the narrow-RBAC case) is refused the dashboard's cluster-wide watch. The
+    /// shared watch ends with the server's sentence after one list instead of retrying it
+    /// behind "connection lost", and the same account's watch of its own namespace works.
+    /// </summary>
+    [Test]
+    public async Task A_narrow_accounts_cluster_wide_dashboard_watch_ends_refused_and_its_namespace_watch_works(CancellationToken ct)
+    {
+        using var argo = await ConnectAsync(ct);
+        var reader = Named("narrow");
+        string? kubeconfig = null;
+        try
+        {
+            kubeconfig = await CreateReaderAsync(argo.Client, reader, ct);
+            var contexts = await Kubeconfig.LoadContextsAsync([kubeconfig]);
+            using var narrow = await ClusterClient.ConnectAsync(contexts[0], ct);
+            var warnings = new List<Exception>();
+
+            Exception? ended = null;
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromSeconds(20));
+            try
+            {
+                await foreach (var _ in narrow.Watches.WatchAsync(argo.Applications, connectionLost: warnings.Add, cancellationToken: timeout.Token))
+                {
+                }
+            }
+            catch (Exception ex)
+            {
+                ended = ex;
+            }
+
+            await Assert.That(ended).IsTypeOf<WatchRefusedException>();
+            await Assert.That(ended!.Message).Contains("cannot list resource \"applications\"");
+            await Assert.That(warnings).IsEmpty();
+            await Assert.That(narrow.Watches.RunningPaths).IsEmpty();
+
+            // Its own namespace is granted: that watch syncs.
+            var synced = false;
+            using var own = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            own.CancelAfter(TimeSpan.FromSeconds(20));
+            await foreach (var change in narrow.Watches.WatchAsync(argo.Applications, ArgoNamespace, cancellationToken: own.Token))
+            {
+                if (change.Type == ResourceEventType.Synced)
+                {
+                    synced = true;
+                    break;
+                }
+            }
+
+            await Assert.That(synced).IsTrue();
+        }
+        finally
+        {
+            foreach (var (descriptor, item) in new[]
+            {
+                (ResourceDescriptor.RoleBindings, reader), (ResourceDescriptor.Roles, reader),
+            })
+            {
+                try
+                {
+                    await argo.Client.DeleteResourceAsync(descriptor, ArgoNamespace, item);
+                }
+                catch (KubernetesApiException)
+                {
+                    // already gone
+                }
+            }
+
+            try
+            {
+                await argo.Client.DeleteResourceAsync(LiveCluster.ServiceAccounts, ArgoNamespace, reader);
+            }
+            catch (KubernetesApiException)
+            {
+                // already gone
+            }
+
+            if (kubeconfig is not null)
+            {
+                File.Delete(kubeconfig);
+            }
+        }
+    }
+
+    /// <summary>
+    /// #336: the fleet list watches every member through the same shared path. Two members —
+    /// two connections to the one Argo sandbox, which is what two tabs on one cluster are — are
+    /// resolved and watched with <see cref="ClusterFleet.WatchAsync"/> into an
+    /// <see cref="ArgoFleetTable"/>; a sync started the way <c>kubectl patch</c> starts one shows
+    /// on both members' rows with no second list, each row keeping its own member's descriptor.
+    /// Then the fleet is watched again without one member, as a fleet change restarts it, and
+    /// that member's shared watch has no reader left.
+    /// </summary>
+    [Test]
+    public async Task The_fleet_watch_shows_a_sync_on_every_member_and_lets_go_of_one_that_left(CancellationToken ct)
+    {
+        using var argo = await ConnectAsync(ct);
+        var contexts = await Kubeconfig.LoadContextsAsync([KubeconfigPath()!]);
+        using var second = await ClusterClient.ConnectAsync(contexts[0], ct);
+        second.DiscoveryCacheDirectory = argo.Client.DiscoveryCacheDirectory;
+        var name = Named("fleet");
+        var destination = Named("fleet-dest");
+        var key = $"{ArgoNamespace}/{name}";
+        List<FleetMember> members =
+        [
+            new("east", argo.Client, ClusterEnvironment.Development),
+            new("west", second, ClusterEnvironment.Development),
+        ];
+        var targets = await ClusterFleet.ResolveAsync(members, ArgoCd.Group, "Application", cancellationToken: ct);
+        await Assert.That(targets.Count).IsEqualTo(2);
+
+        var table = new ArgoFleetTable(targets);
+        var resets = new Dictionary<string, int>(StringComparer.Ordinal);
+        var gate = new object();
+        using var watching = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var watch = Task.Run(async () =>
+        {
+            try
+            {
+                await foreach (var batch in ClusterFleet.WatchAsync(targets, cancellationToken: watching.Token)
+                                   .InBatches(cancellationToken: watching.Token))
+                {
+                    lock (gate)
+                    {
+                        foreach (var change in batch)
+                        {
+                            if (change.Event.Type == ResourceEventType.Reset)
+                            {
+                                resets[change.ClusterName] = resets.GetValueOrDefault(change.ClusterName) + 1;
+                            }
+
+                            table.Apply(change);
+                        }
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // the fleet changed, or the test is over
+            }
+        }, CancellationToken.None);
+
+        string Phase(string cluster)
+        {
+            lock (gate)
+            {
+                return table.Applications.FirstOrDefault(a => a.ClusterName == cluster && a.Application.Key == key)?.Application.OperationPhase
+                       ?? "(absent)";
+            }
+        }
+
+        try
+        {
+            await LiveCluster.WaitUntilAsync(() => { lock (gate) { return Task.FromResult(table.HasEveryAnswer); } },
+                TimeSpan.FromSeconds(30), "both members' Applications watches to sync", ct);
+
+            await CreateApplicationAsync(argo, name, "app", "with-removed", destination);
+            await LiveCluster.WaitUntilAsync(() => Task.FromResult(Phase("east") != "(absent)" && Phase("west") != "(absent)"),
+                TimeSpan.FromSeconds(30), "the new Application to reach both members through their watches", ct);
+
+            await MergePatchAsync(argo, ArgoNamespace, name,
+                """{"operation":{"initiatedBy":{"username":"kubectl"},"sync":{"revision":"with-removed","syncOptions":["CreateNamespace=true"]}}}""");
+
+            static bool Done(string phase) => phase is "Succeeded" or "Failed" or "Error";
+            await LiveCluster.WaitUntilAsync(() => Task.FromResult(Done(Phase("east")) && Done(Phase("west"))),
+                Reconcile, "the sync's phase to reach both members", ct);
+
+            await Assert.That(Phase("east")).IsEqualTo("Succeeded");
+            await Assert.That(Phase("west")).IsEqualTo("Succeeded");
+            lock (gate)
+            {
+                // One Reset per member: the first list. Everything after came from the watches.
+                Console.WriteLine($"Resets per member: {string.Join(", ", resets.Select(r => $"{r.Key}={r.Value}"))}");
+                foreach (var cluster in new[] { "east", "west" })
+                {
+                    if (resets.GetValueOrDefault(cluster) != 1)
+                    {
+                        throw new InvalidOperationException($"{cluster} relisted ({resets.GetValueOrDefault(cluster)} resets).");
+                    }
+                }
+
+                if (table.Applications.Where(a => a.Application.Key == key).Any(a => a.Descriptor != targets.Single(t => t.Member.ClusterName == a.ClusterName).Descriptor))
+                {
+                    throw new InvalidOperationException("A fleet row carries another member's descriptor.");
+                }
+            }
+
+            // West leaves: the fleet is watched again over east alone, and west's shared watch
+            // has nobody reading it (kept idle by its own connection, which closing the tab
+            // disposes).
+            await watching.CancelAsync();
+            await watch;
+            var westPath = targets.Single(t => t.Member.ClusterName == "west").Descriptor.CollectionPath(null);
+            await LiveCluster.WaitUntilAsync(() => Task.FromResult(second.Watches.IdlePaths.Contains(westPath)),
+                TimeSpan.FromSeconds(10), "west's watch to lose its reader", ct);
+
+            using var eastOnly = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            var remaining = targets.Where(t => t.Member.ClusterName == "east").ToList();
+            var seen = new List<string>();
+            var rewatch = Task.Run(async () =>
+            {
+                try
+                {
+                    await foreach (var change in ClusterFleet.WatchAsync(remaining, cancellationToken: eastOnly.Token))
+                    {
+                        lock (seen)
+                        {
+                            seen.Add(change.ClusterName);
+                        }
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                }
+            }, CancellationToken.None);
+            await LiveCluster.WaitUntilAsync(() => { lock (seen) { return Task.FromResult(seen.Count > 0); } },
+                TimeSpan.FromSeconds(30), "the east-only fleet watch to deliver", ct);
+            await Task.Delay(500, ct);
+            await eastOnly.CancelAsync();
+            await rewatch;
+
+            await Assert.That(seen.Distinct()).IsEquivalentTo(["east"]);
+            await Assert.That(second.Watches.IdlePaths).Contains(westPath);
+        }
+        finally
+        {
+            await watching.CancelAsync();
+            await watch;
+            await CleanUpAsync(argo, [(ArgoNamespace, name)], destination);
+        }
+    }
 }

@@ -172,10 +172,35 @@ list on every flip.
 - **A failed reconnect clears the cache** (`ShowReconnectFailureAsync`), so the next good
   connect reads everything again. A source that fails ends its readers with the failure and
   is dropped; the next reader starts a new one.
+- **A refusal ends the entry** (#339). `PumpAsync` retries every failure after a backoff and
+  reports it through `connectionLost`, which is right for a dropped socket and wrong for a 403:
+  asking again changes nothing, and under narrow RBAC, the expected case, every list the user
+  may not read sat behind "Watch connection lost … retrying" and a spinner that never stopped
+  (first seen on the Argo dashboard, a cluster-wide watch most users are refused). `WatchCache`
+  looks at each report (`WatchRefusedException.From`: a 403 on the list is a
+  `KubernetesApiException` with the server's sentence, on the watch request a bare
+  `HttpRequestException`, either wrapped in a `WatchConnectionException`) and fails the entry with
+  a `WatchRefusedException` instead of passing the report on: the source is cancelled, the readers'
+  streams end with the server's sentence, and nothing asks again until a reader subscribes again
+  (Refresh, a namespace or kind change, a reconnect). The lists turn that into a stated state: the
+  Resources list's "This account may not list Pods" (with "choose a namespace" when it asked the
+  whole cluster for a namespaced kind; when it had already listed and only the watch was refused,
+  the rows stay and the status bar says live updates stopped), the Argo dashboard's "This account
+  may not read Argo CD Applications" ([argo-cd](argo-cd.md)), a namespace of a several-namespace
+  list through `NamespaceWatch`'s `sourceFailed`, a fleet member through `ClusterFleet`'s
+  `memberEnded` (the fleet list stops waiting once every member has ended). The Applications mode
+  needed no change: its failure path already called `Refuse` with the message, which is now the
+  server's sentence. The two 403 branches that read `connectionLost` reports in the Resources
+  list's several-namespace watch and the Applications mode no longer see a 403 there; the first
+  was removed, the second is unreachable and left for whoever next changes that file.
 - **Not replayed**: a connection warning or an unreadable object reaches the readers present
   when it happens. One that joins later sees the rows, not the warning.
 
 `WatchCacheTests` pins the sharing, the late reader's replay, the namespace filter and its
-synced-only rule, idle retention and eviction, the never-synced stop, the relist and the
-failure. Not verified here: the cost of five idle watches against a real API server with
+synced-only rule, idle retention and eviction, the never-synced stop, the relist, the
+failure and the refusal: a source that reports a 403 and would retry is stopped at its first
+report, and a real `ClusterClient` against a stub answering 403 ends its shared watch with the
+server's sentence after one list request (both mutation-checked: without the refusal branch the
+reader never ends and the list is asked again after the backoff). `Live/ArgoLiveTests` repeats
+it against a real API server with a Role-only account (see [argo-cd](argo-cd.md)). Not verified here: the cost of five idle watches against a real API server with
 large lists, which is reasoned, not measured.

@@ -33,6 +33,14 @@ namespace KubeNimbus.Core;
 /// would retry for ever with nobody reading it.
 /// </para>
 /// <para>
+/// <b>A refusal ends the entry</b> (#339). The source retries a lost connection for ever, which
+/// is right for a dropped socket and wrong for a 403: under narrow RBAC, the expected case, every
+/// list this user may not read sat behind "Watch connection lost … retrying" and a spinner that
+/// never stopped. A 403 reported by the source fails the entry with a
+/// <see cref="WatchRefusedException"/> carrying the server's sentence, its subscribers' streams
+/// end with it, and nothing asks again until somebody subscribes again.
+/// </para>
+/// <para>
 /// <b>What is not replayed.</b> A connection warning and an unreadable object are reported to
 /// the subscribers that are there when they happen; one that joins later sees the rows and
 /// not the warning.
@@ -350,6 +358,15 @@ public sealed class WatchCache : IDisposable
 
     private void Broadcast(Entry entry, int generation, Exception ex)
     {
+        // A refusal (403) is an answer, not a lost connection: the entry ends with it rather than
+        // retrying every backoff behind a "connection lost" banner and a spinner (#339). The next
+        // subscriber — a namespace change, Refresh, a reconnect — asks again from nothing.
+        if (WatchRefusedException.From(ex) is { } refused)
+        {
+            Fail(entry, generation, refused);
+            return;
+        }
+
         List<Subscriber> subscribers;
         lock (_gate)
         {

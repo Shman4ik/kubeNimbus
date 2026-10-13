@@ -371,6 +371,8 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-argo-applicationset-overview", () => HostInMainWindow(ArgoScenarios.ApplicationSetDetail(0), height: 1000)),
     ("cluster-tab-argo-appproject-detail", () => HostInMainWindow(ArgoScenarios.ProjectDetail(), height: 1000)),
     ("cluster-tab-argo-fleet", () => HostInMainWindow(ArgoScenarios.Fleet())),
+    ("cluster-tab-argo-refused", () => HostInMainWindow(RefusalScenarios.Argo())),
+    ("cluster-tab-list-refused", () => HostInMainWindow(RefusalScenarios.List())),
     // L1 — the palette's log rows. On the demo cluster, which is the one place the rows
     // come from a real listing (the dataset) rather than a fixture; the states a sandbox
     // cannot produce on demand (in flight, refused, capped, a fleet) are written in
