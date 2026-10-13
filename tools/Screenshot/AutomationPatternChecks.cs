@@ -236,6 +236,29 @@ internal static class AutomationPatternChecks
             || front != vm.SelectedInspectorTab)
             throw new InvalidOperationException("After Delete closed a dock tab, focus did not move to the tab in front.");
         Console.WriteLine("Dock tab Delete: closed the focused tab, focus on the one in front.");
+
+        // #370: the QA VM crops the open tab's pane by AutomationId (`qa-ui.ps1 screenshot
+        // -Id DockContent`), so the pane has to be in the peer tree a client walks, under that
+        // id, with bounds to crop to.
+        var content = FindPeer(ControlAutomationPeer.CreatePeerForElement(window), "DockContent")
+                      ?? throw new InvalidOperationException("No automation peer with AutomationId DockContent under the window: qa-ui cannot crop the dock's content.");
+        if (!content.IsControlElement() || content.GetAutomationControlType() != AutomationControlType.Pane || content.GetBoundingRectangle().Height < 20)
+            throw new InvalidOperationException(
+                $"DockContent is a {content.GetAutomationControlType()}{(content.IsControlElement() ? "" : " outside the control view")}, {content.GetBoundingRectangle().Height:0}px tall; qa-ui needs a Pane in the control view with bounds to crop.");
+        Console.WriteLine($"Dock content: AutomationId DockContent, {content.GetAutomationControlType()}, {content.GetBoundingRectangle().Height:0}px tall.");
+    }
+
+    private static AutomationPeer? FindPeer(AutomationPeer peer, string automationId)
+    {
+        if (peer.GetAutomationId() == automationId)
+            return peer;
+        foreach (var child in peer.GetChildren())
+        {
+            if (FindPeer(child, automationId) is { } found)
+                return found;
+        }
+
+        return null;
     }
 
     /// <summary>

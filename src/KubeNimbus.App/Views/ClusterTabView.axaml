@@ -1417,7 +1417,14 @@
               </Button>
             </Grid>
 
-            <ContentControl Grid.Row="1" Content="{Binding SelectedInspectorTab}" />
+            <!-- DockContent is the open tab's pane under the strip: the AutomationId the QA
+                 VM's `qa-ui.ps1 screenshot -Id DockContent` crops to (#370), and a screen
+                 reader's landmark for "the inspector's content". -->
+            <ContentControl Grid.Row="1" Name="DockContent" Content="{Binding SelectedInspectorTab}"
+                            AutomationProperties.AutomationId="DockContent"
+                            AutomationProperties.AccessibilityView="Control"
+                            AutomationProperties.ControlTypeOverride="Pane"
+                            AutomationProperties.Name="Inspector content" />
           </Grid>
         </Border>
       </Grid>

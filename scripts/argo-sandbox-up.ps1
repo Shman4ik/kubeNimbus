@@ -43,13 +43,43 @@
 
 .PARAMETER Name
     The sandbox's Docker container. Refuses the shared `kubenimbus-sandbox`.
+
+.PARAMETER Wsl
+    Run every docker command through `wsl.exe --exec docker ...`, for Docker Engine inside
+    a WSL2 distro, as `sandbox-up.ps1 -Wsl` does; pass it when the cluster was brought up
+    that way. It also starts (or reuses) the same keep-alive, so WSL does not stop the
+    distro, and the cluster with it, when idle. See scripts/wsl-docker.ps1.
+
+.PARAMETER WslDistribution
+    WSL distro to target (passed as `wsl -d <name>`). Only meaningful with -Wsl.
+    Default: WSL's own default distro.
+
+.PARAMETER Kubeconfig
+    The cluster's kubeconfig, used only to place the keep-alive record beside it.
+    Default: <repo>/.sandbox/argo-kubeconfig.yaml.
+
+.EXAMPLE
+    ./scripts/sandbox-up.ps1 -Wsl -Name kubenimbus-argo -Port 6551 -SkipApps -Kubeconfig .sandbox/argo-kubeconfig.yaml
+    ./scripts/argo-sandbox-up.ps1 -Wsl
 #>
 [CmdletBinding()]
 param(
-    [string] $Name = 'kubenimbus-argo'
+    [string] $Name = 'kubenimbus-argo',
+    [switch] $Wsl,
+    [string] $WslDistribution,
+    [string] $Kubeconfig
 )
 
 $ErrorActionPreference = 'Stop'
+
+# The same `docker` routing as sandbox-up.ps1 -Wsl, and its keep-alive (#370): the 2026-10-13
+# QA VM run had to forward docker to WSL by hand here.
+if ($Wsl) {
+    . (Join-Path $PSScriptRoot 'wsl-docker.ps1')
+    if (-not $Kubeconfig) { $Kubeconfig = Join-Path (Split-Path -Parent $PSScriptRoot) '.sandbox/argo-kubeconfig.yaml' }
+    $keepAlive = Start-WslKeepAlive (Join-Path (Split-Path $Kubeconfig -Parent) 'wsl-keepalive.json')
+    Write-Host "    WSL keep-alive: pid $($keepAlive.Pid)" -ForegroundColor DarkGray
+}
 
 # The release this installs, and the SHA-256 of its install.yaml. Changing the version is
 # changing both lines, after computing the new file's hash yourself.
@@ -91,7 +121,7 @@ function Invoke-KubectlApply([string] $Yaml, [string[]] $Extra = @()) {
 # --- The cluster must be up, and must not be carrying the stand-in CRDs -------------
 $state = docker inspect -f '{{.State.Running}}' $Name 2>$null
 if ($state -ne 'true') {
-    throw "Container $Name is not running. Start it with ./scripts/sandbox-up.ps1 -Name $Name -Port 6551 -SkipApps."
+    throw "Container $Name is not running. Start it with ./scripts/sandbox-up.ps1$(if ($Wsl) { ' -Wsl' }) -Name $Name -Port 6551 -SkipApps."
 }
 
 $standIn = docker exec $Name kubectl get crd applications.argoproj.io -o 'jsonpath={.metadata.labels.app\.kubernetes\.io/part-of}' 2>$null

@@ -42,6 +42,53 @@ detours per batch, not the checks themselves: a UI Automation round trip costs w
 full run is still tens of minutes of agent time, and that is a target, not a measurement until
 the next run records one in this table.
 
+## What the second run (2026-10-13) changed
+
+The run on main at 0b3c20b ([report](https://github.com/Shman4ik/kubeNimbus/issues/327#issuecomment-6148529150))
+ran the #314 fixes in the VM for the first time. Every finding below turned a check into an
+UNSURE, or into a FAIL that said nothing about the app (#370):
+
+| Finding | Fix |
+|---|---|
+| `select` on a namespace-picker row read back "selected" and changed nothing (Q-2): that list's selection is a highlight, and it chooses on a press or Enter. | `select` also fails when the item sits in a popup window (its point is on a top-level window of the app other than the main one) that is still open afterwards. A combo's drop-down that closes on the choice passes. |
+| The file dialog's `1148` and `1` are Panes with no Value or Invoke pattern on the VM's Windows 11 (Q-3, S-1). | `set-text` writes to the Edit inside the target and reads the text back; `invoke -Dialog` presses a Button inside it, or names `keys -Dialog -Id 1148 -Keys '{ENTER}'`; real input with `-Dialog` brings the dialog forward, not its disabled owner. |
+| `dump` printed no "not selected", no expand state and no item status, and there was no `collapse` (C-13, C-16). | `dump` prints `selected`/`not selected`, `expand=…` and `status='…'` whenever the element has them; `collapse` reads its state back. |
+| Range drop-down items were refused as "not on one of the app's windows". A ComboBox has the Scroll pattern, and its bounds are the closed box, so its items in the popup were judged clipped by it. | A scrolling ancestor clips a point only when it is drawn in the same native window, and never while it is an expanded drop-down. A point on the app that a list does clip now says so instead. `Show-Window` no longer restores a maximized window, which would close the popup the click was aimed at. |
+| The dock's content had no AutomationId, so C-9, C-10 and Y-11 attached whole-window crops. | `DockContent` (accessible-names item 15); the harness's `ux-dock-tab-delete` asserts its peer. |
+| The VM's WSL stopped its idle distro a minute after `sandbox-up.ps1 -Wsl`, and both k3s containers with it (Exited (2)); the preflight had run before. `argo-sandbox-up.ps1` had no `-Wsl`. | `scripts/wsl-docker.ps1`: the `docker` routing both scripts share, and a hidden `wsl.exe --exec sleep infinity` recorded in `wsl-keepalive.json` beside the kubeconfig (reused while it lives). The preflight fails a WSL-hosted sandbox with no live keep-alive and reads each `kubenimbus*` container's state. |
+| G-10 to G-13 and G-15 to G-20 were not run: the session's permission check refused `kubectl -n qa-shop rollout restart deploy/shop-web` ("Interfere With Workloads"). | The rule below. |
+| Check text: K-7 expected a context menu the Applications list does not have, A-3 a menu item named "Refresh from Git", K-6 "five cards" the UIA tree cannot count, P-5 one run's drain numbers. | Rewritten in the suite to what the app does and what a run can read. |
+
+### Batch G2's kubectl
+
+G2 restarts, creates, patches and deletes in `qa-shop`, and an agent's mutating `kubectl` is
+refused by default. Every G2 command in the suite is written `kubectl -n qa-shop …`, with the
+namespace first, so one pair of prefix rules covers them. The owner adds them to the VM
+checkout's **`.claude/settings.local.json`**, which the repository's `.gitignore` names so a
+`git add -A` in the VM cannot commit it, and never to the committed `.claude/settings.json`:
+that file also loads on the owner's own desktop, where `kubectl` points at real clusters.
+
+```json
+{ "permissions": { "allow": [ "PowerShell(kubectl -n qa-shop *)", "Bash(kubectl -n qa-shop *)" ] } }
+```
+
+**What the rules let through is wider than G2.** The `*` takes any verb and any further
+argument, so `kubectl -n qa-shop delete ns <x>`, `… get pods -A`, `… --context <other>` and
+`… --kubeconfig <other file>` all pass. Narrowing them to G2's exact commands does not help:
+every command with a variable part (a pod name, the gated pod's manifest) needs a `*`, and a
+`*` admits the same extra flags. The preflight's loopback check reads only the kubeconfig it is
+given, not what an agent passes to `kubectl`. So the rules are safe only because of what the
+VM holds: **the sandbox's kubeconfig is the only one on the VM**, and every context in it
+(`kubectl config get-contexts`: the sandbox's and `qa-seed.ps1`'s `qa-prod`, `qa-limited`,
+`qa-cut`) points at the VM's own loopback. The owner checks that before adding the rules, and
+removes them again if a real cluster's kubeconfig ever lands on the VM. The worst a rule can
+then do is break the throwaway sandbox, which `sandbox-up.ps1 -Recreate` puts back.
+
+Without the rules, the agent stops at each G2
+mutation and a person runs it: G-10, G-18 and G-19's `rollout restart deploy/shop-web`, G-12's
+`create deployment qa-many` and its delete, G-13's gated pod and its `patch`, and G-20's
+`delete pod`.
+
 ## Rules that came out of it
 
 1. **A prompt names a batch and a path; the checks live in the repo.** Check text in a prompt

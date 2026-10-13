@@ -73,7 +73,9 @@ internal static class Program
             .WithNimbusFonts()
             .LogToTrace();
 #if DEBUG
-        builder = builder.WithDeveloperTools();
+        // Not on F12, the library's default: inside the exec terminal that key is the
+        // shell's, and developer tools see it first (#369). See Hotkeys.DeveloperTools.
+        builder = builder.WithDeveloperTools(options => options.Gesture = Hotkeys.DeveloperTools);
 #endif
         return builder;
     }

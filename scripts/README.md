@@ -125,7 +125,7 @@ starts from scratch.
 | `-Force` / `--force` | off | let `-InstallKubeconfig` replace an existing `~/.kube/config` (backed up first) |
 | `-Recreate` / `--recreate` | off | delete an existing container first |
 | `-SkipApps` / `--skip-apps` | off | bare cluster, no demo workloads |
-| `-Wsl` (`sandbox-up.ps1`/`sandbox-down.ps1` only) | off | route every docker call through `wsl.exe --exec docker ...` instead of a native Windows docker.exe |
+| `-Wsl` (`sandbox-up.ps1`, `sandbox-down.ps1` and `argo-sandbox-up.ps1`) | off | route every docker call through `wsl.exe --exec docker ...` instead of a native Windows docker.exe; the up scripts also start a WSL keep-alive (below) |
 | `-WslDistribution` | WSL default | which distro `-Wsl` targets (`wsl -d <name>`) |
 
 ## A real Argo CD for the Argo live tests (optional)
@@ -199,7 +199,13 @@ Two ways to drive it from there:
   command out to `wsl.exe --exec docker ...`, so the rest of the workflow — the
   kubeconfig path, `$env:KUBECONFIG`, `dotnet run` — is unchanged. Pass
   `-WslDistribution <name>` if it isn't your default distro. Tear down the same
-  way: `./scripts/sandbox-down.ps1 -Wsl`.
+  way: `./scripts/sandbox-down.ps1 -Wsl`. `argo-sandbox-up.ps1 -Wsl` works the same.
+  WSL stops an idle distro about a minute after its last process ends, and the
+  k3s containers with it, so `-Wsl` also starts a hidden `wsl.exe --exec sleep
+  infinity` and records its pid in `wsl-keepalive.json` beside the kubeconfig
+  (`scripts/wsl-docker.ps1`); a live one is reused. `qa-preflight.ps1` fails a
+  WSL-hosted sandbox without it. Stop it with `Stop-Process -Id <pid>` when done:
+  `sandbox-down.ps1` leaves it, since the Argo sandbox may still need the distro.
 
 ## The classic path (`~/.kube/config`)
 

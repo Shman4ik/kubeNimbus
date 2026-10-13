@@ -77,6 +77,18 @@ Seven things are load-bearing:
    from `ShellOwns` fails it), `ExecKeyEncodingTests` pins F11/F12, and `ux-exec-keys` presses
    F1–F12 on the rendered pane, expects each key's sequence with the sheet and the palette
    shut, then F1 with focus on the pane's button opens the sheet.
+   **A Debug build opens Avalonia's developer tools on Pause, not F12** (#369). QA T-13 saw F12
+   in the terminal reach the shell and also open the "Developer Tools Not Installed" dialog,
+   which took the next Enter. Developer tools read their key from the raw input stream
+   (`AvaloniaUI.DiagnosticsSupport` hooks the input manager, read off its IL), ahead of any
+   window binding or control and without marking it handled, so neither the yield above nor the
+   control's own handling can keep it from them: the only fix is a key the terminal leaves
+   alone. A probe in `ux-exec-keys` ruled out the chords: the control sent `^D` (end of input)
+   for Ctrl+Alt+Shift+D and the key's character for Ctrl+Alt+Shift+0, while Pause sent nothing.
+   `Hotkeys.DeveloperTools` is Pause, passed in `Program.BuildAvaloniaApp`;
+   `TerminalChordYieldTests` pins that the shell does not own it and no command binds it
+   (mutation-checked: F12 fails it), and `ux-exec-keys` presses it in the terminal and expects
+   no bytes. The dialog itself appears only in a Debug build, so it is desktop check T-14.
    **Alt+&lt;letter&gt; is ESC and the letter in the case Shift gives it** (#315). The control
    sends ESC followed by the key event's `KeySymbol`, and Windows reports an Alt chord's
    symbol as the upper-case letter whatever Shift says, so Alt+B reached the shell as

@@ -178,6 +178,18 @@ internal static class KeyboardChecks
             if (shell.IsShortcutsOpen || palette.IsOpen)
                 throw new InvalidOperationException("A function key inside the exec terminal opened the cheat sheet or the palette; the key belongs to the shell.");
 
+            // The Debug build's developer-tools key (#369) is read from the raw input stream
+            // before the terminal sees it, so it has to be one the terminal sends nothing for:
+            // a key that reached the shell would both open the tools and type into the pod.
+            // A probe of the control showed why it is Pause: Ctrl+Alt+Shift+D sent ^D (EOF)
+            // and Ctrl+Alt+Shift+0 sent the key's symbol, while Pause sent nothing.
+            var devTools = KubeNimbus.App.Hotkeys.DeveloperTools;
+            if (devTools.Key != Key.Pause || devTools.KeyModifiers != KeyModifiers.None)
+                throw new InvalidOperationException($"The developer-tools key is now {KubeNimbus.App.Hotkeys.Describe(devTools)}; press it here with its physical key and symbol before trusting it.");
+            Expect(Press(Key.Pause, RawInputModifiers.None, PhysicalKey.Pause, null), [], "Pause (developer tools)");
+            if (shell.IsShortcutsOpen || palette.IsOpen)
+                throw new InvalidOperationException($"{KubeNimbus.App.Hotkeys.Describe(devTools)} inside the exec terminal opened the cheat sheet or the palette.");
+
             var copy = Press(Key.C, RawInputModifiers.Control | RawInputModifiers.Shift, PhysicalKey.C, "C");
             if (copy.Contains((byte)0x03))
                 throw new InvalidOperationException("Ctrl+Shift+C reached the pod as ^C; it is the terminal's Copy.");
@@ -214,7 +226,7 @@ internal static class KeyboardChecks
             exec.Terminal.UserInput -= OnInput;
         }
 
-        Console.WriteLine("Exec terminal key mapping passed (^C 0x03, ^D 0x04, Tab 0x09, Ctrl+Shift+C not ^C, Alt+B ESC b, Ctrl+Shift+L ^L in the terminal and the logs palette outside it, Ctrl+K ^K, Ctrl+P ^P, Ctrl+Shift+N ^N, F1-F12 as xterm sequences in the terminal and F1 the cheat sheet outside it).");
+        Console.WriteLine("Exec terminal key mapping passed (^C 0x03, ^D 0x04, Tab 0x09, Ctrl+Shift+C not ^C, Alt+B ESC b, Ctrl+Shift+L ^L in the terminal and the logs palette outside it, Ctrl+K ^K, Ctrl+P ^P, Ctrl+Shift+N ^N, F1-F12 as xterm sequences in the terminal and F1 the cheat sheet outside it, the Debug developer-tools chord sends nothing).");
     }
 
     /// <summary>

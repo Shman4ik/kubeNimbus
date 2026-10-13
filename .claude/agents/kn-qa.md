@@ -104,7 +104,7 @@ file written in the pod and read with `kubectl exec`); a row's selected state is
 sidebar's kind rows and the flyout's rows need a real `click`: `select`, `toggle` and an
 `invoke` that selects read the state back and fail when nothing changed, and `invoke` through
 InvokePattern cannot be read back, so check its effect. The Windows file dialog is reached with
-`-Dialog` (`set-text -Dialog -Id 1148 -Text <path>`, then `invoke -Dialog -Id 1`). Context-menu items are often named by their help text, so find
+`-Dialog` (`set-text -Dialog -Id 1148 -Text <path>`, then `invoke -Dialog -Id 1`, or the `keys -Dialog -Id 1148 -Keys '{ENTER}'` it names when Open has no button inside). The dock's open pane crops as `screenshot -Id DockContent`. Context-menu items are often named by their help text, so find
 them with `dump -Match`. `toggle` on a toggle button bypasses the app's own refusal; use a
 real click for a check about refusing. The description in a `click` result is read before the
 click, and the tab close buttons are `<unnamed>` in it; neither is a failure.

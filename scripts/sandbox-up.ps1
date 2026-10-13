@@ -54,6 +54,10 @@
     translated to their /mnt/... form via `wsl --exec wslpath -u` first. `--exec`
     keeps the Linux shell out of it: without it bash eats the backslashes of a
     Windows path, and `X:\source\...` arrives as `X:source...`.
+    It also starts a hidden `wsl.exe --exec sleep infinity`, because WSL stops an idle
+    distro about a minute after its last process ends and takes the k3s containers with
+    it, and records its pid in wsl-keepalive.json beside the kubeconfig (an existing live
+    one is reused). See scripts/wsl-docker.ps1.
 
 .PARAMETER WslDistribution
     WSL distro to target (passed as `wsl -d <name>`). Only meaningful with
@@ -91,23 +95,10 @@ function Write-Step([string] $Message) { Write-Host "==> $Message" -ForegroundCo
 function Write-Note([string] $Message) { Write-Host "    $Message" -ForegroundColor DarkGray }
 
 # When -Wsl is set, every `docker` call in this script below is routed through
-# `wsl.exe docker ...` — a function shadows the external docker.exe for the
-# rest of this process, so nothing below needs to know which one is in play.
-# $LASTEXITCODE still flows through: it's set by the `&` call inside the
-# function and untouched by returning from it.
-if ($Wsl) {
-    # `$input |` matters: this script pipes YAML into `docker exec -i ... kubectl
-    # apply -f -`, and a function with no pipeline input touches $input nowhere
-    # near the external process's stdin unless it's forwarded explicitly.
-    function docker {
-        if ($WslDistribution) {
-            $input | & wsl.exe -d $WslDistribution --exec docker @args
-        }
-        else {
-            $input | & wsl.exe --exec docker @args
-        }
-    }
-}
+# `wsl.exe --exec docker ...` — a function from wsl-docker.ps1 shadows the external
+# docker.exe for the rest of this process, so nothing below needs to know which one
+# is in play. Dot-sourced at script scope (an `if` block is not a scope of its own).
+if ($Wsl) { . (Join-Path $PSScriptRoot 'wsl-docker.ps1') }
 
 function ConvertTo-DockerHostPath([string] $WindowsPath) {
     if (-not $Wsl) { return $WindowsPath }
@@ -137,6 +128,14 @@ if ($LASTEXITCODE -ne 0) {
         throw "Docker is not available inside WSL (wsl.exe docker failed). Check that Docker Engine is installed and dockerd is running in the target distro — see scripts/README.md."
     }
     throw 'Docker is not available or the daemon is not running. Start Docker Desktop and retry (or pass -Wsl to use Docker Engine inside WSL2 instead).'
+}
+
+# WSL stops an idle distro's VM about a minute after its last process ends, and the k3s
+# containers stop with it (#370); a hidden keep-alive process holds it up. Recorded beside
+# the kubeconfig, where qa-preflight.ps1 looks for it.
+if ($Wsl) {
+    $keepAlive = Start-WslKeepAlive (Join-Path (Split-Path $Kubeconfig -Parent) 'wsl-keepalive.json')
+    Write-Note "WSL keep-alive: wsl.exe --exec sleep infinity, pid $($keepAlive.Pid) (stop it with Stop-Process -Id $($keepAlive.Pid) when done)"
 }
 
 $existing = (docker ps -a --filter "name=^/$Name$" --format '{{.Names}} {{.State}}') -join ''

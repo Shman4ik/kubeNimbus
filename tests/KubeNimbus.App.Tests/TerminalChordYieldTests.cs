@@ -103,6 +103,31 @@ public class TerminalChordYieldTests
     }
 
     [Test]
+    public async Task The_developer_tools_key_is_neither_the_shell_s_nor_a_command_s()
+    {
+        // #369: developer tools read their key from the raw input stream, ahead of every
+        // control, so on F12 they opened from inside the exec terminal, where F12 is the
+        // shell's. The key is checked against both schemes: no command may sit on it either.
+        foreach (var scheme in new[] { "windows", "mac" })
+        {
+            try
+            {
+                Nimbus.Ui.Hotkeys.Initialize(scheme);
+                var devTools = Hotkeys.DeveloperTools;
+                await Assert.That(CommandBindings.ShellOwns(devTools)).IsFalse();
+
+                var bindings = new List<KeyBinding>();
+                CommandBindings.RebuildWindowBindings(bindings, _ => new CountingCommand(), _ => new CountingCommand(), () => true);
+                await Assert.That(bindings.Any(b => b.Gesture is { } g && g.Key == devTools.Key && g.KeyModifiers == devTools.KeyModifiers)).IsFalse();
+            }
+            finally
+            {
+                Nimbus.Ui.Hotkeys.Initialize("auto");
+            }
+        }
+    }
+
+    [Test]
     public async Task The_shell_owns_every_function_key()
     {
         for (var key = Key.F1; key <= Key.F12; key++)
