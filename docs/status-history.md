@@ -3169,7 +3169,7 @@ Linux.
 
 What is left unverified. Everything that needs a real window, pointer, keyboard or screen reader is
 owed to the QA VM and is written down as checks in `docs/qa/desktop-checks.md`; none of them has been
-run: K-8, A-10, L-18 and M-17 (the Argo palette, the fleet title, the switcher's names and #366),
+run: K-8, A-10, L-20 and M-17 (the Argo palette, the fleet title, the switcher's names and #366),
 Q-2, Q-3, Q-5 to Q-8 and T-14 (every `qa-ui.ps1` change against a live app, the `DockContent` pane
 and Pause in the exec terminal), K-9 and G-25 (the Applications-mode palette and the regex filter),
 K-10 (the unhealthy-only and column items), and P-9, P-10 and G-21 (the dragged CRD width, the retry

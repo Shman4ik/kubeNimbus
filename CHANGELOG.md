@@ -176,7 +176,6 @@ These changes touch the build, the tests and the repository's tooling, not the a
   nightly on `main` in `.github/workflows/nightly-determinism.yml`, not on a PR (#360). The flaky
   `ArgoDashboardRefreshTests` asserts at least one more list after the press instead of an exact
   total (#357).
-
 - **A `nimbusUi drift` job fails a PR when `shared/nimbusUi` differs from nimbusUi's `main`**
   (#343; paired with pgNimbus's own check).
 - **The XAML smoke test runs as five parallel shards plus a separate stress job**, behind one
