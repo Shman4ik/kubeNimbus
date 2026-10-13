@@ -2982,3 +2982,106 @@ focus, pointer drags, a real clipboard and real keyboard input; a real cloud cre
 and a live token-file rotation; a narrow-RBAC ServiceAccount through the UI; macOS Cmd+click and
 Cmd+A; Argo CD's own web UI; the NativeAOT publish, which is left to the release PR's CI and to
 `release.yml`.
+
+### Backlog train after 0.7.0 (2026-10-12 to 2026-10-13)
+
+The train tracked in #327 continued the October sweep (#259) after 0.7.0 was tagged. One session
+orchestrated; each bundle was built by a `kn-bundle` agent in its own worktree and checked by
+`kn-verifier`, and the PRs were merged one at a time, squash, once CI was green on the head and the
+verifier said PASS. Three PRs that were not bundles landed in the same days: #338 (one namespace
+choice per tab, kept across restarts, and the shared, cached list watches), #351 (Linux builds on
+Ubuntu 22.04, the AppImage named by the catalog's rules and shipped with its `.zsync`) and #329
+(the action strip draws the verb's glyph bare, because on an Argo sync's result line it looked
+like a refresh button). No release was cut at the end of the train, by the owner's decision.
+
+What shipped, by bundle:
+
+- **P, logs (#328).** `LogFollowRetry` (Core) makes a not-started 400 a wait in both log panes,
+  re-reading the pod after the refusal (the race in #309) and gating watch retries on the
+  container having a run (#184, the G-13 failure of the 0.7.0 QA run). Log panes say their state
+  above their lines (#319). A 403 on metrics hides the CPU and Memory columns, says why and stops
+  the poll, remembered per kind until a reconnect (#310). #321 was investigated and left open: the
+  log list's automation peers are per realized row (about 1,000 per window at 5,000 lines), and a
+  fast follow re-announces every visible row each tick (about 120 events per tick); the stress
+  checks `logs-automation-*` bound it.
+- **R, YAML editor and selection (#333).** A second pasted document is refused and E after New
+  YAML focuses the editor (#300), the apply preview's diff gets the editor's place and a conflict
+  shows the force-apply diff (#316), `workspace.json` stores a column layout once (#318), a
+  ConfigMap carriage return survives and the Helm and Argo views start no reads behind a failed
+  reconnect (#311), a successful Argo fleet reload keeps an unrelated warning (#306), and with
+  several rows selected single-object actions are disabled and Delete always asks (#305).
+- **J, one grouping device per group (#330).** A shared-surface pair with nimbusUi#11 and
+  pgNimbus#394: DESIGN.md rule 23 and UI rule 24 (#215, #237), nimbusUi's `ArrowKeyFocus`, which
+  keeps the focus ring on a strip's tab (#297), `Button.chip.accentText` (#249), and the three
+  copies of nimbusUi made identical again (#238). The README GIFs and the trailer were not
+  re-recorded (#334).
+- **V, row-menu hand-offs and the drift check (#345, with pgNimbus#395).** "Exec in my terminal"
+  and "Node shell in my terminal" in the resource list's right-click menu (#198), a cancellable
+  New YAML kind read (#342), the sort cleared with its hidden column (the first slice of #301),
+  and the `nimbusUi drift` job (#343), which the owner made a required check on `main` in both
+  apps.
+- **S, Argo watch and exec keys (#335).** The single-cluster Argo dashboard is a list+watch
+  (`ArgoApplicationTable`, batched, row-level replace; #303), the exec terminal encodes
+  Alt+letter and Ctrl+Shift+letter itself (#315), window Ctrl+letter bindings yield to the focused
+  terminal (#222), and `qa-ui.ps1` reads pattern actions back, gets `resize` and `move` handles
+  from UI Automation and drives a file dialog with `-Dialog`.
+- **T, log retries and ResourceQuota (#340).** The not-started retry asks again what was asked
+  (#331), a 404 for a pod going away is its end in the multi-pod pane (#332), and ResourceQuota
+  rows carry a Full or Almost full verdict (a slice of #308).
+- **W, the smoke test in under 6 minutes (#348).** The XAML smoke test runs as five parallel
+  shards (`--shard=i/n`, round-robin, positions verified on every run) and a separate stress job,
+  behind one `XAML smoke test` summary check. Before it was one job of 15 min 51 s (render 14 min
+  32 s, median 1.26 s per capture); after, 3 min 31 s of wall clock on the PR's first run, every
+  scenario still in both themes with all checks on every PR. The harness prints per-phase timing
+  (#347).
+- **O, cluster tabs as tabs and pane text (#346).** The cluster tabs are one Tab stop with arrow
+  keys, Home and End, read as tabs, and Delete closes a tab; sidebar ExpandCollapse, namespace
+  check boxes, row names and selection, menu item names and the managed-fields toggle for UI
+  Automation (part of #236); the wheel over the dock strip (#313), one sidebar highlight (#317)
+  and the pane text of #320. The fix round was a harness one: it did not pin the time zone, so
+  `LocalTimeText.ToLocal` is now the one seam and the harness renders UTC.
+- **X, F-keys, the Argo fleet and refused watches (#352, with nimbusUi#12 and pgNimbus#396).**
+  F1 to F12 yield to the exec terminal (`ShellOwns`) and F11 and F12 are encoded by
+  `ExecView.EncodeKey` (#337), the Argo fleet list is watched per member (`ArgoFleetTable`,
+  `ClusterFleet.WatchAsync` with `memberEnded`; #336), `WatchCache` ends a 403 with
+  `WatchRefusedException`, stated in the Resources list and the Argo dashboard, and an Argo relist
+  swaps at Synced (#339), and Avalonia 12.1.4, SvcSystems.UI.Terminal 2.2.2 and TUnit 1.74.0 in
+  all three repositories (#344).
+- **Y, clock and 404 (#356, with pgNimbus#397).** The harness stops the clock (`AppClock`,
+  `FixedClock` at `DemoData.Now`, `BannedSymbols.Clock.txt`, `ClockChecks`), so two runs of one
+  commit render the same ages (#350); the Windows-only `EditorChecks.HelmReleaseLinks` failure was
+  the Helm fixture racing a two-second refused connect, not the editor (#349); pod detail applies
+  `IsPodGone` to a 404 (#341); `AVALONIA_TELEMETRY_OPTOUT` is set in every building workflow and
+  the test scripts. #353 stays open for the owner: on a machine signed in to Accelerate Community
+  a local licence ticket overrides the opt-out.
+- **Z, refusals stated (#355).** A several-namespace or fleet list that every member refuses says
+  so instead of "No … found" (#354), `PumpAsync` ends every list+watch on a 403 so selector
+  watches stop retrying a refusal, the dead Applications 403 branch is gone, the Argo "Live
+  updates stopped" state and the several-namespace refusal have harness scenarios, and the column
+  chooser opens from the palette with focus shown and returned (`ux-column-chooser-keyboard`; the
+  second slice of #301).
+
+What was verified. Every bundle PR got a `kn-verifier` PASS, several after one fix round (J, O, R,
+V, X and Z; S was verified three times), and each was merged only with CI green on its head, the
+sharded XAML smoke test included once #348 had landed. The PRs record their own runs: build with
+no new warnings and both suites on the sandbox (bundle R: Core 1058 passed, 0 failed, 8 skipped,
+App 702; bundle O: Core 1065 passed, 8 skipped, App 710), the touched harness scenarios, and mutation checks on the central tests of most of
+them. Live tests ran where a PR says so: the apply loop for #311, 20 runs of a row, all green
+(#333); `WorkloadLogsLiveTests` 20 of 20, twice (#340); a live Argo CD v3.5.4 for the dashboard
+watch (phases `(none)`, `Running`, `Succeeded`, one Reset), the fleet watch and a Role-only
+refusal (#335, #352); and a live test that impersonates a role-less service account for the
+selector watches (#355). The win-x64 NativeAOT publish of #352 gave only the DataGrid
+IL2104/IL3053 pair. One gated-pod log live test failed once in #352 and was green on re-run.
+
+What is left unverified. Everything that needs a real window, pointer, keyboard or screen reader
+is owed to the QA VM and is written down, as checks, in `docs/qa/desktop-checks.md`; none of them
+has been run: C-8 to C-16 (the focus ring, the cluster tabs and the UI Automation patterns, #297
+and #236), L-15 to L-19 (several rows selected, the row menu's terminal hand-offs, the column
+chooser from the palette), Y-9 to Y-12 (the YAML editor and the apply preview, #300 and #316),
+G-17 to G-20 (the log panes' retries and a deleted pod), T-9 and T-11 to T-13 (the exec
+terminal's keys, the hand-offs and the F-keys; there is no T-10), A-7 to A-9 (a real Argo CD's
+live dashboard and fleet), M-11 to M-16 (the metrics 403 and the stated refusals) and Q-1 to Q-4
+(the QA driver itself, #335). Also unverified: the README GIFs and the trailer, which were not
+re-recorded after the look changed (#334); the cost of five idle watches against a large real
+cluster (#338), which was reasoned and not measured; and the open chooser's highlight, which
+nobody has looked at with eyes.
