@@ -54,6 +54,25 @@ a file moves). Notes for anyone changing it:
 - A context that is already open appears **only** under Open, never twice.
 - **Row activation is handled on the ListBox, not in the item template.** See the
   hit-testing rule below — this one shipped broken once already.
+- **A row's accessible name follows the row it draws** (#367, the QA VM run on 0b3c20b). The
+  list virtualizes, so a filter hands each container a different context, and the name
+  `AutomationNames.NameFromContentText` took from the container's text on its first load
+  stayed: UI Automation reported the old row's name at the new row's (correct) bounds, and a
+  real click at the place it gave for `qa-limited` opened `qa-cut`. A name taken from a
+  control's content is now taken again whenever the content changes, after layout, for every
+  list item and button, not only here ([accessible-names](accessible-names.md)). The harness
+  scenario `ux-switcher-filter-uia` (`AutomationPatternChecks.SwitcherAfterFilter`) filters to
+  "prod" and clears it, and checks that each drawn row's peer names its own context and no other
+  and reports the bounds it is drawn at; it failed before the fix with the row drawn as
+  `prod-ledger` named after the `arn:aws:eks:…search-staging` row. Desktop check L-18.
+- **A context added while the app runs is in the unfiltered list after a rescan** (#366). The
+  QA run reported it missing until typed, also through UI Automation; the list itself is rebuilt
+  from `AvailableContexts` on every `Refresh`, filtered or not, and
+  `KubeconfigShellTests.A_context_added_while_running_is_in_the_unfiltered_switcher_after_a_rescan`
+  finds it after ☰ → Rescan kubeconfig and after the focus rescan with the switcher open. Not
+  reproduced in code; the likely cause is #367's stale names on recycled rows, and a row below
+  the fold of a virtualized list is not in the UIA tree until it is scrolled to. Desktop check
+  M-17 confirms it in the VM.
 
 **Environment colours** (`ClusterEnvironment` / `ClusterEnvironments.Classify`,
 Core) are the other half. "One wrong kubectl command in the wrong context can

@@ -19,7 +19,7 @@ public sealed partial class ArgoProjectTabViewModel : InspectorTabViewModelBase
 
     public ArgoProjectTabViewModel(
         ClusterClient? client, ResourceDescriptor descriptor, ArgoProject project, string clusterName = "")
-        : base($"AppProject/{project?.Name}", isDemo: client is null)
+        : base(clusterName.Length == 0 ? $"AppProject/{project?.Name}" : $"AppProject/{project?.Name} · {clusterName}", isDemo: client is null)
     {
         ArgumentNullException.ThrowIfNull(project);
 

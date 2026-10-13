@@ -302,6 +302,66 @@ internal static class AutomationPatternChecks
         Console.WriteLine($"Dock tab strip: a vertical wheel scrolls it sideways ({down:0}px for two notches).");
     }
 
+    /// <summary>
+    /// Scenario <c>ux-switcher-filter-uia</c> (#367): after the switcher's filter narrows the
+    /// list and is cleared again, every row on screen is named, through UI Automation, after
+    /// the context it draws, and reports the bounds it is drawn at. The list recycles its
+    /// containers, and a name taken once from a container's first content outlived it: the QA
+    /// run's click at the position UI Automation gave for qa-limited opened qa-cut. The
+    /// screenshot is the switcher back on the unfiltered list.
+    /// </summary>
+    internal static void SwitcherAfterFilter(Window window)
+    {
+        var vm = (MainWindowViewModel)window.DataContext!;
+        var list = window.GetVisualDescendants().OfType<ListBox>().First(l => l.Name == "SwitcherList");
+        Settle();
+        var unfiltered = SwitcherRowsMatch(window, list, "the unfiltered list");
+
+        vm.Switcher.Query = "prod";
+        Settle();
+        var filtered = SwitcherRowsMatch(window, list, "the filter 'prod'");
+
+        vm.Switcher.Query = "";
+        Settle();
+        SwitcherRowsMatch(window, list, "the filter cleared");
+        Console.WriteLine($"Switcher automation: {unfiltered} rows, then {filtered} filtered, then {unfiltered} again, each named for and bounded where it is drawn.");
+    }
+
+    private static int SwitcherRowsMatch(Window window, ListBox list, string state)
+    {
+        var rows = list.GetVisualDescendants().OfType<ListBoxItem>()
+            .Where(i => i.IsEffectivelyVisible && i.DataContext is ClusterSwitcherItemViewModel)
+            .ToList();
+        if (rows.Count < 2)
+            throw new InvalidOperationException($"The switcher draws {rows.Count} rows after {state}.");
+
+        // The row's name is the text it draws (AutomationNames.NameFromContentText): the group
+        // heading on a group's first row, the context, its provenance line. So it must name this
+        // row's context and no other context the list holds.
+        var vm = (MainWindowViewModel)window.DataContext!;
+        var everyName = vm.AvailableContexts.Select(c => c.Name)
+            .Concat(vm.Tabs.Select(t => t.Context.Name))
+            .Append(ClusterContext.Demo.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (var row in rows)
+        {
+            var item = (ClusterSwitcherItemViewModel)row.DataContext!;
+            var peer = ControlAutomationPeer.CreatePeerForElement(row);
+            var name = peer.GetName();
+            var named = name.Split(", ").Where(everyName.Contains).ToList();
+            if (named.Count != 1 || named[0] != item.Name)
+                throw new InvalidOperationException($"After {state}, the switcher row drawn as {item.Name} is named '{name}' through UI Automation.");
+
+            var drawn = row.TranslatePoint(default, window) is { } origin ? new Rect(origin, row.Bounds.Size) : default;
+            var reported = peer.GetBoundingRectangle();
+            if (Math.Abs(reported.X - drawn.X) > 1 || Math.Abs(reported.Y - drawn.Y) > 1
+                || Math.Abs(reported.Width - drawn.Width) > 1 || Math.Abs(reported.Height - drawn.Height) > 1)
+                throw new InvalidOperationException($"After {state}, the switcher row {item.Name} is drawn at {drawn} and UI Automation reports {reported}.");
+        }
+
+        return rows.Count;
+    }
+
     private static void Press(Window window, Key key, PhysicalKey physical)
     {
         window.KeyPress(key, RawInputModifiers.None, physical, null);

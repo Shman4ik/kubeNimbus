@@ -132,14 +132,38 @@ public sealed partial class ClusterTabViewModel
     }
 
     /// <summary>
-    /// The Application a sync or refresh would act on: the dashboard's selected row while the
-    /// dashboard is showing, and otherwise the selected row of an ordinary Applications list.
-    /// Two entry points to one action, because the ordinary list is still there and a menu
-    /// item that worked in one of them and not the other would be the harder thing to explain.
+    /// Whether the window is showing this tab's Applications mode rather than its Resources
+    /// mode. The mode is the shell's, not the tab's, so the shell stamps this on every tab it
+    /// holds; null (a tab nobody stamped, as in most tests) reads as Resources.
+    /// </summary>
+    public Func<bool>? IsApplicationsModeShown { get; set; }
+
+    /// <summary>
+    /// The Applications mode's Argo CD Application on screen: the one whose page is open, or
+    /// else the list's selected row. Null when neither is an Argo Application (#364).
+    /// </summary>
+    private ArgoApplication? ApplicationsModeArgoApplication() =>
+        (Applications.Page?.Entry ?? Applications.SelectedRow?.Entry)?.Argo;
+
+    /// <summary>
+    /// The Application a sync or refresh would act on. In the Applications mode, the one on
+    /// screen there (#364: it used to fall through to whatever the Resources mode last had
+    /// selected, so the palette named and terminated an Application nobody was looking at).
+    /// In the Resources mode, the dashboard's selected row while the dashboard is showing, and
+    /// otherwise the selected row of an ordinary Applications list. Two entry points to one
+    /// action, because the ordinary list is still there and a menu item that worked in one of
+    /// them and not the other would be the harder thing to explain.
     /// </summary>
     private (ClusterClient? Client, ResourceDescriptor Descriptor, string Namespace, string Name, string Cluster)?
         ArgoActionTarget()
     {
+        if (IsApplicationsModeShown?.Invoke() == true)
+        {
+            return ApplicationsModeArgoApplication() is { } app && ArgoApplicationDescriptor() is { } argoDescriptor
+                ? (Client, argoDescriptor, app.Namespace, app.Name, "")
+                : null;
+        }
+
         if (IsArgoView)
         {
             return SelectedArgoApplication is { } row
@@ -200,7 +224,9 @@ public sealed partial class ClusterTabViewModel
     /// </summary>
     public bool CanTerminateSelectedArgoSync =>
         ArgoActionTarget() is not null
-        && (IsArgoView
+        && (IsApplicationsModeShown?.Invoke() == true
+            ? ApplicationsModeArgoApplication()?.CanTerminate == true
+            : IsArgoView
             ? SelectedArgoApplication?.Application.CanTerminate == true
             : SelectedRow is { } row && ArgoCd.OperationPhaseOf(row.Resource) == "Running");
 

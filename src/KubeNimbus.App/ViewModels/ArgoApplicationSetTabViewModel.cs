@@ -33,7 +33,7 @@ public sealed partial class ArgoApplicationSetTabViewModel : InspectorTabViewMod
         Func<OwnerRef, string?, Task>? openResource = null,
         string clusterName = "",
         Func<CancellationToken, Task<ResourceDescriptor?>>? applicationDescriptor = null)
-        : base($"ApplicationSet/{set?.Name}", isDemo: client is null)
+        : base(clusterName.Length == 0 ? $"ApplicationSet/{set?.Name}" : $"ApplicationSet/{set?.Name} · {clusterName}", isDemo: client is null)
     {
         ArgumentNullException.ThrowIfNull(set);
 

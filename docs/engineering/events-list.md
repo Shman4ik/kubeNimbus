@@ -115,7 +115,10 @@ too, so the row reads as kubectl's.
 resolve-and-open path owner chips use — and in fleet mode now on the *event's* cluster.
 The route used to call `OpenOwnerAsync` without the row's cluster and client, so a fleet
 row's object was looked up on the tab's own cluster. An event that names no object falls
-through and opens the event itself (its YAML).
+through and opens the event itself (its YAML). The pane it opens ends its title in
+"· <cluster>" whatever the kind: the three Argo panes did not until #365, so an event about
+another cluster's Application opened `Argo/qa-slow` with nothing saying where it was
+([argo-cd](argo-cd.md), "Another cluster's pane names that cluster").
 
 **Screenshots.** `cluster-tab-events-list` is the demo dataset's events, exactly (demo
 rule 3); `cluster-tab-events-empty`, `-search` and `-narrow` (1024px) are the states
