@@ -135,6 +135,43 @@ sync), in both Argo row menus and in the palette, enabled only while the phase i
 stays applied; it is not red, because nothing is deleted. Like sync, what authorises it is
 Kubernetes RBAC `patch` on the Application, not Argo's `applications, sync` role.
 
+## What the palette's Argo items act on
+
+**The Application on screen, in whichever mode is showing** (#364, the QA VM run on 0b3c20b).
+`ClusterTabViewModel.ArgoActionTarget` used to read only the Resources mode's two sources (the
+dashboard's selected row, or an ordinary Applications list's selected row), and the mode is the
+shell's, not the tab's. So in the Applications mode, with `checkout`'s page open, Ctrl+K offered
+"Argo CD: terminate sync…, argocd/notification-dispatcher": the Application last selected in
+Resources, which nobody was looking at, and sync, prune and refresh named it too. The shell now
+stamps `IsApplicationsModeShown` on every tab, and in the Applications mode the target is the open
+page's Application, or else the list's selected row, read from its `ApplicationEntry.Argo`; a row
+no Argo Application tracks offers no Argo item at all. Terminate there follows that
+Application's own operation phase.
+
+**And it acts where it is seen.** The tab's own strip (`PendingRowAction`) is drawn only by
+the Resources view, which the Applications mode hides, so in that mode a palette item is armed on
+the Application page's strip instead (`ApplicationPageViewModel.ArmArgo`, the strip its Sync arrow
+uses): the open page, or the selected row's page, opened for it as a click on the row would. The
+first version of the #364 fix named the right Application and armed the hidden strip, so a prune
+or terminate asked where nobody could see it (verifier, fix round 1).
+
+`ArgoPaletteTargetTests` drives the real shell and demo tab through the QA run's sequence and
+runs the items, asserting the page's `PendingAction` and an empty `PendingRowAction`. Mutation
+checks: with the Applications-mode branch of `ArgoActionTarget` removed, all three tests fail and
+the items name `notification-dispatcher` again; with the Applications-mode branch of
+`ArmArgoAction` removed, two fail on the hidden strip being armed. Desktop check K-8 runs the
+items and reads the page's strip.
+
+## Another cluster's pane names that cluster
+
+Every pane opened for another cluster's object ends its title in "· <cluster>", and the three
+Argo panes (`Argo/…`, `ApplicationSet/…`, `AppProject/…`) did not (#365): in Events across all
+clusters, an event about the Application `qa-slow` opened a tab titled `Argo/qa-slow`, while a Pod
+event's tab carried "· kubenimbus-argo". The cluster name reached the pane (its key had it); only
+the title dropped it. `ArgoFleetRoutingTests` opens such an event against a stub server serving
+discovery and the Application, and checks the other two panes' titles; mutation check: without the
+suffix the event test reads "Argo/qa-slow". Desktop check A-10.
+
 ## ApplicationSet and AppProject panes
 
 **Double-click opens a pane for each of Argo's three kinds** (#194), from the ordinary

@@ -308,4 +308,73 @@ public class ArgoFleetRoutingTests
         await Assert.That(alone.IsArgoEmpty).IsFalse();
         await Assert.That(alone.ConnectionWarning).IsNull();
     }
+
+    /// <summary>
+    /// #365: in Events across all clusters, a double-click on an event about another cluster's
+    /// Argo CD Application opens a pane whose title ends in that cluster's name, as a Pod's
+    /// does. The event row carries the cluster; the object is resolved on that cluster's server
+    /// (a stub serving discovery and the Application). Mutation-checked by dropping the suffix
+    /// from <c>ArgoApplicationTabViewModel</c>'s title: the tab reads "Argo/qa-slow" again.
+    /// </summary>
+    [Test]
+    public async Task An_event_about_another_clusters_application_opens_a_tab_named_for_that_cluster()
+    {
+        using var argo = new StubApiServer();
+        argo.Respond("GET", "/api", HttpStatusCode.OK,
+            """{"kind":"APIGroupDiscoveryList","apiVersion":"apidiscovery.k8s.io/v2","items":[]}""");
+        argo.Respond("GET", "/apis", HttpStatusCode.OK, """
+            {"kind":"APIGroupDiscoveryList","apiVersion":"apidiscovery.k8s.io/v2","items":[
+              {"metadata":{"name":"argoproj.io"},"versions":[{"version":"v1alpha1","freshness":"Current","resources":[
+                {"resource":"applications","singularResource":"application","scope":"Namespaced",
+                 "responseKind":{"group":"argoproj.io","version":"v1alpha1","kind":"Application"},
+                 "verbs":["get","list","watch","patch"]}]}]}]}
+            """);
+        argo.Respond("GET", "/apis/argoproj.io/v1alpha1/namespaces/argocd/applications/qa-slow", HttpStatusCode.OK, """
+            {"apiVersion":"argoproj.io/v1alpha1","kind":"Application",
+             "metadata":{"name":"qa-slow","namespace":"argocd","uid":"app-uid"},"spec":{"project":"default"},
+             "status":{"sync":{"status":"Synced"},"health":{"status":"Progressing"}}}
+            """);
+
+        ResourceDescriptor eventDescriptor = new("", "v1", "Event", "events", "event", true, [], []);
+        using var document = JsonDocument.Parse("""
+            {"apiVersion":"v1","kind":"Event","metadata":{"name":"qa-slow.1","namespace":"argocd"},
+             "involvedObject":{"apiVersion":"argoproj.io/v1alpha1","kind":"Application","name":"qa-slow","namespace":"argocd","uid":"app-uid"},
+             "reason":"OperationStarted","message":"Initiated automated sync","type":"Normal"}
+            """);
+        var tab = new ClusterTabViewModel(TestObjects.Context)
+        {
+            Client = argo.Connect(),
+            SelectedKind = new SidebarKindViewModel(eventDescriptor, "core"),
+        };
+        tab.SelectedRow = new ResourceRowViewModel(
+            DynamicResource.FromListItem(document.RootElement.Clone(), eventDescriptor), "kubenimbus-argo");
+
+        await tab.OpenSelectedCommand.ExecuteAsync(null);
+
+        await Assert.That(tab.SelectedInspectorTab).IsTypeOf<ArgoApplicationTabViewModel>();
+        await Assert.That(tab.SelectedInspectorTab!.Title).IsEqualTo("Argo/qa-slow · kubenimbus-argo");
+    }
+
+    /// <summary>The same rule for the other two Argo panes, which had the same unsuffixed title.</summary>
+    [Test]
+    public async Task The_other_argo_panes_name_another_cluster_too()
+    {
+        var set = new ArgoApplicationSetTabViewModel(
+            null, ApplicationDescriptor, ArgoCd.ReadApplicationSet(Resource("ApplicationSet", "payments")), clusterName: "east");
+        var project = new ArgoProjectTabViewModel(
+            null, ApplicationDescriptor, ArgoCd.ReadProject(Resource("AppProject", "payments")), clusterName: "east");
+        var local = new ArgoProjectTabViewModel(
+            null, ApplicationDescriptor, ArgoCd.ReadProject(Resource("AppProject", "payments")));
+
+        await Assert.That(set.Title).IsEqualTo("ApplicationSet/payments · east");
+        await Assert.That(project.Title).IsEqualTo("AppProject/payments · east");
+        await Assert.That(local.Title).IsEqualTo("AppProject/payments");
+
+        static DynamicResource Resource(string kind, string name)
+        {
+            using var document = JsonDocument.Parse(
+                $$$"""{"apiVersion":"argoproj.io/v1alpha1","kind":"{{{kind}}}","metadata":{"name":"{{{name}}}","namespace":"argocd"},"spec":{}}""");
+            return DynamicResource.FromListItem(document.RootElement.Clone(), ApplicationDescriptor);
+        }
+    }
 }

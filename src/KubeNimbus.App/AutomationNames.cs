@@ -4,6 +4,7 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.LogicalTree;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 
 namespace KubeNimbus.App;
@@ -72,6 +73,13 @@ internal static partial class AutomationNames
         // A button or list item whose content is a layout of text and icons reads as the layout's
         // type name. Once it has its content, name it after the text it shows.
         Control.LoadedEvent.AddClassHandler<ContentControl>((control, _) => NameFromContentText(control));
+
+        // A virtualizing list recycles its containers: when a filter narrows it, the container
+        // that drew one item draws another and is never loaded again. A name taken from the
+        // first content then named the wrong row, at the right row's bounds (#367: a click at
+        // the place UI Automation gave for qa-limited opened qa-cut). So a name taken from the
+        // content is taken again whenever the content changes, once the new text is laid out.
+        ContentControl.ContentProperty.Changed.AddClassHandler<ContentControl>((control, _) => RenameFromContentText(control));
 
         // Template parts a control brings with it: their names are fixed by the template, so
         // they are named by what they do once, here, instead of in every theme that restyles them.
@@ -162,7 +170,35 @@ internal static partial class AutomationNames
         if (words.Count > 0)
         {
             control.SetCurrentValue(AutomationProperties.NameProperty, string.Join(", ", words));
+            control.SetValue(ContentDerivedProperty, true);
         }
+    }
+
+    /// <summary>
+    /// Marks a name <see cref="NameFromContentText"/> took from the text a control showed, so a
+    /// change of content (a recycled list container) takes it again rather than keeping it.
+    /// </summary>
+    private static readonly AttachedProperty<bool> ContentDerivedProperty =
+        AvaloniaProperty.RegisterAttached<Control, bool>("ContentDerived", typeof(AutomationNames));
+
+    private static void RenameFromContentText(ContentControl control)
+    {
+        if (!control.GetValue(ContentDerivedProperty))
+        {
+            return;
+        }
+
+        control.ClearValue(AutomationProperties.NameProperty);
+        control.ClearValue(ContentDerivedProperty);
+
+        // After the new content's bindings and layout, so the text read is the new row's.
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (control.IsLoaded)
+            {
+                NameFromContentText(control);
+            }
+        }, DispatcherPriority.Loaded);
     }
 
     private static void Derive(Control control)

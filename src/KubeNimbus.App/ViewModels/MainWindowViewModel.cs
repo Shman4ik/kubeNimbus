@@ -448,6 +448,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 // Resources mode; this is how it gets there.
                 tab.Applications.SwitchToResources = () => Mode = ShellMode.Resources;
 
+                // The tab's Argo CD actions act on what this mode shows (#364), so it asks.
+                tab.IsApplicationsModeShown = () => IsApplicationsMode;
+
                 // Log rows landing while the palette is open join it in place. Only the
                 // selected tab's: a background tab finishing a load has nothing to show.
                 tab.LogTargetsChanged = () =>
@@ -1656,10 +1659,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         // Argo CD's actions. Their own block rather than one inside the selected-row
-        // section above, because they have two sources: the GitOps dashboard's selected
-        // Application (where the resource list has no selection at all) and an ordinary
-        // Applications list's selected row. The tab resolves whichever is showing, so this
-        // asks it rather than testing for a row.
+        // section above, because they have three sources: the Applications mode's open page or
+        // selected row, the GitOps dashboard's selected Application (where the resource list
+        // has no selection at all) and an ordinary Applications list's selected row. The tab
+        // resolves whichever is showing, so this asks it rather than testing for a row.
         if (SelectedTab is { CanSyncSelectedArgoApplication: true } argoTab
             && argoTab.ArgoActionLabel is { } argoWhere)
         {

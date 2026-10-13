@@ -164,6 +164,12 @@ clicks are `click -Modifiers shift|ctrl`. Rows have no selected flag in the tree
   still shows both. Cancel; turn the preference back on.
 - **L-17 [look]** (#305) In L-7's run at 1280 px wide, the refused line's sentence wraps under
   itself and is not cut with "…" before "cannot delete resource". Crop the strip.
+- **L-18 [input]** (#367) Ctrl+P, `dump -Within SwitcherList`; then type `qa-` in
+  `SwitcherQueryBox` and dump again; then clear it and dump a third time. Each time every
+  ListItem's name names the context drawn in that row (crop one dump's list to compare). A real
+  `click` at the bounds reported for `qa-limited` after the filter opens (or selects) the
+  `qa-limited` tab, not another. **0.7.x before #367:** the names stayed those of the rows first
+  drawn in each recycled container, and the click at "qa-limited" opened `qa-cut`.
 
 ## Batch L2 — columns and the Service row
 
@@ -455,6 +461,19 @@ Setup: "Explore demo cluster". Nothing is mutated.
   below."; "Matches applications *. Manual syncs are still allowed."
 - **K-7 [input]** Applications, double-click `checkout`: the "Argo/checkout" pane, not the YAML;
   right-click → "Edit YAML" opens `Application/checkout`.
+- **K-8 [text]** (#364) Resources → Argo → Argo CD, select `notification-dispatcher` (a sync is
+  running). Applications mode, open `checkout`'s page: Ctrl+K "Argo CD:" lists "Argo CD: sync",
+  "Argo CD: sync with prune…" and "Argo CD: refresh from Git", each with `argocd/checkout`, and no
+  "terminate sync…". Back to the list, select the `notification-dispatcher` row: the items name
+  `argocd/notification-dispatcher` and "Argo CD: terminate sync…" is listed. Select an application
+  whose source column reads "…, no Argo": Ctrl+K "Argo CD:" lists none. Then run items, all in the
+  Applications mode: with `checkout`'s page open, Ctrl+K → "Argo CD: sync with prune…" shows the
+  confirm on that page ("Sync and prune", demo notice) and Cancel closes it; Ctrl+K → "Argo CD:
+  sync" shows its result line on the page, naming `checkout` and the demo cluster. Back to the
+  list, select `notification-dispatcher`, Ctrl+K → "Argo CD: terminate sync…": its page opens with
+  the "Stop syncing" confirm on it; Cancel. **0.7.x before #364:** every item named the Resources
+  mode's `notification-dispatcher`, and a run item armed the hidden Resources view's strip, so
+  nothing appeared.
 
 ## Batch S — preferences
 
@@ -482,7 +501,7 @@ preflight's `display` line says what it is; otherwise both are UNSURE "the VM do
 
 Runs only if the owner has the Argo sandbox up (`sandbox-up.ps1 -Name kubenimbus-argo -Port 6551
 -SkipApps -Kubeconfig .sandbox/argo-kubeconfig.yaml`, then `argo-sandbox-up.ps1`) and its
-kubeconfig is merged into the run's. Otherwise all nine are UNSURE "no Argo sandbox".
+kubeconfig is merged into the run's. Otherwise all ten are UNSURE "no Argo sandbox".
 
 - **A-1** (PR #302) "All clusters": a Cluster column first, "2 of 2 clusters run Argo CD", counts equal
   the two dashboards' sum; Sync on the other cluster's row names that cluster and lands there.
@@ -517,6 +536,9 @@ kubeconfig is merged into the run's. Otherwise all nine are UNSURE "no Argo sand
   (`… cannot list resource "applications" … at the cluster scope`), no spinner and no "Watch
   connection lost" line, within a few seconds, and still so a minute later. **0.7.x:** "Watch
   connection lost … retrying" over a spinner that never ended.
+- **A-10 [text]** (#365) Events, "All clusters": double-click an event about the Application
+  `qa-slow` (Sync it first if there is none): the tab title is "Argo/qa-slow · kubenimbus-argo".
+  **0.7.x before #365:** "Argo/qa-slow", while a Pod event's tab carried the cluster.
 
 ## Batch M — capacity strip, managed fields, failed reconnect
 
@@ -579,6 +601,12 @@ kubeconfig is merged into the run's. Otherwise all nine are UNSURE "no Argo sand
   warning line repeating them. **0.7.x before #354:** "No Pods found" plus a warning line.
 - **M-16 [text]** (#354) Same context, tick `qa-shop` and `default`: the `qa-shop` pods are listed
   and a warning line names `default`'s refusal, still there a minute later.
+- **M-17 [text]** (#366) Open Ctrl+P once and close it. Append a copy of the `qa-prod` context named
+  `qa-extra-m17` to the run's kubeconfig, then ☰ → Rescan kubeconfig, then Ctrl+P with nothing
+  typed: `find -Within SwitcherList` finds a ListItem named for `qa-extra-m17` under "All contexts"
+  (the list virtualizes, so press End in the list first if it is below the fold; a row never
+  scrolled to is not in the UIA tree). Remove the context afterwards. **0.7.x:** reported missing
+  until typed; a view-model test finds it in the list, so the likely cause was #367's stale names.
 
 ## Batch Q — the QA driver itself
 

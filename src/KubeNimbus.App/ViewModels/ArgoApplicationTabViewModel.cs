@@ -34,7 +34,9 @@ public sealed partial class ArgoApplicationTabViewModel : InspectorTabViewModelB
         Func<OwnerRef, string?, Task>? openResource = null,
         string clusterName = "",
         OpenNamedLogs? openLogs = null)
-        : base($"Argo/{application?.Name}", isDemo: client is null)
+        // Another cluster's Application ends in that cluster's name, as every other pane's
+        // title does (#365): the fleet Events list opened "Argo/qa-slow" with no cluster.
+        : base(clusterName.Length == 0 ? $"Argo/{application?.Name}" : $"Argo/{application?.Name} · {clusterName}", isDemo: client is null)
     {
         ArgumentNullException.ThrowIfNull(application);
 

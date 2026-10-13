@@ -332,6 +332,14 @@ mode is session state in `workspace.json` (`ShellMode`), default Applications; b
 views stay alive, one hidden. Ctrl/Cmd+Shift+A and +R, the palette (the mode not on screen),
 the macOS View menu and the F1 sheet all come from the catalog.
 
+The mode is the shell's, so a tab learns which one shows through `IsApplicationsModeShown`,
+stamped by the shell on every tab it holds. The palette's Argo CD items read it (#364): in this
+mode they act on the open page's Application, or else the selected row's (opening its page), arm
+the page's own strip rather than the hidden Resources one, and offer nothing for
+an application no Argo Application tracks (argo-cd, "What the palette's Argo items act on"). The
+palette's other selected-row items (logs, exec, Edit YAML, delete) still follow the Resources
+list's selection in this mode; that is a backlog item, not yet changed.
+
 ## The demo cluster
 
 Every state above plays out on the demo cluster through production code (demo rules 1–6).

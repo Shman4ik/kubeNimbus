@@ -589,6 +589,53 @@ public class KubeconfigShellTests
         }
     }
 
+    /// <summary>
+    /// #366, as the QA run described it: the switcher opened once, a context added to the
+    /// kubeconfig while the app runs, a rescan. The new context is in the unfiltered list both
+    /// after ☰ → Rescan kubeconfig and after the focus rescan with the switcher still open, and
+    /// in the same group as the others. The QA agent read the list through UI Automation,
+    /// whose stale names on recycled rows (#367) made it look missing; the list was not.
+    /// </summary>
+    [Test]
+    public async Task A_context_added_while_running_is_in_the_unfiltered_switcher_after_a_rescan()
+    {
+        FreshStores();
+        var file = Path.Combine(Folder(), "config");
+        string Text(int count) =>
+            "apiVersion: v1\nkind: Config\nclusters:\n- name: c\n  cluster:\n    server: http://127.0.0.1:1\ncontexts:\n"
+            + string.Concat(Enumerable.Range(1, count).Select(i => $"- name: ctx-{i:00}\n  context:\n    cluster: c\n    user: u\n"))
+            + "users:\n- name: u\n  user:\n    token: not-a-credential\n";
+        await File.WriteAllTextAsync(file, Text(12));
+        Kubeconfig.EnvironmentSearchOverride = [file];
+        try
+        {
+            using var shell = new MainWindowViewModel();
+            await shell.Initialization;
+            shell.Switcher.Open();
+            await Assert.That(shell.Switcher.Ordered.Select(i => i.Name)).DoesNotContain("ctx-13");
+            shell.Switcher.Close();
+
+            await File.WriteAllTextAsync(file, Text(13));
+            await shell.ReloadContextsCommand.ExecuteAsync(null);
+            shell.Switcher.Open();
+
+            var added = shell.Switcher.Ordered.SingleOrDefault(i => i.Name == "ctx-13");
+            await Assert.That(added).IsNotNull();
+            await Assert.That(added!.Group).IsEqualTo(ClusterSwitcherGroup.All);
+            await Assert.That(shell.Switcher.Query).IsEqualTo("");
+
+            // The focus rescan, with the switcher left open: its list is rebuilt in place.
+            await File.WriteAllTextAsync(file, Text(14));
+            File.SetLastWriteTimeUtc(file, DateTime.UtcNow.AddSeconds(5));
+            await shell.RescanIfChangedAsync();
+            await Assert.That(shell.Switcher.Ordered.Select(i => i.Name)).Contains("ctx-14");
+        }
+        finally
+        {
+            Kubeconfig.EnvironmentSearchOverride = [];
+        }
+    }
+
     /// <summary>A kubeconfig with one context on a loopback port nothing listens on, and a token.</summary>
     private static string KubeconfigText(string name, bool current) => $"""
         apiVersion: v1

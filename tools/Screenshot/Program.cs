@@ -509,6 +509,8 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // "pro" is a subsequence of several of these and a prefix of others — the
     // ranking (prefix > contiguous > subsequence) is the point of the shot.
     ("main-window-switcher-search", () => BuildSwitcherContent("pro")),
+    // #367: filtered and cleared again, every row is named and bounded where it is drawn.
+    ("ux-switcher-filter-uia", () => BuildSwitcherContent()),
 
     // Preferences and About, which are overlays over the shell now rather than
     // windows of their own. Rendering them is not really about the picture: the
@@ -671,6 +673,7 @@ void Capture(string name, ThemeVariant theme, Func<Control> build)
         or "cluster-tab-exec" or "cluster-tab-yaml-diff-preview" or "net-service-overview" or "cluster-tab-argo-appproject-detail")
         LayoutChecks.OneGroupingDevice(window);
     if (name == "main-window-switcher") LayoutChecks.SwitcherPinsOnlyWhereUsed(window);
+    if (name == "ux-switcher-filter-uia") AutomationPatternChecks.SwitcherAfterFilter(window);
     if (name == "ux-log-search-keys") KeyboardChecks.LogSearchKeys(window);
     if (name == "ux-yaml-apply-key") KeyboardChecks.YamlApplyKey(window);
     if (name == "ux-yaml-editor-links") EditorChecks.YamlEditorLinks(window);
