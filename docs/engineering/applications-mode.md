@@ -346,6 +346,15 @@ the page's strip or editor, and built as plain items: `Catalog()` would append t
 E keys, which the page does not handle; the page already shows its logs, and exec, port-forward and delete
 are not page actions. `ApplicationsModePaletteTests` pins both halves; removing the mode branch
 in `BuildPaletteItems` lists Delete resource, Logs and Exec for the hidden pod again.
+The two list-level items that change the Resources list are not offered here either (#380):
+"Show only unhealthy rows" (and its way out, "Show every row, healthy ones too") and "Reset the
+list's columns" were gated on `IsResourceListVisible` and `SelectedKind`, which stay true while
+this mode hides that list, so they changed a list nobody could see and the change only showed on
+the way back. The Applications list has no column choice, and its own narrowing is the Needs
+attention chip, a question about apps rather than rows and one click away on the list, so neither
+item is redirected to it. The namespace items stay: the namespace belongs to the tab and both
+modes. `ApplicationsModePaletteTests.In_the_applications_mode_the_resource_list_items_are_not_offered`
+pins it; dropping either `!IsApplicationsMode` gate lists that item again.
 
 ## The demo cluster
 

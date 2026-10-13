@@ -507,6 +507,14 @@ Setup: "Explore demo cluster". Nothing is mutated.
   "Rollout restart" with exactly "checkout · roll its pods" (no " · R"); running the
   restart shows its confirm on the page (Cancel), and Ctrl+K "delete" still lists no Delete item.
   **0.7.x before #373:** the items named and acted on the hidden Resources-mode pod.
+- **K-10 [text]** (#380) Resources → Pods: right-click a column header and hide Restarts, then
+  Ctrl+K "unhealthy" lists "Show only unhealthy rows" and Ctrl+K "columns" lists "Reset the list's
+  columns". Applications mode, list showing: Ctrl+K "unhealthy" and Ctrl+K "reset" list neither
+  item. Back to Resources, run Ctrl+K "Show only unhealthy rows", then Applications again: Ctrl+K
+  "healthy" lists no "Show every row, healthy ones too". Back to Resources: the Pods list is still
+  unhealthy-only and Restarts still hidden; Ctrl+K "Reset the list's columns" brings Restarts back
+  and Ctrl+K "Show every row, healthy ones too" turns unhealthy-only off. **0.7.x before #380:** both items were offered in the
+  Applications mode and changed the hidden Resources list.
 
 ## Batch S — preferences
 
