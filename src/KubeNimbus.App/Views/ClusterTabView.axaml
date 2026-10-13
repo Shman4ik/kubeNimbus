@@ -1061,7 +1061,7 @@
              synthetic Helm sidebar entry is selected. Read-only. -->
         <Grid Grid.Row="1" IsVisible="{Binding IsHelmView}" Margin="1">
           <DataGrid Name="HelmGrid"
-                     ItemsSource="{Binding HelmReleases}" SelectedItem="{Binding SelectedHelmRelease}"
+                     ItemsSource="{Binding Helm.Releases}" SelectedItem="{Binding Helm.SelectedRelease}"
                      IsReadOnly="True" GridLinesVisibility="Horizontal" CanUserResizeColumns="True"
                      DoubleTapped="OnHelmRowDoubleTapped">
             <DataGrid.Columns>
@@ -1132,10 +1132,10 @@
 
           <TextBlock Text="Reading Helm releases…" Opacity="0.5" FontSize="13"
                      HorizontalAlignment="Center" VerticalAlignment="Center"
-                     IsVisible="{Binding IsHelmLoading}" />
+                     IsVisible="{Binding Helm.IsLoading}" />
 
           <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" MaxWidth="340"
-                      IsVisible="{Binding IsHelmEmpty}">
+                      IsVisible="{Binding Helm.IsEmpty}">
             <PathIcon Data="{StaticResource LayersIconGeometry}" Width="28" Height="28" Opacity="0.25" HorizontalAlignment="Center" />
             <TextBlock Text="No Helm releases found" FontWeight="SemiBold" FontSize="13" HorizontalAlignment="Center" Opacity="0.7" />
             <TextBlock Text="{Binding NamespaceDisplay, StringFormat='in {0}'}" FontSize="12" Opacity="0.5" HorizontalAlignment="Center" />

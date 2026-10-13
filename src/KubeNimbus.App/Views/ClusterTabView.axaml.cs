@@ -134,7 +134,7 @@ public partial class ClusterTabView : UserControl
     {
         InitializeComponent();
         AddHandler(KeyDownEvent, OnNamespaceShortcut, RoutingStrategies.Tunnel);
-        GridSortHeaders.Track(this, HelmGrid, dataContext => (dataContext as ClusterTabViewModel)?.HelmSort);
+        GridSortHeaders.Track(this, HelmGrid, dataContext => (dataContext as ClusterTabViewModel)?.Helm.Sort);
         GridSortHeaders.Track(this, ArgoGrid, dataContext => (dataContext as ClusterTabViewModel)?.ArgoSort);
 
         _printerSlots.AddRange(ResourceGrid.Columns.Where(c => c.Tag as string == PrinterSlotTag));
@@ -338,7 +338,7 @@ public partial class ClusterTabView : UserControl
 
             // The Helm list's Updated column and a release's history are ages too (FEAT-72).
             var now = AppClock.UtcNow;
-            foreach (var release in vm.HelmReleases)
+            foreach (var release in vm.Helm.Releases)
             {
                 release.RefreshTimes(now);
             }
@@ -1252,7 +1252,7 @@ public partial class ClusterTabView : UserControl
     {
         if (e.Source is Control { DataContext: HelmReleaseRowViewModel })
         {
-            Vm?.OpenSelectedHelmReleaseCommand.Execute(null);
+            Vm?.Helm.OpenSelectedCommand.Execute(null);
         }
     }
 

@@ -45,7 +45,7 @@ public class ReconnectFailedReadsTests
         await Task.Delay(300);
 
         await Assert.That(server.Requests.Count).IsEqualTo(before);
-        await Assert.That(tab.IsHelmLoading).IsFalse();
+        await Assert.That(tab.Helm.IsLoading).IsFalse();
         await Assert.That(tab.IsArgoLoading).IsFalse();
     }
 }

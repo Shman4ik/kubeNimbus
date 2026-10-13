@@ -1969,11 +1969,11 @@ internal static class ClusterTabScenarios
 
         foreach (var release in FixtureData.HelmReleases)
         {
-            tab.HelmReleases.Add(new HelmReleaseRowViewModel(release));
+            tab.Helm.Releases.Add(new HelmReleaseRowViewModel(release));
         }
 
-        tab.SelectedHelmRelease = tab.HelmReleases.FirstOrDefault();
-        tab.IsHelmEmpty = tab.HelmReleases.Count == 0;
+        tab.Helm.SelectedRelease = tab.Helm.Releases.FirstOrDefault();
+        tab.Helm.IsEmpty = tab.Helm.Releases.Count == 0;
         return tab;
     }
 

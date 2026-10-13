@@ -51,21 +51,21 @@ public class HelmArgoSortTests
     {
         static bool Helm(SidebarKindViewModel k) => k.IsHelmReleases;
         var tab = Tab(Helm);
-        var releases = tab.HelmReleases;
+        var releases = tab.Helm.Releases;
         await Assert.That(releases.Count).IsGreaterThan(1);
         await Assert.That(releases.Select(r => $"{r.Namespace}/{r.Name}")).IsOrderedBy(k => k, StringComparer.Ordinal);
 
-        tab.HelmSort.Toggle(HelmReleaseComparer.Revision);
-        tab.HelmSort.Toggle(HelmReleaseComparer.Revision);
+        tab.Helm.Sort.Toggle(HelmReleaseComparer.Revision);
+        tab.Helm.Sort.Toggle(HelmReleaseComparer.Revision);
         await Assert.That(releases.Select(r => r.Revision)).IsOrderedByDescending(r => r);
 
-        tab.HelmSort.Toggle(HelmReleaseComparer.Updated);
+        tab.Helm.Sort.Toggle(HelmReleaseComparer.Updated);
         var dated = releases.Where(r => r.Updated is not null).Select(r => r.Updated!.Value).ToList();
         await Assert.That(dated).IsOrderedBy(d => d);
 
-        tab.HelmSort.Toggle(HelmReleaseComparer.Updated);
-        tab.HelmSort.Toggle(HelmReleaseComparer.Updated);
-        await Assert.That(tab.HelmSort.Column).IsNull();
+        tab.Helm.Sort.Toggle(HelmReleaseComparer.Updated);
+        tab.Helm.Sort.Toggle(HelmReleaseComparer.Updated);
+        await Assert.That(tab.Helm.Sort.Column).IsNull();
         await Assert.That(releases.Select(r => $"{r.Namespace}/{r.Name}")).IsOrderedBy(k => k, StringComparer.Ordinal);
     }
 }

@@ -14,7 +14,7 @@ public sealed partial class ClusterTabViewModel
     {
         if (IsHelmView)
         {
-            _ = RefreshHelmReleasesAsync();
+            _ = Helm.RefreshAsync();
         }
         else if (IsArgoView)
         {

@@ -821,24 +821,6 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
     }
 
-    public ObservableCollection<HelmReleaseRowViewModel> HelmReleases { get; } = [];
-
-    /// <summary>The Helm grid's header sort; namespace/name until a header is clicked. Kept across reloads for the tab's life.</summary>
-    public GridSort<HelmReleaseRowViewModel> HelmSort => _helmSort ??= new(
-        HelmReleases, HelmReleaseComparer.ByKey, (column, descending) => new HelmReleaseComparer(column, descending),
-        () => SelectedHelmRelease, release => SelectedHelmRelease = release);
-
-    private GridSort<HelmReleaseRowViewModel>? _helmSort;
-
-    [ObservableProperty]
-    private HelmReleaseRowViewModel? _selectedHelmRelease;
-
-    [ObservableProperty]
-    private bool _isHelmLoading;
-
-    [ObservableProperty]
-    private bool _isHelmEmpty;
-
     // ------------------------------------------------------------ Argo CD dashboard
     //
     // Every Application on the cluster, with the sync and health Argo itself reports, the
@@ -978,6 +960,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     {
         Context = context;
         Terminal = new TerminalNoticeViewModel(context);
+        Helm = new HelmBrowserViewModel(this);
         _recentNamespaces = WorkspaceStore.Load().RecentNamespaces?.GetValueOrDefault(NamespaceHistoryKey) ?? [];
         NamespaceOptions.CollectionChanged += (_, _) => RebuildNamespaceChoices();
         RebuildNamespaceChoices();
@@ -1383,7 +1366,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             IsArgoView = false;
             AreMetricsVisible = false;
             PrinterColumns = []; // Helm releases are not an API kind and have no CRD behind them.
-            _ = RefreshHelmReleasesAsync();
+            _ = Helm.RefreshAsync();
             return;
         }
 
@@ -1478,7 +1461,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         if (IsHelmView)
         {
-            _ = RefreshHelmReleasesAsync();
+            _ = Helm.RefreshAsync();
         }
         else if (IsArgoView)
         {

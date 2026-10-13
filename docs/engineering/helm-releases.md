@@ -37,6 +37,16 @@ a release docks a tab with its values, rendered manifest, notes and revision
 history; double-clicking a history row loads that revision. Everything is
 read-only: install/upgrade/rollback stays Helm's job.
 
+The browser is its own view model, `HelmBrowserViewModel`, owned by the tab as `Helm`
+(ENG-13's second half, #361): the release rows (`Helm.Releases`), the grid's sort
+(`Helm.Sort`), the selection, the loading and empty states, the read
+(`Helm.RefreshAsync`) and opening a release (`Helm.OpenSelectedCommand`). What it needs from
+the tab — the client, the demo flag, the chosen namespaces, whether a reconnect just failed,
+where a failed read is said, and how a release tab is docked — is the `IHelmBrowserHost`
+interface the tab implements, which is also how `HelmBrowserViewModelTests` drives it with no
+tab at all. `IsHelmView` stays on the tab, because what fills the content area is the tab's
+decision.
+
 ## Sorting
 
 The list sorts by a header click (2026-10): ascending, descending, then its default order, kept across reloads for the tab's life. How each column compares, and why a header double-click opens nothing, is in [resource-grid-resize-sort](resource-grid-resize-sort.md), "The inspector grids sort too".
