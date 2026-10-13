@@ -410,8 +410,8 @@
           <!-- Why the list has no CPU/Memory columns when this user may not read the kind's
                usage (#310): a column that is simply absent does not say why. -->
           <TextBlock Grid.Column="3" Classes="statusText statusMessage" Margin="12,0,0,0" MaxWidth="560"
-                     Text="{Binding SelectedTab.MetricsNotice}"
-                     IsVisible="{Binding SelectedTab.MetricsNotice, Converter={x:Static aconv:ObjectConverters.IsNotNull}, FallbackValue=False}" />
+                     Text="{Binding SelectedTab.Metrics.Notice}"
+                     IsVisible="{Binding SelectedTab.Metrics.Notice, Converter={x:Static aconv:ObjectConverters.IsNotNull}, FallbackValue=False}" />
           <!-- Running forwards, counted; a click lists them with Open and Stop. When none is
                left it carries the last thing the registry did on its own (forwards stopped
                because their cluster tab closed). -->

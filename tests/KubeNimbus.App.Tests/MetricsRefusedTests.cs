@@ -22,14 +22,14 @@ public class MetricsRefusedTests
         var tab = TestObjects.Tab();
         tab.AreMetricsVisible = true;
 
-        tab.RefuseMetrics("Pod", Reason, CancellationToken.None, remember: true);
+        tab.Metrics.Refuse("Pod", Reason, CancellationToken.None, remember: true);
 
         await Assert.That(tab.AreMetricsVisible).IsFalse();
         await Assert.That(tab.AreUsageColumnsVisible).IsFalse();
-        await Assert.That(tab.MetricsNotice).IsEqualTo($"CPU and memory are hidden: this user may not read pod usage ({Reason}).");
+        await Assert.That(tab.Metrics.Notice).IsEqualTo($"CPU and memory are hidden: this user may not read pod usage ({Reason}).");
         await Assert.That(tab.IsStatusWorthShowing).IsTrue();
-        await Assert.That(tab.IsMetricsRefused("Pod")).IsTrue();
-        await Assert.That(tab.IsMetricsRefused("Node")).IsFalse();
+        await Assert.That(tab.Metrics.IsRefused("Pod")).IsTrue();
+        await Assert.That(tab.Metrics.IsRefused("Node")).IsFalse();
     }
 
     [Test]
@@ -37,14 +37,14 @@ public class MetricsRefusedTests
     {
         var tab = TestObjects.Tab();
         tab.AreMetricsVisible = true;
-        tab.RefuseMetrics("Pod", Reason, CancellationToken.None, remember: true);
+        tab.Metrics.Refuse("Pod", Reason, CancellationToken.None, remember: true);
 
         // Another namespace is another list: its notice is its own (and the refusal, which is
         // about the user and not the list, is still remembered).
         tab.SelectedNamespace = "ledger";
 
-        await Assert.That(tab.MetricsNotice).IsNull();
-        await Assert.That(tab.IsMetricsRefused("Pod")).IsTrue();
+        await Assert.That(tab.Metrics.Notice).IsNull();
+        await Assert.That(tab.Metrics.IsRefused("Pod")).IsTrue();
     }
 
     [Test]
@@ -53,10 +53,10 @@ public class MetricsRefusedTests
         var tab = TestObjects.Tab();
         tab.AreMetricsVisible = true;
 
-        tab.RefuseMetrics("Pod", Reason, new CancellationToken(canceled: true), remember: true);
+        tab.Metrics.Refuse("Pod", Reason, new CancellationToken(canceled: true), remember: true);
 
         await Assert.That(tab.AreMetricsVisible).IsTrue();
-        await Assert.That(tab.MetricsNotice).IsNull();
-        await Assert.That(tab.IsMetricsRefused("Pod")).IsFalse();
+        await Assert.That(tab.Metrics.Notice).IsNull();
+        await Assert.That(tab.Metrics.IsRefused("Pod")).IsFalse();
     }
 }

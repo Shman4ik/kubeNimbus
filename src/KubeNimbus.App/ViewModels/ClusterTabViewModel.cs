@@ -19,15 +19,6 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 {
     public const string AllNamespaces = "All namespaces";
 
-    /// <summary>
-    /// How often metrics are re-read, from settings. metrics.k8s.io aggregates over a
-    /// ~30s window, so polling faster than the default buys no resolution; the setting
-    /// exists for the other direction — a large cluster or a metered link, where this
-    /// being the app's only poll makes it the only thing worth turning down.
-    /// </summary>
-    private static TimeSpan MetricsPollInterval =>
-        TimeSpan.FromSeconds(App.LoadSettings().MetricsPollSeconds);
-
     private readonly Dictionary<string, ResourceRowViewModel> _rowsByKey = new(StringComparer.Ordinal);
 
     /// <summary>
@@ -47,15 +38,6 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     private readonly Dictionary<string, ResourceDescriptor> _podDescriptors = new(StringComparer.Ordinal);
 
     private CancellationTokenSource? _watchCts;
-    private bool _metricsApiAvailable;
-
-    /// <summary>
-    /// Metered kinds whose usage this user may not read (a 403 from metrics.k8s.io), with
-    /// the server's sentence, so returning to the list does not ask again. Narrow RBAC is
-    /// the expected case, and a refusal is an answer, not a blip (#310). Cleared on connect,
-    /// the one moment the user's permissions can have changed under the app's feet.
-    /// </summary>
-    private readonly Dictionary<string, string> _metricsRefused = new(StringComparer.Ordinal);
 
     public ClusterContext Context { get; }
 
@@ -229,7 +211,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     /// </summary>
     public bool IsStatusWorthShowing =>
         Status != _routineStatus || ConnectionWarning is not null || IsTlsUnverified || IsPlainHttp
-        || MetricsNotice is not null;
+        || Metrics.Notice is not null;
 
     /// <summary>
     /// The connected cluster's entry sets <c>insecure-skip-tls-verify</c>: nothing checks
@@ -960,6 +942,14 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     {
         Context = context;
         Terminal = new TerminalNoticeViewModel(context);
+        Metrics = new ListMetricsViewModel(this);
+        Metrics.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ListMetricsViewModel.Notice))
+            {
+                OnPropertyChanged(nameof(IsStatusWorthShowing));
+            }
+        };
         Helm = new HelmBrowserViewModel(this);
         _recentNamespaces = WorkspaceStore.Load().RecentNamespaces?.GetValueOrDefault(NamespaceHistoryKey) ?? [];
         NamespaceOptions.CollectionChanged += (_, _) => RebuildNamespaceChoices();
@@ -1022,7 +1012,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
             var sidebar = BuildSidebarAsync();
             var namespaces = RefreshNamespacesAsync();
-            var metrics = DetectMetricsApiAsync();
+            var metrics = Metrics.DetectAsync(Client);
             await namespaces;
             var startedPods = StartInitialPods();
             try
@@ -1195,7 +1185,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             NamespaceOptions.Add(ns);
         }
 
-        _metricsApiAvailable = true;
+        Metrics.IsApiAvailable = true;
 
         ApplyInitialView(fallbackNamespace: null);
     }
@@ -1287,11 +1277,11 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         {
             SelectedKind = replacement;
         }
-        if (!IsFleetView && !AreMetricsVisible && _metricsApiAvailable && Client is { } client
+        if (!IsFleetView && !AreMetricsVisible && Metrics.IsApiAvailable && Client is { } client
             && _watchCts is { } cts && IsMeteredKind(SelectedKind.Descriptor))
         {
             AreMetricsVisible = true;
-            StartMetricsPolling(SelectedKind.Descriptor, [("", client)], WatchNamespaces(SelectedKind.Descriptor), cts.Token);
+            Metrics.Start(SelectedKind.Descriptor, [("", client)], WatchNamespaces(SelectedKind.Descriptor), cts.Token);
         }
     }
 
@@ -1413,24 +1403,6 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
 
         _ = OpenRowAsync(new ResourceRowViewModel(resolved), preview: false, descriptor);
-    }
-
-    /// <summary>
-    /// Plenty of clusters run without metrics-server. Probing once at connect
-    /// (off the cached discovery catalog) keeps the usage columns out of the way
-    /// entirely on those clusters instead of showing a column full of dashes.
-    /// </summary>
-    private async Task DetectMetricsApiAsync()
-    {
-        _metricsRefused.Clear();
-        try
-        {
-            _metricsApiAvailable = Client is not null && await Client.IsMetricsApiAvailableAsync();
-        }
-        catch (Exception)
-        {
-            _metricsApiAvailable = false; // usage is supplementary; never fail the connect over it
-        }
     }
 
     partial void OnSelectedNamespaceChanging(string value)
