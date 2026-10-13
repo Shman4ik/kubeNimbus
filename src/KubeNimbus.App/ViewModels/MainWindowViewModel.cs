@@ -1369,8 +1369,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         // The column chooser's way back (FEAT-13), only where the list on screen has a
-        // choice to undo.
-        if (SelectedTab is { IsResourceListVisible: true, HasCustomColumns: true } columnsTab)
+        // choice to undo. Not in the Applications mode, which hides the resource list: the
+        // reset would land on a list nobody can see (#380, UI rule 20), and the Applications
+        // list has no column choice of its own to reset.
+        if (!IsApplicationsMode && SelectedTab is { IsResourceListVisible: true, HasCustomColumns: true } columnsTab)
         {
             yield return Catalog(
                 CommandId.ResetListColumns,
@@ -1461,7 +1463,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         // filter by, and to switch off wherever it is on — including a kind where the
         // disabled chip cannot, so the palette is always a way out of the mode. Explicit
         // target, captured now, for the same reason as the rows above.
-        if (SelectedTab is { IsResourceListVisible: true } healthTab
+        // Not in the Applications mode (#380): it narrows the hidden resource list, and the
+        // change would only show on the way back to Resources. The Applications list's own
+        // narrowing is its Needs attention chip, a different question (an app, not a row),
+        // already one click away on the list itself.
+        if (!IsApplicationsMode && SelectedTab is { IsResourceListVisible: true } healthTab
             && (healthTab.CanFilterUnhealthy || healthTab.IsUnhealthyOnly))
         {
             var descriptor = CommandCatalog.Get(CommandId.ToggleUnhealthyOnly);

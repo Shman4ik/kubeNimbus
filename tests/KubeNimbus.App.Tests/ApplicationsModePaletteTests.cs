@@ -69,6 +69,42 @@ public class ApplicationsModePaletteTests
     }
 
     /// <summary>
+    /// #380: "Unhealthy only" (and its way out) and "Reset columns" narrow or reset the Resources
+    /// list, which the Applications mode hides, so there they are not offered; back in the
+    /// Resources mode they are again. Mutation-checked: dropping either <c>!IsApplicationsMode</c>
+    /// gate in <c>BuildPaletteItems</c> offers that item in the Applications mode again.
+    /// </summary>
+    [Test]
+    public async Task In_the_applications_mode_the_resource_list_items_are_not_offered()
+    {
+        var (shell, tab) = Shell();
+        shell.Mode = ShellMode.Resources;
+        tab.SelectKindCommand.Execute(tab.SidebarSections.SelectMany(s => s.Kinds).First(k => k.Descriptor is { Group: "", Kind: "Pod" }));
+        tab.SetColumnHidden(ResourceColumn.Restarts, hidden: true);
+
+        var unhealthyOn = Title(CommandId.ToggleUnhealthyOnly);
+        const string unhealthyOff = "Show every row, healthy ones too";
+        var reset = Title(CommandId.ResetListColumns);
+
+        var resources = Items(shell);
+        await Assert.That(resources.Any(i => i.Title == unhealthyOn)).IsTrue();
+        await Assert.That(resources.Any(i => i.Title == reset)).IsTrue();
+
+        shell.Mode = ShellMode.Applications;
+        var applications = Items(shell);
+        await Assert.That(applications.Where(i => i.Title == unhealthyOn || i.Title == reset).Select(i => i.Title)).IsEmpty();
+
+        // The way out of the mode is not offered either: it, too, changes the hidden list.
+        shell.Mode = ShellMode.Resources;
+        tab.IsUnhealthyOnly = true;
+        await Assert.That(Items(shell).Any(i => i.Title == unhealthyOff)).IsTrue();
+        shell.Mode = ShellMode.Applications;
+        await Assert.That(Items(shell).Any(i => i.Title == unhealthyOff)).IsFalse();
+        await Assert.That(tab.IsUnhealthyOnly).IsTrue();
+        tab.ResetColumns();
+    }
+
+    /// <summary>
     /// With an Application's page open, the palette offers what the page offers — Edit YAML
     /// and Rollout restart, named after the application — and a restart asks on the page's own
     /// strip, never on the hidden Resources strip. Delete is still not offered. The subtitles
