@@ -168,6 +168,43 @@ Both are read-only with a Reload, like the Application pane. The demo cluster sh
 them, and the harness renders `cluster-tab-argo-applicationset-*` and
 `cluster-tab-argo-appproject-detail`.
 
+## The dashboard is a watch (#303)
+
+The dashboard used to read Applications once when it opened, so a sync started with `kubectl`
+or Argo's own UI, a health change or a new Application showed only after a reload — the one
+list in the app that was not a list+watch (hard rule 2), and a sync in flight is exactly when
+somebody is looking. On one cluster it is now `WatchResourceAsync` over the Application kind,
+cluster-wide, folded into an `ArgoApplicationTable` (Core) and brought to the UI thread in
+batches (`ClusterTabViewModel.ArgoWatch.cs`). It rides the list's own `_watchCts`, so another
+kind, Refresh, the fleet toggle and closing the tab stop it as they stop any list watch, and it
+resumes and relists through the same engine as every other list. It reads the cluster-wide
+Applications collection through the shared `ClusterClient.Watches` (`WatchCache`, see
+[aot-watch-and-discovery](aot-watch-and-discovery.md)), the same entry the Applications mode's
+Argo watch reads, so opening the dashboard joins a running watch instead of listing again; Refresh
+calls `Watches.Relist` on that entry first, as the Resources list does, or it would be answered
+from the cache. `ArgoDashboardRefreshTests` pins that against a fake API server that counts the
+Application lists: Refresh with the dashboard open is a second list (mutation-checked: without
+the `Relist` call the test times out on one).
+
+- **Loading ends at the first row or at Synced, never at Reset** (UI rule 18). A Reset in the
+  middle of the stream (a relist after 410 Gone) keeps the rows on screen until the relist has
+  something to show, so the grid does not blink empty.
+- **A status update replaces only its own row.** An unchanged Application keeps the same
+  `ArgoApplication` instance in the table, so when a batch leaves the order alone only the rows
+  whose object changed are replaced, and the reader's scroll position and selection stay. An
+  Application added, deleted or moved by the sort rebuilds the list; the selection follows the
+  same `namespace/name` either way. `ArgoDashboardWatchTests` pins it (mutation-checked: always
+  rebuilding fails the "same row object" assertion).
+- **The fleet list and the demo cluster are still reads.** The fleet list's per-member watch
+  belongs with the Argo fleet work (#306); the demo has no client.
+
+Live proof, against the Argo sandbox (`Live/ArgoLiveTests`,
+`The_dashboard_watch_shows_a_sync_started_with_kubectl_without_a_reload`): the watch was opened
+before the Application existed, the Application arrived through it, a sync was started with a
+raw merge patch writing `operation` (what `kubectl patch` sends, not kubeNimbus's own Sync), and
+the table saw the phase go `(none)`, `Running`, `Succeeded` with exactly one Reset — no relist
+(Argo CD v3.5.4, 2026-10-12).
+
 ## The dashboard across the fleet
 
 **One merged list with a Cluster column, the counts summed** (owner decision on #195,
@@ -176,8 +213,8 @@ cluster connected. `ClusterFleet.ListArgoApplicationsAsync` resolves the Applica
 each member's own discovery, reads every member in parallel and returns an `ArgoFleetRead`; the
 seven counts are `ArgoSummary` over all of them, the header says "n of m clusters run Argo CD",
 and a member that could not be read is named in the inline warning while the rest show. The
-dashboard stays a read, not a watch, so the toggle and a cluster tab opening or closing re-read
-it. **A fleet row acts on its own cluster**: `ClientForArgoRow` takes the member's client from
+fleet list is still a read, not a watch (the one-cluster dashboard is a watch since #303, below),
+so the toggle and a cluster tab opening or closing re-read it. **A fleet row acts on its own cluster**: `ClientForArgoRow` takes the member's client from
 the shell's member list, and a row whose cluster has left the fleet gets no client rather than
 this tab's (which would sync a namesake on the wrong cluster); the detail pane opens on the same
 client. Rows with the same `namespace/name` on two clusters order by cluster, so they no longer
@@ -208,6 +245,7 @@ the argocd image serving the test repository. `scripts/README.md` has the detail
 |---|---|
 | sync, initiator, prune | ran the sync from kubeNimbus to `Succeeded`, recorded `operation.initiatedBy.username` = `"<user> (kubeNimbus)"` with the API server's username, created the `CreateNamespace=true` destination; after the Application moved to the commit that deleted `removed.yaml`, a sync without prune left that ConfigMap and a sync with prune deleted it, keeping the one still in Git |
 | refresh | cleared `argocd.argoproj.io/refresh` after re-comparing |
+| dashboard watch | delivered a new Application and a `kubectl`-style sync's phases (`Running`, then `Succeeded`) to the dashboard's Applications watch, with one Reset and no relist (#303) |
 | deny window | held a manual sync under a deny window with `manualSync: false`, its operation message saying it is "blocked by sync window", and applied nothing |
 | 403 | refused sync and terminate from a user with only get/list/watch, with the API server's own sentence (`cannot patch resource "applications"`), and nothing was written |
 | terminate | `/status` patch is a 404; the object patch stopped a sync waiting on its PreSync hook, ended `Failed` / "Operation terminated", and never applied what came after the hook; a second terminate found nothing running (422) |

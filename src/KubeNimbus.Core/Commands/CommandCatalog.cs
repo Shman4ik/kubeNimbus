@@ -346,13 +346,13 @@ public static class CommandCatalog
         {
             Id = CommandId.LogsPalette,
             Title = "Logs: find a pod or workload…",
-            CheatTitle = "Logs of any pod or workload, from anywhere",
+            CheatTitle = "Logs of any pod or workload",
             Category = CommandCategory.Pods,
             IconKey = "LogsIconGeometry",
             // The palette, opened already narrowed to the tab's pods and workloads. A
             // window binding, not a list key like L: it has to work with focus in the
-            // sidebar, the inspector or nowhere, which is the whole point of "from
-            // anywhere". Shift because Cmd+L is the address bar in every browser and
+            // sidebar, the inspector or nowhere. Not inside the exec terminal, whose shell
+            // owns Ctrl+Shift+L (#222), so the sheet no longer says "from anywhere". Shift because Cmd+L is the address bar in every browser and
             // Ctrl+L clears a terminal; nothing else in the app is on Ctrl/Cmd+Shift+L.
             Chord = new(CommandKey.L, Cmd | ChordModifiers.Shift),
             Surfaces = Everywhere,

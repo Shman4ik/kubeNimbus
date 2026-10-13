@@ -43,7 +43,7 @@ way in Preferences → General → Shortcut modifier.
 | --- | --- | --- |
 | Logs — a pod's, a workload's, or an event's pod; also in detail panes | L | L |
 | Logs, opened full-size over the list (Esc returns to split) | Shift+L / Shift+click a row's logs icon | Shift+L / Shift+click a row's logs icon |
-| Logs of any pod or workload, from anywhere | Ctrl+Shift+L | Cmd+Shift+L |
+| Logs of any pod or workload | Ctrl+Shift+L | Cmd+Shift+L |
 | Previous logs (crashed container) | P | P |
 | Shell into the pod — or scale a Deployment/StatefulSet | S | S |
 | Port-forward | F | F |

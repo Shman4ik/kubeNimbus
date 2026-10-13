@@ -282,8 +282,8 @@ Setup: `qa-seed.ps1 -Reset`; `./scripts/qa-netcut.ps1 start` for G-11.
   live test, `GatedPodLogsLiveTests`; what stays here is the panes' own wiring). Delete the pod.
 - **G-14 [input]** (#222) Ctrl+Shift+L: the palette opens prefilled `logs `; "shop-web" and the pod
   row streams (a line under 10 s old), "Logs: Deployment/shop-web" opens the multi-pod pane. The
-  chord in a YAML editor opens it. In an exec terminal it is **not** meant to (the terminal
-  keeps Ctrl+letters; 0.7.0 observed it firing there); Ctrl+Tab out, then it opens.
+  chord in a YAML editor opens it. In an exec terminal it does **not** (owner decision on #222:
+  the terminal keeps the chord; 0.7.0 observed it firing there): see T-9. Ctrl+Tab out, then it opens.
 - **G-15 [text]** (#225) "Logs" and "Logs, maximized" from workload detail's Pods tab, "Logs" from
   node detail's Pods tab (read only, no Shell item) and from an Event about a `qa-shop` pod each
   open that pod's streaming logs.
@@ -305,9 +305,11 @@ and read what ran through the clipboard or a marker file (`echo hi > /tmp/m`,
 - **T-2 [input]** (#265) `ls /`; `drag` across two output lines, `keys ^+c`: the clipboard holds exactly
   those two lines.
 - **T-3 [input]** (PR #295) `echo hi` prints `hi`; `sleep 100` then Ctrl+C returns the prompt in under
-  2 s. Alt+B / Alt+F: `cat -v > /tmp/m` and press them; busybox `ash` has no word motion, so the
-  check is that the app sends `ESC b` and `ESC f` (0.7.0 saw `^[B^[F`, uppercase) and nothing
-  stray is inserted.
+  2 s. Alt+B / Alt+F (#315): run `cat -v`, press Alt+B, Alt+F, Alt+Shift+B, then Enter: the line
+  echoed back reads `^[b^[f^[B` (0.7.0 saw `^[B^[F`, uppercase). Ctrl+C. Busybox `ash` has no
+  word motion, so the cursor half needs a readline shell: where a pod runs `bash`, type `echo one
+  two`, Alt+B moves the cursor to the start of `two` and Alt+F back to the end, with nothing
+  inserted; UNSURE when no such pod is allowed.
 - **T-4 [text][look]** (#278, #290) Preferences → General → Terminal = `wt`; ☰ → "Open a terminal on
   this cluster": PowerShell opens, notice "Your preferred terminal was not used — Preferred
   terminal (wt): Windows Terminal opens its tabs from a process of its own …"; its severity colour
@@ -318,6 +320,10 @@ and read what ran through the clipboard or a marker file (`echo hi > /tmp/m`,
 - **T-7 [input]** (#189) `Set-Clipboard "echo one`necho two"`, Ctrl+Shift+V: the card "Paste 2 lines? This shell
   has not turned on bracketed paste, so each line runs as soon as it arrives." with `Paste` focused
   and `Cancel`; nothing ran (marker files). Esc closes it. A one-line paste has no card.
+- **T-9 [input]** (#222) In the exec terminal type `echo abc` (no Enter), then Ctrl+Shift+L: no
+  palette opens and the screen clears to the prompt with `echo abc` still typed (`^L`). Ctrl+K: no
+  palette opens. Ctrl+P: the cluster switcher does not open. Then Ctrl+Tab out of the terminal and
+  Ctrl+Shift+L: the palette opens prefilled `logs `. Close it.
 - **T-8 [opt]** (PR #286) The cordon one-click strip: not allowed on the shared node. UNSURE.
 - **T-11 [input]** (#198) Right-click a `shop-api-…` row: "Exec in my terminal" sits under Exec,
   no ellipsis. Click it: a PowerShell window opens in the container (`hostname` prints the pod
@@ -394,9 +400,9 @@ Setup: "Explore demo cluster". Nothing is mutated.
 ## Batch S — preferences
 
 - **S-1 [input]** (#159) Write a one-context copy of the kubeconfig (`qa-prod` renamed
-  `qa-extra-prod`) to `$env:TEMP\kubenimbus-qa\extra.yaml`; Preferences → General → "Add file…" (the
-  modal file dialog is outside `qa-ui.ps1`: click the name field, `SendWait` the path from your own
-  shell, click Open): Ctrl+P lists `qa-extra-prod` at once; Remove takes it out, the file stays.
+  `qa-extra-prod`) to `$env:TEMP\kubenimbus-qa\extra.yaml`; Preferences → General → "Add file…", then
+  `set-text -Dialog -Id 1148 -Text <that path>` and `invoke -Dialog -Id 1` (#314; if `-Dialog` finds
+  no dialog, say so in the verdict and fall back to clicking the name field and `SendWait`): Ctrl+P lists `qa-extra-prod` at once; Remove takes it out, the file stays.
 - **S-2 [text]** (#159) Appearance → Theme → Dark recolours at once with no OK button; `settings.json`
   has `"Theme": "dark"`; back to System.
 - **S-3 [opt]** (#159) Migration from a pre-migration `workspace.json` needs a prepared profile;
@@ -417,7 +423,7 @@ preflight's `display` line says what it is; otherwise both are UNSURE "the VM do
 
 Runs only if the owner has the Argo sandbox up (`sandbox-up.ps1 -Name kubenimbus-argo -Port 6551
 -SkipApps -Kubeconfig .sandbox/argo-kubeconfig.yaml`, then `argo-sandbox-up.ps1`) and its
-kubeconfig is merged into the run's. Otherwise all six are UNSURE "no Argo sandbox".
+kubeconfig is merged into the run's. Otherwise all seven are UNSURE "no Argo sandbox".
 
 - **A-1** (PR #302) "All clusters": a Cluster column first, "2 of 2 clusters run Argo CD", counts equal
   the two dashboards' sum; Sync on the other cluster's row names that cluster and lands there.
@@ -435,6 +441,12 @@ kubeconfig is merged into the run's. Otherwise all six are UNSURE "no Argo sandb
   owner signs in; the agent never types the password.
 - **A-6** (#224) Events, "All clusters": double-click an event from the Argo cluster; the tab title
   carries "· kubenimbus-argo".
+- **A-7 [text]** (#303) The Argo cluster's own dashboard open (not "All clusters"), an `app`/`with-removed`
+  Application selected and its row scrolled into view. From a shell, `kubectl patch application <name>
+  -n argocd --type merge -p '{"operation":{"sync":{"revision":"with-removed"}}}'`: with no click and
+  no reload, the row's tooltip "Last operation:" reads Running and then Succeeded within about a
+  minute, and the selection stays on that row. `kubectl delete application <name> -n argocd`: the
+  row leaves and the counts drop by one.
 
 ## Batch M — capacity strip, managed fields, failed reconnect
 
@@ -476,3 +488,19 @@ kubeconfig is merged into the run's. Otherwise all six are UNSURE "no Argo sandb
   not read pod usage (pods.metrics.k8s.io is forbidden: …)." Switch to Deployments and back to Pods:
   the same, at once (the refusal is remembered; no "—" columns appear first). Reconnect the tab:
   asked once more, same result. **0.7.0:** the columns read "—" for ever.
+
+## Batch Q — the QA driver itself
+
+Setup: a fresh `qa-app.ps1` start; these check `qa-ui.ps1`, not the app (#314).
+
+- **Q-1 [text]** Right after the start, `resize -Width 960 -Height 720`: it prints `resized:` with
+  bounds near 960x720, no `SetWindowPos failed`. Then `move -X 40 -Y 40`: `moved:`.
+- **Q-2 [text]** `select` on a sidebar kind row (`-Within SidebarItems`) whose selection the app does
+  not take: the command fails with "Select changed nothing" rather than printing `selected:`, or
+  the kind really opens. A `click` on the same row opens it. The same for a namespace-picker row
+  in its open flyout.
+- **Q-3 [text]** Preferences → General → "Add file…": `find -Dialog -Id 1148` lists an Edit;
+  `set-text -Dialog -Id 1148 -Text <a kubeconfig path>`, `invoke -Dialog -Id 1`: the dialog closes
+  and the file is in the list. With no dialog open, `find -Dialog -Id 1` says "No file dialog is open".
+- **Q-4 [input]** G-5 again: `click -Id MenuCopy` on the log pane's ⋯ menu hanging past the window's
+  bottom edge prints `clicked (real mouse)` and copies.

@@ -16,6 +16,11 @@
       brought to the front and the pointer and keyboard really move. Use them only when a
       check is about real input (a DataGrid double-click, a context menu, a key gesture),
       which is exactly what the pattern actions cannot prove.
+    A pattern action reads its state back: `select` fails when the item is not selected
+    afterwards, `toggle` when the state did not change, and `invoke` says which pattern it
+    used and, for InvokePattern (which has no state), that the effect is for the caller to
+    check. A list that only acts on a pointer press then fails loudly instead of printing
+    success; use `click` there.
 
     Runs only inside the owner's Hyper-V QA VM (KUBENIMBUS_QA_VM=1), never on the owner's
     own desktop; see qa-app.ps1.
@@ -61,6 +66,8 @@
       -Index <n>           the n-th match (0-based), default 0
       -Within <AutomationId>  search only inside that container (ResourceGrid, PaletteList,
                            InspectorTabStrip, …): much faster than a whole-window scan
+      -Dialog              search the open Windows file dialog instead of the main window
+                           (its file name box is -Id 1148, Open is -Id 1, Cancel -Id 2)
 
 .EXAMPLE
     ./scripts/qa-ui.ps1 dump -Match crashloop
@@ -70,6 +77,8 @@
     ./scripts/qa-ui.ps1 double-click -Match "crashloop-" -Type DataItem
     ./scripts/qa-ui.ps1 keys -Keys "{ESC}"
     ./scripts/qa-ui.ps1 resize -Width 960 -Height 720
+    ./scripts/qa-ui.ps1 set-text -Dialog -Id 1148 -Text C:\qa\extra.kubeconfig
+    ./scripts/qa-ui.ps1 invoke -Dialog -Id 1
     ./scripts/qa-ui.ps1 screenshot -Id RowFilterBox -Out $env:TEMP/qa/step1.png
 #>
 [CmdletBinding()]
@@ -100,7 +109,8 @@ param(
     [int]$OffsetY = [int]::MinValue,
     [string]$Modifiers,
     [switch]$Horizontal,
-    [switch]$WholeWindow
+    [switch]$WholeWindow,
+    [switch]$Dialog
 )
 
 $ErrorActionPreference = 'Stop'
@@ -113,7 +123,7 @@ Add-Type -Namespace QaNative -Name Win32 -MemberDefinition @'
 [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
 [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);
-[DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+[DllImport("user32.dll", SetLastError = true)] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
 [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
 [DllImport("user32.dll")] public static extern uint MapVirtualKey(uint code, uint mapType);
 // POINT is passed by value as one 64-bit register on x64: y in the high half, x in the low.
@@ -146,9 +156,30 @@ function Invoke-UiaRead([scriptblock]$read) {
 
 function Get-Window {
     $cond = New-Object System.Windows.Automation.PropertyCondition($A::ProcessIdProperty, $appPid)
-    $window = Invoke-UiaRead { $A::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Children, $cond) }
+    $windows = Invoke-UiaRead { , @($A::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, $cond)) }
+    # The open-file dialog is a top-level window of the same process: never mistake it for
+    # the app's own window (#314).
+    $window = $windows | Where-Object { $_.Current.ClassName -ne $DialogClass } | Select-Object -First 1
     if (-not $window) { throw "kubeNimbus (pid $appPid) has no window. Is it still running?" }
     $window
+}
+
+# The Windows common file dialog (Preferences → General → Add file…, Open kubeconfig file):
+# class #32770, in this process. UI Automation lists it beside the main window or, as an owned
+# window, inside it; both are searched. Its controls have Win32 ids as AutomationIds: the
+# file name box is 1148 and Open is 1, so `set-text -Dialog -Id 1148 -Text <path>` and
+# `invoke -Dialog -Id 1` drive it (#314). Cancel is 2.
+$DialogClass = '#32770'
+function Get-Dialog {
+    $byClass = New-Object System.Windows.Automation.PropertyCondition($A::ClassNameProperty, $DialogClass)
+    $byPid = New-Object System.Windows.Automation.PropertyCondition($A::ProcessIdProperty, $appPid)
+    $both = New-Object System.Windows.Automation.AndCondition($byClass, $byPid)
+    $dialog = Invoke-UiaRead { $A::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Children, $both) }
+    if (-not $dialog) {
+        $dialog = Invoke-UiaRead { (Get-Window).FindFirst([System.Windows.Automation.TreeScope]::Descendants, $byClass) }
+    }
+    if (-not $dialog) { throw 'No file dialog is open in kubeNimbus (no #32770 window in its process).' }
+    $dialog
 }
 
 # Avalonia falls back to the content's type name when a control has no accessible name;
@@ -182,7 +213,7 @@ function Format-Element($element, [int]$number) {
 }
 
 function Get-Matches {
-    $window = Get-Window
+    $window = if ($Dialog) { Get-Dialog } else { Get-Window }
     $scope = $window
     if ($Within) {
         # A scan of the whole window walks every row of every grid and the sidebar's hundred
@@ -292,6 +323,31 @@ function Assert-InputDesktop {
     }
 }
 
+# The main window's handle, from the same UI Automation node every other command uses.
+# `Process.MainWindowHandle` is a guess Windows makes per call (the first visible unowned
+# window it finds), and right after start it can be 0 or another window, which is the likeliest
+# reason the 0.7.0 run's first `resize` threw "SetWindowPos failed." (#314; not reproduced
+# outside the QA VM).
+function Get-MainHandle {
+    $handle = [IntPtr](Get-Window).Current.NativeWindowHandle
+    if ($handle -eq [IntPtr]::Zero) { $handle = [IntPtr](Get-Process -Id $appPid).MainWindowHandle }
+    if ($handle -eq [IntPtr]::Zero) { throw "kubeNimbus (pid $appPid) has no window handle yet. Wait for its window and retry." }
+    $handle
+}
+
+# SetWindowPos, retried once after a pause (a window still restoring from maximized), and
+# failing with the Win32 error rather than a bare "failed".
+function Set-WindowPos([IntPtr]$hwnd, [int]$x, [int]$y, [int]$cx, [int]$cy, [uint32]$flags) {
+    for ($attempt = 1; $attempt -le 2; $attempt++) {
+        if ([QaNative.Win32]::SetWindowPos($hwnd, [IntPtr]::Zero, $x, $y, $cx, $cy, $flags)) { return }
+        $code = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+        if ($attempt -eq 2) {
+            throw "SetWindowPos failed on window 0x$($hwnd.ToString('X')): $([System.ComponentModel.Win32Exception]::new($code).Message) (Win32 error $code)."
+        }
+        Start-Sleep -Milliseconds 300
+    }
+}
+
 function Show-Window {
     Assert-InputDesktop
     $hwnd = [IntPtr](Get-Process -Id $appPid).MainWindowHandle
@@ -369,6 +425,31 @@ function Send-Wheel($element, [int]$notches, [bool]$horizontal) {
     Start-Sleep -Milliseconds 100
 }
 
+# A pattern action is read back after the app has had a moment to react, and one that left
+# the state where it was fails (#314). In the 0.7.0 run `select` on a namespace-picker item and
+# `select`/`invoke` on sidebar items printed success while nothing changed, so checks were
+# recorded on a state that never happened. A list whose selection the app re-derives (the
+# sidebar marks the selected kind itself) or that acts only on a pointer press puts the old
+# selection back, and that shows here as a failure: use `click` for those.
+$SettleMs = 400
+
+function Invoke-Select($element, $pattern) {
+    $pattern.Select()
+    Start-Sleep -Milliseconds $SettleMs
+    if (-not (Invoke-UiaRead { $pattern.Current.IsSelected })) {
+        throw "Select changed nothing: $(Format-Element $element 0) is not selected afterwards (the app put its own selection back, or ignores a selection it did not see a press for). Use click for real input."
+    }
+}
+
+function Invoke-Toggle($element, $pattern) {
+    $before = $pattern.Current.ToggleState
+    $pattern.Toggle()
+    Start-Sleep -Milliseconds $SettleMs
+    if ((Invoke-UiaRead { $pattern.Current.ToggleState }) -eq $before) {
+        throw "Toggle changed nothing: $(Format-Element $element 0) is still $before. Use click for real input."
+    }
+}
+
 switch ($Command) {
     'window' {
         $w = Get-Window
@@ -390,25 +471,36 @@ switch ($Command) {
                         [System.Windows.Automation.TogglePattern]::Pattern,
                         [System.Windows.Automation.ExpandCollapsePattern]::Pattern) {
             try { $pattern = $e.GetCurrentPattern($p) } catch { continue }
+            $before = Format-Element $e 0
             switch ($pattern.GetType().Name) {
-                'InvokePattern' { $pattern.Invoke() }
-                'SelectionItemPattern' { $pattern.Select() }
-                'TogglePattern' { $pattern.Toggle() }
-                'ExpandCollapsePattern' { $pattern.Expand() }
+                'InvokePattern' {
+                    $pattern.Invoke()
+                    # Invoke has no state to read back; say so rather than claim an effect.
+                    "invoked (InvokePattern; the pattern reports no state, so check what it should have changed): $before"
+                }
+                'SelectionItemPattern' { Invoke-Select $e $pattern; "invoked (SelectionItemPattern): $(Format-Element $e 0)" }
+                'TogglePattern' { Invoke-Toggle $e $pattern; "invoked (TogglePattern): $(Format-Element $e 0)" }
+                'ExpandCollapsePattern' {
+                    $pattern.Expand()
+                    Start-Sleep -Milliseconds $SettleMs
+                    if ($pattern.Current.ExpandCollapseState -eq [System.Windows.Automation.ExpandCollapseState]::Collapsed) {
+                        throw "Expand changed nothing: $(Format-Element $e 0) is still collapsed. Use click for real input."
+                    }
+                    "invoked (ExpandCollapsePattern): $(Format-Element $e 0)"
+                }
             }
-            "invoked ($($pattern.GetType().Name)): $(Format-Element $e 0)"
             return
         }
         throw "No invoke/select/toggle/expand pattern on: $(Format-Element $e 0). Use click for real input."
     }
     'select' {
         $e = Get-Target
-        $e.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+        Invoke-Select $e $e.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern)
         "selected: $(Format-Element $e 0)"
     }
     'toggle' {
         $e = Get-Target
-        $e.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Toggle()
+        Invoke-Toggle $e $e.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern)
         "toggled: $(Format-Element $e 0)"
     }
     'set-text' {
@@ -432,21 +524,19 @@ switch ($Command) {
     }
     'move' {
         if (-not ($PSBoundParameters.ContainsKey('X') -and $PSBoundParameters.ContainsKey('Y'))) { throw 'Pass -X and -Y in screen pixels.' }
-        $hwnd = [IntPtr](Get-Process -Id $appPid).MainWindowHandle
+        $hwnd = Get-MainHandle
         [QaNative.Win32]::ShowWindow($hwnd, 9) | Out-Null
         # SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE
-        if (-not [QaNative.Win32]::SetWindowPos($hwnd, [IntPtr]::Zero, $X, $Y, 0, 0, 0x0001 -bor 0x0004 -bor 0x0010)) { throw 'SetWindowPos failed.' }
+        Set-WindowPos $hwnd $X $Y 0 0 (0x0001 -bor 0x0004 -bor 0x0010)
         Start-Sleep -Milliseconds 300
         "moved: $(Format-Element (Get-Window) 0)"
     }
     'resize' {
         if ($Width -le 0 -or $Height -le 0) { throw 'Pass -Width and -Height in screen pixels.' }
-        $hwnd = [IntPtr](Get-Process -Id $appPid).MainWindowHandle
+        $hwnd = Get-MainHandle
         [QaNative.Win32]::ShowWindow($hwnd, 9) | Out-Null   # SW_RESTORE: a maximized window keeps its size
         # SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE
-        if (-not [QaNative.Win32]::SetWindowPos($hwnd, [IntPtr]::Zero, 0, 0, $Width, $Height, 0x0002 -bor 0x0004 -bor 0x0010)) {
-            throw 'SetWindowPos failed.'
-        }
+        Set-WindowPos $hwnd 0 0 $Width $Height (0x0002 -bor 0x0004 -bor 0x0010)
         Start-Sleep -Milliseconds 300
         "resized: $(Format-Element (Get-Window) 0)"
     }

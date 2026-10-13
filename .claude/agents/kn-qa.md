@@ -56,8 +56,8 @@ UNSURE with the reason and a `-Surprise`, which is how it gets added.
 - Start: `./scripts/qa-app.ps1` (builds Debug, starts the app on an isolated profile
   against the local sandbox cluster; it refuses any non-local cluster). If it says an
   instance is already running, stop and report that — another check run owns the desktop.
-  The first `resize` right after the start can throw `SetWindowPos failed.`; wait five
-  seconds and repeat it.
+  `resize` and `move` take the window handle from UI Automation and retry once; if one
+  still fails, its message carries the Win32 error: quote it in the verdict.
 - Always finish with `./scripts/qa-app.ps1 -Stop`, including after a failure.
 - If `keys`, `click` or `screenshot` says the interactive desktop is not available, the VM's
   console is locked: record the rest of the batch UNSURE with that reason and stop; nothing
@@ -101,8 +101,10 @@ What the tree cannot show, and what to use instead: the exec terminal's text and
 editor's text are not in it (clipboard: click in, Ctrl+A, Ctrl+C, `Get-Clipboard`; or a marker
 file written in the pod and read with `kubectl exec`); a row's selected state is not (the
 "N selected" text is); the namespace flyout's check boxes are not (`-OffsetX/-OffsetY`). The
-sidebar's kind rows and the flyout's rows need a real `click`; `select`/`invoke` report
-success and change nothing. Context-menu items are often named by their help text, so find
+sidebar's kind rows and the flyout's rows need a real `click`: `select`, `toggle` and an
+`invoke` that selects read the state back and fail when nothing changed, and `invoke` through
+InvokePattern cannot be read back, so check its effect. The Windows file dialog is reached with
+`-Dialog` (`set-text -Dialog -Id 1148 -Text <path>`, then `invoke -Dialog -Id 1`). Context-menu items are often named by their help text, so find
 them with `dump -Match`. `toggle` on a toggle button bypasses the app's own refusal; use a
 real click for a check about refusing. The description in a `click` result is read before the
 click, and the tab close buttons are `<unnamed>` in it; neither is a failure.

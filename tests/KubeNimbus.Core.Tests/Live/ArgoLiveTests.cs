@@ -625,4 +625,94 @@ public class ArgoLiveTests
             """, ct);
         return path;
     }
+
+    // ------------------------------------------------------------------ #303
+
+    /// <summary>
+    /// The dashboard's watch sees a sync nobody started from kubeNimbus. One list+watch of
+    /// Applications across the cluster, folded into the <see cref="ArgoApplicationTable"/> the
+    /// dashboard renders, is opened before the Application exists; the Application then
+    /// arrives, a sync is started the way <c>kubectl patch</c> starts one (a merge patch
+    /// writing <c>operation</c>, not <see cref="ClusterClient.SyncArgoApplicationAsync"/>), and
+    /// the table shows the phase reach Succeeded with no second list.
+    /// </summary>
+    [Test]
+    public async Task The_dashboard_watch_shows_a_sync_started_with_kubectl_without_a_reload(CancellationToken ct)
+    {
+        using var argo = await ConnectAsync(ct);
+        var name = Named("watch");
+        var destination = Named("watch-dest");
+        var key = $"{ArgoNamespace}/{name}";
+        var table = new ArgoApplicationTable();
+        var resets = 0;
+        var phases = new List<string>();
+        using var watching = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var gate = new object();
+
+        var watch = Task.Run(async () =>
+        {
+            try
+            {
+                await foreach (var batch in argo.Client.WatchResourceAsync(argo.Applications, cancellationToken: watching.Token)
+                                   .InBatches(cancellationToken: watching.Token))
+                {
+                    lock (gate)
+                    {
+                        foreach (var change in batch)
+                        {
+                            resets += change.Type == ResourceEventType.Reset ? 1 : 0;
+                            table.Apply(change);
+                        }
+
+                        if (table.Applications.FirstOrDefault(a => a.Key == key) is { } seen
+                            && (phases.Count == 0 || phases[^1] != seen.OperationPhase))
+                        {
+                            phases.Add(seen.OperationPhase);
+                        }
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // the test is over
+            }
+        }, CancellationToken.None);
+
+        try
+        {
+            await LiveCluster.WaitUntilAsync(() => { lock (gate) { return Task.FromResult(table.IsSynced); } },
+                TimeSpan.FromSeconds(30), "the Applications watch to sync", ct);
+
+            await CreateApplicationAsync(argo, name, "app", "with-removed", destination);
+            await LiveCluster.WaitUntilAsync(() => { lock (gate) { return Task.FromResult(table.Applications.Any(a => a.Key == key)); } },
+                TimeSpan.FromSeconds(30), "the new Application to arrive through the watch", ct);
+
+            await MergePatchAsync(argo, ArgoNamespace, name,
+                """{"operation":{"initiatedBy":{"username":"kubectl"},"sync":{"revision":"with-removed","syncOptions":["CreateNamespace=true"]}}}""");
+
+            await LiveCluster.WaitUntilAsync(
+                () => { lock (gate) { return Task.FromResult(table.Applications.Single(a => a.Key == key).OperationPhase is "Succeeded" or "Failed" or "Error"); } },
+                Reconcile, "the sync's phase to reach the watch", ct);
+
+            string final;
+            int resetCount;
+            lock (gate)
+            {
+                final = table.Applications.Single(a => a.Key == key).OperationPhase;
+                resetCount = resets;
+                Console.WriteLine($"Phases seen through the watch: [{string.Join(", ", phases.Select(p => p.Length == 0 ? "(none)" : p))}], resets: {resets}");
+            }
+
+            await Assert.That(final).IsEqualTo("Succeeded");
+
+            // One Reset: the first list. Everything after it came from the watch, not a relist.
+            await Assert.That(resetCount).IsEqualTo(1);
+        }
+        finally
+        {
+            await watching.CancelAsync();
+            await watch;
+            await CleanUpAsync(argo, [(ArgoNamespace, name)], destination);
+        }
+    }
 }

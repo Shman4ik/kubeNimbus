@@ -1388,8 +1388,8 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     }
 
     /// <summary>
-    /// The Argo dashboard is a read, not a watch, so a fleet change re-reads it; everything
-    /// else re-fans its watch.
+    /// The Argo dashboard moves between its own cluster's watch and the fleet's read, so a
+    /// fleet change reloads it; everything else re-fans its watch.
     /// </summary>
     private void ReloadForFleetChange()
     {
@@ -2379,10 +2379,25 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
 
         if (ArgoApplicationDescriptor() is not { } descriptor)
         {
+            StopWatch();
             IsArgoEmpty = true;
             return;
         }
 
+        // This cluster's own dashboard is a watch (#303, ClusterTabViewModel.ArgoWatch.cs); the
+        // fleet list and the demo cluster are still the read below.
+        if (Client is { } client && !(IsFleetView && FleetMembersProvider?.Invoke() is { Count: > 0 }))
+        {
+            if (ConnectionWarning?.StartsWith(ArgoReadWarning, StringComparison.Ordinal) == true)
+            {
+                ConnectionWarning = null;
+            }
+
+            StartArgoWatch(client, descriptor);
+            return;
+        }
+
+        StopWatch();
         IsArgoLoading = true;
         IsArgoEmpty = false;
         var previous = SelectedArgoApplication is { } selected ? (selected.ClusterName, selected.Application.Key) : default;
@@ -2778,6 +2793,13 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
         else if (IsArgoView)
         {
+            // The dashboard reads the shared watch too: relist it, or a refresh is answered
+            // with what the cache already holds.
+            if (Client is { } argoClient && !IsFleetView && ArgoApplicationDescriptor() is { } applications)
+            {
+                argoClient.Watches.Relist(applications);
+            }
+
             _ = ReloadArgoAsync();
         }
         else

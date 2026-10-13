@@ -88,7 +88,16 @@ Seven things worth keeping:
    there is Copy. A test asserts both render as "Ctrl" even under the Cmd scheme. The
    pane's Copy/Paste pair is `Control | Shift` for the far side of the same argument —
    the terminal owns plain Ctrl+C, so the clipboard has to move up a modifier, exactly
-   as it does in every terminal emulator.
+   as it does in every terminal emulator. **With focus in the exec terminal, a window chord
+   on literal Ctrl (with or without Shift) and a letter is the shell's** (#222, owner
+   decision 2026-10-12): Ctrl+Shift+L there is `^L` and does not open the logs palette, and
+   Ctrl+K, Ctrl+P and Ctrl+Shift+N reach the shell as well. Everywhere else Ctrl/Cmd+Shift+L opens
+   the palette narrowed to logs (the YAML editor too, since window bindings run before the
+   focused control; that one is a desktop check, G-14), and from the terminal Ctrl+Tab leaves
+   it first. `RebuildWindowBindings` builds those bindings over a command that stands
+   aside while the terminal has focus (`CommandBindings.ShellOwns`); a new window chord on
+   Ctrl+letter gets that for free, and one that must work inside the terminal needs a key
+   the shell does not read. Evidence in [exec-terminal](exec-terminal.md), item 4.
 6. **The list has single-letter row keys, k9s's own.** L logs (a pod's, or every pod a
    workload owns), Shift+L the same logs with the inspector maximized, P previous logs, S shell on a pod / scale on anything with a `scale`
    subresource, F port-forward, E edit YAML, R rollout restart, Delete, and `/` to search.
