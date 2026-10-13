@@ -112,8 +112,8 @@ Builds are self-contained NativeAOT binaries — **no .NET runtime to install**.
 |---|---|---|
 | Windows x64 | the [Store](https://apps.microsoft.com/detail/9MZ3C28M65PB) | `kubeNimbus-<version>-win-x64.zip` |
 | macOS Apple Silicon | `kubeNimbus-<version>-osx-arm64.dmg` | `kubeNimbus-<version>-osx-arm64.tar.gz` |
-| Linux x64 | `kubeNimbus-<version>-linux-x64.deb` or `.AppImage` | `kubeNimbus-<version>-linux-x64.tar.gz` |
-| Linux arm64 | `kubeNimbus-<version>-linux-arm64.deb` or `.AppImage` | `kubeNimbus-<version>-linux-arm64.tar.gz` |
+| Linux x64 | `kubeNimbus-<version>-linux-x64.deb` or `kubeNimbus-<version>-x86_64.AppImage` | `kubeNimbus-<version>-linux-x64.tar.gz` |
+| Linux arm64 | `kubeNimbus-<version>-linux-arm64.deb` or `kubeNimbus-<version>-aarch64.AppImage` | `kubeNimbus-<version>-linux-arm64.tar.gz` |
 
 The installers add a desktop launcher and an icon; the portable archives are
 the same binary with nothing to install. Every package is launched by CI on its
@@ -153,12 +153,18 @@ sudo apt install ./kubeNimbus-<version>-linux-x64.deb
 kubenimbus
 ```
 
-**AppImage** — nothing to install, runs on any distribution:
+**AppImage** — nothing to install, runs on any distribution with glibc 2.35 or newer
+(Ubuntu 22.04, Debian 12, RHEL 9 and later):
 
 ```bash
-chmod +x kubeNimbus-<version>-linux-x64.AppImage
-./kubeNimbus-<version>-linux-x64.AppImage
+chmod +x kubeNimbus-<version>-x86_64.AppImage
+./kubeNimbus-<version>-x86_64.AppImage
 ```
+
+The AppImage carries update information, so
+[AppImageUpdate](https://github.com/AppImageCommunity/AppImageUpdate) and the
+AppImage managers built on it can bring it to the latest release. Up to 0.7.0
+it was named `kubeNimbus-<version>-linux-x64.AppImage` and had none.
 
 **Tarball**:
 

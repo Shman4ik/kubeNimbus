@@ -184,13 +184,16 @@ The packaging itself lives in scripts you can run on your own machine, against
 any `dotnet publish` output:
 
 ```bash
-./scripts/linux/build-packages.sh publish/app 0.0.0-dev linux-x64 dist   # .deb + .AppImage
+./scripts/linux/build-packages.sh publish/app 0.0.0-dev linux-x64 dist   # .deb + .AppImage + .zsync
 ./scripts/macos/build-app-bundle.sh publish/app 0.0.0-dev osx-arm64 dist # .app + .dmg
 ```
 
 The Linux script downloads appimagetool and the AppImage runtime from tagged
 upstream releases and refuses to run either unless its SHA-256 matches the one
-written in the script; how to move that pin is a comment beside it.
+written in the script; how to move that pin is a comment beside it. It also
+needs `zsyncmake` (`apt install zsync`) for the AppImage's `.zsync` update file,
+and refuses to build without it. `scripts/linux/check-glibc.sh <publish-dir> 2.35`
+reports the newest glibc a Linux publish output needs.
 
 Run it with `workflow_dispatch` and `dry_run: true` to build and archive
 everything without creating a release — worth doing once if you've touched the

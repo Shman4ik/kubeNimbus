@@ -26,7 +26,8 @@ without cutting a release. Each takes the same four arguments:
 
 | Script | Builds | Runs on |
 |---|---|---|
-| `linux/build-packages.sh` | `.deb` and `.AppImage` | Linux (`dpkg-deb`; downloads `appimagetool`) |
+| `linux/build-packages.sh` | `.deb`, and `.AppImage` with its `.zsync` update file | Linux (`dpkg-deb`, `zsyncmake`; downloads `appimagetool`) |
+| `linux/check-glibc.sh` | nothing; fails when a Linux publish output needs a glibc above the ceiling | Linux (`objdump`) |
 | `macos/build-app-bundle.sh` | `kubeNimbus.app` and a drag-to-Applications `.dmg` | macOS (`sips`, `iconutil`, `hdiutil`, `codesign`) |
 | `windows/build-msix.ps1` | `.msix` for Microsoft Store submission | Windows (Windows SDK `makeappx`/`makepri`) |
 

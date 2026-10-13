@@ -231,6 +231,40 @@ be launched from Spotlight. `release.yml` now builds, per RID:
   `/proc/self/exe` and needs nothing exported. The `.tar.gz` is still built by
   the workflow itself, so the script deliberately does not produce one.
 
+### Linux: the glibc floor, the AppImage name and its updates (2026-10)
+
+Two things the AppImage catalog (appimage.github.io) checks, and that pgNimbus's
+submission (AppImage/appimage.github.io#6624) failed on for a week until its #371
+and #390 fixed them. kubeNimbus had both defects up to 0.7.0 and took the same fixes.
+
+1. **The Linux legs build on `ubuntu-22.04` and `ubuntu-22.04-arm`, never
+   `ubuntu-latest`.** NativeAOT links every glibc symbol to the newest version the
+   build machine's glibc has, so a binary linked on 24.04 (glibc 2.39) can need
+   `GLIBC_2.38` and refuse to start on Ubuntu 22.04, Debian 12 and RHEL 9 —
+   pgNimbus 1.1.0 did exactly that through `fmod`, and the catalog's test runs on
+   the oldest supported Ubuntu LTS. The launch checks cannot see this, because
+   they run on the machine that linked the binary; so `scripts/linux/check-glibc.sh`
+   reads the symbol versions out of every ELF file in the publish output (not the
+   `.dbg`, which 22.04's binutils cannot read and no package ships) and fails above
+   `GLIBC_CEILING` (`2.35`, a job-level env in `release.yml`). `warm-cache.yml`
+   mirrors the runners. When GitHub retires 22.04, move both legs, `warm-cache.yml`
+   and the ceiling to the next LTS together, and say so in the README's AppImage
+   section, which names the floor.
+2. **The AppImage is `kubeNimbus-<version>-x86_64.AppImage` / `-aarch64.AppImage`**,
+   not `-linux-x64`: the catalog's test warns when the name contains "linux" or
+   spells the architecture other than AppImage's way. The `.deb` and `.tar.gz` keep
+   their `-linux-<arch>` names. The AppImage embeds update information
+   (`appimagetool -u 'gh-releases-zsync|Shman4ik|kubeNimbus|latest|kubeNimbus-*-<arch>.AppImage.zsync'`),
+   so AppImageUpdate and the managers built on it can find the next release, and
+   the `.zsync` that appimagetool writes beside it ships as a release asset and in
+   `SHA256SUMS.txt` (both automatic: it lands in `dist/`). appimagetool writes it by
+   calling `zsyncmake` (apt package `zsync`) and only *warns* when that is missing,
+   so `build-packages.sh` refuses to start without it and fails if the file did not
+   appear, and the install check asserts both the embedded string and the file.
+   Releases are immutable: a `.zsync` missing at tag time can never be added, so
+   these are hard failures rather than warnings. The name pattern and the update
+   string must change together.
+
 Three things about this are load-bearing:
 
 1. **Each package is smoke-launched through its own installed path**, not just
