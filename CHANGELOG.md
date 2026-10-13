@@ -14,6 +14,12 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Changed
 
+- **The Linux AppImage has a new name and updates itself.** It is now
+  `kubeNimbus-<version>-x86_64.AppImage` or `kubeNimbus-<version>-aarch64.AppImage` (it was
+  `-linux-x64.AppImage` and `-linux-arm64.AppImage`), the naming the AppImage catalog asks for;
+  the `.deb` and `.tar.gz` keep their names. The AppImage now carries update information, and its
+  `.zsync` file is published beside it, so AppImageUpdate and AppImage managers can bring it to
+  the latest release. A script or bookmark that downloads the AppImage by name needs the new one.
 - **One namespace choice per cluster tab, kept across restarts.** The Applications and
   Resources pickers now share the tab's choice: namespaces chosen in one mode are the ones
   the other shows, and the next launch opens on them again. A tab with nothing saved opens on
@@ -22,6 +28,13 @@ it as the GitHub Release body, so headings must match tags exactly
   by both modes, so the Resources list of Pods, Deployments and the other kinds the
   Applications mode reads appears at once, and the last five kinds you left stay live: going
   back to one shows current rows with no new list. Refresh still reads the cluster again.
+
+### Fixed
+
+- **The Linux packages are built for Ubuntu 22.04, Debian 12 and RHEL 9.** They were built on
+  Ubuntu 24.04, and a NativeAOT binary asks for the glibc version of the machine it was built on,
+  so an older distribution could refuse to start it with a "GLIBC_2.38 not found" error. They are
+  now built on Ubuntu 22.04, and the release fails if a binary needs a glibc newer than 2.35.
 
 ## [0.7.0] - 2026-10-11
 

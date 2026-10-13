@@ -36,12 +36,26 @@ jobs:
         include:
           # NativeAOT cannot cross-compile — each RID needs a runner of its own
           # architecture and OS, which is what this matrix is.
-          - { os: windows-latest,  rid: win-x64,     archive: zip }
-          - { os: ubuntu-latest,   rid: linux-x64,   archive: tar }
+          #
+          # The Linux legs are on 22.04, not latest, on purpose: NativeAOT binds
+          # every glibc symbol to the newest version the machine it was linked on
+          # has, so this runner sets the oldest system the Linux packages start
+          # on. Up to 0.7.0 they were linked on 24.04 (glibc 2.39), and pgNimbus
+          # 1.1.0, built the same way, would not start on Ubuntu 22.04, Debian 12
+          # or RHEL 9; the AppImage catalog, which tests on the oldest supported
+          # Ubuntu LTS, refused it for that (AppImage/appimage.github.io#6624).
+          # Keep this the oldest Ubuntu LTS GitHub still hosts; when 22.04
+          # retires, move both legs, warm-cache.yml and GLIBC_CEILING together.
+          - { os: windows-latest,   rid: win-x64,     archive: zip }
+          - { os: ubuntu-22.04,     rid: linux-x64,   archive: tar }
           # Free for public repositories; see CONTRIBUTING.md if this label ever
           # stops resolving.
-          - { os: ubuntu-24.04-arm, rid: linux-arm64, archive: tar }
-          - { os: macos-latest,    rid: osx-arm64,   archive: tar }
+          - { os: ubuntu-22.04-arm, rid: linux-arm64, archive: tar }
+          - { os: macos-latest,     rid: osx-arm64,   archive: tar }
+    env:
+      # Ubuntu 22.04's glibc. scripts/linux/check-glibc.sh fails a Linux leg
+      # whose binary needs anything newer.
+      GLIBC_CEILING: "2.35"
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -67,12 +81,14 @@ jobs:
       # guarantee the dev headers. Xvfb and the X client libraries are for the
       # launch check below — Avalonia's X11 backend dlopens exactly these seven
       # and nothing else native. Windows and macOS runners have a window server
-      # already, so only Linux needs a display supplying.
+      # already, so only Linux needs a display supplying. zsync supplies
+      # zsyncmake, which writes the AppImage's .zsync update file;
+      # build-packages.sh refuses to build without it.
       - name: Install AOT toolchain prerequisites (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang zlib1g-dev \
+          sudo apt-get install -y clang zlib1g-dev zsync \
             xvfb libice6 libsm6 libx11-6 libxcursor1 libxext6 libxi6 libxrandr2
 
       - name: Resolve version
@@ -109,6 +125,15 @@ jobs:
           -p:PublishAot=true
           -p:Version=${{ steps.version.outputs.version }}
           -o publish/${{ matrix.rid }}
+
+      # The launch checks below run on this same runner, so they cannot see a
+      # glibc floor raised by the runner itself; this reads it from the binary.
+      - name: Check the glibc floor
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          chmod +x scripts/linux/check-glibc.sh
+          ./scripts/linux/check-glibc.sh publish/${{ matrix.rid }} "$GLIBC_CEILING"
 
       # ---------------------------------------------------------------------
       # Launch check. Deliberately BEFORE staging: a binary that cannot start
@@ -244,6 +269,9 @@ jobs:
 
           "$app/Contents/MacOS/kubeNimbus" --smoke-test
 
+      # Also writes the AppImage's .zsync update file into dist/, so the
+      # checksum, upload and release steps carry it with no wiring of their own.
+      # Releases are immutable: a .zsync missing at tag time is missing for good.
       - name: Build .deb + .AppImage
         if: runner.os == 'Linux'
         shell: bash
@@ -267,8 +295,20 @@ jobs:
           base="${{ steps.version.outputs.name }}"
           smoke() { xvfb-run -a --server-args="-screen 0 1280x800x24" "$@" --smoke-test; }
 
-          chmod +x "dist/$base.AppImage"
-          smoke "./dist/$base.AppImage" --appimage-extract-and-run
+          # The AppImage is named with the architecture AppImages spell.
+          case "${{ matrix.rid }}" in
+            linux-x64)   appimage_arch=x86_64 ;;
+            linux-arm64) appimage_arch=aarch64 ;;
+          esac
+          appimage="kubeNimbus-${{ steps.version.outputs.version }}-${appimage_arch}.AppImage"
+
+          chmod +x "dist/$appimage"
+          smoke "./dist/$appimage" --appimage-extract-and-run
+          # Its updater reads the update information inside the AppImage and the
+          # .zsync file next to it: both have to be there under the matching name.
+          "./dist/$appimage" --appimage-updateinformation | grep -Fx \
+            "gh-releases-zsync|Shman4ik|kubeNimbus|latest|kubeNimbus-*-${appimage_arch}.AppImage.zsync"
+          test -s "dist/$appimage.zsync"
 
           sudo apt-get install -y "./dist/$base.deb"
           smoke /usr/bin/kubenimbus

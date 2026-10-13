@@ -232,7 +232,8 @@ in the log. Escape sent by computer-use does not reach the app either; the harne
       `.AppImage`) is installed and launched through its own path, so a red smoke step is a real
       failure. A red leg is fixed forward as a patch release; the tag is never moved.
 - [ ] The release page: the body is the CHANGELOG section plus the unsigned-binary
-      footer, `SHA256SUMS.txt` is attached, no `.msix`, `.msi` or `.wixpdb` is attached, and the release
+      footer, `SHA256SUMS.txt` is attached, each `.AppImage` (named `-x86_64` / `-aarch64`, no
+      "linux") has its `.zsync` beside it and in `SHA256SUMS.txt`, no `.msix`, `.msi` or `.wixpdb` is attached, and the release
       carries the **Latest** label (a plain `vX.Y.Z` tag does; only a suffixed tag is
       a pre-release).
 - [ ] Download one asset and check both the release attestation and the build

@@ -6,7 +6,8 @@
 # binary, and duplicating it would give two tarballs of the same bytes.
 #
 # Linux-only: dpkg-deb ships with any Debian-family distro and runner image,
-# and appimagetool is downloaded on demand and run with
+# the AppImage's .zsync update file needs `zsyncmake` (apt package zsync), and
+# appimagetool is downloaded on demand and run with
 # --appimage-extract-and-run because GitHub's runners have no FUSE. Both
 # downloads (appimagetool and the AppImage runtime it embeds) are pinned by
 # version and SHA-256; see "Pinned tools" below.
@@ -103,9 +104,14 @@ fetch_verified \
   "$RUNTIME_SHA256" "$APPIMAGE_RUNTIME"
 chmod +x "$APPIMAGETOOL"
 
-# The same base name the release workflow gives the .tar.gz, so every Linux
-# asset on a release page sorts together and reads as one set.
+# The .deb takes the base name the release workflow gives the .tar.gz.
 BASE_NAME="kubeNimbus-$VERSION-$RID"
+# The AppImage alone is named the way the AppImage catalog asks for: no "linux"
+# (every AppImage is for Linux) and the architecture AppImages spell, x86_64 or
+# aarch64. Its update information below matches this pattern, so keep the two
+# together; pgNimbus names its AppImage the same way.
+APPIMAGE_NAME="kubeNimbus-$VERSION-$APPIMAGE_ARCH.AppImage"
+UPDATE_INFO="gh-releases-zsync|Shman4ik|kubeNimbus|latest|kubeNimbus-*-$APPIMAGE_ARCH.AppImage.zsync"
 MASTER_DIR="$REPO_ROOT/design/masters/icon"
 DESKTOP_TEMPLATE="$REPO_ROOT/installer/linux/kubenimbus.desktop.template"
 
@@ -134,10 +140,33 @@ cp "$MASTER_DIR/icon-256.png" "$APPDIR/.DirIcon"
 # side-car .so files relative to /proc/self/exe, so nothing has to be exported.
 ln -s usr/bin/kubeNimbus "$APPDIR/AppRun"
 
-ARCH="$APPIMAGE_ARCH" "$APPIMAGETOOL" --appimage-extract-and-run \
-  --runtime-file "$APPIMAGE_RUNTIME" \
-  "$APPDIR" "$OUT_DIR/$BASE_NAME.AppImage"
-echo "Built $OUT_DIR/$BASE_NAME.AppImage"
+# The AppImage carries its update information (-u), so AppImageUpdate and the
+# tools built on it can find the next release on GitHub and download only the
+# changed blocks. With a gh-releases-zsync value appimagetool also writes the
+# matching .zsync file, which is published beside the AppImage under the same
+# name plus ".zsync": it is what the updater reads. appimagetool calls
+# `zsyncmake` for it and, when that is missing, only warns, which would ship an
+# AppImage whose updater finds nothing. Releases are immutable, so a .zsync
+# missing at tag time can never be added afterwards; hence the hard checks.
+command -v zsyncmake >/dev/null || {
+  echo "zsyncmake not found (apt-get install zsync): the AppImage needs its .zsync file" >&2
+  exit 1
+}
+
+# appimagetool writes the .zsync file into its working directory, so it runs
+# from the output directory.
+(
+  cd "$OUT_DIR"
+  ARCH="$APPIMAGE_ARCH" "$APPIMAGETOOL" --appimage-extract-and-run \
+    --runtime-file "$APPIMAGE_RUNTIME" \
+    -u "$UPDATE_INFO" \
+    "$APPDIR" "$OUT_DIR/$APPIMAGE_NAME"
+)
+[ -s "$OUT_DIR/$APPIMAGE_NAME.zsync" ] || {
+  echo "appimagetool did not write $APPIMAGE_NAME.zsync into $OUT_DIR" >&2
+  exit 1
+}
+echo "Built $OUT_DIR/$APPIMAGE_NAME and $APPIMAGE_NAME.zsync"
 
 # ---- .deb -------------------------------------------------------------------
 # Debian spells a prerelease with ~ (which sorts *before* the release), where
