@@ -326,8 +326,10 @@ and Argo's own Degraded/Unknown when nothing read from the workloads explains it
 
 A segmented `ListBox` in the command bar, right of the sidebar toggle and left of the cluster
 tabs, bound by index (one value, no toggling command — UI rule 8b) and carrying the `User`
-decoration role (UI rules 12 and 15). The sidebar toggle is disabled, not hidden, in the
-Applications mode: a vanishing control would slide the mode switch under the pointer. The
+decoration role (UI rules 12 and 15). The sidebar toggle is invisible in the
+Applications mode, which has no sidebar for it to act on, but keeps its slot: it is disabled and
+drawn at zero opacity (out of the Tab order and the UI Automation control view), never
+collapsed, because a collapsing control would slide the mode switch under the pointer. The
 mode is session state in `workspace.json` (`ShellMode`), default Applications; both modes'
 views stay alive, one hidden. Ctrl/Cmd+Shift+A and +R, the palette (the mode not on screen),
 the macOS View menu and the F1 sheet all come from the catalog.

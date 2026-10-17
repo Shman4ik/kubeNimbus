@@ -31,6 +31,9 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Changed
 
+- **The sidebar toggle is gone from the Applications mode**, which has no sidebar for it to
+  show or hide. It used to sit there disabled; now it is not drawn at all, and its place is
+  kept so the Applications/Resources switch beside it never moves under the pointer.
 - **The Linux AppImage has a new name and updates itself.** It is now
   `kubeNimbus-<version>-x86_64.AppImage` or `kubeNimbus-<version>-aarch64.AppImage` (it was
   `-linux-x64.AppImage` and `-linux-arm64.AppImage`), the naming the AppImage catalog asks for;
