@@ -30,8 +30,17 @@ public static class Hotkeys
     /// <summary>Cmd on macOS, Ctrl everywhere else — or whatever the preference forces.</summary>
     public static KeyModifiers Primary => Nimbus.Ui.Hotkeys.Primary;
 
-    /// <summary>"Cmd" on macOS, "Ctrl" elsewhere — for describing chords built by hand.</summary>
-    public static string PrimaryLabel => Nimbus.Ui.Hotkeys.PrimaryLabel;
+    /// <summary>
+    /// The live scheme as the command catalog knows it: which key
+    /// <see cref="ChordModifiers.Command"/> is, and whether a chord is spelled "Ctrl+Shift+N"
+    /// or "⇧⌘N". Follows the hotkey-scheme preference, not the OS alone. Every label reads it
+    /// at the moment it is built, for the same reason the gestures below are properties.
+    /// </summary>
+    public static ChordScheme Scheme =>
+        Primary.HasFlag(KeyModifiers.Meta) ? ChordScheme.Cmd : ChordScheme.Ctrl;
+
+    /// <summary>"⌘-click" on the Cmd scheme, "Ctrl+click" on the Ctrl one — for the hints that name a modified click.</summary>
+    public static string ClickLabel => Scheme == ChordScheme.Cmd ? "⌘-click" : "Ctrl+click";
 
     /// <summary>Raised when the scheme changes, so open windows rebuild their bindings.</summary>
     public static event Action? Changed

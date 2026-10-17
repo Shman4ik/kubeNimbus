@@ -372,6 +372,9 @@ projects it. Full text: [command-catalog](docs/engineering/command-catalog.md).
 - **Gestures are properties**, rebuilt (cleared first) when the Ctrl/Cmd scheme changes.
 - **Every open-logs gesture goes through `OpenLogsForAsync` / `OpenNamedLogsAsync`.**
 - **An action with no gesture is `PaletteOnly`.** `ChordModifiers.Control` is literal Ctrl.
+- **Every label is spelled per `ChordScheme`** ("Ctrl+Shift+N" / "⇧⌘N"); a Mac-only chord
+  (⌘⌫, ⌘[) is a `SchemeChord` in `MoreChords`, never a platform check in a view.
+- **The palette ranks a title match above a subtitle match** (`CommandPaletteViewModel.Rank`).
 - **Single-letter row keys are list-scoped, never window bindings.**
 - **`docs/keyboard-shortcuts.md` is a golden file**; `KUBENIMBUS_UPDATE_DOCS=1` regenerates it.
 - **macOS: the app menu is set in `App.Initialize`** (Avalonia's exporter reads it once, before

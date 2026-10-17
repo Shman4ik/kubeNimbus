@@ -15,7 +15,7 @@ namespace KubeNimbus.App.Views;
 public static class NamespacePickerGestures
 {
     /// <summary>The line under the pickers' search box. The modifier comes from <see cref="Hotkeys"/> (UI rule 4).</summary>
-    public static string Hint => $"Click for one · its box, {Hotkeys.PrimaryLabel}+click or Space to add more";
+    public static string Hint => $"Click for one · its box, {Hotkeys.ClickLabel} or Space to add more";
 
     /// <summary>The picker row a tap landed on, by its data, or null for a tap between rows.</summary>
     public static T? RowAt<T>(TappedEventArgs e) where T : class =>

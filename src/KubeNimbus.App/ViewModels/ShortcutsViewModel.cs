@@ -33,31 +33,26 @@ public sealed class ShortcutsViewModel
 
     private static IReadOnlyList<ShortcutSection> Build()
     {
-        var label = Hotkeys.PrimaryLabel;
+        var scheme = Hotkeys.Scheme;
 
         return CommandCatalog.CheatSheetSections()
             .Select(section => new ShortcutSection(
                 CommandCatalog.Label(section.Category),
-                section.Rows.Select(row => new ShortcutRow(row.DisplayName, Tokenize(row, label))).ToList()))
+                section.Rows.Select(row => new ShortcutRow(row.DisplayName, Tokenize(row, scheme))).ToList()))
             .ToList();
     }
 
-    private static IReadOnlyList<ShortcutToken> Tokenize(CommandDescriptor descriptor, string commandLabel)
+    private static IReadOnlyList<ShortcutToken> Tokenize(CommandDescriptor descriptor, ChordScheme scheme)
     {
         var tokens = new List<ShortcutToken>(6);
 
-        if (descriptor.Chord is { } chord)
-        {
-            tokens.AddRange(chord.Caps(commandLabel).Select(cap => new ShortcutToken(cap, IsKey: true)));
-        }
-
-        if (descriptor.AltChord is { } alt)
+        foreach (var chord in descriptor.ChordsFor(scheme))
         {
             Separate();
-            tokens.AddRange(alt.Caps(commandLabel).Select(cap => new ShortcutToken(cap, IsKey: true)));
+            tokens.AddRange(chord.Caps(scheme).Select(cap => new ShortcutToken(cap, IsKey: true)));
         }
 
-        if (descriptor.GestureNoteFor(commandLabel) is { Length: > 0 } note)
+        if (descriptor.GestureNoteFor(scheme) is { Length: > 0 } note)
         {
             Separate();
             tokens.Add(new ShortcutToken(note, IsKey: false));

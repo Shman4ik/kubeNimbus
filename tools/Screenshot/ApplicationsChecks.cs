@@ -9,6 +9,7 @@ using Avalonia.VisualTree;
 using KubeNimbus.App;
 using KubeNimbus.App.ViewModels;
 using KubeNimbus.App.Views;
+using KubeNimbus.Core.Commands;
 
 namespace KubeNimbus.Screenshot;
 
@@ -175,7 +176,7 @@ internal static class ApplicationsChecks
         SettlePage(window);
         var namespaceSearch = view.FindControl<TextBox>("NamespaceSearch")!;
         if (!namespaceSearch.IsFocused)
-            throw new InvalidOperationException($"{Hotkeys.PrimaryLabel}+Shift+N did not open the namespace picker with its search focused.");
+            throw new InvalidOperationException($"{CommandBindings.ShortcutLabel(CommandId.NamespacePicker)} did not open the namespace picker with its search focused.");
         window.KeyTextInput("payments");
         Dispatcher.UIThread.RunJobs();
         window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, "\r");
@@ -243,7 +244,7 @@ internal static class ApplicationsChecks
         if (vm.IsPageOpen || !ReferenceEquals(vm.SelectedRow, target))
             throw new InvalidOperationException("The selected Applications segment did not go back to the list from a page.");
 
-        Console.WriteLine($"Applications interaction passed ({rows} applications; arrows, Enter, Esc, /, {Hotkeys.PrimaryLabel}+F, chips, header sort by pointer, {Hotkeys.PrimaryLabel}+Shift+N namespace picker, two namespaces by pointer, double-click then Esc, one click on and off, mode switch, Applications segment back to the list).");
+        Console.WriteLine($"Applications interaction passed ({rows} applications; arrows, Enter, Esc, /, {CommandBindings.ShortcutLabel(CommandId.FilterList)}, chips, header sort by pointer, {CommandBindings.ShortcutLabel(CommandId.NamespacePicker)} namespace picker, two namespaces by pointer, double-click then Esc, one click on and off, mode switch, Applications segment back to the list).");
     }
 
     /// <summary>Opens the namespace picker for its screenshot: two namespaces chosen, so the checks show.</summary>

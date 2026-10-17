@@ -47,7 +47,7 @@ public sealed partial class LogProblems : ObservableObject
 
     public string ErrorTip => ErrorCount == 0
         ? "No error lines shown"
-        : $"{ErrorCount:N0} error line{(ErrorCount == 1 ? "" : "s")} — click for the latest, again for the one before (Alt+↑); Shift+click or Alt+↓ goes forward";
+        : KeyTips.Spell($"{ErrorCount:N0} error line{(ErrorCount == 1 ? "" : "s")} — click for the latest, again for the one before ({{key:Alt+Up}}); Shift+click or {{key:Alt+Down}} goes forward");
 
     public string WarningTip => WarningCount == 0
         ? "No warning lines shown"

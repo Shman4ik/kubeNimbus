@@ -73,8 +73,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     /// sentence changes with the kubeconfig state, which an attached text cannot follow.
     /// </summary>
     public string SwitcherTooltip => HasContexts
-        ? $"Switch or open a cluster  ({Hotkeys.Describe(Hotkeys.ClusterSwitcher)})"
-        : $"No kubeconfig contexts — the demo cluster is still in here  ({Hotkeys.Describe(Hotkeys.ClusterSwitcher)})";
+        ? $"Switch or open a cluster  ({CommandBindings.ShortcutLabel(CommandId.ClusterSwitcher)})"
+        : $"No kubeconfig contexts — the demo cluster is still in here  ({CommandBindings.ShortcutLabel(CommandId.ClusterSwitcher)})";
 
     /// <summary>
     /// Everything the shell renders that spells out Ctrl or Cmd: the F1 sheet, rebuilt
@@ -1308,7 +1308,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private static PaletteItem Catalog(CommandId id, string subtitle, Action run)
     {
         var descriptor = CommandCatalog.Get(id);
-        var shortcut = descriptor.ShortcutLabel(Hotkeys.PrimaryLabel);
+        var shortcut = descriptor.ShortcutLabel(Hotkeys.Scheme);
 
         return new PaletteItem(
             descriptor.Title,
@@ -1324,7 +1324,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         // under hundreds of "open cluster" rows on a real estate. Open tabs stay,
         // because there are only ever a handful and they're a genuine destination.
         yield return new PaletteItem(
-            "Switch cluster…", $"{AvailableContexts.Count} contexts · {Hotkeys.Describe(Hotkeys.ClusterSwitcher)}",
+            "Switch cluster…", $"{AvailableContexts.Count} contexts · {CommandBindings.ShortcutLabel(CommandId.ClusterSwitcher)}",
             "SwapHorizontalIconGeometry", Switcher.Open);
 
         // Nothing is reachable exactly one way. The empty state's button is the route a
@@ -1491,7 +1491,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             var descriptor = CommandCatalog.Get(CommandId.ToggleUnhealthyOnly);
             var unhealthyTarget = !healthTab.IsUnhealthyOnly;
             var kind = healthTab.SelectedKind?.DisplayName ?? "rows";
-            var shortcut = descriptor.ShortcutLabel(Hotkeys.PrimaryLabel);
+            var shortcut = descriptor.ShortcutLabel(Hotkeys.Scheme);
             yield return new PaletteItem(
                 unhealthyTarget ? descriptor.Title : "Show every row, healthy ones too",
                 unhealthyTarget
@@ -1832,7 +1832,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         var descriptor = CommandCatalog.Get(CommandId.LogsPalette);
-        var shortcut = descriptor.ShortcutLabel(Hotkeys.PrimaryLabel);
+        var shortcut = descriptor.ShortcutLabel(Hotkeys.Scheme);
         var state = tab.LogTargetsState;
         yield return new PaletteItem(
             descriptor.Title,

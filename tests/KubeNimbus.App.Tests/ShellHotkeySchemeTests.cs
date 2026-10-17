@@ -42,12 +42,12 @@ public class ShellHotkeySchemeTests
 
             // The F1 sheet is a new one, spelled for the new scheme…
             await Assert.That(ReferenceEquals(shell.Shortcuts, before)).IsFalse();
-            await Assert.That(HotkeySchemeTests.Caps(shell.Shortcuts, "Switch or open a cluster")).IsEqualTo("Cmd, P");
+            await Assert.That(HotkeySchemeTests.Caps(shell.Shortcuts, "Switch or open a cluster")).IsEqualTo("⌘, P");
 
             // …and the switcher tooltip is re-read because the shell said so (ENG-17), not
             // because its popup happens to re-evaluate a binding when it next opens.
             await Assert.That(raised).Contains(nameof(MainWindowViewModel.SwitcherTooltip));
-            await Assert.That(shell.SwitcherTooltip).Contains("Cmd");
+            await Assert.That(shell.SwitcherTooltip).Contains("⌘P");
             await Assert.That(shell.SwitcherTooltip).DoesNotContain("Ctrl");
         }
         finally

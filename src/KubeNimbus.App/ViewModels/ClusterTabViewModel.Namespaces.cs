@@ -70,7 +70,7 @@ public sealed partial class ClusterTabViewModel
 
     public string NamespaceButtonTip => SelectedNamespaces.Count > 2
         ? $"Namespaces: {string.Join(", ", SelectedNamespaces)}. Click to change."
-        : $"Choose a namespace: type to filter, click a row for it alone, its box or {Hotkeys.PrimaryLabel}+click to add it";
+        : $"Choose a namespace: type to filter, click a row for it alone, its box or {Hotkeys.ClickLabel} to add it";
 
     /// <summary>
     /// Narrows the list to exactly these namespaces (none: all of them). The first in
