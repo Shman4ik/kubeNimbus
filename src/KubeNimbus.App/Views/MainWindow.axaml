@@ -175,14 +175,23 @@
                    wide resource list is exactly what you want it back for. One-way
                    IsChecked + an explicit command target, never an inverting command
                    beside a two-way binding (UI rule 8b). -->
-              <!-- Disabled, not hidden, in the Applications mode: the sidebar belongs to the
-                   Resources explorer, and a control that vanished would move the mode switch
-                   beside it under the pointer between two clicks. -->
+              <!-- Gone from sight in the Applications mode, where there is no sidebar to show
+                   or hide, but its slot is kept: the sidebar belongs to the Resources explorer,
+                   and a control that collapsed would move the mode switch beside it under the
+                   pointer between two clicks. So it is disabled (out of the Tab order) and
+                   drawn at zero opacity, never IsVisible=False. -->
               <ToggleButton Name="SidebarToggleButton" Classes="chip" Padding="5" VerticalAlignment="Center"
                             IsChecked="{Binding IsSidebarVisible, Mode=TwoWay}"
                             IsEnabled="{Binding IsResourcesMode}"
                             cmd:CommandTip.Text="Show or hide the resource sidebar"
                             cmd:CommandTip.Command="ToggleSidebar">
+                <ToggleButton.Styles>
+                  <Style Selector="ToggleButton#SidebarToggleButton:disabled">
+                    <Setter Property="Opacity" Value="0" />
+                    <Setter Property="IsHitTestVisible" Value="False" />
+                    <Setter Property="AutomationProperties.AccessibilityView" Value="Raw" />
+                  </Style>
+                </ToggleButton.Styles>
                 <PathIcon Data="{OnPlatform Default={StaticResource SidebarToggleIconGeometry}, macOS={StaticResource SidebarToggleMacIconGeometry}}"
                           Width="14" Height="14" />
               </ToggleButton>
