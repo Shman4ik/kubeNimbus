@@ -22,6 +22,22 @@ using Nimbus.Ui.Fonts;
 // list across a job matrix (#347). It may appear anywhere in the arguments.
 (ShardPlan.Current, args) = ShardPlan.Parse(args);
 
+// `--jobs=N` (or `--jobs`, one per two cores, at most four) runs that many copies of this harness,
+// each rendering one shard into the same output directory: the CI matrix on one machine
+// (ParallelRun). Every other argument, `--twice` included, is passed to each child unchanged.
+int jobs;
+(jobs, args) = ParallelRun.Parse(args);
+if (jobs > 1)
+{
+    if (ShardPlan.Current.IsSharded || args.Contains("--stress"))
+    {
+        Console.Error.WriteLine("--jobs splits a full render into shards itself; it cannot be combined with --shard or --stress.");
+        return 2;
+    }
+
+    return ParallelRun.Run(jobs, args);
+}
+
 // `--twice` renders every ux-* scenario a second time and fails the run when the two PNGs differ
 // (#360, HarnessDeterminism). The nightly workflow passes it; a PR's smoke test does not, so it
 // costs a PR nothing. It may appear anywhere in the arguments.
@@ -85,6 +101,15 @@ Kubeconfig.EnvironmentSearchOverride = [];
 // published screenshots differed in an Age cell (#350). BannedSymbols.Clock.txt keeps the app
 // and this harness from reading the wall clock past it; ClockChecks checks the rows it rendered.
 AppClock.Time = new FixedClock(KubeNimbus.App.Demo.DemoData.Now);
+
+// And the demo's log replay, which hands out a line every 280 ms so the demo reads as a live
+// follow. Every log scenario waits for its replay to end before the capture (LogSettle), so at
+// that pace a single pod's stream of a few dozen lines was seconds of sleeping per capture. The
+// lines, their order (ENG-53 replays a merged pane in logged order) and how the stream ends do
+// not depend on the pace, so the PNGs do not either; what is left of the wait is the pane's own
+// 100 ms flush. The one wait that stops part-way through a replay keeps the app's pace for its
+// length (ClusterTabScenarios.DrainDemoLogs says why).
+KubeNimbus.App.Demo.DemoLogs.Interval = TimeSpan.FromMilliseconds(10);
 
 BuildAvaloniaApp().SetupWithoutStarting();
 
@@ -594,6 +619,7 @@ FontChecks.ThrowIfAnyFailed(filtered: filter is not null);
 SelectionChecks.ThrowIfAnyFailed(filtered: filter is not null);
 ClockChecks.ThrowIfAnyFailed(filtered: filter is not null);
 HarnessDeterminism.ThrowIfAnyDiffered();
+HarnessTeardown.ThrowIfWindowsLeaked();
 HarnessTiming.Report();
 if (ShardPlan.Current.IsSharded)
 {
@@ -609,11 +635,14 @@ catch (IOException)
 {
     // Best effort: a file still held open leaves a few KB in %TEMP%, not a failed run.
 }
-return;
+return 0;
 
 void Capture(string name, ThemeVariant theme, Func<Control> build, bool again = false)
 {
+    var themeLabel = theme == ThemeVariant.Dark ? "dark" : "light";
+    var timing = new HarnessTiming.Capture(name, themeLabel);
     Application.Current!.RequestedThemeVariant = theme;
+    timing.Phase("theme");
 
     // Every capture starts from the shipped defaults: no settings.json, no workspace.json.
     // Anything a scenario persists would otherwise reach every scenario rendered after it,
@@ -634,10 +663,11 @@ void Capture(string name, ThemeVariant theme, Func<Control> build, bool again = 
 
     // The faces are application resources rather than something read from the file per
     // window, so a scenario that changes one would otherwise reach every later capture.
-    App.ApplyFonts(App.LoadSettings());
-
-    var themeLabel = theme == ThemeVariant.Dark ? "dark" : "light";
-    var timing = new HarnessTiming.Capture(name, themeLabel);
+    // Only when one did: every write to an application resource is announced to every top
+    // level, the windows already closed but not yet collected among them, and re-applying
+    // unchanged faces before each capture was a few seconds of a full run (HarnessTeardown).
+    HarnessTeardown.ResetFonts();
+    timing.Phase("reset");
     var content = build();
     timing.Phase("build");
     var window = content as Window ?? new Window
@@ -755,13 +785,13 @@ void Capture(string name, ThemeVariant theme, Func<Control> build, bool again = 
         using var second = new MemoryStream();
         frame?.Save(second, new Avalonia.Media.Imaging.PngBitmapEncoderOptions());
         HarnessDeterminism.Compare(path, File.ReadAllBytes(path), second.ToArray());
-        window.Close();
+        HarnessTeardown.Close(window);
         timing.End();
         return;
     }
 
     frame?.Save(path, new Avalonia.Media.Imaging.PngBitmapEncoderOptions());
-    window.Close();
+    HarnessTeardown.Close(window);
     timing.Phase("save");
     timing.End();
     Console.WriteLine(frame is null ? $"FAILED (no frame): {path}" : $"Wrote {path}");

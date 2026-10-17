@@ -85,7 +85,8 @@ dotnet build KubeNimbus.slnx
 dotnet test --project tests/KubeNimbus.Core.Tests/KubeNimbus.Core.Tests.csproj
 
 # Headless visual check — renders real Views into PNGs, no display needed.
-dotnet run --project tools/Screenshot -- /tmp/kubenimbus-screenshots
+# --jobs renders it in parallel processes, about a minute on a laptop.
+dotnet run --project tools/Screenshot -c Release -- /tmp/kubenimbus-screenshots --jobs
 
 # NativeAOT publish. Run this after ANY change that could affect trimming:
 # a new package, new reflection, a new binding.

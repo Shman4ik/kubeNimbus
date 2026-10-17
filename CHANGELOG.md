@@ -70,6 +70,10 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Fixed
 
+- **The demo cluster's pod logs no longer pick up a line from the stream they replaced.** Switching
+  container, toggling Follow or picking a range just as a line was due could carry that line into
+  the new stream.
+
 - **The Linux packages are built for Ubuntu 22.04, Debian 12 and RHEL 9.** They were built on
   Ubuntu 24.04, and a NativeAOT binary asks for the glibc version of the machine it was built on,
   so an older distribution could refuse to start it with a "GLIBC_2.38 not found" error. They are

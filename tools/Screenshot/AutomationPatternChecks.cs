@@ -322,6 +322,13 @@ internal static class AutomationPatternChecks
         Settle();
         if (viewer.Offset.X >= down)
             throw new InvalidOperationException("A vertical wheel up over the dock's tab strip did not scroll it back (#313).");
+
+        // Off the strip again before the capture. Left over a tab, the pointer opened that tab's
+        // tooltip once its show delay had passed on the wall clock, so whether the PNG had a
+        // tooltip in it depended on how long the log settle after this check took: always,
+        // while the demo replayed a line every 280 ms, and never once it was shortened.
+        window.MouseMove(new Point(2, 2));
+        Settle();
         Console.WriteLine($"Dock tab strip: a vertical wheel scrolls it sideways ({down:0}px for two notches).");
     }
 

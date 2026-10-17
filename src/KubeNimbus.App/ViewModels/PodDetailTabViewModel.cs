@@ -1656,6 +1656,12 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
             foreach (var line in lines)
             {
                 await Task.Delay(DemoLogs.Interval, token);
+
+                // The delay can finish and queue this continuation just before the stream is
+                // restarted (container switched, Follow toggled, a range picked), which cancels
+                // the token and clears the buffer; enqueued anyway, the old stream's line landed
+                // in the new one's buffer. The multi-pod pane drops cancelled replays the same way.
+                token.ThrowIfCancellationRequested();
                 Enqueue(line);
             }
         }

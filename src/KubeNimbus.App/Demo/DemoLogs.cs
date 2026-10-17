@@ -24,8 +24,17 @@ namespace KubeNimbus.App.Demo;
 /// </remarks>
 internal static class DemoLogs
 {
-    /// <summary>How fast lines arrive. A few per second: visibly streaming, not a firehose.</summary>
-    public static readonly TimeSpan Interval = TimeSpan.FromMilliseconds(280);
+    /// <summary>How fast lines arrive in the app. A few per second: visibly streaming, not a firehose.</summary>
+    public static readonly TimeSpan LiveInterval = TimeSpan.FromMilliseconds(280);
+
+    /// <summary>How fast lines arrive: <see cref="LiveInterval"/> except under the screenshot harness.</summary>
+    /// <remarks>
+    /// Settable for the screenshot harness only, which shortens it: every capture of a log pane
+    /// waits for its replay to end (LogSettle), so at 280 ms a line the harness spent most of a
+    /// log scenario sleeping. The pace is what someone watching the demo sees; the lines, their
+    /// order and how the stream ends do not depend on it.
+    /// </remarks>
+    public static TimeSpan Interval { get; internal set; } = LiveInterval;
 
     private static readonly string[] Fallback =
     [
