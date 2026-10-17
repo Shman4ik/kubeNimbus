@@ -112,6 +112,15 @@ Seven things worth keeping:
    The menu's `InputGesture` captions are display-only and have to be kept in step by
    hand. They exist because every action here used to be right-click, read the menu,
    click — three motions for the thing the app is opened to do.
-7. **The docs page is a golden file.** `ShortcutDocsTests` fails on any drift;
+7. **New and close cluster tab are Cmd/Ctrl+T and Cmd/Ctrl+W** (2026-10-17, from the first Mac
+   pass, where ⌘T and ⌘W did nothing). Window bindings on every platform, so Windows and Linux
+   get the browser's chords too; in the exec terminal Ctrl+T and Ctrl+W are the shell's
+   (transpose, delete word) and the bindings yield there through `ShellOwns`. ⌘W on the last tab
+   leaves the empty shell and is then disabled; it never closes this one window, which would
+   quit. New cluster tab is not a palette row, because the palette's "Switch cluster…" opens the
+   same switcher. On macOS both are also the Cluster menu's key equivalents, and that menu leaves
+   a shell-owned chord off rather than take it from the terminal
+   ([macos-menu-bar](macos-menu-bar.md)). `TabChordTests` pins the chords and the last-tab rule.
+8. **The docs page is a golden file.** `ShortcutDocsTests` fails on any drift;
    `KUBENIMBUS_UPDATE_DOCS=1` regenerates it. A shortcut reference that can silently
    fall behind the app is worse than none.

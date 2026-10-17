@@ -31,7 +31,7 @@ namespace KubeNimbus.App.Views;
 /// are on Ctrl+Shift here, as they are in every terminal emulator.
 /// </para>
 /// </remarks>
-public partial class ExecView : UserControl
+public partial class ExecView : UserControl, IEditCommandTarget
 {
     public ExecView()
     {
@@ -233,4 +233,37 @@ public partial class ExecView : UserControl
     private void OnPasteClick(object? sender, RoutedEventArgs e) => _ = PasteFromClipboardAsync();
 
     private void OnSelectAllClick(object? sender, RoutedEventArgs e) => Terminal.SelectAll();
+
+    /// <summary>
+    /// The macOS Edit menu, while the terminal has focus. AppKit takes ⌘C and ⌘V as the
+    /// menu's key equivalents before the terminal sees them (see <see cref="EditCommands"/>),
+    /// so they arrive here as menu verbs and do what Terminal.app does with them: Copy the
+    /// trimmed selection and Paste through the filtered, bracketed path — the same two methods
+    /// as Ctrl+Shift+C/V and the right-click menu, never the control's raw ones. Undo, Redo
+    /// and Cut mean nothing to a shell and are swallowed, so they cannot fall through as a key
+    /// the shell would read. A focused control elsewhere in the pane (the shell picker) is not
+    /// the terminal and is left to its own handling.
+    /// </summary>
+    public bool TryExecute(EditCommand command)
+    {
+        if (!IsInTerminal(TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement()))
+        {
+            return false;
+        }
+
+        switch (command)
+        {
+            case EditCommand.Copy:
+                _ = CopySelectionAsync();
+                break;
+            case EditCommand.Paste:
+                _ = PasteFromClipboardAsync();
+                break;
+            case EditCommand.SelectAll:
+                Terminal.SelectAll();
+                break;
+        }
+
+        return true;
+    }
 }

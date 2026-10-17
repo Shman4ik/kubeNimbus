@@ -166,26 +166,7 @@ internal static class SmokeTest
             }
 
             var code = builder.StartWithClassicDesktopLifetime(args);
-            StopWatchdog();
-
-            if (code != 0)
-            {
-                Fail("application exited non-zero", code);
-                return code;
-            }
-
-            // A clean exit is not the same as a passed check. If the message loop ended
-            // without Complete having run — the window closed itself, something called
-            // Shutdown() — then nothing ever observed a rendered window, and returning
-            // that 0 would be the check passing for the one reason it must not: the app
-            // did not stay up long enough to show anything.
-            if (!_passed)
-            {
-                Fail($"the app exited before its main window rendered (last stage: {_stage})", ExitWindowNotShown);
-                return ExitWindowNotShown;
-            }
-
-            return 0;
+            return Verdict(code);
         }
         catch (Exception e)
         {
@@ -201,6 +182,40 @@ internal static class SmokeTest
         {
             DeleteSeed();
         }
+    }
+
+    /// <summary>
+    /// The check's exit code once the desktop lifetime has shut down with
+    /// <paramref name="code"/>. Two callers, and they must agree: <see cref="Run"/> after the
+    /// message loop returns, and on macOS <c>MacShutdown</c>, which ends the process from the
+    /// lifetime's <c>Exit</c> event before the loop ever returns to <see cref="Run"/> (the
+    /// process would otherwise abort in AppKit's <c>exit()</c>; see there). Without this
+    /// second caller a Mac run whose window closed itself would have exited 0 straight from
+    /// the event — the one outcome the check exists to refuse.
+    /// </summary>
+    internal static int Verdict(int code)
+    {
+        StopWatchdog();
+        DeleteSeed();
+
+        if (code != 0)
+        {
+            Fail("application exited non-zero", code);
+            return code;
+        }
+
+        // A clean exit is not the same as a passed check. If the message loop ended
+        // without Complete having run — the window closed itself, something called
+        // Shutdown() — then nothing ever observed a rendered window, and returning
+        // that 0 would be the check passing for the one reason it must not: the app
+        // did not stay up long enough to show anything.
+        if (!_passed)
+        {
+            Fail($"the app exited before its main window rendered (last stage: {_stage})", ExitWindowNotShown);
+            return ExitWindowNotShown;
+        }
+
+        return 0;
     }
 
     /// <summary>
@@ -259,6 +274,7 @@ internal static class SmokeTest
         try
         {
             Directory.Delete(_seedDirectory, recursive: true);
+            _seedDirectory = null;
         }
         catch (IOException)
         {
@@ -289,7 +305,7 @@ internal static class SmokeTest
         if (desktop.MainWindow is not { } window)
         {
             Fail("the desktop lifetime has no MainWindow", ExitNoWindow);
-            Environment.Exit(ExitNoWindow);
+            Terminate(ExitNoWindow);
             return;
         }
 
@@ -442,11 +458,27 @@ internal static class SmokeTest
             _ =>
             {
                 Fail($"no window after {TimeoutSeconds}s (last stage: {_stage})", ExitTimedOut);
-                Environment.Exit(ExitTimedOut);
+                Terminate(ExitTimedOut);
             },
             state: null,
             dueTime: TimeSpan.FromSeconds(TimeoutSeconds),
             period: Timeout.InfiniteTimeSpan);
+
+    /// <summary>
+    /// Ends the process with <paramref name="code"/> from outside the lifetime's shutdown.
+    /// <see cref="Environment.Exit(int)"/> everywhere but macOS, where it would run the same
+    /// <c>exit()</c> teardown that aborts in libAvaloniaNative's static destructors and turns
+    /// the check's exit code into a SIGABRT (see <c>Platform.MacShutdown</c>).
+    /// </summary>
+    private static void Terminate(int code)
+    {
+        if (OperatingSystem.IsMacOS())
+        {
+            Platform.MacShutdown.ExitNow(code);
+        }
+
+        Environment.Exit(code);
+    }
 
     private static void StopWatchdog()
     {

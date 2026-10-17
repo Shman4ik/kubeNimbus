@@ -28,6 +28,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public PortForwardRegistry PortForwards { get; } = new();
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(CloseSelectedTabCommand))]
     private ClusterTabViewModel? _selectedTab;
 
     partial void OnSelectedTabChanged(ClusterTabViewModel? oldValue, ClusterTabViewModel? newValue)
@@ -1199,6 +1200,18 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         tab.OpenPortForwardsCommand.Execute(null);
     }
 
+    /// <summary>
+    /// Closes the tab in front — Cmd/Ctrl+W (<c>CommandId.CloseClusterTab</c>), the macOS
+    /// Cluster menu and the palette. Disabled with no tab, so the last ⌘W leaves the empty
+    /// shell and the next one does nothing: it never closes the window, which in this
+    /// one-window app would quit it.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(HasSelectedTab))]
+    private Task CloseSelectedTabAsync() =>
+        SelectedTab is { } tab ? CloseTabAsync(tab) : Task.CompletedTask;
+
+    private bool HasSelectedTab() => SelectedTab is not null;
+
     [RelayCommand]
     private async Task CloseTabAsync(ClusterTabViewModel tab)
     {
@@ -1322,6 +1335,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             "Sample data that ships with the app — nothing is connected",
             "LayersIconGeometry",
             () => OpenDemoClusterCommand.Execute(null));
+
+        if (SelectedTab is { } closing)
+        {
+            yield return Catalog(CommandId.CloseClusterTab, closing.Context.Name, () => _ = CloseTabAsync(closing));
+        }
 
         // The machine's own terminal on the selected cluster. Offered on a demo tab too,
         // unlike the access review: this one refuses in place with a sentence that says

@@ -739,6 +739,17 @@
         <Setter Property="Background" Value="{StaticResource HoverBackgroundBrush}" />
     </Style>
 
+    <!-- A one-line box with Fluent's own padding gets it level: 6 over and 6 under rather
+         than Fluent's 6 over 5. nimbusUi centres the line (VerticalContentAlignment) but a
+         box held at its 32px MinHeight with an 11.5-13px line still came out with the text
+         9px from the top and 7px from the bottom, and on a Mac the exec pane's shell box read
+         as sitting high (2026-10-17). A class or a local Padding still wins; this is placed
+         before them for that reason. LayoutChecks.OneLineTextBoxesCentred holds it, and it is
+         a candidate for nimbusUi's Controls.axaml beside the centring rule it completes. -->
+    <Style Selector="TextBox[AcceptsReturn=False]">
+        <Setter Property="Padding" Value="10,6,6,6" />
+    </Style>
+
     <!-- Sidebar filter box: same quiet card language as the palette's searchpill. -->
     <Style Selector="TextBox.filterbox">
         <Setter Property="Background" Value="{StaticResource CardBackgroundBrush}" />

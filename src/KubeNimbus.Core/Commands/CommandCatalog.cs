@@ -81,7 +81,13 @@ public static class CommandCatalog
             Title = "New cluster tab",
             Category = CommandCategory.Clusters,
             IconKey = "PlusIconGeometry",
-            Surfaces = PaletteOnly,
+            // Cmd+T on macOS, Ctrl+T elsewhere: every tabbed app's new-tab chord. It opens
+            // the switcher, which is where a new tab's cluster is picked. In the exec
+            // terminal Ctrl+T is the shell's (transpose), and the window binding yields
+            // there (CommandBindings.ShellOwns); Cmd+T is not a shell key. Not a palette row:
+            // the palette's "Switch cluster…" is the same switcher.
+            Chord = new(CommandKey.T, Cmd),
+            Surfaces = CommandSurface.WindowBinding | CommandSurface.CheatSheet,
         },
         new()
         {
@@ -89,7 +95,13 @@ public static class CommandCatalog
             Title = "Close cluster tab",
             Category = CommandCategory.Clusters,
             IconKey = "CloseIconGeometry",
-            Surfaces = PaletteOnly,
+            // Cmd+W / Ctrl+W, the close-tab chord of every tabbed app. It closes the cluster
+            // tab in front, as its × does (port-forwards through it stop with it), and on the
+            // last tab it leaves the empty shell rather than closing the window: this app
+            // has one window, and closing it would quit. Ctrl+W in the exec terminal is the
+            // shell's (delete word) and the binding yields there, as Ctrl+T's does.
+            Chord = new(CommandKey.W, Cmd),
+            Surfaces = Everywhere,
         },
         new()
         {

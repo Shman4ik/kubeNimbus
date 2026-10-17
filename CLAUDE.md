@@ -374,6 +374,12 @@ projects it. Full text: [command-catalog](docs/engineering/command-catalog.md).
 - **An action with no gesture is `PaletteOnly`.** `ChordModifiers.Control` is literal Ctrl.
 - **Single-letter row keys are list-scoped, never window bindings.**
 - **`docs/keyboard-shortcuts.md` is a golden file**; `KUBENIMBUS_UPDATE_DOCS=1` regenerates it.
+- **macOS: the app menu is set in `App.Initialize`** (Avalonia's exporter reads it once, before
+  `OnFrameworkInitializationCompleted`), **and the Edit menu routes every verb to the focused
+  control** (`EditCommands`), because AppKit takes a key equivalent before Avalonia sees the
+  key; a chord the exec terminal's shell owns is never a menu key equivalent. The Cocoa text
+  keys (`Platform/MacTextKeys`) are not catalog commands, and no catalog chord may be one
+  ([macos-menu-bar](docs/engineering/macos-menu-bar.md)).
 
 ## The Advanced view
 
@@ -497,7 +503,9 @@ publish/app/kubeNimbus --smoke-test        # Linux: wrap in xvfb-run -a
   exits 0; `dotnet test --project` on this machine's SDK 10.0.400-preview reports "Zero tests
   ran". `scripts/test.ps1` runs the test executables directly and fails a zero-test run.
 - **A clean publish is not a working binary**: launch it with `--smoke-test` (and
-  `--smoke-test=unreachable-cluster`). Never call the synchronous `ClusterClient.Connect` on
+  `--smoke-test=unreachable-cluster`). On macOS the process ends with `_exit`
+  (`Platform/MacShutdown`), never through `exit()`, which aborts in libAvaloniaNative's static
+  destructors and turns any exit code into a SIGABRT; the smoke test's verdict goes through it. Never call the synchronous `ClusterClient.Connect` on
   the UI thread. Without MSVC, publish linux-x64 for the same AOT analysis.
 - **View-model tests** start no Avalonia app and redirect both stores and the kubeconfig
   search; a test that writes and reads back a setting is `[NotInParallel]`.

@@ -125,3 +125,9 @@ answered by the highlighted tab and, for production, by the band.
 construct real `MainWindowViewModel`s, which read the workspace on construction
 and write it when a cluster is pinned, so without the redirect rendering fixtures
 would clobber the developer's own tabs and pins.
+
+**Whatever opens the switcher puts the keyboard in its search box** (2026-10-17). The window
+focuses the box when `ClusterSwitcherViewModel.IsOpen` turns true, rather than only in
+`MainWindow.OpenSwitcher`: "New cluster tab" (⌘T/Ctrl+T, the ☰ menu, the empty state's "Open a
+tab") opens it through the view model, and before this it left focus behind, so Esc did nothing
+and typing went to the page underneath. Found driving ⌘T on a Mac.

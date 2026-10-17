@@ -22,12 +22,17 @@ internal static class Program
         // Owner-only on Linux and macOS, for profiles an older build created under umask 022.
         AppDataDirectory.SecureExisting();
 
-        if (SmokeTest.IsRequested)
-        {
-            return SmokeTest.Run(BuildAvaloniaApp(), args);
-        }
+        var code = SmokeTest.IsRequested
+            ? SmokeTest.Run(BuildAvaloniaApp(), args)
+            : BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
 
-        return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        // macOS: returning from Main runs C's exit(), which aborts in libAvaloniaNative's
+        // static destructors and turns any exit code into a SIGABRT (134) and a crash report —
+        // seen on this path when the platform failed to start ("not able to start the
+        // RenderTimer") and the smoke test's 66 came out as 134. A shutdown that went through
+        // the lifetime never gets here (Platform.MacShutdown ends it from the Exit event);
+        // this is every other way out.
+        return Platform.MacShutdown.Return(code);
     }
 
     /// <summary>

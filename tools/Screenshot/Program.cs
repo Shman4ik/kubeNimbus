@@ -436,6 +436,11 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-logs-maximized", () => HostInMainWindow(ClusterTabScenarios.DemoLogsMaximized())),
     ("ux-log-search-keys", () => HostInMainWindow(ClusterTabScenarios.DemoLogsMaximized())),
     ("ux-yaml-apply-key", () => HostInMainWindow(ClusterTabScenarios.YamlEditor())),
+    // The macOS text keys (⌘↑ moving, not selecting) and the Edit menu's routing to the
+    // focused control, forced on so they run on every OS (MacChecks).
+    ("ux-mac-text-keys", () => HostInMainWindow(ClusterTabScenarios.YamlEditor())),
+    ("ux-mac-edit-routing", () => HostInMainWindow(ClusterTabScenarios.YamlEditor())),
+    ("ux-mac-edit-routing-exec", () => HostInMainWindow(ClusterTabScenarios.Exec())),
     ("palette-logs", () => LogsPalette(ClusterTabScenarios.DemoList(), "")),
     ("palette-logs-search", () => LogsPalette(ClusterTabScenarios.DemoList(), "report")),
     ("palette-logs-narrow", () => LogsPalette(ClusterTabScenarios.DemoList(), "", width: 560)),
@@ -702,6 +707,11 @@ void Capture(string name, ThemeVariant theme, Func<Control> build, bool again = 
     if (name == "ux-switcher-filter-uia") AutomationPatternChecks.SwitcherAfterFilter(window);
     if (name == "ux-log-search-keys") KeyboardChecks.LogSearchKeys(window);
     if (name == "ux-yaml-apply-key") KeyboardChecks.YamlApplyKey(window);
+    if (name == "ux-mac-text-keys") MacChecks.TextKeys(window);
+    if (name == "ux-mac-edit-routing") MacChecks.EditRouting(window);
+    if (name == "ux-mac-edit-routing-exec") MacChecks.EditRoutingInTerminal(window);
+    if (name is "cluster-tab-exec" or "cluster-tab-port-forward" or "cluster-tab-workloads-list" or "palette-logs")
+        LayoutChecks.OneLineTextBoxesCentred(window);
     if (name == "ux-yaml-editor-links") EditorChecks.YamlEditorLinks(window);
     if (name == "ux-helm-editor-links") EditorChecks.HelmReleaseLinks(window);
     if (name.StartsWith("applications-page", StringComparison.Ordinal) || name == "store-applications-page") ApplicationsChecks.SettlePage(window);

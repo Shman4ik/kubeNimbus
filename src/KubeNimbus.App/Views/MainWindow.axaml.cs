@@ -85,6 +85,19 @@ public partial class MainWindow : Window
             if (Vm is { } vm)
             {
                 MacMenu.Attach(this, vm);
+
+                // Whatever opened the switcher, its search box takes the keyboard — the
+                // switcher is driven from that box (arrows, Enter, Esc). Only Cmd/Ctrl+P and
+                // the + button used to focus it; "New cluster tab" (⌘T, the ☰ menu, the empty
+                // state's "Open a tab") opened it with focus left behind, so Esc did nothing
+                // and typing went to the page under it.
+                vm.Switcher.PropertyChanged += (_, args) =>
+                {
+                    if (args.PropertyName == nameof(ClusterSwitcherViewModel.IsOpen) && vm.Switcher.IsOpen)
+                    {
+                        Dispatcher.UIThread.Post(() => SwitcherQueryBox.Focus(), DispatcherPriority.Input);
+                    }
+                };
             }
         };
         ActualThemeVariantChanged += (_, _) =>

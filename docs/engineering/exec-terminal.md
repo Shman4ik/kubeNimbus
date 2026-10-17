@@ -162,6 +162,18 @@ Seven things are load-bearing:
    chrome row carries the state anyway. The demo cluster is unchanged: no `ClusterClient`,
    so `Border.demoUnavailable` and nothing else.
 
+## On macOS, ⌘C and ⌘V go through the Edit menu
+
+AppKit matches a menu's key equivalent before the key reaches Avalonia, so with the macOS Edit
+menu in place ⌘C and ⌘V never arrive at the terminal as keys. `ExecView` is an
+`IEditCommandTarget`: while the terminal has focus the menu's Copy and Paste run the same
+`CopySelectionAsync` and `PasteFromClipboardAsync` as Ctrl+Shift+C/V (trimmed copy; filtered,
+bracketed, confirmed paste), Select All selects the screen, and Undo, Redo and Cut are swallowed so
+no verb becomes bytes the shell reads. ^C, ^D and every other literal-Ctrl key are untouched: the
+menu's gestures are ⌘, and under the Windows scheme a chord the shell owns is kept off the menu.
+Checked on a Mac with real key events (`sleep 30`, ^C interrupted it; ⌘V ran a pasted `echo`), and
+by the harness's `ux-mac-edit-routing-exec`. See [macos-menu-bar](macos-menu-bar.md).
+
 ## A paste is filtered, bracketed, and asked about when it would run line by line
 
 The terminal control's own `PasteFromClipboardAsync` hands the clipboard to the shell raw:
