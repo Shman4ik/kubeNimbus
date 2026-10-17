@@ -331,7 +331,7 @@ else {
 }
 Write-Host ''
 Write-Host '  Run the integration tests (auto-discovers .sandbox/kubeconfig.yaml):' -ForegroundColor Gray
-Write-Host '    dotnet test tests/KubeNimbus.Core.Tests/KubeNimbus.Core.Tests.csproj' -ForegroundColor White
+Write-Host '    ./scripts/test.ps1' -ForegroundColor White
 Write-Host ''
 Write-Host "  Tear down:  ./scripts/sandbox-down.ps1 -Name $Name" -ForegroundColor Gray
 Write-Host ''
