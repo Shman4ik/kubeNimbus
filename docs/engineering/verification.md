@@ -30,7 +30,8 @@ $env:KUBECONFIG = ".sandbox/kubeconfig.yaml"
 dotnet run --project src/KubeNimbus.App
 
 # Headless visual check (no display, e.g. Claude Code Cloud) — see below.
-dotnet run --project tools/Screenshot -- /tmp/kubenimbus-screenshots
+# --jobs splits a full run across processes on this machine (the CI shards, locally).
+dotnet run --project tools/Screenshot -c Release -- /tmp/kubenimbus-screenshots --jobs
 
 # Stress mode: every data surface fed a large cluster's worth of objects, against a
 # budget of visuals, collection notifications and time — see "The stress mode" below.
@@ -623,6 +624,83 @@ has ever downloaded 58 PNGs to confirm it. `if-no-files-found` has to be
 `ignore` rather than `error` precisely because the common failure is the
 render throwing, which leaves the directory empty; a missing diagnostic must
 not turn one red step into two.
+
+### A full run takes about a minute locally (2026-10-18)
+
+**Closing a captured window has to release what it built, and the harness checks that it
+did.** A full run on an eight-core Apple Silicon Mac took 732 s from `main` (520 captures),
+and the captures themselves accounted for only 375 s of it. Splitting each capture into more
+phases (`theme` and `reset` were added to `HarnessTiming`) and writing a row per capture
+(`KUBENIMBUS_HARNESS_TIMING_CSV=<file>`) showed the rest was the per-capture reset, and that it
+grew along the run: nothing for the first capture, 1.7 s for the three-hundredth. Every window
+the run had captured was still in memory. The harness closed the window but not the cluster
+tab in it, and the app releases a cluster tab only in `CloseTabAsync` (dispose the tab, close
+its inspector tabs); a YAML editor tab subscribes to the static
+`YamlEditorTabViewModel.PreviewPreferenceChanged` and leaves it only when it is closed, so it
+rooted its view and, through the view, the whole window. Every write to an application
+resource is announced to every live top level, and the reset before each capture writes the
+fonts (`App.ApplyFonts`), so the reset walked every window captured so far. The app is not
+affected: it has one window and closes tabs the right way.
+
+Four changes, each measured on its own:
+
+- **`HarnessTeardown.Close`** closes a captured window the way the app closes a tab: it disposes
+  each cluster tab and the shell. Measured on the 151 `cluster-tab-*` scenarios: 287 s to 66 s,
+  and 20 windows alive after 20 captures down to one. **`HarnessTeardown.ThrowIfWindowsLeaked`**
+  then fails the run when more than eight closed windows survive a full collection at its end;
+  with the teardown removed, a run of the 19 `cluster-tab-yaml*` scenarios failed it with 38 of
+  38 alive. A new static subscription that roots a view is a red smoke test, not a run that is
+  slower every week.
+- **`HarnessTeardown.ResetFonts`** re-applies the faces only when a scenario changed one,
+  compared by value. Windows that are closed but not yet collected still receive the
+  announcement, and the unconditional re-apply was about 45 s of a full run after the leak was
+  fixed.
+- **The demo's log replay runs at 10 ms a line under the harness** (`DemoLogs.Interval`, was
+  280 ms, the app keeps `LiveInterval`). Every log scenario waits for its replay to end, so the
+  waits were seconds of sleeping per capture: the `build` phase, where several scenarios drain
+  their replays, went from 200 s to 36 s, and the settle from 72 s to 6 s. The lines, their order
+  and how the stream ends do not depend on the pace. Two things did, and both were fixed rather
+  than worked around. `cluster-tab-dock-many-tabs` left the pointer over a dock tab, whose
+  tooltip opened once its show delay had passed on the wall clock — always during the old,
+  slow settle, never during the new one — so the check moves the pointer off the strip. And
+  pod detail's demo replay enqueued a line from a cancelled stream when its delay finished just
+  before the stream restarted, which put an extra line in the new buffer (in 3 of 48 renders of
+  `cluster-tab-dock-many-tabs` under eight concurrent runs, 0 of 96 after the fix); it now
+  checks the token after the delay, as the multi-pod pane already did. The one wait that stops
+  part-way through a replay (`DrainDemoLogs`, six lines) keeps the app's pace for its length: at
+  10 ms a loaded machine's first flush could carry thirty lines, the pane opened already
+  overflowing, did not follow the stream, and the PNG showed the top of the log instead of the
+  end.
+- **`--jobs=N`** (`ParallelRun`), or `--jobs` for one per two logical cores at most four, runs N
+  copies of the harness, each rendering one shard (`--shard=i/N`) into the same directory: the
+  CI matrix on one machine, with the same guarantee, since a scenario's PNG does not depend on
+  its shard. Processes rather than threads because the stores, the clock and the headless
+  platform's UI thread are per process. Four jobs took 50 s, six took 63 s on that Mac.
+
+| full run, 520 captures, one Mac | wall clock |
+|---|---|
+| `main` before | 732 s |
+| one process, all four changes | 150–181 s (the machine was shared with another session) |
+| `--jobs` (four processes) | 50–58 s |
+
+Three runs of the final build (one process, then `--jobs` twice) produced 520 byte-identical
+PNGs, and each matched `main`'s run except `cluster-tab-dock-many-tabs`, which lost its tooltip
+on purpose. Every log scenario rendered six at a time, twice, matched a calm render byte for
+byte (984 PNGs), and `ux- --twice --jobs` passed. CI's shards get the same per-capture savings;
+the matrix itself is unchanged.
+
+Left as they were, with the reasons:
+
+- **The indeterminate `ProgressBar` animates on the wall clock.** `StopTransitions` covers
+  property transitions, not keyframe animations, and Avalonia 12 made the window clock internal,
+  so it cannot be paused from outside. `cluster-tab-node-drain-running` showed a four-pixel sliver
+  of its busy bar in one run of six; it predates this change and is a candidate for a style that
+  hides the template's moving part under the harness.
+- **One theme per scenario** would halve the work and drop the only check that every view
+  resolves its dark resources (see the sharding section above).
+- **Fewer CI shards.** The per-shard time should fall to well under half; whether five runners
+  are still worth their share of the concurrent-job limit is for the CI numbers to decide after
+  this lands, not for one Mac's.
 
 ### The stress mode (`tools/Screenshot -- --stress`)
 

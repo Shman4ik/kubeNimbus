@@ -536,10 +536,25 @@ internal static class ClusterTabScenarios
             return;
         }
 
-        for (var i = 0; i < 200 && detail.LogLines.Count < 6; i++)
+        // At the app's own pace for this part, which is the only drain that stops part-way
+        // through a replay. The pane opens with however many lines have arrived, and whether it
+        // then follows the stream to its end depends on them fitting the pane: at the harness's
+        // fast pace the first flush could carry thirty lines on a loaded machine, the pane opened
+        // already overflowing, did not follow, and the PNG showed the top of the log in one run
+        // and the end of it in the next. At this pace a flush carries one line, as it always did.
+        var fast = DemoLogs.Interval;
+        DemoLogs.Interval = DemoLogs.LiveInterval;
+        try
         {
-            Dispatcher.UIThread.RunJobs();
-            Thread.Sleep(10);
+            for (var i = 0; i < 200 && detail.LogLines.Count < 6; i++)
+            {
+                Dispatcher.UIThread.RunJobs();
+                Thread.Sleep(10);
+            }
+        }
+        finally
+        {
+            DemoLogs.Interval = fast;
         }
     }
 

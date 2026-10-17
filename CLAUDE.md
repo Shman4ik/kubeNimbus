@@ -496,7 +496,7 @@ Full text, with the incident behind each trap: [verification](docs/engineering/v
 ```powershell
 dotnet build KubeNimbus.slnx
 ./scripts/test.ps1        # both suites; ./scripts/test.sh on Linux and macOS
-dotnet run --project tools/Screenshot -- <scratch dir> [scenario filter]
+dotnet run --project tools/Screenshot -c Release -- <scratch dir> [scenario filter] [--jobs]
 dotnet run --project tools/Screenshot -- --stress
 dotnet publish src/KubeNimbus.App -c Release -r win-x64 -p:PublishAot=true -o publish/app
 publish/app/kubeNimbus --smoke-test        # Linux: wrap in xvfb-run -a
@@ -514,6 +514,9 @@ publish/app/kubeNimbus --smoke-test        # Linux: wrap in xvfb-run -a
   search; a test that writes and reads back a setting is `[NotInParallel]`.
 - **The screenshot harness is the XAML smoke test.** Host views in a real `MainWindow`; two
   runs of one commit must produce the same PNGs, and CI renders it in shards, so no scenario may depend on another.
+  A captured window is closed the way the app closes a tab (`HarnessTeardown`), and the run
+  fails when closed windows stay alive: a leaked window made every later capture slower, and a
+  full run took 12 minutes on a Mac until it was found. `--jobs` runs the shards side by side.
 - **The stress mode's budgets are counts**; a list bound to cluster data virtualizes and is
   rebuilt with one notification.
 - **`kn-qa` runs only in the owner's QA VM** (`KUBENIMBUS_QA_VM=1`), never on the owner's
