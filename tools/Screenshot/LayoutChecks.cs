@@ -34,6 +34,38 @@ internal static class LayoutChecks
     }
 
     /// <summary>ENG-35: the palette keeps a 16px gutter each side when the window is narrower than it.</summary>
+    /// <summary>
+    /// Every visible one-line TextBox holds its line in the middle of the box: the space
+    /// above the text line and below it differ by at most a pixel. The exec pane's shell box
+    /// failed this (9 over, 7 under in a 32px box): it kept Fluent's padding, which is 6 over
+    /// 5, and a MinHeight taller than its 11.5px line, and on a Mac its placeholder read as
+    /// sitting high. The placeholder is laid out in the same place as the text presenter, so
+    /// measuring the presenter covers both.
+    /// </summary>
+    internal static void OneLineTextBoxesCentred(Window window)
+    {
+        var checkedBoxes = 0;
+        foreach (var box in window.GetVisualDescendants().OfType<TextBox>().Where(b => b.IsEffectivelyVisible && !b.AcceptsReturn))
+        {
+            if (box.GetVisualDescendants().OfType<Avalonia.Controls.Presenters.TextPresenter>().FirstOrDefault() is not { } line
+                || line.TranslatePoint(new Point(0, 0), box) is not { } origin)
+            {
+                continue;
+            }
+
+            var above = origin.Y;
+            var below = box.Bounds.Height - (origin.Y + line.Bounds.Height);
+            if (Math.Abs(above - below) > 1.01)
+                throw new InvalidOperationException(
+                    $"The one-line box \"{box.PlaceholderText ?? box.Name}\" holds its text {above:0.#}px from the top and {below:0.#}px from the bottom of a {box.Bounds.Height:0.#}px box; it should be centred.");
+            checkedBoxes++;
+        }
+
+        if (checkedBoxes == 0)
+            throw new InvalidOperationException("No visible one-line TextBox to check; the scenario changed under the check.");
+        Console.WriteLine($"One-line text boxes centred: {checkedBoxes}.");
+    }
+
     internal static void PaletteFollowsWindow(Window window)
     {
         var box = window.FindControl<TextBox>("PaletteQueryBox")

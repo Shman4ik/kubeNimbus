@@ -15,6 +15,8 @@ way in Preferences → General → Shortcut modifier.
 | --- | --- | --- |
 | Switch or open a cluster | Ctrl+P | Cmd+P |
 | Jump to cluster tab 1–9 | Ctrl+1 … Ctrl+9 | Cmd+1 … Cmd+9 |
+| New cluster tab | Ctrl+T | Cmd+T |
+| Close cluster tab | Ctrl+W | Cmd+W |
 | Correct a cluster's environment colour | Right-click a cluster tab | Right-click a cluster tab |
 | Reorder cluster tabs | Drag tab | Drag tab |
 

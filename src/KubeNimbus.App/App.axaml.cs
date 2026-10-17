@@ -39,6 +39,47 @@ public partial class App : Application
         Nimbus.Ui.Controls.ToolTipHitTesting.Install();
         AutomationNames.Install();
         Views.HeaderDragGuard.Install();
+
+        // The Cocoa text keys (⌘↑, ⌘→, ⌥⌫, ⌃K …) on every TextBox and AvaloniaEdit editor.
+        // Class handlers, installed here so the screenshot harness's ux-mac-text-keys check
+        // runs the same wiring; inert off macOS and under the Windows scheme.
+        Platform.MacTextKeys.Install();
+
+        // The macOS app menu has to exist before the platform's AfterSetup step builds the
+        // menu exporter, which reads it once and never again — set any later and macOS keeps
+        // Avalonia's "About Avalonia" placeholder for good. That is exactly what happened when
+        // it was set from the main window (see Platform.MacAppMenu).
+        if (OperatingSystem.IsMacOS())
+        {
+            Avalonia.Controls.NativeMenu.SetMenu(this, Platform.MacAppMenu.Create(
+                Name ?? "kubeNimbus",
+                about: () => MainViewModel()?.ShowAboutCommand.Execute(null),
+                settings: () => MainViewModel()?.ShowPreferencesCommand.Execute(null)));
+        }
+    }
+
+    /// <summary>
+    /// The main window's view model, for the app menu: the app menu is the application's,
+    /// not the window's, so its items find their target at click time.
+    /// </summary>
+    private MainWindowViewModel? MainViewModel() =>
+        (ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow?.DataContext as MainWindowViewModel;
+
+    /// <summary>
+    /// macOS only: corrects the standard block Avalonia.Native appended to the app menu
+    /// during platform setup (⌥⌘H for Hide Others, "Quit kubeNimbus"), and keeps Settings…'s
+    /// chord in step with the hotkey scheme.
+    /// </summary>
+    private void FinishMacAppMenu()
+    {
+        if (!OperatingSystem.IsMacOS() || Avalonia.Controls.NativeMenu.GetMenu(this) is not { } appMenu)
+        {
+            return;
+        }
+
+        Platform.MacAppMenu.FixStandardItems(appMenu, Name ?? "kubeNimbus");
+        Platform.MacAppMenu.RefreshGestures(appMenu);
+        Nimbus.Ui.Hotkeys.Changed += () => Platform.MacAppMenu.RefreshGestures(appMenu);
     }
 
     public override void OnFrameworkInitializationCompleted()
@@ -52,9 +93,16 @@ public partial class App : Application
         var settings = SettingsStore.Load();
         RequestedThemeVariant = ThemeFromString(settings.Theme);
         Nimbus.Ui.Hotkeys.Initialize(settings.HotkeyScheme);
+        FinishMacAppMenu();
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            // macOS: a finished shutdown ends the process with _exit rather than handing it
+            // back to exit(), which aborts in libAvaloniaNative's static destructors (see
+            // Platform.MacShutdown). The smoke test's verdict goes through it, because once
+            // this has run, nothing after the message loop does.
+            Platform.MacShutdown.ExitProcessOnShutdown(desktop, SmokeTest.IsRequested ? SmokeTest.Verdict : null);
+
             desktop.MainWindow = new MainWindow
             {
                 DataContext = new MainWindowViewModel(),

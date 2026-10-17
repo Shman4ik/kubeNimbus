@@ -261,6 +261,8 @@ public static class CommandBindings
         [CommandId.ShortcutsWindow] = vm => vm.ToggleShortcutsCommand,
         [CommandId.ShowApplications] = vm => vm.ShowApplicationsCommand,
         [CommandId.ShowResources] = vm => vm.ShowResourcesCommand,
+        [CommandId.NewClusterTab] = vm => vm.AddNewTabCommand,
+        [CommandId.CloseClusterTab] = vm => vm.CloseSelectedTabCommand,
 
         // SelectedTab settles after construction and changes on every tab switch, so
         // these resolve through it each time rather than being captured.
