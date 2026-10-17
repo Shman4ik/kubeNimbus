@@ -55,6 +55,9 @@ public static class CommandBindings
         CommandKey.Slash => Key.OemQuestion,
         CommandKey.Plus => Key.OemPlus,
         CommandKey.Minus => Key.OemMinus,
+        CommandKey.Period => Key.OemPeriod,
+        CommandKey.OpenBracket => Key.OemOpenBrackets,
+        CommandKey.CloseBracket => Key.OemCloseBrackets,
         _ => Enum.TryParse<Key>(key.ToString(), out var parsed)
             ? parsed
             : throw new InvalidOperationException($"No Avalonia Key mapping for CommandKey.{key}."),
@@ -94,30 +97,41 @@ public static class CommandBindings
 
     public static KeyGesture ToGesture(Chord chord) => new(ToKey(chord.Key), ToModifiers(chord.Modifiers));
 
-    /// <summary>The primary gesture for a command, or null when it has none.</summary>
+    /// <summary>
+    /// The primary gesture for a command on the live scheme (⌘⌫ for Delete resource on the
+    /// Cmd scheme), or null when it has none.
+    /// </summary>
     public static KeyGesture? GestureFor(CommandId id) =>
-        CommandCatalog.ChordFor(id) is { } chord ? ToGesture(chord) : null;
+        CommandCatalog.ChordFor(id, Hotkeys.Scheme) is { } chord ? ToGesture(chord) : null;
 
     /// <summary>
-    /// Whether a key event is exactly this command's primary chord. Used where a
-    /// <c>KeyBinding</c> cannot express the behaviour — focus moves, panes that bind
-    /// the physical key themselves — and the gesture still has to match the catalog.
+    /// Whether a key event is exactly one of this command's chords on the live scheme — its
+    /// <c>Chord</c> or a synonym from <c>MoreChords</c>, never its <c>AltChord</c>, which is a
+    /// different action. Used where a <c>KeyBinding</c> cannot express the behaviour — focus
+    /// moves, panes that bind the physical key themselves — and the gesture still has to
+    /// match the catalog.
     /// </summary>
     public static bool Matches(CommandId id, KeyEventArgs e)
     {
         ArgumentNullException.ThrowIfNull(e);
 
-        return CommandCatalog.ChordFor(id) is { } chord
-               && e.Key == ToKey(chord.Key)
-               && e.KeyModifiers == ToModifiers(chord.Modifiers);
+        foreach (var chord in CommandCatalog.Get(id).SynonymsFor(Hotkeys.Scheme))
+        {
+            if (e.Key == ToKey(chord.Key) && e.KeyModifiers == ToModifiers(chord.Modifiers))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
     /// The one-line shortcut caption for a command, resolved against the live scheme —
-    /// "Ctrl+P" or "Cmd+P", or a gesture note like "Double-click".
+    /// "Ctrl+P" or "⌘P", or a gesture note like "Double-click".
     /// </summary>
     public static string? ShortcutLabel(CommandId id) =>
-        CommandCatalog.Get(id).ShortcutLabel(Hotkeys.PrimaryLabel);
+        CommandCatalog.Get(id).ShortcutLabel(Hotkeys.Scheme);
 
     /// <summary>The command a catalog entry invokes; null while its target isn't available yet.</summary>
     public static ICommand? Resolve(CommandId id, MainWindowViewModel vm) =>
@@ -129,11 +143,12 @@ public static class CommandBindings
     /// <summary>Every command that gets a window-level key binding, with its gesture.</summary>
     public static IEnumerable<(CommandId Id, KeyGesture Gesture)> WindowBindings()
     {
+        var scheme = Hotkeys.Scheme;
         foreach (var descriptor in CommandCatalog.On(CommandSurface.WindowBinding))
         {
-            if (GestureFor(descriptor.Id) is { } gesture)
+            foreach (var chord in descriptor.SynonymsFor(scheme))
             {
-                yield return (descriptor.Id, gesture);
+                yield return (descriptor.Id, ToGesture(chord));
             }
         }
     }

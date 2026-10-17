@@ -17,7 +17,7 @@ view-model commands, `ShortcutsViewModel` builds the F1 sheet, `CommandTip` buil
 tooltips. It replaced a hand-written `Hotkeys.CheatSheet` array plus gestures typed
 into four places.
 
-Seven things worth keeping:
+Ten things worth keeping:
 
 1. **Core stays UI-free** (rule 1), so `CommandKey` is a local enum rather than
    Avalonia's `Key` and `CommandBindings.ToKey` owns the one mapping. That is also why
@@ -121,6 +121,31 @@ Seven things worth keeping:
    same switcher. On macOS both are also the Cluster menu's key equivalents, and that menu leaves
    a shell-owned chord off rather than take it from the terminal
    ([macos-menu-bar](macos-menu-bar.md)). `TabChordTests` pins the chords and the last-tab rule.
-8. **The docs page is a golden file.** `ShortcutDocsTests` fails on any drift;
+8. **A chord is spelled per scheme, and the Cmd scheme has a few chords of its own**
+   (2026-10-17, from the macOS pass). `ChordScheme` (`Ctrl` / `Cmd`, the live one is
+   `Hotkeys.Scheme`) is pgNimbus's, ported with `Chord.Resolve`, `Caps` and `Label`: the Ctrl
+   scheme writes "Ctrl+Shift+N", the Cmd scheme Apple's glyphs in ⌃⌥⇧⌘ order run together
+   ("⇧⌘N", "⌘1 … ⌘9", "⌃C" for the exec pane's literal Ctrl). Every label goes through it —
+   the palette column, the F1 sheet, `CommandTip` tooltips, the search pill, the switcher's
+   tooltip and footer, the YAML editor's "(⌘S)", the namespace hints ("⌘-click") — so before
+   it the Mac build said "Cmd+K" everywhere. A gesture note writes `{cmd}+` for the primary
+   modifier and `{key:Alt+R}` for any other chord, both spelled per scheme
+   (`CommandDescriptor.SpellNote`, which `KeyTips` uses for the log search box's tooltips).
+   `MoreChords` holds a platform's own convention as a `SchemeChord`: Delete resource takes
+   ⌘⌫ on the Cmd scheme, listed first because a Mac keyboard has no Delete key (that is
+   fn+⌫), and Back to the Applications list takes ⌘[ beside Esc. `CommandBindings.Matches`
+   accepts a command's `Chord` and its synonyms for the live scheme, never its `AltChord`,
+   which is a different action (Ctrl+Shift+Tab beside Ctrl+Tab). There is no ⌘]: the
+   application page has no forward history. ⌘⌫ is also a Cocoa text key (delete to the
+   line's start); it stays one in a text box because the delete chord is a list key, answered
+   only by the resource grid's handler, and `MacTextKeysTests` asserts the grid is no text
+   control. `MacChordTests` and the Core catalog tests pin the spelling and the chords.
+9. **The palette ranks by title** (`CommandPaletteViewModel.Rank`): the whole title, its
+   start, a word's start, anywhere in it, and last a row that matched only on its subtitle or
+   search text; the source order stands within a rank. Before it the rows kept the source's
+   order, and typing "Nodes" put "Advanced view: show only everyday kinds" (its subtitle
+   lists Nodes) above the Nodes kind, so Enter turned the Advanced view off — twice by
+   accident on the macOS pass. `PaletteRankingTests` drives the real shell for it.
+10. **The docs page is a golden file.** `ShortcutDocsTests` fails on any drift;
    `KUBENIMBUS_UPDATE_DOCS=1` regenerates it. A shortcut reference that can silently
    fall behind the app is worse than none.

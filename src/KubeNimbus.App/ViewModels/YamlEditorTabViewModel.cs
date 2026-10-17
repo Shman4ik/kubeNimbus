@@ -809,7 +809,7 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
     internal static void NotifyPreviewPreferenceChanged() => PreviewPreferenceChanged?.Invoke();
 
     private static string ApplyShortcut =>
-        CommandCatalog.Get(CommandId.ApplyYaml).ShortcutLabel(Hotkeys.PrimaryLabel) is { } keys ? $" ({keys})" : "";
+        CommandCatalog.Get(CommandId.ApplyYaml).ShortcutLabel(Hotkeys.Scheme) is { } keys ? $" ({keys})" : "";
 
     private void OnPreviewPreferenceChanged() => PreviewsApplies = App.LoadSettings().PreviewApplies;
 

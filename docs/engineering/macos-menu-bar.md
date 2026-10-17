@@ -138,6 +138,16 @@ copy, both apps take the copy) best done in one session. `EditCommands`, `MacApp
 `MacShutdown` are the same kind of candidate. pgNimbus's word-grouped editor undo
 (`EditorTypingUndo`) was not ported: it changes undo on every platform, not only the Mac.
 
+## Mac spelling and Mac chords
+
+Since the second pass (2026-10-17) every shortcut label on the Cmd scheme is written with Apple's
+glyphs in ⌃⌥⇧⌘ order (⌘K, ⇧⌘N, ⌘1 … ⌘9, ⌃C in the exec pane), and two Mac conventions are
+catalog chords on that scheme only: ⌘⌫ arms the delete strip on a selected list row (Delete
+still does; a Mac keyboard sends it only as fn+⌫) and ⌘[ goes back from an application's page to
+the list, beside Esc. ⌘⌫ in a text box is still MacTextKeys' delete-to-line-start, because the
+delete chord is a list key. How the scheme spells a chord and where the Mac-only chords live is in
+[command-catalog](command-catalog.md), item 8.
+
 ## Quitting ends the process with `_exit`
 
 On macOS a quit — ⌘Q, the menu's Quit, a logout, or `Main` returning after the smoke test — used

@@ -158,13 +158,13 @@ public partial class MainWindow : Window
             ordinal => new RelaySelectTabCommand(this, ordinal),
             () => ExecView.IsInTerminal(FocusManager?.GetFocusedElement()));
 
-        PaletteShortcutLabel.Text = Hotkeys.Describe(Hotkeys.CommandPalette);
+        PaletteShortcutLabel.Text = CommandBindings.ShortcutLabel(CommandId.CommandPalette);
 
         // Says "click" explicitly: with both a hovered and a selected row visible,
         // whether the mouse needs one click or two is a real question, and a popup that
         // answers it costs one line.
         SwitcherHintLabel.Text =
-            $"Click or Enter to open · ↑↓ navigate · Esc close · {Hotkeys.PrimaryLabel}+1…9 jump to tab";
+            $"Click or Enter to open · ↑↓ navigate · Esc close · {CommandDescriptor.SpellNote("{cmd}+1…9", Hotkeys.Scheme)} jump to tab";
     }
 
     /// <summary>

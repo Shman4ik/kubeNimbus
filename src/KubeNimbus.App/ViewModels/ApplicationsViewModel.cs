@@ -961,7 +961,7 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
 
     public string NamespaceButtonTip => _selectedNamespaces.Count > 2
         ? $"Namespaces: {string.Join(", ", _selectedNamespaces)}. Click to change."
-        : $"Choose a namespace: type to filter, click a row for it alone, its box or {Hotkeys.PrimaryLabel}+click to add it";
+        : $"Choose a namespace: type to filter, click a row for it alone, its box or {Hotkeys.ClickLabel} to add it";
 
     /// <summary>How an empty state names the selection: "in payments", "in the 3 chosen namespaces".</summary>
     private string SelectionPhrase => _selectedNamespaces.Count == 1

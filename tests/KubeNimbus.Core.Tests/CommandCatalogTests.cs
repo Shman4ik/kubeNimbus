@@ -45,7 +45,7 @@ public class CommandCatalogTests
             .SelectMany(d => Chords(d).Select(c => (d.Scope, Chord: c, d.Id)))
             .GroupBy(x => (x.Scope, x.Chord))
             .Where(g => g.Count() > 1)
-            .Select(g => $"{g.Key.Scope}/{g.Key.Chord.Label("Ctrl")}: {string.Join(", ", g.Select(x => x.Id))}")
+            .Select(g => $"{g.Key.Scope}/{g.Key.Chord.Label(ChordScheme.Ctrl)}: {string.Join(", ", g.Select(x => x.Id))}")
             .ToList();
 
         await Assert.That(clashes).IsEmpty();
@@ -68,7 +68,7 @@ public class CommandCatalogTests
             .Where(pane => pane.Chord.Modifiers.HasFlag(ChordModifiers.Command))
             .SelectMany(pane => global
                 .Where(g => g.Chord == pane.Chord)
-                .Select(g => $"{pane.Chord.Label("Ctrl")}: {pane.Id} vs {g.Id}"))
+                .Select(g => $"{pane.Chord.Label(ChordScheme.Ctrl)}: {pane.Id} vs {g.Id}"))
             .ToList();
 
         await Assert.That(clashes).IsEmpty();
@@ -116,8 +116,10 @@ public class CommandCatalogTests
             await Assert.That(chord!.Value.Modifiers.HasFlag(ChordModifiers.Control)).IsTrue();
             await Assert.That(chord.Value.Modifiers.HasFlag(ChordModifiers.Command)).IsFalse();
 
-            // And it must say "Ctrl" under both schemes, not just under the Ctrl one.
-            await Assert.That(chord.Value.Label("Cmd")).StartsWith("Ctrl");
+            // And it must say Control under both schemes: "Ctrl+C", and "⌃C" on the Cmd
+            // scheme, never "⌘C".
+            await Assert.That(chord.Value.Label(ChordScheme.Ctrl)).StartsWith("Ctrl");
+            await Assert.That(chord.Value.Label(ChordScheme.Cmd)).StartsWith("⌃");
         }
     }
 
@@ -144,5 +146,64 @@ public class CommandCatalogTests
         {
             yield return alt;
         }
+
+        foreach (var more in descriptor.MoreChords)
+        {
+            yield return more.Chord;
+        }
+    }
+
+    [Test]
+    public async Task The_cmd_scheme_spells_chords_with_apple_glyphs_in_apple_order()
+    {
+        // The 2026-10-17 macOS pass: every label said "Cmd+K", "Cmd+1…9", "(Cmd+S)". A Mac
+        // writes ⌘K, and modifiers run ⌃⌥⇧⌘ before the key.
+        await Assert.That(CommandCatalog.Get(CommandId.CommandPalette).ShortcutLabel(ChordScheme.Cmd)).IsEqualTo("⌘K");
+        await Assert.That(CommandCatalog.Get(CommandId.NamespacePicker).ShortcutLabel(ChordScheme.Cmd)).IsEqualTo("⇧⌘N");
+        await Assert.That(CommandCatalog.Get(CommandId.GoToTabByNumber).ShortcutLabel(ChordScheme.Cmd)).IsEqualTo("⌘1 … ⌘9");
+        await Assert.That(new Chord(CommandKey.F, ChordModifiers.Command | ChordModifiers.Shift | ChordModifiers.Alt | ChordModifiers.Control)
+            .Label(ChordScheme.Cmd)).IsEqualTo("⌃⌥⇧⌘F");
+
+        await Assert.That(CommandCatalog.Get(CommandId.CommandPalette).ShortcutLabel(ChordScheme.Ctrl)).IsEqualTo("Ctrl+K");
+        await Assert.That(CommandCatalog.Get(CommandId.NamespacePicker).ShortcutLabel(ChordScheme.Ctrl)).IsEqualTo("Ctrl+Shift+N");
+        await Assert.That(CommandCatalog.Get(CommandId.GoToTabByNumber).ShortcutLabel(ChordScheme.Ctrl)).IsEqualTo("Ctrl+1 … Ctrl+9");
+    }
+
+    [Test]
+    public async Task Gesture_notes_spell_their_keys_per_scheme()
+    {
+        await Assert.That(CommandCatalog.Get(CommandId.LogSearchOptions).GestureNoteFor(ChordScheme.Cmd))
+            .IsEqualTo("⌥R / ⌥C / ⌥P in a log pane's search box");
+        await Assert.That(CommandCatalog.Get(CommandId.LogSearchOptions).GestureNoteFor(ChordScheme.Ctrl))
+            .IsEqualTo("Alt+R / Alt+C / Alt+P in a log pane's search box");
+        await Assert.That(CommandCatalog.Get(CommandId.LogSearchStep).GestureNoteFor(ChordScheme.Cmd))
+            .IsEqualTo("↩ / ⇧↩ in a log pane's search box");
+
+        // Every note's placeholders resolve, on both schemes: a typo throws here, not at render.
+        foreach (var descriptor in CommandCatalog.All)
+        {
+            foreach (var scheme in Enum.GetValues<ChordScheme>())
+            {
+                await Assert.That(descriptor.GestureNoteFor(scheme) ?? "").DoesNotContain("{");
+            }
+        }
+    }
+
+    [Test]
+    public async Task Mac_conventions_are_chords_on_the_cmd_scheme_only()
+    {
+        // ⌘⌫ deletes the selected row on a Mac (it has no Delete key; that is fn+⌫) and is
+        // what the menus and the sheet name first there; Delete is still accepted.
+        var delete = CommandCatalog.Get(CommandId.DeleteResource);
+        await Assert.That(delete.PrimaryChordFor(ChordScheme.Cmd)).IsEqualTo(new Chord(CommandKey.Backspace, ChordModifiers.Command));
+        await Assert.That(delete.SynonymsFor(ChordScheme.Cmd)).Contains(new Chord(CommandKey.Delete));
+        await Assert.That(delete.ShortcutLabel(ChordScheme.Cmd)).IsEqualTo("⌘⌫ / ⌦");
+        await Assert.That(delete.ShortcutLabel(ChordScheme.Ctrl)).IsEqualTo("Delete");
+
+        // ⌘[ goes back from an application's page, beside Esc; nothing on the Ctrl scheme.
+        var back = CommandCatalog.Get(CommandId.BackToApplications);
+        await Assert.That(back.SynonymsFor(ChordScheme.Cmd)).Contains(new Chord(CommandKey.OpenBracket, ChordModifiers.Command));
+        await Assert.That(back.SynonymsFor(ChordScheme.Ctrl).Count()).IsEqualTo(1);
+        await Assert.That(back.ShortcutLabel(ChordScheme.Cmd)).IsEqualTo("⎋ / ⌘[");
     }
 }

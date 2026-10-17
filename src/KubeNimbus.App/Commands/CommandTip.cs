@@ -65,7 +65,7 @@ public static class CommandTip
     /// <summary>
     /// The tip text itself, with no control involved. Split out so the scheme-sensitive
     /// half can be pinned by <c>HotkeySchemeTests</c>: composing against the live
-    /// <see cref="Hotkeys.PrimaryLabel"/> is what makes a tooltip re-render when the
+    /// <see cref="Hotkeys.Scheme"/> is what makes a tooltip re-render when the
     /// preference changes, and reading it once into a constant is a regression nothing
     /// else would catch — a stale tooltip renders perfectly, it just names the other
     /// platform's chord.
@@ -80,7 +80,7 @@ public static class CommandTip
         var descriptor = CommandCatalog.Get(id);
         text ??= descriptor.Title;
 
-        return descriptor.ShortcutLabel(Hotkeys.PrimaryLabel) is { Length: > 0 } shortcut
+        return descriptor.ShortcutLabel(Hotkeys.Scheme) is { Length: > 0 } shortcut
             ? $"{text} ({shortcut})"
             : text;
     }
@@ -90,11 +90,12 @@ public static class CommandTip
     /// the list does not handle: "Logs (L) — Shift+click opens them full-size (Shift+L)".
     /// A static string rather than the attached properties above because it sits in every
     /// realized row of a virtualized list, and neither chord involves Ctrl/Cmd — so there
-    /// is no scheme change for a per-row subscription to follow.
+    /// is no modifier for a per-row subscription to follow. Only the spelling differs ("Shift+L"
+    /// or "⇧L"), and that is read from the scheme each time the row binds the tip.
     /// </summary>
-    public static string RowLogs { get; } =
-        $"Logs ({CommandCatalog.Get(CommandId.PodLogs).Chord!.Value.Label("Ctrl")}) — Shift+click opens them full-size "
-        + $"({CommandCatalog.Get(CommandId.PodLogsMaximized).Chord!.Value.Label("Ctrl")})";
+    public static string RowLogs =>
+        $"Logs ({CommandCatalog.Get(CommandId.PodLogs).Chord!.Value.Label(Hotkeys.Scheme)}) — Shift+click opens them full-size "
+        + $"({CommandCatalog.Get(CommandId.PodLogsMaximized).Chord!.Value.Label(Hotkeys.Scheme)})";
 
     // Subscribed only while the control is on screen, so a closed window's buttons
     // don't stay rooted by the static event.

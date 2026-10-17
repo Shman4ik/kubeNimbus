@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:app="using:KubeNimbus.App"
              xmlns:vm="using:KubeNimbus.App.ViewModels"
              xmlns:conv="using:KubeNimbus.App.Converters"
              xmlns:controls="using:KubeNimbus.App.Controls"
@@ -69,21 +70,21 @@
             <TextBlock Text="{Binding LogSearchSummary}" FontSize="10.5" Opacity="0.6" VerticalAlignment="Center"
                        Margin="0,0,3,0" IsVisible="{Binding HasLogSearch}" />
             <Button Classes="toolbar" Padding="3" Command="{Binding FindPreviousLogMatchCommand}" IsVisible="{Binding IsFinding}"
-                    Focusable="False" ToolTip.Tip="Previous (earlier) match — Shift+Enter">
+                    Focusable="False" ToolTip.Tip="{x:Static app:KeyTips.PreviousMatch}">
               <PathIcon Data="{StaticResource ChevronUpIconGeometry}" Width="11" Height="11" />
             </Button>
             <Button Classes="toolbar" Padding="3" Command="{Binding FindNextLogMatchCommand}" IsVisible="{Binding IsFinding}"
-                    Focusable="False" ToolTip.Tip="Next (later) match — Enter">
+                    Focusable="False" ToolTip.Tip="{x:Static app:KeyTips.NextMatch}">
               <PathIcon Data="{StaticResource ChevronDownIconGeometry}" Width="11" Height="11" />
             </Button>
             <Button Classes="toolbar" Padding="3" Command="{Binding PinSearchCommand}" IsVisible="{Binding HasLogSearch}"
-                    Focusable="False" ToolTip.Tip="Pin this search as a coloured highlight and search for something else — Alt+P">
+                    Focusable="False" ToolTip.Tip="{x:Static app:KeyTips.PinSearch}">
               <PathIcon Data="{StaticResource PinOutlineIconGeometry}" Width="11" Height="11" />
             </Button>
             <ToggleButton Classes="chip checkedAccent logSearchOption" Focusable="False" IsChecked="{Binding IsLogMatchCase}"
-                          ToolTip.Tip="Match case — Alt+C" Content="Aa" />
+                          ToolTip.Tip="{x:Static app:KeyTips.MatchCase}" Content="Aa" />
             <ToggleButton Classes="chip checkedAccent logSearchOption" Focusable="False" IsChecked="{Binding IsLogRegex}"
-                          ToolTip.Tip="Regular expression — Alt+R" Content=".*" />
+                          ToolTip.Tip="{x:Static app:KeyTips.RegularExpression}" Content=".*" />
             <ToggleButton Classes="chip checkedAccent" Padding="4" Focusable="False" IsChecked="{Binding IsLogFilterMode}"
                           ToolTip.Tip="Filter: hide the lines that don't match, instead of highlighting the matches among them">
               <PathIcon Data="{StaticResource FilterVariantIconGeometry}" Width="11" Height="11" />

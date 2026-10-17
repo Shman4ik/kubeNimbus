@@ -5,12 +5,15 @@ using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using AvaloniaEdit;
 using KubeNimbus.App.ViewModels;
+using KubeNimbus.Core.Commands;
 
 namespace KubeNimbus.App.Views;
 
 /// <summary>
 /// Esc goes back to the list — from anywhere on the page except a text box, whose Esc is
-/// its own (the log filter clears itself). Same carve-out the inspector's Esc makes.
+/// its own (the log filter clears itself). Same carve-out the inspector's Esc makes. On the
+/// Cmd scheme ⌘[ goes back too (<see cref="CommandId.BackToApplications"/>), from a text box
+/// as well, because it is no text key there.
 /// </summary>
 public partial class ApplicationPageView : UserControl
 {
@@ -49,8 +52,9 @@ public partial class ApplicationPageView : UserControl
 
     private void OnPageKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Handled || e.Key != Key.Escape || e.KeyModifiers != KeyModifiers.None
-            || e.Source is TextBox or TextEditor || DataContext is not ApplicationPageViewModel vm)
+        if (e.Handled || DataContext is not ApplicationPageViewModel vm
+            || !CommandBindings.Matches(CommandId.BackToApplications, e)
+            || (e.Key == Key.Escape && e.Source is TextBox or TextEditor))
         {
             return;
         }

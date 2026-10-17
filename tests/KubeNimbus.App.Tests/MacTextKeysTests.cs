@@ -73,19 +73,18 @@ public class MacTextKeysTests
     /// input and also Cocoa's delete-forward, which is harmless only because the terminal is
     /// neither of the two control types the text keys are installed on. That is asserted too,
     /// so a terminal that one day derives from TextBox fails here rather than eating ^D.
+    /// The list keys are the second exception: they are answered by the resource grid's own
+    /// handler, and ⌘⌫ there deletes the row (asking first) while in a text box it deletes to
+    /// the line's start. The grid being neither control type is asserted the same way.
     /// </summary>
     [Test]
     public async Task No_command_chord_on_the_cmd_scheme_is_a_text_key()
     {
         var clashes = new List<string>();
-        foreach (var descriptor in CommandCatalog.All.Where(d => d.Scope != CommandScope.Exec))
+        foreach (var descriptor in CommandCatalog.All.Where(d => d.Scope is not (CommandScope.Exec or CommandScope.List)))
         {
-            foreach (var chord in new[] { descriptor.Chord, descriptor.AltChord })
+            foreach (var c in descriptor.ChordsFor(ChordScheme.Cmd))
             {
-                if (chord is not { } c)
-                {
-                    continue;
-                }
 
                 var modifiers = KeyModifiers.None;
                 modifiers |= c.Modifiers.HasFlag(ChordModifiers.Command) ? KeyModifiers.Meta : KeyModifiers.None;
@@ -95,7 +94,7 @@ public class MacTextKeysTests
 
                 if (MacTextKeys.Classify(CommandBindings.ToKey(c.Key), modifiers).Action != MacTextAction.None)
                 {
-                    clashes.Add($"{descriptor.Id} ({c.Label("Cmd")})");
+                    clashes.Add($"{descriptor.Id} ({c.Label(ChordScheme.Cmd)})");
                 }
             }
         }
@@ -103,6 +102,7 @@ public class MacTextKeysTests
         await Assert.That(clashes).IsEmpty();
         await Assert.That(typeof(TextBox).IsAssignableFrom(typeof(TerminalControl))).IsFalse();
         await Assert.That(typeof(TextArea).IsAssignableFrom(typeof(TerminalControl))).IsFalse();
+        await Assert.That(typeof(TextBox).IsAssignableFrom(typeof(DataGrid))).IsFalse();
     }
 
     [Test]

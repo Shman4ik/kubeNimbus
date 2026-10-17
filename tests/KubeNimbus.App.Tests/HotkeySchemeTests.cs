@@ -219,7 +219,7 @@ public class HotkeySchemeTests
 
             Nimbus.Ui.Hotkeys.Initialize("mac");
             await Assert.That(Caps(new ShortcutsViewModel(), "Switch or open a cluster"))
-                .IsEqualTo("Cmd, P");
+                .IsEqualTo("⌘, P");
         }
         finally
         {
@@ -227,18 +227,21 @@ public class HotkeySchemeTests
         }
     }
 
-    /// <summary>The same rule 5 exception, on the surface a user actually reads it from.</summary>
+    /// <summary>
+    /// The same rule 5 exception, on the surface a user actually reads it from: Control, which
+    /// the Cmd scheme spells ⌃ as every Mac app does, never ⌘.
+    /// </summary>
     [Test]
-    public async Task The_cheat_sheets_exec_rows_stay_Ctrl_under_the_Cmd_scheme()
+    public async Task The_cheat_sheets_exec_rows_stay_Control_under_the_Cmd_scheme()
     {
         try
         {
             Nimbus.Ui.Hotkeys.Initialize("mac");
 
             await Assert.That(Caps(new ShortcutsViewModel(), "Interrupt a command in the exec pane"))
-                .IsEqualTo("Ctrl, C");
+                .IsEqualTo("⌃, C");
             await Assert.That(Caps(new ShortcutsViewModel(), "End input / exit the shell"))
-                .IsEqualTo("Ctrl, D");
+                .IsEqualTo("⌃, D");
         }
         finally
         {
@@ -263,7 +266,7 @@ public class HotkeySchemeTests
 
             Nimbus.Ui.Hotkeys.Initialize("mac");
             await Assert.That(CommandTip.Compose("Show or hide the resource sidebar", CommandId.ToggleSidebar))
-                .IsEqualTo("Show or hide the resource sidebar (Cmd+B)");
+                .IsEqualTo("Show or hide the resource sidebar (⌘B)");
 
             // A tip with no command is plain text and must not gain a chord.
             await Assert.That(CommandTip.Compose("Just a sentence", command: null))

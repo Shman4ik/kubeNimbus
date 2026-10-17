@@ -273,8 +273,12 @@ public static class CommandCatalog
             Scope = CommandScope.List,
             IconKey = "DeleteIconGeometry",
             // Safe on a bare key only because it arms the confirm strip (UI rule 17) —
-            // nothing is deleted by this keystroke.
+            // nothing is deleted by this keystroke. A Mac keyboard has no Delete key (it is
+            // fn+⌫), so ⌘⌫ is the gesture there, Finder's and Mail's, and is listed first. It
+            // is a list key like Delete, so a text box never sees it as one: ⌘⌫ there is
+            // "delete to the line's start" (MacTextKeys).
             Chord = new(CommandKey.Delete),
+            MoreChords = [new(new(CommandKey.Backspace, Cmd), ChordScheme.Cmd, Primary: true)],
             Surfaces = PaletteAndSheet,
         },
         new()
@@ -521,6 +525,22 @@ public static class CommandCatalog
         },
         new()
         {
+            // The page's own key handler, like the list keys: Esc from anywhere on the page but
+            // a text box, whose Esc is its own. ⌘[ on the Cmd scheme too, every Mac app's back
+            // gesture (Safari, Finder, Xcode); it is no text key, so it goes back from the log
+            // filter as well. No ⌘]: the page has no forward history to go to.
+            Id = CommandId.BackToApplications,
+            Title = "Back to the Applications list",
+            CheatTitle = "Back from an application's page to the list",
+            Category = CommandCategory.View,
+            Scope = CommandScope.Page,
+            IconKey = "ApplicationsIconGeometry",
+            Chord = new(CommandKey.Escape),
+            MoreChords = [new(new(CommandKey.OpenBracket, Cmd), ChordScheme.Cmd)],
+            Surfaces = SheetOnly,
+        },
+        new()
+        {
             Id = CommandId.CommandPalette,
             Title = "Open the command palette",
             Category = CommandCategory.View,
@@ -693,7 +713,7 @@ public static class CommandCatalog
             // Keys of the log panes' search box, not window or list chords: Enter belongs to
             // that box only while it has focus, which is why this is a note rather than a
             // Chord the window would bind. Esc there empties the box.
-            GestureNote = "Enter / Shift+Enter in a log pane's search box",
+            GestureNote = "{key:Enter} / {key:Shift+Enter} in a log pane's search box",
             Surfaces = SheetOnly,
         },
         new()
@@ -704,7 +724,7 @@ public static class CommandCatalog
             Category = CommandCategory.Pods,
             IconKey = "MagnifyIconGeometry",
             // VS Code's find-widget keys, and like Enter above they belong to the box.
-            GestureNote = "Alt+R / Alt+C / Alt+P in a log pane's search box",
+            GestureNote = "{key:Alt+R} / {key:Alt+C} / {key:Alt+P} in a log pane's search box",
             Surfaces = SheetOnly,
         },
         new()
@@ -716,7 +736,7 @@ public static class CommandCatalog
             IconKey = "AlertCircleIconGeometry",
             // A pane key, not a window chord: Alt+arrows mean nothing to the rest of the window
             // and belong to whichever log pane has focus.
-            GestureNote = "Alt+↑ / Alt+↓ in a log pane, or click its error count",
+            GestureNote = "{key:Alt+Up} / {key:Alt+Down} in a log pane, or click its error count",
             Surfaces = SheetOnly,
         },
         new()
@@ -739,8 +759,8 @@ public static class CommandCatalog
     public static IEnumerable<CommandDescriptor> On(CommandSurface surface) =>
         All.Where(d => d.In(surface));
 
-    /// <summary>A command's primary chord, or null when it has none (palette-only actions).</summary>
-    public static Chord? ChordFor(CommandId id) => Get(id).Chord;
+    /// <summary>A command's primary chord on a scheme, or null when it has none (palette-only actions).</summary>
+    public static Chord? ChordFor(CommandId id, ChordScheme scheme) => Get(id).PrimaryChordFor(scheme);
 
     /// <summary>A command's palette/menu title, so no call site retypes it.</summary>
     public static string TitleFor(CommandId id) => Get(id).Title;

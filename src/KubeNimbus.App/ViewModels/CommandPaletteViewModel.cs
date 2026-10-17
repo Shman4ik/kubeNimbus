@@ -54,7 +54,8 @@ public sealed record PaletteItem(string Title, string Subtitle, string IconKey, 
 
 /// <summary>
 /// Ctrl/Cmd+K palette: filters a caller-supplied action list by substring match on
-/// title/subtitle (or an item's own <see cref="PaletteItem.SearchText"/>).
+/// title/subtitle (or an item's own <see cref="PaletteItem.SearchText"/>), and ranks the
+/// matches by how well their title answers the query (<see cref="Rank"/>).
 ///
 /// <para>
 /// <b>The source is re-read, not captured.</b> It is a function the shell evaluates on
@@ -140,7 +141,7 @@ public sealed partial class CommandPaletteViewModel(Func<IEnumerable<PaletteItem
         var logsOnly = raw.StartsWith(LogsPrefix, StringComparison.OrdinalIgnoreCase);
         var q = (logsOnly ? raw[LogsPrefix.Length..] : raw).Trim();
 
-        var matches = new List<PaletteItem>();
+        var matches = new List<(PaletteItem Item, int Rank)>();
         var notes = new List<PaletteItem>();
         foreach (var item in itemSource())
         {
@@ -153,9 +154,13 @@ public sealed partial class CommandPaletteViewModel(Func<IEnumerable<PaletteItem
             {
                 notes.Add(item);
             }
-            else if (q.Length == 0 || Matches(item, q))
+            else if (q.Length == 0)
             {
-                matches.Add(item);
+                matches.Add((item, 0));
+            }
+            else if (Matches(item, q))
+            {
+                matches.Add((item, Rank(item.Title, q)));
             }
         }
 
@@ -175,7 +180,8 @@ public sealed partial class CommandPaletteViewModel(Func<IEnumerable<PaletteItem
             }
         }
 
-        foreach (var item in matches.Take(MaxRows))
+        // OrderBy is stable, so within a rank the source's own order stands.
+        foreach (var item in matches.OrderBy(m => m.Rank).Select(m => m.Item).Take(MaxRows))
         {
             FilteredItems.Add(item);
         }
@@ -192,6 +198,43 @@ public sealed partial class CommandPaletteViewModel(Func<IEnumerable<PaletteItem
                 ? null
                 : FilteredItems.FirstOrDefault(i => i.IsActionable && i.Title == previous.Title && i.Subtitle == previous.Subtitle))
             ?? FilteredItems.FirstOrDefault(i => i.IsActionable);
+    }
+
+    /// <summary>
+    /// How well the title answers the query, lower first: the whole title, its start, the
+    /// start of one of its words, anywhere in it, and last a row that matched only on its
+    /// subtitle or search text. Without it the rows kept the source's order, and "Nodes"
+    /// put "Advanced view: show only everyday kinds" (whose subtitle lists Nodes) above the
+    /// Nodes kind, so Enter turned the Advanced view off (the 2026-10-17 macOS pass).
+    /// </summary>
+    internal static int Rank(string title, string q)
+    {
+        if (title.Equals(q, StringComparison.OrdinalIgnoreCase))
+        {
+            return 0;
+        }
+
+        if (title.StartsWith(q, StringComparison.OrdinalIgnoreCase))
+        {
+            return 1;
+        }
+
+        var at = title.IndexOf(q, StringComparison.OrdinalIgnoreCase);
+        if (at < 0)
+        {
+            return 4;
+        }
+
+        // A later occurrence may be the one at a word start ("Logs: api" for "api").
+        for (; at >= 0; at = title.IndexOf(q, at + 1, StringComparison.OrdinalIgnoreCase))
+        {
+            if (!char.IsLetterOrDigit(title[at - 1]))
+            {
+                return 2;
+            }
+        }
+
+        return 3;
     }
 
     private static bool Matches(PaletteItem item, string q) =>

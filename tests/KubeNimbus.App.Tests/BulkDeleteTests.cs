@@ -1,6 +1,7 @@
 using System.Net;
 using KubeNimbus.App.ViewModels;
 using KubeNimbus.Core;
+using KubeNimbus.Core.Commands;
 
 namespace KubeNimbus.App.Tests;
 
@@ -272,7 +273,7 @@ public class BulkDeleteTests
             .ToList();
         shell.Palette.Close();
 
-        await Assert.That(string.Join(" | ", rowEntries)).IsEqualTo("Delete resource — 3 selected · asks to confirm · Delete");
+        await Assert.That(string.Join(" | ", rowEntries)).IsEqualTo($"Delete resource — 3 selected · asks to confirm · {CommandBindings.ShortcutLabel(CommandId.DeleteResource)}");
 
         tab.SetSelectedRows([tab.Rows[0]]);
         shell.Palette.Open();
