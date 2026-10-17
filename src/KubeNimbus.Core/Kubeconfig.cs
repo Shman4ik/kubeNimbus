@@ -518,6 +518,16 @@ public static partial class Kubeconfig
                 details.User = null;
             }
 
+            // The library keeps only the first certificate of a CA bundle; kubectl trusts them all.
+            // Read before the library sees the bundle: on macOS its certificate loader refuses a
+            // bundle with a block that does not parse (Apple's "Unknown format in import") before
+            // this reader could say which field is broken, where Windows and Linux load the first
+            // block and leave the rest to this.
+            var endpoint = config.Clusters?.FirstOrDefault(c => c.Name == clusterName)?.ClusterEndpoint;
+            var authorities = endpoint is { SkipTlsVerify: false }
+                ? ClusterCertificateAuthority.Read(endpoint, file.DirectoryName)
+                : null;
+
             var configuration = KubernetesClientConfiguration.BuildConfigFromConfigObject(config, context.Name);
             if (execProvider is not null)
             {
@@ -529,10 +539,7 @@ public static partial class Kubeconfig
                 configuration.TokenProvider = new TokenFileProvider(tokenFilePath, fileToken);
             }
 
-            // The library keeps only the first certificate of a CA bundle; kubectl trusts them all.
-            if (!configuration.SkipTlsVerify
-                && config.Clusters?.FirstOrDefault(c => c.Name == clusterName)?.ClusterEndpoint is { } endpoint
-                && ClusterCertificateAuthority.Read(endpoint, file.DirectoryName) is { } authorities)
+            if (!configuration.SkipTlsVerify && authorities is not null)
             {
                 configuration.SslCaCerts = authorities;
             }
