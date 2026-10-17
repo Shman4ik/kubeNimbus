@@ -174,6 +174,12 @@ WebSocket transport, so exec and port-forward were affected too.
   kubeconfig", as it fails kubectl, rather than trusting part of it —
   `X509Certificate2Collection.ImportFromPem` was not used because it was seen to pass over such
   a block. `ApiServerTlsTests` turns red in two cases with the replacement removed.
+  The bundle is read **before** the library builds its configuration, not after: on macOS the
+  library's own certificate load goes through Apple's loader, which refuses the whole bundle
+  ("Unknown format in import", `AppleCommonCryptoCryptographicException`) when one block is
+  broken, so reading afterwards left the connect failing with a raw crypto exception instead of
+  naming the field. Windows and Linux load the first block and leave the rest to this reader, which
+  is why the order only showed on the first test run on a Mac (2026-10-17).
 - **Without one**, the TLS stack's own chain verdict against the system's trust stands, and
   only the name check is ours.
 - **`insecure-skip-tls-verify: true`** still accepts anything (the library's accept-all is left
