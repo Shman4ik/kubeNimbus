@@ -46,7 +46,7 @@ MANIFEST_DIR="$SCRIPT_DIR/manifests"
 
 step() { printf '\033[36m==> %s\033[0m\n' "$1"; }
 note() { printf '\033[90m    %s\033[0m\n' "$1"; }
-kube() { docker exec "$NAME" kubectl "$@"; }
+kube() { docker exec -i "$NAME" kubectl "$@"; }
 
 step 'Checking Docker'
 docker version --format '{{.Server.Version}}' >/dev/null 2>&1 ||
@@ -86,7 +86,7 @@ done
 # the app's tab strip (k3s calls everything "default").
 mkdir -p "$(dirname "$KUBECONFIG_PATH")"
 printf '%s' "$RAW" \
-  | sed -e "s|https://127.0.0.1:6443|https://127.0.0.1:${PORT}|" -e "s/\bdefault\b/${NAME}/g" \
+  | sed -e "s|https://127.0.0.1:6443|https://127.0.0.1:${PORT}|" -E -e "s/(: |- name: )default$/\1${NAME}/" \
   > "$KUBECONFIG_PATH"
 note "kubeconfig → $KUBECONFIG_PATH (context: $NAME)"
 
@@ -209,7 +209,7 @@ $(printf '\033[32mSandbox is up.\033[0m')
     dotnet run --project src/KubeNimbus.App
 
   Run the integration tests (auto-discovers .sandbox/kubeconfig.yaml):
-    dotnet test tests/KubeNimbus.Core.Tests/KubeNimbus.Core.Tests.csproj
+    ./scripts/test.sh
 
   Tear down:  ./scripts/sandbox-down.sh --name $NAME
 
