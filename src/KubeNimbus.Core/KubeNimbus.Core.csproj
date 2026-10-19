@@ -8,7 +8,7 @@
   <ItemGroup>
     <!-- Aot variant only: source-generated serialization, survives NativeAOT.
          Never swap for the reflection-based "KubernetesClient" package. -->
-    <PackageReference Include="KubernetesClient.Aot" Version="19.0.2" />
+    <PackageReference Include="KubernetesClient.Aot" Version="21.0.8" />
     <!-- Ours, and upgraded on its own schedule. Used through its event parser
          (KubeconfigReader.cs) and its structural RepresentationModel (YamlJson.cs) —
          never the attribute/reflection-based serializer, which isn't AOT/trim-safe.
