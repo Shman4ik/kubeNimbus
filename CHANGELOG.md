@@ -12,6 +12,8 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-19
+
 ### Added
 
 - **Cluster tabs are real tabs.** The cluster tabs in the command bar are one Tab stop: the
@@ -28,6 +30,16 @@ it as the GitHub Release body, so headings must match tags exactly
 - **"Choose the list's columns…" in the command palette** opens the column chooser from the
   keyboard. Focus starts on the first column you can hide and returns to the list when the menu
   closes (#301).
+- **kubeNimbus now behaves like a Mac app on macOS** (#396, #398). The app menu is ours from the
+  first frame (About kubeNimbus, Settings… on ⌘,, Hide Others on ⌥⌘H, Quit kubeNimbus), with Edit
+  and Window menus whose Undo, Redo, Cut, Copy, Paste, Select All and Find go to the focused
+  control, including the exec terminal. ⌘T opens a cluster tab and ⌘W closes one (Ctrl+T and
+  Ctrl+W on Windows and Linux stay with the exec terminal's shell); ⌘W on the last tab leaves the
+  empty shell instead of closing the window. The Cocoa text keys work in the YAML editor and in
+  text boxes (⌘←/→ and ⌘↑/↓ to the line and document ends, ⌥⌫, ⌘⌫, ⌃A/⌃E/⌃K and the rest), each
+  edit one undo step. ⌘⌫ deletes the selected row and ⌘[ goes back from an application's page.
+  Every shortcut label, in the palette, the F1 sheet, tooltips and hints, is spelled the Mac way
+  (⇧⌘N, ⌥R) on macOS and as Ctrl+Shift+N on the other platforms.
 
 ### Changed
 
@@ -66,7 +78,12 @@ it as the GitHub Release body, so headings must match tags exactly
 - **A row action's question no longer starts with a button-like icon.** The verb's glyph is drawn
   bare, level with the sentence, because on an Argo sync's result line it looked like a refresh
   button although it has no command (#329).
-- Avalonia 12.1.4 and SvcSystems.UI.Terminal 2.2.2 (#344).
+- Avalonia 12.1.4, SvcSystems.UI.Terminal 2.3.0 and KubernetesClient.Aot 21.0.8 (#344, #400, #401).
+- **The command palette ranks a title match above a subtitle match.** Typing "Nodes" or "Services"
+  puts that kind first; before, "Advanced view: show only everyday kinds", whose subtitle lists
+  them, came first and Enter turned the Advanced view off (#398).
+- **One-line text boxes centre their text** on Fluent's padding, the shell box and the
+  port-forward fields having sat 2px high (#396).
 
 ### Fixed
 
@@ -156,6 +173,14 @@ it as the GitHub Release body, so headings must match tags exactly
   retrying" line on their own**, even when nothing in the list changes. The watch resumes where it
   stopped without listing again, so the rows and the selection stay while the connection is down
   (#363).
+- **On macOS the app no longer crashes when it quits.** The process ends with `_exit`, because
+  `exit()` aborted in libAvaloniaNative's static destructors and turned any exit code into a
+  SIGABRT (#396).
+- **A CA bundle with a block that does not parse names its kubeconfig field on macOS too.** The
+  connect used to fail with a raw Apple crypto exception instead of "Reading the kubeconfig"
+  (#393).
+- **The demo cluster's pod detail replay no longer enqueues a log line from a cancelled stream**
+  (#399).
 
 ### Development
 
@@ -195,6 +220,12 @@ These changes touch the build, the tests and the repository's tooling, not the a
 - **`scripts/qa-ui.ps1` reads pattern actions back, gets `resize` and `move` handles from UI
   Automation and drives a file dialog with `-Dialog`**, and `docs/qa/desktop-checks.md` has
   the checks for this release's changes.
+- **The screenshot harness releases each captured window and `--jobs` renders in parallel.** A
+  full run on an eight-core Mac took 732 s and now takes 150–181 s in one process and about 55 s
+  with `--jobs`, the output unchanged apart from one dock tooltip that no longer opens (#399).
+- **The first macOS pass is recorded** in `docs/research/2026-10-17-macos-pre-1.0-pass.md`, and
+  the sandbox scripts work on macOS: the context rename, `docker exec -i` for the Helm seeding and
+  the executable bit (#392, #397).
 
 ## [0.7.0] - 2026-10-11
 
@@ -1278,7 +1309,8 @@ First public release. Everything below is new.
 - Usage history is session-scoped and bounded at 30 minutes by design. Long-range
   metrics history is a non-goal — that's Prometheus's job.
 
-[Unreleased]: https://github.com/Shman4ik/kubeNimbus/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/Shman4ik/kubeNimbus/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.8.0
 [0.7.0]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.7.0
 [0.6.0]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.5.0
