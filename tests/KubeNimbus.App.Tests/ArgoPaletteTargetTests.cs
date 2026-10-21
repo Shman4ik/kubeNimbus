@@ -81,8 +81,8 @@ public class ArgoPaletteTargetTests
 
     /// <summary>
     /// With no page open the selected row is what is on screen, and terminate follows that
-    /// row's own operation phase. The list has no strip, so running an item opens that row's
-    /// page (what a click on the row does) and asks there.
+    /// row's own operation phase. The item asks on the list's own strip, the one the row menu
+    /// reports on, and opens no page.
     /// </summary>
     [Test]
     public async Task With_no_page_open_the_selected_row_is_the_target()
@@ -98,9 +98,10 @@ public class ArgoPaletteTargetTests
         items.First(i => i.Title == "Argo CD: terminate sync…").Execute!();
 
         await Assert.That(tab.PendingRowAction).IsNull();
-        await Assert.That(tab.Applications.Page!.Entry.Argo!.Name).IsEqualTo("notification-dispatcher");
-        await Assert.That(tab.Applications.Page!.PendingAction!.Kind).IsEqualTo(RowActionKind.ArgoTerminate);
-        await Assert.That(tab.Applications.Page!.PendingAction!.IsQuestionVisible).IsTrue();
+        await Assert.That(tab.Applications.Page).IsNull();
+        await Assert.That(tab.Applications.PendingAction!.Kind).IsEqualTo(RowActionKind.ArgoTerminate);
+        await Assert.That(tab.Applications.PendingAction!.Question).Contains("notification-dispatcher");
+        await Assert.That(tab.Applications.PendingAction!.IsQuestionVisible).IsTrue();
     }
 
     /// <summary>

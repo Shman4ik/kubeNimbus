@@ -4,6 +4,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Input.Raw;
+using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using KubeNimbus.App;
@@ -254,6 +255,61 @@ internal static class ApplicationsChecks
         var button = view.FindControl<Button>("NamespaceButton")!;
         button.Flyout!.ShowAt(button);
         SettlePage(window);
+    }
+
+    /// <summary>
+    /// The list's row menu (2026-10-21), through real right-clicks: a right-click selects the
+    /// row it lands on and opens nothing else, the menu offers the Argo CD items only on an app
+    /// Argo tracks, and its Sync reports on the list's own strip in one line. Leaves that
+    /// result on screen for the capture.
+    /// </summary>
+    internal static void RowMenu(Window window)
+    {
+        var view = window.GetVisualDescendants().OfType<ApplicationsView>().First(v => v.IsEffectivelyVisible);
+        var vm = (ApplicationsViewModel)view.DataContext!;
+        var list = view.FindControl<ListBox>("AppList")!;
+        var menu = (ContextMenu)list.ContextMenu!;
+
+        MenuItem Item(string header) => menu.Items.OfType<MenuItem>().First(m => (m.Header as string) == header);
+
+        var plain = vm.VisibleRows.First(r => !r.IsArgo);
+        RightClickRow(window, list, plain);
+        if (!ReferenceEquals(vm.SelectedRow, plain) || vm.IsPageOpen || !menu.IsOpen)
+            throw new InvalidOperationException(
+                $"A right-click on {plain.Name} should select it and open the row menu, not its page (selected {vm.SelectedRow?.Name}, page open {vm.IsPageOpen}, menu open {menu.IsOpen}).");
+        if (Item("Sync").IsVisible || !Item("Restart…").IsVisible)
+            throw new InvalidOperationException($"{plain.Name} is not an Argo CD app, so its menu must not offer Sync.");
+        menu.Close();
+        Dispatcher.UIThread.RunJobs();
+
+        var argo = vm.VisibleRows.First(r => r.Entry.Argo?.Name == "checkout");
+        RightClickRow(window, list, argo);
+        if (!ReferenceEquals(vm.SelectedRow, argo) || !menu.IsOpen || !Item("Sync").IsVisible || !Item("Sync").IsEffectivelyEnabled)
+            throw new InvalidOperationException("The checkout row's menu should offer an enabled Sync.");
+        if (Item("Terminate sync…").IsEffectivelyEnabled)
+            throw new InvalidOperationException("Terminate sync… is enabled on checkout, whose sync is not running.");
+
+        Item("Sync").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        menu.Close();
+        SettlePage(window);
+
+        if (vm.PendingAction is not { Kind: RowActionKind.ArgoSync, IsDone: true } || vm.IsPageOpen)
+            throw new InvalidOperationException("The menu's Sync should report on the list's strip without opening the page.");
+        var line = view.GetVisualDescendants().OfType<TextBlock>().First(t => t.Name == "ResultMessage" && t.IsEffectivelyVisible);
+        if (line.TextLayout.TextLines.Count != 1)
+            throw new InvalidOperationException($"The Sync result wraps to {line.TextLayout.TextLines.Count} lines: \"{line.Text}\".");
+
+        Console.WriteLine("Applications row menu passed (right-click selects, Argo items only on Argo apps, Sync reports in one line on the list).");
+    }
+
+    private static void RightClickRow(Window window, ListBox list, ApplicationRowViewModel row)
+    {
+        var container = list.ContainerFromItem(row) as Control
+            ?? throw new InvalidOperationException($"Application row {row.Name} has no container.");
+        var centre = container.TranslatePoint(new Point(container.Bounds.Width / 2, container.Bounds.Height / 2), window)!.Value;
+        window.MouseDown(centre, MouseButton.Right);
+        window.MouseUp(centre, MouseButton.Right);
+        Dispatcher.UIThread.RunJobs();
     }
 
     private static void ClickAt(Window window, Control target, double x)

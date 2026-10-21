@@ -422,8 +422,8 @@ public sealed partial class RowActionViewModel : ObservableObject
         FiredOnClick = true;
         if (IsDemo)
         {
-            Message =
-                $"Nothing was sent: the demo cluster has no API server. On a real cluster this click acts on {Target} straight away.";
+            Message = $"Nothing was sent for {TargetKind}/{TargetName}: the demo cluster has no API server.";
+            MessageDetail = $"On a real cluster this click acts on {Target} straight away.";
             IsDone = true;
             return;
         }
@@ -828,6 +828,14 @@ public sealed partial class RowActionViewModel : ObservableObject
 
     public bool HasMessage => !string.IsNullOrEmpty(Message);
 
+    /// <summary>
+    /// The why behind a one-line result, as the result line's tooltip. A click that fires an
+    /// Argo sync or refresh, or that the demo cluster refuses, says what happened in one line
+    /// (the owner asked for that, 2026-10-21: a two-line paragraph under every Sync read as a
+    /// warning); what the request means and where to watch it is here for whoever hovers.
+    /// </summary>
+    [ObservableProperty] private string? _messageDetail;
+
     [ObservableProperty]
     private bool _isError;
 
@@ -1140,23 +1148,22 @@ public sealed partial class RowActionViewModel : ObservableObject
                 // would be asserting something this app has not observed.
                 case RowActionKind.ArgoSync:
                     await client.SyncArgoApplicationAsync(_descriptor, _namespace, _name, prune: false);
-                    Message =
-                        $"Sync of {Target} requested. Argo reports progress on the Application — the list follows "
-                        + "it as the watch reports it.";
+                    Message = $"Sync of {TargetName}{TargetPlace} requested.";
+                    MessageDetail = ArgoProgressDetail;
                     break;
 
                 case RowActionKind.ArgoSyncPrune:
                     await client.SyncArgoApplicationAsync(_descriptor, _namespace, _name, prune: true);
-                    Message =
-                        "Sync requested, with prune. Argo reports progress on the Application — the list "
-                        + "follows it as the watch reports it.";
+                    Message = $"Sync with prune of {TargetName}{TargetPlace} requested.";
+                    MessageDetail = ArgoProgressDetail;
                     break;
 
                 case RowActionKind.ArgoRefresh:
                     await client.RefreshArgoApplicationAsync(_descriptor, _namespace, _name);
-                    Message =
-                        $"Refresh of {Target} requested. Argo clears the annotation once it has re-compared, so "
-                        + "there is nothing on the object to watch — the sync status updates when it is done.";
+                    Message = $"Refresh of {TargetName}{TargetPlace} requested.";
+                    MessageDetail =
+                        "Argo clears the annotation once it has re-compared, so there is nothing on the object to "
+                        + "watch — the sync status updates when it is done.";
                     break;
 
                 // Terminate is a request too, and conditional: the patch tests that the sync is
@@ -1214,6 +1221,9 @@ public sealed partial class RowActionViewModel : ObservableObject
             IsBusy = false;
         }
     }
+
+    private const string ArgoProgressDetail =
+        "Argo reports progress on the Application, and the list follows it as the watch reports it.";
 
     /// <summary>Dismisses the strip — the cancel before the action, and the close after it.</summary>
     [RelayCommand]

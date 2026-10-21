@@ -152,6 +152,17 @@
                       ToolTip.Tip="Show applications in kube-* namespaces" FontSize="12" />
       </WrapPanel>
 
+      <!-- The row menu's strip: Restart's or Sync with prune's confirm, or a Sync's one-line
+           result. The same RowActionStrip as the page's and the Resources list's. -->
+      <ContentControl DockPanel.Dock="Top" Content="{Binding PendingAction}" Margin="0,0,0,8"
+                      IsVisible="{Binding HasPendingAction}">
+        <ContentControl.ContentTemplate>
+          <DataTemplate x:DataType="vm:RowActionViewModel">
+            <views:RowActionStrip />
+          </DataTemplate>
+        </ContentControl.ContentTemplate>
+      </ContentControl>
+
       <Border Classes="card" Padding="0">
         <Grid RowDefinitions="Auto,*">
           <!-- Column header. The same fixed widths as the row template below — no Auto
@@ -192,7 +203,32 @@
                    SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
                    Background="Transparent" BorderThickness="0"
                    Tapped="OnListTapped"
-                   DoubleTapped="OnListDoubleTapped">
+                   DoubleTapped="OnListDoubleTapped"
+                   ContextRequested="OnListContextRequested">
+            <!-- The row menu. A right-click selects the row it lands on, and every item acts on
+                 the selected row; a right-click below the last row opens nothing
+                 (OnListContextRequested). The Argo CD items are there only for an app Argo
+                 tracks, as the page's Sync button is; the ones that ask end in an ellipsis. -->
+            <ListBox.ContextMenu>
+              <ContextMenu Name="AppRowMenu">
+                <MenuItem Header="Open" Command="{Binding OpenSelectedCommand}" InputGesture="Enter" />
+                <Separator IsVisible="{Binding SelectedIsArgo}" />
+                <MenuItem Header="Sync" Command="{Binding SyncSelectedCommand}" IsVisible="{Binding SelectedIsArgo}">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource SyncIconGeometry}" Width="13" Height="13" />
+                  </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="Sync with prune…" Command="{Binding SyncSelectedWithPruneCommand}"
+                          IsVisible="{Binding SelectedIsArgo}" />
+                <MenuItem Header="Refresh from Git" Command="{Binding RefreshSelectedCommand}" IsVisible="{Binding SelectedIsArgo}" />
+                <MenuItem Header="Terminate sync…" Command="{Binding TerminateSelectedSyncCommand}"
+                          IsVisible="{Binding SelectedIsArgo}" />
+                <Separator />
+                <MenuItem Header="Restart…" Command="{Binding RestartSelectedCommand}" />
+                <MenuItem Header="Show in Resources" Command="{Binding ShowSelectedInResourcesCommand}" />
+                <MenuItem Header="Copy name" Command="{Binding CopySelectedNameCommand}" />
+              </ContextMenu>
+            </ListBox.ContextMenu>
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:ApplicationRowViewModel">
                 <StackPanel>

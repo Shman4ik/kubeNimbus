@@ -228,13 +228,7 @@ public sealed partial class ApplicationPageViewModel : ObservableObject
         return (primary.Workload, descriptor, [.. sameNamespace.Select(s => s.Selector!)]);
     }
 
-    private ResourceDescriptor DescriptorFor(DynamicResource resource)
-    {
-        var group = GroupOf(resource);
-        return _list.Tab.DescriptorOf(group, resource.Kind)
-            ?? new ResourceDescriptor(group, VersionOf(resource), resource.Kind, resource.Kind.ToLowerInvariant() + "s",
-                resource.Kind.ToLowerInvariant(), true, [], []);
-    }
+    private ResourceDescriptor DescriptorFor(DynamicResource resource) => ApplicationActions.DescriptorFor(_list, resource);
 
     private void CreateLogs()
     {
@@ -383,42 +377,37 @@ public sealed partial class ApplicationPageViewModel : ObservableObject
 
     public bool HasPendingAction => PendingAction is not null;
 
-    private DynamicResource? PrimaryWorkload => Entry.Input.Workloads.FirstOrDefault(w => w.Kind != "Job" && w.Kind != "CronJob")
-        ?? Entry.Input.Workloads.FirstOrDefault();
+    private DynamicResource? PrimaryWorkload => ApplicationActions.PrimaryWorkload(Entry);
 
-    public bool CanRestart =>
-        PrimaryWorkload is { } w && WorkloadActions.SupportsRestart(DescriptorFor(w), w)
-        && (_list.Tab.Client is not null || IsDemo);
+    public bool CanRestart => ApplicationActions.CanRestart(_list, Entry);
 
     [RelayCommand(CanExecute = nameof(CanRestart))]
     private void Restart()
     {
-        if (PrimaryWorkload is { } w)
+        if (ApplicationActions.Restart(_list, Entry) is { } action)
         {
-            Arm(new RowActionViewModel(
-                RowActionKind.Restart, _list.Tab.Client, DescriptorFor(w), w.Namespace, w.Name,
-                _list.Tab.ContextNameFor(""), environment: _list.Tab.Environment));
+            Arm(action);
         }
     }
 
-    public bool CanSync => Entry.Argo is not null && ArgoDescriptor() is { } d && ArgoCd.SupportsSync(d);
+    public bool CanSync => ApplicationActions.CanSync(_list, Entry);
 
     /// <summary>Sync, sent on the click: it applies what Git already declares.</summary>
     [RelayCommand(CanExecute = nameof(CanSync))]
-    private void Sync() => ArmSync(RowActionKind.ArgoSync);
+    private void Sync() => ArmArgo(RowActionKind.ArgoSync);
 
     /// <summary>Sync with prune, which deletes what Git no longer declares, so it asks first.</summary>
     [RelayCommand(CanExecute = nameof(CanSync))]
-    private void SyncWithPrune() => ArmSync(RowActionKind.ArgoSyncPrune);
+    private void SyncWithPrune() => ArmArgo(RowActionKind.ArgoSyncPrune);
 
     /// <summary>
     /// Only while Argo reports the sync Running: the same strip that started a sync is where
     /// it is stopped (#193). It asks first, since what was applied stays applied.
     /// </summary>
-    public bool CanTerminateSync => CanSync && Entry.Argo is { CanTerminate: true };
+    public bool CanTerminateSync => ApplicationActions.CanTerminate(_list, Entry);
 
     [RelayCommand(CanExecute = nameof(CanTerminateSync))]
-    private void TerminateSync() => ArmSync(RowActionKind.ArgoTerminate);
+    private void TerminateSync() => ArmArgo(RowActionKind.ArgoTerminate);
 
     /// <summary>
     /// An Argo CD action from the palette (#364): armed on this page's own strip, the one the
@@ -427,29 +416,11 @@ public sealed partial class ApplicationPageViewModel : ObservableObject
     /// </summary>
     internal void ArmArgo(RowActionKind kind)
     {
-        if (kind is not (RowActionKind.ArgoSync or RowActionKind.ArgoSyncPrune or RowActionKind.ArgoRefresh or RowActionKind.ArgoTerminate)
-            || !CanSync
-            || (kind == RowActionKind.ArgoTerminate && !CanTerminateSync))
+        if (ApplicationActions.Argo(_list, Entry, kind) is { } action)
         {
-            return;
-        }
-
-        ArmSync(kind);
-    }
-
-    private void ArmSync(RowActionKind kind)
-    {
-        if (Entry.Argo is { } argo && ArgoDescriptor() is { } d)
-        {
-            Arm(new RowActionViewModel(
-                kind, _list.Tab.Client, d, argo.Namespace, argo.Name,
-                _list.Tab.ContextNameFor(""), environment: _list.Tab.Environment));
+            Arm(action);
         }
     }
-
-    private ResourceDescriptor? ArgoDescriptor() =>
-        _list.Tab.DescriptorOf(ArgoCd.Group, "Application")
-        ?? (IsDemo ? ArgoCd.ApplicationDescriptor(DemoData.BuildCatalog()) : null);
 
     private void Arm(RowActionViewModel action)
     {
@@ -925,18 +896,6 @@ public sealed partial class ApplicationPageViewModel : ObservableObject
         {
             // Not readable (a 403 is the common case): the action stays hidden, as specified.
         }
-    }
-
-    private static string GroupOf(DynamicResource resource)
-    {
-        var slash = resource.ApiVersion.IndexOf('/');
-        return slash < 0 ? "" : resource.ApiVersion[..slash];
-    }
-
-    private static string VersionOf(DynamicResource resource)
-    {
-        var slash = resource.ApiVersion.IndexOf('/');
-        return slash < 0 ? resource.ApiVersion : resource.ApiVersion[(slash + 1)..];
     }
 
     private static string StripNoLogs(string reason)

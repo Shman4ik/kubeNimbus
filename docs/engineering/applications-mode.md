@@ -241,6 +241,22 @@ and Argo's own Degraded/Unknown when nothing read from the workloads explains it
    value changes on a watch event moves, as the same instance. The group captions stay under
    the list's own order and a Health sort, where the groups are contiguous, and go under any
    other column, where they would head rows that are not theirs. Session state; not persisted.
+11. **A right-click on a row opens its menu** (2026-10-21, the owner's ask): Open, then on an
+   app Argo CD tracks Sync, Sync with prune…, Refresh from Git and Terminate sync…, then
+   Restart…, Show in Resources and Copy name. The right-click selects the row it lands on and
+   opens nothing else (a right-click raises `RightTapped`, never the `Tapped` that opens a row),
+   and every item acts on the selected row, as the Resources grid's menu does; a right-click
+   below the last row opens no menu (`OnListContextRequested`), because the items would then act
+   on whichever row was selected before. The Argo items are hidden on an app Argo does not
+   track, as the page's Sync button is, and Terminate is disabled unless Argo reports the sync
+   Running. The actions are the page's, built once in `ApplicationActions`, and they report on
+   **the list's own strip** above the rows (`ApplicationsViewModel.PendingAction`), because the
+   page's strip is not on screen while the list is: Sync and Refresh fire on the click and leave
+   a one-line result, prune, terminate and restart ask there first. The palette's Argo items do
+   the same while the list shows ([argo-cd](argo-cd.md#what-the-palettes-argo-items-act-on)).
+   Opening a page clears a finished result off the list's strip, so going back shows no stale
+   line; one still in flight stays. Show in Resources reveals the app's main workload (the one
+   Restart acts on), or the Application object for an Argo app that has no workload yet.
 
 ## The page (layout A)
 
@@ -303,9 +319,9 @@ and Argo's own Degraded/Unknown when nothing read from the workloads explains it
    harness opened pages with Enter only, which is why it passed; `ux-applications-keys` now
    double-clicks a row and presses Esc, and that step fails without the fix.
 8. **One click opens a row** (2026-10, the owner's call), an exception to UI rule 2's
-   double-click. The list is navigation, not selection: no row action, context menu or row
-   key needs a row selected without opening it, so the first click of a double-click did
-   nothing anyone could see. `AppSettings.OpenApplicationsOnSingleClick` (on by default, a
+   double-click. The list is navigation, not selection: no row key needs a row selected
+   without opening it, so the first click of a double-click did nothing anyone could see. The
+   row menu (list rule 11) selects with the right button, which never opens. `AppSettings.OpenApplicationsOnSingleClick` (on by default, a
    card on the preferences page's General tab) turns it back into a double-click; it is read at the click.
    A click with a modifier only selects. The row opened is the item under the pointer, and a
    click that arrives while a page is already open does nothing, so the second press of a
@@ -387,7 +403,10 @@ payments and monitoring sorted by Restarts, most first) and `applications-page-*
 `ux-applications-keys` drives arrows, Enter, Esc, `/`, Ctrl/Cmd+F, the chips by pointer, a
 header by pointer at its far edge, the namespace picker from Ctrl/Cmd+Shift+N, two namespaces
 added by their boxes with the picker staying open and then one chosen alone by a click on its
-row, and the mode switch by pointer against the rendered window. `applications-namespace-picker` renders the picker open with two chosen.
+row, and the mode switch by pointer against the rendered window. `applications-namespace-picker` renders the picker open with two chosen. `applications-row-menu` right-clicks a row
+outside Argo (selected, no page, no Sync item) and then `checkout` (Sync enabled, Terminate not),
+clicks the menu's Sync, and fails unless its result is one line on the list's strip; the capture
+is that strip. `ApplicationsRowMenuTests` pins the menu's commands on the demo tab.
 
 Not verified here: a real cluster (Argo CD, SSO, narrow RBAC — the 403 fallback is pinned
 against the fixture seam, not an API server), the win-x64 publish, macOS.

@@ -499,6 +499,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("applications-list-filtered-empty", () => HostInMainWindow(ApplicationsScenarios.List(filter: "zzz"), mode: ShellMode.Applications)),
     ("applications-namespace-picker", () => HostInMainWindow(ApplicationsScenarios.List(namespaces: ["payments", "monitoring"]), mode: ShellMode.Applications)),
     ("applications-list-sorted", () => HostInMainWindow(ApplicationsScenarios.List(namespaces: ["payments", "monitoring"], sort: ApplicationSortColumn.Restarts, descending: true), mode: ShellMode.Applications)),
+    ("applications-row-menu", () => HostInMainWindow(ApplicationsScenarios.List(), mode: ShellMode.Applications)),
     ("applications-list-narrow", () => HostInMainWindow(ApplicationsScenarios.List(), width: 1024, mode: ShellMode.Applications)),
     ("applications-list-loading", () => HostInMainWindow(ApplicationsScenarios.Loading(), mode: ShellMode.Applications)),
     ("applications-list-rbac-fallback", () => HostInMainWindow(ApplicationsScenarios.RbacFallback(), mode: ShellMode.Applications)),
@@ -696,6 +697,7 @@ void Capture(string name, ThemeVariant theme, Func<Control> build, bool again = 
     if (name == "ux-helm-sort") GridSortChecks.ClusterTabGrid(window, "HelmGrid", "Rev", HelmReleaseComparer.Revision);
     if (name == "ux-argo-sort") GridSortChecks.ClusterTabGrid(window, "ArgoGrid", "Health", ArgoApplicationComparer.Health);
     if (name == "applications-namespace-picker") ApplicationsChecks.OpenNamespacePicker(window);
+    if (name == "applications-row-menu") ApplicationsChecks.RowMenu(window);
     if (name == "ux-hotkey-scheme") KeyboardChecks.HotkeyScheme(window);
     if (name == "ux-overlay-focus") UxInteractionChecks.OverlayTakesFocus(window);
     if (name == "ux-preferences-tabs") UxInteractionChecks.PreferencesTabs(window);

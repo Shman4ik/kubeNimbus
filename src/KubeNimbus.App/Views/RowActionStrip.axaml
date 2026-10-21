@@ -35,6 +35,20 @@
          and the owner asked whether it was a refresh button (2026-10-12). It is level with
          the sentence's first line. The sentence is 13px, a step above the 12px consequence
          under it. -->
+    <Style Selector="Border.actionStrip">
+      <Setter Property="Padding" Value="14,12" />
+    </Style>
+    <!-- An action that fired on its click (an Argo sync or refresh, a cordon) has no question,
+         so the strip is only its result: the infoBar alone, one line, with no card around it
+         (UI rule 24: nothing boxed inside a box; the owner asked for a one-line notice,
+         2026-10-21). Production is still said in the line's own words ("on prod-eu
+         (production)"). These are the view's own styles, so they win over the app's
+         Border.card and Border.card.actionStrip.production. -->
+    <Style Selector="Border.actionStrip.result">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
     <Style Selector="PathIcon.actionGlyph">
       <Setter Property="Width" Value="16" />
       <Setter Property="Height" Value="16" />
@@ -67,10 +81,10 @@
     </Style>
   </UserControl.Styles>
 
-  <Border Classes="card actionStrip" Classes.production="{Binding IsProduction}" Padding="14,12"
+  <Border Classes="card actionStrip" Classes.production="{Binding IsProduction}" Classes.result="{Binding FiredOnClick}"
           AutomationProperties.Name="{Binding Question}">
     <Grid ColumnDefinitions="Auto,*">
-      <PathIcon Grid.Column="0" Classes="actionGlyph" Classes.danger="{Binding IsDestructive}"
+      <PathIcon Grid.Column="0" Classes="actionGlyph" Classes.danger="{Binding IsDestructive}" IsVisible="{Binding IsQuestionVisible}"
                 Data="{Binding IconKey, Converter={x:Static conv:IconKeyToGeometryConverter.Instance}}"
                 VerticalAlignment="Top" Margin="0,1,10,0" />
 
@@ -207,8 +221,11 @@
               <PathIcon Classes="actionResult error" Data="{StaticResource AlertCircleIconGeometry}"
                         IsVisible="{Binding IsError}" />
             </Panel>
-            <TextBlock Grid.Column="1" Text="{Binding Message}" TextWrapping="Wrap" FontSize="12"
-                       VerticalAlignment="Center" />
+            <!-- One line for a click's result ("Sync of checkout in argocd on prod-eu
+                 requested."); the why behind it is the tooltip, MessageDetail. It still wraps,
+                 so a narrow window or the API server's refusal loses no word of it. -->
+            <TextBlock Grid.Column="1" Name="ResultMessage" Text="{Binding Message}" TextWrapping="Wrap" FontSize="12"
+                       VerticalAlignment="Center" ToolTip.Tip="{Binding MessageDetail}" />
             <Button Grid.Column="2" Content="Open Job" Classes="accent" Margin="12,-4,0,-4"
                     Padding="10,3" VerticalAlignment="Center"
                     Command="{Binding OpenCreatedJobCommand}" IsVisible="{Binding HasFollowUp}" />

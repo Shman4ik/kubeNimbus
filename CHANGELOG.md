@@ -12,6 +12,20 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+### Added
+
+- **A right-click menu on the Applications list.** Each row offers Open, Restart…, Show in
+  Resources and Copy name, and an app Argo CD tracks also offers Sync, Sync with prune…,
+  Refresh from Git and Terminate sync…, without opening the app's page first. The result shows
+  on the list itself, and the palette's Argo CD items report there too while the list is showing.
+
+### Changed
+
+- **A sync or refresh says so in one line.** "Sync of checkout in argocd on prod-eu requested."
+  replaces the two-sentence paragraph that followed every Sync, and it no longer sits in a box
+  of its own; what the request means is the line's tooltip. Cordon, uncordon and suspend
+  results look the same.
+
 ## [0.8.0] - 2026-10-19
 
 ### Added
