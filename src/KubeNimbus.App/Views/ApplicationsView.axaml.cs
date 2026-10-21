@@ -261,6 +261,24 @@ public partial class ApplicationsView : UserControl
     /// </summary>
     private void OnListDoubleTapped(object? sender, TappedEventArgs e) => OpenTappedRow(e);
 
+    /// <summary>
+    /// The row menu opens only over a row: the items act on the selected row, and a
+    /// right-click on the empty space below the last one would otherwise offer them for
+    /// whichever row was selected before. A keyboard request (the menu key, Shift+F10) comes
+    /// from the focused row, so it passes.
+    /// </summary>
+    private void OnListContextRequested(object? sender, ContextRequestedEventArgs e)
+    {
+        if ((e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true) is not { DataContext: ApplicationRowViewModel row }
+            || Vm is not { IsPageOpen: false } vm)
+        {
+            e.Handled = true;
+            return;
+        }
+
+        vm.SelectedRow = row;
+    }
+
     private void OpenTappedRow(TappedEventArgs e)
     {
         // Only a click on a row opens it; the empty space below the last row is not "the

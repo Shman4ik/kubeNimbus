@@ -670,6 +670,7 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
             ExtendFallbacks();
         }
 
+        NotifyRowMenu();
         Rebuilt?.Invoke(this, EventArgs.Empty);
     }
 
@@ -1314,6 +1315,7 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
     public void Open(ApplicationRowViewModel row)
     {
         SelectedRow = row;
+        DismissListActionForPage();
         var previous = Page;
         Page = new ApplicationPageViewModel(this, row);
         _ = previous?.CloseAsync();

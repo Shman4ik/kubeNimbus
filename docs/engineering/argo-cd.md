@@ -38,9 +38,13 @@ Nine things are load-bearing.
    into "deploy something else", and it would do so without any visible difference.
 3. **Both actions report a *request*, never a result.** The API server accepting the
    patch means Argo has been asked; what it then did lands in `status.operationState`
-   seconds later and reaches the list through the ordinary watch. The strip says "Sync
-   requested", and a refresh says out loud that Argo *clears the annotation* once it has
-   re-compared, so there is deliberately nothing left on the object to look at.
+   seconds later and reaches the list through the ordinary watch. The strip says so in one
+   line, "Sync of checkout in argocd on prod-eu requested." (2026-10-21: the owner asked for a
+   one-line notice; the two-sentence paragraph under every Sync read as a warning). What the
+   request means is the line's tooltip (`RowActionViewModel.MessageDetail`): Argo reports
+   progress on the Application, and for a refresh, that Argo *clears the annotation* once it has
+   re-compared, so there is deliberately nothing left on the object to look at. The line
+   still wraps, so a narrow window or the API server's refusal loses no word of it.
 4. **Sync and health are two independent states and get two pills, never one column.**
    An Application can be Synced and Degraded (Git applied cleanly, the pods crash) or
    OutOfSync and Healthy (someone changed the cluster by hand and what they left works),
@@ -151,7 +155,9 @@ Application's own operation phase.
 **And it acts where it is seen.** The tab's own strip (`PendingRowAction`) is drawn only by
 the Resources view, which the Applications mode hides, so in that mode a palette item is armed on
 the Application page's strip instead (`ApplicationPageViewModel.ArmArgo`, the strip its Sync arrow
-uses): the open page, or the selected row's page, opened for it as a click on the row would. The
+uses), or with no page open, on the list's own strip, the one its row menu reports on
+(`ApplicationsViewModel.ArmArgoOnSelectedRow`, 2026-10-21). Before the list had a strip, the
+item opened the selected row's page and asked there. The
 first version of the #364 fix named the right Application and armed the hidden strip, so a prune
 or terminate asked where nobody could see it (verifier, fix round 1).
 

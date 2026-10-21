@@ -243,16 +243,19 @@ public sealed partial class ClusterTabViewModel
 
         // The Applications mode hides the Resources view and the strip on it, so an action
         // armed there would ask, or report, where nobody can see it (#364, UI rules 9 and 17).
-        // It goes to the Application's page instead, whose own strip is on screen: the open
-        // page, or the selected row's, opened for it, as a click on the row would.
+        // It goes to the strip that is on screen instead: the open page's, or with the list
+        // showing, the list's own, which the row menu reports on too.
         if (IsApplicationsModeShown?.Invoke() == true)
         {
-            if (Applications.Page is null && Applications.SelectedRow is { } row)
+            if (Applications.Page is { } page)
             {
-                Applications.Open(row);
+                page.ArmArgo(kind);
+            }
+            else
+            {
+                Applications.ArmArgoOnSelectedRow(kind);
             }
 
-            Applications.Page?.ArmArgo(kind);
             return;
         }
 
