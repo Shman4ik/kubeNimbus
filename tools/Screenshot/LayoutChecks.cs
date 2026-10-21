@@ -286,6 +286,17 @@ internal static class LayoutChecks
                     $"The sentence stands on y={sentenceBaseline:0.0} and the replica box's number on y={numberBaseline:0.0}; "
                     + "the words, \"to\" and the number should share one baseline.");
         }
+        // 2026-10-21: the verb's glyph is centred on the first line's words, also when the scale
+        // box shares that line and makes it as tall as the box.
+        var glyph = strip.FindControl<PathIcon>("ActionGlyph")!;
+        var firstLine = sentence.TextLayout.TextLines[0];
+        var firstBaseline = sentence.TranslatePoint(new Point(0, sentence.Padding.Top + firstLine.Baseline), window)?.Y ?? double.NaN;
+        var glyphMiddle = (glyph.TranslatePoint(default, window)?.Y ?? double.NaN) + glyph.Bounds.Height / 2;
+        var capMiddle = firstBaseline - RowActionStrip.CapMiddle * sentence.FontSize;
+        if (!(Math.Abs(glyphMiddle - capMiddle) <= 1))
+            throw new InvalidOperationException(
+                $"The strip's glyph is centred on y={glyphMiddle:0.0} and the first line's capitals on y={capMiddle:0.0}; it should sit level with the words.");
+
         Console.WriteLine($"Action strip reads as one block at {window.Bounds.Width:0}px (confirm {gap:0}px after the text).");
 
         double InkRight(TextBlock block) =>

@@ -11,7 +11,35 @@ public partial class RowActionStrip : UserControl
     {
         InitializeComponent();
         ReplicaInput.LayoutUpdated += (_, _) => AlignBlankLead();
+        ActionSentence.LayoutUpdated += (_, _) => AlignGlyph();
     }
+
+    /// <summary>
+    /// Centres the verb's glyph on the sentence's first line of text, at the middle of its
+    /// capitals. A fixed top margin put it level with the words only while the first line
+    /// was a line of text: when the scale box fits on that line, the line is as tall as the
+    /// box and its words sit at the bottom, so the glyph stood above them (the owner's
+    /// screenshot, 2026-10-21). Measured from the text layout, because the interface font
+    /// is a setting (UI rule 23).
+    /// </summary>
+    private void AlignGlyph()
+    {
+        if (!ActionGlyph.IsEffectivelyVisible || ActionGlyph.Parent is not Visual grid
+            || ActionSentence.TextLayout.TextLines is not [var first, ..]
+            || ActionSentence.TranslatePoint(new Point(0, ActionSentence.Padding.Top + first.Baseline), grid) is not { } baseline)
+        {
+            return;
+        }
+
+        var top = Math.Max(0, baseline.Y - (CapMiddle * ActionSentence.FontSize) - (ActionGlyph.Bounds.Height / 2));
+        if (Math.Abs(ActionGlyph.Margin.Top - top) > 0.25)
+        {
+            ActionGlyph.Margin = new Thickness(0, top, 10, 0);
+        }
+    }
+
+    /// <summary>The middle of a capital above the baseline, in ems: about half the cap height of the interface faces.</summary>
+    internal const double CapMiddle = 0.35;
 
     /// <summary>
     /// Puts the scale sentence's "to" on the same baseline as the number in the replica box

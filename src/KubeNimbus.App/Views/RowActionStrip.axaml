@@ -84,7 +84,7 @@
   <Border Classes="card actionStrip" Classes.production="{Binding IsProduction}" Classes.result="{Binding FiredOnClick}"
           AutomationProperties.Name="{Binding Question}">
     <Grid ColumnDefinitions="Auto,*">
-      <PathIcon Grid.Column="0" Classes="actionGlyph" Classes.danger="{Binding IsDestructive}" IsVisible="{Binding IsQuestionVisible}"
+      <PathIcon Grid.Column="0" Name="ActionGlyph" Classes="actionGlyph" Classes.danger="{Binding IsDestructive}" IsVisible="{Binding IsQuestionVisible}"
                 Data="{Binding IconKey, Converter={x:Static conv:IconKeyToGeometryConverter.Instance}}"
                 VerticalAlignment="Top" Margin="0,1,10,0" />
 
