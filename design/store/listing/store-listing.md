@@ -10,7 +10,9 @@ Product ID `9MZ3C28M65PB`. Field limits are Partner Center's own: What's new 1,5
 description 10,000, short description 1,000, 20 product features of 200 characters each, 7 search
 terms. Every fenced block below is pasted as it stands.
 
-**Written for 0.7.0**, with the closing line of the description added on 2026-10-12 (the pgNimbus cross-mention; both listings carry one). "What's new" describes the changes since 0.6.0; the rest of the listing
+**"What's new" written for 0.8.0** (2026-10-20) and describes the changes since 0.7.0 that a Windows user sees; the
+rest of the listing was written for 0.7.0, with its closing line added on 2026-10-12 (the pgNimbus
+cross-mention; both listings carry one), and describes the whole app
 describes the whole app. (0.4.0 was submitted and failed certification on policy 10.5.1, below,
 which is why 0.6.0's text carried everything since 0.4.0.) Keep this file's date in step with the
 release it describes.
@@ -53,15 +55,15 @@ data-collection answers stay as they are (no data is collected).
 ## What's new in this version
 
 ```text
-0.7: Work on several things at once. Choose several namespaces in either list, select several resources and delete them with one confirm, and pick the columns each kind shows. Paste a manifest into "New resource from YAML". Port-forwards keep running after their dock tab closes, and a Service can be forwarded to a ready pod behind it.
+0.8: Lists open faster. Each kind is listed and watched once per connection and shared by the Applications and Resources modes, and the last five kinds you left stay live. The namespace choice belongs to the cluster tab, is shared by both modes and is kept across restarts.
 
-Argo CD: terminate a running sync, open ApplicationSets and AppProjects, and see every connected cluster's applications in one dashboard. Syncs now carry the application's own sync options.
+New: ResourceQuota rows say when a namespace is full or almost full, "Exec in my terminal" and "Node shell in my terminal" are in the list's right-click menu, and the column chooser is in the command palette. The Argo CD dashboard updates live, and in the Applications mode the palette acts on the application on screen.
 
-Also new: a capacity strip above the Nodes list (CPU and memory used and requested, no Prometheus needed), how long each condition has held, sorting by any column in the Applications list, pod lists, Helm releases and Argo CD, exec and node shells in your own terminal, and "Signed in as" in the access review.
+Accessibility: cluster tabs are real tabs for the keyboard and screen readers, and grid rows, menu items and the cluster switcher's rows are named correctly.
 
-Safer connections: the API server's certificate is checked for its host name as kubectl does, kubeconfig impersonation and token files are honoured, and a delete on a production cluster always asks. Actions you can take back, such as Sync or Cordon, now act on the click.
+The exec terminal leaves F1 to F12, Ctrl+Shift+L, Alt+B and Alt+F to the shell.
 
-Fixed: a sign-in plugin runs once per connect instead of twice, copying from the exec terminal and the log menu works, the last log line clears the scroll bar, and the keyboard reaches every part of the window.
+Fixed: a log pane on a pod that was not running yet starts once the container runs, says what it is showing, and keeps a pod deleted mid-rollout as "deleted". An account that may not read metrics or list a kind sees the server's reason instead of empty columns or an endless retry. A watch that reconnects clears its "connection lost" line without listing again. The apply preview is readable at the dock's default height.
 ```
 
 ## Short description
