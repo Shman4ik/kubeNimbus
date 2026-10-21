@@ -20,6 +20,14 @@ public partial class RowActionStrip : UserControl
     /// platform's interface font "to" sat visibly above the number it introduces. A
     /// StackPanel has no baseline alignment, so the word's top margin is set from the two
     /// text layouts once the box has been laid out.
+    ///
+    /// The row stands on the sentence's baseline (<c>BaselineAlignment="Baseline"</c> puts
+    /// its bottom there), so the box's number would sit a box-bottom above the words around
+    /// it: the owner saw "to" and the box float above the sentence on 2026-10-21. The row
+    /// hangs below the line by the distance from the number's baseline to the box's bottom,
+    /// which puts the sentence, "to" and the number on one baseline, and the sentence makes
+    /// room for that hang under its last line. Measured, not a constant, because the
+    /// interface font is a setting (UI rule 23).
     /// </summary>
     private void AlignBlankLead()
     {
@@ -36,6 +44,13 @@ public partial class RowActionStrip : UserControl
         if (Math.Abs(BlankLead.Margin.Top - top) > 0.25)
         {
             BlankLead.Margin = new Thickness(0, top, 0, 0);
+        }
+
+        var hang = Math.Max(0, BlankRow.Bounds.Height - boxBaseline.Y);
+        if (Math.Abs(BlankRow.Margin.Bottom + hang) > 0.25)
+        {
+            BlankRow.Margin = new Thickness(4, 0, 0, -hang);
+            ActionSentence.Padding = new Thickness(0, 0, 0, hang);
         }
     }
 }

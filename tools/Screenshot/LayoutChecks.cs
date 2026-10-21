@@ -263,6 +263,28 @@ internal static class LayoutChecks
             if (!(Math.Abs(numberBaseline - leadBaseline) <= 0.5))
                 throw new InvalidOperationException(
                     $"\"to\" stands on y={leadBaseline:0.0} and the replica box's number on y={numberBaseline:0.0}; they should share a baseline (#293).");
+
+            // 2026-10-21: and the sentence's own words stand on that baseline too. The row used
+            // to stand on the line with its bottom, so "to" and the box floated above the words.
+            var sentenceTop = sentence.TranslatePoint(new Point(0, sentence.Padding.Top), window)?.Y ?? double.NaN;
+            var boxMiddle = boxTop + box.Bounds.Height / 2;
+            var hangBelow = boxBottom - numberBaseline;
+            double? sentenceBaseline = null;
+            foreach (var textLine in sentence.TextLayout.TextLines)
+            {
+                if (boxMiddle >= sentenceTop && boxMiddle <= sentenceTop + textLine.Height + hangBelow)
+                {
+                    sentenceBaseline = sentenceTop + textLine.Baseline;
+                    break;
+                }
+
+                sentenceTop += textLine.Height;
+            }
+
+            if (sentenceBaseline is not { } words || !(Math.Abs(words - numberBaseline) <= 0.75))
+                throw new InvalidOperationException(
+                    $"The sentence stands on y={sentenceBaseline:0.0} and the replica box's number on y={numberBaseline:0.0}; "
+                    + "the words, \"to\" and the number should share one baseline.");
         }
         Console.WriteLine($"Action strip reads as one block at {window.Bounds.Width:0}px (confirm {gap:0}px after the text).");
 
