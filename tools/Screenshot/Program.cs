@@ -705,6 +705,16 @@ void Capture(string name, ThemeVariant theme, Func<Control> build, bool again = 
     if (name is "cluster-tab-list-unhealthy-fleet-partial-narrow" or "cluster-tab-list-unhealthy-narrow")
         LayoutChecks.ListHeaderFits(window);
     if (name == "palette-logs-narrow") LayoutChecks.PaletteFollowsWindow(window);
+    if (name == "cluster-tab-yaml-editor")
+        LayoutChecks.RowIsLevel(window, LayoutChecks.Find<YamlEditorView, Button>(window, b => b.Classes.Contains("accent")), "YAML toolbar");
+    if (name == "applications-page-sync")
+        LayoutChecks.RowIsLevel(window, LayoutChecks.Find<ApplicationPageView, SplitButton>(window, _ => true), "Application page actions");
+    if (name == "cluster-tab-port-forward")
+        LayoutChecks.RowIsLevel(window, LayoutChecks.Find<PortForwardView, Button>(window, b => Avalonia.Automation.AutomationProperties.GetName(b)?.EndsWith("forwarding", StringComparison.Ordinal) == true), "Port-forward form");
+    if (name == "cluster-tab-rbac-who-can")
+        LayoutChecks.RowIsLevel(window, LayoutChecks.Find<RbacView, Button>(window, b => b.Content as string == "Find"), "Who can… form");
+    if (name is "cluster-tab-row-action-restart" or "cluster-tab-row-action-delete-production")
+        LayoutChecks.RowIsLevel(window, LayoutChecks.Find<RowActionStrip, Button>(window, b => b.Name == "ConfirmButton"), "Action strip answer");
     if (name.StartsWith("cluster-tab-row-action-", StringComparison.Ordinal)
         && name is not ("cluster-tab-row-action-scaled" or "cluster-tab-row-action-busy"))
         LayoutChecks.ActionStripReadsAsOneBlock(window);

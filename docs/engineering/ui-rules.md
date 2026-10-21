@@ -660,4 +660,15 @@ which now have a page of their own in this directory.
    tiles, an Ingress's rule cards, Argo's condition cards, the RBAC answer) keep their
    border, which is the rule's other half.
 
+25. **A text button is as tall as the field beside it, 32px in every family** (DESIGN.md rule
+   24, 2026-10-21). After the owner's screenshot of the scale strip, an audit of the rendered
+   screens and then `LayoutChecks.RowIsLevel` measured rows at three heights: Restart… at 34px
+   beside a 32px Sync split button on the application page, the YAML toolbar's Delete at 26px
+   (its own `Padding="8,4"` and a 12px label) beside a 32px Review…/Apply, and the port-forward
+   form's 34px Stop beside 32px fields. The audit's other two suspects, Who can…'s Find and the
+   action strip's confirm beside Cancel, measured level already. nimbusUi's `Theme.axaml` now
+   pads every family to 32px (6px for the bordered ones, 7px for the filled ones, which draw no
+   border), and the check runs on all five rows plus a production delete's strip. An icon-only
+   `toolbar` button is not a text button and keeps its size.
+
 [fluent-basics]: https://learn.microsoft.com/en-us/windows/apps/design/basics/
