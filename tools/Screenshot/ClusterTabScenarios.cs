@@ -900,7 +900,8 @@ internal static class ClusterTabScenarios
         action.Replicas = 6;
         action.IsSuccess = true;
         action.IsDone = true;
-        action.Message = "Scaled to 6. The list follows the rollout as the watch reports it.";
+        action.Message = "Scaled to 6.";
+        action.MessageDetail = "The list follows the rollout as the watch reports it.";
         return tab;
     }
 
@@ -1144,7 +1145,8 @@ internal static class ClusterTabScenarios
         action.CreatedJob = new DynamicResource(document.RootElement.Clone());
         action.IsDone = true;
         action.IsSuccess = true;
-        action.Message = "Created Job/nightly-reconcile-manual-x7k2m. Its pods appear as the Job controller starts them.";
+        action.Message = "Created Job/nightly-reconcile-manual-x7k2m.";
+        action.MessageDetail = "Its pods appear as the Job controller starts them.";
         return tab;
     }
 

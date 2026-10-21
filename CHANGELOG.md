@@ -28,7 +28,7 @@ it as the GitHub Release body, so headings must match tags exactly
 - **A sync or refresh says so in one line.** "Sync of checkout in argocd on prod-eu requested."
   replaces the two-sentence paragraph that followed every Sync, and it no longer sits in a box
   of its own; what the request means is the line's tooltip. Cordon, uncordon and suspend
-  results look the same.
+  results look the same, and scale, run now and terminate sync results are one line too.
 
 ## [0.8.0] - 2026-10-19
 

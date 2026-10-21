@@ -457,8 +457,8 @@ and read what ran through the clipboard or a marker file (`echo hi > /tmp/m`,
   seen … · first seen … (N times)", matching `kubectl get events -n demo-broken -o wide` within a
   minute; an image-pull event renders and double-click opens its object. The fleet half needs a
   second cluster: [opt].
-- **P-8 [input]** (#191) `qa-tick` row → Suspend fires on one click: "qa-tick is suspended. Jobs
-  already running carry on; …" and `kubectl … -o jsonpath='{.spec.suspend}'` is `true`. Resume
+- **P-8 [input]** (#191) `qa-tick` row → Suspend fires on one click: "qa-tick is suspended." (the
+  tooltip says Jobs already running carry on) and `kubectl … -o jsonpath='{.spec.suspend}'` is `true`. Resume
   asks ("Resume CronJob qa-tick in qa-shop on …"), confirm: "qa-tick is scheduled again.". On
   `qa-limited` Suspend fails with `cronjobs.batch "qa-tick" is forbidden: … cannot patch resource
   "cronjobs" … (403 Forbidden)` and `.spec.suspend` is unchanged. The strip's Close has the
