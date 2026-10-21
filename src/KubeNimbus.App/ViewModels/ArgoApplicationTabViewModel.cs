@@ -300,6 +300,10 @@ public sealed partial class ArgoResourceRowViewModel(
     public Task OpenLogsAsync(bool maximized) =>
         HasLogs ? openLogs!(Resource, maximized) : Task.CompletedTask;
 
+    /// <summary>The row menu's Logs: what a plain click on the logs icon does, in the dock.</summary>
+    [RelayCommand(CanExecute = nameof(HasLogs))]
+    private Task Logs() => OpenLogsAsync(maximized: false);
+
     public string Kind => Resource.Kind;
 
     public string Name => Resource.Name;

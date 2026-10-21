@@ -25,6 +25,33 @@
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="vm:PortForwardTabViewModel">
             <Border Classes="card" Padding="10,8" Margin="0,0,0,6">
+              <!-- The card's menu: its two buttons, and the pane's Copy URL and Open in browser,
+                   so a forward's address is usable from here without its pane. On the card,
+                   not the list, so it is about the forward it opened over and a right-click
+                   below the last card opens nothing. Bound to the forward's own commands: the
+                   menu is a popup, where the buttons' $parent[ItemsControl] finds nothing.
+                   Every item fires on the click (UI rule 17); Stop is undone from the pane. -->
+              <Border.ContextMenu>
+                <ContextMenu>
+                  <MenuItem Header="Show pane" Command="{Binding ShowPaneCommand}" />
+                  <MenuItem Header="Copy URL" Command="{Binding CopyUrlCommand}">
+                    <MenuItem.Icon>
+                      <PathIcon Data="{StaticResource ContentCopyIconGeometry}" Width="13" Height="13" />
+                    </MenuItem.Icon>
+                  </MenuItem>
+                  <MenuItem Header="Open in browser" Command="{Binding OpenInBrowserCommand}">
+                    <MenuItem.Icon>
+                      <PathIcon Data="{StaticResource OpenInNewIconGeometry}" Width="13" Height="13" />
+                    </MenuItem.Icon>
+                  </MenuItem>
+                  <Separator />
+                  <MenuItem Header="Stop" Command="{Binding StopFromListCommand}">
+                    <MenuItem.Icon>
+                      <PathIcon Data="{StaticResource StopIconGeometry}" Width="13" Height="13" />
+                    </MenuItem.Icon>
+                  </MenuItem>
+                </ContextMenu>
+              </Border.ContextMenu>
               <Grid ColumnDefinitions="Auto,*,Auto,Auto" RowDefinitions="Auto,Auto">
                 <Ellipse Grid.Row="0" Grid.Column="0" Classes="statusDot" VerticalAlignment="Center" Margin="0,0,10,0"
                          Fill="{Binding Health, Converter={x:Static conv:HealthToBrushConverter.Instance}}" />

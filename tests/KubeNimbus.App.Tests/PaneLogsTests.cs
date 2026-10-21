@@ -422,6 +422,29 @@ public class PaneLogsTests
             _ => Task.CompletedTask);
 
         await Assert.That(row.HasLogs).IsFalse();
+        await Assert.That(row.LogsCommand.CanExecute(null)).IsFalse();
+    }
+
+    [Test]
+    public async Task An_Argo_rows_menu_Logs_opens_them_in_the_dock()
+    {
+        // The row menu's Logs is the icon's plain click: the dock, never full-size.
+        var (tab, detail) = ArgoDetail("fraud-detector");
+        var deployment = detail.Resources.Single(r => r.Kind == "Deployment");
+
+        await Assert.That(deployment.LogsCommand.CanExecute(null)).IsTrue();
+        await deployment.LogsCommand.ExecuteAsync(null);
+
+        await Assert.That(tab.SelectedInspectorTab).IsTypeOf<WorkloadLogsTabViewModel>();
+        await Assert.That(tab.IsInspectorMaximized).IsFalse();
+    }
+
+    [Test]
+    public async Task An_Argo_rows_menu_offers_no_Logs_on_a_kind_without_them()
+    {
+        var (_, detail) = ArgoDetail("checkout");
+
+        await Assert.That(detail.Resources.Single(r => r.Kind == "ConfigMap").LogsCommand.CanExecute(null)).IsFalse();
     }
 
     // -------------------------------------------- the one resolver, on a real cluster

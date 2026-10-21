@@ -18,6 +18,10 @@ it as the GitHub Release body, so headings must match tags exactly
   Resources and Copy name, and an app Argo CD tracks also offers Sync, Sync with prune…,
   Refresh from Git and Terminate sync…, without opening the app's page first. The result shows
   on the list itself, and the palette's Argo CD items report there too while the list is showing.
+- **Right-click menus on three more lists.** A card in the port-forwards list offers Show
+  pane, Copy URL, Open in browser and Stop. A Helm release offers Open and Refresh. A resource
+  on an Argo CD Application's Resources tab offers Open, and Logs where the row has logs. Each
+  menu is about the row it opened over, and a right-click on empty space opens none.
 
 ### Changed
 

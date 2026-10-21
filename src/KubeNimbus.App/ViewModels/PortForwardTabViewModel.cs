@@ -120,6 +120,7 @@ public sealed partial class PortForwardTabViewModel : InspectorTabViewModelBase
     [NotifyCanExecuteChangedFor(nameof(StopCommand))]
     [NotifyCanExecuteChangedFor(nameof(CopyUrlCommand))]
     [NotifyCanExecuteChangedFor(nameof(OpenInBrowserCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StopFromListCommand))]
     private bool _isRunning;
 
     [ObservableProperty]
@@ -444,6 +445,18 @@ public sealed partial class PortForwardTabViewModel : InspectorTabViewModelBase
         StatusIsError = false;
         StatusMessage = status;
     }
+
+    /// <summary>
+    /// The forwards list's Show pane, for its card menu. The card's button reaches the list's
+    /// own command through <c>$parent[ItemsControl]</c>, but a context menu is a popup outside
+    /// the list's visual tree, where that lookup finds nothing, so the menu binds here.
+    /// </summary>
+    [RelayCommand]
+    private void ShowPane() => Registry?.Reopen(this);
+
+    /// <summary>The forwards list's Stop, for its card menu (see <see cref="ShowPaneCommand"/>); its button's sentence.</summary>
+    [RelayCommand(CanExecute = nameof(IsRunning))]
+    private Task StopFromListAsync() => StopForwardingAsync(PortForwardsTabViewModel.StoppedFromListText);
 
     [RelayCommand(CanExecute = nameof(IsRunning))]
     private async Task CopyUrlAsync()

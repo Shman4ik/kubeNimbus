@@ -216,15 +216,11 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-port-forward", () => HostInMainWindow(ClusterTabScenarios.PortForward())),
     ("cluster-tab-port-forward-idle", () => HostInMainWindow(ClusterTabScenarios.PortForwardIdle())),
     ("cluster-tab-port-forward-service", () => HostInMainWindow(ClusterTabScenarios.PortForwardService())),
-    ("cluster-tab-port-forwards-list", () =>
-    {
-        var tab = ClusterTabScenarios.WorkloadsList();
-        var window = (Window)HostInMainWindow(tab);
-        ClusterTabScenarios.PortForwardsList(tab, ((MainWindowViewModel)window.DataContext!).PortForwards);
-        return window;
-    }),
+    ("cluster-tab-port-forwards-list", PortForwardsListWindow),
+    ("ux-port-forwards-row-menu", PortForwardsListWindow),
     ("cluster-tab-helm-releases", () => HostInMainWindow(ClusterTabScenarios.HelmReleases())),
     ("ux-helm-sort", () => HostInMainWindow(ClusterTabScenarios.HelmReleases())),
+    ("ux-helm-row-menu", () => HostInMainWindow(ClusterTabScenarios.HelmReleases())),
     ("cluster-tab-helm-release-detail", () => HostInMainWindow(ClusterTabScenarios.HelmReleaseDetail())),
     ("cluster-tab-rbac-who-can", () => HostInMainWindow(ClusterTabScenarios.RbacWhoCan(), height: 1000)),
     ("cluster-tab-rbac-who-can-empty", () => HostInMainWindow(ClusterTabScenarios.RbacWhoCan(empty: true))),
@@ -414,6 +410,8 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-argo-application-detail",
         () => HostInMainWindow(ClusterTabScenarios.ArgoApplicationDetail(), height: 1000)),
     ("ux-argo-sort", () => HostInMainWindow(ClusterTabScenarios.ArgoDashboard())),
+    ("ux-argo-resources-row-menu",
+        () => HostInMainWindow(ClusterTabScenarios.ArgoApplicationDetail(), height: 1000)),
     ("cluster-tab-argo-sync-unavailable", () => HostInMainWindow(ClusterTabScenarios.ArgoSyncUnavailable())),
     ("cluster-tab-argo-sync-prune", () => HostInMainWindow(ClusterTabScenarios.ArgoSyncPrune())),
     // Bundle K: terminate (#193), the ApplicationSet and AppProject panes (#194), the fleet list (#195).
@@ -698,6 +696,9 @@ void Capture(string name, ThemeVariant theme, Func<Control> build, bool again = 
     if (name == "ux-argo-sort") GridSortChecks.ClusterTabGrid(window, "ArgoGrid", "Health", ArgoApplicationComparer.Health);
     if (name == "applications-namespace-picker") ApplicationsChecks.OpenNamespacePicker(window);
     if (name == "applications-row-menu") ApplicationsChecks.RowMenu(window);
+    if (name == "ux-port-forwards-row-menu") RowMenuChecks.PortForwards(window);
+    if (name == "ux-helm-row-menu") RowMenuChecks.HelmReleases(window);
+    if (name == "ux-argo-resources-row-menu") RowMenuChecks.ArgoResources(window);
     if (name == "ux-hotkey-scheme") KeyboardChecks.HotkeyScheme(window);
     if (name == "ux-overlay-focus") UxInteractionChecks.OverlayTakesFocus(window);
     if (name == "ux-preferences-tabs") UxInteractionChecks.PreferencesTabs(window);
@@ -807,6 +808,15 @@ void Capture(string name, ThemeVariant theme, Func<Control> build, bool again = 
     timing.Phase("save");
     timing.End();
     Console.WriteLine(frame is null ? $"FAILED (no frame): {path}" : $"Wrote {path}");
+}
+
+// The port-forwards list needs the window's own registry, so it is filled after the window exists.
+static Control PortForwardsListWindow()
+{
+    var tab = ClusterTabScenarios.WorkloadsList();
+    var window = (Window)HostInMainWindow(tab);
+    ClusterTabScenarios.PortForwardsList(tab, ((MainWindowViewModel)window.DataContext!).PortForwards);
+    return window;
 }
 
 // Hosts a single cluster tab inside a real MainWindow (command bar, tab strip,

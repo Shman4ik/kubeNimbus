@@ -42,6 +42,16 @@ listening on the machine. Now:
 6. **The list** (palette "Port-forwards" while one runs, or the status-bar count) shows each
    forward's local address, what it reaches, its cluster and its last refused connection,
    with Open and Stop. It opens in the selected tab's dock and lists every cluster's forwards.
+   Each card has a right-click menu (2026-10-21): Show pane and Stop, which are its two
+   buttons, and Copy URL and Open in browser, which are the forward's own pane's. All four
+   fire on the click; Stop is undone from the pane. The menu binds to the forward's view
+   model, not the list's: a context menu is a popup outside the list's visual tree, so the
+   buttons' `$parent[ItemsControl]` route finds nothing there (the item renders disabled), and
+   a compiled `RelativeSource` cast cannot be typed against the ancestor. So
+   `PortForwardTabViewModel` carries `ShowPaneCommand` (the registry's `Reopen`) and
+   `StopFromListCommand` (the list's sentence, `PortForwardsTabViewModel.StoppedFromListText`).
+   Copy URL and Open in browser report in the forward's pane, as they do from there; the list
+   has no line of its own to say "Copied". `ux-port-forwards-row-menu` checks the menu.
 
 `PortForwardRegistryTests` binds real loopback listeners: a closed pane still accepts a TCP
 connection, a stopped one refuses it, and the shell's tab close stops what ran on it.

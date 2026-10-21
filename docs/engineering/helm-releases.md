@@ -47,6 +47,16 @@ interface the tab implements, which is also how `HelmBrowserViewModelTests` driv
 tab at all. `IsHelmView` stays on the tab, because what fills the content area is the tab's
 decision.
 
+## The row menu
+
+A right-click on a release (2026-10-21) selects it and offers Open, which is the
+double-click, and Refresh, which reads the list again. Neither changes the cluster, so both
+fire on the click (UI rule 17). The grid selects the row under a right-click through
+`RowLogsGesture.SelectRowOnRightClick`, as the resource list does, so Open is about the row
+the menu opened over and never the one selected before. For the same reason a right-click on
+a column header or below the last release opens no menu (`OnHelmGridContextRequested`, which
+asks `RowLogsGesture.RowUnder`). `ux-helm-row-menu` drives all three right-clicks.
+
 ## Sorting
 
 The list sorts by a header click (2026-10): ascending, descending, then its default order, kept across reloads for the tab's life. How each column compares, and why a header double-click opens nothing, is in [resource-grid-resize-sort](resource-grid-resize-sort.md), "The inspector grids sort too".

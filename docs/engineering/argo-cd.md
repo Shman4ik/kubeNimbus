@@ -81,7 +81,14 @@ Nine things are load-bearing.
    tab would report on a strip a maximized inspector is covering. The pane's own Reload button is a
    different thing and says so: it re-reads the object, where Refresh asks Argo to
    re-compare against Git. Managed resources carry the chevron owner chips already use,
-   so the Deployment Argo calls Degraded is one click from its own manifest.
+   so the Deployment Argo calls Degraded is one click from its own manifest. A managed
+   resource's row also has a right-click menu (2026-10-21) with the same two actions its
+   buttons have: Open (the chevron) and, only on a row with the logs icon, Logs (the icon's
+   plain click, `ArgoResourceRowViewModel.LogsCommand`). Neither changes the cluster, so both
+   fire on the click. The menu sits on the row's own grid rather than the list, because the
+   list is an `ItemsControl` with no selection: the menu is always about the row it opened
+   over, and a right-click below the last row opens nothing. `ux-argo-resources-row-menu`
+   right-clicks a row with logs and one without and checks the items.
 9. **Sync fires on its click; Sync with prune asks** (2026-10-07, UI rule 17 revised). A
    sync without prune applies what Git already declares — on an auto-sync Application it is
    what Argo would do on its own next reconcile — so it is sent on the click and the strip

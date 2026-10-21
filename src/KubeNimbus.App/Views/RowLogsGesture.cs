@@ -34,7 +34,8 @@ namespace KubeNimbus.App.Views;
 /// right click — Logs opening a different pod than the one the menu opened over, and on
 /// the resource list, Delete. Every list that tracks this gesture has such a menu, which
 /// is why it lives here rather than once per view (the resource list had its own copy,
-/// and the panes' pod lists had none).
+/// and the panes' pod lists had none). The Helm releases list has a row menu and no logs, so
+/// it takes only this half (<see cref="SelectRowOnRightClick"/>).
 /// </para>
 /// </summary>
 internal sealed class RowLogsGesture
@@ -54,10 +55,20 @@ internal sealed class RowLogsGesture
         host.AddHandler(InputElement.PointerReleasedEvent, gesture.OnPointerReleased, RoutingStrategies.Tunnel);
         if (host is DataGrid grid)
         {
-            grid.AddHandler(InputElement.PointerPressedEvent, SelectRowUnderRightClick, RoutingStrategies.Tunnel);
+            SelectRowOnRightClick(grid);
         }
 
         return gesture;
+    }
+
+    /// <summary>
+    /// Makes a right click select the row under it, for a grid whose rows have a menu and no
+    /// logs icon (the Helm releases list). <see cref="Track"/> already does this for a grid.
+    /// </summary>
+    public static void SelectRowOnRightClick(DataGrid grid)
+    {
+        ArgumentNullException.ThrowIfNull(grid);
+        grid.AddHandler(InputElement.PointerPressedEvent, SelectRowUnderRightClick, RoutingStrategies.Tunnel);
     }
 
     /// <summary>
@@ -65,33 +76,45 @@ internal sealed class RowLogsGesture
     /// opens normally; this only fixes which row it is about. DataGrid 12 already selects
     /// on a right click over a <em>cell</em>; what it misses is the rest of the row — the
     /// gaps a row's padding leaves, and the strip past the last column, where nothing
-    /// hit-tests and the event's source is the grid itself (UI rule 8). So the row is
-    /// resolved from the source when the source is inside one, and otherwise by which
-    /// realized row spans the pointer's height.
+    /// hit-tests and the event's source is the grid itself (UI rule 8).
     /// </summary>
     private static void SelectRowUnderRightClick(object? sender, PointerPressedEventArgs e)
     {
-        if (sender is not DataGrid grid || !e.GetCurrentPoint(grid).Properties.IsRightButtonPressed)
+        if (sender is not DataGrid grid || !e.GetCurrentPoint(grid).Properties.IsRightButtonPressed
+            || RowUnder(grid, e.Source, e.GetPosition(grid)) is not { } row)
         {
             return;
         }
 
-        for (var element = e.Source as Visual; element is not null; element = element.GetVisualParent())
+        // A right click inside a multi-row selection is about the selection (FEAT-6): its
+        // menu's Delete deletes all of them, as in every file manager. Handled, so the grid's
+        // own press handling does not collapse the selection to this row; the context menu
+        // opens on the release regardless.
+        if (grid.SelectedItems.Count > 1 && grid.SelectedItems.Contains(row.DataContext))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        grid.SelectedItem = row.DataContext;
+    }
+
+    /// <summary>
+    /// The row a pointer at <paramref name="pointInGrid"/> is over, or null over a header or
+    /// the empty space below the last row. Resolved from <paramref name="source"/> when that
+    /// is inside a row, and otherwise by which realized row spans the pointer's height, for
+    /// the gaps where the source is the grid itself. With no pointer (a context menu from the
+    /// keyboard) only the source can say.
+    /// </summary>
+    public static DataGridRow? RowUnder(DataGrid grid, object? source, Point? pointInGrid)
+    {
+        ArgumentNullException.ThrowIfNull(grid);
+
+        for (var element = source as Visual; element is not null; element = element.GetVisualParent())
         {
             if (element is DataGridRow row)
             {
-                // A right click inside a multi-row selection is about the selection (FEAT-6):
-                // its menu's Delete deletes all of them, as in every file manager. Handled, so
-                // the grid's own press handling does not collapse the selection to this row;
-                // the context menu opens on the release regardless.
-                if (grid.SelectedItems.Count > 1 && grid.SelectedItems.Contains(row.DataContext))
-                {
-                    e.Handled = true;
-                    return;
-                }
-
-                grid.SelectedItem = row.DataContext;
-                return;
+                return row;
             }
 
             if (ReferenceEquals(element, grid))
@@ -102,27 +125,24 @@ internal sealed class RowLogsGesture
 
         // Only inside the rows area: a row scrolled half under the column headers still
         // spans a header's height, and a right click on a header is not about that row.
-        if (grid.GetVisualDescendants().OfType<DataGridRowsPresenter>().FirstOrDefault() is not { } rows
-            || !new Rect(rows.Bounds.Size).Contains(e.GetPosition(rows)))
+        if (pointInGrid is not { } point
+            || grid.GetVisualDescendants().OfType<DataGridRowsPresenter>().FirstOrDefault() is not { } rows
+            || grid.TranslatePoint(point, rows) is not { } inRows
+            || !new Rect(rows.Bounds.Size).Contains(inRows))
         {
-            return;
+            return null;
         }
 
-        var y = e.GetPosition(grid).Y;
         foreach (var row in grid.GetVisualDescendants().OfType<DataGridRow>())
         {
             if (row.IsEffectivelyVisible && row.TranslatePoint(default, grid) is { } top
-                && y >= top.Y && y < top.Y + row.Bounds.Height)
+                && point.Y >= top.Y && point.Y < top.Y + row.Bounds.Height)
             {
-                if (grid.SelectedItems.Count > 1 && grid.SelectedItems.Contains(row.DataContext))
-                {
-                    return;
-                }
-
-                grid.SelectedItem = row.DataContext;
-                return;
+                return row;
             }
         }
+
+        return null;
     }
 
     private void OnPointerReleased(object? sender, PointerReleasedEventArgs e) => _modifiers = e.KeyModifiers;
