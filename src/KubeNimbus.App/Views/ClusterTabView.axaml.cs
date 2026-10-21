@@ -137,6 +137,10 @@ public partial class ClusterTabView : UserControl
         GridSortHeaders.Track(this, HelmGrid, dataContext => (dataContext as ClusterTabViewModel)?.Helm.Sort);
         GridSortHeaders.Track(this, ArgoGrid, dataContext => (dataContext as ClusterTabViewModel)?.ArgoSort);
 
+        // The Helm list's row menu is about the row under the pointer, and nothing else.
+        RowLogsGesture.SelectRowOnRightClick(HelmGrid);
+        HelmGrid.AddHandler(ContextRequestedEvent, OnHelmGridContextRequested, RoutingStrategies.Tunnel);
+
         _printerSlots.AddRange(ResourceGrid.Columns.Where(c => c.Tag as string == PrinterSlotTag));
         _slotIds = new string?[_printerSlots.Count];
 
@@ -1253,6 +1257,20 @@ public partial class ClusterTabView : UserControl
         if (e.Source is Control { DataContext: HelmReleaseRowViewModel })
         {
             Vm?.Helm.OpenSelectedCommand.Execute(null);
+        }
+    }
+
+    /// <summary>
+    /// A right click on a header or below the last release opens no menu: its Open would
+    /// act on whichever release was selected before, which is not the one under the pointer.
+    /// Tunnel, so it runs before the grid's own handling opens its <c>ContextFlyout</c>.
+    /// </summary>
+    private void OnHelmGridContextRequested(object? sender, ContextRequestedEventArgs e)
+    {
+        Point? point = e.TryGetPosition(HelmGrid, out var p) ? p : null;
+        if (RowLogsGesture.RowUnder(HelmGrid, e.Source, point) is not { DataContext: HelmReleaseRowViewModel })
+        {
+            e.Handled = true;
         }
     }
 

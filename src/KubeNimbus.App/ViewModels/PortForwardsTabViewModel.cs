@@ -38,8 +38,11 @@ public sealed partial class PortForwardsTabViewModel : InspectorTabViewModelBase
         }
     }
 
+    /// <summary>What a forward's pane says after it was stopped from this list, by its button or its menu.</summary>
+    public const string StoppedFromListText = "Stopped from the port-forwards list.";
+
     /// <summary>Stops on the click: a stopped forward is started again from its pane (UI rule 17).</summary>
     [RelayCommand]
     private Task StopAsync(PortForwardTabViewModel? forward) =>
-        forward is null ? Task.CompletedTask : forward.StopForwardingAsync("Stopped from the port-forwards list.");
+        forward is null ? Task.CompletedTask : forward.StopForwardingAsync(StoppedFromListText);
 }

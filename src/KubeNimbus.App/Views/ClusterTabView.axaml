@@ -1064,6 +1064,22 @@
                      ItemsSource="{Binding Helm.Releases}" SelectedItem="{Binding Helm.SelectedRelease}"
                      IsReadOnly="True" GridLinesVisibility="Horizontal" CanUserResizeColumns="True"
                      DoubleTapped="OnHelmRowDoubleTapped">
+            <!-- The row menu: Open is the double-click, Refresh the list's own reload, and
+                 neither changes the cluster, so both fire on the click (UI rule 17). A right
+                 click selects the row it lands on, and one on a header or below the last row
+                 opens nothing (OnHelmGridContextRequested). -->
+            <DataGrid.ContextFlyout>
+              <MenuFlyout>
+                <MenuItem Header="Open" Command="{Binding Helm.OpenSelectedCommand}"
+                          ToolTip.Tip="Values, manifest, notes and revision history" />
+                <MenuItem Header="Refresh" Command="{Binding Helm.RefreshCommand}"
+                          ToolTip.Tip="Read the Helm releases again">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource RefreshIconGeometry}" Width="13" Height="13" />
+                  </MenuItem.Icon>
+                </MenuItem>
+              </MenuFlyout>
+            </DataGrid.ContextFlyout>
             <DataGrid.Columns>
               <!-- No health dot here, for the same reason the resource list no longer
                    has one: this grid always shows its Status column, and that column is

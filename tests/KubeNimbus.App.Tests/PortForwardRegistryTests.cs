@@ -114,6 +114,35 @@ public class PortForwardRegistryTests
         await Assert.That(list.Registry.IsEmpty).IsTrue();
     }
 
+    [Test]
+    public async Task A_cards_menu_stops_the_forward_as_the_lists_button_does()
+    {
+        var (tab, registry, pane) = Docked();
+        await pane.StartCommand.ExecuteAsync(null);
+        await Assert.That(pane.StopFromListCommand.CanExecute(null)).IsTrue();
+
+        await pane.StopFromListCommand.ExecuteAsync(null);
+
+        await Assert.That(pane.IsRunning).IsFalse();
+        await Assert.That(registry.IsEmpty).IsTrue();
+        await Assert.That(pane.StatusMessage).IsEqualTo(PortForwardsTabViewModel.StoppedFromListText);
+        await Assert.That(pane.StopFromListCommand.CanExecute(null)).IsFalse();
+    }
+
+    [Test]
+    public async Task A_cards_menu_shows_the_forwards_pane_in_the_tab_that_started_it()
+    {
+        var (tab, registry, pane) = Docked();
+        await pane.StartCommand.ExecuteAsync(null);
+        await tab.CloseInspectorTabCommand.ExecuteAsync(pane);
+        tab.OpenPortForwardsCommand.Execute(null);
+
+        pane.ShowPaneCommand.Execute(null);
+
+        await Assert.That(tab.SelectedInspectorTab).IsSameReferenceAs(pane);
+        await pane.StopCommand.ExecuteAsync(null);
+    }
+
     /// <summary>
     /// The stop is said even while another cluster's forward still runs: the status bar line
     /// carries the notice beside the count, and so does its tooltip.

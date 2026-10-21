@@ -150,6 +150,25 @@
                        separated by more than their own lines are, or a list of them reads as
                        one block of text running together. -->
                   <Grid Classes="argoResourceRow" Background="Transparent" ColumnDefinitions="*,Auto,Auto,Auto,Auto" Margin="0,0,0,12">
+                    <!-- The row menu: the two things the row's own buttons do, for a pointer
+                         that is not over them. On the row's grid, not the list, so the menu is
+                         always about the row it opened over and a right-click in the space below
+                         the last row opens nothing. Logs only where the row has its icon; both
+                         fire on the click, since opening a pane changes nothing (UI rule 17). -->
+                    <Grid.ContextMenu>
+                      <ContextMenu>
+                        <MenuItem Header="Open" Command="{Binding OpenCommand}">
+                          <MenuItem.Icon>
+                            <PathIcon Data="{StaticResource ChevronRightIconGeometry}" Width="13" Height="13" />
+                          </MenuItem.Icon>
+                        </MenuItem>
+                        <MenuItem Header="Logs" Command="{Binding LogsCommand}" IsVisible="{Binding HasLogs}">
+                          <MenuItem.Icon>
+                            <PathIcon Data="{StaticResource LogsIconGeometry}" Width="13" Height="13" />
+                          </MenuItem.Icon>
+                        </MenuItem>
+                      </ContextMenu>
+                    </Grid.ContextMenu>
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
                       <TextBlock FontSize="12.5" TextTrimming="CharacterEllipsis">
                         <Run Text="{Binding Kind}" FontWeight="SemiBold" />
