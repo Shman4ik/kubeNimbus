@@ -3,8 +3,10 @@
 The checks a `kn-qa` agent runs against a live kubeNimbus in the QA VM, in the order they
 are cheapest to run. It started as the 0.7.0 pre-release run (PRs #295, #296, #299, #302,
 #304, #307) and is kept as the regression suite: **a new release adds the checks for its own
-PRs under a new batch and retires none until the behaviour is gone.** How a run works, what
-it costs and why it is built this way: [desktop-qa](../engineering/desktop-qa.md).
+PRs under a new batch and retires none until the behaviour is gone.** 1.0 added batch V for
+its bundles (PRs #412, #414 and #415; PR #416's checks are C-17 to C-22, and PR #413 changed
+packaging only) and batch R for the verification issues no batch covered yet. How a run
+works, what it costs and why it is built this way: [desktop-qa](../engineering/desktop-qa.md).
 
 ## Running it
 
@@ -23,6 +25,17 @@ UNSURE reasons on top. Nobody re-types a result.
 Every batch starts with `./scripts/qa-app.ps1` and ends with `./scripts/qa-app.ps1 -Stop`,
 also after a failure. `./scripts/qa-seed.ps1 -Reset` between batches puts back what the last
 one changed; a batch says when it needs that.
+
+**The run order.** Batch Q goes first, because it checks `qa-ui.ps1`, which every other batch
+relies on. Then C, L1, L2, Y, G1, G2, T, P, K, S and M, with W and A only when the preflight
+says the VM has what they need. Then V, and R last. R-9 is the last check of the whole run:
+it opens a log that may leave UI Automation unable to read the window for minutes, and any
+check after it would stall on that.
+
+**A check that relaunches the app** (V-2, V-13, R-5) stops it with `./scripts/qa-app.ps1 -Stop
+-KeepProfile`, which keeps the profile and prints its folder, and starts it again on that
+folder with `./scripts/qa-app.ps1 -NoBuild -ProfileDir <folder>`. The batch still ends with a
+plain `-Stop`, which deletes the kept profile.
 
 ## Kinds of check
 
@@ -54,7 +67,8 @@ it cannot:
 - `NamespaceButton`'s flyout and the sidebar's kind rows need a real `click`; `select` and
   `invoke` report success and change nothing. Make sure the namespace is `qa-shop`, not
   "All namespaces", before opening a workload's logs.
-- Never open `qa-chatty`'s logs except in G-9 with the scrollback at 200.
+- Never open `qa-chatty`'s logs except in G-9 with the scrollback at 200. `qa-firehose`, ten
+  times as fast, is never seeded: only R-9 creates it, at the end of the run, and deletes it.
 
 ## Batch C — dock and keyboard
 
@@ -119,7 +133,7 @@ Setup: Resources, Pods, namespace `qa-shop`. Both themes where noted (`ThemeTogg
   select two rows (click, Ctrl+click) and both report the item status "Selected", the others none.
   Right-click a Deployment row: the menu item reads `MenuItem 'Logs (all pods)'` (its help text is
   the longer tooltip), and the column chooser's items are named by their column.
-- **C-17 [text]** (#236) `invoke` the ☰ button, then `invoke` its "Rescan kubeconfig" item and,
+- **C-17 [text]** (#236) `invoke -Id AppMenuButton` (☰), then `invoke` its "Rescan kubeconfig" item and,
   with a cluster tab open, "Reconnect": each runs (the kubeconfig status line or the tab's
   connecting state changes) without a real click, and the menu closes. A refusal or no effect
   is a FAIL with the `invoke` output quoted.
@@ -134,11 +148,15 @@ Setup: Resources, Pods, namespace `qa-shop`. Both themes where noted (`ThemeTogg
   file…" reaches the General tab, and the Shortcut modifier drop-down shows the focus ring [look].
 - **C-20 [input]** (#236) The demo cluster's `payment-service-report-generator-8c1a4f2e91-tq6rn`
   pod, Logs tab (its scheduler prints JSON lines): Tab to
-  the log list, Up outlines the newest line, Up again the one before; Ctrl+C, then paste into
-  Notepad: exactly that line. Home, Down to a JSON line, Enter opens its fields, Enter closes them.
-  On a following pane, Up stops the follow (the view stays put as lines arrive).
+  the log list, Up outlines the newest line, Up again the one before; sentinel, Ctrl+C:
+  `Get-Clipboard` holds exactly that line (no Notepad needed). Home, Down to a JSON line, Enter
+  opens its fields and Enter closes them (the line's `-Match "JSON line's fields"` toggle reads
+  `toggle=On`, then `Off`). On a following pane, Up stops the follow (the view stays put as
+  lines arrive).
 - **C-21 [input]** (#236, Mac only, skip on Windows) A focused dock tab or cluster tab closes with ⌫.
-- **C-22 [look] Narrator** (#236) With Narrator on (Ctrl+Win+Enter), walk the shell with Tab: the
+- **C-22 [look]** (#236) Narrator, for the owner. The agent cannot hear speech and SendKeys
+  cannot press the Windows key, so it records UNSURE "needs a person listening" without
+  starting Narrator. With Narrator on (Ctrl+Win+Enter), walk the shell with Tab: the
   cluster tabs read as tabs with the front one selected, a sidebar section header says expanded or
   collapsed, a Pods row reads its name and namespace and "Selected" on a selected row, a dock tab
   reads its title, the ☰ menu items read their labels, a Helm release row and an Argo CD
@@ -729,3 +747,279 @@ Setup: a fresh `qa-app.ps1` start; these check `qa-ui.ps1`, not the app (#314).
   `Pane 'Inspector content'` whose bounds start just under `InspectorTabStrip`'s; `screenshot -Id
   DockContent -Out <file>` prints `saved` and the PNG's width and height
   (`[System.Drawing.Image]::FromFile(<file>).Size`) are those bounds.
+
+## Batch V — the 1.0 bundles (#412–#416)
+
+Setup: `qa-seed.ps1 -Reset` (V needs `qa-ticker`, `qa-roll-a` and `qa-roll-b`, which the seed
+has made since 1.0), Resources, namespace `qa-shop`. The files V opens or applies are in
+`scripts/qa/`, named from the clone's root. Every `kubectl` write here is `kubectl -n qa-shop
+…`, which batch G2's allow rules cover; without them the agent asks a person to run it. Run the
+checks in the order listed, except V-2 and V-13: they relaunch the app, so they come last.
+PR #413 changed packaging only and brings no check. PR #416's checks are C-17 to C-22 in batch
+C. PR #415's fourth check (the log pane's ⋯ → Copy at a narrow width) is G-1.
+
+- **V-1 [input]** (#403, PR #412) A following log pane stays on its newest line after Shift+L
+  and Esc. Pods in `qa-shop`, `qa-ticker` in `RowFilterBox`, click the `qa-ticker-…` row, press
+  L (Follow is on by default). Where the pane sits is read off the line numbers: the highest
+  `tick` among the lines `dump -Within LogItems -Type Text` prints, against the newest from
+  `kubectl -n qa-shop logs deploy/qa-ticker --tail=1`, read right after it. Click the row again
+  (the list keeps the focus), `keys -Keys "+l"`, wait 5 s, `keys -Keys "{ESC}"`: `find -Name
+  "Maximize inspector"` says the split is back, the pane's highest tick is within 5 of
+  kubectl's, and 15 s later it is again, about 15 higher. Then `wheel -Id LogItems -Delta 3` (the
+  pane scrolls up and stops following) and note the lowest tick on screen. Click the row,
+  Shift+L, wait 5 s, Esc: the lowest tick is the noted one (within 2), and 15 s later the pane
+  has still not moved to the tail. Repeat both halves on the Deployment: Deployments,
+  the `qa-ticker` row, L opens its `Logs (all pods)` pane. **Before #403** the split showed lines
+  about a minute behind the newest, and the follow stopped for good.
+- **V-2 [text]** (#405, PR #412) A saved tab whose context one launch does not find stays saved.
+  Run it with V-13, after every other V check. Work on a copy of the kubeconfig, so the
+  sandbox's own file is never edited: `$k = "$env:TEMP\kubenimbus-qa\v2-kubeconfig.yaml";
+  Copy-Item (Get-Content "$env:TEMP\kubenimbus-qa\app.pid" -Raw | ConvertFrom-Json).Kubeconfig
+  $k`. Then `qa-app.ps1 -Stop` and `qa-app.ps1 -NoBuild -Kubeconfig $k`. In this first launch,
+  close the `kubenimbus-sandbox` tab it opens by itself (☰ → Close cluster tab), open `qa-prod`
+  (Ctrl+P) and the demo cluster (☰ → Explore demo cluster), and leave the demo cluster's tab in
+  front. `qa-app.ps1 -Stop -KeepProfile` (#405 found that nothing on the app's quit path writes
+  `workspace.json`, so the file is the one a quit leaves), then `kubectl --kubeconfig $k config
+  rename-context qa-prod qa-prod-away`. Second launch, `qa-app.ps1 -NoBuild -Kubeconfig $k
+  -ProfileDir <kept folder>`: only the demo cluster's tab opens (`dump -Within TabStrip -Type
+  TabItem`), and `<kept folder>\workspace.json` still lists `qa-prod` after `Demo cluster` in
+  `Tabs` (quote both `ContextName` lines). Do V-13 here. Rename the context back (`…
+  rename-context qa-prod-away qa-prod`), `qa-app.ps1 -Stop -KeepProfile`, and start a third time
+  on the same folder: both tabs open, the demo cluster's in front. Then `qa-app.ps1 -Stop` (it
+  deletes the profile), `Remove-Item $k`, and `qa-app.ps1 -NoBuild` if a check follows. **Before
+  #405** the second launch rewrote `workspace.json` with the demo tab alone, and `qa-prod` was
+  gone for good.
+- **V-3 [input]** (#404, PR #412) Force apply writes on its first click. `kubectl -n qa-shop
+  apply -f scripts/qa/qa-force.yaml` (a client-side apply, so `kubectl-client-side-apply` owns
+  both values). ConfigMaps in `qa-shop`, select `qa-force`, press E. Change `first: one` to
+  `first: changed` through the clipboard (click in, Ctrl+A, Ctrl+C, edit the text in PowerShell,
+  `Set-Clipboard`, Ctrl+A, Ctrl+V), then `click -Name "Review…"`: the panel's headline starts
+  "Apply conflict. A force apply would take these fields and make", the conflict sentence names
+  `.data.first` and `kubectl-client-side-apply`, and the confirm reads Force apply. One real
+  `click -Name "Force apply"`: within 5 s `kubectl -n qa-shop get cm qa-force -o
+  jsonpath='{.data.first}'` reads `changed` and the panel is gone (`wait-gone -Match "Apply
+  conflict"`). Needing a second click is a FAIL. Then the other path: change `second: two` to
+  `second: changed`, Review…, Cancel: the conflict card comes back with its own Force apply.
+  Click that once: the forced preview opens with the same headline, and `{.data.second}` still
+  reads `two`; the preview's Force apply then writes `changed`. That path takes two clicks by
+  design ([apply-preview](../engineering/apply-preview.md), rule 3); say in the observation
+  which of the two paths matches #404's report (the first click did nothing, the second
+  applied). `kubectl -n qa-shop delete cm qa-force`.
+- **V-4 [input]** (#406, PR #412, Mac only, skip on Windows) Right-click a CronJob row (`qa-tick`):
+  the menu's last item reads "Delete…" with ⌘⌫ in the shortcut column, not clipped. Nothing
+  changed on the Ctrl scheme (the item still shows Delete there, and the harness's
+  `ux-bulk-delete` checks both schemes), so this VM has nothing to check.
+- **V-5 [text]** (#384, PR #412) Two connected clusters: the `kubenimbus-sandbox` tab and
+  `qa-prod` (Ctrl+P). In Resources, Pods, Ctrl+K and type `fleet`: `dump -Within PaletteList`
+  lists "Fleet view: aggregate across all clusters", the control half. Escape, `click -Id
+  ApplicationsModeItem`, Ctrl+K, `fleet`: no "Fleet view" row. Clear the box, type
+  `Deployments`, Enter: `find -Id ResourcesModeItem` reads selected, and `dump -Within
+  ResourceGrid -Type DataItem` lists `shop-distroless, qa-shop` (the Deployment row; its pod's
+  row would read `shop-distroless-…`). Close the `qa-prod` tab. **Before #384** the Fleet view
+  row was offered in the Applications mode and changed the hidden Resources list.
+- **V-6 [text]** (#301, PR #414) `click -Id AppMenuButton` (☰), then "Open a YAML file…": a file
+  dialog opens (`find -Dialog -Id 1148` lists its name box). `dump -Dialog -Type ComboBox`: the
+  file-type box reads YAML (the filter's patterns are `*.yaml` and `*.yml`); open it with a
+  `click -Dialog` and dump again: its other entry is the all-files one (quote its text). Cancel
+  with `invoke -Dialog -Id 2`: `find -Dialog -Id 1` says no file dialog is open, `dump -Within
+  InspectorTabStrip -Type TabItem` lists the same tabs as before, and no status line appeared.
+- **V-7 [text]** (#301, PR #414) ☰ → "Open a YAML file…", `set-text -Dialog -Id 1148 -Text
+  (Resolve-Path scripts/qa/qa-y-file.yaml).Path`, then `invoke -Dialog -Id 1` (or the `keys` it
+  names): a dock tab titled `qa-y-file.yaml` opens with the InfoBar "Opened from qa-y-file.yaml.
+  Review… applies it to kubenimbus-sandbox. A namespaced object without metadata.namespace goes
+  to qa-shop." Review…, then Apply changes: the tab becomes `ConfigMap/qa-y-file`, and `kubectl
+  -n qa-shop get cm qa-y-file` finds it. `kubectl -n qa-shop delete cm qa-y-file`.
+- **V-8 [text]** (#301, PR #414) The same with `scripts/qa/qa-y-stack.yaml` (three ConfigMaps,
+  `qa-y-stack-1` to `-3`; the first holds a block scalar with a `---` line in it): the InfoBar
+  starts "qa-y-stack.yaml holds 3 documents. Only the first is open here, because an editor
+  applies one object; the other 2 were not opened and nothing was applied." The editor's text
+  (click in, Ctrl+A, Ctrl+C, `Get-Clipboard`) is the file's leading comment and the first
+  document whole, its block scalar's `---` line included, and holds no `qa-y-stack-2`. `kubectl
+  -n qa-shop get cm qa-y-stack-1 qa-y-stack-2 qa-y-stack-3` finds none of them. Close the tab
+  without Review.
+- **V-9 [text]** (#301, PR #414) Ctrl+K, type `yaml file`: the row "Open a YAML file…" is listed;
+  Enter opens the same file dialog (`find -Dialog -Id 1148`); cancel it (`invoke -Dialog -Id 2`).
+  ☰ → Explore demo cluster, then ☰ again: "Open a YAML file…" is disabled (`dump -Match "Open a
+  YAML file"`), and Ctrl+K `yaml file` lists no such row. Close the menu and the demo tab.
+- **V-10 [input]** (#301, PR #414) Bulk rollout restart. Deployments in `qa-shop`, `qa-roll` in
+  `RowFilterBox`. Note the pods (`kubectl -n qa-shop get pods -l 'app in (qa-roll-a,qa-roll-b)'`).
+  Click `qa-roll-a`, Shift+click `qa-roll-b` ("2 selected"), press R: one strip,
+  `ActionSentence` "Restart 2 Deployments in qa-shop on kubenimbus-sandbox", both names in
+  `BulkItemList`, and `ConfirmButton` "Restart" beside Cancel; the pods are still the noted two.
+  Click Restart: each line reads "Restart requested, stamped …", `ResultMessage` reads "Restart
+  requested for 2 Deployments.", and within a minute the same `kubectl` lists a new pod for each.
+- **V-11 [input]** (#301, PR #414) With the same two rows selected, right-click inside the
+  selection: "Rollout restart…" is enabled and its help text starts "Stamps the pod template of
+  all 2 selected objects". Close the menu. Pods, `qa-del` in `RowFilterBox`, click `qa-del-a`,
+  Ctrl+click `qa-del-b`, right-click inside the selection: "Rollout restart…" is disabled and its
+  help text ends "Delete acts on all of them."
+- **V-12 [input]** (#301, PR #414) A multi-row selection survives a re-sort. Pods in `qa-shop`,
+  click the CPU header (sorted by CPU), then select `qa-chatty` (select only; never open its
+  logs), a `qa-ticker-…` pod and a `shop-api-…` pod (click, Ctrl+click, Ctrl+click): "3
+  selected", and `dump -Within ResourceGrid -Type DataItem` gives those three status='Selected'.
+  Touch nothing for 35 s (two metrics polls), then read both again: still "3 selected", and the
+  same three rows Selected. Compare the rows' order (their bounds) between the two dumps: if no
+  selected row moved, the path that lost the selection was not exercised, and the verdict is
+  UNSURE "the order did not change", not PASS. **Before PR #414** a poll that moved a selected
+  row on a sorted list left one of three rows selected.
+- **V-13 [text]** (#405, PR #414) The status line for a saved tab not reopened, read on V-2's
+  second launch: `find -Id UnrestoredTabsNotice` reads "1 saved tab not reopened: qa-prod is not
+  in the kubeconfig files read", and its help text names "qa-prod, saved from" the copy's path and
+  ends "It stays saved: a launch that finds this context in the kubeconfig files reopens the
+  tab." After V-2 renames the context back, ☰ → Rescan kubeconfig (real clicks): within 5 s
+  `wait-gone -Id UnrestoredTabsNotice`, and no `qa-prod` tab opens (V-2's third launch does
+  that). The third launch shows no such line.
+- **V-14 [input]** (#298, PR #415) Network → Ingresses in `qa-shop`, double-click `shop`. Sentinel,
+  then a real `click -Name Copy -Type Button -Within RoutesGrid`: `Get-Clipboard` reads
+  `http://shop.sandbox.local/`, and the pane says "Copied http://shop.sandbox.local/". P-6 reads
+  the same; this check is the pointer path PR #415 moved to the window's clipboard.
+- **V-15 [input]** (#298, PR #415) Services in `qa-shop`, `shop-web`, F: the tab `Forward:
+  svc/shop-web:80`. `click -Name "Start forwarding"` and wait for "Forwarding". Sentinel, then a
+  real `click -Name "Copy the local URL"`: `Get-Clipboard` reads the `http://127.0.0.1:<port>`
+  the pane shows, and the pane says "Copied http://127.0.0.1:<port> to the clipboard.". `click
+  -Name "Stop forwarding"`, then close the tab.
+- **V-16 [input]** (#298, PR #415) Config → Secrets in `qa-shop`, `shop-credentials`, E, then
+  `click -Name "Reveal values"`. Sentinel, then a real `click -Name "Copy the value" -Index 0`:
+  the status reads "Copied <key> to the clipboard. It is cleared in 60 seconds unless something
+  else is copied first." and `Get-Clipboard` holds that key's value (`API_TOKEN` is
+  `sandbox-token-0000`, `DATABASE_PASSWORD` is `sandbox-not-a-real-password`). Copy nothing else
+  for 70 s: then the status reads "Cleared <key> from the clipboard." and the clipboard is empty.
+  Close the tab without applying.
+- **V-17 [opt]** (#388, PR #415) The drain strip's busy bar animates in the app while a drain
+  runs, so the freeze PR #415 gives the screenshot harness (a style it adds after the app's) has
+  not reached the app. Draining the shared node is not allowed: record UNSURE "not allowed on
+  the shared node" without arming Drain.
+
+## Batch R — open verification issues
+
+Setup: a fresh `qa-app.ps1` start after `qa-seed.ps1 -Reset` (R-4 needs a profile in which
+`qa-limited` was never opened; R-6 uses `qa-roll-a`). Its `kubectl` writes are `kubectl -n
+qa-shop …` (batch G2's rule). Each check closes an issue's Windows half or desktop half; what
+each issue still needs from a Mac, a Linux desktop or a second node is listed under "Not in
+this batch". R-5 relaunches the app. **The last check of the whole run is R-9.**
+
+- **R-1 [input]** (#162, the Windows half) On Windows the Auto shortcut modifier resolves to
+  Ctrl. ⚙ (`click -Id PreferencesButton`) → General: the box under "Shortcut modifier" reads
+  Auto (`dump -Type ComboBox`); Escape. `keys -Keys "^k"`: the palette opens with
+  `PaletteQueryBox` focused; Escape. F1: the cheat sheet spells its chords with Ctrl (`dump
+  -Match "Ctrl+K"` finds one) and none with ⌘ (`dump -Match "⌘"` finds none); F1 again closes
+  it. The issue's Win+K half is not sent: SendKeys cannot press the Windows key, and Windows
+  takes Win+K for its own Cast panel.
+- **R-2 [input]** (#163) Ctrl+R and Ctrl+S follow a change of scheme. Two readings first. Helm:
+  `helm` in the sidebar's filter, its Releases row, namespace All namespaces; click the second
+  row of `HelmGrid`, then `keys -Keys "^r"`: within 5 s `dump -Within HelmGrid -Type DataItem`
+  gives status='Selected' to the first row, not the second (a refresh reads the releases again
+  and selects the first). ConfigMaps in `qa-shop`, `shop-config`, E, click in the editor, `keys
+  -Keys "^s"`: "The server reports this apply would change nothing." appears (Review ran); close
+  the tab. Now ⚙ → General → Shortcut modifier → Cmd (a real `click` on the box, then on `Cmd`),
+  Escape: `settings.json` in the profile reads `"HotkeyScheme": "mac"`. Helm again, click the
+  second row, Ctrl+R: the second row stays Selected for 5 s, because Ctrl is no longer the
+  modifier; F1 spells the refresh as ⌘R (`dump -Match "⌘R"`), F1 closes it. Set the box to Ctrl
+  (`"windows"`) and repeat both readings: Ctrl+R selects the first row again, and Ctrl+S runs
+  Review. Set it back to Auto.
+- **R-3 [input]** (#165) The exec pane with a real keyboard and mouse. Pods in `qa-shop`, click
+  a `shop-api-…` row, press S. With no further click, `keys -Keys "echo r3a > /tmp/r3{ENTER}"`: `kubectl -n
+  qa-shop exec <pod> -c api -- cat /tmp/r3` prints `r3a`, so the terminal had the focus on
+  open. Right-click the terminal (`right-click -Id DockContent -OffsetX 200 -OffsetY 120`):
+  `dump -Match` finds the menu's Copy, Paste and Select all. `Set-Clipboard 'echo r3b >>
+  /tmp/r3'`, click Paste, `keys -Keys "{ENTER}"`; then `Set-Clipboard 'echo r3c >> /tmp/r3'`,
+  `keys -Keys "^+v"`, `keys -Keys "{ENTER}"`: the file reads `r3a`, `r3b`, `r3c`. The copy half
+  (Select all then Ctrl+Shift+C, and a dragged selection) is T-1 and T-2 and is not repeated
+  here. Close the tab.
+- **R-4 [text]** (#220) A user who may not list namespaces lands on the context's namespace. Run
+  it before anything else opens `qa-limited` in this profile. Ctrl+P, type `qa-limited`, Enter:
+  in whichever mode the new tab opens, `find -Id NamespaceButton` reads `qa-shop` within 15 s,
+  not All namespaces. Switch mode (`ApplicationsModeItem`, `ResourcesModeItem`): that picker
+  reads `qa-shop` too, and Resources → Pods lists the `qa-shop` pods (`dump -Within ResourceGrid
+  -Type DataItem`: "…, qa-shop") with no "This account may not list Pods". A tab with nothing
+  saved opens on All namespaces only where the namespace list can be read
+  ([several-namespaces](../engineering/several-namespaces.md)). Close the tab.
+- **R-5 [text]** (#220) Restored tabs connect at once, so a slow cluster does not hold the others.
+  This relaunches the app. Build a kubeconfig that adds `qa-slow-auth`, a context whose
+  credential plugin sleeps 30 s and then fails: `$run = (Get-Content
+  "$env:TEMP\kubenimbus-qa\app.pid" -Raw | ConvertFrom-Json).Kubeconfig; $k =
+  "$env:TEMP\kubenimbus-qa\r5-kubeconfig.yaml"; $env:KUBECONFIG = "$run;$((Resolve-Path
+  scripts/qa/qa-slow-auth.kubeconfig.yaml).Path)"; kubectl config view --raw --flatten |
+  Set-Content $k; Remove-Item Env:KUBECONFIG`. `qa-app.ps1 -Stop`, then `qa-app.ps1 -NoBuild
+  -Kubeconfig $k`. Close the `kubenimbus-sandbox` tab it opens by itself, open `qa-slow-auth`
+  (Ctrl+P; it connects, then fails, both expected), then `kubenimbus-sandbox` again, so the slow
+  tab is first in `TabStrip`. Leave the sandbox tab in front on Resources → Pods in `qa-shop`
+  (the workspace keeps the mode, the kind and the namespace). `qa-app.ps1 -Stop -KeepProfile`,
+  then `qa-app.ps1 -NoBuild -Kubeconfig $k -ProfileDir <kept folder>` and at once `wait -Within
+  ResourceGrid -Type DataItem -Timeout 15`: the sandbox's pods are listed within 15 s, while the
+  slow tab's plugin is still asleep. If the tabs connected one after the other, the list would
+  wait 30 s or more. Then bring `qa-slow-auth` to the front: within about 70 s of the start (an
+  exec plugin runs twice per connect, #283) its failed connect names what the plugin printed,
+  `qa-slow-auth: this plugin never returns a credential`. Then `qa-app.ps1 -Stop`, `Remove-Item
+  $k`, and `qa-app.ps1 -NoBuild`.
+- **R-6 [text]** (#221, the Windows half) Unhealthy only on a live pod. Pods in `qa-shop`: `find
+  -Id UnhealthyToggle` is enabled, help='Show only unhealthy Pods — warnings and errors, the rows
+  drawn amber or red (Ctrl+Z in the list)'. ConfigMaps: it is disabled, help='ConfigMaps carry
+  no health status, so there is nothing to narrow to.'. Back to Pods, click a row, `keys -Keys
+  "^z"`: the toggle reads `toggle=On`, and the list holds only unhealthy rows (`qa-restarter`
+  while it crash-loops) or reads "Nothing unhealthy among N Pods". `kubectl -n qa-shop set image
+  deploy/qa-roll-a app=busybox:does-not-exist`: with no click, a `qa-roll-a-…` row appears within
+  30 s (`wait -Within ResourceGrid -Match qa-roll-a -Timeout 30`; `kubectl -n qa-shop get pods -l
+  app=qa-roll-a` says ErrImagePull or ImagePullBackOff), and the healthy `qa-roll-a-…` pod never
+  shows. `kubectl -n qa-shop rollout undo deploy/qa-roll-a`: that row leaves within 30 s
+  (`wait-gone`). Ctrl+Z turns it off.
+- **R-7 [look]** (#221) The chip's hover state. Pods: `click -Id UnhealthyToggle` turns it on and
+  leaves the pointer on it; `screenshot -Id UnhealthyToggle` (hovered, on). Click again and crop
+  (hovered, off), then `click -Id RowFilterBox` to move the pointer away and crop (off). Both
+  themes. The pressed state is not checked: no `qa-ui.ps1` command holds a button down while it
+  captures.
+- **R-8 [input]** (#223, the Windows half) Esc while the inspector is maximized belongs to what
+  has the focus. Pods in `qa-shop`: click a `shop-api-…` row and press E (its YAML); click the row
+  again and press S (an exec), since the editor and the terminal each take the focus. Click the
+  row again; `find -Within ResourceGrid -Name Logs -Type Button` has help='Logs (L) —
+  Shift+click opens them full-size (Shift+L)'; `click` it with `-Modifiers shift`: the pod's
+  logs open with the inspector maximized (`find -Match "Restore split view"`). Then, after each
+  of these, the inspector is still maximized: the YAML tab in `InspectorTabStrip`, a click in
+  the editor, Escape; the exec tab, a click in the terminal, Escape; the logs tab, then Ctrl+K
+  and Escape (`wait-gone -Id PaletteQueryBox`); Ctrl+P and Escape (`wait-gone -Id
+  SwitcherQueryBox`); and, if `NamespaceButton` is on screen while maximized, a click on it and
+  Escape (the flyout closes). If it is not on screen, say so: the picker cannot be opened from
+  there. Last, click in the log list (`LogItems`) and Escape: `find -Name "Maximize inspector"`
+  (the split is back). Close the exec and YAML tabs. The hand cursor over the icon is not
+  checked here (see below).
+- **R-9 [text]** (#321) A fast, large log buffer and UI Automation. **Run this check last in the
+  whole run**: it may leave UI Automation unable to read the window for minutes, and every read
+  after it would hang or fail. With no log tab open, time a whole-window read: `Measure-Command
+  { ./scripts/qa-ui.ps1 dump | Out-Null }` (the baseline). `kubectl -n qa-shop apply -f
+  scripts/qa/qa-firehose.yaml` (about 200 numbered lines a second), wait until it runs, then Pods
+  in `qa-shop`, `qa-firehose` in `RowFilterBox`, click it, L. After 30 s (the 4000-line scrollback
+  is full), time the same read three times, 10 s apart, each with a 120 s tool timeout. PASS
+  when every read finishes with no "Unexpected HRESULT" or other error, each within the baseline
+  plus 2 s; quote every time and error. Then the same at a scrollback of 200: Preferences → Logs
+  and metrics → Log scrollback 200, close the log tab, L again, 30 s, three timed reads. If the
+  first half left the tree unreadable, `qa-app.ps1 -Stop` (it ends the process whether or not UI
+  Automation answers), `qa-app.ps1 -NoBuild`, set the scrollback to 200 first, and then open the
+  log. Either way, end with `qa-app.ps1 -Stop` and `kubectl -n qa-shop delete pod qa-firehose
+  --grace-period=1`. #321 asks which is the cause, the size of the tree or the rate it changes
+  at; the times at 4000 and at 200 lines are that evidence, so record both even on a PASS.
+
+**Not in this batch**, with the reason:
+
+- **#162, the macOS half**: a physical Cmd key reaching the app as Meta on Avalonia.Native needs
+  a Mac.
+- **#163, the Cmd scheme driven itself**: on Windows the Cmd scheme's modifier is the Windows
+  key. Windows takes Win+R (Run) and Win+S (search) for itself, and SendKeys cannot press the
+  key. R-2 checks what Windows can show: the bindings follow a change of scheme both ways.
+- **#165, the macOS half**: Cmd+C against the terminal's own ^C needs a Mac.
+- **#174**: its done-when names gnome-terminal or konsole, which need a Linux desktop. The
+  Windows launcher is T-4 to T-6 and T-11.
+- **#175**: what is left is a drain that evicts and a pod that appears mid-drain, and the rules
+  forbid draining the shared node. The cordon, a real PodDisruptionBudget's 429 and a narrow
+  user's 403 were paid by `NodeOperationsLiveTests` (#101).
+- **#179**: needs an API server older than 1.27. The owner declined pulling an older k3s image
+  (2026-10-10), and the VM's sandbox is current.
+- **#185**: a drain of a second node. The sandbox has one node, and the rules forbid draining
+  it.
+- **#220, the exec plugin's runs per connect and the discovery fan-out**: the plugin runs twice,
+  which is #283 and pinned by `ConnectFanOutLiveTests`; the 44-group fan-out was paid by #282.
+  Neither needs a desktop.
+- **#221, the macOS half** (Ctrl+Z reaching the grid as Control rather than Undo), **and the
+  chip's pressed state**, which no `qa-ui.ps1` command can hold while it captures.
+- **#223, the macOS half, and the hand cursor over the row logs icon**: `qa-ui.ps1` cannot read
+  the cursor's shape. The 2026-10-10 session read it with a user32 call of its own, which a
+  `kn-qa` agent may not write.

@@ -14,6 +14,9 @@
       (its container exits every ~20 s, so it has previous-container logs), qa-chatty
       (about 20 lines a second, for the scrollback-trim check; the first run used 200 and
       it hung UI Automation for minutes), qa-del-a/b/c (the bulk-delete checks).
+    - qa-ticker (a Deployment printing one numbered line a second, for reading where a log
+      pane sits), qa-roll-a and qa-roll-b (two Deployments to restart together and to make
+      unhealthy and back), for the 1.0 batches V and R.
     - qa-limited: a ServiceAccount that may read pods, CronJobs, Deployments and events,
       may delete only qa-del-a and qa-del-b, may not read pod logs and may not patch
       CronJobs: the narrow-RBAC checks' 403s.
@@ -24,7 +27,12 @@
 
     Every step is idempotent and the script prints one line per step. `-Reset` also puts
     back what a check changes (shop-web at 3 replicas, qa-tick unsuspended, qa-del-* and
-    the other pods recreated). `-Down` deletes the namespace and the contexts.
+    the other pods recreated; any run puts qa-roll-a's image back). `-Down` deletes the
+    namespace and the contexts.
+
+    A few fixtures are not seeded because a check creates and deletes them itself: the
+    files under scripts/qa/ (YAML files to open, a ConfigMap to force-apply, a pod that logs
+    200 lines a second, a context whose credential plugin is slow).
 
     The kubeconfig must name a loopback server (the same rule as qa-app.ps1), because this
     script applies manifests and mints tokens.
@@ -124,6 +132,39 @@ Step 'pods qa-quiet, qa-restarter, qa-chatty, qa-del-a, qa-del-b, qa-del-c'
 K -n $ns create cronjob qa-tick --image=busybox:1.36 --schedule='*/30 * * * *' -- sh -c 'echo tick' 2>$null | Out-Null
 K -n $ns patch cronjob qa-tick --type=merge -p '{"spec":{"suspend":false}}' | Out-Null
 Step 'cronjob qa-tick (not suspended)'
+
+# --- the Deployments of the 1.0 checks (batches V and R) ------------------------------------
+# qa-ticker prints one numbered line a second, so whether a log pane sits on the tail can be
+# read off the line numbers (V-1). qa-roll-a and qa-roll-b are restarted together (V-10) and
+# qa-roll-a is made unhealthy and back (R-6), so shop-web and shop-api, which other batches
+# read, are left alone. The grace period is one second because busybox's sleep ignores
+# SIGTERM, and every roll would otherwise wait thirty. Applying them again also puts back an
+# image a check changed.
+function QaDeployment([string]$name, [string]$script) {
+    @"
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: $name, namespace: $ns }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: $name } }
+  template:
+    metadata: { labels: { app: $name } }
+    spec:
+      terminationGracePeriodSeconds: 1
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: [sh, -c, '$script']
+          resources: { requests: { cpu: 5m, memory: 8Mi } }
+"@
+}
+@(
+    (QaDeployment 'qa-ticker' 'i=0; while true; do i=$((i+1)); echo "INFO tick $i"; sleep 1; done'),
+    (QaDeployment 'qa-roll-a' 'sleep 86400'),
+    (QaDeployment 'qa-roll-b' 'sleep 86400')
+) -join "`n---`n" | K apply -f - | Out-Null
+Step 'deployments qa-ticker (a numbered line a second), qa-roll-a, qa-roll-b'
 
 # --- the narrow RBAC ----------------------------------------------------------------------
 @"

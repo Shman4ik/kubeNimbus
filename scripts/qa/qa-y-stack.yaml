@@ -1,0 +1,26 @@
+# QA check V-8 (docs/qa/desktop-checks.md): three documents. "Open a YAML file…" opens the
+# first only and says the other two were not opened. The first document's block scalar holds
+# a "---" line, which is data and must stay in it.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: qa-y-stack-1
+data:
+  note: |
+    A block scalar with a document marker inside it:
+    ---
+    This line still belongs to qa-y-stack-1.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: qa-y-stack-2
+data:
+  index: "2"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: qa-y-stack-3
+data:
+  index: "3"

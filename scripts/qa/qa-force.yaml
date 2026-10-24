@@ -1,0 +1,12 @@
+# QA check V-3 (docs/qa/desktop-checks.md). Created with a client-side
+# `kubectl -n qa-shop apply -f`, so its fields belong to the field manager
+# kubectl-client-side-apply, and an edit of either value in kubeNimbus's editor ends in an
+# apply conflict. The check deletes it afterwards.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: qa-force
+  namespace: qa-shop
+data:
+  first: one
+  second: two

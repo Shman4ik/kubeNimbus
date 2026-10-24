@@ -58,7 +58,10 @@ UNSURE with the reason and a `-Surprise`, which is how it gets added.
   instance is already running, stop and report that — another check run owns the desktop.
   `resize` and `move` take the window handle from UI Automation and retry once; if one
   still fails, its message carries the Win32 error: quote it in the verdict.
-- Always finish with `./scripts/qa-app.ps1 -Stop`, including after a failure.
+- Always finish with `./scripts/qa-app.ps1 -Stop`, including after a failure. A check that
+  relaunches the app says so: it stops with `-Stop -KeepProfile` and starts again with
+  `-NoBuild -ProfileDir <the folder it printed>`; the plain `-Stop` at the end deletes that
+  profile.
 - If `keys`, `click` or `screenshot` says the interactive desktop is not available, the VM's
   console is locked: record the rest of the batch UNSURE with that reason and stop; nothing
   you do from here unlocks it.
