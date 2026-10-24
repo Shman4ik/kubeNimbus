@@ -7,7 +7,11 @@
 #
 #   ./scripts/sandbox-up.sh [--name N] [--port P] [--k3s-version V]
 #                           [--kubeconfig PATH] [--install-kubeconfig [--force]]
-#                           [--recreate] [--skip-apps]
+#                           [--recreate] [--skip-apps] [--print-kubeconfig-path]
+#
+# The kubeconfig defaults to .sandbox/kubeconfig.yaml for kubenimbus-sandbox and to
+# .sandbox/<N without kubenimbus->-kubeconfig.yaml for any other name, as in sandbox-down
+# (#383). --print-kubeconfig-path prints the path the arguments resolve to and exits.
 #
 # --install-kubeconfig also writes ~/.kube/config (the classic path), so the app
 # and kubectl find the cluster with no $KUBECONFIG set — which is what a GUI
@@ -23,6 +27,7 @@ RECREATE=0
 SKIP_APPS=0
 INSTALL_KUBECONFIG=0
 FORCE=0
+PRINT_KUBECONFIG_PATH=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -34,7 +39,8 @@ while [ $# -gt 0 ]; do
     --skip-apps)    SKIP_APPS=1; shift ;;
     --install-kubeconfig) INSTALL_KUBECONFIG=1; shift ;;
     --force)        FORCE=1; shift ;;
-    -h|--help)      sed -n '2,17p' "$0"; exit 0 ;;
+    --print-kubeconfig-path) PRINT_KUBECONFIG_PATH=1; shift ;;
+    -h|--help)      sed -n '2,19p' "$0"; exit 0 ;;
     *)              echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -42,7 +48,13 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 MANIFEST_DIR="$SCRIPT_DIR/manifests"
-: "${KUBECONFIG_PATH:=$REPO_ROOT/.sandbox/kubeconfig.yaml}"
+# The default follows --name, with the same rule in all four sandbox scripts: the shared file
+# for the main sandbox only (#383; #379 was the same hazard in sandbox-down).
+if [ -z "$KUBECONFIG_PATH" ]; then
+  if [ "$NAME" = kubenimbus-sandbox ]; then FILE=kubeconfig.yaml; else FILE="${NAME#kubenimbus-}-kubeconfig.yaml"; fi
+  KUBECONFIG_PATH="$REPO_ROOT/.sandbox/$FILE"
+fi
+if [ "$PRINT_KUBECONFIG_PATH" = 1 ]; then echo "$KUBECONFIG_PATH"; exit 0; fi
 
 step() { printf '\033[36m==> %s\033[0m\n' "$1"; }
 note() { printf '\033[90m    %s\033[0m\n' "$1"; }

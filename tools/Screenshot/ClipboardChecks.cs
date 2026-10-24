@@ -141,6 +141,76 @@ internal static class ClipboardChecks
         Console.WriteLine("Exec copy by real key sequence passed (Select all and a pointer drag, each then Ctrl, Shift, C).");
     }
 
+    /// <summary>
+    /// #298: the Ingress detail's Copy beside a route's URL writes that URL. Clicked with the
+    /// pointer, on the button inside the routes grid.
+    /// </summary>
+    internal static void IngressCopyUrl(Window window)
+    {
+        var view = window.GetVisualDescendants().OfType<IngressDetailView>().First(v => v.IsEffectivelyVisible);
+        var vm = (IngressDetailTabViewModel)view.DataContext!;
+        var button = view.GetVisualDescendants().OfType<Button>()
+            .First(b => b.Command == vm.CopyUrlCommand && b.IsEffectivelyVisible && b.DataContext is IngressRouteViewModel { Url: not null });
+        var route = (IngressRouteViewModel)button.DataContext!;
+        CopyByClick(window, button, route.Url!.AbsoluteUri, () => vm.ActionMessage, "The Ingress route's Copy");
+    }
+
+    /// <summary>#298: a running port-forward's Copy writes its local URL.</summary>
+    internal static void PortForwardCopyUrl(Window window)
+    {
+        var view = window.GetVisualDescendants().OfType<PortForwardView>().First(v => v.IsEffectivelyVisible);
+        var vm = (PortForwardTabViewModel)view.DataContext!;
+        var button = view.GetVisualDescendants().OfType<Button>()
+            .First(b => b.Command == vm.CopyUrlCommand && b.IsEffectivelyVisible);
+        CopyByClick(window, button, vm.LocalUrl, () => vm.StatusMessage, "The port-forward's Copy");
+    }
+
+    /// <summary>
+    /// #298: a revealed Secret value's Copy writes the value (through SensitiveClipboard, which
+    /// clears it again a minute later; the check reads it back at once).
+    /// </summary>
+    internal static void YamlRevealedValueCopy(Window window)
+    {
+        var view = window.GetVisualDescendants().OfType<YamlEditorView>().First(v => v.IsEffectivelyVisible);
+        var vm = (YamlEditorTabViewModel)view.DataContext!;
+        var button = view.GetVisualDescendants().OfType<Button>()
+            .First(b => b.Command == vm.CopyRevealedValueCommand && b.IsEffectivelyVisible);
+        var row = (RevealedValueViewModel)button.DataContext!;
+        CopyByClick(window, button, row.ClipboardText!, () => vm.StatusMessage, "The revealed value's Copy");
+    }
+
+    /// <summary>
+    /// Clicks <paramref name="button"/> with the pointer and requires the clipboard to hold
+    /// exactly <paramref name="expected"/> and the pane to say it copied. The view models copy
+    /// through <see cref="MainWindowAccess"/>, which answers this window for the check.
+    /// </summary>
+    private static void CopyByClick(Window window, Button button, string expected, Func<string?> status, string what)
+    {
+        MainWindowAccess.Override = window;
+        try
+        {
+            var clipboard = window.Clipboard ?? throw new InvalidOperationException("The headless window has no clipboard.");
+            Write(clipboard, "");
+            Click(window, button);
+            var command = button.Command as IAsyncRelayCommand;
+            for (var i = 0; i < 20 && command?.IsRunning == true; i++)
+                Dispatcher.UIThread.RunJobs();
+
+            var copied = Read(clipboard);
+            if (copied != expected)
+                throw new InvalidOperationException(
+                    $"{what} wrote {(string.IsNullOrEmpty(copied) ? "nothing" : $"'{copied}'")} to the clipboard; expected '{expected}' (#298).");
+            if (status() is not { } said || !said.StartsWith("Copied", StringComparison.Ordinal))
+                throw new InvalidOperationException($"{what} copied, but the pane does not say so (it says '{status()}').");
+
+            Console.WriteLine($"{what} wrote {expected.Length} characters and said '{status()}'.");
+        }
+        finally
+        {
+            MainWindowAccess.Override = null;
+        }
+    }
+
     private static void Click(TopLevel topLevel, Control target)
     {
         var centre = target.TranslatePoint(new Point(target.Bounds.Width / 2, target.Bounds.Height / 2), topLevel)

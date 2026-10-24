@@ -9,7 +9,8 @@
 .PARAMETER Kubeconfig
     The sandbox's kubeconfig, deleted after the container (it points at a cluster that no
     longer exists). Default: derived from -Name, the way the up scripts write it:
-    .sandbox/argo-kubeconfig.yaml for kubenimbus-argo, .sandbox/kubeconfig.yaml otherwise.
+    .sandbox/kubeconfig.yaml for kubenimbus-sandbox, and .sandbox/<name>-kubeconfig.yaml for
+    any other name, without its `kubenimbus-` prefix (argo-kubeconfig.yaml for kubenimbus-argo).
     The file is deleted only when its current-context is -Name (sandbox-up renames k3s's
     `default` context to the container name), so tearing down one sandbox never deletes
     another one's kubeconfig (#379).
@@ -27,6 +28,9 @@
 .PARAMETER WslDistribution
     WSL distro to target (passed as `wsl -d <name>`). Only meaningful with
     -Wsl.
+
+.PARAMETER PrintKubeconfigPath
+    Print the kubeconfig path the other parameters resolve to and exit, touching nothing.
 #>
 [CmdletBinding()]
 param(
@@ -34,19 +38,25 @@ param(
     [string] $Kubeconfig,
     [switch] $KeepKubeconfig,
     [switch] $Wsl,
-    [string] $WslDistribution
+    [string] $WslDistribution,
+    [switch] $PrintKubeconfigPath
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-# The Argo sandbox writes its own file (argo-sandbox-up.ps1 and the documented sandbox-up line
-# use .sandbox/argo-kubeconfig.yaml); falling back to the shared file here deleted the running
-# kubenimbus-sandbox's kubeconfig on `sandbox-down.ps1 -Name kubenimbus-argo` (#379).
+# The same rule as sandbox-up (#383): every sandbox but the main one has its own file; falling
+# back to the shared file here deleted the running kubenimbus-sandbox's kubeconfig on
+# `sandbox-down.ps1 -Name kubenimbus-argo` (#379).
 if (-not $Kubeconfig) {
-    $file = if ($Name -eq 'kubenimbus-argo') { 'argo-kubeconfig.yaml' } else { 'kubeconfig.yaml' }
+    $file = if ($Name -eq 'kubenimbus-sandbox') { 'kubeconfig.yaml' } else { ($Name -replace '^kubenimbus-', '') + '-kubeconfig.yaml' }
     $Kubeconfig = Join-Path $repoRoot ".sandbox/$file"
+}
+
+if ($PrintKubeconfigPath) {
+    $Kubeconfig
+    return
 }
 
 # The context a kubeconfig selects, read as text (no YAML parser in a bare pwsh); $null when

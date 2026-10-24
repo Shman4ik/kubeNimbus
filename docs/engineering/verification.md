@@ -538,6 +538,34 @@ runs of all 49 `ux-*` scenarios (each rendered twice per theme) passed the check
 each other byte for byte, and the 18 published screenshots rendered byte-identical to the
 committed ones.
 
+**An indeterminate ProgressBar is drawn empty, and a scenario that shows one is rendered twice on
+every run (#388, 2026-10-24).** `cluster-tab-node-drain-running` came out with a different hash on
+every render, in both themes, on `main` too: the row action strip's busy bar (`IsWorking`, a 28px
+indeterminate `ProgressBar`) slides Fluent's two indicators across its track on an infinite
+keyframe animation driven by the render clock, which the harness cannot stop: Avalonia 12 keeps
+`Animatable.ClockProperty`, `Clock` and `IClock` internal, so a paused clock cannot be handed to
+the window. The harness hides `IndeterminateProgressBarIndicator` and
+`IndeterminateProgressBarIndicator2` instead (a style after the app's, beside the transitions and
+caret ones), which leaves the empty track, as the bar looks between the indicators' sweeps (one unfrozen
+dark render had already come out byte-identical to the frozen one). `HarnessDeterminism.NoteAnimations` records each scenario
+whose window shows a visible indeterminate bar, and `RendersTwice` renders those twice in every
+run, not only with `--twice`: there are few of them, and the PR that unfreezes one then fails
+rather than the nightly. Measured: two separate runs of `cluster-tab-node-drain` gave identical
+hashes for `-running` in both themes and its in-run second render matched; with the indicators
+left visible, three runs in a row failed with "Rendered twice in one run, these differed (#360):
+cluster-tab-node-drain-running.light.png, cluster-tab-node-drain-running.dark.png". The nightly's
+`--twice` still covers only `ux-*` beside these; widening it to every scenario would double the
+nightly's run for a kind of drift (a clock or an animation) the walks and this check now catch.
+
+**Every Copy that writes to the clipboard has a `ux-` check that reads it back (#298).** The
+Ingress detail's route Copy, a running port-forward's Copy and a revealed Secret value's Copy now
+reach the window through `MainWindowAccess`, like the log panes, so the harness can give them its
+window: `ux-ingress-copy-url`, `ux-port-forward-copy` and `ux-yaml-secret-copy`
+(`ClipboardChecks.CopyByClick`) click the button with the pointer, require the clipboard to hold
+exactly the URL or value, and the pane to say "Copied…". With `PortForwardTabViewModel` put back on
+the desktop lifetime's `MainWindow`, `ux-port-forward-copy` failed with "The port-forward's Copy
+wrote nothing to the clipboard".
+
 When Docker is available (unlike this session — `docker version` succeeds but
 `dockerd` isn't running here), prefer driving the harness against a real
 k3s sandbox (see below) instead of fixtures for a final verification pass;

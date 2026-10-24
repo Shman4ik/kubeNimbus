@@ -116,20 +116,26 @@ reuses a live container and re-applies the manifests; `-Recreate` / `--recreate`
 starts from scratch.
 
 `sandbox-down` deletes the sandbox's kubeconfig after the container, unless
-`-KeepKubeconfig` / `--keep-kubeconfig` is passed. Without `-Kubeconfig` it takes the file
-the up scripts write for that name: `.sandbox/argo-kubeconfig.yaml` for `kubenimbus-argo`,
-`.sandbox/kubeconfig.yaml` for any other. It deletes the file only when the file's
+`-KeepKubeconfig` / `--keep-kubeconfig` is passed. It deletes the file only when the file's
 `current-context` is the `-Name` it tears down (`sandbox-up` names the context after the
 container), and otherwise keeps it with a warning. So tearing down a second sandbox never
-deletes the shared one's kubeconfig (#379); pass the second sandbox's own file with
-`-Kubeconfig` when it is not the Argo one.
+deletes the shared one's kubeconfig (#379).
+
+Without `-Kubeconfig`, all four scripts take the kubeconfig path from `-Name`, with one rule:
+`.sandbox/kubeconfig.yaml` for `kubenimbus-sandbox`, and `.sandbox/<name>-kubeconfig.yaml` for
+any other name, less its `kubenimbus-` prefix (`argo-kubeconfig.yaml` for `kubenimbus-argo`,
+`sandbox-b-kubeconfig.yaml` for `kubenimbus-sandbox-b`). So bringing up a second sandbox never
+overwrites the shared one's kubeconfig either (#383). `-PrintKubeconfigPath` /
+`--print-kubeconfig-path` prints the path the other flags resolve to and exits without touching
+Docker.
 
 | Flag | Default | |
 |---|---|---|
 | `-Name` / `--name` | `kubenimbus-sandbox` | container name — vary it to run a second cluster and exercise multi-cluster/fleet views |
 | `-Port` / `--port` | `6550` | host port for the API server |
 | `-K3sVersion` / `--k3s-version` | `v1.33.4-k3s1` | `rancher/k3s` image tag |
-| `-Kubeconfig` / `--kubeconfig` | `.sandbox/kubeconfig.yaml` | where to write the kubeconfig |
+| `-Kubeconfig` / `--kubeconfig` | from `-Name`: `.sandbox/kubeconfig.yaml` for the default name | where to write the kubeconfig |
+| `-PrintKubeconfigPath` / `--print-kubeconfig-path` | off | print the resolved kubeconfig path and exit |
 | `-InstallKubeconfig` / `--install-kubeconfig` | off | **also** write `~/.kube/config` — see below |
 | `-Force` / `--force` | off | let `-InstallKubeconfig` replace an existing `~/.kube/config` (backed up first) |
 | `-Recreate` / `--recreate` | off | delete an existing container first |
@@ -147,7 +153,7 @@ read-only user gets, and "Open in Argo CD" with applications in any namespace. T
 names), and skip with the reason without it:
 
 ```powershell
-./scripts/sandbox-up.ps1 -Name kubenimbus-argo -Port 6551 -SkipApps -Kubeconfig .sandbox/argo-kubeconfig.yaml
+./scripts/sandbox-up.ps1 -Name kubenimbus-argo -Port 6551 -SkipApps   # writes .sandbox/argo-kubeconfig.yaml
 ./scripts/argo-sandbox-up.ps1                     # refuses the shared kubenimbus-sandbox
 ./scripts/sandbox-down.ps1 -Name kubenimbus-argo  # when done; removes only .sandbox/argo-kubeconfig.yaml
 ```
@@ -241,8 +247,8 @@ never goes stale, so prefer it when you launch from a terminal.
 A second cluster for the fleet views:
 
 ```powershell
-./scripts/sandbox-up.ps1 -Name kubenimbus-sandbox-b -Port 6551 -Kubeconfig .sandbox/kubeconfig-b.yaml
-$env:KUBECONFIG = ".sandbox/kubeconfig.yaml;.sandbox/kubeconfig-b.yaml"
+./scripts/sandbox-up.ps1 -Name kubenimbus-sandbox-b -Port 6551   # writes .sandbox/sandbox-b-kubeconfig.yaml
+$env:KUBECONFIG = ".sandbox/kubeconfig.yaml;.sandbox/sandbox-b-kubeconfig.yaml"
 ```
 
 ## What gets deployed, and which feature it exercises

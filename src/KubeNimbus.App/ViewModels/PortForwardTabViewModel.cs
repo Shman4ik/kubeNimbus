@@ -1,7 +1,5 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using Avalonia;
-using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input.Platform;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -461,8 +459,7 @@ public sealed partial class PortForwardTabViewModel : InspectorTabViewModelBase
     [RelayCommand(CanExecute = nameof(IsRunning))]
     private async Task CopyUrlAsync()
     {
-        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop
-            || desktop.MainWindow?.Clipboard is not { } clipboard)
+        if (MainWindowAccess.Current?.Clipboard is not { } clipboard)
         {
             return;
         }
