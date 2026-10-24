@@ -160,6 +160,8 @@
                          always-visible button (UI rule 1); disabled on the demo cluster and
                          before a connect, where there is no API server to create on. -->
                     <MenuItem Header="New resource from YAML…" Command="{Binding SelectedTab.NewYamlCommand}" />
+                    <!-- #301: the same editor, filled from a local file the user picks. -->
+                    <MenuItem Header="Open a YAML file…" Command="{Binding SelectedTab.OpenYamlFileCommand}" />
                     <MenuItem Header="Close cluster tab" Command="{Binding CloseTabCommand}"
                               CommandParameter="{Binding SelectedTab}" />
                     <Separator />
@@ -394,9 +396,12 @@
           <MultiBinding Converter="{x:Static BoolConverters.Or}">
             <Binding Path="SelectedTab.IsStatusWorthShowing" FallbackValue="True" />
             <Binding Path="PortForwards.HasSomethingToShow" />
+            <!-- ...or while a saved tab was not reopened (#405): the window opened with fewer
+                 tabs than it closed with, and nothing else on screen says why. -->
+            <Binding Path="UnrestoredTabsNotice" Converter="{x:Static aconv:ObjectConverters.IsNotNull}" />
           </MultiBinding>
         </Border.IsVisible>
-        <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
+        <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto">
           <!-- With no tab open there is no SelectedTab.Status to show, and that is
                exactly when the shell's own status (kubeconfig load result) matters. -->
           <!-- Gated on its own worth, not on the tab's existence: the bar may be open only for
@@ -421,10 +426,17 @@
           <TextBlock Grid.Column="3" Classes="statusText statusMessage" Margin="12,0,0,0" MaxWidth="560"
                      Text="{Binding SelectedTab.Metrics.Notice}"
                      IsVisible="{Binding SelectedTab.Metrics.Notice, Converter={x:Static aconv:ObjectConverters.IsNotNull}, FallbackValue=False}" />
+          <!-- Saved tabs this launch did not reopen, because their context is in no kubeconfig
+               file it read (#405). They stay saved; the tooltip names each file. -->
+          <TextBlock Grid.Column="4" Name="UnrestoredTabsNotice" Classes="statusText warn statusMessage" Margin="12,0,0,0"
+                     MaxWidth="560"
+                     Text="{Binding UnrestoredTabsNotice}"
+                     ToolTip.Tip="{Binding UnrestoredTabsDetail}"
+                     IsVisible="{Binding UnrestoredTabsNotice, Converter={x:Static aconv:ObjectConverters.IsNotNull}}" />
           <!-- Running forwards, counted; a click lists them with Open and Stop. When none is
                left it carries the last thing the registry did on its own (forwards stopped
                because their cluster tab closed). -->
-          <Button Grid.Column="4" Name="PortForwardsStatusButton" Classes="toolbar" Padding="6,1" Margin="12,0,0,0"
+          <Button Grid.Column="5" Name="PortForwardsStatusButton" Classes="toolbar" Padding="6,1" Margin="12,0,0,0"
                   Command="{Binding OpenPortForwardsCommand}"
                   IsVisible="{Binding PortForwards.HasSomethingToShow}"
                   AutomationProperties.Name="Port-forwards"

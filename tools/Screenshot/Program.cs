@@ -363,6 +363,14 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // #301: the chooser by keyboard, from the palette, with focus shown and given back.
     ("ux-column-chooser-keyboard", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
     ("cluster-tab-yaml-new", () => HostInMainWindow(ListCreateChecks.NewYaml())),
+    // Bundle Y (#301, #405): Open a YAML file… on a multi-document file, a bulk rollout restart
+    // armed and after a partial refusal, a multi-row selection kept through a re-sort, and the
+    // status bar's line for a saved tab the launch did not reopen.
+    ("cluster-tab-yaml-from-file", () => HostInMainWindow(ListCreateChecks.YamlFromFile())),
+    ("cluster-tab-row-action-bulk-restart", () => HostInMainWindow(ListCreateChecks.BulkRestartArmed())),
+    ("cluster-tab-bulk-restart-partial", () => HostInMainWindow(ListCreateChecks.BulkRestartPartial())),
+    ("ux-bulk-selection-resort", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
+    ("shell-unrestored-tab", () => ListCreateChecks.WithUnrestoredTab(HostInMainWindow(ClusterTabScenarios.WorkloadsList()))),
 
     // FEAT-4 — the node surface. All on the demo cluster, which is where the node
     // dataset lives; the drain's progress states are the two the harness cannot produce
@@ -770,7 +778,9 @@ void Capture(string name, ThemeVariant theme, Func<Control> build, bool again = 
     if (name.StartsWith("cluster-tab-row-logs", StringComparison.Ordinal)) UxInteractionChecks.HoverRow(window, 3);
     if (name == "ux-font-settings") FontChecks.SettingsReachOpenText(window);
     if (name == "ux-bulk-delete") ListCreateChecks.BulkDelete(window);
-    if (name == "cluster-tab-bulk-delete-partial") ListCreateChecks.BulkRefusalWraps(window);
+    if (name is "cluster-tab-bulk-delete-partial" or "cluster-tab-bulk-restart-partial") ListCreateChecks.BulkRefusalWraps(window);
+    if (name == "ux-bulk-selection-resort") ListCreateChecks.SelectionKeptThroughResort(window);
+    if (name == "shell-unrestored-tab") ListCreateChecks.UnrestoredTabNotice(window);
     if (name == "ux-column-chooser") ListCreateChecks.ColumnChooser(window);
     if (name == "ux-column-chooser-keyboard") ListCreateChecks.ColumnChooserKeyboard(window);
 

@@ -235,13 +235,13 @@
           </Grid>
         </Border>
 
-        <!-- A bulk delete (FEAT-6): the names under the sentence before the confirm, so the
+        <!-- A bulk delete or rollout restart (FEAT-6): the names under the sentence before the confirm, so the
              count in it is never a number nobody can read, and each one's outcome after —
              deleted, or the API server's own refusal beside it (a 403 names the verb and the
              resource). Height-capped like the drain's list. While it runs, Stop takes the
              confirm's place: "Cancel" over a loop that is already deleting would read as undo. -->
         <StackPanel Spacing="6" IsVisible="{Binding IsBulk}">
-          <Button HorizontalAlignment="Left" Classes="danger" Content="Stop deleting"
+          <Button HorizontalAlignment="Left" Classes="danger" Content="{Binding StopBulkLabel}"
                   Command="{Binding StopBulkCommand}" IsVisible="{Binding IsDeletingMany}" />
           <ScrollViewer MaxHeight="150">
             <ItemsControl Name="BulkItemList" ItemsSource="{Binding BulkItems}">

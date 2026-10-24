@@ -45,6 +45,21 @@ saw the Demo tab restored alone). `MainWindowViewModel._unrestoredTabs` keeps su
 and every save writes them after the open tabs, so `SelectedTabIndex` still counts open tabs;
 opening the context takes it off the list. `WorkspaceRestoreTests` pins it, mutation-checked.
 
+**And the status bar says so** (UI rule 9; the follow-up to #405). Keeping the tab saved fixed the
+data loss, but the window still opened with a tab fewer than it closed with and nothing on screen
+said why. `MainWindowViewModel.UnrestoredTabsNotice` is one line in the status bar — "1 saved tab
+not reopened: sandbox is not in the kubeconfig files read" — whose tooltip names each context with
+the kubeconfig it was saved from, and says it stays saved and reopens on a launch that finds it.
+The status bar is shown while the line is. It names only snapshots whose context is still missing
+from `AvailableContexts`, recomputed after the restore, on every kubeconfig load and when a tab
+is opened on one: once a rescan finds the context, "is not in the kubeconfig files read" would be
+false (UI rule 20), and the switcher lists it. There is no Forget: a context removed for good keeps
+the line on every launch until a kubeconfig has it again or `workspace.json` is deleted (filed for
+the backlog).
+`WorkspaceRestoreTests.A_saved_tab_not_reopened_is_named_in_the_status_bar` went red with the
+recompute at the end of the restore taken out; the harness scenario `shell-unrestored-tab` checks
+the line is visible, whole and carries the path.
+
 The test: deleting the workspace should lose your tabs and nothing else; deleting the
 settings should reset your preferences and not close your clusters. Theme,
 `IsAdvancedView` and `KubeconfigPaths` used to be in the workspace, on the wrong side

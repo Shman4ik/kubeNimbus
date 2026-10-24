@@ -276,6 +276,39 @@ public sealed partial class ClusterTabViewModel
     }
 
     /// <summary>
+    /// Raised after a re-sort moved rows, with the rows of a multi-row selection that are still
+    /// listed, for the view to select again. <c>SelectedItems</c> is not bindable, so the view does it.
+    /// </summary>
+    public event EventHandler<IReadOnlyList<ResourceRowViewModel>>? MultipleSelectionRestored;
+
+    /// <summary>
+    /// Puts a multi-row selection back after a re-sort moved rows (#301, FEAT-6). A metrics poll
+    /// on a list sorted by CPU that leaves a few rows out of place moves each one (a Remove and an
+    /// Insert), and the DataGrid drops its selection on the Remove: three rows selected for a bulk
+    /// delete or restart came back as one (<c>ux-bulk-selection-resort</c>). A poll that
+    /// reshuffles the list replaces it with one Reset instead, and Avalonia 12's DataGrid keeps the
+    /// selection of items still listed across a Reset (checked in the same scenario), so that path
+    /// needs nothing. Only rows still listed are kept.
+    /// </summary>
+    private void RestoreMultipleSelection(IReadOnlyList<ResourceRowViewModel>? selection)
+    {
+        if (selection is not { Count: > 1 })
+        {
+            return;
+        }
+
+        var listed = new HashSet<ResourceRowViewModel>(VisibleRows);
+        IReadOnlyList<ResourceRowViewModel> kept = [.. selection.Where(listed.Contains)];
+        if (kept.Count < 2)
+        {
+            return;
+        }
+
+        SetSelectedRows(kept);
+        MultipleSelectionRestored?.Invoke(this, kept);
+    }
+
+    /// <summary>
     /// Where a row belongs in the sorted list — a binary search, so a watch tick on a
     /// sorted 5000-row list costs a handful of comparisons rather than a re-sort.
     /// </summary>
@@ -349,6 +382,8 @@ public sealed partial class ClusterTabViewModel
             return;
         }
 
+        var before = HasMultipleSelection ? _selectedRows : null;
+        var moved = false;
         for (var i = 1; i < VisibleRows.Count; i++)
         {
             var row = VisibleRows[i];
@@ -359,6 +394,14 @@ public sealed partial class ClusterTabViewModel
 
             VisibleRows.RemoveAt(i);
             VisibleRows.Insert(SortedIndexFor(row, comparer, i), row);
+            moved = true;
+        }
+
+        // A moved row is a Remove and an Insert, and a DataGrid drops the selection of a row
+        // removed under it, so a multi-row selection is put back here.
+        if (moved)
+        {
+            RestoreMultipleSelection(before);
         }
     }
 
@@ -390,8 +433,12 @@ public sealed partial class ClusterTabViewModel
             return;
         }
 
+        // A Modified that moves a selected row (a pod going CrashLoopBackOff on a list sorted
+        // by Status) drops it from the grid's selection the same way a poll's move does.
+        var before = HasMultipleSelection ? _selectedRows : null;
         VisibleRows.RemoveAt(index);
         VisibleRows.Insert(Math.Min(SortedIndexFor(row, comparer), VisibleRows.Count), row);
+        RestoreMultipleSelection(before);
     }
 
     /// <summary>

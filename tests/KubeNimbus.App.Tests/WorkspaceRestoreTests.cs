@@ -44,4 +44,53 @@ public class WorkspaceRestoreTests
         await Assert.That(saved.Tabs.Any(t => t.ContextName == "sandbox" && t.KubeconfigPath == Missing.KubeconfigPath)).IsTrue();
         await Assert.That(saved.SelectedTabIndex).IsEqualTo(0);
     }
+
+    /// <summary>
+    /// The follow-up to #405: a tab kept saved but not reopened is said on screen (UI rule 9),
+    /// by its context's name, with the kubeconfig it was saved from in the tooltip.
+    /// Mutation-checked: without <c>RefreshUnrestoredTabsNotice</c> at the end of the restore,
+    /// the notice stays null.
+    /// </summary>
+    [Test]
+    public async Task A_saved_tab_not_reopened_is_named_in_the_status_bar()
+    {
+        TestObjects.RedirectStores();
+        WorkspaceStore.Save(new WorkspaceSettings(Theme: null, Tabs:
+        [
+            Missing,
+            new TabSnapshot(ClusterContext.Demo.Name, ClusterContext.DemoKubeconfigPath),
+        ], SelectedTabIndex: 1));
+
+        using var shell = new MainWindowViewModel();
+        await shell.Initialization;
+
+        await Assert.That(shell.UnrestoredTabsNotice)
+            .IsEqualTo("1 saved tab not reopened: sandbox is not in the kubeconfig files read");
+        await Assert.That(shell.UnrestoredTabsDetail).Contains(Missing.KubeconfigPath);
+    }
+
+    [Test]
+    public async Task Every_saved_tab_reopened_leaves_no_notice()
+    {
+        TestObjects.RedirectStores();
+        WorkspaceStore.Save(new WorkspaceSettings(Theme: null, Tabs:
+        [
+            new TabSnapshot(ClusterContext.Demo.Name, ClusterContext.DemoKubeconfigPath),
+        ], SelectedTabIndex: 0));
+
+        using var shell = new MainWindowViewModel();
+        await shell.Initialization;
+
+        await Assert.That(shell.UnrestoredTabsNotice).IsNull();
+    }
+
+    [Test]
+    public async Task Several_missing_contexts_are_counted_and_named()
+    {
+        await Assert.That(MainWindowViewModel.UnrestoredTabsLine(["a", "b"]))
+            .IsEqualTo("2 saved tabs not reopened: a and b are not in the kubeconfig files read");
+        await Assert.That(MainWindowViewModel.UnrestoredTabsLine(["a", "b", "c"]))
+            .IsEqualTo("3 saved tabs not reopened: a, b and c are not in the kubeconfig files read");
+        await Assert.That(MainWindowViewModel.UnrestoredTabsLine([])).IsNull();
+    }
 }
