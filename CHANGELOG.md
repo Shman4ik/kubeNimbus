@@ -22,8 +22,25 @@ it as the GitHub Release body, so headings must match tags exactly
   pane, Copy URL, Open in browser and Stop. A Helm release offers Open and Refresh. A resource
   on an Argo CD Application's Resources tab offers Open, and Logs where the row has logs. Each
   menu is about the row it opened over, and a right-click on empty space opens none.
+- **Open a YAML file.** "Open a YAML file…" in the ☰ menu and the palette opens a local file in
+  the YAML editor, and Review and server-side apply work as for New resource from YAML…. A file
+  with several documents opens on its first one, and the editor says how many were left out.
+- **Rollout restart of several workloads at once.** Select several Deployments, StatefulSets or
+  DaemonSets and press R. One confirm names the count and the cluster, and each object's result
+  is listed, a refusal included.
+- **A line for a saved tab that was not reopened.** When a saved cluster tab's context is in no
+  kubeconfig file the launch read, the status bar says so, and its tooltip names the file. The tab
+  stays saved and comes back once a kubeconfig has its context again.
+- **A log line from the keyboard.** With a log pane's lines focused, the arrow keys, Page Up and
+  Page Down, Home and End move to a line, Ctrl+C (⌘C) copies it, and Enter opens or closes a JSON
+  line's fields.
 
 ### Changed
+
+- **Windows: install from the Microsoft Store or with winget.** `winget install --id 9MZ3C28M65PB
+  --source msstore` installs the same Store package, which Microsoft signs and the Store keeps up
+  to date. The portable zip published up to 0.8 is no longer built. The macOS and Linux downloads
+  are unchanged.
 
 - **A sync or refresh says so in one line.** "Sync of checkout in argocd on prod-eu requested."
   replaces the two-sentence paragraph that followed every Sync, and it no longer sits in a box
@@ -51,6 +68,20 @@ it as the GitHub Release body, so headings must match tags exactly
   kubeconfig that names it, such as a launch from the Dock that does not see `$KUBECONFIG`, used
   to drop the tab from the workspace for good. It now comes back on the next launch that finds it.
 - **macOS: the row menu's Delete shows ⌘⌫**, not a Delete key the Mac keyboard does not have.
+- **A selection of several rows survives a re-sort.** A metrics poll or a watch update that moved
+  a selected row on a sorted list used to cut the selection to one row.
+- **The palette, the cluster switcher and the preferences keep Tab inside them.** Tab used to
+  leave each for the command bar under the scrim. Esc now closes the palette and the switcher from
+  any of their rows, and closing either gives focus back to where it was. Shift+Tab out of the
+  preferences' first section no longer sticks on "Add file…", and the shortcut-modifier drop-down
+  shows its focus ring.
+- **An application's page is quicker to cross with Tab.** Its lines of evidence are no longer each
+  a stop, the pods list is entered on the selected pod from either direction, and screen readers
+  tell the linked resources apart by name.
+- **Screen readers read the rows of the node detail, Helm and Argo CD lists by name**, as they
+  already read the resource list's.
+- **macOS: ⌫ closes the focused cluster tab or dock tab**, and the shortcut sheet shows it, rather
+  than a ⌦ key the Mac keyboard does not have.
 
 ## [0.8.0] - 2026-10-19
 
