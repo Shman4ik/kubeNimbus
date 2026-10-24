@@ -39,6 +39,37 @@ internal static class HarnessDeterminism
         {
             Setters = { new Setter(TextBox.CaretBlinkIntervalProperty, TimeSpan.Zero) },
         });
+
+        // And the indeterminate ProgressBar (#388), the row action strip's busy bar, shown while a
+        // drain runs: Fluent slides its two indicators across the track on an infinite keyframe
+        // animation driven by the render clock, so cluster-tab-node-drain-running caught them at a
+        // different place on every run. Avalonia 12 keeps the animation clock internal, so the
+        // animation cannot be paused from here; the indicators are hidden instead, which leaves the
+        // empty track, as the bar looks between the indicators' sweeps.
+        foreach (var part in new[] { "IndeterminateProgressBarIndicator", "IndeterminateProgressBarIndicator2" })
+        {
+            application.Styles.Add(new Style(x => x.OfType<ProgressBar>().Class(":indeterminate").Template().OfType<Border>().Name(part))
+            {
+                Setters = { new Setter(Visual.IsVisibleProperty, false) },
+            });
+        }
+    }
+
+    private static readonly HashSet<string> Animated = [];
+
+    /// <summary>
+    /// Records a scenario whose window shows an indeterminate <see cref="ProgressBar"/> (#388), the
+    /// one control in the app that animates for as long as it is on screen. Such a scenario is
+    /// rendered twice on every run, not only with <c>--twice</c>, so a capture that stops being
+    /// frozen fails the PR that unfroze it. There are few of them, so the second render is cheap.
+    /// </summary>
+    internal static void NoteAnimations(Window window, string name)
+    {
+        if (window.GetVisualDescendants().OfType<ProgressBar>()
+            .Any(bar => bar.IsIndeterminate && bar.IsEffectivelyVisible))
+        {
+            Animated.Add(name);
+        }
     }
 
     /// <summary>
@@ -73,10 +104,12 @@ internal static class HarnessDeterminism
     internal static bool Twice { get; set; }
 
     /// <summary>
-    /// The scenarios rendered twice in a <c>--twice</c> run: the interaction ones, which press
-    /// keys, move the pointer or the focus before the capture, and so are the ones that differed.
+    /// The scenarios rendered twice: in a <c>--twice</c> run the interaction ones, which press
+    /// keys, move the pointer or the focus before the capture, and so are the ones that differed;
+    /// in every run the ones <see cref="NoteAnimations"/> found an animation in (#388).
     /// </summary>
-    internal static bool RendersTwice(string name) => Twice && name.StartsWith("ux-", StringComparison.Ordinal);
+    internal static bool RendersTwice(string name) =>
+        (Twice && name.StartsWith("ux-", StringComparison.Ordinal)) || Animated.Contains(name);
 
     /// <summary>
     /// Records the second render of <paramref name="path"/> when it is not byte-identical to the

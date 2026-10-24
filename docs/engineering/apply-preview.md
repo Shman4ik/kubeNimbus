@@ -173,8 +173,16 @@ Thirteen things are load-bearing.
    **A Conflict from `resourceVersion` is not a field conflict, and a force-apply does not
    override it.** A Deployment's controller writes its status for a few seconds after almost
    any change, which moves `resourceVersion`; an Apply from a text opened before that is refused
-   with "the object has been modified" whatever `force` says. The live test waits for the object to settle
-   for this reason. Reload, then apply again, is the way through.
+   with "the object has been modified" whatever `force` says. Reload, then apply again, is the way
+   through, and the live test now does exactly that (#385): it used to wait for the object's
+   `resourceVersion` to stop moving before the force-apply only, and the first apply still lost the
+   race to the controller once (a 409 in bundle C's run for PR #381). Each open, edit, preview and
+   apply step now runs again from a fresh read, up to five times, when the server answers with that
+   optimistic-lock 409; a field-manager conflict ("Apply failed with N conflict(s)") is not retried.
+   Proved against the sandbox by a write from a second field manager injected between the read and
+   the apply: with the retry all three kinds passed, without it all three failed with the 409 of
+   the issue. The product needs no change for it: the editor shows the server's sentence, which
+   says to apply to the latest version.
 
 14. **`metadata.managedFields` is out of the editor's text by default (#270, the owner's
    decision of 2026-10-11).** On a Deployment it is a couple of hundred lines (`f:lastUpdateTime:

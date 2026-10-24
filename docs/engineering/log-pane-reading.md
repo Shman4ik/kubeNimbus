@@ -182,7 +182,14 @@ The harness's `ux-log-menu-copy-pod` opens ⋯ with a click at 960px, clicks Cop
 compares the clipboard with what the bar's Copy writes; with the hide made synchronous again it
 reports "The ⋯ menu's Copy wrote nothing to the clipboard". The log view models reach the window
 through `MainWindowAccess`, whose `Override` is how the harness, which cannot replace the
-application lifetime, gives them one. The Range combo's tooltip mentions the demo only on the demo
+application lifetime, gives them one. **A source check keeps the shape from coming back
+anywhere** (#298): `FlyoutHideOrderTests` (App.Tests) reads every view's XAML for an element with
+both a `Command` and a `Click` handler and fails when that handler hides a flyout (`.Hide()`) or
+closes a popup (`IsOpen = false`) outside a posted call (`Dispatcher.UIThread.Post`/`InvokeAsync`).
+With `PodDetailView`'s hide made synchronous again it names `OnLogMenuActionClick` (Copy, Clear
+and Save). It reads only the handler's own body, so a hide reached through a helper it calls is
+not caught; the namespace pickers' `Flyout?.Hide()` calls sit in key and pointer handlers with no
+`Command` beside them, outside its reach by design. The Range combo's tooltip mentions the demo only on the demo
 cluster (`LogRange.Tooltip`, #290), where it is disabled; on a real cluster it says what the range is.
 
 **At a narrow window the bar gives way rather than running off the pane (ENG-51).** Pod

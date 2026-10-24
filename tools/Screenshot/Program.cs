@@ -206,6 +206,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-yaml-conflict-diff", () => HostInMainWindow(ClusterTabScenarios.YamlEditorConflictDiff())),
     ("cluster-tab-yaml-secret-masked", () => HostInMainWindow(ClusterTabScenarios.YamlEditorSecretMasked())),
     ("cluster-tab-yaml-secret-revealed", () => HostInMainWindow(ClusterTabScenarios.YamlEditorSecretRevealed())),
+    ("ux-yaml-secret-copy", () => HostInMainWindow(ClusterTabScenarios.YamlEditorSecretRevealed())),
     // FEAT-30 — a TLS Secret's certificate chain, decoded without a Reveal.
     ("cluster-tab-yaml-tls-secret", () => HostInMainWindow(ClusterTabScenarios.YamlEditorTlsSecret())),
     ("cluster-tab-exec", () => HostInMainWindow(ClusterTabScenarios.Exec())),
@@ -214,6 +215,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-exec-no-shell", () => HostInMainWindow(ClusterTabScenarios.ExecNoShell())),
     ("cluster-tab-exec-debug-container", () => HostInMainWindow(ClusterTabScenarios.ExecDebugContainer())),
     ("cluster-tab-port-forward", () => HostInMainWindow(ClusterTabScenarios.PortForward())),
+    ("ux-port-forward-copy", () => HostInMainWindow(ClusterTabScenarios.PortForward())),
     ("cluster-tab-port-forward-idle", () => HostInMainWindow(ClusterTabScenarios.PortForwardIdle())),
     ("cluster-tab-port-forward-service", () => HostInMainWindow(ClusterTabScenarios.PortForwardService())),
     ("cluster-tab-port-forwards-list", PortForwardsListWindow),
@@ -398,6 +400,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("net-service-deleted", () => HostInMainWindow(NetworkingScenarios.ServiceDeleted(), height: 1000)),
     ("net-ingress-list", () => HostInMainWindow(NetworkingScenarios.IngressList())),
     ("net-ingress-detail", () => HostInMainWindow(NetworkingScenarios.IngressDetail(), height: 1000)),
+    ("ux-ingress-copy-url", () => HostInMainWindow(NetworkingScenarios.IngressDetail(), height: 1000)),
     ("net-netpol-list", () => HostInMainWindow(NetworkingScenarios.NetworkPolicyList())),
     ("net-netpol-detail", () => HostInMainWindow(NetworkingScenarios.NetworkPolicyDetail(), height: 1000)),
     ("net-netpol-default-deny-pods", () => HostInMainWindow(NetworkingScenarios.NetworkPolicyDefaultDenyPods(), height: 1000)),
@@ -609,7 +612,7 @@ for (var position = 0; position < scenarios.Length; position++)
         Capture(name, theme, build);
 
         // #360, with --twice: an interaction scenario is rendered a second time and must come out
-        // byte-identical.
+        // byte-identical. So is one that shows an animation, in every run (#388).
         if (HarnessDeterminism.RendersTwice(name))
         {
             Capture(name, theme, build, again: true);
@@ -728,6 +731,9 @@ void Capture(string name, ThemeVariant theme, Func<Control> build, bool again = 
     if (name is "ux-leave-yaml-editor" or "ux-leave-exec-terminal") KeyboardChecks.LeaveEditorKeys(window);
     if (name == "ux-exec-copy") KeyboardChecks.ExecCopy(window);
     if (name == "ux-exec-copy-keys") ClipboardChecks.ExecCopyRealKeys(window);
+    if (name == "ux-ingress-copy-url") ClipboardChecks.IngressCopyUrl(window);
+    if (name == "ux-port-forward-copy") ClipboardChecks.PortForwardCopyUrl(window);
+    if (name == "ux-yaml-secret-copy") ClipboardChecks.YamlRevealedValueCopy(window);
     if (name == "ux-dock-splitter-focus") KeyboardChecks.DockSplitterKeepsFocus(window);
     if (name == "cluster-tab-dock-many-tabs")
     {
@@ -798,6 +804,7 @@ void Capture(string name, ThemeVariant theme, Func<Control> build, bool again = 
     if (walk) FontChecks.Walk(window, name);
     if (walk) SelectionChecks.Walk(window, name);
     if (walk) ClockChecks.Walk(window, name);
+    if (!again) HarnessDeterminism.NoteAnimations(window, name);
     timing.Phase("walks");
     HarnessDeterminism.RepaintWhole(window);
     using var frame = window.CaptureRenderedFrame();

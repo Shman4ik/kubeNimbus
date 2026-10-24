@@ -202,30 +202,39 @@ public class ApplyLiveTests
             await LiveCluster.WaitForReadyPodsAsync(client, name, 1, ct);
         }
 
-        // What the editor shows: the object as the server returns it. The server-written
-        // fields are in the text, which is the premise of the whole test.
-        var live = await client.ReadResourceAsync(descriptor, LiveCluster.Namespace, name, ct);
-        var opened = live!.ToYaml();
-        await Assert.That(opened).Contains("managedFields");
-        await Assert.That(opened).Contains("uid:");
-        await Assert.That(opened).Contains("creationTimestamp:");
-        await Assert.That(opened).Contains("resourceVersion:");
+        // Opened, edited, previewed and applied as one step, retried from a fresh read when the
+        // apply was refused because the object moved under the opened text (#385): the
+        // Deployment controller writes the object's status for a while after its pods are ready,
+        // and the text carries resourceVersion, which makes the apply an optimistic lock.
+        DynamicResource? live = null;
+        DynamicResource? applied = null;
+        await ReopenedUntilCurrentAsync(async () =>
+        {
+            // What the editor shows: the object as the server returns it. The server-written
+            // fields are in the text, which is the premise of the whole test.
+            live = await client.ReadResourceAsync(descriptor, LiveCluster.Namespace, name, ct);
+            var opened = live!.ToYaml();
+            await Assert.That(opened).Contains("managedFields");
+            await Assert.That(opened).Contains("uid:");
+            await Assert.That(opened).Contains("creationTimestamp:");
+            await Assert.That(opened).Contains("resourceVersion:");
 
-        // The editor hides metadata.managedFields since #270, so what it sends is the edit
-        // without them.
-        await Assert.That(ManagedFieldsText.TryHide(ReplaceFirst(opened, firstEdit.Item1, firstEdit.Item2), out var edited, out _)).IsTrue();
+            // The editor hides metadata.managedFields since #270, so what it sends is the edit
+            // without them.
+            await Assert.That(ManagedFieldsText.TryHide(ReplaceFirst(opened, firstEdit.Item1, firstEdit.Item2), out var edited, out _)).IsTrue();
 
-        // The preview is a dry run: it names the change and writes nothing.
-        var preview = await client.PreviewApplyAsync(
-            descriptor, LiveCluster.Namespace, name, edited, LiveCluster.FieldManager, cancellationToken: ct);
-        await Assert.That(preview.Diff.Changes.Any(c => c.Path == changedPath)).IsTrue();
-        var untouched = await client.ReadResourceAsync(descriptor, LiveCluster.Namespace, name, ct);
-        await Assert.That(untouched!.ToYaml()).Contains(firstEdit.Item1);
+            // The preview is a dry run: it names the change and writes nothing.
+            var preview = await client.PreviewApplyAsync(
+                descriptor, LiveCluster.Namespace, name, edited, LiveCluster.FieldManager, cancellationToken: ct);
+            await Assert.That(preview.Diff.Changes.Any(c => c.Path == changedPath)).IsTrue();
+            var untouched = await client.ReadResourceAsync(descriptor, LiveCluster.Namespace, name, ct);
+            await Assert.That(untouched!.ToYaml()).Contains(firstEdit.Item1);
 
-        // The apply writes it.
-        var applied = await client.ApplyYamlAsync(
-            descriptor, LiveCluster.Namespace, name, edited, LiveCluster.FieldManager, cancellationToken: ct);
-        await Assert.That(applied.ToYaml()).Contains(firstEdit.Item2);
+            // The apply writes it.
+            applied = await client.ApplyYamlAsync(
+                descriptor, LiveCluster.Namespace, name, edited, LiveCluster.FieldManager, cancellationToken: ct);
+        }, ct);
+        await Assert.That(applied!.ToYaml()).Contains(firstEdit.Item2);
 
         // An apply that carries no managedFields leaves the server's record in place — every
         // manager the object had before is still there (#270): the field is the server's to
@@ -233,30 +242,52 @@ public class ApplyLiveTests
         static IEnumerable<string?> Managers(DynamicResource o) =>
             o.Raw.GetProperty("metadata").GetProperty("managedFields").EnumerateArray().Select(m => m.GetProperty("manager").GetString());
         var record = applied.Raw.GetProperty("metadata").GetProperty("managedFields");
-        await Assert.That(Managers(live).Except(Managers(applied)).Any()).IsFalse();
+        await Assert.That(Managers(live!).Except(Managers(applied)).Any()).IsFalse();
         await Assert.That(record.EnumerateArray().Any(m => m.GetProperty("manager").GetString() == LiveCluster.FieldManager)).IsTrue();
 
         // And so does a force-apply of the next edit, read back again like the editor's reload.
         // A controller writes a Deployment's status after any change to it, which moves the
-        // resourceVersion; wait for that to stop so the Conflict below cannot be one of its.
-        string? seen = null;
-        await LiveCluster.WaitUntilAsync(async () =>
+        // resourceVersion, and a force takes fields from other managers but does not lift the
+        // lock: reopened and retried the same way.
+        DynamicResource? forceApplied = null;
+        await ReopenedUntilCurrentAsync(async () =>
         {
-            var current = (await client.ReadResourceAsync(descriptor, LiveCluster.Namespace, name, ct))!.ResourceVersion;
-            var stable = current == seen;
-            seen = current;
-            await Task.Delay(1000, ct);
-            return stable;
-        }, TimeSpan.FromSeconds(30), "the object's resourceVersion to stop moving", ct);
-        var reopened = (await client.ReadResourceAsync(descriptor, LiveCluster.Namespace, name, ct))!.ToYaml();
-        var forced = ReplaceFirst(reopened, secondEdit.Item1, secondEdit.Item2);
-        var forcePreview = await client.PreviewApplyAsync(
-            descriptor, LiveCluster.Namespace, name, forced, LiveCluster.FieldManager, force: true, cancellationToken: ct);
-        await Assert.That(forcePreview.Diff.Changes.Any(c => c.Path == changedPath)).IsTrue();
-        var forceApplied = await client.ApplyYamlAsync(
-            descriptor, LiveCluster.Namespace, name, forced, LiveCluster.FieldManager, force: true, cancellationToken: ct);
-        await Assert.That(forceApplied.ToYaml()).Contains(secondEdit.Item2);
+            var reopened = (await client.ReadResourceAsync(descriptor, LiveCluster.Namespace, name, ct))!.ToYaml();
+            var forced = ReplaceFirst(reopened, secondEdit.Item1, secondEdit.Item2);
+            var forcePreview = await client.PreviewApplyAsync(
+                descriptor, LiveCluster.Namespace, name, forced, LiveCluster.FieldManager, force: true, cancellationToken: ct);
+            await Assert.That(forcePreview.Diff.Changes.Any(c => c.Path == changedPath)).IsTrue();
+            forceApplied = await client.ApplyYamlAsync(
+                descriptor, LiveCluster.Namespace, name, forced, LiveCluster.FieldManager, force: true, cancellationToken: ct);
+        }, ct);
+        await Assert.That(forceApplied!.ToYaml()).Contains(secondEdit.Item2);
     }
+
+    /// <summary>
+    /// Runs <paramref name="openEditApply"/> (read the object, edit the text, preview, apply)
+    /// again from a fresh read when the server refused it because the object changed after it
+    /// was read: the optimistic-lock 409, "the object has been modified". That one is a
+    /// controller's write racing the test (#385), not something the test did. A field-manager
+    /// conflict is a 409 too, worded "Apply failed with N conflict(s)", and is not retried.
+    /// </summary>
+    private static async Task ReopenedUntilCurrentAsync(Func<Task> openEditApply, CancellationToken ct)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await openEditApply();
+                return;
+            }
+            catch (ServerSideApplyConflictException ex) when (attempt < 5 && IsStaleOpen(ex))
+            {
+                await Task.Delay(TimeSpan.FromSeconds(1), ct);
+            }
+        }
+    }
+
+    private static bool IsStaleOpen(ServerSideApplyConflictException ex) =>
+        ex.Message.Contains("the object has been modified", StringComparison.Ordinal);
 
     private static string ReplaceFirst(string text, string from, string to)
     {
