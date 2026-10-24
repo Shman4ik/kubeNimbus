@@ -51,7 +51,12 @@ jobs:
           # Ubuntu LTS, refused it for that (AppImage/appimage.github.io#6624).
           # Keep this the oldest Ubuntu LTS GitHub still hosts; when 22.04
           # retires, move both legs, warm-cache.yml and GLIBC_CEILING together.
-          - { os: windows-latest,   rid: win-x64,     archive: zip }
+          #
+          # win-x64 has no release archive (`archive: none`): from 1.0 Windows
+          # ships through the Microsoft Store only, so this leg builds,
+          # launch-checks and uploads the MSIX for Partner Center and nothing
+          # else. The portable zip it used to attach went on 2026-10-24.
+          - { os: windows-latest,   rid: win-x64,     archive: none }
           - { os: ubuntu-22.04,     rid: linux-x64,   archive: tar }
           # Free for public repositories; see CONTRIBUTING.md if this label ever
           # stops resolving.
@@ -215,12 +220,10 @@ jobs:
       # Installers. A tarball is what a developer wants; a .dmg and a
       # .deb/.AppImage are what everyone else expects, and until these every
       # platform's instructions ended in "extract it and run the binary from a
-      # terminal". Windows has no installer here: the Store package covers
-      # installing and updating, and the direct download is the portable zip
-      # below. It used to be a per-user WiX MSI as well, which was downloaded
-      # once across 0.3.2-0.5.0 (the zip three times) and needed WiX installed
-      # at a floating version on every release run; it went on 2026-10-04, as
-      # pgNimbus's did on 2026-10-01.
+      # terminal". Windows has no download here at all: from 1.0 it ships
+      # through the Microsoft Store only (the MSIX step below), which signs and
+      # updates it. It had a per-user WiX MSI until 2026-10-04 and a portable
+      # zip until 2026-10-24.
       #
       # Each format is built from the publish output the launch check above has
       # already run, and each is then smoke-launched AGAIN through its own
@@ -320,9 +323,9 @@ jobs:
           sudo apt-get remove -y kubenimbus
 
       # ---------------------------------------------------------------------
-      # Microsoft Store package (win-x64 only). Built from the same publish
-      # output the archive is staged from, so the Store gets exactly the binary
-      # that just passed the launch check above.
+      # Microsoft Store package (win-x64 only), the one way Windows ships. Built
+      # from the publish output, so the Store gets exactly the binary that just
+      # passed the launch check above.
       #
       # Deliberately NOT attached to the GitHub Release: the package is signed
       # with an ephemeral self-signed certificate, which nobody can install
@@ -357,58 +360,19 @@ jobs:
       # The AOT output carries .pdb/.dbg sidecars that quadruple the download
       # and are of no use to anyone who isn't debugging a stripped binary.
       - name: Stage archive contents
+        if: matrix.archive != 'none'
         shell: bash
         run: |
           set -euo pipefail
           staging="staging/${{ steps.version.outputs.name }}"
           mkdir -p "$staging"
           cp -r publish/${{ matrix.rid }}/. "$staging/"
-          # win-x64 emits .pdb, linux-* a .dbg (108 MB against a 46 MB binary),
-          # osx-* a .dsym bundle. Case varies by toolchain, hence both spellings.
+          # linux-* emits a .dbg (108 MB against a 46 MB binary), osx-* a .dsym
+          # bundle. Case varies by toolchain, hence both spellings.
           rm -f "$staging"/*.pdb "$staging"/*.dbg "$staging"/*.dwarf
           rm -rf "$staging"/*.dsym "$staging"/*.dSYM
           cp LICENSE README.md CHANGELOG.md "$staging/"
           ls -la "$staging"
-
-      - name: Archive (zip)
-        if: matrix.archive == 'zip'
-        shell: pwsh
-        run: |
-          # Compress-Archive does not create the destination's parent directory
-          # and fails outright when it is missing — which is what happened on
-          # every win-x64 release run until v0.3.0, three steps after the binary
-          # had already been built and smoke-tested. The tar leg below has always
-          # created it; this one silently did not.
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Compress-Archive -Path "staging/${{ steps.version.outputs.name }}" `
-                           -DestinationPath "dist/${{ steps.version.outputs.name }}.zip" `
-                           -CompressionLevel Optimal
-
-      # The zip is the Windows download, so launch it the way its users get it:
-      # unpacked into a fresh folder, both smoke modes. It also fails if a .pdb
-      # reached the archive, which is what staging exists to prevent.
-      - name: Install check (zip)
-        if: matrix.archive == 'zip'
-        timeout-minutes: 5
-        shell: pwsh
-        run: |
-          $dest = Join-Path $env:RUNNER_TEMP "zip-smoke"
-          Expand-Archive -Path "dist/${{ steps.version.outputs.name }}.zip" -DestinationPath $dest -Force
-          $exe = Join-Path $dest "${{ steps.version.outputs.name }}\kubeNimbus.exe"
-          if (-not (Test-Path $exe)) { throw "kubeNimbus.exe is not at the top of the zip's folder ($exe)" }
-          $pdb = Get-ChildItem -Path $dest -Filter *.pdb -Recurse
-          if ($pdb) { throw "Debug symbols shipped in the zip: $($pdb.Name -join ', ')" }
-          # Start-Process for the reason the launch check above gives.
-          foreach ($mode in '--smoke-test', '--smoke-test=unreachable-cluster') {
-            $p = Start-Process -FilePath $exe -ArgumentList $mode `
-                               -Wait -PassThru -NoNewWindow `
-                               -RedirectStandardOutput zip-smoke-out.txt `
-                               -RedirectStandardError zip-smoke-err.txt
-            Get-Content zip-smoke-out.txt, zip-smoke-err.txt -ErrorAction SilentlyContinue
-            if ($p.ExitCode -ne 0) {
-              throw "The unpacked zip does not start: $mode exited $($p.ExitCode)"
-            }
-          }
 
       - name: Archive (tar.gz)
         if: matrix.archive == 'tar'
@@ -420,6 +384,7 @@ jobs:
               -C staging "${{ steps.version.outputs.name }}"
 
       - name: Checksum
+        if: matrix.archive != 'none'
         shell: bash
         run: |
           set -euo pipefail
@@ -433,7 +398,10 @@ jobs:
           done
           cat ./*.sha256
 
+      # win-x64 uploads nothing here: its only output is the MSIX artifact
+      # above, which must never reach the release (see the download step).
       - name: Upload artifact
+        if: matrix.archive != 'none'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ steps.version.outputs.name }}
@@ -582,7 +550,9 @@ jobs:
             echo
             echo '---'
             echo
-            echo '**Binaries are unsigned.** Windows shows a SmartScreen prompt; macOS quarantines the app (`xattr -dr com.apple.quarantine <path>`). See the [README](https://github.com/Shman4ik/kubeNimbus#download) for per-platform instructions and for verifying the download (`SHA256SUMS.txt`, `gh release verify-asset`, `gh attestation verify`).'
+            echo '**Windows:** install from the [Microsoft Store](https://apps.microsoft.com/detail/9MZ3C28M65PB) or with `winget install --id 9MZ3C28M65PB --source msstore`; the Store signs and updates it, and no Windows download is attached here.'
+            echo
+            echo '**The macOS and Linux downloads are not signed by a certificate.** The macOS app is ad-hoc signed, so macOS quarantines it (`xattr -dr com.apple.quarantine <path>`). See the [README](https://github.com/Shman4ik/kubeNimbus#download) for per-platform instructions and for verifying the download (`SHA256SUMS.txt`, `gh release verify-asset`, `gh attestation verify`).'
           } >> notes.md
           cat notes.md
 
