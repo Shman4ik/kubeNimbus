@@ -582,12 +582,16 @@ public static class CommandCatalog
             // two stops one way and one the other), so the keyboard closes the tab that has
             // focus instead (#236). Handled by the two strips' own key handlers, so a bare
             // Delete anywhere else keeps its meaning (the list's Delete arms a confirm).
+            // A Mac keyboard has no Delete key (⌦ is fn+⌫), so the Cmd scheme also takes a
+            // bare ⌫ on a focused tab, listed first; a strip is no text control, so it never
+            // reaches one as "delete a character".
             Id = CommandId.CloseFocusedTab,
             Title = "Close the focused tab",
             CheatTitle = "Close the focused cluster tab or dock tab",
             Category = CommandCategory.View,
             IconKey = "CloseIconGeometry",
             Chord = new(CommandKey.Delete),
+            MoreChords = [new(new(CommandKey.Backspace), ChordScheme.Cmd, Primary: true)],
             Surfaces = SheetOnly,
         },
         new()
@@ -737,6 +741,32 @@ public static class CommandCatalog
             // A pane key, not a window chord: Alt+arrows mean nothing to the rest of the window
             // and belong to whichever log pane has focus.
             GestureNote = "{key:Alt+Up} / {key:Alt+Down} in a log pane, or click its error count",
+            Surfaces = SheetOnly,
+        },
+        new()
+        {
+            // A log pane is one Tab stop, the list (ENG-4), so a keyboard user reached the lines
+            // and no further: selecting one and opening a JSON line were pointer gestures
+            // (#236). Keys of the focused log list, not window chords: the arrows scroll and
+            // Enter means something else everywhere else.
+            Id = CommandId.LogLineKeys,
+            Title = "Move to a log line / open a JSON line",
+            CheatTitle = "Move to a line in a focused log pane, and open or close a JSON line's fields",
+            Category = CommandCategory.Pods,
+            IconKey = "LogsIconGeometry",
+            GestureNote = "{key:Up} / {key:Down}, {key:Home} / {key:End} in a focused log pane; {key:Enter} opens a JSON line",
+            Surfaces = SheetOnly,
+        },
+        new()
+        {
+            // The line the keys are on; a text selection made with the pointer still copies
+            // through the line's own Copy. A list key like the one above, so a text box keeps
+            // its own Copy.
+            Id = CommandId.CopyLogLine,
+            Title = "Copy the log line the keys are on",
+            Category = CommandCategory.Pods,
+            IconKey = "ContentCopyIconGeometry",
+            Chord = new(CommandKey.C, Cmd),
             Surfaces = SheetOnly,
         },
         new()

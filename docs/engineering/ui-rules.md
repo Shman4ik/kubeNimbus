@@ -413,6 +413,20 @@ which now have a page of their own in this directory.
    The palette and the cluster switcher are deliberately **not** OverlayPanels: both put
    focus in a search box and drive a selection from the arrow keys, which is a different
    control, not a differently-styled one.
+   **Tab stays inside an open overlay, and Esc closes it from any of its stops** (#236,
+   2026-10-24). The first keyboard walk of the overlays (`KeyboardWalkChecks.Overlays`,
+   scenario `ux-keyboard-walk-overlays`) found Tab leaving the palette for the command bar
+   under the scrim after two presses, the switcher the same way, and the preferences after
+   eight; Esc on a palette or switcher row did nothing, because only the search box answered
+   it; closing the palette gave focus to nothing; Shift+Tab out of the preferences' first
+   control went back to that control for ever (the strip's one stop remembered a control on
+   the tab's page); and the shortcut-modifier drop-down drew no ring. Now each card cycles
+   Tab (`KeyboardNavigation.TabNavigation="Cycle"`, by a style on the `OverlayPanel`'s card
+   because the theme is nimbusUi's), the palette's and switcher's cards answer Esc and Enter
+   themselves, both give focus back on close as `OverlayPanel` does (`MainWindow.GiveFocusBack`),
+   `PreferencesView` points the strip's stop back at the selected tab after every focus change,
+   and `ComboBox` takes the shared ring. The switcher's pin is a pointer target, not a stop,
+   like a dock tab's ✕: Shift+Tab reached it and Tab never did.
 16. **This app has exactly one window, and that is now the rule rather than an
    accident.** It used to have three — the shell plus About and Preferences — and the
    two secondaries needed `ThemedWindowChrome.Attach` to pin `DWMWA_CAPTION_COLOR`,

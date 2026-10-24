@@ -7,7 +7,19 @@
              xmlns:cmd="using:KubeNimbus.App"
              x:Class="KubeNimbus.App.Views.ApplicationPageView"
              x:DataType="vm:ApplicationPageViewModel"
-             Focusable="True">
+             Focusable="True" KeyboardNavigation.IsTabStop="False">
+
+  <!-- The page holds focus when it opens, so Esc goes back at once, but it is not a Tab stop
+       of its own: a stop on the page's background drew no ring and did nothing (#236, the
+       Applications keyboard walk). Nor is each line of evidence: every SelectableTextBlock
+       was a stop, twelve of them on the demo's checkout page before the pods were reached,
+       the log lines' problem again (ENG-4). Their text is still selected and copied with the
+       pointer. -->
+  <UserControl.Styles>
+    <Style Selector="SelectableTextBlock">
+      <Setter Property="KeyboardNavigation.IsTabStop" Value="False" />
+    </Style>
+  </UserControl.Styles>
 
   <!-- One application, layout A: what is wrong, its pods and what they are wired to on
        the left; the last hour and the logs on the right, the logs taking every pixel that
@@ -232,10 +244,13 @@
               <ItemsControl ItemsSource="{Binding Linked}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:LinkedResourceViewModel">
+                    <!-- Named by its row: from the tooltip alone every linked row read
+                         "Show it in Resources mode", five in a row on the demo page (#236). -->
                     <Button Classes="linkRow"
                             Command="{Binding $parent[views:ApplicationPageView].((vm:ApplicationPageViewModel)DataContext).RevealLinkedCommand}"
                             CommandParameter="{Binding}"
-                            ToolTip.Tip="Show it in Resources mode">
+                            ToolTip.Tip="Show it in Resources mode"
+                            AutomationProperties.Name="{Binding Title, StringFormat='Show {0} in Resources mode'}">
                       <StackPanel>
                         <TextBlock Text="{Binding Title}" FontSize="12" TextTrimming="CharacterEllipsis" />
                         <TextBlock Text="{Binding Via}" FontSize="11" Opacity="0.55" TextTrimming="CharacterEllipsis" />

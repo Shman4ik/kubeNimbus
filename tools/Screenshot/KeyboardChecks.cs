@@ -762,10 +762,14 @@ internal static class KeyboardChecks
     /// selection that rule gives such a list instead. A strip (segmented, dock tabs) keeps its
     /// wash whatever the focus, so it needs the ring.
     /// </summary>
-    private static bool HasFocusVisual(Control stop)
+    internal static bool HasFocusVisual(Control stop)
     {
         if (AdornerLayer.GetAdornerLayer(stop) is { } layer
-            && layer.Children.Any(c => c is Nimbus.Ui.Controls.FocusRing && AdornerLayer.GetAdornedElement(c) == stop))
+            && layer.Children.Any(c => c is Nimbus.Ui.Controls.FocusRing
+                                       && AdornerLayer.GetAdornedElement(c) is { } adorned
+                                       // A template part marked IsTemplateFocusTarget wears the
+                                       // ring for its control (nimbusUi's switch: the track).
+                                       && (adorned == stop || (adorned.TemplatedParent == stop && stop.IsVisualAncestorOf(adorned)))))
             return true;
 
         if (stop is TextBox { IsFocused: true })
@@ -784,7 +788,7 @@ internal static class KeyboardChecks
         root.GetVisualDescendants().OfType<T>().FirstOrDefault(c => c.Name == name)
         ?? throw new InvalidOperationException($"No {typeof(T).Name} named {name} on screen.");
 
-    private static void Press(Window window, Key key, RawInputModifiers modifiers)
+    internal static void Press(Window window, Key key, RawInputModifiers modifiers)
     {
         var (physical, symbol) = key switch
         {
@@ -796,6 +800,7 @@ internal static class KeyboardChecks
             Key.Left => (PhysicalKey.ArrowLeft, null),
             Key.Right => (PhysicalKey.ArrowRight, null),
             Key.Home => (PhysicalKey.Home, null),
+            Key.Escape => (PhysicalKey.Escape, null),
             _ => throw new ArgumentOutOfRangeException(nameof(key)),
         };
         window.KeyPress(key, modifiers, physical, symbol);
@@ -803,7 +808,7 @@ internal static class KeyboardChecks
         Dispatcher.UIThread.RunJobs();
     }
 
-    private static string Describe(Control? control) => control switch
+    internal static string Describe(Control? control) => control switch
     {
         null => "nothing",
         { Name.Length: > 0 } => $"{control.GetType().Name} {control.Name}",

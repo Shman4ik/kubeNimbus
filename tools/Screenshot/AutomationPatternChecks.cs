@@ -36,7 +36,8 @@ internal static class AutomationPatternChecks
         MenuItemNames();
         NamespaceChecks(window, view, vm);
         ClusterTabs(window);
-        Console.WriteLine("Automation patterns: section headers fold, grid rows named and marked, menu items named by label, namespace boxes toggle, cluster tabs are tabs.");
+        AppMenuItems(window);
+        Console.WriteLine("Automation patterns: section headers fold, grid rows named and marked, menu items named by label, namespace boxes toggle, cluster tabs are tabs, the app menu's items invoke.");
     }
 
     private static void SectionHeaders(ClusterTabView view, ClusterTabViewModel vm)
@@ -118,6 +119,57 @@ internal static class AutomationPatternChecks
             var name = ControlAutomationPeer.CreatePeerForElement(item).GetName();
             if (name != label)
                 throw new InvalidOperationException($"The menu item '{label}' is named '{name}' through UI Automation; it should be its label.");
+        }
+    }
+
+    /// <summary>
+    /// #236, from the 2026-10 QA runs: the ☰ menu's items (Rescan, Reconnect) took real clicks,
+    /// because UI Automation could not invoke them. Through the peers: the ☰ button opens its
+    /// menu by Invoke, every item there is named by its label and has the Invoke pattern, and
+    /// invoking one runs its command and closes the menu, as a click does. "Keyboard
+    /// shortcuts" is the item invoked, since it changes nothing outside the window.
+    /// </summary>
+    private static void AppMenuItems(Window window)
+    {
+        var shell = (MainWindowViewModel)window.DataContext!;
+        var button = window.GetVisualDescendants().OfType<Button>().First(b => b.Name == "AppMenuButton");
+        if (ControlAutomationPeer.CreatePeerForElement(button) is not IInvokeProvider open)
+            throw new InvalidOperationException("The ☰ button has no Invoke pattern.");
+        var flyout = (MenuFlyout)button.Flyout!;
+        open.Invoke();
+        Settle();
+        if (!flyout.IsOpen)
+            throw new InvalidOperationException("Invoking the ☰ button through UI Automation did not open its menu.");
+
+        try
+        {
+            var items = flyout.Items.OfType<MenuItem>().ToList();
+            if (items.Count == 0)
+                throw new InvalidOperationException("The ☰ menu has no items.");
+            foreach (var item in items)
+            {
+                var peer = ControlAutomationPeer.CreatePeerForElement(item);
+                if (peer.GetName() != item.Header as string)
+                    throw new InvalidOperationException($"The ☰ menu's item '{item.Header}' is named '{peer.GetName()}' through UI Automation.");
+                if (peer.GetProvider<IInvokeProvider>() is null)
+                    throw new InvalidOperationException($"The ☰ menu's item '{item.Header}' has no Invoke pattern, so UI Automation cannot run it.");
+            }
+
+            var shortcuts = items.First(i => i.Header as string == "Keyboard shortcuts");
+            var wasOpen = shell.IsShortcutsOpen;
+            ControlAutomationPeer.CreatePeerForElement(shortcuts).GetProvider<IInvokeProvider>()!.Invoke();
+            Settle();
+            if (shell.IsShortcutsOpen == wasOpen)
+                throw new InvalidOperationException("Invoking the ☰ menu's Keyboard shortcuts through UI Automation did not run its command.");
+            if (flyout.IsOpen)
+                throw new InvalidOperationException("Invoking a ☰ menu item through UI Automation left the menu open; a click closes it.");
+            shell.IsShortcutsOpen = wasOpen;
+            Settle();
+        }
+        finally
+        {
+            flyout.Hide();
+            Settle();
         }
     }
 

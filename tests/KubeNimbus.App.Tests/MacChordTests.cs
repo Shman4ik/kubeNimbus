@@ -45,6 +45,34 @@ public class MacChordTests
     }
 
     /// <summary>
+    /// #236: a focused cluster tab or dock tab closes from the keyboard. The gesture was a bare
+    /// Delete on every scheme, which a Mac keyboard sends only as fn+⌫, and the F1 sheet said
+    /// "⌦" there. The Cmd scheme takes a bare ⌫ too, listed first; Windows and Linux keep
+    /// Delete alone, so Backspace on a strip means nothing there.
+    /// </summary>
+    [Test]
+    public async Task A_focused_tab_closes_with_backspace_on_the_cmd_scheme_and_delete_everywhere()
+    {
+        try
+        {
+            Nimbus.Ui.Hotkeys.Initialize("mac");
+            await Assert.That(CommandBindings.Matches(CommandId.CloseFocusedTab, Key(Avalonia.Input.Key.Back))).IsTrue();
+            await Assert.That(CommandBindings.Matches(CommandId.CloseFocusedTab, Key(Avalonia.Input.Key.Delete))).IsTrue();
+            await Assert.That(CommandBindings.Matches(CommandId.CloseFocusedTab, Key(Avalonia.Input.Key.Back, KeyModifiers.Meta))).IsFalse();
+            await Assert.That(CommandBindings.ShortcutLabel(CommandId.CloseFocusedTab)).IsEqualTo("⌫ / ⌦");
+
+            Nimbus.Ui.Hotkeys.Initialize("windows");
+            await Assert.That(CommandBindings.Matches(CommandId.CloseFocusedTab, Key(Avalonia.Input.Key.Back))).IsFalse();
+            await Assert.That(CommandBindings.Matches(CommandId.CloseFocusedTab, Key(Avalonia.Input.Key.Delete))).IsTrue();
+            await Assert.That(CommandBindings.ShortcutLabel(CommandId.CloseFocusedTab)).IsEqualTo("Delete");
+        }
+        finally
+        {
+            Nimbus.Ui.Hotkeys.Initialize("auto");
+        }
+    }
+
+    /// <summary>
     /// <c>Nimbus.Ui.Hotkeys.Describe</c>, shared with pgNimbus, dropped Shift and Alt ("Cmd+N"
     /// for ⇧⌘N) and printed raw key names ("D1", "OemComma").
     /// </summary>

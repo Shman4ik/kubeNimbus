@@ -310,6 +310,12 @@ public sealed partial class ArgoResourceRowViewModel(
 
     public string Namespace => Resource.Namespace;
 
+    /// <summary>
+    /// What UI Automation names this row by (#236, accessible-names rule 11): identity only,
+    /// because the grid reads it when the row is bound and a status in it would go stale.
+    /// </summary>
+    public override string ToString() => RowAutomationName.Of($"{Kind} {Name}", Namespace);
+
     /// <summary>"apps/v1 · payments" — group and namespace, which is what tells two same-named rows apart.</summary>
     public string Qualifier => Resource.Namespace.Length > 0
         ? $"{Resource.ApiVersion} · {Resource.Namespace}"

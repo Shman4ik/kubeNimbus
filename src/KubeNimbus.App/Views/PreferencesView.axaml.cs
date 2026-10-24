@@ -1,5 +1,9 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
 
 namespace KubeNimbus.App.Views;
 
@@ -32,7 +36,27 @@ public partial class PreferencesView : UserControl
     {
         InitializeComponent();
         Loaded += (_, _) => AutomationNames.NameCardControls(this);
+        SettingsTabs.AddHandler(GotFocusEvent, (_, _) => PointStripAtSelectedTab(), RoutingStrategies.Bubble, handledEventsToo: true);
     }
+
+    /// <summary>
+    /// Shift+Tab out of a tab's first control goes back to the tab strip (#236). The strip's
+    /// panel is one Tab stop (<c>TabNavigation="Once"</c>), and a control on the tab's page,
+    /// which is the tab item's logical content, became that stop's remembered element when it
+    /// took focus: Shift+Tab from "Add file…" then went back to "Add file…" itself, a trap the
+    /// overlays' keyboard walk found. The stop is put back on the selected tab after every
+    /// focus change, once Avalonia has recorded its own.
+    /// </summary>
+    private void PointStripAtSelectedTab() => Dispatcher.UIThread.Post(() =>
+    {
+        if (SettingsTabs.ContainerFromIndex(SettingsTabs.SelectedIndex) is TabItem selected
+            && selected.GetVisualParent() is InputElement strip
+            && KeyboardNavigation.GetTabNavigation(strip) == KeyboardNavigationMode.Once
+            && !ReferenceEquals(KeyboardNavigation.GetTabOnceActiveElement(strip), selected))
+        {
+            KeyboardNavigation.SetTabOnceActiveElement(strip, selected);
+        }
+    }, DispatcherPriority.Background);
 
     protected override Size MeasureOverride(Size availableSize)
     {

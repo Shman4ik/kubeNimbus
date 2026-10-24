@@ -50,6 +50,8 @@ public enum CommandId
     LogSearchStep,
     LogSearchOptions,
     LogProblemStep,
+    LogLineKeys,
+    CopyLogLine,
     Exec,
     PortForward,
     PortForwards,

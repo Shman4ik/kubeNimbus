@@ -524,6 +524,15 @@
         <Setter Property="Background" Value="{DynamicResource LogCursorBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource SystemAccentColor}" />
     </Style>
+    <!-- The line a focused log list's keys are on (#236, LogLineCursor): the shared focus
+         ring's brush drawn round the row, and only while the list has focus, so a pane the
+         keyboard has left shows no stale cursor. After .cursor, so a key line that is also
+         the problem cursor keeps the ring. -->
+    <Style Selector="ItemsControl#LogItems:focus Border.logRow.keyLine">
+        <Setter Property="BorderThickness" Value="2" />
+        <Setter Property="BorderBrush" Value="{StaticResource AppFocusRingBrush}" />
+        <Setter Property="CornerRadius" Value="3" />
+    </Style>
     <Style Selector="Border.logRow.context">
         <Setter Property="Opacity" Value="0.6" />
     </Style>
@@ -1290,5 +1299,19 @@
     <Style Selector="Button.linkText:pointerover /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{StaticResource AppAccentBrush}" />
+    </Style>
+
+    <!-- A drop-down draws the shared ring too (DESIGN.md rule 20). Fluent's theme sets its
+         FocusAdorner to nothing and marks focus only by a border a shade darker, which read as
+         no focus at all: the overlays' keyboard walk found the preferences' shortcut modifier
+         without a visible stop (#236). The adorner layer's default ring reaches only a control
+         whose FocusAdorner is unset, so this one needs it set. A candidate for nimbusUi's
+         Controls.axaml, where pgNimbus would get it as well. -->
+    <Style Selector="ComboBox">
+        <Setter Property="FocusAdorner">
+            <FocusAdornerTemplate>
+                <nimbus:FocusRing />
+            </FocusAdornerTemplate>
+        </Setter>
     </Style>
 </Styles>

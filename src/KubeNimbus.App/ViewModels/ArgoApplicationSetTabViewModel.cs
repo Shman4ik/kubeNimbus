@@ -266,6 +266,12 @@ public sealed partial class ArgoGeneratedApplicationRowViewModel(
 
     public string Namespace { get; } = @namespace;
 
+    /// <summary>
+    /// What UI Automation names this row by (#236, accessible-names rule 11): identity only,
+    /// because the grid reads it when the row is bound and a status in it would go stale.
+    /// </summary>
+    public override string ToString() => RowAutomationName.Of(Name, Namespace);
+
     public ArgoSyncState Sync { get; } = sync;
 
     public ArgoHealthState Health { get; } = health;

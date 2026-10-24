@@ -33,6 +33,16 @@
        minimum to lower. The overlays are written not to depend on it: the palette follows
        the window below its own 560px (palette-logs-narrow renders it at 560). -->
 
+  <!-- Tab cycles inside a dismissable panel's card: from the last control on the
+       preferences page it went on to the command bar under the scrim (#236, the overlays'
+       keyboard walk). The card, not the panel: the panel holds focus while open and is not
+       a Tab stop, and a cycle set on it sent the first Tab straight out. Styled here because
+       OverlayPanel's theme is nimbusUi's; the fix belongs there too, for pgNimbus. -->
+  <Window.Styles>
+    <Style Selector="nui|OverlayPanel /template/ Border.overlayCard">
+      <Setter Property="KeyboardNavigation.TabNavigation" Value="Cycle" />
+    </Style>
+  </Window.Styles>
 
   <Window.DataTemplates>
     <DataTemplate DataType="vm:ClusterTabViewModel">
@@ -515,8 +525,12 @@
          behave identically — type, arrow, Enter — so neither needs to be learned
          twice. Rows are wider than the palette's because context names run long. -->
     <Border Classes="scrim" IsVisible="{Binding Switcher.IsOpen}" PointerPressed="OnSwitcherBackdropPressed">
-      <Border Classes="overlayCard" Width="640" MaxHeight="480" VerticalAlignment="Top" Margin="0,80,0,0"
-              HorizontalAlignment="Center" Padding="0">
+      <!-- Tab cycles inside the card: from the list it went on to the command bar under the
+           scrim, where Esc and typing no longer reached the switcher (#236, the overlays'
+           keyboard walk). The palette's card below does the same. -->
+      <Border Name="SwitcherCard" Classes="overlayCard" Width="640" MaxHeight="480" VerticalAlignment="Top" Margin="0,80,0,0"
+              HorizontalAlignment="Center" Padding="0" KeyboardNavigation.TabNavigation="Cycle"
+              KeyDown="OnSwitcherCardKeyDown">
         <Grid RowDefinitions="Auto,*,Auto">
           <TextBox Grid.Row="0" Name="SwitcherQueryBox" Text="{Binding Switcher.Query}"
                    PlaceholderText="Search clusters — name, cluster or kubeconfig…" Margin="10" FontSize="14"
@@ -580,9 +594,11 @@
 
                       <!-- Pin toggle. Pinning is what makes a 200-context kubeconfig
                            usable without typing: the four you actually work in sit at
-                           the top, every session. -->
+                           the top, every session. A pointer target, not a Tab stop, like a
+                           dock tab's ✕: inside the list's one stop it was reached by Shift+Tab
+                           only, never by Tab (#236, the overlays' keyboard walk). -->
                       <Button Grid.Column="3" Classes="chip switcherPin" Classes.pinned="{Binding IsPinned}"
-                              Padding="4" MinWidth="22" MinHeight="22"
+                              Padding="4" MinWidth="22" MinHeight="22" KeyboardNavigation.IsTabStop="False"
                               Click="OnSwitcherPinClick"
                               ToolTip.Tip="Pin to the top of the switcher">
                         <PathIcon Width="12" Height="12"
@@ -616,7 +632,8 @@
          each side where it does not (ENG-35). A stretched element held back by MaxWidth is
          centred, so nothing changes at any width the app can be today. -->
     <Border Classes="scrim" IsVisible="{Binding Palette.IsOpen}" PointerPressed="OnPaletteBackdropPressed">
-      <Border Classes="overlayCard" MaxWidth="560" MaxHeight="440" VerticalAlignment="Top" Margin="16,90,16,0" HorizontalAlignment="Stretch" Padding="0">
+      <Border Name="PaletteCard" Classes="overlayCard" MaxWidth="560" MaxHeight="440" VerticalAlignment="Top" Margin="16,90,16,0" HorizontalAlignment="Stretch" Padding="0"
+              KeyboardNavigation.TabNavigation="Cycle" KeyDown="OnPaletteCardKeyDown">
         <Grid RowDefinitions="Auto,*">
           <TextBox Grid.Row="0" Name="PaletteQueryBox" Text="{Binding Palette.Query}"
                     PlaceholderText="Type a command…" Margin="10" FontSize="14" KeyDown="OnPaletteKeyDown" />
@@ -670,7 +687,7 @@
 
          IsOpen binds two-way and is the ONLY wiring: the panel closes itself and the
          binding writes it back. Never pair it with a closing Command — that is the
-         double-toggle no-op of UI rule 8b. -->
+         double-toggle no-op of UI rule 8b. Tab cycles inside each one (Window.Styles). -->
     <nui:OverlayPanel IsOpen="{Binding IsShortcutsOpen, Mode=TwoWay}"
                       Title="Keyboard shortcuts" PanelWidth="520" PanelMaxHeight="640"
                       Content="{Binding Shortcuts}">

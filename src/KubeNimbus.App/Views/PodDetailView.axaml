@@ -427,7 +427,7 @@
                       <StackPanel>
                       <Rectangle Classes="logGap" IsVisible="{Binding IsGapBefore}" />
                       <Border Classes="logRow" Classes.error="{Binding IsErrorLine}" Classes.warn="{Binding IsWarnLine}"
-                              Classes.context="{Binding IsContextLine}" Classes.cursor="{Binding IsProblemCursor}">
+                              Classes.context="{Binding IsContextLine}" Classes.cursor="{Binding IsProblemCursor}" Classes.keyLine="{Binding IsKeyLine}">
                       <!-- Column 0 is the JSON chevron's, kept on every row so the text of
                            a JSON line and of a plain one start at the same x. -->
                       <Grid ColumnDefinitions="14,*" RowDefinitions="Auto,Auto">

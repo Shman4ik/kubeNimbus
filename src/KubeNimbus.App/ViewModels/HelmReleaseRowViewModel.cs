@@ -16,6 +16,12 @@ public sealed partial class HelmReleaseRowViewModel : ObservableObject
 
     public string Namespace => Release.Namespace;
 
+    /// <summary>
+    /// What UI Automation names this row by (#236, accessible-names rule 11): identity only,
+    /// because the grid reads it when the row is bound and a status in it would go stale.
+    /// </summary>
+    public override string ToString() => RowAutomationName.Of(Name, Namespace);
+
     public string Chart => Release.Chart;
 
     public string AppVersion => Release.AppVersion;

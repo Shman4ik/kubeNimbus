@@ -2948,6 +2948,19 @@ internal static class ClusterTabScenarios
     /// kind from the keyboard repopulates the list from the dataset instead of starting a watch
     /// against the offline client.
     /// </summary>
+    /// <summary>
+    /// One demo pod's logs in the dock: the new report-generator pod, whose scheduler prints
+    /// JSON lines, so a JSON line can be opened from the keyboard (#236, <c>ux-log-line-keys</c>).
+    /// </summary>
+    public static ClusterTabViewModel DemoPodLogsWithJson()
+    {
+        var tab = DemoTab();
+        tab.SelectedRow = tab.Rows.First(r => r.Name == "payment-service-report-generator-8c1a4f2e91-tq6rn");
+        tab.OpenSelectedCommand.Execute(null);
+        DrainDemoLogs(tab);
+        return tab;
+    }
+
     public static ClusterTabViewModel DemoDockTabs(int count = 2)
     {
         var tab = DemoTab();
