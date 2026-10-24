@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Effective 11 October 2026. This policy covers kubeNimbus, the desktop Kubernetes
+Effective 24 October 2026. This policy covers kubeNimbus, the desktop Kubernetes
 client, in every form it is distributed: the Microsoft Store package, the installers
 and archives on the GitHub Releases page, and builds made from this repository.
 
@@ -24,6 +24,10 @@ Kubeconfig files can contain personal information and credentials, such as user 
 access tokens, client certificates and the names of credential programs. kubeNimbus uses
 them only to connect to the cluster you open, and only on your computer. It never modifies
 them.
+
+When you choose **Open a YAML file…**, kubeNimbus reads the one file you pick into an editor,
+once. It does not remember the file's name or location, and the text goes to a cluster only
+when you apply it.
 
 When a kubeconfig names a credential program (for example `aws eks get-token`,
 `gke-gcloud-auth-plugin` or `kubelogin`), kubeNimbus runs that program the same way

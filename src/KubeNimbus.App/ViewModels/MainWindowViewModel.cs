@@ -699,6 +699,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             }
 
             HasContexts = AvailableContexts.Count > 0;
+            RefreshUnrestoredTabsNotice();
             var existing = RefreshSearchPaths();
             _lastChainFingerprint = fingerprint;
 
@@ -1057,6 +1058,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             _isRestoring = false;
         }
 
+        RefreshUnrestoredTabsNotice();
         SaveWorkspace();
         await Task.WhenAll(connects);
     }
@@ -1121,9 +1123,60 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     /// </summary>
     private readonly List<TabSnapshot> _unrestoredTabs = [];
 
+    /// <summary>
+    /// The status bar's line for <see cref="_unrestoredTabs"/> (UI rule 9): "1 saved tab not
+    /// reopened: sandbox is not in the kubeconfig files read". Keeping such a tab saved fixed
+    /// the data loss of #405, but the screen said nothing: the window simply opened with one
+    /// tab fewer than it closed with. Null when every saved tab was reopened. It names only the
+    /// snapshots whose context is still missing, because once a rescan finds one, "is not in
+    /// the kubeconfig files read" would be false (UI rule 20) and the switcher lists it again.
+    /// </summary>
+    [ObservableProperty]
+    private string? _unrestoredTabsNotice;
+
+    /// <summary>The line's tooltip: each missing context with the kubeconfig it was saved from, and what happens next.</summary>
+    [ObservableProperty]
+    private string? _unrestoredTabsDetail;
+
+    /// <summary>The screenshot harness's way to the state a restore leaves, with no workspace file to restore from.</summary>
+    internal void AddUnrestoredTab(TabSnapshot snapshot)
+    {
+        _unrestoredTabs.Add(snapshot);
+        RefreshUnrestoredTabsNotice();
+    }
+
+    private void RefreshUnrestoredTabsNotice()
+    {
+        var missing = _unrestoredTabs
+            .Where(s => !AvailableContexts.Any(c => c.Name == s.ContextName && c.KubeconfigPath == s.KubeconfigPath))
+            .ToList();
+        UnrestoredTabsNotice = UnrestoredTabsLine([.. missing.Select(s => s.ContextName)]);
+        UnrestoredTabsDetail = missing.Count == 0
+            ? null
+            : string.Join(Environment.NewLine, missing.Select(s => $"{s.ContextName}, saved from {s.KubeconfigPath}"))
+              + Environment.NewLine
+              + (missing.Count == 1
+                  ? "It stays saved: a launch that finds this context in the kubeconfig files reopens the tab."
+                  : "They stay saved: a launch that finds a context in the kubeconfig files reopens its tab.");
+    }
+
+    /// <summary>The sentence for the saved tabs a launch could not reopen, or null when there are none.</summary>
+    internal static string? UnrestoredTabsLine(IReadOnlyList<string> contextNames) => contextNames switch
+    {
+        [] => null,
+        [var one] => $"1 saved tab not reopened: {one} is not in the kubeconfig files read",
+        [var first, var second] => $"2 saved tabs not reopened: {first} and {second} are not in the kubeconfig files read",
+        _ => $"{contextNames.Count} saved tabs not reopened: {string.Join(", ", contextNames.Take(contextNames.Count - 1))} "
+             + $"and {contextNames[^1]} are not in the kubeconfig files read",
+    };
+
     private async Task AddTabAsync(ClusterContext context, TabSnapshot? snapshot = null)
     {
-        _unrestoredTabs.RemoveAll(s => s.ContextName == context.Name && s.KubeconfigPath == context.KubeconfigPath);
+        if (_unrestoredTabs.RemoveAll(s => s.ContextName == context.Name && s.KubeconfigPath == context.KubeconfigPath) > 0)
+        {
+            RefreshUnrestoredTabsNotice();
+        }
+
         var tab = new ClusterTabViewModel(context)
         {
             FleetMembersProvider = FleetMembers,
@@ -1394,6 +1447,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 CommandId.NewYaml,
                 $"Paste or type a manifest and apply it to {yamlTab.Header} — namespace {yamlTab.NewObjectNamespace} unless it names one",
                 () => yamlTab.NewYamlCommand.Execute(null));
+            yield return Catalog(
+                CommandId.OpenYamlFile,
+                $"Pick a local file and review it before it is applied to {yamlTab.Header}",
+                () => yamlTab.OpenYamlFileCommand.Execute(null));
         }
 
         // The column chooser itself (#301): a column header is not a keyboard stop, so this is
@@ -1569,6 +1626,13 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             {
                 yield return Catalog(CommandId.DeleteResource, $"{selectionTab.SelectionSummary} · asks to confirm",
                     () => selectionTab.DeleteSelectedCommand.Execute(null));
+            }
+
+            // #301 (FEAT-6): a rollout restart of every selected workload, which asks too.
+            if (selectionTab.CanRestartSelectedRow)
+            {
+                yield return Catalog(CommandId.RolloutRestart, $"{selectionTab.SelectionSummary} · asks to confirm",
+                    () => selectionTab.RestartSelectedCommand.Execute(null));
             }
         }
         else if (SelectedTab is { SelectedRow: { } row } rowTab)

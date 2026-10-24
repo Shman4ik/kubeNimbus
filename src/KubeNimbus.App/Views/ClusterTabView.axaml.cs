@@ -298,6 +298,7 @@ public partial class ClusterTabView : UserControl
         {
             _subscribed.PropertyChanged -= OnVmPropertyChanged;
             _subscribed.InspectorTabs.CollectionChanged -= OnInspectorTabsChanged;
+            _subscribed.MultipleSelectionRestored -= OnMultipleSelectionRestored;
         }
 
         _subscribed = Vm;
@@ -306,6 +307,7 @@ public partial class ClusterTabView : UserControl
         {
             _subscribed.PropertyChanged += OnVmPropertyChanged;
             _subscribed.InspectorTabs.CollectionChanged += OnInspectorTabsChanged;
+            _subscribed.MultipleSelectionRestored += OnMultipleSelectionRestored;
         }
 
         ApplyDockState();
@@ -1054,6 +1056,24 @@ public partial class ClusterTabView : UserControl
     /// </summary>
     private void OnGridSelectionChanged(object? sender, SelectionChangedEventArgs e) =>
         Vm?.SetSelectedRows([.. ResourceGrid.SelectedItems.OfType<ResourceRowViewModel>()]);
+
+    /// <summary>
+    /// The other way (#301, FEAT-6): after a re-sort replaced the list, the view model hands back
+    /// the rows of a multi-row selection still listed, and they are selected again. The grid has
+    /// put back only the current row, through its bound <c>SelectedItem</c>.
+    /// </summary>
+    private void OnMultipleSelectionRestored(object? sender, IReadOnlyList<ResourceRowViewModel> rows)
+    {
+        var selected = ResourceGrid.SelectedItems;
+        var already = new HashSet<ResourceRowViewModel>(selected.OfType<ResourceRowViewModel>());
+        foreach (var row in rows)
+        {
+            if (already.Add(row))
+            {
+                selected.Add(row);
+            }
+        }
+    }
 
     private void OnInspectorTabsChanged(object? sender, NotifyCollectionChangedEventArgs e) => ApplyDockState();
 

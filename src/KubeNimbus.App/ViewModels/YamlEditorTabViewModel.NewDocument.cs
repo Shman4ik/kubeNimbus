@@ -68,9 +68,45 @@ public sealed partial class YamlEditorTabViewModel
     /// Gone once the document has been applied — from then on it is that object's editor.
     /// </summary>
     public string? NewDocumentNotice => IsNewDocument && !_hasAppliedTarget
-        ? $"Paste or type one manifest, then {ApplyButtonLabel} applies it to {(ContextName.Length > 0 ? ContextName : "this cluster")}"
+        ? OpenedFrom
+          + $"{(_sourceFileName is null ? "Paste or type one manifest, then " : "")}{ApplyButtonLabel} applies it to {(ContextName.Length > 0 ? ContextName : "this cluster")}"
           + (_defaultNamespace.Length > 0 ? $". A namespaced object without metadata.namespace goes to {_defaultNamespace}." : ".")
         : null;
+
+    /// <summary>The local file this document was read from (#301, FEAT-12), or null for one typed or pasted.</summary>
+    private string? _sourceFileName;
+
+    /// <summary>How many documents that file held; the editor has only the first.</summary>
+    private int _sourceDocumentCount;
+
+    /// <summary>
+    /// The notice's first sentence for a document read from a file. A multi-document file is
+    /// opened on its first document only, and the notice says so before anything is applied:
+    /// the editor applies one object (rule 3 above), and the rest were neither opened nor sent.
+    /// </summary>
+    private string OpenedFrom => _sourceFileName switch
+    {
+        null => "",
+        var file when _sourceDocumentCount > 1 =>
+            $"{file} holds {_sourceDocumentCount} documents. Only the first is open here, because an editor applies one "
+            + $"object; the other {_sourceDocumentCount - 1} were not opened and nothing was applied. ",
+        var file => $"Opened from {file}. ",
+    };
+
+    /// <summary>
+    /// Fills a new document with a local file's text — its first document when it holds
+    /// several — and names the file as the tab's title until the first apply names the object.
+    /// The file is read once, here; nothing about it is kept beyond this editor's text.
+    /// </summary>
+    internal void LoadFromFile(string fileName, string text)
+    {
+        var (first, count) = YamlJson.FirstDocument(text.Replace("\r\n", "\n", StringComparison.Ordinal));
+        _sourceFileName = fileName;
+        _sourceDocumentCount = count;
+        Title = fileName;
+        YamlText = first;
+        OnPropertyChanged(nameof(NewDocumentNotice));
+    }
 
     /// <summary>
     /// Reads what a new document is and points the editor at it, or says why it cannot.
