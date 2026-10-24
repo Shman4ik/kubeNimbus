@@ -206,6 +206,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-yaml-conflict-diff", () => HostInMainWindow(ClusterTabScenarios.YamlEditorConflictDiff())),
     ("cluster-tab-yaml-secret-masked", () => HostInMainWindow(ClusterTabScenarios.YamlEditorSecretMasked())),
     ("cluster-tab-yaml-secret-revealed", () => HostInMainWindow(ClusterTabScenarios.YamlEditorSecretRevealed())),
+    ("ux-yaml-secret-copy", () => HostInMainWindow(ClusterTabScenarios.YamlEditorSecretRevealed())),
     // FEAT-30 — a TLS Secret's certificate chain, decoded without a Reveal.
     ("cluster-tab-yaml-tls-secret", () => HostInMainWindow(ClusterTabScenarios.YamlEditorTlsSecret())),
     ("cluster-tab-exec", () => HostInMainWindow(ClusterTabScenarios.Exec())),
@@ -214,6 +215,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-exec-no-shell", () => HostInMainWindow(ClusterTabScenarios.ExecNoShell())),
     ("cluster-tab-exec-debug-container", () => HostInMainWindow(ClusterTabScenarios.ExecDebugContainer())),
     ("cluster-tab-port-forward", () => HostInMainWindow(ClusterTabScenarios.PortForward())),
+    ("ux-port-forward-copy", () => HostInMainWindow(ClusterTabScenarios.PortForward())),
     ("cluster-tab-port-forward-idle", () => HostInMainWindow(ClusterTabScenarios.PortForwardIdle())),
     ("cluster-tab-port-forward-service", () => HostInMainWindow(ClusterTabScenarios.PortForwardService())),
     ("cluster-tab-port-forwards-list", PortForwardsListWindow),
@@ -363,6 +365,14 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // #301: the chooser by keyboard, from the palette, with focus shown and given back.
     ("ux-column-chooser-keyboard", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
     ("cluster-tab-yaml-new", () => HostInMainWindow(ListCreateChecks.NewYaml())),
+    // Bundle Y (#301, #405): Open a YAML file… on a multi-document file, a bulk rollout restart
+    // armed and after a partial refusal, a multi-row selection kept through a re-sort, and the
+    // status bar's line for a saved tab the launch did not reopen.
+    ("cluster-tab-yaml-from-file", () => HostInMainWindow(ListCreateChecks.YamlFromFile())),
+    ("cluster-tab-row-action-bulk-restart", () => HostInMainWindow(ListCreateChecks.BulkRestartArmed())),
+    ("cluster-tab-bulk-restart-partial", () => HostInMainWindow(ListCreateChecks.BulkRestartPartial())),
+    ("ux-bulk-selection-resort", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
+    ("shell-unrestored-tab", () => ListCreateChecks.WithUnrestoredTab(HostInMainWindow(ClusterTabScenarios.WorkloadsList()))),
 
     // FEAT-4 — the node surface. All on the demo cluster, which is where the node
     // dataset lives; the drain's progress states are the two the harness cannot produce
@@ -398,6 +408,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("net-service-deleted", () => HostInMainWindow(NetworkingScenarios.ServiceDeleted(), height: 1000)),
     ("net-ingress-list", () => HostInMainWindow(NetworkingScenarios.IngressList())),
     ("net-ingress-detail", () => HostInMainWindow(NetworkingScenarios.IngressDetail(), height: 1000)),
+    ("ux-ingress-copy-url", () => HostInMainWindow(NetworkingScenarios.IngressDetail(), height: 1000)),
     ("net-netpol-list", () => HostInMainWindow(NetworkingScenarios.NetworkPolicyList())),
     ("net-netpol-detail", () => HostInMainWindow(NetworkingScenarios.NetworkPolicyDetail(), height: 1000)),
     ("net-netpol-default-deny-pods", () => HostInMainWindow(NetworkingScenarios.NetworkPolicyDefaultDenyPods(), height: 1000)),
@@ -613,7 +624,7 @@ for (var position = 0; position < scenarios.Length; position++)
         Capture(name, theme, build);
 
         // #360, with --twice: an interaction scenario is rendered a second time and must come out
-        // byte-identical.
+        // byte-identical. So is one that shows an animation, in every run (#388).
         if (HarnessDeterminism.RendersTwice(name))
         {
             Capture(name, theme, build, again: true);
@@ -735,6 +746,9 @@ void Capture(string name, ThemeVariant theme, Func<Control> build, bool again = 
     if (name is "ux-leave-yaml-editor" or "ux-leave-exec-terminal") KeyboardChecks.LeaveEditorKeys(window);
     if (name == "ux-exec-copy") KeyboardChecks.ExecCopy(window);
     if (name == "ux-exec-copy-keys") ClipboardChecks.ExecCopyRealKeys(window);
+    if (name == "ux-ingress-copy-url") ClipboardChecks.IngressCopyUrl(window);
+    if (name == "ux-port-forward-copy") ClipboardChecks.PortForwardCopyUrl(window);
+    if (name == "ux-yaml-secret-copy") ClipboardChecks.YamlRevealedValueCopy(window);
     if (name == "ux-dock-splitter-focus") KeyboardChecks.DockSplitterKeepsFocus(window);
     if (name == "cluster-tab-dock-many-tabs")
     {
@@ -777,7 +791,9 @@ void Capture(string name, ThemeVariant theme, Func<Control> build, bool again = 
     if (name.StartsWith("cluster-tab-row-logs", StringComparison.Ordinal)) UxInteractionChecks.HoverRow(window, 3);
     if (name == "ux-font-settings") FontChecks.SettingsReachOpenText(window);
     if (name == "ux-bulk-delete") ListCreateChecks.BulkDelete(window);
-    if (name == "cluster-tab-bulk-delete-partial") ListCreateChecks.BulkRefusalWraps(window);
+    if (name is "cluster-tab-bulk-delete-partial" or "cluster-tab-bulk-restart-partial") ListCreateChecks.BulkRefusalWraps(window);
+    if (name == "ux-bulk-selection-resort") ListCreateChecks.SelectionKeptThroughResort(window);
+    if (name == "shell-unrestored-tab") ListCreateChecks.UnrestoredTabNotice(window);
     if (name == "ux-column-chooser") ListCreateChecks.ColumnChooser(window);
     if (name == "ux-column-chooser-keyboard") ListCreateChecks.ColumnChooserKeyboard(window);
 
@@ -805,6 +821,7 @@ void Capture(string name, ThemeVariant theme, Func<Control> build, bool again = 
     if (walk) FontChecks.Walk(window, name);
     if (walk) SelectionChecks.Walk(window, name);
     if (walk) ClockChecks.Walk(window, name);
+    if (!again) HarnessDeterminism.NoteAnimations(window, name);
     timing.Phase("walks");
     HarnessDeterminism.RepaintWhole(window);
     using var frame = window.CaptureRenderedFrame();

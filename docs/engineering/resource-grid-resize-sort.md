@@ -71,6 +71,11 @@ Twelve things are load-bearing.
    on 5,000 pods (the stress mode's `resource-list-metrics-poll` check). The selection is
    put back after the Reset. `ClusterTabSortTests` pins both halves: a small change stays
    in place with no Reset, a reshuffle is exactly one Reset and keeps the selection.
+   **A multi-row selection is kept too** (#301): the grid keeps it across a Reset on its own,
+   but a moved row (the insertion pass, or `RepositionRow` on a watch Modified) is a Remove and
+   an Insert, and the grid dropped it — three selected rows came back as one. The move paths now
+   hand the selection back through `MultipleSelectionRestored`; the evidence is in
+   [workload-actions](workload-actions.md) ("A multi-row selection survives a re-sort").
 8. **A CRD column is identified by the CRD author's name for it, never by slot.** The
    grid's printer columns are ten fixed positional slots, and which column a slot draws
    is a property of the kind in front of the reader — two kinds declaring different

@@ -236,7 +236,15 @@ public sealed partial class RowActionViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(IsDeletingMany))]
     private void StopBulk() => _bulkCts?.Cancel();
 
-    private async Task RunBulkDeleteAsync()
+    /// <summary>"Stop deleting" or "Stop restarting": the button that replaces Cancel while the loop runs.</summary>
+    public string StopBulkLabel => Kind == RowActionKind.Restart ? "Stop restarting" : "Stop deleting";
+
+    /// <summary>
+    /// The bulk loop, for a delete and (#301, FEAT-6) a rollout restart: one request per object,
+    /// one at a time, with Stop, and every object's own outcome. <see cref="IsDeletingMany"/>
+    /// keeps its name from when delete was the only bulk action; it means "the loop is running".
+    /// </summary>
+    private async Task RunBulkAsync()
     {
         using var cts = new CancellationTokenSource();
         _bulkCts = cts;
@@ -244,6 +252,10 @@ public sealed partial class RowActionViewModel : ObservableObject
         IsError = false;
         IsSuccess = false;
 
+        var restart = Kind == RowActionKind.Restart;
+#pragma warning disable RS0030 // the restartedAt stamp sent to the cluster is the real instant, not a displayed one
+        var at = DateTimeOffset.UtcNow;
+#pragma warning restore RS0030
         var deleted = 0;
         var refused = 0;
         var stopped = false;
@@ -258,8 +270,8 @@ public sealed partial class RowActionViewModel : ObservableObject
                     break;
                 }
 
-                Message = $"Deleting {i + 1} of {BulkItems.Count}: {item.Key}…";
-                item.MarkDeleting();
+                Message = $"{(restart ? "Restarting" : "Deleting")} {i + 1} of {BulkItems.Count}: {item.Key}…";
+                item.MarkWorking(restart ? "Restarting…" : "Deleting…");
                 if (item.Target.Client is not { } client)
                 {
                     item.MarkRefused("Nothing was sent: the demo cluster has no API server.");
@@ -269,8 +281,19 @@ public sealed partial class RowActionViewModel : ObservableObject
 
                 try
                 {
-                    await client.DeleteResourceAsync(item.Target.Descriptor, item.Target.Namespace, item.Target.Name, cts.Token);
-                    item.MarkDeleted();
+                    if (restart)
+                    {
+                        // One instant for the whole run, so every object's template carries the
+                        // same restartedAt and the run reads as one restart in each history.
+                        await client.RestartWorkloadAsync(item.Target.Descriptor, item.Target.Namespace, item.Target.Name, at, cts.Token);
+                        item.MarkDone($"Restart requested, stamped {WorkloadActions.FormatRestartedAt(at)}");
+                    }
+                    else
+                    {
+                        await client.DeleteResourceAsync(item.Target.Descriptor, item.Target.Namespace, item.Target.Name, cts.Token);
+                        item.MarkDeleted();
+                    }
+
                     deleted++;
                 }
                 catch (OperationCanceledException) when (cts.IsCancellationRequested)
@@ -296,10 +319,37 @@ public sealed partial class RowActionViewModel : ObservableObject
             _bulkCts = null;
         }
 
-        Message = BulkSummary(deleted, refused, BulkItems.Count, TargetName, stopped);
+        Message = restart
+            ? BulkRestartSummary(deleted, refused, BulkItems.Count, TargetName, stopped)
+            : BulkSummary(deleted, refused, BulkItems.Count, TargetName, stopped);
         IsSuccess = deleted == BulkItems.Count;
         IsError = !IsSuccess;
         IsDone = true;
+    }
+
+    /// <summary>
+    /// The result line of a bulk rollout restart, counted out loud like a bulk delete's. A
+    /// restart request is accepted when the template is stamped; the roll itself is the
+    /// controller's, and the list follows it through the watch.
+    /// </summary>
+    internal static string BulkRestartSummary(int restarted, int refused, int total, string plural, bool stopped)
+    {
+        var notTried = total - restarted - refused;
+        if (stopped)
+        {
+            return $"Stopped. Restart requested for {restarted} of {total} {plural}"
+                + (refused > 0 ? $", {refused} refused" : "")
+                + $", {notTried} not sent. Select the ones not restarted and restart again to finish.";
+        }
+
+        if (refused == 0)
+        {
+            return $"Restart requested for {restarted} {plural}.";
+        }
+
+        return restarted == 0
+            ? $"Nothing was restarted: the server refused all {total}. Each one's reason is in the list below."
+            : $"Restart requested for {restarted} of {total} {plural}. {refused} refused — each one's reason is in the list below.";
     }
 
     /// <summary>
@@ -486,6 +536,11 @@ public sealed partial class RowActionViewModel : ObservableObject
     public string Consequence => Kind switch
     {
         RowActionKind.Scale => "",
+        // #301 (FEAT-6): several at once. Each one rolls on its own, so the sentence says that
+        // the restarts overlap — the whole point of asking before N of them start.
+        RowActionKind.Restart when IsBulk =>
+            "Each one's pods roll under its controller's own update strategy, all at once. Each is its own "
+            + "request, so one the server refuses does not stop the others.",
         RowActionKind.Restart =>
             "Its pods roll under the controller's own update strategy — surge, maxUnavailable and "
             + "PodDisruptionBudgets are all honored.",
@@ -1087,7 +1142,7 @@ public sealed partial class RowActionViewModel : ObservableObject
         if (IsBulk)
         {
             // Several objects: one request each, its own Stop and its own per-object result.
-            await RunBulkDeleteAsync();
+            await RunBulkAsync();
             return;
         }
 
@@ -1338,7 +1393,13 @@ public sealed partial class BulkItemViewModel(BulkTarget target, bool showCluste
     [ObservableProperty]
     private bool _isUncertain;
 
-    internal void MarkDeleting() => Detail = "Deleting…";
+    internal void MarkWorking(string doing) => Detail = doing;
+
+    internal void MarkDone(string outcome)
+    {
+        IsDone = true;
+        Detail = outcome;
+    }
 
     internal void MarkDeleted()
     {

@@ -38,6 +38,7 @@ public enum CommandId
     ToggleUnhealthyOnly,
     RefreshList,
     NewYaml,
+    OpenYamlFile,
     ResetListColumns,
     ChooseListColumns,
 

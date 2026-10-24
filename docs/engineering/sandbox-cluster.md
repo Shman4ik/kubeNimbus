@@ -115,6 +115,22 @@ still removed `kubeconfig.yaml`; a file with no `current-context` was kept. The 
 checked the same way. `-Wsl` was not exercised: its keep-alive record sits beside the kubeconfig,
 which for the Argo sandbox is the same `.sandbox/` directory as before.
 
+**Bringing up a second sandbox never overwrites the shared one's kubeconfig either** (#383).
+`sandbox-up` still defaulted to `.sandbox/kubeconfig.yaml` whatever `-Name` said, so
+`sandbox-up.ps1 -Name kubenimbus-argo` without `-Kubeconfig` replaced the shared sandbox's file
+with the Argo cluster's, and the live tests and the QA seed then talked to the wrong cluster. All
+four scripts now share one rule: `.sandbox/kubeconfig.yaml` for `kubenimbus-sandbox`, and
+`.sandbox/<name>-kubeconfig.yaml` for any other name, less its `kubenimbus-` prefix
+(`argo-kubeconfig.yaml` for `kubenimbus-argo`, the file `argo-sandbox-up.ps1` already reads, and
+`sandbox-b-kubeconfig.yaml` for `kubenimbus-sandbox-b`, where `sandbox-down` used to fall back to
+the shared file and keep it with a warning). `-PrintKubeconfigPath` / `--print-kubeconfig-path`
+prints the resolved path and exits before any Docker call, which is what `SandboxScriptTests`
+(Core.Tests) runs: the `.ps1` pair wherever `pwsh` is on PATH, the `.sh` pair off Windows only,
+where `bash` on PATH may be WSL's. With the old default restored in `sandbox-up.ps1` the test
+failed for `kubenimbus-argo`, `kubenimbus-sandbox-b` and `scratch`. The `.sh` dry runs were also
+checked by hand in Git Bash on Windows. A second sandbox brought up before this change wrote its
+kubeconfig wherever `-Kubeconfig` said; pass the same path to tear it down.
+
 **Docker Desktop is not required.** `-Wsl` on both `.ps1` scripts routes every
 docker call through `wsl.exe --exec docker ...` instead — for Docker Engine installed
 directly inside a WSL2 distro

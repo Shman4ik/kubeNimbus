@@ -27,7 +27,15 @@
     rancher/k3s image tag. Default: v1.33.4-k3s1.
 
 .PARAMETER Kubeconfig
-    Where to write the kubeconfig. Default: <repo>/.sandbox/kubeconfig.yaml (git-ignored).
+    Where to write the kubeconfig. Default: derived from -Name, the same rule as
+    sandbox-down: <repo>/.sandbox/kubeconfig.yaml for kubenimbus-sandbox, and
+    <repo>/.sandbox/<name>-kubeconfig.yaml for any other name, without its `kubenimbus-`
+    prefix (argo-kubeconfig.yaml for kubenimbus-argo). All git-ignored. A second sandbox
+    started without -Kubeconfig used to overwrite the main one's file (#383).
+
+.PARAMETER PrintKubeconfigPath
+    Print the kubeconfig path the other parameters resolve to and exit, touching nothing.
+    A dry run of the default above; SandboxScriptTests reads it.
 
 .PARAMETER InstallKubeconfig
     Also install the kubeconfig at the classic location (~/.kube/config), so the
@@ -81,7 +89,8 @@ param(
     [switch] $Recreate,
     [switch] $SkipApps,
     [switch] $Wsl,
-    [string] $WslDistribution
+    [string] $WslDistribution,
+    [switch] $PrintKubeconfigPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -89,7 +98,19 @@ Set-StrictMode -Version Latest
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $manifestDir = Join-Path $PSScriptRoot 'manifests'
-if (-not $Kubeconfig) { $Kubeconfig = Join-Path $repoRoot '.sandbox/kubeconfig.yaml' }
+# The default follows -Name, with the same rule in all four sandbox scripts: the shared file
+# for the main sandbox only. `sandbox-up.ps1 -Name kubenimbus-argo` without -Kubeconfig wrote
+# the Argo cluster's kubeconfig over .sandbox/kubeconfig.yaml, and the live tests and the QA
+# seed then talked to the wrong cluster (#383; #379 was the same hazard in sandbox-down).
+if (-not $Kubeconfig) {
+    $file = if ($Name -eq 'kubenimbus-sandbox') { 'kubeconfig.yaml' } else { ($Name -replace '^kubenimbus-', '') + '-kubeconfig.yaml' }
+    $Kubeconfig = Join-Path $repoRoot ".sandbox/$file"
+}
+
+if ($PrintKubeconfigPath) {
+    $Kubeconfig
+    return
+}
 
 function Write-Step([string] $Message) { Write-Host "==> $Message" -ForegroundColor Cyan }
 function Write-Note([string] $Message) { Write-Host "    $Message" -ForegroundColor DarkGray }

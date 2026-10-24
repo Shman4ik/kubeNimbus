@@ -310,6 +310,48 @@ was confirmed red with `HasSelectedRow` reading `SelectedRow` again, and the `ux
 harness check now also asserts that Edit YAML is disabled under the three-row selection, says
 why, and that Delete is enabled.
 
-**Not built:** bulk restart, scale or any other bulk action, and keeping a multi-row selection
-through a re-sort that replaces the list (a metrics poll on a list sorted by CPU puts back only
-the current row).
+## Several rows: rollout restart (FEAT-6, #301)
+
+With several Deployments, StatefulSets or DaemonSets selected, **Rollout restart…** (R, the row
+menu, the palette) arms one strip for all of them, on the bulk delete's machinery
+(`ArmBulk`, `BulkTarget`, `BulkItems`, the one-at-a-time loop with Stop). Four things are
+load-bearing.
+
+1. **It always asks** (UI rule 17): a restart is disruptive, and N of them roll at once. The
+   sentence names the count and the cluster — "Restart 4 Deployments in payments on prod-payments
+   (production)" — with the names under it, and the consequence says the rolls overlap and that a
+   refusal does not stop the others. It is not destructive, so the confirm is the accent button,
+   not the red one. `BulkRestartTests.Several_workloads_arm_one_strip_that_asks_and_names_the_count_and_the_cluster`
+   was confirmed red with `RestartSelected` arming the single-row strip again (the command was
+   then disabled under the selection and nothing was armed).
+2. **Every selected row must have a pod template** (`RestartTargets`, `WorkloadActions.SupportsRestart`
+   per row), or the whole selection is refused, as for a delete: the count in the sentence is the
+   count that is restarted. Pods selected offer no bulk restart; the single-object tip then still
+   says "Delete acts on all of them", and with workloads selected it says "Delete and Rollout
+   restart act on all of them". `RestartRowActionTip` gives the row menu's item its own tooltip,
+   because the single-object tip ("Acts on one object…") would be wrong over an enabled item.
+3. **One request per object, one `restartedAt` instant for the run**: each object's template gets
+   the same stamp, so the run reads as one restart in every history. Each row says "Restart
+   requested, stamped …" or carries the API server's refusal; the result line counts both —
+   "Restart requested for 3 of 4 Deployments. 1 refused — each one's reason is in the list
+   below." Stop is labelled "Stop restarting". `IsDeletingMany` keeps its name and means "the
+   bulk loop is running".
+4. **The palette offers it beside Delete** under a multi-row selection ("3 selected · asks to
+   confirm"), only when every row can be restarted.
+
+The harness renders `cluster-tab-row-action-bulk-restart` (armed) and
+`cluster-tab-bulk-restart-partial` (one 403), and the latter runs `BulkRefusalWraps`.
+
+**A multi-row selection survives a re-sort.** A metrics poll on a list sorted by CPU that leaves a
+few rows out of place moves each one, a Remove and an Insert, and the DataGrid drops the
+selection of a row removed under it: `ux-bulk-selection-resort` selected three rows, moved one
+with a usage change and found **one** row left selected in the grid. The move pass (and
+`RepositionRow`, a watch Modified moving a row) now hands the rows still listed back through
+`MultipleSelectionRestored`, which the view adds to `SelectedItems`. The other path — a poll that
+reshuffles the list, or a sort click, which replaces it with one Reset — needed nothing: Avalonia
+12's DataGrid keeps the selection of items still listed across a Reset, which the same scenario
+checks first. `BulkRestartTests.A_multi_row_selection_survives_a_re_sort_that_moves_a_selected_row`
+was confirmed red with the restore taken out of the move pass, and the harness check failed with
+"the grid has 1 row(s) selected" with the view's handler emptied.
+
+**Not built:** bulk scale or any other bulk action.

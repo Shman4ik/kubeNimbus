@@ -1,8 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
-using Avalonia;
-using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input.Platform;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -173,8 +171,7 @@ public sealed partial class IngressDetailTabViewModel : InspectorTabViewModelBas
     private async Task CopyUrlAsync(IngressRouteViewModel? route)
     {
         if ((route ?? SelectedRoute)?.Url is not { } url
-            || Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop
-            || desktop.MainWindow?.Clipboard is not { } clipboard)
+            || MainWindowAccess.Current?.Clipboard is not { } clipboard)
         {
             return;
         }

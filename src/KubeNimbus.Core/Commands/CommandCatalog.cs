@@ -668,6 +668,16 @@ public static class CommandCatalog
         },
         new()
         {
+            // #301 (FEAT-12): New YAML…, filled from a local file the user picks. The ☰ menu
+            // carries it beside New YAML…; no gesture of its own.
+            Id = CommandId.OpenYamlFile,
+            Title = "Open a YAML file…",
+            Category = CommandCategory.Resources,
+            IconKey = "CodeBracesIconGeometry",
+            Surfaces = PaletteOnly,
+        },
+        new()
+        {
             // #301: the column chooser from the keyboard. A right click on a column header
             // opens it too, but a header is not a keyboard stop.
             Id = CommandId.ChooseListColumns,

@@ -1,33 +1,38 @@
 #!/usr/bin/env bash
 # Tears down a sandbox cluster started by sandbox-up.sh.
 #
-#   ./scripts/sandbox-down.sh [--name N] [--kubeconfig PATH] [--keep-kubeconfig]
+#   ./scripts/sandbox-down.sh [--name N] [--kubeconfig PATH] [--keep-kubeconfig] [--print-kubeconfig-path]
 #
-# The kubeconfig defaults to .sandbox/argo-kubeconfig.yaml for kubenimbus-argo and
-# .sandbox/kubeconfig.yaml otherwise, and is deleted only when its current-context is N (#379).
+# The kubeconfig defaults to .sandbox/kubeconfig.yaml for kubenimbus-sandbox and to
+# .sandbox/<N without kubenimbus->-kubeconfig.yaml for any other name, as in sandbox-up (#383),
+# and is deleted only when its current-context is N (#379).
 set -euo pipefail
 
 NAME=kubenimbus-sandbox
 KUBECONFIG_PATH=
 KEEP=0
+PRINT_KUBECONFIG_PATH=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --name)             NAME="$2"; shift 2 ;;
     --kubeconfig)       KUBECONFIG_PATH="$2"; shift 2 ;;
     --keep-kubeconfig)  KEEP=1; shift ;;
-    -h|--help)          sed -n '2,7p' "$0"; exit 0 ;;
+    --print-kubeconfig-path) PRINT_KUBECONFIG_PATH=1; shift ;;
+    -h|--help)          sed -n '2,8p' "$0"; exit 0 ;;
     *)                  echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# The Argo sandbox has its own file; falling back to the shared one deleted the running
-# kubenimbus-sandbox's kubeconfig on `--name kubenimbus-argo` (#379).
+# The same rule as sandbox-up (#383): every sandbox but the main one has its own file; falling
+# back to the shared one deleted the running kubenimbus-sandbox's kubeconfig on
+# `--name kubenimbus-argo` (#379).
 if [ -z "$KUBECONFIG_PATH" ]; then
-  if [ "$NAME" = kubenimbus-argo ]; then FILE=argo-kubeconfig.yaml; else FILE=kubeconfig.yaml; fi
+  if [ "$NAME" = kubenimbus-sandbox ]; then FILE=kubeconfig.yaml; else FILE="${NAME#kubenimbus-}-kubeconfig.yaml"; fi
   KUBECONFIG_PATH="$(dirname "$SCRIPT_DIR")/.sandbox/$FILE"
 fi
+if [ "$PRINT_KUBECONFIG_PATH" = 1 ]; then echo "$KUBECONFIG_PATH"; exit 0; fi
 
 if [ -n "$(docker ps -a --filter "name=^/${NAME}$" --format '{{.Names}}')" ]; then
   docker rm -f "$NAME" >/dev/null

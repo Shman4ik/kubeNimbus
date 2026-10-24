@@ -498,7 +498,7 @@
                 </MenuItem>
                 <MenuItem Header="Rollout restart…" Command="{Binding RestartSelectedCommand}" InputGesture="R"
                           ToolTip.ShowOnDisabled="True"
-                          ToolTip.Tip="{Binding SingleRowActionTip, TargetNullValue='Stamps the pod template so the controller rolls its pods — the same thing kubectl rollout restart does'}">
+                          ToolTip.Tip="{Binding RestartRowActionTip}">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource RestartIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>

@@ -165,12 +165,13 @@ build of this repository.
 ## Release integrity
 
 Release binaries are built and published by `.github/workflows/release.yml` on
-GitHub-hosted runners, never on a developer's machine. They are **not
-code-signed** yet: Authenticode and Apple Developer ID signing are planned for
-after 1.0, and until then Windows users who want a signed build can install
-from the Microsoft Store, whose package Microsoft signs. What a download can be
-checked against instead (the commands are in the README, "Verifying the
-download"):
+GitHub-hosted runners, never on a developer's machine. Windows is published
+only through the Microsoft Store, whose package Microsoft signs; the release
+page carries no Windows download. The macOS and Linux downloads are **not
+code-signed** with a certificate, and no signing is planned: the macOS app is
+ad-hoc signed only, because the project has no Apple Developer ID. What a
+download can be checked against instead (the commands are in the README,
+"Verifying the download"):
 
 - **`SHA256SUMS.txt`** on the release page. It detects a damaged download, but
   it sits beside the files it describes and proves nothing on its own.

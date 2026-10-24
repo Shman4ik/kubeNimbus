@@ -196,6 +196,168 @@ internal static class ListCreateChecks
     }
 
     /// <summary>
+    /// #301 (FEAT-6): three selected rows survive both ways a re-sort rewrites the list. A Reset
+    /// (a sort click, or a poll that reshuffles a usage-sorted list) keeps them on its own in
+    /// Avalonia 12's DataGrid, and this pins that. A poll that moves a few rows is a Remove and an
+    /// Insert per row, and the grid kept one of the three until the view model handed the rest
+    /// back (<c>MultipleSelectionRestored</c>); with that handler emptied this check failed with
+    /// "the grid has 1 row(s) selected".
+    /// </summary>
+    internal static void SelectionKeptThroughResort(Window window)
+    {
+        var view = window.GetVisualDescendants().OfType<ClusterTabView>().First();
+        var vm = (ClusterTabViewModel)view.DataContext!;
+        var grid = view.FindControl<DataGrid>("ResourceGrid")!;
+        Settle(window);
+
+        var rows = grid.GetVisualDescendants().OfType<DataGridRow>()
+            .Where(r => r.IsEffectivelyVisible).OrderBy(r => r.TranslatePoint(default, grid)!.Value.Y).Take(3).ToList();
+        if (rows.Count < 3) throw new InvalidOperationException("The demo list has fewer than three rows on screen.");
+
+        ClickRow(window, rows[0], MouseButton.Left, RawModifiers.None);
+        ClickRow(window, rows[2], MouseButton.Left, RawModifiers.Shift);
+        var selected = vm.SelectedRows.ToHashSet();
+        if (selected.Count != 3)
+            throw new InvalidOperationException($"Click then Shift+click selected {selected.Count} rows, not 3.");
+
+        // Sorting by name descending replaces the list with one Reset, as a metrics poll on a
+        // list sorted by CPU does past InPlaceResortLimit; the grid keeps the selection itself.
+        vm.ToggleSort(ResourceColumn.Name);
+        vm.ToggleSort(ResourceColumn.Name);
+        Settle(window);
+
+        var inGrid = grid.SelectedItems.OfType<ResourceRowViewModel>().ToHashSet();
+        if (!inGrid.SetEquals(selected))
+            throw new InvalidOperationException($"After the re-sort the grid has {inGrid.Count} row(s) selected, not the same 3.");
+        if (!vm.SelectedRows.ToHashSet().SetEquals(selected) || vm.SelectionSummary != "3 selected")
+            throw new InvalidOperationException($"After the re-sort the view model has {vm.SelectedRows.Count} row(s) selected (\"{vm.SelectionSummary}\").");
+
+        // The metrics poll's other path: a few rows out of place are moved one by one (a Remove
+        // and an Insert each), and a DataGrid drops the selection of a row removed under it.
+        vm.ToggleSort(ResourceColumn.Cpu);
+        Settle(window);
+        var cpuSelection = vm.VisibleRows.Where(r => r.LatestCpuNanocores is > 0).Take(3).ToList();
+        if (cpuSelection.Count < 3) throw new InvalidOperationException("The demo list has fewer than three measured rows.");
+        grid.SelectedItems.Clear();
+        foreach (var row in cpuSelection) grid.SelectedItems.Add(row);
+        Settle(window);
+        cpuSelection[0].ApplyUsage(cpuSelection[0].LatestCpuNanocores!.Value * 1000, 1);
+        vm.ResortVisibleRows();
+        Settle(window);
+        inGrid = grid.SelectedItems.OfType<ResourceRowViewModel>().ToHashSet();
+        if (!inGrid.SetEquals(cpuSelection))
+            throw new InvalidOperationException($"After a usage re-sort that moved a selected row, the grid has {inGrid.Count} row(s) selected, not the same 3.");
+        Console.WriteLine("Selection through a re-sort passed: 3 rows selected before and after, through a Reset and a move.");
+    }
+
+    /// <summary>
+    /// #301 (FEAT-6): a rollout restart of four selected Deployments, armed on the bulk strip —
+    /// the count and the cluster in the sentence, the names under it, and the question asked.
+    /// </summary>
+    public static ClusterTabViewModel BulkRestartArmed() => BulkRestartTab(partial: false);
+
+    /// <summary>The same after a run where one restart was refused by RBAC: every outcome on its own row.</summary>
+    public static ClusterTabViewModel BulkRestartPartial() => BulkRestartTab(partial: true);
+
+    private static ClusterTabViewModel BulkRestartTab(bool partial)
+    {
+        var tab = ClusterTabScenarios.RowActionRestart();
+        var rows = tab.Rows.Where(r => r.Namespace == tab.SelectedRow!.Namespace).Take(4).ToList();
+        if (rows.Count < 2) throw new InvalidOperationException("The fixture has fewer than two Deployments in one namespace.");
+        var client = FixtureData.CreateOfflineClient();
+        var bulk = rows.Select(r => new BulkTarget(client, tab.SelectedKind!.Descriptor, r.Namespace, r.Name, tab.Context.Name)).ToList();
+        var action = new RowActionViewModel(
+            RowActionKind.Restart, client, tab.SelectedKind!.Descriptor, rows[0].Namespace, rows[0].Name, tab.Context.Name,
+            environment: ClusterEnvironments.Classify(tab.Context.Name, tab.Context.ClusterName), bulk: bulk);
+        tab.SetSelectedRows(rows);
+        tab.PendingRowAction = action;
+
+        if (partial)
+        {
+            for (var i = 0; i < action.BulkItems.Count; i++)
+            {
+                if (i == 1)
+                {
+                    action.BulkItems[i].MarkRefused(
+                        $"deployments.apps \"{action.BulkItems[i].Target.Name}\" is forbidden: User \"deploy-bot\" "
+                        + "cannot patch resource \"deployments\" in API group \"apps\" in the namespace \"payments\"");
+                }
+                else
+                {
+                    action.BulkItems[i].MarkDone("Restart requested, stamped 2026-08-01 10:00:00Z");
+                }
+            }
+
+            action.Message = RowActionViewModel.BulkRestartSummary(
+                action.BulkItems.Count - 1, 1, action.BulkItems.Count, action.TargetName, stopped: false);
+            action.IsError = true;
+            action.IsDone = true;
+        }
+
+        return tab;
+    }
+
+    /// <summary>
+    /// #301 (FEAT-12): Open a YAML file… on a three-document file — the editor holds the first
+    /// document, the tab is titled with the file name, and the InfoBar says the other two were
+    /// neither opened nor applied.
+    /// </summary>
+    public static ClusterTabViewModel YamlFromFile()
+    {
+        var tab = NewYaml();
+        var editor = (YamlEditorTabViewModel)tab.SelectedInspectorTab!;
+        editor.LoadFromFile("checkout-stack.yaml", """
+            # checkout: the worker's settings, its Service and its Deployment
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: checkout-settings
+            data:
+              mode: fast
+              retries: "3"
+            ---
+            apiVersion: v1
+            kind: Service
+            metadata:
+              name: checkout
+            ---
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: checkout-worker
+            """);
+        return tab;
+    }
+
+    /// <summary>
+    /// The follow-up to #405: a saved tab whose context this launch did not find, named in the
+    /// status bar. The fixture has no workspace file to restore from, so the state is put in.
+    /// </summary>
+    internal static Control WithUnrestoredTab(Control host)
+    {
+        var shell = (MainWindowViewModel)((Window)host).DataContext!;
+        shell.AddUnrestoredTab(new KubeNimbus.App.TabSnapshot("sandbox", "/home/dev/.kube/sandbox.yaml"));
+        return host;
+    }
+
+    /// <summary>The line is on screen, whole, and its tooltip names the kubeconfig the tab was saved from.</summary>
+    internal static void UnrestoredTabNotice(Window window)
+    {
+        Settle(window);
+        var line = window.GetVisualDescendants().OfType<TextBlock>().FirstOrDefault(t => t.Name == "UnrestoredTabsNotice")
+            ?? throw new InvalidOperationException("The status bar has no unrestored-tabs line.");
+        if (!line.IsEffectivelyVisible)
+            throw new InvalidOperationException("The unrestored-tabs line is not visible; the status bar may be hidden.");
+        if (line.Text != "1 saved tab not reopened: sandbox is not in the kubeconfig files read")
+            throw new InvalidOperationException($"The unrestored-tabs line reads \"{line.Text}\".");
+        if (line.TextLayout.TextLines.Any(l => l.HasCollapsed))
+            throw new InvalidOperationException("The unrestored-tabs line is cut with an ellipsis.");
+        if (ToolTip.GetTip(line) is not string tip || !tip.Contains("/home/dev/.kube/sandbox.yaml", StringComparison.Ordinal))
+            throw new InvalidOperationException($"The line's tooltip does not name the kubeconfig: \"{ToolTip.GetTip(line)}\".");
+        Console.WriteLine("Unrestored-tab line passed.");
+    }
+
+    /// <summary>
     /// A right click on a column header opens the column chooser, not the row menu; unticking
     /// Restarts hides that column and remembers it; the chooser is left open for the PNG.
     /// </summary>

@@ -239,11 +239,14 @@ public sealed partial class ClusterTabViewModel
     /// Whether the selected object can be rollout-restarted: it has a pod template to
     /// stamp. A property of the object rather than of its kind, which is what makes it
     /// true for Deployments, StatefulSets, DaemonSets <em>and</em> a CRD that embeds a
-    /// pod template, with none of the four named anywhere.
+    /// pod template, with none of the four named anywhere. With several rows selected it is
+    /// true when every one of them can be restarted (#301, FEAT-6): the one single-object
+    /// action besides Delete that acts on the whole selection.
     /// </summary>
-    public bool CanRestartSelectedRow =>
-        ActionRow is { } row && DescriptorFor(row) is { } descriptor
-        && WorkloadActions.SupportsRestart(descriptor, row.Resource);
+    public bool CanRestartSelectedRow => HasMultipleSelection
+        ? RestartTargets().Count > 1
+        : ActionRow is { } row && DescriptorFor(row) is { } descriptor
+          && WorkloadActions.SupportsRestart(descriptor, row.Resource);
 
     /// <summary>Whether the server says the selected row's kind can be deleted at all.</summary>
     public bool CanDeleteSelectedRow => DeleteTargets().Count > 0;
@@ -261,7 +264,17 @@ public sealed partial class ClusterTabViewModel
     }
 
     [RelayCommand(CanExecute = nameof(CanRestartSelectedRow))]
-    private void RestartSelected() => ArmRowAction(RowActionKind.Restart);
+    private void RestartSelected()
+    {
+        // Several workloads selected: one strip for all of them, and it asks (UI rule 17).
+        if (HasMultipleSelection)
+        {
+            ArmBulkRestart();
+            return;
+        }
+
+        ArmRowAction(RowActionKind.Restart);
+    }
 
     /// <summary>
     /// Delete, with the confirm armed in place. It used to open the object's YAML with

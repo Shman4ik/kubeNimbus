@@ -2,8 +2,6 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
-using Avalonia;
-using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input.Platform;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -709,8 +707,7 @@ public sealed partial class YamlEditorTabViewModel : InspectorTabViewModelBase
     private async Task CopyRevealedValueAsync(RevealedValueViewModel? row)
     {
         if (row?.ClipboardText is not { } text
-            || Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop
-            || desktop.MainWindow?.Clipboard is not { } clipboard)
+            || MainWindowAccess.Current?.Clipboard is not { } clipboard)
         {
             return;
         }

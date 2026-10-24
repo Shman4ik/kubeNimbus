@@ -173,8 +173,16 @@ Thirteen things are load-bearing.
    **A Conflict from `resourceVersion` is not a field conflict, and a force-apply does not
    override it.** A Deployment's controller writes its status for a few seconds after almost
    any change, which moves `resourceVersion`; an Apply from a text opened before that is refused
-   with "the object has been modified" whatever `force` says. The live test waits for the object to settle
-   for this reason. Reload, then apply again, is the way through.
+   with "the object has been modified" whatever `force` says. Reload, then apply again, is the way
+   through, and the live test now does exactly that (#385): it used to wait for the object's
+   `resourceVersion` to stop moving before the force-apply only, and the first apply still lost the
+   race to the controller once (a 409 in bundle C's run for PR #381). Each open, edit, preview and
+   apply step now runs again from a fresh read, up to five times, when the server answers with that
+   optimistic-lock 409; a field-manager conflict ("Apply failed with N conflict(s)") is not retried.
+   Proved against the sandbox by a write from a second field manager injected between the read and
+   the apply: with the retry all three kinds passed, without it all three failed with the 409 of
+   the issue. The product needs no change for it: the editor shows the server's sentence, which
+   says to apply to the latest version.
 
 14. **`metadata.managedFields` is out of the editor's text by default (#270, the owner's
    decision of 2026-10-11).** On a Deployment it is a couple of hundred lines (`f:lastUpdateTime:
@@ -350,5 +358,38 @@ covers the preview on and off, and went red with the check bypassed.
 5. **Not on the demo cluster, and not before a connect**: `ClusterTabViewModel.CanCreateFromYaml`
    is false with no `ClusterClient`, the ☰ item is disabled and the palette has no row.
 
-**Not built (left for the backlog):** opening a local file into the editor, a template library,
-and applying several documents in one go.
+## Open a YAML file… (FEAT-12, the local-file slice, #301)
+
+**Open a YAML file…** in the ☰ menu (under New resource from YAML…) and the palette picks a file
+with Avalonia's `StorageProvider` and opens it in the same new-document editor, so everything
+above applies unchanged: the kind read from the text at the press, the namespace default, Review,
+server-side apply, the re-key after the first apply. Four things are load-bearing.
+
+1. **A multi-document file opens on its first document, and says so in place.** Of the two honest
+   options — apply object by object with per-object results, or open one document and say so —
+   this is the smaller: the editor already applies exactly one object (rule 3 above), and an
+   object-by-object apply would need a second result surface beside the editor's own. The InfoBar
+   reads "stack.yaml holds 3 documents. Only the first is open here, because an editor applies one
+   object; the other 2 were not opened and nothing was applied." before anything is sent.
+   `YamlJson.FirstDocument` (Core) cuts the first non-empty document out of the source by the
+   YamlDotNet parser's marks, never by splitting on `---` lines (a `---` inside a block scalar is
+   data), and keeps a file's leading comments. Text that does not parse opens whole, so the apply
+   reports the parser's own error. `OpenYamlFileTests.A_multi_document_file_opens_on_its_first_document_and_says_so`
+   went red with `LoadFromFile` setting the whole file's text; `YamlFirstDocumentTests` pins the cut.
+2. **The tab is titled with the file name** until the first apply names the object, and the
+   InfoBar starts "Opened from settings.yaml." for a one-document file.
+3. **It reads only the file picked, once, and keeps nothing**: not the path (`PickedYamlFile`
+   carries the name and the text), not a recent-files list. `PRIVACY.md` has a sentence for it
+   under "What the app reads on your computer", because that section would otherwise omit a read
+   the app now makes; CLAUDE.md's privacy rule 2 does not require it (nothing new is stored or
+   sent, and no URL is opened).
+4. **A file past 4 MiB or not UTF-8 is refused in the status line** with nothing opened: no
+   object the API server stores is larger than about 1.5 MiB, and bytes that are not UTF-8 would
+   otherwise open as replacement characters an apply would send. A byte-order mark is dropped.
+   Not on the demo cluster and not before a connect (`CanCreateFromYaml`, as for New YAML…).
+
+The harness renders `cluster-tab-yaml-from-file` (a three-document file). The picker itself
+cannot be driven headlessly; it is a check for the QA VM.
+
+**Not built (left for the backlog):** a template library, and applying several documents in one
+go (object by object, with per-object results).

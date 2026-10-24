@@ -89,7 +89,7 @@ Seven things are load-bearing:
    looks for a name with no directory in it in the app's own folder and then the *current
    directory* before `PATH`, on Windows (`CreateProcess` with no application name) and on Unix
    (`Process.ResolvePath`) alike. So a `cmd.exe` or `pwsh.exe` left in a downloads folder or a
-   cloned repository the app was started from, or in the folder a portable zip was extracted
+   cloned repository the app was started from, or in the folder a portable archive was extracted
    into, would have run with `KUBECONFIG` pointed at a cluster. Every candidate is resolved to
    an absolute path first, by `TerminalLauncher.Resolve` over a `TerminalLookup` (PATH, PATHEXT
    and the system directory, passed in so the tests can fake all three):

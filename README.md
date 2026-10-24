@@ -99,18 +99,20 @@ labels identify the sample data; no real cluster or credentials are involved.
 ## Download
 
 **On Windows, install from the
-[Microsoft Store](https://apps.microsoft.com/detail/9MZ3C28M65PB).** It is the
-same app, re-signed by Microsoft during certification, so it installs and
-updates with no SmartScreen prompt and no unsigned-binary workaround.
+[Microsoft Store](https://apps.microsoft.com/detail/9MZ3C28M65PB)**, or from a
+terminal with `winget install --id 9MZ3C28M65PB --source msstore` (which
+installs the same Store package). The Store is the only Windows channel: it
+signs the app and keeps it updated. There is no Windows download on the release
+page; the portable zip published up to 0.8 is no longer built.
 
-Everywhere else — and on Windows if you would rather not use the Store — grab
-the installer or the portable archive for your platform from the
+On macOS and Linux, grab the installer or the portable archive for your
+platform from the
 [latest release](https://github.com/Shman4ik/kubeNimbus/releases/latest).
 Builds are self-contained NativeAOT binaries — **no .NET runtime to install**.
 
 | Platform | Installer | Portable |
 |---|---|---|
-| Windows x64 | the [Store](https://apps.microsoft.com/detail/9MZ3C28M65PB) | `kubeNimbus-<version>-win-x64.zip` |
+| Windows x64 | the [Store](https://apps.microsoft.com/detail/9MZ3C28M65PB) or winget | — |
 | macOS Apple Silicon | `kubeNimbus-<version>-osx-arm64.dmg` | `kubeNimbus-<version>-osx-arm64.tar.gz` |
 | Linux x64 | `kubeNimbus-<version>-linux-x64.deb` or `kubeNimbus-<version>-x86_64.AppImage` | `kubeNimbus-<version>-linux-x64.tar.gz` |
 | Linux arm64 | `kubeNimbus-<version>-linux-arm64.deb` or `kubeNimbus-<version>-aarch64.AppImage` | `kubeNimbus-<version>-linux-arm64.tar.gz` |
@@ -122,24 +124,21 @@ own platform before the release is created.
 Intel Macs aren't published yet — [build from source](#building-from-source),
 it's one command.
 
-**Downloads from this page are unsigned** — code signing needs certificates
-this project doesn't have, so your OS will object the first time. (The Store
-build above is signed by Microsoft and does none of this.)
+**The macOS and Linux downloads are not signed with a certificate** — that
+needs an Apple Developer account this project doesn't have, so macOS will
+object the first time (the steps are below). The Windows app is signed by
+Microsoft through the Store.
 
 <details>
 <summary><b>Windows</b></summary>
 
-**Store.** `winget install --id 9MZ3C28M65PB --source msstore` or the
-[listing](https://apps.microsoft.com/detail/9MZ3C28M65PB) — signed, and nothing below applies.
+Install from the [Store listing](https://apps.microsoft.com/detail/9MZ3C28M65PB),
+or run `winget install --id 9MZ3C28M65PB --source msstore`. Both install the
+Store package, which Microsoft signs and the Store updates.
 
-**Zip.** Unblock it before extracting (Properties → Unblock, or `Unblock-File
-kubeNimbus-<version>-win-x64.zip` in PowerShell), then run `kubeNimbus.exe`.
-Nothing is installed: your settings live in `%AppData%\kubeNimbus`, so updating
-is replacing the folder with the new one. Up to 0.5.0 there was also an MSI; if
-you installed it, uninstall it from Settings → Apps.
-
-SmartScreen shows "Windows protected your PC" the first time — click
-**More info → Run anyway**.
+If you used the portable zip (published up to 0.8), delete its folder once the
+Store app is installed. If you installed the MSI (up to 0.5.0), uninstall it
+from Settings → Apps.
 </details>
 
 <details>
@@ -220,7 +219,7 @@ gh release verify-asset v<version> <file> --repo Shman4ik/kubeNimbus
 gh attestation verify <file> --repo Shman4ik/kubeNimbus
 ```
 
-The binaries are not code-signed yet; see [SECURITY.md](SECURITY.md#release-integrity).
+The macOS and Linux binaries are not code-signed; see [SECURITY.md](SECURITY.md#release-integrity).
 </details>
 
 ## Quick start
@@ -371,9 +370,10 @@ Microsoft Store listing.
 kubeNimbus is **pre-1.0**, and the first public release is honest about where
 it's been exercised:
 
-- Binaries and installers downloaded from Releases are unsigned (see above),
-  and there is no auto-update — a new version is a new download. The Microsoft
-  Store build is signed and updates itself; it is Windows-only.
+- The macOS and Linux downloads from Releases are not signed with a
+  certificate (see above), and there is no auto-update — a new version is a new
+  download (the AppImage can update through AppImageUpdate). On Windows the
+  Microsoft Store build, the only Windows channel, is signed and updates itself.
 - Windows has had the most hands-on use. The Linux and macOS builds are
   produced and AOT-verified by CI but have seen much less real-world testing.
 - The demo cluster is a fixed sample set, not a simulator: nothing in it
