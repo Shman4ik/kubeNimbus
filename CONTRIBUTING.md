@@ -173,9 +173,9 @@ steps below are the mechanics it ends with.
 
 The workflow NativeAOT-publishes for `win-x64`, `linux-x64`, `linux-arm64` and
 `osx-arm64`, launches each binary (`--smoke-test`), packages every platform's
-installer beside the portable archive — `.dmg`, `.deb` and `.AppImage`; Windows
-gets the portable zip only, since the Store covers installing —
-smoke-launches each of those through its own installed path (the zip unpacked), generates
+installer beside the portable archive for macOS and Linux — `.dmg`, `.deb` and
+`.AppImage`; Windows gets no release asset, because it ships through the
+Microsoft Store only — smoke-launches each of those through its own installed path, generates
 `SHA256SUMS.txt`, signs a build-provenance attestation over every file, and
 creates the GitHub Release with the CHANGELOG section as its body. A plain tag (`v0.4.0`) is a full release and takes GitHub's
 **Latest** label; only a tag with a suffix (`v0.4.0-rc.1`) is published as a
@@ -204,8 +204,8 @@ workflow. A dry run can be dispatched from any branch; a real release
 ### Microsoft Store submission (manual)
 
 kubeNimbus is [listed on the Store](https://apps.microsoft.com/detail/9MZ3C28M65PB) (product ID `9MZ3C28M65PB`), so this is
-now an update path rather than a first submission — and the README points
-Windows users at it first, because the Store copy is signed.
+now an update path rather than a first submission. It is the only Windows
+channel: the release page carries no Windows download.
 
 The same run also packs the `win-x64` output into a `.msix` and uploads it as
 the `windows-msix` workflow artifact (14-day retention — it is the one artifact
@@ -220,10 +220,10 @@ Packages, and submit for certification. Identity values live in
 `installer/msix/Package.appxmanifest` and must never be edited — see CLAUDE.md,
 "Microsoft Store (MSIX)".
 
-Note that the release binaries are **unsigned**: code signing needs
-certificates this project does not have. Users get a SmartScreen prompt on
-Windows and a Gatekeeper quarantine on macOS; the README says so and explains
-the workaround.
+No code-signing certificate is bought. Windows needs none, because the Store
+re-signs the package; the macOS app is ad-hoc signed, so users get a Gatekeeper
+quarantine on first launch, and the Linux packages are unsigned. The README
+says so and explains the workaround.
 
 ## License
 

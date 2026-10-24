@@ -1,6 +1,6 @@
 ---
 name: release
-description: kubeNimbus release, CI and packaging rules — tag-driven release.yml, per-RID launch checks, the Windows zip, .dmg/.deb/AppImage installers, why NativeAOT is not compiled for size, Microsoft Store MSIX identity, assembly-name coupling, and the 0.5 GB Actions storage budget. Load before cutting a release or editing .github/workflows, installer/, or the packaging scripts.
+description: kubeNimbus release, CI and packaging rules — tag-driven release.yml, per-RID launch checks, Windows through the Store only, .dmg/.deb/AppImage installers, why NativeAOT is not compiled for size, Microsoft Store MSIX identity, assembly-name coupling, and the 0.5 GB Actions storage budget. Load before cutting a release or editing .github/workflows, installer/, or the packaging scripts.
 ---
 
 ## Actions storage is a 0.5 GB budget (2026-08)
@@ -152,10 +152,15 @@ to walk before tagging is [`docs/RELEASE-CHECKLIST.md`](../../../docs/RELEASE-CH
   workflow passes no `--latest` flag: GitHub's automatic choice picks the
   highest semver, and forcing it would hand the label to an older tag
   re-published through `workflow_dispatch`.
-- **Binaries are unsigned** (no certificates), so every release body repeats
-  the SmartScreen/Gatekeeper workaround. Don't drop that footer.
-- **Every platform ships an installer beside the portable archive**, and each
+- **No code-signing certificate is bought** (owner decision, 2026-10-24).
+  Windows needs none, because it ships only through the Store, which re-signs
+  the MSIX; macOS stays ad-hoc signed, because the owner cannot enrol in the
+  Apple Developer Program; Linux packages are unsigned. So every release body
+  ends with a footer that sends Windows users to the Store and winget and gives
+  the macOS quarantine workaround. Don't drop that footer.
+- **macOS and Linux ship an installer beside the portable archive**, and each
   one is *installed and launched* in CI before the release exists — see below.
+  Windows attaches nothing to the release (next section).
 - `workflow_dispatch` with `dry_run: true` builds and archives all four RIDs
   without creating anything public — use it after touching the workflow.
 
@@ -193,7 +198,7 @@ Four rules, each closing a way a release could ship something nobody reviewed:
    step's env. A persisted token sits in `.git/config` for every later step,
    including third-party code, and in the `release` job it can write.
 
-### Installers (.dmg, .deb, .AppImage) and the Windows zip
+### Installers (.dmg, .deb, .AppImage), and Windows through the Store only
 
 A tarball is what a developer wants. Everyone else expects an
 installer, and until this every platform's instructions in the README ended in
@@ -201,20 +206,21 @@ installer, and until this every platform's instructions in the README ended in
 optional, since an unbundled binary has no Dock icon, no app name and no way to
 be launched from Spotlight. `release.yml` now builds, per RID:
 
-- **Windows: the portable zip, and no installer.** The Store package covers
-  installing and updating, so the direct download is
-  `kubeNimbus-<version>-win-x64.zip`: one top-level folder, no `.pdb`, nothing
-  to install, and the app's data lives in `%AppData%\kubeNimbus` either way, so
-  replacing the folder is the update. **It replaced a per-user WiX MSI on
-  2026-10-04**, following pgNimbus (#343, 2026-10-01): across 0.3.2–0.5.0 the
-  MSI was downloaded once and the zip three times, the workflow installed WiX
-  as a floating `5.*` on every release run (WiX 7 has since started to require
-  accepting its OSMF EULA), and WiX wrote a `.wixpdb` beside the MSI in `dist/`
-  that every release from 0.3.2 attached as a public asset. What the zip gives
-  up is the Start menu entry, the Apps entry and upgrading in place. If an MSI
-  ever comes back, its old `UpgradeCode` was
-  `29a90bce-dcfd-4567-b2fc-da434722f319`; reuse it, so it upgrades the 0.3–0.5
-  installs instead of landing beside them.
+- **Windows: nothing on the release page; the Microsoft Store only** (owner
+  decision, 2026-10-24, from 1.0). Users install from the Store listing or with
+  `winget install --id 9MZ3C28M65PB --source msstore`, which installs the same
+  Store package. The `win-x64` leg is `archive: none`: it publishes,
+  launch-checks and builds the MSIX for Partner Center, and its Stage, Checksum
+  and Upload steps are skipped, so no `kubeNimbus-<version>-win-x64` artifact
+  exists for the release job to collect. The reason: the Store signs and
+  updates the app for free, while a direct download would need a purchased
+  Authenticode certificate to get past SmartScreen, which the project does not
+  buy. History: a per-user WiX MSI until 2026-10-04 (dropped, following pgNimbus
+  #343, because it was downloaded once across 0.3.2–0.5.0, installed WiX at a
+  floating version on every run and leaked a `.wixpdb` onto every release), then
+  a portable `kubeNimbus-<version>-win-x64.zip` until 2026-10-24. If an MSI ever
+  comes back, its old `UpgradeCode` was `29a90bce-dcfd-4567-b2fc-da434722f319`;
+  reuse it, so it upgrades the 0.3–0.5 installs instead of landing beside them.
 - **`.app` + `.dmg`** (`scripts/macos/build-app-bundle.sh`). The bundle is
   **ad-hoc signed**, and that is not decoration: a quarantined bundle with no
   signature at all is reported as *"kubeNimbus is damaged and can't be opened"*,
@@ -272,8 +278,7 @@ Three things about this are load-bearing:
    check") proves the binary starts; it says nothing about what an installer can
    break, which is a different list: a file left out of an archive, a bundle
    layout Gatekeeper refuses, a `Depends` line one library short of what the
-   X11 backend loads. The zip leg unpacks the archive into a fresh folder, runs
-   both smoke modes from there, and fails if a `.pdb` reached it. The `.deb` leg
+   X11 backend loads. The `.deb` leg
    is the strongest: `apt` resolves the control file's own `Depends`, so a
    forgotten library fails on a runner rather than on a minimal desktop.
 2. **The packages are written into `dist/`**, which is where the existing
@@ -286,10 +291,12 @@ Three things about this are load-bearing:
    what makes the comment true; the MSIX artifact keeps its own name and its
    14-day retention.
 
-**Not done:** winget manifests, a Homebrew cask, and signing/notarization of any
-kind (deferred until after 1.0; build provenance and GitHub's release
-attestations are what a download can be checked against meanwhile). The first two are distribution channels that need this to exist first; the
-third needs a paid certificate and an Apple Developer account.
+**Not done:** a Homebrew cask. winget needs no manifest of ours: `winget install
+--id 9MZ3C28M65PB --source msstore` installs the Store package. **Signing and
+notarization are not planned** (owner decision, 2026-10-24): Windows is signed
+by the Store, and macOS stays ad-hoc signed because the owner cannot enrol in
+the Apple Developer Program. Build provenance and GitHub's release attestations
+are what a macOS or Linux download is checked against.
 
 ### Microsoft Store (MSIX)
 
@@ -297,12 +304,12 @@ The Store is how an unsigned free project buys out of SmartScreen for $0: an
 uploaded package is **re-signed by Microsoft with its own trusted certificate**
 during certification, so the upload only needs a throwaway self-signed
 certificate to satisfy MSIX's "must be signed" rule — not a purchased
-Authenticode one. It is an *additional* channel, not a replacement for the
-direct download; the GitHub Release archives stay exactly as they are.
+Authenticode one. **From 1.0 it is the only Windows channel** (2026-10-24): the
+portable zip is no longer published, and the macOS and Linux release archives
+are unchanged.
 
 **The app is live on the Store**: <https://apps.microsoft.com/detail/9MZ3C28M65PB> (product ID `9MZ3C28M65PB`). That makes
-it the only signed way to get kubeNimbus, which is why the README leads Windows
-users there and treats the Release downloads as the alternative — and it is why
+it the only way to get kubeNimbus on Windows — and it is why
 the identity values below are now load-bearing for an *update* rather than for a
 first submission: a package whose identity does not match the listing is
 rejected at upload, and there is a listing to be rejected against now.
@@ -320,7 +327,7 @@ it as the `windows-msix` artifact. Five things are load-bearing.
    step carries `pattern: kubeNimbus-*` for that reason.
    As for why it must not be there: A
    self-signed MSIX cannot be installed by anyone who has not first trusted the
-   certificate, so publishing it beside the zip would offer a download that
+   certificate, so publishing it on the release page would offer a download that
    fails for every person who takes it. It is a workflow artifact instead, and
    the only one carrying more than a day of retention (14 days), because
    Partner Center submission is a manual download-and-upload rather than a
@@ -371,13 +378,13 @@ was tried and rejected. Measured on win-x64, the same commit built both ways:
 | | default `-O` | `Size` |
 |---|---|---|
 | `kubeNimbus.exe` | 62.4 MB | 46.5 MB |
-| the zip a user downloads | 29.6 MB | 28.4 MB |
+| the Windows zip (the download at the time) | 29.6 MB | 28.4 MB |
 | median `--smoke-test` (launch, first frame, exit) | 432–436 ms | 448–456 ms |
 | idle after 4 s: working set / private bytes | 101 / 111 MB | 128 / 130 MB |
 
 The 16 MB comes almost entirely out of what compresses well, so the download
 shrinks by 1.2 MB, and the app starts slower and holds about 20 MB more memory.
-Every package format here is compressed (zip, tar.gz, `.deb`, AppImage,
+Every package format here is compressed (tar.gz, `.deb`, AppImage,
 `.dmg`, MSIX), so only the unpacked size on disk would gain. Re-measure before
 proposing it again, and compare compressed packages and memory, not the
 binary's size. The rest of a win-x64 package is native side-cars no ILC switch
