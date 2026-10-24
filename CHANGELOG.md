@@ -37,6 +37,21 @@ it as the GitHub Release body, so headings must match tags exactly
   Review…, and Restart… and the port-forward Stop no longer stand 2px taller than Sync and the
   port fields.
 
+### Fixed
+
+- **The palette in the Applications mode acts on what is on screen.** It no longer offers the
+  Fleet view toggle, which changed the hidden Resources list. Picking a kind ("Pods",
+  "Deployments", …) from the palette there now switches to Resources and shows that kind.
+- **A cluster's retry line in the All clusters list goes when that cluster is back.** Its
+  "connection lost" line clears when its watch resumes, and another cluster still retrying keeps
+  its own line.
+- **A following log pane stays on its last line after Shift+L and Esc.** Going back from the
+  maximized pane to the split used to leave it about a minute behind, and the follow stopped.
+- **A saved cluster tab survives a launch that cannot find its context.** One launch without the
+  kubeconfig that names it, such as a launch from the Dock that does not see `$KUBECONFIG`, used
+  to drop the tab from the workspace for good. It now comes back on the next launch that finds it.
+- **macOS: the row menu's Delete shows ⌘⌫**, not a Delete key the Mac keyboard does not have.
+
 ## [0.8.0] - 2026-10-19
 
 ### Added

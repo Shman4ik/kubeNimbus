@@ -3182,3 +3182,22 @@ on Linux; and the NativeAOT publish, which ran only in CI. Known and not fixed: 
 scenario `cluster-tab-node-drain-running` renders differently from run to run on `main` itself, an
 `ApplyLiveTests` force-apply case failed once with a 409 race against the Deployment controller, and
 `sandbox-up` still defaults its kubeconfig to the shared file for every `-Name`.
+
+### Bundle V, the 1.0 bugs (2026-10-24)
+
+The owner picked eight bugs to clear before 1.0. One `kn-bundle` agent built six of them as PR #412.
+#353 waits on the owner signing out of the Avalonia tools, whose licence ticket makes the build
+ignore `AVALONIA_TELEMETRY_OPTOUT`. #368 waits on desktop check G-21 in the QA VM. The owner decided
+#384's open question on 2026-10-24: a palette kind row switches to the Resources mode.
+
+What shipped: #384 (the palette in the Applications mode), #386 (a fleet member's retry line clears
+on that member's resume only), #403 (`Views/LogTail` keeps a following pane on its tail through a
+change of the pane's height), #405 (saved tabs whose context a launch did not find are written back
+on every save rather than erased by the restore's own save) and #406 (the row menu's Delete takes its
+gesture from the catalog). #404 was dropped: no cause in the code, and the one two-click path is the
+conflict card's forced dry run, which is by design.
+
+Verified: build, both suites (Core 987 passed and 104 live tests skipped with no sandbox, App 859
+passed), each central change mutation-checked, and the harness scenario `ux-bulk-delete`. Unverified:
+the macOS-only symptoms of #403, #405 and #406, a real dock resize with a live stream, and #404
+itself; they are QA VM checks V-1 to V-5 in the PR.
