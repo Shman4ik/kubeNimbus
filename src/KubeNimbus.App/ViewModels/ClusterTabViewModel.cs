@@ -127,6 +127,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             // created before the connect lands.
             OnPropertyChanged(nameof(CanCreateFromYaml));
             NewYamlCommand.NotifyCanExecuteChanged();
+            OpenYamlFileCommand.NotifyCanExecuteChanged();
         }
     }
 

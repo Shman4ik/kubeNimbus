@@ -100,7 +100,8 @@ who opens it.
 - What other objects carry in the clear (a Helm release's values, an Argo CD Application's inline values, a
   container's logs) is shown as `helm` and `kubectl` show it; Secret masking covers Secrets and references to them.
 - The cluster-wide "who can do X?" view is a labelled local scan of RBAC objects, not an authorization decision.
-- Unsigned release binaries, SmartScreen and Gatekeeper warnings.
+- Unsigned macOS and Linux release binaries and the Gatekeeper warning (Windows ships only through the
+  Microsoft Store, which signs the package).
 - Vulnerabilities inside KubernetesClient, Avalonia or the .NET runtime, unless kubeNimbus uses them unsafely.
   Report those upstream.
 

@@ -31,8 +31,8 @@ without cutting a release. Each takes the same four arguments:
 | `macos/build-app-bundle.sh` | `kubeNimbus.app` and a drag-to-Applications `.dmg` | macOS (`sips`, `iconutil`, `hdiutil`, `codesign`) |
 | `windows/build-msix.ps1` | `.msix` for Microsoft Store submission | Windows (Windows SDK `makeappx`/`makepri`) |
 
-The Windows direct download is a portable zip, packed by the release workflow
-itself from the staged publish output, so it has no script here either.
+Windows has no direct download: it ships through the Microsoft Store only, from
+the `.msix` that `windows/build-msix.ps1` builds.
 
 ```bash
 dotnet publish src/KubeNimbus.App -c Release -r linux-x64 -p:PublishAot=true -o publish/app

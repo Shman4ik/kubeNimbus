@@ -53,8 +53,8 @@ not a fresh scan, so the next train's SURVEY still starts from the code.
 - **Shell.** Command palette (Ctrl/Cmd+K), F1 cheat sheet generated from the command
   catalog, preferences overlay (four tabs, interface and code fonts), macOS native menu, "open a terminal on this cluster".
 - **Shipping.** NativeAOT on four RIDs, launch check on every published binary,
-  .dmg/.deb/AppImage/MSIX packaging and a portable Windows zip. Listed in the
-  Microsoft Store.
+  .dmg/.deb/AppImage/MSIX packaging. Windows ships through the Microsoft Store only
+  (and winget's `msstore` source); the portable zip stopped on 2026-10-24.
 - **Connection failures.** A failed connect is a view that names the step, the cause
   and the facts; exec plugins found like a login shell would, `proxy-url`, kubeconfig
   folders, and a 401 treated as expired credentials and refreshed in place.

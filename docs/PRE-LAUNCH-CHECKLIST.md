@@ -97,12 +97,12 @@ skill and `docs/RELEASE-CHECKLIST.md`.
 - [x] **README screenshots match the UI.** All of them were re-rendered on Windows
       for 0.6.0, and the hero again on 2026-10-05 so that its last row is not cut
       off (`readme-applications-list`, 1280×880).
-- [ ] **Code signing — decide, don't necessarily block.** The Store channel buys the
-      SmartScreen trust for $0; a purchased Authenticode certificate would
-      additionally clean up the direct-download path, and macOS notarization needs
-      an Apple Developer account. pgNimbus deliberately does not buy one. Make the
-      same decision consciously (backlog DIST-1), because "is it signed?" is the
-      first question every thread asks.
+- [x] **Code signing — decided (2026-10-24): no certificate is bought.** Windows
+      ships through the Microsoft Store only (and `winget --source msstore`), which
+      re-signs the MSIX for $0, so the portable zip is no longer published; macOS
+      stays ad-hoc signed because the owner cannot enrol in the Apple Developer
+      Program; Linux stays unsigned. pgNimbus does not buy one either (backlog
+      DIST-1). "Is it signed?" — on Windows, yes, by Microsoft.
 
 ## Phase 5 — Flip the repo public
 

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using YamlDotNet.Core;
 using YamlDotNet.RepresentationModel;
 
 namespace KubeNimbus.Core;
@@ -37,6 +38,52 @@ public static class YamlJson
         var stream = new YamlStream();
         stream.Load(new StringReader(yaml));
         return stream.Documents.Count(d => d.RootNode is not YamlScalarNode { Value: null or "" });
+    }
+
+    /// <summary>
+    /// The text of the first non-empty document of a YAML stream, cut from the source as
+    /// written (comments and layout kept), and how many non-empty documents the stream holds —
+    /// the same count <see cref="CountDocuments"/> gives. Text that does not parse comes back
+    /// whole, with a count of 1, so that whoever applies it reports the parser's own error.
+    /// </summary>
+    /// <remarks>
+    /// Cut by the parser's marks rather than by splitting on <c>---</c> lines, because a
+    /// <c>---</c> inside a block scalar (a ConfigMap holding a YAML file) is not a separator.
+    /// The first document keeps whatever precedes it, so a file's leading comments stay.
+    /// </remarks>
+    public static (string Text, int DocumentCount) FirstDocument(string yaml)
+    {
+        try
+        {
+            var parser = new YamlDotNet.Core.Parser(new StringReader(yaml));
+            parser.Consume<YamlDotNet.Core.Events.StreamStart>();
+            string? first = null;
+            var count = 0;
+            var isFirstDocument = true;
+            while (parser.TryConsume<YamlDotNet.Core.Events.DocumentStart>(out var start))
+            {
+                var isEmpty = parser.Accept<YamlDotNet.Core.Events.Scalar>(out var scalar) && scalar.Value.Length == 0;
+                parser.SkipThisAndNestedEvents();
+                var end = parser.Consume<YamlDotNet.Core.Events.DocumentEnd>();
+                if (!isEmpty)
+                {
+                    count++;
+                    if (first is null)
+                    {
+                        var from = isFirstDocument ? 0 : (int)start.Start.Index;
+                        first = yaml[from..(int)end.End.Index].TrimEnd() + "\n";
+                    }
+                }
+
+                isFirstDocument = false;
+            }
+
+            return first is null ? (yaml, 0) : (first, count);
+        }
+        catch (YamlDotNet.Core.YamlException)
+        {
+            return (yaml, 1);
+        }
     }
 
     /// <summary>Renders a JSON element as YAML text, with <c>\n</c> line ends on every platform.</summary>

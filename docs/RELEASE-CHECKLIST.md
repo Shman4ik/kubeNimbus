@@ -228,11 +228,12 @@ in the log. Escape sent by computer-use does not reach the app either; the harne
       git push origin vX.Y.Z
       ```
 - [ ] Watch `release.yml` (`gh run watch`). Every RID's binary is launched before it
-      is archived, and every package (the Windows zip unpacked, `.dmg`, `.deb`,
-      `.AppImage`) is installed and launched through its own path, so a red smoke step is a real
+      is archived (win-x64 is launched and packed as the MSIX, never archived), and every
+      package (`.dmg`, `.deb`, `.AppImage`) is installed and launched through its own path, so a red smoke step is a real
       failure. A red leg is fixed forward as a patch release; the tag is never moved.
-- [ ] The release page: the body is the CHANGELOG section plus the unsigned-binary
-      footer, `SHA256SUMS.txt` is attached, each `.AppImage` (named `-x86_64` / `-aarch64`, no
+- [ ] The release page: the body is the CHANGELOG section plus the footer (Windows
+      through the Store and winget, the macOS quarantine workaround), `SHA256SUMS.txt`
+      is attached, no Windows file (`.zip`, `.msix`, `.msi`, `.exe`) is attached, each `.AppImage` (named `-x86_64` / `-aarch64`, no
       "linux") has its `.zsync` beside it and in `SHA256SUMS.txt`, no `.msix`, `.msi` or `.wixpdb` is attached, and the release
       carries the **Latest** label (a plain `vX.Y.Z` tag does; only a suffixed tag is
       a pre-release).
@@ -247,8 +248,9 @@ in the log. Escape sent by computer-use does not reach the app either; the harne
 
 ## 6. After
 
-- [ ] Install from the channels a user would: the zip from the release page, and the
-      Store update once certified. Launch each and check About shows the new version.
+- [ ] Install from the channels a user would: the Store update once certified (or
+      `winget upgrade --id 9MZ3C28M65PB --source msstore`), and a macOS or Linux package
+      from the release page. Launch each and check About shows the new version.
 - [ ] If this release came from a train, `/release-train`'s RECORD step moves
       `TRAIN.md` into `docs/product-loop/history/`. Either way, record the pass in
       `docs/status-history.md` if it found anything worth keeping.
@@ -268,10 +270,9 @@ gets asked in a launch thread.
   run in the shipped app, which still makes no network connection except to the API
   servers of the clusters you open. pgNimbus's publish log states that an opt-out
   needs a paid Avalonia tier.
-- **Unsigned direct downloads.** The Windows zip and the Linux packages are unsigned and the
-  `.dmg` is ad-hoc signed, so Windows shows SmartScreen and macOS quarantines the app.
-  The Store package is signed by Microsoft, which is why the README sends Windows
-  users there first.
+- **Unsigned direct downloads.** The Linux packages are unsigned and the `.dmg` is ad-hoc
+  signed, so macOS quarantines the app; no certificate is bought (2026-10-24). Windows
+  has no direct download: it ships only through the Store, whose package Microsoft signs.
 - **macOS and Linux get less hands-on testing than Windows.** Every RID is launched in
   CI, but the manual pass above runs on Windows.
 - **The sandbox needs Docker.** On a machine with only `wslc`, the live tests skip and

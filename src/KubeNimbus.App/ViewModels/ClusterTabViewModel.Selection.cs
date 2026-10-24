@@ -37,8 +37,19 @@ public sealed partial class ClusterTabViewModel
     /// null otherwise, when each item keeps its own tooltip.
     /// </summary>
     public string? SingleRowActionTip => HasMultipleSelection
-        ? $"Acts on one object, and {_selectedRows.Count} rows are selected. Select one row to use it; Delete acts on all of them."
+        ? $"Acts on one object, and {_selectedRows.Count} rows are selected. Select one row to use it; "
+          + (RestartTargets().Count > 1 ? "Delete and Rollout restart act on all of them." : "Delete acts on all of them.")
         : null;
+
+    /// <summary>
+    /// The row menu's Rollout restart tooltip. With several restartable rows selected the item
+    /// acts on all of them (#301), so it says that instead of the single-object tip.
+    /// </summary>
+    public string RestartRowActionTip => HasMultipleSelection
+        ? RestartTargets().Count > 1
+            ? $"Stamps the pod template of all {_selectedRows.Count} selected objects so each controller rolls its pods. Asks first, naming every one."
+            : SingleRowActionTip!
+        : "Stamps the pod template so the controller rolls its pods — the same thing kubectl rollout restart does";
 
     /// <summary>Called by the view on the grid's SelectionChanged, and with nothing when the kind changes.</summary>
     public void SetSelectedRows(IReadOnlyList<ResourceRowViewModel> rows)
@@ -53,6 +64,7 @@ public sealed partial class ClusterTabViewModel
         OnPropertyChanged(nameof(HasMultipleSelection));
         OnPropertyChanged(nameof(SelectionSummary));
         OnPropertyChanged(nameof(SingleRowActionTip));
+        OnPropertyChanged(nameof(RestartRowActionTip));
         OnPropertyChanged(nameof(CanDeleteSelectedRow));
         DeleteSelectedCommand.NotifyCanExecuteChanged();
         NotifySingleRowActions();
@@ -119,14 +131,50 @@ public sealed partial class ClusterTabViewModel
     }
 
     /// <summary>
+    /// The rows a bulk rollout restart acts on (#301, FEAT-6): the whole selection while more
+    /// than one row is selected and every one of them has a pod template to stamp; otherwise
+    /// none. Like a delete, a selection with one row that cannot be restarted refuses as a
+    /// whole rather than quietly leaving that row out, so the count in the sentence is the
+    /// count that is restarted.
+    /// </summary>
+    private IReadOnlyList<(ResourceRowViewModel Row, ResourceDescriptor Descriptor)> RestartTargets()
+    {
+        if (!HasMultipleSelection)
+        {
+            return [];
+        }
+
+        var targets = new List<(ResourceRowViewModel, ResourceDescriptor)>(_selectedRows.Count);
+        foreach (var row in _selectedRows)
+        {
+            if (DescriptorFor(row) is not { } descriptor || !WorkloadActions.SupportsRestart(descriptor, row.Resource))
+            {
+                return [];
+            }
+
+            targets.Add((row, descriptor));
+        }
+
+        return targets;
+    }
+
+    /// <summary>
     /// Arms one strip for the whole selection. The sentence names the count and the cluster
     /// (the row's own, in a fleet list; "on 2 clusters" when the selection spans several), and
     /// it always asks, whatever "Confirm before deleting" says (#305); the production border
     /// marks a selection with any row on a production cluster.
     /// </summary>
-    private RowActionViewModel? ArmBulkDelete()
+    private RowActionViewModel? ArmBulkDelete() => ArmBulk(RowActionKind.Delete, DeleteTargets());
+
+    /// <summary>
+    /// A bulk rollout restart (#301, FEAT-6): disruptive — every selected workload's pods roll
+    /// at once — so it arms the strip and asks (UI rule 17), naming the count and the cluster.
+    /// </summary>
+    private RowActionViewModel? ArmBulkRestart() => ArmBulk(RowActionKind.Restart, RestartTargets());
+
+    private RowActionViewModel? ArmBulk(
+        RowActionKind kind, IReadOnlyList<(ResourceRowViewModel Row, ResourceDescriptor Descriptor)> targets)
     {
-        var targets = DeleteTargets();
         if (targets.Count < 2)
         {
             return null;
@@ -154,7 +202,7 @@ public sealed partial class ClusterTabViewModel
             : EnvironmentOf(targets[0].Row.ClusterName);
         var first = targets[0];
         var action = new RowActionViewModel(
-            RowActionKind.Delete, bulk[0].Client, first.Descriptor, first.Row.Namespace, first.Row.Name,
+            kind, bulk[0].Client, first.Descriptor, first.Row.Namespace, first.Row.Name,
             bulk[0].ClusterName, environment: environment, bulk: bulk);
 
         action.Dismissed = () =>
