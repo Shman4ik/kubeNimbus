@@ -60,6 +60,8 @@ follows the platform by default and can be forced either way in Preferences → 
 | Step through a log search's matches (the funnel filters instead) | Enter / Shift+Enter in a log pane's search box | ↩ / ⇧↩ in a log pane's search box |
 | Search a log with a regular expression or matching case, or pin the search as a highlight (!word hides lines) | Alt+R / Alt+C / Alt+P in a log pane's search box | ⌥R / ⌥C / ⌥P in a log pane's search box |
 | Jump to the latest error in a log, then the ones before it | Alt+↑ / Alt+↓ in a log pane, or click its error count | ⌥↑ / ⌥↓ in a log pane, or click its error count |
+| Move to a line in a focused log pane, and open or close a JSON line's fields | ↑ / ↓, Home / End in a focused log pane; Enter opens a JSON line | ↑ / ↓, ↖ / ↘ in a focused log pane; ↩ opens a JSON line |
+| Copy the log line the keys are on | Ctrl+C | ⌘C |
 
 ## View & app
 
@@ -72,7 +74,7 @@ follows the platform by default and can be forced either way in Preferences → 
 | Show every resource kind in the sidebar, or only the everyday ones | The eye-plus icon, top of the sidebar | The eye-plus icon, top of the sidebar |
 | Show or hide the resource sidebar | Ctrl+B | ⌘B |
 | Maximize the inspector over the list | The inspector's expand icon; Esc restores | The inspector's expand icon; Esc restores |
-| Close the focused cluster tab or dock tab | Delete | ⌦ |
+| Close the focused cluster tab or dock tab | Delete | ⌫ / ⌦ |
 | Move focus out of the YAML editor or the terminal | Ctrl+Tab / Ctrl+Shift+Tab | ⌃⇥ / ⌃⇧⇥ |
 | Preferences… | Ctrl+, | ⌘, |
 | Show this cheat sheet | F1 | F1 |

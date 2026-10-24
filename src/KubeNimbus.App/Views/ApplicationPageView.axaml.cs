@@ -22,6 +22,31 @@ public partial class ApplicationPageView : UserControl
         InitializeComponent();
         AddHandler(KeyDownEvent, OnPageKeyDown, RoutingStrategies.Bubble);
         AddHandler(PointerPressedEvent, OnPagePointerPressed, RoutingStrategies.Bubble, handledEventsToo: true);
+
+        PodList.AddHandler(GotFocusEvent, OnPodListGotFocus, RoutingStrategies.Bubble);
+    }
+
+    /// <summary>
+    /// Tab into the pod list lands on the selected pod, both ways (#236). The list is one Tab
+    /// stop and virtualizes, and the selected pod's row is often below the page's fold when the
+    /// page opens, so it had no container to be the stop: Tab entered on the first row and
+    /// Shift+Tab, after the walk had scrolled, on the selected one. A Tab that arrives on another
+    /// row is moved to the selected one, brought into view. The list's own arrow keys are not
+    /// Tab focus and are left alone.
+    /// </summary>
+    private void OnPodListGotFocus(object? sender, FocusChangedEventArgs e)
+    {
+        if (e.NavigationMethod != NavigationMethod.Tab || PodList.SelectedItem is not { } selected
+            || e.Source is not ListBoxItem { } arrived || ReferenceEquals(arrived.DataContext, selected))
+        {
+            return;
+        }
+
+        PodList.ScrollIntoView(selected);
+        if (PodList.ContainerFromItem(selected) is { } container)
+        {
+            container.Focus(NavigationMethod.Tab);
+        }
     }
 
     /// <summary>

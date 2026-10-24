@@ -119,6 +119,31 @@ Setup: Resources, Pods, namespace `qa-shop`. Both themes where noted (`ThemeTogg
   select two rows (click, Ctrl+click) and both report the item status "Selected", the others none.
   Right-click a Deployment row: the menu item reads `MenuItem 'Logs (all pods)'` (its help text is
   the longer tooltip), and the column chooser's items are named by their column.
+- **C-17 [text]** (#236) `invoke` the ☰ button, then `invoke` its "Rescan kubeconfig" item and,
+  with a cluster tab open, "Reconnect": each runs (the kubeconfig status line or the tab's
+  connecting state changes) without a real click, and the menu closes. A refusal or no effect
+  is a FAIL with the `invoke` output quoted.
+- **C-18 [input][look]** (#236) Applications mode on `qa-shop`: Tab from ☰ round to ☰ and
+  Shift+Tab back, counting stops; no trap, every stop with a ring, the list one stop on the
+  selected row. Enter opens the row's page: Tab reaches Back, the actions, the pods (one stop, on
+  the selected pod, both ways) and the linked rows, never a line of evidence; `dump` names each
+  linked row "Show <kind> <name> in Resources mode". Escape goes back with the list focused.
+- **C-19 [input]** (#236) Ctrl+K, then Tab twice: focus stays in the palette (query box, list);
+  Escape on a list row closes the palette and focus is back where it was. Same with Ctrl+P (the
+  switcher). Preferences (Ctrl+,): Tab and Shift+Tab cycle inside the panel, Shift+Tab from "Add
+  file…" reaches the General tab, and the Shortcut modifier drop-down shows the focus ring [look].
+- **C-20 [input]** (#236) The demo cluster's `payment-service-report-generator-8c1a4f2e91-tq6rn`
+  pod, Logs tab (its scheduler prints JSON lines): Tab to
+  the log list, Up outlines the newest line, Up again the one before; Ctrl+C, then paste into
+  Notepad: exactly that line. Home, Down to a JSON line, Enter opens its fields, Enter closes them.
+  On a following pane, Up stops the follow (the view stays put as lines arrive).
+- **C-21 [input]** (#236, Mac only, skip on Windows) A focused dock tab or cluster tab closes with ⌫.
+- **C-22 [look] Narrator** (#236) With Narrator on (Ctrl+Win+Enter), walk the shell with Tab: the
+  cluster tabs read as tabs with the front one selected, a sidebar section header says expanded or
+  collapsed, a Pods row reads its name and namespace and "Selected" on a selected row, a dock tab
+  reads its title, the ☰ menu items read their labels, a Helm release row and an Argo CD
+  Application row read their name and namespace. Note anything read as a type name, "button" alone,
+  or nothing. NVDA if installed, the same walk.
 
 ## Batch L1 — selection and bulk delete
 

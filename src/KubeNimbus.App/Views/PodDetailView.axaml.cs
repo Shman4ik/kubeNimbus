@@ -60,6 +60,7 @@ public partial class PodDetailView : UserControl
         LogTail.KeepOnResize(LogScroll, () => _vm?.IsFollowingLogs == true);
         LogSearchGestures.AttachProblemKeys(this, () => _vm?.Problems);
         LogSearchGestures.AttachReveal(LogItems, () => _vm?.IsLogFilterMode == true, line => _vm?.RevealLine(line));
+        LogSearchGestures.AttachLineKeys(LogItems, () => _vm?.LogLines);
 
         // ENG-51: at a narrow window Range, Levels, the context chip and then Copy move into the ⋯ menu.
         LogBar = new LogBarOverflow(LogBarRow, DetailTabStrip, LogSearchBox, LogBarTools,

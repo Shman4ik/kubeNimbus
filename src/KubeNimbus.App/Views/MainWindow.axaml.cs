@@ -93,9 +93,38 @@ public partial class MainWindow : Window
                 // and typing went to the page under it.
                 vm.Switcher.PropertyChanged += (_, args) =>
                 {
-                    if (args.PropertyName == nameof(ClusterSwitcherViewModel.IsOpen) && vm.Switcher.IsOpen)
+                    if (args.PropertyName != nameof(ClusterSwitcherViewModel.IsOpen))
                     {
+                        return;
+                    }
+
+                    if (vm.Switcher.IsOpen)
+                    {
+                        _switcherReturnFocus = FocusOutside(SwitcherCard);
                         Dispatcher.UIThread.Post(() => SwitcherQueryBox.Focus(), DispatcherPriority.Input);
+                    }
+                    else
+                    {
+                        GiveFocusBack(SwitcherCard, ref _switcherReturnFocus);
+                    }
+                };
+
+                // The palette gives focus back the same way when it closes (#236): it hid the
+                // search box that held the focus, so Esc left the keyboard on nothing at all.
+                vm.Palette.PropertyChanged += (_, args) =>
+                {
+                    if (args.PropertyName != nameof(CommandPaletteViewModel.IsOpen))
+                    {
+                        return;
+                    }
+
+                    if (vm.Palette.IsOpen)
+                    {
+                        _paletteReturnFocus = FocusOutside(PaletteCard);
+                    }
+                    else
+                    {
+                        GiveFocusBack(PaletteCard, ref _paletteReturnFocus);
                     }
                 };
             }
@@ -118,6 +147,44 @@ public partial class MainWindow : Window
     }
 
     private MainWindowViewModel? Vm => DataContext as MainWindowViewModel;
+
+    private WeakReference<IInputElement>? _paletteReturnFocus;
+    private WeakReference<IInputElement>? _switcherReturnFocus;
+
+    /// <summary>What had focus as an overlay opened, unless it was already inside the overlay.</summary>
+    private WeakReference<IInputElement>? FocusOutside(Control card) =>
+        FocusManager?.GetFocusedElement() is { } focused
+        && !(focused is Visual visual && (ReferenceEquals(visual, card) || card.IsVisualAncestorOf(visual)))
+            ? new WeakReference<IInputElement>(focused)
+            : null;
+
+    /// <summary>
+    /// The palette's and the switcher's half of UI rule 16b's contract (they are not
+    /// <c>OverlayPanel</c>s): closing gives focus back to what had it when the overlay opened,
+    /// if focus is still in the overlay or nowhere, and that control is still on screen. A
+    /// command that moved focus on purpose (the row filter, the column chooser) is left alone.
+    /// Posted, so the card has been hidden and a command run from it has had its turn first.
+    /// </summary>
+    private void GiveFocusBack(Control card, ref WeakReference<IInputElement>? remembered)
+    {
+        var target = remembered is { } weak && weak.TryGetTarget(out var element) ? element : null;
+        remembered = null;
+        if (target is null)
+        {
+            return;
+        }
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            var focused = FocusManager?.GetFocusedElement();
+            var focusIsTheOverlays = focused is null
+                                     || (focused is Visual visual && (ReferenceEquals(visual, card) || card.IsVisualAncestorOf(visual)));
+            if (focusIsTheOverlays && target is Visual { IsEffectivelyVisible: true } && target.Focusable)
+            {
+                target.Focus(NavigationMethod.Unspecified);
+            }
+        }, DispatcherPriority.Input);
+    }
 
     private void OnApplicationsModePressed(object? sender, PointerPressedEventArgs e)
     {
@@ -470,6 +537,51 @@ public partial class MainWindow : Window
                 palette.MoveSelection(-1);
                 e.Handled = true;
                 break;
+        }
+    }
+
+    /// <summary>
+    /// Esc and Enter from anywhere in the palette's or the switcher's card, not only from its
+    /// search box (#236). Tab reaches the list, and on a row there Esc did nothing, so a
+    /// keyboard user who tabbed in could not close the overlay. The search box handles its own
+    /// keys first and marks them handled, so these see only the keys it did not take.
+    /// </summary>
+    private void OnPaletteCardKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (Vm?.Palette is not { } palette)
+        {
+            return;
+        }
+
+        if (e.Key == Key.Escape)
+        {
+            palette.Close();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Enter && e.Source is Visual source && source.FindAncestorOfType<ListBoxItem>(includeSelf: true) is not null)
+        {
+            palette.ExecuteSelected();
+            AfterPaletteRun(palette);
+            e.Handled = true;
+        }
+    }
+
+    private void OnSwitcherCardKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (Vm?.Switcher is not { } switcher)
+        {
+            return;
+        }
+
+        if (e.Key == Key.Escape)
+        {
+            switcher.Close();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Enter && e.Source is Visual source && source.FindAncestorOfType<ListBoxItem>(includeSelf: true) is not null)
+        {
+            switcher.ActivateSelected();
+            e.Handled = true;
         }
     }
 

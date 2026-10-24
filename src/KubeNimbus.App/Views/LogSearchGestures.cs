@@ -1,9 +1,12 @@
 using System.Windows.Input;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using KubeNimbus.App.ViewModels;
+using KubeNimbus.Core.Commands;
 
 namespace KubeNimbus.App.Views;
 
@@ -109,6 +112,85 @@ internal static class LogSearchGestures
                 e.Handled = true;
             }
         }, RoutingStrategies.Bubble, handledEventsToo: true);
+
+    /// <summary>
+    /// The keys of a focused log list (#236, <see cref="LogLineCursor"/>): the arrows, Page
+    /// Up/Down, Home and End move to a line and bring it into view, Enter or Space opens or
+    /// closes a JSON line, and Copy (<see cref="CommandId.CopyLogLine"/>) copies the line.
+    /// Only while the list itself has focus: a line's text selected with the pointer keeps its
+    /// own Copy. Moving up scrolls away from the newest line, which pauses a follow the way a
+    /// wheel does (<see cref="LogTail"/>).
+    /// </summary>
+    public static LogLineCursor AttachLineKeys(ItemsControl items, Func<IReadOnlyList<LogLineViewModel>?> lines)
+    {
+        var cursor = new LogLineCursor();
+        items.AddHandler(InputElement.KeyDownEvent, (_, e) =>
+        {
+            if (!ReferenceEquals(e.Source, items) || lines() is not { } shown)
+            {
+                return;
+            }
+
+            if (CommandBindings.Matches(CommandId.CopyLogLine, e))
+            {
+                if (cursor.CopyText(shown) is { } text)
+                {
+                    _ = CopyAsync(items, text);
+                    e.Handled = true;
+                }
+
+                return;
+            }
+
+            if (e.KeyModifiers != KeyModifiers.None)
+            {
+                return;
+            }
+
+            if (e.Key is Key.Enter or Key.Space)
+            {
+                e.Handled = cursor.ToggleJson(shown);
+                return;
+            }
+
+            LogLineCursor.Step? step = e.Key switch
+            {
+                Key.Up => LogLineCursor.Step.Previous,
+                Key.Down => LogLineCursor.Step.Next,
+                Key.PageUp => LogLineCursor.Step.PageUp,
+                Key.PageDown => LogLineCursor.Step.PageDown,
+                Key.Home => LogLineCursor.Step.First,
+                Key.End => LogLineCursor.Step.Last,
+                _ => null,
+            };
+            if (step is { } move)
+            {
+                // A page is the lines the pane has realized, which is what is on screen and a
+                // few more; never fewer than one.
+                var page = Math.Max(1, items.GetRealizedContainers().Count() - 2);
+                BringIntoView(items, cursor.Move(shown, move, page));
+                e.Handled = true;
+            }
+        }, RoutingStrategies.Bubble);
+        return cursor;
+    }
+
+    private static async Task CopyAsync(Visual anchor, string text)
+    {
+        if (TopLevel.GetTopLevel(anchor)?.Clipboard is not { } clipboard)
+        {
+            return;
+        }
+
+        try
+        {
+            await clipboard.SetTextAsync(text);
+        }
+        catch (Exception)
+        {
+            // A clipboard that cannot be written copies nothing; the line is still there.
+        }
+    }
 
     private static void OnKeyDown(
         TextBox box, KeyEventArgs e, Func<ICommand?> next, Func<ICommand?> previous, Action clear,

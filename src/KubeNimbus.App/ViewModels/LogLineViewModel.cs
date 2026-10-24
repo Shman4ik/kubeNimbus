@@ -123,6 +123,13 @@ public sealed partial class LogLineViewModel : ObservableObject
     private bool _isProblemCursor;
 
     /// <summary>
+    /// The keys of a focused log list are on this line (<see cref="LogLineCursor"/>, #236):
+    /// the line ⌘C/Ctrl+C copies and Enter opens. Drawn only while the list has focus.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isKeyLine;
+
+    /// <summary>
     /// The message is a JSON object — the shape structured loggers print one per line, and
     /// the most requested thing in this corner of the market (k9s#364, Lens#3045). Read off
     /// the shape only; it is parsed when someone opens it (<see cref="PrettyJson"/>).

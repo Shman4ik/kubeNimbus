@@ -1040,6 +1040,12 @@ public sealed partial class NodePodViewModel : ObservableObject
 
     public string Name { get; }
 
+    /// <summary>
+    /// What UI Automation names this row by (#236, accessible-names rule 11): identity only,
+    /// because the grid reads it when the row is bound and a status in it would go stale.
+    /// </summary>
+    public override string ToString() => RowAutomationName.Of(Name, Namespace);
+
     /// <summary>namespace/name — the watch's key for this row.</summary>
     public string Key => $"{Namespace}/{Name}";
 

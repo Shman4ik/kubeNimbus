@@ -69,11 +69,7 @@ public sealed partial class ResourceRowViewModel : ObservableObject
     /// the row is bound to it, and a status read then would go stale while the row updates
     /// in place; the cells carry the status.
     /// </summary>
-    public override string ToString()
-    {
-        var where = string.Join(", ", new[] { Namespace, ClusterName }.Where(s => !string.IsNullOrEmpty(s)));
-        return where.Length == 0 ? Name : $"{Name}, {where}";
-    }
+    public override string ToString() => RowAutomationName.Of(Name, Namespace, ClusterName);
 
     /// <summary>
     /// Whether this row gets the logs icon in its Name cell (shown on hover and on the

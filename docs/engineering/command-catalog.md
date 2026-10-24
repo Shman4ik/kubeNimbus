@@ -145,6 +145,13 @@ Ten things worth keeping:
    in XAML, which showed a key the Mac keyboard lacks and ignored the scheme (#406: in the 0.8.0
    macOS pass its shortcut column read "De", clipped). The harness's `ux-bulk-delete` check opens the
    menu on the Cmd scheme and fails unless it shows ⌘⌫.
+   Close the focused tab (`CloseFocusedTab`, a strip key) takes a bare ⌫ on the Cmd scheme
+   for the same reason (#236, 2026-10-24); its label there is "⌫ / ⌦". Two log pane keys
+   joined the sheet in the same pass, both answered only by a focused log list
+   (`LogSearchGestures.AttachLineKeys`), never by the window: `LogLineKeys`, a note for the
+   arrows, Home/End and Enter on a JSON line, and `CopyLogLine`, the primary modifier with C,
+   a list key like Delete resource, so a text box and a line's pointer selection keep their
+   own Copy ([accessible-names](accessible-names.md), the keyboard walk).
 9. **The palette ranks by title** (`CommandPaletteViewModel.Rank`): the whole title, its
    start, a word's start, anywhere in it, and last a row that matched only on its subtitle or
    search text; the source order stands within a rank. Before it the rows kept the source's

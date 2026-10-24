@@ -535,6 +535,10 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // the dock's tabs and the sidebar as one stop each, and Ctrl+Tab out of the YAML editor
     // and the terminal (KeyboardChecks.KeyboardWalk, LeaveEditorKeys).
     ("ux-keyboard-walk", () => HostInMainWindow(ClusterTabScenarios.DemoDockTabs(), height: 1000)),
+    // #236: the Applications mode and the overlays get the same walk (KeyboardWalkChecks).
+    ("ux-keyboard-walk-applications", () => HostInMainWindow(ApplicationsScenarios.List(), mode: ShellMode.Applications)),
+    ("ux-keyboard-walk-overlays", () => BuildMainWindowContent()),
+    ("ux-log-line-keys", () => HostInMainWindow(ClusterTabScenarios.DemoPodLogsWithJson(), height: 1000)),
     // #297: Left/Right along a pane's segmented strip keep the focus ring (KeyboardChecks.SegmentedArrowFocus).
     ("ux-segmented-arrow-focus", () => HostInMainWindow(ClusterTabScenarios.PodDetailOverview(), height: 1000)),
     ("ux-leave-yaml-editor", () => HostInMainWindow(ClusterTabScenarios.YamlEditor())),
@@ -735,6 +739,9 @@ void Capture(string name, ThemeVariant theme, Func<Control> build, bool again = 
     if (name == "ux-exec-keys") KeyboardChecks.ExecKeys(window);
     if (name == "ux-exec-paste") KeyboardChecks.ExecPaste(window);
     if (name == "ux-keyboard-walk") KeyboardChecks.KeyboardWalk(window);
+    if (name == "ux-keyboard-walk-applications") KeyboardWalkChecks.Applications(window);
+    if (name == "ux-keyboard-walk-overlays") KeyboardWalkChecks.Overlays(window);
+    if (name == "ux-log-line-keys") KeyboardWalkChecks.LogLineKeys(window);
     if (name == "ux-segmented-arrow-focus") KeyboardChecks.SegmentedArrowFocus(window);
     if (name is "ux-leave-yaml-editor" or "ux-leave-exec-terminal") KeyboardChecks.LeaveEditorKeys(window);
     if (name == "ux-exec-copy") KeyboardChecks.ExecCopy(window);

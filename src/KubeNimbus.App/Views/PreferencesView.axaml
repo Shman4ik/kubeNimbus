@@ -36,7 +36,7 @@
          headers only when it has more than one group. The page keeps one height
          whichever tab shows (PreferencesView.axaml.cs), so the strip never moves under
          the pointer. -->
-    <TabControl Classes="capsule settings" SelectedIndex="{Binding SelectedTab}">
+    <TabControl Name="SettingsTabs" Classes="capsule settings" SelectedIndex="{Binding SelectedTab}">
         <TabItem Header="General">
             <ScrollViewer HorizontalScrollBarVisibility="Disabled">
                 <StackPanel Margin="20,14,20,20" Spacing="6">
