@@ -62,6 +62,7 @@ public partial class WorkloadLogsView : UserControl
             },
             pin: () => _vm?.PinSearchCommand);
         LogSearchGestures.AttachRuler(LogRuler, LogItems, LogScroll);
+        LogTail.KeepOnResize(LogScroll, () => _vm?.IsFollowing == true);
         LogSearchGestures.AttachProblemKeys(this, () => _vm?.Problems);
         LogSearchGestures.AttachReveal(LogItems, () => _vm?.IsLogFilterMode == true, line => _vm?.RevealLine(line));
 
@@ -125,8 +126,6 @@ public partial class WorkloadLogsView : UserControl
         }
     }
 
-    private const double ScrollLockSlack = 24;
-
     private void OnLogLinesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         if (_vm?.IsFollowing != true || !IsScrolledToBottom())
@@ -137,8 +136,7 @@ public partial class WorkloadLogsView : UserControl
         Dispatcher.UIThread.Post(LogScroll.ScrollToEnd, DispatcherPriority.Background);
     }
 
-    private bool IsScrolledToBottom() =>
-        LogScroll.Offset.Y >= LogScroll.Extent.Height - LogScroll.Viewport.Height - ScrollLockSlack;
+    private bool IsScrolledToBottom() => LogTail.IsAtBottom(LogScroll);
 
     // Clear and Save in the log overflow menu run their Command; this closes the menu
     // behind them, which a Flyout does not do on its own for a Button inside it.

@@ -429,7 +429,7 @@
                  them. The state-dependent items stay where they are, disabled, through their
                  Offers* visibility, so the menu does not change shape under a selection. -->
             <DataGrid.ContextFlyout>
-              <MenuFlyout>
+              <MenuFlyout Opening="OnRowMenuOpening">
                 <!-- On an Event about a pod, "Logs" is that pod's (L3). -->
                 <MenuItem Header="Logs" Command="{Binding OpenLogsCommand}" InputGesture="L"
                           ToolTip.Tip="{Binding SingleRowActionTip}" ToolTip.ShowOnDisabled="True">
@@ -606,7 +606,9 @@
                     <PathIcon Data="{StaticResource CodeBracesIconGeometry}" Width="13" Height="13" />
                   </MenuItem.Icon>
                 </MenuItem>
-                <MenuItem Header="Delete…" Command="{Binding DeleteSelectedCommand}" InputGesture="Delete"
+                <!-- No InputGesture here: OnRowMenuOpening sets the catalog's primary chord for
+                     the live scheme, Delete or ⌘⌫ (#406). -->
+                <MenuItem Name="DeleteRowMenuItem" Header="Delete…" Command="{Binding DeleteSelectedCommand}"
                           ToolTip.Tip="Asks to confirm, naming the object or, with several rows selected, how many — for a controller-owned pod, deleting it is how it gets recreated">
                   <MenuItem.Icon>
                     <PathIcon Data="{StaticResource DeleteIconGeometry}" Width="13" Height="13" />

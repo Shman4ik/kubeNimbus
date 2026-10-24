@@ -110,6 +110,7 @@ public sealed partial class ClusterTabViewModel
         _watchedNamespaces.Clear();
         _refusedNamespaces.Clear();
         _refusedMembers.Clear();
+        _fleetLostWarnings.Clear();
         _fleetNamespaceFilter = null;
 
         if (Client is not { } client)
@@ -510,8 +511,13 @@ public sealed partial class ClusterTabViewModel
 
                 await foreach (var batch in ClusterFleet.WatchAsync(
                     targets, @namespace,
-                    connectionLost: (member, ex) => Dispatcher.UIThread.Post(
-                        () => ConnectionWarning = $"{member.ClusterName}: {ex.Message}"),
+                    connectionLost: (member, ex) => Dispatcher.UIThread.Post(() =>
+                    {
+                        if (!token.IsCancellationRequested)
+                        {
+                            OnFleetMemberConnectionLost(member.ClusterName, ex);
+                        }
+                    }),
                     memberEnded: (member, ex) => Dispatcher.UIThread.Post(() =>
                     {
                         if (!token.IsCancellationRequested)
@@ -565,6 +571,60 @@ public sealed partial class ClusterTabViewModel
         }
 
         ConnectionWarning = $"{clusterName}: {ex.Message}";
+    }
+
+    // Each fleet member's "connection lost; retrying" line, oldest first (#386): the warning
+    // line shows one sentence, so when the member on screen resumes, another member still
+    // retrying takes its place rather than the line going blank under it.
+    private readonly List<(string ClusterName, string Line)> _fleetLostWarnings = [];
+
+    /// <summary>
+    /// What one fleet member's watch reports between frames: the fleet counterpart of
+    /// <see cref="OnListConnectionLost"/>. A lost connection is remembered against its member,
+    /// so that member's own resumed <c>Synced</c> clears it and no other member's does.
+    /// </summary>
+    internal void OnFleetMemberConnectionLost(string clusterName, Exception ex)
+    {
+        var line = $"{clusterName}: {ex.Message}";
+        _fleetLostWarnings.RemoveAll(w => string.Equals(w.ClusterName, clusterName, StringComparison.Ordinal));
+        if (ex is WatchConnectionException)
+        {
+            _fleetLostWarnings.Add((clusterName, line));
+        }
+
+        ConnectionWarning = line;
+        ConnectionWarningOffersReconnect = ex is not UnreadableObjectException;
+    }
+
+    /// <summary>
+    /// One fleet member's watch was answered again (its <c>Synced</c> or <c>Reset</c>): its own
+    /// retry line goes, and if that line was the one on screen, the newest line of a member
+    /// still retrying replaces it. Another member's line, or a warning from anywhere else, stays.
+    /// </summary>
+    private void ClearFleetMemberLostWarning(string clusterName)
+    {
+        var index = _fleetLostWarnings.FindIndex(w => string.Equals(w.ClusterName, clusterName, StringComparison.Ordinal));
+        if (index < 0)
+        {
+            return;
+        }
+
+        var line = _fleetLostWarnings[index].Line;
+        _fleetLostWarnings.RemoveAt(index);
+        if (ConnectionWarning != line)
+        {
+            return;
+        }
+
+        if (_fleetLostWarnings.Count > 0)
+        {
+            ConnectionWarning = _fleetLostWarnings[^1].Line;
+            ConnectionWarningOffersReconnect = true;
+        }
+        else
+        {
+            ConnectionWarning = null;
+        }
     }
 
     /// <summary>

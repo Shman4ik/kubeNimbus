@@ -114,6 +114,27 @@ internal static class ListCreateChecks
         if (vm.SelectionSummary != "3 selected")
             throw new InvalidOperationException($"The selection count reads \"{vm.SelectionSummary}\".");
 
+        // #406: opened on the Cmd scheme, so the Delete item's gesture is checked against the
+        // Mac's ⌘⌫ — the XAML used to hard-code the Delete key, which a Mac keyboard lacks.
+        var scheme = Nimbus.Ui.Hotkeys.Primary == KeyModifiers.Meta ? "mac" : "windows";
+        Nimbus.Ui.Hotkeys.Initialize("mac");
+        try
+        {
+            ClickRow(window, rows[1], MouseButton.Right, RawModifiers.None);
+            if (grid.ContextFlyout is MenuFlyout { IsOpen: true } macMenu)
+            {
+                var delete = macMenu.Items.OfType<MenuItem>().First(i => i.Header as string == "Delete…");
+                if (delete.InputGesture is not { Key: Key.Back, KeyModifiers: KeyModifiers.Meta })
+                    throw new InvalidOperationException($"On the Cmd scheme the row menu's Delete shows \"{delete.InputGesture}\", not ⌘⌫.");
+                macMenu.Hide();
+                Settle(window);
+            }
+        }
+        finally
+        {
+            Nimbus.Ui.Hotkeys.Initialize(scheme);
+        }
+
         ClickRow(window, rows[1], MouseButton.Right, RawModifiers.None);
         if (vm.SelectedRows.Count != 3)
             throw new InvalidOperationException(
@@ -135,6 +156,8 @@ internal static class ListCreateChecks
                 throw new InvalidOperationException("Exec in my terminal is enabled with three rows selected; it would exec into one of them.");
             if (!items.Any(i => i.Header as string == "Delete…") || !vm.DeleteSelectedCommand.CanExecute(null))
                 throw new InvalidOperationException("Delete is missing or disabled with three rows selected.");
+            if (!Equals(items.First(i => i.Header as string == "Delete…").InputGesture, KubeNimbus.App.CommandBindings.GestureFor(KubeNimbus.Core.Commands.CommandId.DeleteResource)))
+                throw new InvalidOperationException("The row menu's Delete does not show the catalog's chord for the live scheme.");
             menu.Hide();
         }
         else

@@ -26,6 +26,29 @@ public partial class ClusterTabView : UserControl
         }
     }
 
+    /// <summary>
+    /// The row menu's Delete item shows the catalog's primary chord on the live scheme: Delete,
+    /// or ⌘⌫ on the Cmd scheme, where a Mac keyboard has no Delete key. It was written in XAML
+    /// as <c>InputGesture="Delete"</c>, which named a key the Mac does not have and ignored the
+    /// scheme (#406, CLAUDE.md "No hardcoded Ctrl gestures"). Read at each opening, so a
+    /// scheme changed in Preferences is what the next menu shows.
+    /// </summary>
+    internal static void ApplyRowMenuGestures(MenuFlyout menu)
+    {
+        if (menu.Items.OfType<MenuItem>().FirstOrDefault(i => i.Name == "DeleteRowMenuItem") is { } delete)
+        {
+            delete.InputGesture = CommandBindings.GestureFor(CommandId.DeleteResource);
+        }
+    }
+
+    private void OnRowMenuOpening(object? sender, EventArgs e)
+    {
+        if (sender is MenuFlyout menu)
+        {
+            ApplyRowMenuGestures(menu);
+        }
+    }
+
     private void OnNamespaceOpened(object? sender, EventArgs e)
     {
         if (DataContext is ClusterTabViewModel vm) { vm.NamespaceFilter = ""; vm.RebuildNamespaceChoices(); }

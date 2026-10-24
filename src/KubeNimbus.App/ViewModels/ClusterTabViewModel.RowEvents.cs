@@ -194,6 +194,10 @@ public sealed partial class ClusterTabViewModel
                 // many clusters are in it, so holding the spinner for the slowest
                 // member would hide four healthy lists behind the fifth.
                 IsListLoading = false;
+
+                // A member's resumed watch answered (#386, the fleet half of #363): that
+                // member's retry line goes, and every other member's stays.
+                ClearFleetMemberLostWarning(cluster);
                 break;
 
             case ResourceEventType.Reset:
@@ -219,7 +223,15 @@ public sealed partial class ClusterTabViewModel
                     Rows.ReplaceAll(Rows.Where(row => !stale.Contains(row)).ToList());
                 }
 
-                ConnectionWarning = null;
+                // This member is listing again, so its own retry line goes; another member
+                // still retrying keeps its line on screen (#386).
+                ClearFleetMemberLostWarning(cluster);
+                ConnectionWarning = _fleetLostWarnings.Count > 0 ? _fleetLostWarnings[^1].Line : null;
+                if (ConnectionWarning is not null)
+                {
+                    ConnectionWarningOffersReconnect = true;
+                }
+
                 break;
             }
 

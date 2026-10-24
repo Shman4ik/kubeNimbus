@@ -59,4 +59,59 @@ public class ClusterTabReconnectTests
 
         await Assert.That(tab.ConnectionWarning).IsEqualTo("Could not refresh the resource catalog: timed out");
     }
+
+    /// <summary>
+    /// #386, the fleet half: two members lose their watch, one resumes (its <c>Synced</c> with no
+    /// <c>Reset</c> before it). That member's line goes and the other member's, still retrying,
+    /// is the line on screen; once that one resumes too, the line is empty. Mutation-checked:
+    /// without <c>ClearFleetMemberLostWarning</c> in the fleet Synced case, east's line stays.
+    /// </summary>
+    [Test]
+    public async Task A_fleet_members_reconnect_clears_its_line_and_keeps_the_others()
+    {
+        var tab = TestObjects.Tab();
+        tab.ApplyFleetBatch(
+        [
+            new FleetResourceEvent("east", ResourceEvent<DynamicResource>.Reset),
+            new FleetResourceEvent("east", TestObjects.Added(TestObjects.Pod("team", "web-1"))),
+            new FleetResourceEvent("east", ResourceEvent<DynamicResource>.Synced),
+            new FleetResourceEvent("west", ResourceEvent<DynamicResource>.Reset),
+            new FleetResourceEvent("west", TestObjects.Added(TestObjects.Pod("team", "web-2"))),
+            new FleetResourceEvent("west", ResourceEvent<DynamicResource>.Synced),
+        ]);
+
+        tab.OnFleetMemberConnectionLost("west", new WatchConnectionException(Lost, new IOException()));
+        tab.OnFleetMemberConnectionLost("east", new WatchConnectionException(Lost, new IOException()));
+        await Assert.That(tab.ConnectionWarning).IsEqualTo($"east: {Lost}");
+        await Assert.That(tab.ConnectionWarningOffersReconnect).IsTrue();
+
+        tab.ApplyFleetBatch([new FleetResourceEvent("east", ResourceEvent<DynamicResource>.Synced)]);
+
+        await Assert.That(tab.ConnectionWarning).IsEqualTo($"west: {Lost}");
+        await Assert.That(tab.ConnectionWarningOffersReconnect).IsTrue();
+        await Assert.That(tab.Rows.Count).IsEqualTo(2);
+
+        tab.ApplyFleetBatch([new FleetResourceEvent("west", ResourceEvent<DynamicResource>.Synced)]);
+        await Assert.That(tab.ConnectionWarning).IsNull();
+    }
+
+    /// <summary>
+    /// A member's resume is not the answer to another member's line: west resumes while east's
+    /// line is on screen, and east's line stays.
+    /// </summary>
+    [Test]
+    public async Task A_fleet_members_reconnect_leaves_another_members_line_on_screen()
+    {
+        var tab = TestObjects.Tab();
+        tab.OnFleetMemberConnectionLost("west", new WatchConnectionException(Lost, new IOException()));
+        tab.OnFleetMemberConnectionLost("east", new WatchConnectionException(Lost, new IOException()));
+
+        tab.ApplyFleetBatch([new FleetResourceEvent("west", ResourceEvent<DynamicResource>.Synced)]);
+
+        await Assert.That(tab.ConnectionWarning).IsEqualTo($"east: {Lost}");
+
+        // And east relisting from scratch (a 410 Gone) clears its own line too.
+        tab.ApplyFleetBatch([new FleetResourceEvent("east", ResourceEvent<DynamicResource>.Reset)]);
+        await Assert.That(tab.ConnectionWarning).IsNull();
+    }
 }

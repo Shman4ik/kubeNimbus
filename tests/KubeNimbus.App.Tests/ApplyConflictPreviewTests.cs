@@ -75,6 +75,34 @@ public class ApplyConflictPreviewTests
         await Assert.That(patches[1].Query).Contains("force=true");
     }
 
+    /// <summary>
+    /// #404's view-model half: the preview's Force apply, run once, sends the forced apply for
+    /// real (no dry run) and closes the panel. The first-click miss seen on macOS with synthetic
+    /// clicks is not in this path; the PR names the desktop check that settles the view half.
+    /// </summary>
+    [Test]
+    public async Task The_previews_force_apply_writes_on_its_first_run()
+    {
+        App.Update(s => s with { PreviewApplies = true });
+        using var server = new StubApiServer();
+        server.Respond("GET", Path, HttpStatusCode.OK, Live);
+        server.RespondWhenQueryContains("PATCH", Path, "force=true", HttpStatusCode.OK, Previewed);
+        server.Respond("PATCH", Path, HttpStatusCode.Conflict, Conflict);
+        var editor = new YamlEditorTabViewModel(server.Connect(), TestObjects.ConfigMapDescriptor, "team-a", "settings", EditedYaml);
+
+        await editor.ApplyCommand.ExecuteAsync(null);
+        await Assert.That(editor.ConfirmPreviewCommand.CanExecute(null)).IsTrue();
+        await editor.ConfirmPreviewCommand.ExecuteAsync(null);
+
+        var patches = server.Requests.Where(r => r.Method == "PATCH").ToList();
+        await Assert.That(patches.Count).IsEqualTo(3);
+        await Assert.That(patches[2].Query).Contains("force=true");
+        await Assert.That(patches[2].Query.Contains("dryRun", StringComparison.Ordinal)).IsFalse();
+        await Assert.That(editor.PendingPreview).IsNull();
+        await Assert.That(editor.ConflictDetails).IsNull();
+        await Assert.That(editor.StatusMessage).StartsWith("Applied at");
+    }
+
     [Test]
     public async Task When_the_forced_dry_run_fails_too_the_conflict_stands_alone()
     {

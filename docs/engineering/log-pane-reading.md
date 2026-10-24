@@ -52,6 +52,16 @@ Six things are load-bearing.
    follow's scroll-to-end is posted: the container may not be measured yet in the tick the
    match moved. Moving to an older match takes the view off the bottom, which is what stops
    the follow yanking it back — the existing scroll lock, unchanged.
+7. **A following pane stays on its last line when its height changes** (#403). The scroll
+   lock (`Views/LogTail`, shared by the pod and workload log panes) asks "is the view at the
+   bottom?" when a line arrives. A `ScrollViewer` keeps its top offset when its viewport
+   shrinks, so the dock going back from maximized (Shift+L, then Esc) to the split left a
+   following pane showing what used to be the top of the tall pane, and the next line found it
+   "scrolled up" and the follow stopped for good — found once in the 0.8.0 macOS pass, and the
+   same on every platform. `LogTail.KeepOnResize` answers a viewport change that took a pane
+   off the tail it was on with a posted `ScrollToEnd`; a scroll by the reader, a pane the reader
+   had scrolled up, and a pane that grew are left alone. `LogTailTests` pins the rule; returning
+   false from `ResizeLeftTheTail` turns the shrink case red.
 
 ## A log viewer good enough not to leave (the log-viewer pass)
 

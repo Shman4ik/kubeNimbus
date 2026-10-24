@@ -36,6 +36,15 @@ its own (B4-4, `KubeconfigChain.AutomaticFirstContext`; see
 namespace list that *was* read is not opened (it was deleted), while one missing because
 listing was refused by RBAC is added and selected.
 
+**A saved tab whose context the launch cannot find stays saved** (#405). A kubeconfig not found
+this time — a `$KUBECONFIG` that a launch from the Dock or Finder does not see, a sandbox file
+being rewritten — used to skip the tab, and the restore's own save then rewrote `workspace.json`
+from the open tabs, erasing it for good after one launch; that is the only writer that turns two
+saved tabs into one, since nothing on the quit path writes the workspace (the 0.8.0 macOS pass
+saw the Demo tab restored alone). `MainWindowViewModel._unrestoredTabs` keeps such snapshots
+and every save writes them after the open tabs, so `SelectedTabIndex` still counts open tabs;
+opening the context takes it off the list. `WorkspaceRestoreTests` pins it, mutation-checked.
+
 The test: deleting the workspace should lose your tabs and nothing else; deleting the
 settings should reset your preferences and not close your clusters. Theme,
 `IsAdvancedView` and `KubeconfigPaths` used to be in the workspace, on the wrong side
