@@ -3201,3 +3201,75 @@ Verified: build, both suites (Core 987 passed and 104 live tests skipped with no
 passed), each central change mutation-checked, and the harness scenario `ux-bulk-delete`. Unverified:
 the macOS-only symptoms of #403, #405 and #406, a real dock resize with a live stream, and #404
 itself; they are QA VM checks V-1 to V-5 in the PR.
+
+### Bundles W, X, Y and Z for 1.0 (2026-10-24)
+
+After bundle V (#412) the owner chose three more bundles for 1.0: accessibility, CI reliability
+and small features. A fourth followed from the signing decision. Four `kn-bundle` agents built them
+in their own worktrees at the same time. `kn-verifier` passed W, X and Y. Z changes only the release
+workflow and the docs, so it was checked by a release dry run from its branch instead. Each PR was
+brought up to date with `main` and merged, squashed, with CI green on the merged head, in this
+order: Z (#413), Y (#414), X (#415), W (#416).
+
+**The signing decision (2026-10-24).** No code-signing certificate is bought. Windows ships through
+the Microsoft Store only, and the Store re-signs the MSIX. macOS stays ad-hoc signed, because the
+owner cannot enrol in the Apple Developer Program. #227 was closed as decided, and #228 was narrowed
+to AUR and a possible Homebrew tap of our own, since the official cask repository has disabled
+unnotarized apps since 2026-09-01. pgNimbus keeps its Windows zip.
+
+What shipped, by bundle:
+
+- **Z, Windows through the Store only (#413).** The win-x64 leg still publishes, launch-checks and
+  uploads the MSIX for Partner Center. The zip, its install check and its release asset are gone.
+  A dry run of `release.yml` from the branch ended the Windows leg at "Upload MSIX artifact", and
+  its artifacts were `windows-msix` plus the three macOS and Linux archives.
+- **Y, small features (#414; refs #301 and #405).**
+  - Open a YAML file. A multi-document file opens on its first document, cut by
+    `YamlJson.FirstDocument` from the parser's marks, and the editor says so.
+  - Bulk rollout restart, reusing the bulk delete's strip, with one `restartedAt` per run.
+  - A multi-row selection is handed back after the move path of a re-sort. Avalonia's DataGrid
+    already kept it through a Reset.
+  - A status line for saved tabs that were not reopened.
+  - `PRIVACY.md` gained one sentence for the file read and a new Effective date.
+- **X, CI reliability (#415; #383, #385, #388, #298).**
+  - The sandbox kubeconfig path follows `-Name` in all four scripts, which also gained a dry-run
+    flag.
+  - `ApplyLiveTests` retries the optimistic-lock 409 from a fresh read.
+  - The harness hides Fluent's indeterminate progress indicators, and every scenario that shows one
+    renders twice on every run. Two runs of `cluster-tab-node-drain-running` gave identical hashes.
+  - Three Copy commands go through `MainWindowAccess`, each with a `ux-` check.
+  - `FlyoutHideOrderTests` guards against the #288 shape.
+  - `LiveNamespaceSweepTests` now skips under `KUBENIMBUS_LIVE_NAMESPACE`.
+- **W, accessibility (#416; refs #236).**
+  - On the Cmd scheme, ⌫ closes a focused tab.
+  - The node detail, Helm and Argo CD grids have row names.
+  - A regression guard checks the ☰ items' UI Automation Invoke.
+  - New keyboard walks of the Applications mode and the overlays, with the traps they found fixed:
+    the palette, switcher and preferences now cycle Tab, Esc closes them from any row, focus is
+    given back on close, and the ComboBox draws its focus ring.
+  - A keyboard line cursor in both log panes (`LogLineCursor`, catalog rows `LogLineKeys` and
+    `CopyLogLine`).
+  - #301's keyboard slice had already shipped (#355).
+
+Verified:
+- Each PR's CI was green on its merged head: build, both suites, all five harness shards, the stress
+  check and the linux-x64 NativeAOT publish with both smoke modes.
+- Counts on W's merged head: Core 1008 passed and 102 cluster-gated tests skipped, App 889 passed.
+- X ran its live tests on the sandbox in its own namespace: all 12 `ApplyLiveTests` passed.
+- Each verifier re-ran the targeted classes and mutated one central change, which went red.
+
+Unverified:
+- Everything that needs a real desktop: the OS file picker, R over a real selection, the restore
+  line across a relaunch, the copy checks, the Windows UI Automation provider, screen readers, and
+  ⌫ and ⌘C on a Mac. These are QA VM checks in each PR body and C-17 to C-22 in
+  `docs/qa/desktop-checks.md`.
+- The Windows NativeAOT publish, which CI does not run.
+- The new release-notes footer, which only the first real tag will show.
+
+Known and not fixed:
+- `GatedPodLogsLiveTests` failed once with an unclassified 404 on `pods/log` and passed alone.
+- `ListCreateChecks.BulkRestartTab` draws one selected row while it arms the strip for four.
+- On a Mac with the scheme forced to Ctrl, the Edit menu's Copy may not reach the log list. The
+  resource grid's ⌘C has the same limit.
+- Three focus fixes made in the app belong in nimbusUi, for pgNimbus too: the overlay card's Tab
+  cycle, the ComboBox focus ring, and the capsule strip's Shift+Tab trap.
