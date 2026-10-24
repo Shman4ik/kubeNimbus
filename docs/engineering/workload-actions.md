@@ -109,7 +109,17 @@ line boxes, and in the owner's real window "to" sat visibly above the number. A 
 no baseline alignment, so `RowActionStrip.AlignBlankLead` sets the word's top margin from the
 two text layouts after layout, and `LayoutChecks.ActionStripReadsAsOneBlock` checks the two
 baselines agree within 0.5px. The headless renderer happened to agree before the change too, so
-that check is a guard, not a reproduction. The 2026-10 form of this said "— it is already at 3" when the box
+that check is a guard, not a reproduction. The sentence's own words share that baseline as well
+(2026-10-21, the owner's screenshot): the inline row stood on the line with its bottom, so "to"
+and the box floated about 12px above the words whenever the box fitted on the sentence's line,
+which is every result after a Scale (the buttons go, and the line gets wider). `AlignBlankLead`
+now also hangs the row below the line by the distance from the number's baseline to the box's
+bottom, and gives the sentence the same padding under its last line; the check measures the
+sentence's baseline on the box's line against the number's within 0.75px. The box's spin
+buttons are nimbusUi's quiet chevrons (`Controls.axaml`), not Fluent's two bordered squares,
+which read as two more buttons in a sentence that ends in Scale and Cancel. The verb's glyph is
+centred on the first line's capitals by `RowActionStrip.AlignGlyph`, measured the same way: a fixed
+top margin left it above the words whenever the box made the first line taller. The 2026-10 form of this said "— it is already at 3" when the box
 still held the starting count; with the box beside "from 3 replicas … to" that reads the same
 without a second phrasing. Three deterministic warnings, none of which disables the confirm
 (`RowActionViewModel.ScaleWarningFor`): to 0 from anything else (every pod stops), ten times the

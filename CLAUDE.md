@@ -186,7 +186,7 @@ Three rules about it:
 
 ## UI design rules
 
-Rules 1, 2, 5, 8, 8b, 9, 11, 12, 14, 22 and 24 are shared with pgNimbus and owned by
+Rules 1, 2, 5, 8, 8b, 9, 11, 12, 14, 22, 24 and 25 are shared with pgNimbus and owned by
 [`shared/nimbusUi/DESIGN.md`](shared/nimbusUi/DESIGN.md). **Each rule's full text and the
 incident behind it are in [ui-rules](docs/engineering/ui-rules.md); read the ones you touch
 before changing a view.** Docs and code cite these numbers.
@@ -259,6 +259,9 @@ before changing a view.** Docs and code cite these numbers.
 24. **A group gets a header or a border, never both, and nothing is boxed inside the dock's
     card** (DESIGN.md rule 23): a headed group is `Border.section`, a dot-led list in one
     takes `dotLed` (`LayoutChecks.OneGroupingDevice`).
+25. **A text button is as tall as the field beside it, 32px in every family** (DESIGN.md rule
+    24); no text button gets a `Padding`, `FontSize` or `Height` of its own in a row of others
+    (`LayoutChecks.RowIsLevel`).
 
 ## Feature deep dives (docs/engineering/)
 

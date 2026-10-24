@@ -101,7 +101,7 @@ internal static class MacChecks
         Dispatcher.UIThread.RunJobs();
         EditCommands.Execute(window, EditCommand.SelectAll);
         EditCommands.Execute(window, EditCommand.Copy);
-        Expect(Read(clipboard) == "kind: Pod\n", $"Copy in the YAML editor put \"{Read(clipboard)}\" on the clipboard");
+        Expect(Read(clipboard)?.Replace("\r\n", "\n") == "kind: Pod\n",$"Copy in the YAML editor put \"{Read(clipboard)}\" on the clipboard");
 
         var box = window.GetVisualDescendants().OfType<TextBox>().First(b => b.Name == "RowFilterBox" && b.IsEffectivelyVisible);
         box.Focus();

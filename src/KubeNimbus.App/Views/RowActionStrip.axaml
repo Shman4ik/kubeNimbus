@@ -84,7 +84,7 @@
   <Border Classes="card actionStrip" Classes.production="{Binding IsProduction}" Classes.result="{Binding FiredOnClick}"
           AutomationProperties.Name="{Binding Question}">
     <Grid ColumnDefinitions="Auto,*">
-      <PathIcon Grid.Column="0" Classes="actionGlyph" Classes.danger="{Binding IsDestructive}" IsVisible="{Binding IsQuestionVisible}"
+      <PathIcon Grid.Column="0" Name="ActionGlyph" Classes="actionGlyph" Classes.danger="{Binding IsDestructive}" IsVisible="{Binding IsQuestionVisible}"
                 Data="{Binding IconKey, Converter={x:Static conv:IconKeyToGeometryConverter.Instance}}"
                 VerticalAlignment="Top" Margin="0,1,10,0" />
 
@@ -103,7 +103,7 @@
                  line with the box centred beside both, reading "(1 running) [6]" over "to".
                  Inline, and drawn together with "to" as one unit, it always follows the word it
                  completes; a wrap moves both. -->
-            <TextBlock Name="ActionSentence" Classes="actionSentence" TextWrapping="Wrap" VerticalAlignment="Center"><Run Text="{Binding Verb}" FontWeight="SemiBold" /><Run Text=" " /><Run Text="{Binding TargetKind}" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" /><Run Text=" " /><Run Text="{Binding TargetName}" FontWeight="SemiBold" /><Run Text="{Binding TargetPlace}" /><Run Text="{Binding SuffixBeforeBlank}" /><InlineUIContainer BaselineAlignment="Center"><StackPanel Orientation="Horizontal" Spacing="10" Margin="4,2,0,2" IsVisible="{Binding IsScale}"><TextBlock Name="BlankLead" Classes="actionSentence" Text="to" VerticalAlignment="Top" /><NumericUpDown Name="ReplicaInput"
+            <TextBlock Name="ActionSentence" Classes="actionSentence" TextWrapping="Wrap" VerticalAlignment="Center"><Run Text="{Binding Verb}" FontWeight="SemiBold" /><Run Text=" " /><Run Text="{Binding TargetKind}" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" /><Run Text=" " /><Run Text="{Binding TargetName}" FontWeight="SemiBold" /><Run Text="{Binding TargetPlace}" /><Run Text="{Binding SuffixBeforeBlank}" /><InlineUIContainer BaselineAlignment="Baseline"><StackPanel Name="BlankRow" Orientation="Horizontal" Spacing="8" Margin="4,0,0,0" IsVisible="{Binding IsScale}"><TextBlock Name="BlankLead" Classes="actionSentence" Text="to" VerticalAlignment="Top" /><NumericUpDown Name="ReplicaInput"
                              VerticalAlignment="Center"
                              AutomationProperties.Name="Replicas"
                              Value="{Binding Replicas}" Minimum="0"
@@ -227,10 +227,10 @@
             <TextBlock Grid.Column="1" Name="ResultMessage" Text="{Binding Message}" TextWrapping="Wrap" FontSize="12"
                        VerticalAlignment="Center" ToolTip.Tip="{Binding MessageDetail}" />
             <Button Grid.Column="2" Content="Open Job" Classes="accent" Margin="12,-4,0,-4"
-                    Padding="10,3" VerticalAlignment="Center"
+                    Padding="10,3" MinHeight="0" VerticalAlignment="Center"
                     Command="{Binding OpenCreatedJobCommand}" IsVisible="{Binding HasFollowUp}" />
             <Button Grid.Column="3" Content="Close" Classes="soft" Margin="8,-4,-4,-4"
-                    Padding="10,3" VerticalAlignment="Center"
+                    Padding="10,3" MinHeight="0" VerticalAlignment="Center"
                     Command="{Binding DismissCommand}" IsVisible="{Binding IsDone}" />
           </Grid>
         </Border>

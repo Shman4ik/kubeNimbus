@@ -502,6 +502,27 @@ card was flush.
 
 ---
 
+### 24. A text button is as tall as the field beside it, in every family
+
+A button with words on it is 32px, Fluent's `TextControlThemeMinHeight` and so the height of
+every TextBox, ComboBox and NumericUpDown, whether it is plain, `soft`, `accent`, `danger` or a
+`SplitButton`. `Theme.axaml` gets there by padding: 6px over and under a 13px line for the
+families with a 1px border, 7px for the filled ones, which have none. That sum holds only for an
+18px line, so `Button` also takes Fluent's field height as its `MinHeight`. A button class that is
+not a text button (`toolbar`, `chip`, an app's link or log classes) sets its own. Never give one text button a
+`Padding`, `FontSize` or `Height` of its own in a row of others; an icon-only toolbar button is
+not a text button and keeps its own size. A NumericUpDown's spin buttons are chevrons inside the
+box, not bordered squares beside it.
+
+kubeNimbus's audit of its rendered screens (2026-10-21, kubeNimbus#409) measured one row at three
+heights: a plain Restart… at 34px beside a 32px Sync split button on the application page, a
+`soft danger` Delete with its own `Padding="8,4"` and 12px label at 26px beside a 32px Apply in
+the YAML toolbar, and a plain 34px Stop beside the 32px port fields. Each family had its own
+padding and the filled ones had no border, so the heights only matched by accident.
+kubeNimbus's harness checks the rows with `LayoutChecks.RowIsLevel`. Its first run on Linux
+(kubeNimbus#411) measured the padded buttons at 30px beside 32px fields, because the system face
+there draws a 16px line where Segoe UI draws 18px; that is why the height is a floor as well.
+
 ## What is deliberately *not* shared
 
 Sharing the wrong thing costs more than duplicating it. Known exceptions, with

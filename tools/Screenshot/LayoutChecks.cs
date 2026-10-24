@@ -263,11 +263,93 @@ internal static class LayoutChecks
             if (!(Math.Abs(numberBaseline - leadBaseline) <= 0.5))
                 throw new InvalidOperationException(
                     $"\"to\" stands on y={leadBaseline:0.0} and the replica box's number on y={numberBaseline:0.0}; they should share a baseline (#293).");
+
+            // 2026-10-21: and the sentence's own words stand on that baseline too. The row used
+            // to stand on the line with its bottom, so "to" and the box floated above the words.
+            var sentenceTop = sentence.TranslatePoint(new Point(0, sentence.Padding.Top), window)?.Y ?? double.NaN;
+            var boxMiddle = boxTop + box.Bounds.Height / 2;
+            var hangBelow = boxBottom - numberBaseline;
+            double? sentenceBaseline = null;
+            foreach (var textLine in sentence.TextLayout.TextLines)
+            {
+                if (boxMiddle >= sentenceTop && boxMiddle <= sentenceTop + textLine.Height + hangBelow)
+                {
+                    sentenceBaseline = sentenceTop + textLine.Baseline;
+                    break;
+                }
+
+                sentenceTop += textLine.Height;
+            }
+
+            if (sentenceBaseline is not { } words || !(Math.Abs(words - numberBaseline) <= 0.75))
+                throw new InvalidOperationException(
+                    $"The sentence stands on y={sentenceBaseline:0.0} and the replica box's number on y={numberBaseline:0.0}; "
+                    + "the words, \"to\" and the number should share one baseline.");
         }
+        // 2026-10-21: the verb's glyph is centred on the first line's words, also when the scale
+        // box shares that line and makes it as tall as the box.
+        var glyph = strip.FindControl<PathIcon>("ActionGlyph")!;
+        var firstLine = sentence.TextLayout.TextLines[0];
+        var firstBaseline = sentence.TranslatePoint(new Point(0, sentence.Padding.Top + firstLine.Baseline), window)?.Y ?? double.NaN;
+        var glyphMiddle = (glyph.TranslatePoint(default, window)?.Y ?? double.NaN) + glyph.Bounds.Height / 2;
+        var capMiddle = firstBaseline - RowActionStrip.CapMiddle * sentence.FontSize;
+        if (!(Math.Abs(glyphMiddle - capMiddle) <= 1))
+            throw new InvalidOperationException(
+                $"The strip's glyph is centred on y={glyphMiddle:0.0} and the first line's capitals on y={capMiddle:0.0}; it should sit level with the words.");
+
         Console.WriteLine($"Action strip reads as one block at {window.Bounds.Width:0}px (confirm {gap:0}px after the text).");
 
         double InkRight(TextBlock block) =>
             (block.TranslatePoint(default, window)?.X ?? double.NaN) + block.Padding.Left + block.TextLayout.Width;
+    }
+
+    /// <summary>
+    /// 2026-10-21 (the owner, after an audit of the rendered app): the buttons and fields of one
+    /// row are one height and share one centre line. Delete sat 10px shorter than Apply in the
+    /// YAML toolbar, Sync's split button shorter than Restart…, and a filled button taller than
+    /// the fields or the soft Cancel beside it, because each family had its own padding and the
+    /// filled one had no border. The row is everything of those kinds inside
+    /// <paramref name="anchor"/>'s parent panel; an icon-only toolbar button is not one of them.
+    /// </summary>
+    internal static TControl Find<TView, TControl>(Window window, Func<TControl, bool> match)
+        where TView : Control where TControl : Control =>
+        window.GetVisualDescendants().OfType<TView>().First(v => v.IsEffectivelyVisible)
+            .GetVisualDescendants().OfType<TControl>().First(c => c.IsEffectivelyVisible && match(c));
+
+    internal static void RowIsLevel(Window window, Control anchor, string where)
+    {
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        Dispatcher.UIThread.RunJobs();
+        var row = anchor.GetVisualParent() as Visual
+            ?? throw new InvalidOperationException($"{where}: the anchor has no parent.");
+        var members = row.GetVisualDescendants().OfType<Control>()
+            .Where(c => c.IsEffectivelyVisible && c is SplitButton or ComboBox or NumericUpDown or TextBox or Button
+                && !c.Classes.Contains("toolbar") && !c.Classes.Contains("linkText") && !c.Classes.Contains("chip")
+                && !c.GetVisualAncestors().TakeWhile(v => v != row).Any(v => v is SplitButton or ComboBox or NumericUpDown or TextBox))
+            .Where(c => c is not Button b || b.Content is not null)
+            .ToList();
+        var measured = members.Select(c =>
+        {
+            var top = c.TranslatePoint(default, window)?.Y ?? double.NaN;
+            return (Control: c, Height: c.Bounds.Height, Middle: top + c.Bounds.Height / 2);
+        }).ToList();
+        var text = string.Join(", ", measured.Select(m => $"{m.Control.GetType().Name} {Label(m.Control)} {m.Height:0.#}px at y={m.Middle:0.#}"));
+        if (measured.Count < 2)
+            throw new InvalidOperationException($"{where}: found {measured.Count} controls in the row ({text}); the check needs two.");
+        var tallest = measured.Max(m => m.Height);
+        var shortest = measured.Min(m => m.Height);
+        var highest = measured.Min(m => m.Middle);
+        var lowest = measured.Max(m => m.Middle);
+        if (tallest - shortest > 0.5 || lowest - highest > 0.5)
+            throw new InvalidOperationException($"{where}: the row's controls differ in height or centre: {text}.");
+        Console.WriteLine($"{where}: {measured.Count} controls, all {tallest:0.#}px on one centre line.");
+
+        static string Label(Control c) => c switch
+        {
+            ContentControl { Content: string s } => $"\"{s}\"",
+            _ => c.Name ?? "",
+        };
     }
 
     /// <summary>

@@ -137,7 +137,7 @@ kubeNimbus sends `ArgoCd.TerminatePatch`, an RFC 6902 JSON patch of the object: 
 `test` is Argo's server-side check made atomic: a sync that finished between the click and the
 request makes the API server refuse the whole patch with 422 and write nothing, which
 `TerminateArgoOperationAsync` returns as false and the strip says as "No sync is running on … any
-more — it finished before the request arrived. Nothing was changed." A merge patch could not be
+more.", with "It finished before the request arrived. Nothing was changed." as its tooltip. A merge patch could not be
 conditional, and one sent after the sync finished would stamp a finished operation Terminating.
 
 Where: "Terminate sync…" on the Applications page's Sync arrow (the same strip that started the

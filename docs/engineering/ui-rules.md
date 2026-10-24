@@ -660,4 +660,24 @@ which now have a page of their own in this directory.
    tiles, an Ingress's rule cards, Argo's condition cards, the RBAC answer) keep their
    border, which is the rule's other half.
 
+25. **A text button is as tall as the field beside it, 32px in every family** (DESIGN.md rule
+   24, 2026-10-21). After the owner's screenshot of the scale strip, an audit of the rendered
+   screens and then `LayoutChecks.RowIsLevel` measured rows at three heights: Restart… at 34px
+   beside a 32px Sync split button on the application page, the YAML toolbar's Delete at 26px
+   (its own `Padding="8,4"` and a 12px label) beside a 32px Review…/Apply, and the port-forward
+   form's 34px Stop beside 32px fields. The audit's other two suspects, Who can…'s Find and the
+   action strip's confirm beside Cancel, measured level already. nimbusUi's `Theme.axaml` now
+   pads every family to 32px (6px for the bordered ones, 7px for the filled ones, which draw no
+   border), and the check runs on all five rows plus a production delete's strip. An icon-only
+   `toolbar` button is not a text button and keeps its size.
+   The padding alone held only on Windows. CI's first Linux run of the check (#411) measured
+   Restart…, Find and the port-forward Stop at 30px beside 32px fields, because the system face
+   there draws a 13px label on a 16px line where Segoe UI draws 18px. So `Button` also takes
+   Fluent's `TextControlThemeMinHeight` as its `MinHeight`. Every button class here that is not
+   a text button (`linkRow`, `linkText`, `logProblem`, `logPinChip`, `rowAction`,
+   `appColumnHeader`) sets `MinHeight="0"`, and so do the four deliberately compact buttons with
+   a `Padding` of their own: the action strip's Open Job and Close, the port-forward list's Stop
+   and the workload header's button. A full Windows render before and after the floor differed
+   only in a sub-pixel shift in the wide-face log-bar scenarios.
+
 [fluent-basics]: https://learn.microsoft.com/en-us/windows/apps/design/basics/

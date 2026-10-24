@@ -829,10 +829,10 @@ public sealed partial class RowActionViewModel : ObservableObject
     public bool HasMessage => !string.IsNullOrEmpty(Message);
 
     /// <summary>
-    /// The why behind a one-line result, as the result line's tooltip. A click that fires an
-    /// Argo sync or refresh, or that the demo cluster refuses, says what happened in one line
-    /// (the owner asked for that, 2026-10-21: a two-line paragraph under every Sync read as a
-    /// warning); what the request means and where to watch it is here for whoever hovers.
+    /// The why behind a one-line result, as the result line's tooltip. Every result says what
+    /// happened in one line (the owner asked for that, 2026-10-21: a two-line paragraph under
+    /// every Sync read as a warning); what it means and where to watch it is here for whoever
+    /// hovers. The API server's refusals and a drain's half-done state stay in the line itself.
     /// </summary>
     [ObservableProperty] private string? _messageDetail;
 
@@ -1119,7 +1119,8 @@ public sealed partial class RowActionViewModel : ObservableObject
                 case RowActionKind.Scale:
                     // Replicas is non-null here — CanConfirm gates on it.
                     var result = await client.ScaleAsync(_descriptor, _namespace, _name, Replicas!.Value);
-                    Message = $"Scaled to {result.Replicas}. The list follows the rollout as the watch reports it.";
+                    Message = $"Scaled to {result.Replicas}.";
+                    MessageDetail = "The list follows the rollout as the watch reports it.";
                     break;
 
                 case RowActionKind.Restart:
@@ -1132,8 +1133,8 @@ public sealed partial class RowActionViewModel : ObservableObject
 
                 case RowActionKind.Cordon:
                     await client.SetNodeSchedulableAsync(_descriptor, _name, schedulable: false);
-                    Message =
-                        $"{_name} is cordoned. Its pods keep running — drain the node to move them.";
+                    Message = $"{_name} is cordoned.";
+                    MessageDetail = "Its pods keep running — drain the node to move them.";
                     break;
 
                 case RowActionKind.Uncordon:
@@ -1170,11 +1171,17 @@ public sealed partial class RowActionViewModel : ObservableObject
                 // still Running, so one that finished in the meantime is a refusal that wrote
                 // nothing, said as what happened rather than as an error.
                 case RowActionKind.ArgoTerminate:
-                    Message = await client.TerminateArgoOperationAsync(_descriptor, _namespace, _name)
-                        ? $"Terminate of the sync on {Target} requested. Argo records it as Failed, \"Operation "
-                          + "terminated\", once it has stopped."
-                        : $"No sync is running on {Target} any more — it finished before the request arrived. "
-                          + "Nothing was changed.";
+                    if (await client.TerminateArgoOperationAsync(_descriptor, _namespace, _name))
+                    {
+                        Message = $"Terminate of the sync on {Target} requested.";
+                        MessageDetail = "Argo records it as Failed, \"Operation terminated\", once it has stopped.";
+                    }
+                    else
+                    {
+                        Message = $"No sync is running on {Target} any more.";
+                        MessageDetail = "It finished before the request arrived. Nothing was changed.";
+                    }
+
                     break;
 
                 // The Job's name is the server's (generateName), so it is only known from
@@ -1182,12 +1189,14 @@ public sealed partial class RowActionViewModel : ObservableObject
                 case RowActionKind.Trigger:
                     var job = await client.CreateJobFromCronJobAsync(_descriptor, _jobDescriptor!, _namespace, _name);
                     CreatedJob = job;
-                    Message = $"Created Job/{job.Name}. Its pods appear as the Job controller starts them.";
+                    Message = $"Created Job/{job.Name}.";
+                    MessageDetail = "Its pods appear as the Job controller starts them.";
                     break;
 
                 case RowActionKind.Suspend:
                     await client.SetCronJobSuspendedAsync(_descriptor, _namespace, _name, suspended: true);
-                    Message = $"{_name} is suspended. Jobs already running carry on; nothing new is scheduled until it is resumed.";
+                    Message = $"{_name} is suspended.";
+                    MessageDetail = "Jobs already running carry on; nothing new is scheduled until it is resumed.";
                     break;
 
                 case RowActionKind.Resume:

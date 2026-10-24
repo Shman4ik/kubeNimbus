@@ -28,7 +28,14 @@ it as the GitHub Release body, so headings must match tags exactly
 - **A sync or refresh says so in one line.** "Sync of checkout in argocd on prod-eu requested."
   replaces the two-sentence paragraph that followed every Sync, and it no longer sits in a box
   of its own; what the request means is the line's tooltip. Cordon, uncordon and suspend
-  results look the same.
+  results look the same, and scale, run now and terminate sync results are one line too.
+- **The scale question reads on one line of type.** "to" and the replica box stand on the
+  sentence's baseline instead of floating above it, and every number box's up and down
+  buttons are two quiet chevrons inside the box rather than two bordered squares beside it.
+- **Buttons are the height of the fields beside them.** Every button with words on it is 32px,
+  the height of a text box, so the YAML toolbar's Delete no longer sits 6px shorter than
+  Review…, and Restart… and the port-forward Stop no longer stand 2px taller than Sync and the
+  port fields.
 
 ## [0.8.0] - 2026-10-19
 
