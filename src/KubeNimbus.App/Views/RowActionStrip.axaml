@@ -227,10 +227,10 @@
             <TextBlock Grid.Column="1" Name="ResultMessage" Text="{Binding Message}" TextWrapping="Wrap" FontSize="12"
                        VerticalAlignment="Center" ToolTip.Tip="{Binding MessageDetail}" />
             <Button Grid.Column="2" Content="Open Job" Classes="accent" Margin="12,-4,0,-4"
-                    Padding="10,3" VerticalAlignment="Center"
+                    Padding="10,3" MinHeight="0" VerticalAlignment="Center"
                     Command="{Binding OpenCreatedJobCommand}" IsVisible="{Binding HasFollowUp}" />
             <Button Grid.Column="3" Content="Close" Classes="soft" Margin="8,-4,-4,-4"
-                    Padding="10,3" VerticalAlignment="Center"
+                    Padding="10,3" MinHeight="0" VerticalAlignment="Center"
                     Command="{Binding DismissCommand}" IsVisible="{Binding IsDone}" />
           </Grid>
         </Border>

@@ -670,5 +670,14 @@ which now have a page of their own in this directory.
    pads every family to 32px (6px for the bordered ones, 7px for the filled ones, which draw no
    border), and the check runs on all five rows plus a production delete's strip. An icon-only
    `toolbar` button is not a text button and keeps its size.
+   The padding alone held only on Windows. CI's first Linux run of the check (#411) measured
+   Restart…, Find and the port-forward Stop at 30px beside 32px fields, because the system face
+   there draws a 13px label on a 16px line where Segoe UI draws 18px. So `Button` also takes
+   Fluent's `TextControlThemeMinHeight` as its `MinHeight`. Every button class here that is not
+   a text button (`linkRow`, `linkText`, `logProblem`, `logPinChip`, `rowAction`,
+   `appColumnHeader`) sets `MinHeight="0"`, and so do the four deliberately compact buttons with
+   a `Padding` of their own: the action strip's Open Job and Close, the port-forward list's Stop
+   and the workload header's button. A full Windows render before and after the floor differed
+   only in a sub-pixel shift in the wide-face log-bar scenarios.
 
 [fluent-basics]: https://learn.microsoft.com/en-us/windows/apps/design/basics/
