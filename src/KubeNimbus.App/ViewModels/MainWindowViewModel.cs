@@ -1011,6 +1011,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         var settings = WorkspaceStore.Load();
         var connects = new List<Task>();
+        _unrestoredTabs.Clear();
         _isRestoring = true;
         try
         {
@@ -1032,6 +1033,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                     // its slowest cluster, on the one launch path that is supposed to
                     // be this app's reason to exist.
                     connects.Add(AddTabAsync(context, snapshot));
+                }
+                else
+                {
+                    _unrestoredTabs.Add(snapshot);
                 }
             }
 
@@ -1105,8 +1110,20 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(SwitcherTooltip));
     }
 
+    /// <summary>
+    /// Saved tabs whose context this launch's kubeconfig chain does not have (#405): a file
+    /// not found this time, a <c>$KUBECONFIG</c> a launch from the Dock or Finder does not see,
+    /// a sandbox kubeconfig being rewritten. They are written back after the restored tabs on
+    /// every save, so the next launch that finds the context reopens the tab. The restore's
+    /// own save used to rewrite <c>workspace.json</c> from the open tabs alone, which erased
+    /// such a tab for good after one launch that missed it. Opening the context again takes
+    /// it off this list.
+    /// </summary>
+    private readonly List<TabSnapshot> _unrestoredTabs = [];
+
     private async Task AddTabAsync(ClusterContext context, TabSnapshot? snapshot = null)
     {
+        _unrestoredTabs.RemoveAll(s => s.ContextName == context.Name && s.KubeconfigPath == context.KubeconfigPath);
         var tab = new ClusterTabViewModel(context)
         {
             FleetMembersProvider = FleetMembers,
@@ -1259,6 +1276,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             t.ViewKindKey ?? t.RestoreKindKey,
             t.SelectedKind is null ? t.RestoreNamespace : t.SelectedNamespace,
             t.SelectedKind is null ? t.RestoreNamespaces : t.SelectedNamespaces is { Count: > 1 } several ? [.. several] : null)).ToList();
+
+        // After the open tabs, so SelectedTabIndex still counts open tabs only (#405).
+        tabs.AddRange(_unrestoredTabs);
         WorkspaceStore.Save(settings with
         {
             Tabs = tabs,
@@ -1468,7 +1488,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         // Gated on the toggle's own visibility rather than on IsFleetViewAvailable, so
         // the palette offers exactly what the command bar does — including the way out
         // of an aggregation left running when the advanced view was switched off.
-        if (SelectedTab is { IsFleetToggleVisible: true } fleetable)
+        // Not in the Applications mode (#384): the toggle lives on the Resources list, which
+        // that mode hides, so the row would aggregate a list nobody can see (UI rule 20).
+        if (!IsApplicationsMode && SelectedTab is { IsFleetToggleVisible: true } fleetable)
         {
             var fleetTarget = !fleetable.IsFleetView;
             yield return new PaletteItem(
@@ -1809,8 +1831,16 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                     var subtitle = kind.HasGroupLabel
                         ? $"{section.Title} · {kind.GroupLabel} · {current.Header}"
                         : $"{section.Title} · {current.Header}";
+                    // A kind is a Resources destination, so picking one from the
+                    // Applications mode switches to Resources first: the owner's call on
+                    // #384 (2026-10-24), so the user sees what they picked rather than a
+                    // selection made on a hidden list.
                     yield return new PaletteItem(kind.DisplayName, subtitle, section.IconKey,
-                        () => current.SelectKindCommand.Execute(kind));
+                        () =>
+                        {
+                            Mode = ShellMode.Resources;
+                            current.SelectKindCommand.Execute(kind);
+                        });
                 }
             }
         }

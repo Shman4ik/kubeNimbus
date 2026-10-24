@@ -57,6 +57,7 @@ public partial class PodDetailView : UserControl
             },
             pin: () => _vm?.PinSearchCommand);
         LogSearchGestures.AttachRuler(LogRuler, LogItems, LogScroll);
+        LogTail.KeepOnResize(LogScroll, () => _vm?.IsFollowingLogs == true);
         LogSearchGestures.AttachProblemKeys(this, () => _vm?.Problems);
         LogSearchGestures.AttachReveal(LogItems, () => _vm?.IsLogFilterMode == true, line => _vm?.RevealLine(line));
 
@@ -123,12 +124,6 @@ public partial class PodDetailView : UserControl
         }
     }
 
-    /// <summary>
-    /// How close to the bottom still counts as "at the bottom". A couple of lines of
-    /// slack, so a stray wheel notch doesn't silently detach the follow.
-    /// </summary>
-    private const double ScrollLockSlack = 24;
-
     private void OnLogLinesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         if (_vm?.IsFollowingLogs != true || !IsScrolledToBottom())
@@ -148,8 +143,7 @@ public partial class PodDetailView : UserControl
     /// so following only pins the view while the view is already at the bottom, which
     /// is what every terminal pager and log viewer does.
     /// </summary>
-    private bool IsScrolledToBottom() =>
-        LogScroll.Offset.Y >= LogScroll.Extent.Height - LogScroll.Viewport.Height - ScrollLockSlack;
+    private bool IsScrolledToBottom() => LogTail.IsAtBottom(LogScroll);
 
     // Clear and Save in the log overflow menu run their Command; this closes the menu
     // behind them, which a Flyout does not do on its own for a Button inside it.

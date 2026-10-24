@@ -105,6 +105,52 @@ public class ApplicationsModePaletteTests
     }
 
     /// <summary>
+    /// #384: the Fleet view toggle lives on the Resources list, which the Applications mode
+    /// hides, so there the palette does not offer it; back in Resources it does. Mutation-checked:
+    /// dropping the <c>!IsApplicationsMode</c> gate on the fleet row offers it in Applications.
+    /// </summary>
+    [Test]
+    public async Task In_the_applications_mode_the_fleet_view_toggle_is_not_offered()
+    {
+        var (shell, tab) = Shell();
+        shell.Mode = ShellMode.Resources;
+        tab.SelectKindCommand.Execute(tab.SidebarSections.SelectMany(s => s.Kinds).First(k => k.Descriptor is { Group: "", Kind: "Pod" }));
+        // Two connected clusters is what makes the toggle visible; set the flag directly.
+        tab.IsFleetViewAvailable = true;
+
+        static bool IsFleet(PaletteItem i) => i.Title.StartsWith("Fleet view:", StringComparison.Ordinal);
+
+        await Assert.That(Items(shell).Any(IsFleet)).IsTrue();
+
+        shell.Mode = ShellMode.Applications;
+        await Assert.That(Items(shell).Where(IsFleet).Select(i => i.Title)).IsEmpty();
+        await Assert.That(tab.IsFleetView).IsFalse();
+    }
+
+    /// <summary>
+    /// #384, the owner's decision (2026-10-24): a palette kind row run from the Applications
+    /// mode switches to the Resources mode and selects that kind there, so the user sees what
+    /// they picked. Mutation-checked: removing the <c>Mode = ShellMode.Resources</c> line in
+    /// the kind row's action leaves the window in Applications with the kind selected unseen.
+    /// </summary>
+    [Test]
+    public async Task A_kind_row_run_from_the_applications_mode_switches_to_resources()
+    {
+        var (shell, tab) = Shell();
+        await Assert.That(shell.Mode).IsEqualTo(ShellMode.Applications);
+
+        var deployments = tab.SidebarSections.SelectMany(s => s.Kinds).First(k => k.Descriptor is { Group: "apps", Kind: "Deployment" });
+        // Searched for, as a user reaches it: the unfiltered palette lists commands first.
+        shell.Palette.Open(deployments.DisplayName);
+        var row = shell.Palette.FilteredItems.First(i => i.Title == deployments.DisplayName && i.Subtitle.EndsWith(tab.Header, StringComparison.Ordinal));
+        shell.Palette.Close();
+        row.Execute!();
+
+        await Assert.That(shell.Mode).IsEqualTo(ShellMode.Resources);
+        await Assert.That(tab.SelectedKind).IsEqualTo(deployments);
+    }
+
+    /// <summary>
     /// With an Application's page open, the palette offers what the page offers — Edit YAML
     /// and Rollout restart, named after the application — and a restart asks on the page's own
     /// strip, never on the hidden Resources strip. Delete is still not offered. The subtitles

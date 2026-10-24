@@ -140,6 +140,11 @@ Ten things worth keeping:
    line's start); it stays one in a text box because the delete chord is a list key, answered
    only by the resource grid's handler, and `MacTextKeysTests` asserts the grid is no text
    control. `MacChordTests` and the Core catalog tests pin the spelling and the chords.
+   The resource list's row menu takes its Delete item's gesture from the catalog too
+   (`ClusterTabView.ApplyRowMenuGestures`, at each opening), not from an `InputGesture="Delete"`
+   in XAML, which showed a key the Mac keyboard lacks and ignored the scheme (#406: in the 0.8.0
+   macOS pass its shortcut column read "De", clipped). The harness's `ux-bulk-delete` check opens the
+   menu on the Cmd scheme and fails unless it shows ⌘⌫.
 9. **The palette ranks by title** (`CommandPaletteViewModel.Rank`): the whole title, its
    start, a word's start, anywhere in it, and last a row that matched only on its subtitle or
    search text; the source order stands within a rank. Before it the rows kept the source's

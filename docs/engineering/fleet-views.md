@@ -60,7 +60,14 @@ longer retries) is named in the warning line, and once every member has ended th
 waiting. When every member refused and no row arrived, the list says "This account may not
 list Pods" in its place with one sentence per cluster, rather than "No Pods found", a fact it
 does not have (UI rule 20, #354; `ListRefusalTests.A_fleet_list_every_member_refused_says_so_one_line_per_cluster`,
-mutation-checked). Some refused and some not stays a warning over whatever rows there are. `MainWindowViewModel` owns the member list and
+mutation-checked). Some refused and some not stays a warning over whatever rows there are.
+A member's lost connection is remembered against that member (`OnFleetMemberConnectionLost`,
+#386, the fleet half of #363): its resumed watch's `Synced`, or its relist's `Reset`, clears
+its own line, and when that line was the one on screen the newest line of a member still
+retrying takes its place, with the Reconnect button. Before, the fleet path kept a member's
+line until something else overwrote it, and a member's `Reset` cleared every member's line.
+`ClusterTabReconnectTests.A_fleet_members_reconnect_clears_its_line_and_keeps_the_others`
+pins it; without the clearing in the fleet `Synced` case it goes red. `MainWindowViewModel` owns the member list and
 makes cluster names unique (two tabs on one context would otherwise merge into
 one apparent cluster) and re-fans active aggregated watches when a tab opens or
 closes, so no tab keeps watching a disposed client.

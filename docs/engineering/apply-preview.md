@@ -48,6 +48,14 @@ Thirteen things are load-bearing.
    too. `ApplyConflictPreviewTests` replays a 409 and a forced 200 through a real
    `ClusterClient`; it went red with the forced dry run dropped, and checks that both PATCHes
    carried `dryRun=All`. `cluster-tab-yaml-conflict-diff` renders it at the dock's default height.
+   #404 (the 0.8.0 macOS pass, synthetic clicks: the first Force apply did nothing, the second
+   applied) was looked for and not found in the code: the panel's `Force apply` runs
+   `ConfirmPreviewCommand`, whose `CanExecute` is constant and which sends the forced apply on
+   its first run (`ApplyConflictPreviewTests.The_previews_force_apply_writes_on_its_first_run`).
+   One path does take two clicks by design: the separate conflict card's `Force apply`, with the
+   preview on, runs the forced *dry run* and opens the panel, whose own `Force apply` then writes
+   — the card and the panel's button sit in about the same place. The QA VM check in that PR's
+   body settles which the pass clicked.
 4. **Three fields are excluded and counted, not shown.** `metadata.managedFields` is the
    apply's own bookkeeping and changes on every apply including one that changes nothing
    else; `resourceVersion` and `generation` are the server's counters. Leaving them in is

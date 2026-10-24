@@ -373,6 +373,13 @@ attention chip, a question about apps rather than rows and one click away on the
 item is redirected to it. The namespace items stay: the namespace belongs to the tab and both
 modes. `ApplicationsModePaletteTests.In_the_applications_mode_the_resource_list_items_are_not_offered`
 pins it; dropping either `!IsApplicationsMode` gate lists that item again.
+The Fleet view toggle is not offered here either (#384): it lives on the Resources list's bar, so
+the row aggregated a list this mode hides. The palette's kind rows ("Pods", "Deployments", …)
+**switch to the Resources mode and select that kind**, the owner's decision on #384
+(2026-10-24): a kind is a Resources destination, and selecting it on a hidden list was a pick
+nobody saw. `ApplicationsModePaletteTests.In_the_applications_mode_the_fleet_view_toggle_is_not_offered`
+and `A_kind_row_run_from_the_applications_mode_switches_to_resources` pin both; dropping the gate,
+or the `Mode = ShellMode.Resources` line in the kind row's action, turns each red.
 
 ## The demo cluster
 
