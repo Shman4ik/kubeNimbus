@@ -33,9 +33,19 @@ Measured from the run's own durations and tool-call counts unless marked as an e
 ./scripts/qa-preflight.ps1      # can it start? (ten seconds, fixes nothing)
 ./scripts/qa-seed.ps1           # fixtures, contexts, the narrow RBAC
 ./scripts/qa-report.ps1 -Clear
-(one kn-qa per batch; each records with qa-result.ps1; qa-seed.ps1 -Reset where a batch says)
+(one kn-qa per batch: Q first, then the others, then V and R; each records with qa-result.ps1;
+ qa-seed.ps1 -Reset where a batch says)
 ./scripts/qa-report.ps1         # the report, counts and failures first
 ```
+
+Batch Q runs first because it checks the driver every other batch relies on. The 1.0 batches
+come last: V (the 1.0 bundles' own checks) and then R (verification issues no earlier batch
+covered), whose R-9 is the last check of the run because the log it opens may leave UI
+Automation unable to read the window for minutes (#321). W and A stay optional, run only when
+the preflight says the VM has what they need. The suite's "Running it" section has the full
+order. Three checks relaunch the app to see what a restart restores; `qa-app.ps1 -Stop
+-KeepProfile` and `-ProfileDir` keep the profile across that relaunch, which a plain `-Stop`
+deletes.
 
 The expected saving is the setup, the re-typing, the three checks that could not run and the
 detours per batch, not the checks themselves: a UI Automation round trip costs what it cost. A

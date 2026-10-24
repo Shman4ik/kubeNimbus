@@ -292,7 +292,9 @@ desktop is not a test machine (2026-10-10, #259). `qa-app.ps1 -Stop` works anywh
 
 `qa-app.ps1` starts a Debug build on an isolated profile (`KUBENIMBUS_PROFILE_DIR`) against
 the local sandbox only — it refuses a kubeconfig whose server is not loopback — and
-`qa-app.ps1 -Stop` ends it. `qa-ui.ps1` then reads and drives the window through Windows UI
+`qa-app.ps1 -Stop` ends it and deletes the profile; `-Stop -KeepProfile` keeps it, and
+`qa-app.ps1 -ProfileDir <that folder>` starts again on it, for the checks of what a relaunch
+restores. `qa-ui.ps1` then reads and drives the window through Windows UI
 Automation (`dump`, `find`, `wait`, `invoke`, `set-text`, `click`, `double-click`, `keys`,
 `screenshot`, which captures one element cropped to its bounds); the header of the script
 lists every command. The `kn-qa` agent uses both.
@@ -307,6 +309,11 @@ A full pre-release run, from [`docs/qa/desktop-checks.md`](../docs/qa/desktop-ch
 - `qa-seed.ps1` — `qa-shop` (a copy of the shop with its HPA pinned), the `qa-*` workloads,
   the narrow-RBAC ServiceAccount and the contexts `qa-prod`, `qa-limited` and `qa-cut`.
   Idempotent; `-Reset` undoes what a batch changed; `-Down` removes it.
+- `qa/` — fixtures a check creates and deletes itself rather than the seed: two YAML files to
+  open (`qa-y-file.yaml`, the three-document `qa-y-stack.yaml`), a ConfigMap to force-apply
+  (`qa-force.yaml`), a pod logging 200 lines a second that only R-9 ever starts
+  (`qa-firehose.yaml`), and a context whose credential plugin is slow
+  (`qa-slow-auth.kubeconfig.yaml`, only merged into a temporary copy of the run's kubeconfig).
 - `qa-netcut.ps1 start|cut|restore|stop` — a loopback forwarder (127.0.0.1:6560 to the
   sandbox) that the `qa-cut` context points at; cutting it drops the app's connection with no
   elevation and no touch on the sandbox.

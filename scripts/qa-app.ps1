@@ -22,11 +22,18 @@
     - One instance. DevTools attaches to "the" running app and the desktop has one
       mouse; a second instance would make every observation ambiguous.
 
+    A check of what a relaunch restores (the saved tabs, a tab whose context went missing)
+    needs the profile to outlive the process: `-Stop -KeepProfile` ends the app and keeps
+    its profile, and `-ProfileDir` starts the next instance on it. A plain `-Stop` deletes it,
+    so a batch that ends the usual way leaves nothing behind.
+
 .EXAMPLE
     ./scripts/qa-app.ps1              # build, then start against the sandbox
     ./scripts/qa-app.ps1 -NoBuild     # start the existing Debug build
     ./scripts/qa-app.ps1 -Exe publish/app/kubeNimbus.exe   # the NativeAOT publish instead
     ./scripts/qa-app.ps1 -Stop        # stop it and delete the profile
+    ./scripts/qa-app.ps1 -Stop -KeepProfile                # stop it and keep the profile
+    ./scripts/qa-app.ps1 -NoBuild -ProfileDir <kept folder> # start again on that profile
 #>
 [CmdletBinding()]
 param(
@@ -35,7 +42,15 @@ param(
     # Drive another build, normally the NativeAOT publish the release checklist tests.
     # Isolation and the local-cluster check apply to it unchanged; nothing is built.
     [string]$Exe,
-    [switch]$Stop
+    [switch]$Stop,
+    # With -Stop: end the app but keep its profile (settings.json, workspace.json) for the
+    # next start. The process is ended the way -Stop always ends it; nothing on the app's quit
+    # path writes workspace.json (#405), so the file is the one a quit would have left.
+    [switch]$KeepProfile,
+    # Start on a profile that `-Stop -KeepProfile` kept instead of a fresh one. Only a folder
+    # this script made (a `profile-*` folder in its own state directory) is accepted, so the
+    # app can never be pointed at the developer's own profile through this.
+    [string]$ProfileDir
 )
 
 $ErrorActionPreference = 'Stop'
@@ -58,9 +73,15 @@ if ($Stop) {
     $state = Get-RunningQaApp
     if ($state) {
         Stop-Process -Id $state.Pid -Force
+        Wait-Process -Id $state.Pid -Timeout 10 -ErrorAction SilentlyContinue
         Remove-Item $pidFile -Force
-        Remove-Item $state.Profile -Recurse -Force -ErrorAction SilentlyContinue
-        "Stopped kubeNimbus (pid $($state.Pid)) and removed $($state.Profile)."
+        if ($KeepProfile) {
+            "Stopped kubeNimbus (pid $($state.Pid)) and kept its profile: $($state.Profile)"
+            "Start on it again: ./scripts/qa-app.ps1 -NoBuild -ProfileDir '$($state.Profile)'"
+        } else {
+            Remove-Item $state.Profile -Recurse -Force -ErrorAction SilentlyContinue
+            "Stopped kubeNimbus (pid $($state.Pid)) and removed $($state.Profile)."
+        }
     } else {
         'No QA instance is running.'
     }
@@ -105,7 +126,17 @@ if (-not $NoBuild -and -not $Exe) {
 $exe = if ($Exe) { (Resolve-Path $Exe).Path } else { Join-Path $repo 'src/KubeNimbus.App/bin/Debug/net10.0/kubeNimbus.exe' }
 if (-not (Test-Path $exe)) { throw "No build at $exe." }
 
-$profileDir = Join-Path $stateDir ("profile-" + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+if ($ProfileDir) {
+    if (-not (Test-Path $ProfileDir -PathType Container)) { throw "No profile folder at $ProfileDir." }
+    $kept = (Resolve-Path $ProfileDir).Path.TrimEnd('\', '/')
+    $root = (Resolve-Path $stateDir).Path.TrimEnd('\', '/')
+    if ((Split-Path $kept -Parent) -ne $root -or (Split-Path $kept -Leaf) -notlike 'profile-*') {
+        throw "Refusing: $kept is not a profile this script made (a profile-* folder in $root)."
+    }
+    $profileDir = $kept
+} else {
+    $profileDir = Join-Path $stateDir ("profile-" + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+}
 $env:KUBENIMBUS_PROFILE_DIR = $profileDir
 $env:KUBECONFIG = (Resolve-Path $Kubeconfig).Path
 # The app and every terminal it opens inherit this PATH. A session started before kubectl was

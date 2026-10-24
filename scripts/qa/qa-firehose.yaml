@@ -1,0 +1,18 @@
+# QA check R-9 (docs/qa/desktop-checks.md, #321): a pod that prints about 200 numbered
+# lines a second, the rate at which a log tab made every UI Automation read fail for minutes
+# in the 0.7.0 run. Never seeded, and never opened outside R-9, which runs last in a whole
+# run and deletes the pod afterwards. qa-chatty (20 lines a second) is the seeded, safe one.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: qa-firehose
+  namespace: qa-shop
+spec:
+  restartPolicy: Always
+  terminationGracePeriodSeconds: 1
+  containers:
+    - name: app
+      image: busybox:1.36
+      command: [sh, -c, 'i=0; while true; do i=$((i+1)); echo "INFO firehose line $i"; usleep 5000; done']
+      resources:
+        requests: { cpu: 50m, memory: 8Mi }
