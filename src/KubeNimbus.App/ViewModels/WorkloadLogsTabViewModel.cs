@@ -629,6 +629,7 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
         {
             try
             {
+                var receivedLines = false;
                 await foreach (var line in client.StreamPodLogsAsync(
                     podNamespace, source.PodName, source.ContainerName.Length == 0 ? null : source.ContainerName,
                     follow: follow, tailLines: tail, sinceSeconds: SelectedLogRange.SinceSeconds,
@@ -637,13 +638,15 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
                     responseReady: () => OnLogResponseReady(source, token, follow),
                     cancellationToken: token))
                 {
+                    receivedLines = true;
                     Enqueue(line, source);
                 }
 
                 if (!follow)
                 {
-                    await EndSourceAsync(source, LogSourceState.Loaded,
-                        "Selected range loaded — snapshot, not a live stream.", token);
+                    var (state, message) = await Dispatcher.UIThread.InvokeAsync(
+                        () => RangeEndVerdict(source, receivedLines));
+                    await EndSourceAsync(source, state, message, token);
                     return;
                 }
 
@@ -696,6 +699,22 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
             }
         }, token);
     }
+
+    /// <summary>
+    /// How a range load (Follow off) ends, on the UI thread. A pod that is not scheduled
+    /// answers a range read as it answers a follow, with an empty 204 (ENG-45), so the read
+    /// ends cleanly with no lines; the chip used to read "loaded", which nothing re-opens, so
+    /// the pod stayed empty after it ran (the 1.0 QA run's G-17, in pod detail). With no
+    /// lines and a watched pod whose container has not started, the source ends "not
+    /// started" with <see cref="LogStreamEnd.DescribePod"/>'s sentence, and the watch's next
+    /// Modified that shows a run loads it again with the pane's Follow (<see cref="AddSource"/>).
+    /// </summary>
+    internal (LogSourceState State, string Message) RangeEndVerdict(LogSourceViewModel source, bool receivedLines) =>
+        !receivedLines
+        && _latestPods.TryGetValue(source.PodName, out var pod)
+        && LogStreamEnd.DescribePod(pod.Raw, source.ContainerName, atStart: null) is (var text, _, NotStarted: true)
+            ? (LogSourceState.NotStarted, text)
+            : (LogSourceState.Loaded, "Selected range loaded — snapshot, not a live stream.");
 
     /// <summary>
     /// A follow refused because the container has not started (#309). The chip reads "not

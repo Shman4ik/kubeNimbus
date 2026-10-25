@@ -282,6 +282,100 @@ public class LogFollowRetryTests
         await Assert.That(detail.IsFollowingLogs).IsFalse();
     }
 
+    /// <summary>A gated pod as the watch shows it: no node, no container status, PodScheduled False.</summary>
+    private static DynamicResource Gated() => Object("""
+        {
+          "apiVersion": "v1", "kind": "Pod",
+          "metadata": { "name": "qa-gated", "namespace": "payments" },
+          "spec": { "containers": [ { "name": "model-server" } ] },
+          "status": { "phase": "Pending",
+            "conditions": [ { "type": "PodScheduled", "status": "False", "reason": "SchedulingGated" } ] }
+        }
+        """);
+
+    private static DynamicResource GatedReleasedAndRunning() => Object("""
+        {
+          "apiVersion": "v1", "kind": "Pod",
+          "metadata": { "name": "qa-gated", "namespace": "payments" },
+          "spec": { "nodeName": "worker-1", "containers": [ { "name": "model-server" } ] },
+          "status": { "phase": "Running",
+            "containerStatuses": [ { "name": "model-server", "ready": true, "restartCount": 0,
+              "containerID": "containerd://a", "state": { "running": {} } } ] }
+        }
+        """);
+
+    /// <summary>
+    /// The 1.0 QA run's G-17: a range load with Follow off on a pod that is not scheduled.
+    /// The API server answers it as it answers a follow, an empty 204, so the read ends
+    /// cleanly with no lines; the pane said "No lines in the last 5 minutes." and never read
+    /// the pod again, so it kept saying so after the gate was released and the pod logged.
+    /// It now says the pod has not started, as a wait, and loads the range once it runs —
+    /// as a range, Follow staying off (#331).
+    /// </summary>
+    [Test]
+    public async Task Pod_detail_waits_out_an_empty_range_of_a_pod_that_has_not_started_and_loads_it_once_it_runs()
+    {
+        TestObjects.RedirectStores();
+        var row = new ResourceRowViewModel(Gated());
+        var detail = new PodDetailTabViewModel(null, row, _ => { }, (_, _) => Task.CompletedTask);
+        detail.IsFollowingLogs = false;
+        var generation = detail.LogGeneration;
+
+        detail.EndRangeLoad(generation, "model-server", atStart: null);
+        await Assert.That(detail.LogStatus!).Contains("has not started");
+        await Assert.That(detail.LogStatus!).Contains("SchedulingGated");
+        await Assert.That(detail.IsLogStatusProblem).IsFalse();
+
+        // The gate released and the container running: the watch tick loads the range again.
+        row.Update(GatedReleasedAndRunning());
+        detail.RefreshFromRow();
+        await Assert.That(detail.LogGeneration).IsGreaterThan(generation);
+        await Assert.That(detail.IsFollowingLogs).IsFalse();
+    }
+
+    /// <summary>An empty range of a pod that has run is the range being empty, said as before.</summary>
+    [Test]
+    public async Task Pod_detail_says_an_empty_range_of_a_running_pod_is_empty()
+    {
+        TestObjects.RedirectStores();
+        var row = new ResourceRowViewModel(GatedReleasedAndRunning());
+        var detail = new PodDetailTabViewModel(null, row, _ => { }, (_, _) => Task.CompletedTask);
+        detail.IsFollowingLogs = false;
+        var generation = detail.LogGeneration;
+
+        // The snapshot sentence (on a real cluster EndLogStream turns it into the range's
+        // empty sentence; this demo-mode pane keeps it as given).
+        detail.EndRangeLoad(generation, "model-server", atStart: GatedReleasedAndRunningRun);
+        await Assert.That(detail.LogStatus).IsEqualTo("Selected range loaded — this is a snapshot.");
+        await Assert.That(detail.IsLogStatusProblem).IsFalse();
+
+        // Nothing armed: a later tick does not load it again.
+        detail.RefreshFromRow();
+        await Assert.That(detail.LogGeneration).IsEqualTo(generation);
+    }
+
+    private static readonly ContainerRun GatedReleasedAndRunningRun =
+        new(ContainerRunState.Running, null, null, "containerd://a", 0);
+
+    /// <summary>G-17 in the multi-pod pane: an empty range of an unscheduled pod reads "not started", so the watch picks it up.</summary>
+    [Test]
+    public async Task An_empty_range_of_a_pod_that_has_not_started_ends_the_source_not_started()
+    {
+        var pane = Pane();
+        pane.IsFollowing = false;
+        var source = pane.RegisterSource("api-1", "app");
+        pane.ApplyPodEvent(new ResourceEvent<DynamicResource>(ResourceEventType.Modified, Pod("unscheduled")));
+
+        var (state, message) = pane.RangeEndVerdict(source, receivedLines: false);
+        await Assert.That(state).IsEqualTo(LogSourceState.NotStarted);
+        await Assert.That(message).Contains("has not started");
+
+        // Lines, or a pod that has run: the range was loaded.
+        await Assert.That(pane.RangeEndVerdict(source, receivedLines: true).State).IsEqualTo(LogSourceState.Loaded);
+        pane.ApplyPodEvent(new ResourceEvent<DynamicResource>(ResourceEventType.Modified, Pod("running")));
+        await Assert.That(pane.RangeEndVerdict(source, receivedLines: false).State).IsEqualTo(LogSourceState.Loaded);
+    }
+
     /// <summary>
     /// #341: pod detail reads a 404 the way the multi-pod pane does (#332). A pod deleted, or
     /// being deleted, while its logs are open ends the pane with "Pod deleted" and no problem;

@@ -1468,7 +1468,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
 
                 if (!follow)
                 {
-                    await EndLogStreamAsync(generation, "Selected range loaded — this is a snapshot.", problem: false);
+                    await Dispatcher.UIThread.InvokeAsync(() => EndRangeLoad(generation, container.Name, atStart));
                     return;
                 }
 
@@ -1587,6 +1587,46 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
         {
             EndLogStream(generation, FirstLine(error.Message), problem: true);
         }
+    }
+
+    /// <summary>
+    /// The end of a range load (Follow off), on the UI thread. A pod that is not scheduled
+    /// answers a range read as it answers a follow, with an empty 204 (ENG-45), so the read
+    /// ends cleanly with no lines; it used to say "No lines in the last 5 minutes." and never
+    /// look again, so the pane kept saying so after the pod was scheduled and logging (the
+    /// 1.0 QA run's G-17). Read against the watched pod: a container that has not started is
+    /// said as a wait and armed for <see cref="RefreshFromRow"/>, which loads the range again
+    /// once it runs — as a range, Follow staying off (#331). A container that started while
+    /// the request was in flight is asked again at once; it cannot loop, because that request
+    /// starts from a started container. Internal so the view-model tests can deliver the end.
+    /// </summary>
+    internal void EndRangeLoad(int generation, string container, ContainerRun? atStart)
+    {
+        if (generation != _logGeneration)
+        {
+            return;
+        }
+
+        FlushLogLines();
+        if (_allLogLines.Count == 0)
+        {
+            var pod = _row.Resource.Raw;
+            if (LogStreamEnd.DescribePod(pod, container, atStart) is (var text, _, NotStarted: true))
+            {
+                EndLogStream(generation, text, problem: false, keepStatus: true);
+                _followWhenStarted = (container, false);
+                return;
+            }
+
+            if (LogFollowRetry.ShouldFollowAgain(atStart, PodDetails.ContainerRunOf(pod, container)))
+            {
+                _streaming = null;
+                StartLogs(follow: false);
+                return;
+            }
+        }
+
+        EndLogStream(generation, "Selected range loaded — this is a snapshot.", problem: false);
     }
 
     /// <summary>
