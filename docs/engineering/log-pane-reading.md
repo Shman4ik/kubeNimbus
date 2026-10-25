@@ -368,6 +368,21 @@ includes a pod a rollout adds while Follow is off, which used to be followed alo
 streaming is stopped". `LogFollowRetryTests` pins both panes; reverting either retry to a bare
 `StartLogs()` / `StartStream(source)` turns its test red (checked).
 
+**An empty range of a pod that has not started is a wait too (1.0 QA run, G-17).** The #331 fix
+covered a range load *refused* with a 400, but a pod that is not scheduled (a scheduling gate, or
+Unschedulable) answers a range read the way it answers a follow, with an empty 204, so the read
+ends cleanly with no lines. Pod detail then said "No lines in the last 5 minutes." and never looked
+again; the multi-pod pane's chip read **loaded**, which no watch event re-opens. So both panes now
+check an empty range against the watched pod (`LogStreamEnd.DescribePod`): a container that has not
+started is said as a wait — pod detail's notice carries the not-started sentence and arms
+`_followWhenStarted` with Follow off, the chip reads **not started** — and the range is loaded again,
+as a range, once the container runs (`PodDetailTabViewModel.EndRangeLoad`,
+`WorkloadLogsTabViewModel.RangeEndVerdict`). Pod detail also asks again at once when the container
+started while the read was in flight. An empty range of a container that has run is still the range
+being empty. `LogFollowRetryTests` pins both panes; turning either check off turns its test red
+(checked). The `Dispatcher` hop that delivers the end is not driven by a test and stays desktop
+check G-17.
+
 **A 404 for a pod that is gone is its end, in both panes (#332, #341).** The one rule:
 when a log request is answered 404, the pane reads the pod once, and
 `LogFollowRetry.IsPodGone` decides. The pod is gone, or carries a `deletionTimestamp`: the
