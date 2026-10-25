@@ -358,8 +358,13 @@ the agent asks.
   text, not pod names.
 - **G-11 [input]** (#168) Switch to context `qa-cut`, open `Logs/shop-web`, then
   `./scripts/qa-netcut.ps1 cut`, wait 20 s, `restore`. The shown lines stay (count before and
-  after); cut chips say "The connection closed, not the container — … Follow resumes the
-  stream."; after the restore a deleted `shop-web` pod produces a new chip.
+  after); cut chips read "failed" with the transport's own sentence ("Unable to read data from
+  the transport connection…") and the pane's banner says "Watch connection lost … retrying". The
+  "The connection closed, not the container — … Follow resumes the stream." sentence is only for
+  a stream that ends cleanly while the pod can still be read, which a cut connection never allows
+  (the 1.0 run read the old wording as a FAIL; `LogFollowRetry` and UI rule 20 make "failed" the
+  intended text). After the restore a deleted `shop-web` pod produces a new chip, and Follow off
+  then on re-opens the failed chips.
 - **G-12 [text]** (#169) If the node has fewer than 50 pods: `kubectl -n qa-shop create deployment
   qa-many --image=busybox:1.36 --replicas=55 -- sh -c 'while true; do echo tick; sleep 5;
   done'`, "Logs (all pods)": "Streaming the first 50 pods. More match app=qa-many — narrow the
@@ -401,8 +406,8 @@ the agent asks.
   find the requested resource". One attempt per restart; the 404 is a race the VM may not hit,
   so a run that never shows "failed" is a PASS.
 - **G-20 [text]** (#341) Open a `shop-web` pod's logs in pod detail, Follow on, then
-  `kubectl -n qa-shop delete pod <that pod>`: the pane ends with "Pod deleted; its lines are kept."
-  in an ordinary notice (not in warning colour), and the lines it had stay. Never "the server could
+  `kubectl -n qa-shop delete pod <that pod>`: the pane ends with "Pod deleted; its lines are kept." (the 404 race)
+  or "Stream ended — the pod is gone." (the stream ended cleanly first) in an ordinary notice (not in warning colour), and the lines it had stay. Never "the server could
   not find the requested resource" as a problem. The 404 is a race the VM may not hit (the stream
   may end cleanly first, with the container's exit); one attempt, and a run that never shows the
   404 as a problem is a PASS.
@@ -729,13 +734,19 @@ Setup: a fresh `qa-app.ps1` start; these check `qa-ui.ps1`, not the app (#314).
   "the edit box inside" it; then `invoke -Dialog -Id 1`: either it prints `invoked (InvokePattern
   on a button inside …)`, or it fails naming `keys -Dialog -Id 1148 -Keys '{ENTER}'`, and that
   command commits the name. Either way the dialog closes and the file is in the list (#370). With
-  no dialog open, `find -Dialog -Id 1` says "No file dialog is open".
+  no dialog open, `find -Dialog -Id 1` says "No file dialog is open". **On the 1.0 run (Windows 11
+  26220) `1148` held only Panes, `set-text` threw "No Value pattern on … or on an edit box inside
+  it" and `keys -Dialog -Id 1148` could not focus it** (recorded FAIL, a driver gap, not the app's):
+  the path that works is `keys -Dialog -Keys '%n'`, the path and `{ENTER}`, or `keys -Dialog
+  -Keys '<path>{ENTER}'` with no `-Id`. The dialog also takes about 20 s to appear, and the main
+  window's tree is empty until it does.
 - **Q-4 [input]** G-5 again: `click -Id MenuCopy` on the log pane's ⋯ menu hanging past the window's
   bottom edge prints `clicked (real mouse)` and copies.
 - **Q-5 [text]** (#370) `dump -Within SidebarItems -Type Group`: each section header prints
   `expand=Expanded` or `expand=Collapsed`. With two of `qa-del-a`…`qa-del-c` selected (click,
-  Ctrl+click), `dump -Within ResourceGrid -Type DataItem` prints `selected` on those two rows and
-  `not selected` on the others.
+  Ctrl+click), `dump -Within ResourceGrid -Type DataItem` prints `status='Selected'` on those two
+  rows and nothing on the others (the grid's rows carry the state as their item status, not as
+  the `selected` / `not selected` flags that list items print); the "N selected" text agrees.
 - **Q-6 [text]** (#370) `collapse -Name Workloads -Within SidebarItems` prints `collapsed:` with
   `expand=Collapsed`, and `find -Name Deployments -Within SidebarItems` then says "No elements
   match"; `invoke` on the same header expands it again. `collapse` on a Button fails with "No
@@ -820,8 +831,13 @@ C. PR #415's fourth check (the log pane's ⋯ → Copy at a narrow width) is G-1
 - **V-6 [text]** (#301, PR #414) `click -Id AppMenuButton` (☰), then "Open a YAML file…": a file
   dialog opens (`find -Dialog -Id 1148` lists its name box). `dump -Dialog -Type ComboBox`: the
   file-type box reads YAML (the filter's patterns are `*.yaml` and `*.yml`); open it with a
-  `click -Dialog` and dump again: its other entry is the all-files one (quote its text). Cancel
-  with `invoke -Dialog -Id 2`: `find -Dialog -Id 1` says no file dialog is open, `dump -Within
+  `click -Dialog` and dump again: its other entry is the all-files one (quote its text). **On the
+  1.0 run the type box (`1136`) was a Pane, not a ComboBox, and its popup is not in the UI
+  Automation tree: the second entry could only be read from a crop, a click on the box left a
+  stray window of the app, and `keys -Dialog -Keys "{TAB}{DOWN}"` opened the popup and hid the
+  dialog until it closed.** So read the first entry from the Pane's name and record UNSURE for the
+  second, or leave it to a human. Cancel with `click -Dialog -Name Cancel -Type Pane` (`invoke
+  -Dialog -Id 2` matches a file-list row first): `find -Dialog -Id 1` says no file dialog is open, `dump -Within
   InspectorTabStrip -Type TabItem` lists the same tabs as before, and no status line appeared.
 - **V-7 [text]** (#301, PR #414) ☰ → "Open a YAML file…", `set-text -Dialog -Id 1148 -Text
   (Resolve-Path scripts/qa/qa-y-file.yaml).Path`, then `invoke -Dialog -Id 1` (or the `keys` it
