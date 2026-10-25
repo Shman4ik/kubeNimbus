@@ -367,8 +367,7 @@ Microsoft Store listing.
 
 ## Known limitations
 
-kubeNimbus is **pre-1.0**, and the first public release is honest about where
-it's been exercised:
+kubeNimbus is at 1.0, and this is where it has and has not been exercised:
 
 - The macOS and Linux downloads from Releases are not signed with a
   certificate (see above), and there is no auto-update — a new version is a new

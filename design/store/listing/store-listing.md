@@ -10,7 +10,7 @@ Product ID `9MZ3C28M65PB`. Field limits are Partner Center's own: What's new 1,5
 description 10,000, short description 1,000, 20 product features of 200 characters each, 7 search
 terms. Every fenced block below is pasted as it stands.
 
-**"What's new" written for 0.8.0** (2026-10-20) and describes the changes since 0.7.0 that a Windows user sees; the
+**"What's new" written for 1.0.0** (2026-10-25) and describes the changes since 0.8.0 that a Windows user sees; the
 rest of the listing was written for 0.7.0, with its closing line added on 2026-10-12 (the pgNimbus
 cross-mention; both listings carry one), and describes the whole app
 describes the whole app. (0.4.0 was submitted and failed certification on policy 10.5.1, below,
@@ -55,15 +55,13 @@ data-collection answers stay as they are (no data is collected).
 ## What's new in this version
 
 ```text
-0.8: Lists open faster. Each kind is listed and watched once per connection and shared by the Applications and Resources modes, and the last five kinds you left stay live. The namespace choice belongs to the cluster tab, is shared by both modes and is kept across restarts.
+1.0: New: a right-click menu on the Applications list (Open, Restart, Show in Resources, Copy name, and Argo CD's Sync and Refresh), and on the port-forwards list, Helm releases and an Argo CD application's resources. "Open a YAML file…" in the menu and the palette opens a local file in the YAML editor with the same Review and apply. Select several Deployments, StatefulSets or DaemonSets and press R to restart them all after one confirmation.
 
-New: ResourceQuota rows say when a namespace is full or almost full, "Exec in my terminal" and "Node shell in my terminal" are in the list's right-click menu, and the column chooser is in the command palette. The Argo CD dashboard updates live, and in the Applications mode the palette acts on the application on screen.
+A saved cluster tab whose context is missing from the kubeconfig is no longer dropped: the status bar says so and the tab returns when the context does.
 
-Accessibility: cluster tabs are real tabs for the keyboard and screen readers, and grid rows, menu items and the cluster switcher's rows are named correctly.
+Accessibility: the keyboard now walks the Applications list and every overlay (the palette, the cluster switcher, the preferences) without leaving it, a log line can be selected, copied and expanded from the keyboard, and screen readers read the rows of the node, Helm and Argo CD lists by name.
 
-The exec terminal leaves F1 to F12, Ctrl+Shift+L, Alt+B and Alt+F to the shell.
-
-Fixed: a log pane on a pod that was not running yet starts once the container runs, says what it is showing, and keeps a pod deleted mid-rollout as "deleted". An account that may not read metrics or list a kind sees the server's reason instead of empty columns or an endless retry. A watch that reconnects clears its "connection lost" line without listing again. The apply preview is readable at the dock's default height.
+Fixed: a following log pane stays on its last line after Shift+L and Esc, a pod that has not started shows a wait and loads its selected range once it runs, a selection of several rows survives a re-sort, and the palette in the Applications mode acts on what is on screen.
 ```
 
 ## Short description
