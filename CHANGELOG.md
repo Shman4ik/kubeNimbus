@@ -4,13 +4,18 @@ All notable changes to kubeNimbus are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-While kubeNimbus is pre-1.0, minor versions may contain breaking changes.
 
 The release workflow reads the section matching a tag out of this file and uses
 it as the GitHub Release body, so headings must match tags exactly
 (`## [0.1.0] - …` ↔ `v0.1.0`).
 
 ## [Unreleased]
+
+## [1.0.0] - 2026-10-25
+
+The first 1.0 release. It covers everything since 0.8.0: right-click menus on more lists, opening a
+YAML file, rollout restart of several workloads at once, a keyboard walk of every list and overlay,
+and the fixes the last desktop pass found.
 
 ### Added
 
@@ -62,6 +67,10 @@ it as the GitHub Release body, so headings must match tags exactly
 - **A cluster's retry line in the All clusters list goes when that cluster is back.** Its
   "connection lost" line clears when its watch resumes, and another cluster still retrying keeps
   its own line.
+- **A selected log range of a pod that has not started waits instead of saying "No lines".** A pod the
+  scheduler has not placed answers a range read with nothing, and the pane used to keep saying so
+  after the pod ran. It now says the container has not started and loads the range once it does, in
+  the pod's pane and in the multi-pod pane.
 - **A following log pane stays on its last line after Shift+L and Esc.** Going back from the
   maximized pane to the split used to leave it about a minute behind, and the follow stopped.
 - **A saved cluster tab survives a launch that cannot find its context.** One launch without the
@@ -1371,8 +1380,8 @@ First public release. Everything below is new.
 
 ### Known limitations
 
-- Release binaries are **unsigned** — Windows shows a SmartScreen prompt and
-  macOS quarantines the app.
+- The macOS and Linux downloads are **unsigned** — macOS quarantines the app on
+  first launch. Windows ships through the Microsoft Store only, which signs it.
 - macOS and Linux builds are produced by CI but have had far less hands-on
   testing than Windows.
 - No `linux-arm64` or `osx-x64`-specific testing beyond the build itself.
@@ -1380,7 +1389,8 @@ First public release. Everything below is new.
 - Usage history is session-scoped and bounded at 30 minutes by design. Long-range
   metrics history is a non-goal — that's Prometheus's job.
 
-[Unreleased]: https://github.com/Shman4ik/kubeNimbus/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/Shman4ik/kubeNimbus/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v1.0.0
 [0.8.0]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.8.0
 [0.7.0]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.7.0
 [0.6.0]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.6.0
