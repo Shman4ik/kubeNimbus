@@ -389,7 +389,7 @@
       <li>
         <strong>macOS: Apple Silicon, ad-hoc signed</strong>
         <p>Apple Silicon only, macOS 11 or later. Intel Macs are not published yet; building from source is one command.</p>
-        <p>The app has no Developer ID signature, so on first launch macOS says it cannot check the app for malicious software. Right-click the app, choose <b>Open</b>, then <b>Open</b> again. After that it opens normally.</p>
+        <p>The app is not notarized, so on first launch macOS says it cannot check the app for malicious software. On macOS 15 and later, close that dialog, then press <b>Open Anyway</b> next to kubeNimbus in System Settings &gt; Privacy &amp; Security. On macOS 14 and earlier, right-click the app, choose <b>Open</b>, then <b>Open</b> again. On any version, <code>xattr -dr com.apple.quarantine /Applications/kubeNimbus.app</code> in a terminal does the same. After that it opens normally.</p>
       </li>
       <li>
         <strong>Linux: AppImage, .deb or .tar.gz</strong>
@@ -552,13 +552,13 @@
       </div>
       <div class="dl">
         <h3>macOS <span>(Apple Silicon)</span></h3>
-        <p>A <code>.dmg</code> for macOS 11 or later. Open it and drag kubeNimbus to Applications. The app is signed ad-hoc, not with a Developer ID, so the first launch has to be:</p>
-        <p><code>Right-click &rarr; Open &rarr; Open</code></p>
+        <p>A <code>.dmg</code> for macOS 11 or later. Open it and drag kubeNimbus to Applications. The app is signed ad-hoc and not notarized, so macOS blocks the first launch. Open it once and close the dialog, then:</p>
+        <p><code>System Settings &rarr; Privacy &amp; Security &rarr; Open Anyway</code></p>
         <a class="btn" href="https://github.com/Shman4ik/kubeNimbus/releases/latest">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Download .dmg
         </a>
-        <p class="note">Double-clicking the first time gives a dialog with no way past it; after the right-click Open, it opens normally. The <code>.tar.gz</code> is the same binary for a terminal: run <code>xattr -dr com.apple.quarantine .</code> in its folder first. Intel Macs are not published yet; <a href="https://github.com/Shman4ik/kubeNimbus#building-from-source">build from source</a>.</p>
+        <p class="note">That is macOS 15 and later. On macOS 14 and earlier, right-click the app and choose Open, then Open again. On any version, <code>xattr -dr com.apple.quarantine /Applications/kubeNimbus.app</code> in a terminal clears the block. After the first launch it opens normally. The <code>.tar.gz</code> is the same binary for a terminal: run <code>xattr -dr com.apple.quarantine .</code> in its folder first. Intel Macs are not published yet; <a href="https://github.com/Shman4ik/kubeNimbus#building-from-source">build from source</a>.</p>
       </div>
       <div class="dl">
         <h3>Linux <span>(x86_64 and aarch64)</span></h3>
