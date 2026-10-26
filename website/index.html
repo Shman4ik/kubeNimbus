@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>kubeNimbus: a fast, open-source Kubernetes desktop client</title>
+<meta name="description" content="kubeNimbus is a free, open-source Kubernetes desktop client for Windows, macOS and Linux. Built with NativeAOT, no telemetry, MIT licensed. It opens on the workloads that need attention.">
+<link rel="icon" type="image/png" href="assets/icon-256.png">
+<link rel="apple-touch-icon" href="assets/icon-256.png">
+<link rel="canonical" href="https://shman4ik.github.io/kubeNimbus/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="kubeNimbus">
+<meta property="og:title" content="kubeNimbus: a fast, open-source Kubernetes desktop client">
+<meta property="og:description" content="kubeNimbus 1.0 opens on the workloads that need attention. Metrics from metrics-server without Prometheus, Argo CD and Helm in the sidebar, no telemetry, MIT licensed.">
+<meta property="og:url" content="https://shman4ik.github.io/kubeNimbus/">
+<meta property="og:image" content="https://shman4ik.github.io/kubeNimbus/assets/social-preview.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="kubeNimbus logo: a ship's helm riding a broom, with the words Fast, open-source Kubernetes desktop client">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "kubeNimbus",
+  "description": "A free, open-source Kubernetes desktop client. It opens on the workloads that need attention, reads metrics-server without Prometheus, and sends no telemetry.",
+  "url": "https://shman4ik.github.io/kubeNimbus/",
+  "image": "https://shman4ik.github.io/kubeNimbus/assets/social-preview.png",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Windows, macOS, Linux",
+  "license": "https://github.com/Shman4ik/kubeNimbus/blob/main/LICENSE",
+  "downloadUrl": "https://github.com/Shman4ik/kubeNimbus/releases/latest",
+  "installUrl": "https://apps.microsoft.com/detail/9MZ3C28M65PB",
+  "sameAs": ["https://github.com/Shman4ik/kubeNimbus", "https://apps.microsoft.com/detail/9MZ3C28M65PB"],
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
+<style>
+  /* The palette and layout follow pgNimbus's landing page (pgNimbus/website/index.html),
+     so the two sites read as one family. */
+  :root {
+    --ink: #242b36;
+    --ink-soft: #4b5563;
+    --bg: #f7f8fa;
+    --surface: #ffffff;
+    --border: #e3e6ea;
+    --accent: #2f6feb;
+    --accent-ink: #ffffff;
+    --code-bg: #eef0f3;
+    --shadow: 0 1px 2px rgba(36, 43, 54, .06), 0 8px 24px rgba(36, 43, 54, .09);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #e7eaee;
+      --ink-soft: #9aa4b2;
+      --bg: #1a2029;
+      --surface: #242b36;
+      --border: #333c49;
+      --accent: #5b8ff0;
+      --accent-ink: #10141a;
+      --code-bg: #2d3542;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .35);
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  img { max-width: 100%; height: auto; }
+  code, .cmd {
+    font-family: "Cascadia Code", "SF Mono", Consolas, "Liberation Mono", monospace;
+    font-size: .9em;
+    background: var(--code-bg);
+    border-radius: 6px;
+    padding: .15em .45em;
+    overflow-wrap: anywhere;
+  }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 0 24px; }
+  @media (max-width: 480px) { .wrap { padding: 0 16px; } }
+
+  /* ---- header ---- */
+  header {
+    padding: 18px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  header .wrap { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  header img { height: 30px; width: auto; display: block; }
+  header nav { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: .95rem; }
+  header nav a { color: var(--ink-soft); }
+  header nav a:hover { color: var(--ink); text-decoration: none; }
+  @media (max-width: 560px) {
+    header nav { margin-left: 0; width: 100%; gap: 6px 18px; font-size: .9rem; }
+  }
+
+  /* ---- hero ---- */
+  .hero { text-align: center; padding: 64px 0 40px; }
+  .hero h1 {
+    font-size: clamp(1.7rem, 4.5vw, 2.6rem);
+    font-weight: 700;
+    letter-spacing: -.02em;
+    line-height: 1.2;
+    max-width: 760px;
+    margin: 0 auto 16px;
+  }
+  .release {
+    display: inline-flex; align-items: center; gap: 9px;
+    max-width: 100%;
+    margin-bottom: 22px;
+    padding: 5px 14px 5px 5px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--ink-soft);
+    font-size: .9rem;
+    text-align: left;
+  }
+  .release:hover { color: var(--ink); text-decoration: none; box-shadow: var(--shadow); }
+  @media (max-width: 480px) { .release { border-radius: 14px; } }
+  .release b {
+    flex: none;
+    padding: 1px 10px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-size: .82rem;
+    font-weight: 600;
+  }
+  .hero p.sub {
+    color: var(--ink-soft);
+    font-size: 1.1rem;
+    max-width: 660px;
+    margin: 0 auto 32px;
+  }
+  .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 11px 22px;
+    border-radius: 9px;
+    font-weight: 600;
+    font-size: .98rem;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--ink);
+    transition: transform .08s ease, box-shadow .08s ease;
+  }
+  .btn:hover { text-decoration: none; transform: translateY(-1px); box-shadow: var(--shadow); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn svg { width: 17px; height: 17px; flex: none; }
+  .winget {
+    color: var(--ink-soft);
+    font-size: .9rem;
+    margin-bottom: 40px;
+  }
+  .shot-hero {
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    display: block;
+    margin: 0 auto;
+  }
+  .shot-note { color: var(--ink-soft); font-size: .85rem; margin-top: 14px; }
+
+  /* ---- sections ---- */
+  section { padding: 64px 0; }
+  section + section { border-top: 1px solid var(--border); }
+  h2 {
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: -.01em;
+    text-align: center;
+    margin-bottom: 10px;
+  }
+  .section-sub { text-align: center; color: var(--ink-soft); max-width: 640px; margin: 0 auto 42px; }
+
+  /* ---- before you install ---- */
+  .facts {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 16px;
+    list-style: none;
+  }
+  .facts li {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--accent);
+    border-radius: 12px;
+    padding: 18px 18px 20px;
+    color: var(--ink-soft);
+    font-size: .92rem;
+  }
+  .facts strong { display: block; color: var(--ink); font-size: 1rem; margin-bottom: 6px; }
+  .facts p + p { margin-top: 8px; }
+  .facts b { color: var(--ink); }
+
+  /* ---- highlight cards ---- */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 18px; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 22px;
+  }
+  .card h3 { font-size: 1.05rem; margin-bottom: 8px; display: flex; align-items: center; gap: 9px; }
+  .card h3 svg { width: 19px; height: 19px; color: var(--accent); flex: none; }
+  .card p { color: var(--ink-soft); font-size: .93rem; }
+  .card p + p { margin-top: 8px; }
+
+  /* ---- gallery ---- */
+  .gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 30px 26px; }
+  .gallery figure { margin: 0; }
+  .gallery img {
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    width: 100%;
+    display: block;
+  }
+  .gallery figcaption { color: var(--ink-soft); font-size: .88rem; margin-top: 10px; text-align: center; }
+  .gallery-note { color: var(--ink-soft); font-size: .85rem; text-align: center; margin-top: 30px; }
+
+  /* ---- feature list ---- */
+  .features { columns: 2; column-gap: 44px; max-width: 920px; margin: 0 auto; }
+  .features li {
+    break-inside: avoid;
+    list-style: none;
+    padding-left: 26px;
+    position: relative;
+    margin-bottom: 13px;
+    color: var(--ink-soft);
+    font-size: .94rem;
+  }
+  .features li::before {
+    content: "";
+    position: absolute; left: 2px; top: 7px;
+    width: 8px; height: 8px; border-radius: 3px;
+    background: var(--accent);
+    opacity: .75;
+  }
+  .features li strong { color: var(--ink); font-weight: 600; }
+  @media (max-width: 700px) { .features { columns: 1; } }
+  .not {
+    max-width: 920px; margin: 34px auto 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 22px 24px;
+    color: var(--ink-soft);
+    font-size: .93rem;
+  }
+  .not h3 { color: var(--ink); font-size: 1.02rem; margin-bottom: 8px; }
+  .not ul { padding-left: 20px; }
+  .not li + li { margin-top: 6px; }
+
+  /* ---- numbers ---- */
+  .bench-stats { display: flex; gap: 18px; justify-content: center; flex-wrap: wrap; margin-bottom: 28px; }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 26px;
+    text-align: center;
+    flex: 1 1 200px;
+    max-width: 300px;
+  }
+  .stat .num { font-size: 1.9rem; font-weight: 700; letter-spacing: -.02em; }
+  .stat .lbl { color: var(--ink-soft); font-size: .86rem; }
+  .prose { max-width: 720px; margin: 0 auto; color: var(--ink-soft); font-size: .95rem; }
+  .prose p + p { margin-top: 12px; }
+  .center { text-align: center; }
+  .nw { white-space: nowrap; }
+
+  /* ---- downloads ---- */
+  .dl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 18px; max-width: 980px; margin: 0 auto; }
+  .dl {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 26px 24px;
+  }
+  .dl h3 { font-size: 1.1rem; margin-bottom: 12px; }
+  .dl h3 span { font-weight: 400; color: var(--ink-soft); }
+  .dl p { color: var(--ink-soft); font-size: .92rem; margin-bottom: 12px; }
+  .dl .btn { margin-bottom: 12px; }
+  .dl .note { font-size: .84rem; color: var(--ink-soft); }
+  .verify { max-width: 760px; margin: 28px auto 0; text-align: center; color: var(--ink-soft); font-size: .9rem; }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 34px 0 44px;
+    color: var(--ink-soft);
+    font-size: .9rem;
+    text-align: center;
+  }
+  footer .links { display: flex; flex-wrap: wrap; gap: 10px 22px; justify-content: center; margin-bottom: 12px; }
+
+  /* ---- feedback, support, sibling ---- */
+  .support {
+    max-width: 680px; margin: 0 auto;
+    text-align: center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 34px 28px 36px;
+  }
+  .support p { color: var(--ink-soft); margin: 0 auto 22px; max-width: 540px; }
+  .support .cta { margin-bottom: 26px; }
+  .coffee { display: inline-block; border-radius: 10px; transition: transform .08s ease, box-shadow .08s ease; }
+  .coffee:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
+  .coffee img { display: block; height: 50px; width: auto; }
+  .sibling { max-width: 680px; margin: 26px auto 0; text-align: center; color: var(--ink-soft); font-size: .93rem; }
+  .sibling strong { color: var(--ink); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <a href="./" aria-label="kubeNimbus home">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="assets/wordmark-dark.png">
+        <img src="assets/wordmark-light.png" alt="kubeNimbus" width="129" height="30">
+      </picture>
+    </a>
+    <nav>
+      <a href="#why">Why</a>
+      <a href="#features">Features</a>
+      <a href="#download">Download</a>
+      <a href="https://github.com/Shman4ik/kubeNimbus/blob/main/docs/comparison.md">Compare</a>
+      <a href="https://github.com/Shman4ik/kubeNimbus">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<section class="hero">
+  <div class="wrap">
+    <a class="release" href="https://github.com/Shman4ik/kubeNimbus/releases/latest"><b>1.0.0</b> Released 26 October 2026: right-click menus on the Applications list, open a local YAML file, restart several workloads at once</a>
+    <h1>A fast, open-source Kubernetes desktop&nbsp;client</h1>
+    <p class="sub">
+      It opens on the workloads that need attention and says why in one line, read from the
+      cluster's own status. A native app with no telemetry, no account and no in-cluster agent.
+      Built with .NET&nbsp;10 and Avalonia&nbsp;12, compiled ahead of time. MIT licensed.
+    </p>
+    <div class="cta">
+      <a class="btn primary" href="https://apps.microsoft.com/detail/9MZ3C28M65PB">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.5 10.5 4.4v7.1H3V5.5zm0 13 7.5 1.1v-7H3v5.9zM11.5 4.25 21 3v8.5h-9.5v-7.25zm0 15.5L21 21v-8.5h-9.5v7.25z"/></svg>
+        Get it from Microsoft Store
+      </a>
+      <a class="btn" href="https://github.com/Shman4ik/kubeNimbus/releases/latest">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        macOS and Linux downloads
+      </a>
+      <a class="btn" href="https://github.com/Shman4ik/kubeNimbus">
+        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+        View on GitHub
+      </a>
+    </div>
+    <p class="winget">or <code>winget install --id 9MZ3C28M65PB --source msstore</code></p>
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="assets/applications-list.dark.png">
+      <img class="shot-hero" src="assets/applications-list.light.png" width="1280" height="880" alt="The Applications list: every app with a health verdict and a one-line reason, the ones that need attention first">
+    </picture>
+    <p class="shot-note">Real views, rendered by the repository's own screenshot harness over the built-in demo cluster's sample data.</p>
+  </div>
+</section>
+
+<section id="first">
+  <div class="wrap">
+    <h2>Before you install</h2>
+    <p class="section-sub">Four things to know up front, so none of them is a surprise later.</p>
+    <ul class="facts">
+      <li>
+        <strong>It is new</strong>
+        <p>1.0 shipped on 26 October 2026, and few people have run it against real clusters yet. Windows has had the most hands-on use. The macOS and Linux builds are launched by CI on their own platforms before each release, but have seen much less real use.</p>
+        <p>If something breaks, or works, please say so in an <a href="https://github.com/Shman4ik/kubeNimbus/issues/new/choose">issue</a> or in <a href="https://github.com/Shman4ik/kubeNimbus/discussions">Discussions</a>.</p>
+      </li>
+      <li>
+        <strong>Windows: Store or winget only</strong>
+        <p>The Microsoft Store is the only Windows channel. Microsoft signs the app and the Store keeps it updated, and <code>winget install --id 9MZ3C28M65PB --source msstore</code> installs the same Store package.</p>
+        <p>There is no Windows file on the Releases page. The portable zip published up to 0.8 is no longer built.</p>
+      </li>
+      <li>
+        <strong>macOS: Apple Silicon, ad-hoc signed</strong>
+        <p>Apple Silicon only, macOS 11 or later. Intel Macs are not published yet; building from source is one command.</p>
+        <p>The app is not notarized, so on first launch macOS says it cannot check the app for malicious software. On macOS 15 and later, close that dialog, then press <b>Open Anyway</b> next to kubeNimbus in System Settings &gt; Privacy &amp; Security. On macOS 14 and earlier, right-click the app, choose <b>Open</b>, then <b>Open</b> again. On any version, <code>xattr -dr com.apple.quarantine /Applications/kubeNimbus.app</code> in a terminal does the same. After that it opens normally.</p>
+      </li>
+      <li>
+        <strong>Linux: AppImage, .deb or .tar.gz</strong>
+        <p>x86_64 and aarch64, as an AppImage, a <code>.deb</code> or a plain <code>.tar.gz</code>. None of them is signed.</p>
+        <p>The AppImage runs on glibc 2.35 or newer (Ubuntu 22.04, Debian 12, RHEL 9 and later) and can update through AppImageUpdate. The others are a new download for each release.</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<section id="why">
+  <div class="wrap">
+    <h2>Why kubeNimbus</h2>
+    <p class="section-sub">
+      For SREs and platform teams who want to see what is wrong in a cluster, read why, and get
+      to the logs, with nothing to install in the cluster and no account to make.
+    </p>
+    <div class="cards">
+      <div class="card">
+        <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>What needs attention, first</h3>
+        <p>A cluster opens on Applications: every Argo CD Application and every workload Argo does not track, each with a health verdict and a one-line reason, such as <q>Crash-looping (exit 1) · 2 pods not created: namespace quota</q>.</p>
+        <p>The reasons come from fixed rules that read the cluster's own status fields. Enter opens the evidence, the last hour on a timeline, and the crashing pod's last run.</p>
+      </div>
+      <div class="card">
+        <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Metrics without Prometheus</h3>
+        <p>CPU and memory come from <code>metrics.k8s.io</code>, which metrics-server serves: columns on the pod and node lists, usage graphs over a rolling 30 minutes, and a capacity strip above the Nodes list.</p>
+        <p>A cluster without metrics-server loses those columns, not the list, and shows no error.</p>
+      </div>
+      <div class="card">
+        <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>Argo CD and Helm, built in</h3>
+        <p>A cluster running Argo CD gets a dashboard of its Applications, with sync status and health as two separate pills. Sync and Refresh from Git run on the click; Sync with prune and Terminate sync ask first.</p>
+        <p>Helm releases are read from their Secrets: values, rendered manifest, notes and history. No <code>argocd</code> or <code>helm</code> binary, and no second login.</p>
+      </div>
+      <div class="card">
+        <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>Native, and quick to open</h3>
+        <p>Compiled ahead of time with .NET NativeAOT: a self-contained app with no .NET runtime to install.</p>
+        <p>Lists are Kubernetes watches, so they change when the cluster does and reconnect on their own after a dropped connection. Logs stream as the lines arrive.</p>
+      </div>
+      <div class="card">
+        <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>No telemetry</h3>
+        <p>No analytics, no crash reporting and no update check. The only connections it makes are to the clusters you open, through the proxy a cluster's <code>proxy-url</code> names when it names one.</p>
+        <p>No account, no subscription, no seat limit. MIT licensed, commercial use included. <a href="https://github.com/Shman4ik/kubeNimbus/blob/main/PRIVACY.md">Privacy policy</a>.</p>
+      </div>
+      <div class="card">
+        <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Your kubeconfig, as it is</h3>
+        <p>It reads every <code>$KUBECONFIG</code> entry and <code>~/.kube/config</code>, runs exec plugins for EKS, GKE and AKS at connect time, and honours <code>proxy-url</code>. Tokens and certificates are never copied into app storage.</p>
+        <p>Production, staging and development each get a colour, and a red band stays under the command bar while you point at production.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="tour">
+  <div class="wrap">
+    <h2>See it in action</h2>
+    <p class="section-sub">From the unhealthy app to its logs, and the tools around them.</p>
+    <div class="gallery">
+      <figure>
+        <img src="assets/applications-demo.gif" width="1000" height="626" loading="lazy" alt="Opening an unhealthy application to read its findings and the crashing pod's logs">
+        <figcaption>Find the unhealthy app, see why, and read the crashing pod's logs</figcaption>
+      </figure>
+      <figure>
+        <img src="assets/palette-logs-demo.gif" width="1000" height="626" loading="lazy" alt="Finding workload logs in the command palette, then searching the merged stream">
+        <figcaption>Ctrl/Cmd+K to a workload's logs, then search all its pods in one stream</figcaption>
+      </figure>
+      <figure>
+        <img src="assets/application-page.light.png" width="1280" height="800" loading="lazy" alt="Application page: findings quoting the fields they came from, a timeline, and the crashing pod's last run">
+        <figcaption>Findings that quote the field they came from, a timeline, and the last run</figcaption>
+      </figure>
+      <figure>
+        <img src="assets/workloads-list.dark.png" width="1280" height="800" loading="lazy" alt="Pod list with live status pills and CPU and memory sparklines">
+        <figcaption>Resources: every kind the cluster serves, CRDs included, with CPU and memory from metrics-server</figcaption>
+      </figure>
+      <figure>
+        <img src="assets/pod-detail.dark.png" width="1280" height="1000" loading="lazy" alt="Pod detail docked along the bottom with container chips and live logs">
+        <figcaption>Pod detail docks along the bottom, so logs read on long lines</figcaption>
+      </figure>
+      <figure>
+        <img src="assets/exec-terminal.dark.png" width="1280" height="800" loading="lazy" alt="top running full screen inside the exec pane's terminal emulator">
+        <figcaption>A real terminal in exec: <code>vi</code>, <code>top</code> and <code>mc</code> draw, and Ctrl+C reaches the container</figcaption>
+      </figure>
+      <figure>
+        <img src="assets/cluster-switcher.light.png" width="1280" height="800" loading="lazy" alt="Searchable cluster switcher with pinned clusters and environment labels">
+        <figcaption>Ctrl/Cmd+P searches every context, with pinned clusters and a prod, staging or dev colour</figcaption>
+      </figure>
+      <figure>
+        <img src="assets/fleet-list.dark.png" width="1280" height="1000" loading="lazy" alt="One list aggregating a resource kind across several clusters">
+        <figcaption>All clusters: one list across the fleet, saying which clusters serve the kind</figcaption>
+      </figure>
+    </div>
+    <p class="gallery-note">The stills come from the repository's headless screenshot harness: real views over sample data. The two recordings are the Windows app on the built-in demo cluster. No real cluster or credentials appear.</p>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <h2>What it does</h2>
+    <p class="section-sub">One window. Secondary actions live in the command palette (Ctrl/Cmd+K) and right-click menus, not on a toolbar.</p>
+    <ul class="features">
+      <li><strong>Connect.</strong> Every <code>$KUBECONFIG</code> entry and <code>~/.kube/config</code>, exec-plugin sign-in, and <code>proxy-url</code> over HTTP or SOCKS5 for a bastion. A failed connect says which step failed and why, with Retry; an expired session is picked up without closing the tab.</li>
+      <li><strong>Triage.</strong> Applications puts what needs attention first, with a one-line reason per app. It works under narrow RBAC and says what it could not read.</li>
+      <li><strong>Browse.</strong> A sidebar built from API discovery, CRDs included, filtered by name, API group or <code>kubectl</code> short name (<code>svc</code>, <code>po</code>). Lists use list and watch, resume after a dropped connection, and relist on 410 Gone.</li>
+      <li><strong>Logs.</strong> Follow, search, regular expressions, level filters, the previous container's logs for a CrashLoopBackOff, and all of a workload's pods merged into one stream.</li>
+      <li><strong>Exec and port-forward.</strong> A VT terminal where <code>vi</code>, <code>top</code> and <code>less</code> work. An image with no shell gets a debug container in one click. Port-forward a pod or a service and open the local address.</li>
+      <li><strong>Edit.</strong> YAML with syntax highlighting, a dry-run preview, and server-side apply through a field manager, with conflicts shown and a force-apply offered. New in 1.0: open a local YAML file.</li>
+      <li><strong>Act.</strong> Scale, rollout restart, cordon, drain and delete. New in 1.0: restart several workloads with one confirmation. A restart, a drain or a delete is armed and named before it fires, and a delete on a production cluster always asks.</li>
+      <li><strong>Measure.</strong> CPU and memory from metrics-server in the lists and per container, a 30-minute rolling graph, node allocatable against requested, and a capacity strip over the Nodes list.</li>
+      <li><strong>Argo CD.</strong> Applications, ApplicationSets and AppProjects, read and written as Argo's own custom resources over your Kubernetes connection. Sync, refresh, prune and terminate a running sync.</li>
+      <li><strong>Helm.</strong> Releases with values, rendered manifest, notes and revision history, read straight from release Secrets. Read-only.</li>
+      <li><strong>RBAC.</strong> Your own permissions (a <code>SelfSubjectRulesReview</code>), where a ServiceAccount's access comes from, and who can do X, with a one-click <code>SubjectAccessReview</code> to confirm an answer.</li>
+      <li><strong>Many clusters.</strong> Tabs restored with your workspace, a Ctrl/Cmd+P switcher with fuzzy search and pins, and an All clusters list across every connected cluster.</li>
+      <li><strong>Keyboard.</strong> A Ctrl/Cmd+K command palette, F1 for every shortcut, and light and dark themes.</li>
+      <li><strong>Demo cluster.</strong> Explore demo cluster opens sample data that ships inside the app, labelled as such, with no cluster, credentials or network involved.</li>
+    </ul>
+    <div class="not">
+      <h3>What it does not do</h3>
+      <ul>
+        <li>Install, upgrade or roll back Helm charts. Helm support is read-only; that stays Helm's job.</li>
+        <li>Keep long-range metrics. Usage history is capped at 30 minutes by design; long-range metrics are Prometheus's job.</li>
+        <li>Complete YAML from a schema. The editor highlights and validates through a dry run, but has no schema-aware completion.</li>
+        <li>Open more than one window, or provision clusters, run an in-cluster agent, or send telemetry. Those last three are permanent non-goals.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="numbers">
+  <div class="wrap">
+    <h2>Numbers, with their dates</h2>
+    <p class="section-sub">Each one says what was measured, on what, and when.</p>
+    <div class="bench-stats">
+      <div class="stat"><div class="num">347&nbsp;ms</div><div class="lbl">median time to first frame on Windows&nbsp;11, 20 runs</div></div>
+      <div class="stat"><div class="num">31&nbsp;MB</div><div class="lbl">the 1.0.0 Linux x64 <code>.tar.gz</code>, with nothing else to install</div></div>
+      <div class="stat"><div class="num">0</div><div class="lbl">network connections of its own, other than to your clusters</div></div>
+    </div>
+    <div class="prose">
+      <p>The startup figure was taken on 11 October 2026 with <a href="https://github.com/Shman4ik/kubeNimbus/blob/main/scripts/measure-startup.ps1"><code>scripts/measure-startup.ps1</code></a> on an AMD Ryzen 9 5900X, from build <code>f9b118f</code>, which shipped in 0.7.0. The script measures any published build, and CI runs it on every pull request that can change startup.</p>
+      <p>It was not re-run with that script for 1.0. The 1.0.0 release check timed something different, the whole <code class="nw">--smoke-test</code> run from launch to exit: a median of 524&nbsp;ms over seven runs, against 530&nbsp;ms for 0.8.0 on the same machine.</p>
+      <p>How kubeNimbus compares with Lens, FreeLens, KubeUI, Aptakube, Headlamp and k9s on startup, footprint, telemetry and metrics is on its own page, with a source and a date beside every number, and the places other clients are ahead said plainly.</p>
+    </div>
+    <p class="center" style="margin-top:28px"><a class="btn" href="https://github.com/Shman4ik/kubeNimbus/blob/main/docs/comparison.md">Read the comparison &rarr;</a></p>
+  </div>
+</section>
+
+<section id="download">
+  <div class="wrap">
+    <h2>Download</h2>
+    <p class="section-sub">Self-contained NativeAOT builds: no .NET runtime to install. Every package is launched by CI on its own platform before the release is created.</p>
+    <div class="dl-grid">
+      <div class="dl">
+        <h3>Windows <span>(x64)</span></h3>
+        <p>Install from the Microsoft Store. Microsoft signs the app and the Store keeps it updated.</p>
+        <a class="btn primary" href="https://apps.microsoft.com/detail/9MZ3C28M65PB">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.5 10.5 4.4v7.1H3V5.5zm0 13 7.5 1.1v-7H3v5.9zM11.5 4.25 21 3v8.5h-9.5v-7.25zm0 15.5L21 21v-8.5h-9.5v7.25z"/></svg>
+          Microsoft Store
+        </a>
+        <p>Or from a terminal, which installs the same Store package:</p>
+        <p><code>winget install --id 9MZ3C28M65PB --source msstore</code></p>
+        <p class="note">There is no Windows download on the Releases page. If you used the portable zip (published up to 0.8), delete its folder once the Store app is installed.</p>
+      </div>
+      <div class="dl">
+        <h3>macOS <span>(Apple Silicon)</span></h3>
+        <p>A <code>.dmg</code> for macOS 11 or later. Open it and drag kubeNimbus to Applications. The app is signed ad-hoc and not notarized, so macOS blocks the first launch. Open it once and close the dialog, then:</p>
+        <p><code>System Settings &rarr; Privacy &amp; Security &rarr; Open Anyway</code></p>
+        <a class="btn" href="https://github.com/Shman4ik/kubeNimbus/releases/latest">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download .dmg
+        </a>
+        <p class="note">That is macOS 15 and later. On macOS 14 and earlier, right-click the app and choose Open, then Open again. On any version, <code>xattr -dr com.apple.quarantine /Applications/kubeNimbus.app</code> in a terminal clears the block. After the first launch it opens normally. The <code>.tar.gz</code> is the same binary for a terminal: run <code>xattr -dr com.apple.quarantine .</code> in its folder first. Intel Macs are not published yet; <a href="https://github.com/Shman4ik/kubeNimbus#building-from-source">build from source</a>.</p>
+      </div>
+      <div class="dl">
+        <h3>Linux <span>(x86_64 and aarch64)</span></h3>
+        <p>The AppImage runs on any distribution with glibc 2.35 or newer (Ubuntu 22.04, Debian 12, RHEL 9 and later). Make it executable and launch it:</p>
+        <p><code>chmod +x kubeNimbus-*.AppImage</code></p>
+        <a class="btn" href="https://github.com/Shman4ik/kubeNimbus/releases/latest">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download AppImage
+        </a>
+        <p class="note">A Debian and Ubuntu <code>.deb</code>, which pulls in the libraries it needs and adds a launcher, and a plain <code>.tar.gz</code> are on the same page. All of them need a desktop session (X11, or Wayland through XWayland).</p>
+      </div>
+    </div>
+    <p class="verify">Every release ships <code>SHA256SUMS.txt</code>, and <code>gh release verify-asset</code> and <code>gh attestation verify</code> check a file against GitHub's own records. <a href="https://github.com/Shman4ik/kubeNimbus#download">How to verify a download</a>.</p>
+  </div>
+</section>
+
+<section id="feedback">
+  <div class="wrap">
+    <div class="support">
+      <h2>Tell us how it went</h2>
+      <p>kubeNimbus is new, and reports from real clusters are what it needs most. A bug report, a feature request, or a note that it worked on your setup all help.</p>
+      <div class="cta">
+        <a class="btn primary" href="https://github.com/Shman4ik/kubeNimbus/issues/new/choose">Open an issue</a>
+        <a class="btn" href="https://github.com/Shman4ik/kubeNimbus/discussions">Join the discussion</a>
+      </div>
+      <p>It is free and MIT licensed. If it saves you time at work, you can support the work with a coffee.</p>
+      <a class="coffee" href="https://buymeacoffee.com/shman4ik"><img src="assets/bmc-button.svg" alt="Buy me a coffee" width="184" height="50"></a>
+    </div>
+    <p class="sibling"><strong>From the same family:</strong> <a href="https://shman4ik.github.io/pgNimbus/">pgNimbus</a> is the same idea for PostgreSQL, a native client that talks to your database and nothing else. Both apps are built on one shared UI layer, <a href="https://github.com/Shman4ik/nimbusUi">nimbusUi</a>, so they look and behave alike.</p>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="links">
+      <a href="https://github.com/Shman4ik/kubeNimbus">GitHub</a>
+      <a href="https://github.com/Shman4ik/kubeNimbus/releases">Releases</a>
+      <a href="https://github.com/Shman4ik/kubeNimbus/blob/main/CHANGELOG.md">Changelog</a>
+      <a href="https://github.com/Shman4ik/kubeNimbus/blob/main/docs/comparison.md">How it compares</a>
+      <a href="https://github.com/Shman4ik/kubeNimbus/blob/main/PRIVACY.md">Privacy</a>
+      <a href="https://github.com/Shman4ik/kubeNimbus/blob/main/SECURITY.md">Security</a>
+      <a href="https://github.com/Shman4ik/kubeNimbus/blob/main/LICENSE">MIT License</a>
+      <a href="https://shman4ik.github.io/pgNimbus/">pgNimbus</a>
+      <a href="https://buymeacoffee.com/shman4ik">Buy me a coffee</a>
+    </div>
+    <div>kubeNimbus: open source, Kubernetes-first, and it talks only to your clusters.</div>
+  </div>
+</footer>
+
+</body>
+</html>
