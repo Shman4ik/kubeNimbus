@@ -207,6 +207,11 @@ in the log. Escape sent by computer-use does not reach the app either; the harne
       themes. Anything that drifted is re-rendered and committed in the release PR.
 - [ ] README: the screenshots it shows, the install instructions for each channel,
       and the limitations it states are still true of this release.
+- [ ] Landing page (<https://shman4ik.github.io/kubeNimbus/>): `website/index.html` names
+      the release in its top line and repeats the install notes and limits, so update it
+      in the release PR. After that PR merges, publish it from `main` with
+      `scripts/website/publish-site.sh`, which copies the page and its images from
+      `design/` to the root of the `gh-pages` branch. Publishing is manual.
 - [ ] Microsoft Store listing text. The source is
       `design/store/listing/store-listing.md`; update its "What's new in this version"
       for this release and paste the changed fields into Partner Center, which is where
