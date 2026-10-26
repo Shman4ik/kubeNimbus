@@ -84,6 +84,30 @@ public class RowActionSentenceTests
         await Assert.That(action.ConfirmLabel).IsEqualTo("Run now");
     }
 
+    /// <summary>
+    /// The prune leads the sentence, as its button says it. At the end, after the cluster,
+    /// "… on cluster-b and prune" read as pruning the cluster.
+    /// </summary>
+    [Test]
+    public async Task Sync_and_prune_leads_with_the_whole_verb()
+    {
+        var app = new ResourceDescriptor("argoproj.io", "v1alpha1", "Application", "applications", "application", true, [], []);
+        var action = Arm(RowActionKind.ArgoSyncPrune, app, ns: "argocd", cluster: "cluster-b");
+
+        await Assert.That(action.Headline).IsEqualTo("Sync and prune Application checkout-worker in argocd on cluster-b");
+        await Assert.That(action.ConfirmLabel).IsEqualTo(action.Verb);
+    }
+
+    /// <summary>The demo cluster's line names the confirm it turned off, not every verb the strip has.</summary>
+    [Test]
+    public async Task The_demo_notice_names_the_one_confirm_it_disables()
+    {
+        var action = Arm(RowActionKind.Restart);
+
+        await Assert.That(action.IsDemoNoticeVisible).IsTrue();
+        await Assert.That(action.DemoNotice).IsEqualTo("The demo cluster has no API server, so Restart is off here.");
+    }
+
     /// <summary>Only the ones that destroy something get the red glyph and the red confirm.</summary>
     [Test]
     public async Task Only_delete_drain_and_prune_are_destructive_and_every_action_has_a_glyph()

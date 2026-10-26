@@ -160,8 +160,17 @@ answer beside it, the same shape for every action it hosts:
 - **The buttons sit with the text, not across the window.** The sentence column is capped at
   900px and left-aligned, so a short sentence keeps Scale / Cancel right after it, and a long
   one wraps beside them rather than pushing them out of the card (the window's minimum width
-  included). The demo notice, the drain plan, the scale warnings and the result line stack
-  under the sentence in the same column.
+  included). The consequence, a scale's plain warning and the demo cluster's line are part of
+  the question, so the buttons centre on all of it; the drain plan, a production scale to zero
+  and the result line stack under it in the same column.
+- **The demo cluster's line names the one confirm it turned off** (`DemoNotice`: "The demo
+  cluster has no API server, so Sync and prune is off here."), one line led by the demo
+  banner's mark. It used to be one paragraph for every action, listing every verb the strip
+  has, in an amber box inside the strip's card: three lines and a box inside a box to say why
+  one button was grey (2026-10-26).
+- **A sync with prune leads with its whole verb**, "Sync and prune Application checkout in
+  argocd on prod-eu", as its button says it. The prune used to close the sentence, "… on
+  prod-eu and prune", which read as pruning the cluster.
 - **The result line leads with its state**: a moving bar while anything is in flight
   (`IsWorking`, a drain included), a check on success, an alert on a refusal. An action that
   fired on its click (UI rule 17) shows the glyph and this line only.

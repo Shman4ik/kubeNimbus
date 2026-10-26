@@ -20,8 +20,9 @@
        the consequence under it in the dim weight, and Scale / Cancel right after the text
        rather than at the far edge of the window. The block is capped at 900px and sits on
        the left of the card, so on a wide window the buttons stay with the sentence they
-       answer. Everything an action adds (the demo notice, the drain plan, the scale
-       warnings, the result line) stacks under the sentence in the same column.
+       answer. The consequence, a scale's plain warning and the demo cluster's one line are
+       part of the question; everything else an action adds (the drain plan, a production
+       scale to zero, the result line) stacks under it in the same column.
 
        On a production cluster the card's own border takes the production colour
        (Border.card.actionStrip.production): no new element, no new row. The words are in
@@ -119,6 +120,13 @@
                  infoBar below. Neither disables the confirm. -->
             <TextBlock Classes="statusText warn" TextWrapping="Wrap" IsVisible="{Binding HasPlainScaleWarning}"
                        Text="{Binding ScaleWarning}" />
+            <!-- The demo cluster: why the confirm beside it is off (demo rule 5), one line of
+                 the question led by the demo banner's mark, not a box inside the card. -->
+            <DockPanel IsVisible="{Binding IsDemoNoticeVisible}">
+              <PathIcon DockPanel.Dock="Left" Data="{StaticResource AlertCircleIconGeometry}" Width="12" Height="12"
+                        Foreground="{StaticResource AppWarningBrush}" VerticalAlignment="Top" Margin="0,2,6,0" />
+              <TextBlock Classes="statusText dim" Text="{Binding DemoNotice}" TextWrapping="Wrap" />
+            </DockPanel>
           </StackPanel>
 
           <!-- The answer, right after the question. Present only while the action is a
@@ -141,14 +149,6 @@
 
         <Border Classes="infoBar warn" IsVisible="{Binding IsScaleWarningProminent}">
           <TextBlock Text="{Binding ScaleWarning}" TextWrapping="Wrap" FontSize="12" FontWeight="SemiBold" />
-        </Border>
-
-        <Border Classes="demoBar" IsVisible="{Binding IsDemoNoticeVisible}">
-          <DockPanel>
-            <PathIcon DockPanel.Dock="Left" Data="{StaticResource AlertCircleIconGeometry}" Width="12" Height="12"
-                      VerticalAlignment="Top" Margin="0,2,8,0" />
-            <TextBlock Text="{x:Static vm:RowActionViewModel.DemoNotice}" TextWrapping="Wrap" />
-          </DockPanel>
         </Border>
 
         <!-- Drain.
