@@ -121,8 +121,8 @@ The installers add a desktop launcher and an icon; the portable archives are
 the same binary with nothing to install. Every package is launched by CI on its
 own platform before the release is created.
 
-Intel Macs aren't published yet. [Build from source](#building-from-source),
-it's one command.
+Intel Macs aren't published yet; [building from source](#building-from-source)
+is one command.
 
 **The macOS and Linux downloads are not signed with a certificate.** That
 needs an Apple Developer account this project doesn't have, so macOS will
