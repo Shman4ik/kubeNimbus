@@ -182,9 +182,13 @@ All three need a desktop session (X11, or Wayland via XWayland). Outside the
 <summary><b>macOS</b></summary>
 
 **DMG.** Open it and drag **kubeNimbus** to Applications. The app is signed
-ad-hoc rather than with a Developer ID, so the first launch has to be
-right-click → **Open** → **Open** (double-clicking gives a dialog with no way
-past it). After that it opens normally.
+ad-hoc rather than with a Developer ID and is not notarized, so macOS blocks
+the first launch. On macOS 15 (Sequoia) and later, open it once, close the
+dialog, then press **Open Anyway** next to kubeNimbus in System Settings →
+Privacy & Security. On macOS 14 and earlier, right-click → **Open** → **Open**
+does the same. From a terminal, `xattr -dr com.apple.quarantine
+/Applications/kubeNimbus.app` works on any version. After that it opens
+normally.
 
 **Tarball.** The same binary without a bundle, for launching from a terminal:
 
@@ -380,9 +384,9 @@ kubeNimbus is at 1.0, and this is where it has and has not been exercised:
   unavailable there by nature. It's for seeing the app, not for practising
   against.
 - Helm is read-only — install, upgrade and rollback stay Helm's job.
-- Argo CD support covers browsing, syncing and refreshing Applications. Creating
-  or editing them is a YAML edit like any other custom resource, and terminating
-  a sync that is already running is not offered.
+- Argo CD support covers browsing, syncing and refreshing Applications, and
+  terminating a sync that is already running. Creating or editing them is a
+  YAML edit like any other custom resource.
 - Usage history is session-scoped and capped at 30 minutes **by design**.
   Long-range metrics is Prometheus's job, and a permanent non-goal here.
 
@@ -469,7 +473,8 @@ By participating you agree to the
 a native client that is on screen in about 0.2 s, streams rows while the query
 runs, and sends no telemetry. It shares this app's UI layer
 ([nimbusUi](https://github.com/Shman4ik/nimbusUi)), so the two look and behave
-like siblings. It reached 1.0 at the end of September and is at 1.2.0 now.
+like siblings. It reached 1.0 at the end of September 2026, and its site is
+[shman4ik.github.io/pgNimbus](https://shman4ik.github.io/pgNimbus/).
 
 ## Support
 
