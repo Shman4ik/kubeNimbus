@@ -67,25 +67,25 @@ ahead said plainly.
 
 <table>
   <tr>
-    <td width="50%"><img src="design/screenshots/application-page.light.png" alt="Application page: findings quoting the fields they came from, a timeline, and the crashing pod's last run"><br><sub><b>One Enter to the why</b> — findings that quote the field they came from, the last hour on a timeline, and the crashing pod's last run.</sub></td>
-    <td width="50%"><img src="design/screenshots/pod-detail.dark.png" alt="Pod detail docked along the bottom with container chips and live logs"><br><sub><b>Pod detail</b> docks along the bottom — full-width logs, not a cramped sidecar.</sub></td>
+    <td width="50%"><img src="design/screenshots/application-page.light.png" alt="Application page: findings quoting the fields they came from, a timeline, and the crashing pod's last run"><br><sub><b>One Enter to the why:</b> findings that quote the field they came from, the last hour on a timeline, and the crashing pod's last run.</sub></td>
+    <td width="50%"><img src="design/screenshots/pod-detail.dark.png" alt="Pod detail docked along the bottom with container chips and live logs"><br><sub><b>Pod detail</b> docks along the bottom: full-width logs, not a cramped sidecar.</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src="design/screenshots/exec-terminal.dark.png" alt="top running full-screen inside the exec pane's terminal emulator"><br><sub><b>A real terminal</b> in the exec pane — <code>vi</code>, <code>top</code> and <code>mc</code> draw, with colour and cursor addressing, and Ctrl+C still reaches the container.</sub></td>
+    <td width="50%"><img src="design/screenshots/exec-terminal.dark.png" alt="top running full-screen inside the exec pane's terminal emulator"><br><sub><b>A real terminal</b> in the exec pane: <code>vi</code>, <code>top</code> and <code>mc</code> draw, with colour and cursor addressing, and Ctrl+C still reaches the container.</sub></td>
     <td width="50%"><img src="design/screenshots/yaml-editor.light.png" alt="YAML editor with syntax highlighting"><br><sub><b>YAML editing</b> with syntax highlighting and server-side apply.</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src="design/screenshots/cluster-switcher.light.png" alt="Searchable cluster switcher with pinned clusters and environment labels"><br><sub><b>Cluster switcher</b> (Ctrl/Cmd+P) — fuzzy search over every context, pinned favourites, and prod/staging/dev colour so you always know where you are.</sub></td>
-    <td width="50%"><img src="design/screenshots/fleet-list.dark.png" alt="One list aggregating a resource kind across several clusters"><br><sub><b>All clusters</b> — one list across the whole fleet, honest about partial coverage.</sub></td>
+    <td width="50%"><img src="design/screenshots/cluster-switcher.light.png" alt="Searchable cluster switcher with pinned clusters and environment labels"><br><sub><b>Cluster switcher</b> (Ctrl/Cmd+P): fuzzy search over every context, pinned favourites, and prod/staging/dev colour so you always know where you are.</sub></td>
+    <td width="50%"><img src="design/screenshots/fleet-list.dark.png" alt="One list aggregating a resource kind across several clusters"><br><sub><b>All clusters:</b> one list across the whole fleet, honest about partial coverage.</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src="design/screenshots/workloads-list.dark.png" alt="Pod list with live status pills and CPU/memory sparklines"><br><sub><b>Resources</b> — every kind the cluster serves, CRDs included, with live status and CPU/memory sparklines.</sub></td>
-    <td width="50%"><img src="design/screenshots/rbac-who-can.light.png" alt="RBAC access review showing which subjects can perform a verb"><br><sub><b>Who can do X?</b> — every subject a binding grants a verb, verifiable against the API server.</sub></td>
+    <td width="50%"><img src="design/screenshots/workloads-list.dark.png" alt="Pod list with live status pills and CPU/memory sparklines"><br><sub><b>Resources:</b> every kind the cluster serves, CRDs included, with live status and CPU/memory sparklines.</sub></td>
+    <td width="50%"><img src="design/screenshots/rbac-who-can.light.png" alt="RBAC access review showing which subjects can perform a verb"><br><sub><b>Who can do X?</b> Every subject a binding grants a verb, verifiable against the API server.</sub></td>
   </tr>
 </table>
 
 <sub>Rendered from the repo's own headless harness (`tools/Screenshot`) against
-fixture data — real views, synthetic clusters.</sub>
+fixture data: real views, synthetic clusters.</sub>
 
 ## See it in action
 
@@ -108,11 +108,11 @@ page; the portable zip published up to 0.8 is no longer built.
 On macOS and Linux, grab the installer or the portable archive for your
 platform from the
 [latest release](https://github.com/Shman4ik/kubeNimbus/releases/latest).
-Builds are self-contained NativeAOT binaries — **no .NET runtime to install**.
+Builds are self-contained NativeAOT binaries: **no .NET runtime to install**.
 
 | Platform | Installer | Portable |
 |---|---|---|
-| Windows x64 | the [Store](https://apps.microsoft.com/detail/9MZ3C28M65PB) or winget | — |
+| Windows x64 | the [Store](https://apps.microsoft.com/detail/9MZ3C28M65PB) or winget | n/a |
 | macOS Apple Silicon | `kubeNimbus-<version>-osx-arm64.dmg` | `kubeNimbus-<version>-osx-arm64.tar.gz` |
 | Linux x64 | `kubeNimbus-<version>-linux-x64.deb` or `kubeNimbus-<version>-x86_64.AppImage` | `kubeNimbus-<version>-linux-x64.tar.gz` |
 | Linux arm64 | `kubeNimbus-<version>-linux-arm64.deb` or `kubeNimbus-<version>-aarch64.AppImage` | `kubeNimbus-<version>-linux-arm64.tar.gz` |
@@ -121,10 +121,10 @@ The installers add a desktop launcher and an icon; the portable archives are
 the same binary with nothing to install. Every package is launched by CI on its
 own platform before the release is created.
 
-Intel Macs aren't published yet — [build from source](#building-from-source),
-it's one command.
+Intel Macs aren't published yet; [building from source](#building-from-source)
+is one command.
 
-**The macOS and Linux downloads are not signed with a certificate** — that
+**The macOS and Linux downloads are not signed with a certificate.** That
 needs an Apple Developer account this project doesn't have, so macOS will
 object the first time (the steps are below). The Windows app is signed by
 Microsoft through the Store.
@@ -144,7 +144,7 @@ from Settings → Apps.
 <details>
 <summary><b>Linux</b></summary>
 
-**Debian/Ubuntu (`.deb`)** — pulls in the X11 and fontconfig libraries it needs
+**Debian/Ubuntu (`.deb`).** Pulls in the X11 and fontconfig libraries it needs
 and registers a desktop launcher:
 
 ```bash
@@ -152,7 +152,7 @@ sudo apt install ./kubeNimbus-<version>-linux-x64.deb
 kubenimbus
 ```
 
-**AppImage** — nothing to install, runs on any distribution with glibc 2.35 or newer
+**AppImage.** Nothing to install, runs on any distribution with glibc 2.35 or newer
 (Ubuntu 22.04, Debian 12, RHEL 9 and later):
 
 ```bash
@@ -182,9 +182,13 @@ All three need a desktop session (X11, or Wayland via XWayland). Outside the
 <summary><b>macOS</b></summary>
 
 **DMG.** Open it and drag **kubeNimbus** to Applications. The app is signed
-ad-hoc rather than with a Developer ID, so the first launch has to be
-right-click → **Open** → **Open** (double-clicking gives a dialog with no way
-past it). After that it opens normally.
+ad-hoc rather than with a Developer ID and is not notarized, so macOS blocks
+the first launch. On macOS 15 (Sequoia) and later, open it once, close the
+dialog, then press **Open Anyway** next to kubeNimbus in System Settings →
+Privacy & Security. On macOS 14 and earlier, right-click → **Open** → **Open**
+does the same. From a terminal, `xattr -dr com.apple.quarantine
+/Applications/kubeNimbus.app` works on any version. After that it opens
+normally.
 
 **Tarball.** The same binary without a bundle, for launching from a terminal:
 
@@ -238,8 +242,8 @@ The macOS and Linux binaries are not code-signed; see [SECURITY.md](SECURITY.md#
 kubeNimbus reads your `$KUBECONFIG` chain and
 `~/.kube/config` and lists what it finds. If neither turns anything up, the
 first screen has an **Open kubeconfig file…** button: pick the file and it's
-added — or **Add folder…**, and every kubeconfig in that folder is read,
-including ones added to it later. Only the *path* is remembered — the file is
+added, or **Add folder…**, and every kubeconfig in that folder is read,
+including ones added to it later. Only the *path* is remembered: the file is
 re-read through the normal kubeconfig chain every time, so nothing is ever
 copied into app storage.
 
@@ -248,15 +252,15 @@ copied into app storage.
 > what the file picker is for; kubeNimbus also tells you exactly which paths
 > it searched. The same goes for `$PATH`: a credential plugin named bare in the
 > kubeconfig (`command: aws`) is also looked for where a login shell would find
-> it — `/usr/local/bin`, `/opt/homebrew/bin`, `~/.local/bin` and friends.
+> it: `/usr/local/bin`, `/opt/homebrew/bin`, `~/.local/bin` and friends.
 
 ### No cluster yet? Try the demo
 
 The same first screen has **Explore demo cluster** (also `Ctrl`/`Cmd`+`K` →
 "Explore the demo cluster"). It opens a full sample workload set that ships
-inside the binary — pods in every interesting state, live-looking logs,
+inside the binary (pods in every interesting state, live-looking logs,
 environment variables and secrets, events, usage graphs, Helm releases and a
-realistic CRD catalog — with **no cluster, no credentials and no network
+realistic CRD catalog), with **no cluster, no credentials and no network
 involved**. It's there so you can see what the app does before wiring
 anything up.
 
@@ -268,15 +272,15 @@ sample objects.
 
 ## What it does
 
-**Connect** — every `$KUBECONFIG` entry plus `~/.kube/config`, with
+**Connect:** every `$KUBECONFIG` entry plus `~/.kube/config`, with
 exec-plugin auth (EKS, GKE, AKS) resolved through the kubeconfig at connect
 time, and the cluster's `proxy-url` (HTTP or SOCKS5, for a bastion) honoured.
 A connect that fails says which step failed, why, and with what, with Retry;
 an expired session is picked up again without closing the tab. Multi-cluster
 tabs, drag-reorderable, restored with your workspace.
-**Credentials are never persisted** — see [SECURITY.md](SECURITY.md).
+**Credentials are never persisted.** See [SECURITY.md](SECURITY.md).
 
-**Triage** — a cluster opens on **Applications**: every Argo CD Application
+**Triage:** a cluster opens on **Applications**: every Argo CD Application
 and every workload Argo does not track, with a health verdict and a one-line
 reason read from the cluster's own status ("Crash-looping (exit 1) · 2 pods not
 created: namespace quota"), what needs attention first. Enter opens the
@@ -286,55 +290,55 @@ changed, with a compare link to your Git host; and the logs, opened on the
 crashing pod's last run. Works under narrow RBAC, and says what it could not
 read. The explorer below is one click away as **Resources**.
 
-**Browse** — a discovery-driven sidebar covering built-in kinds *and* CRDs,
+**Browse:** a discovery-driven sidebar covering built-in kinds *and* CRDs,
 filterable by name, API group or `kubectl` short name (`svc`, `po`), with a
 pinned Recent section. Lists are informer-style **list + watch**, so they
 update live rather than polling, and reconnect on their own with
 resourceVersion resume and a relist on 410 Gone.
 
-**Inspect** — pod detail docks along the bottom, full width: live logs with
+**Inspect:** pod detail docks along the bottom, full width: live logs with
 follow, search, severity colouring and a previous-container fetch; environment
 variables with per-key on-demand reveal for Secret and ConfigMap refs; events
 as a card feed; owner-chain navigation from pod to replica set to deployment.
-**Exec** into a container — a real VT terminal, so `vi`, `top`, `mc` and `less`
-work rather than unspooling escape codes — and **port-forward**, both over
+**Exec** into a container (a real VT terminal, so `vi`, `top`, `mc` and `less`
+work rather than unspooling escape codes) and **port-forward**, both over
 websockets. An image with no shell (distroless, .NET chiseled) gets a **debug
 container** in one click, `kubectl debug`'s ephemeral container sharing the
 target's processes; a pod on a Windows node gets `powershell` or `cmd`.
 
-**Edit** — YAML view and edit for any resource with syntax highlighting,
+**Edit:** YAML view and edit for any resource with syntax highlighting,
 server-side apply through a field manager, conflicts surfaced with a
 force-apply offered, and a two-step delete.
 
-**Measure** — live CPU and memory from `metrics.k8s.io` in the list and per
+**Measure:** live CPU and memory from `metrics.k8s.io` in the list and per
 container, plus usage graphs over the session's rolling 30-minute window. A
 cluster with no metrics-server simply hides those columns instead of erroring.
 
-**Operate** — read-only Helm release browsing (values, rendered manifest,
+**Operate:** read-only Helm release browsing (values, rendered manifest,
 notes, revision history) read straight from release Secrets with no Helm binary
 involved; and RBAC access review in all three directions: your effective
 permissions via `SelfSubjectRulesReview`, where a ServiceAccount's access comes
 from, and cluster-wide **who can do X** with one-click `SubjectAccessReview`
 confirmation.
 
-**GitOps** — a cluster running **Argo CD** gets its own sidebar section with a
+**GitOps:** a cluster running **Argo CD** gets its own sidebar section with a
 dashboard over every Application: the cluster-wide counts, a list ordered by what
 needs attention, and sync status and health as two separate pills, because an
 Application can be perfectly synced and still degraded. Open one for its source,
-destination, managed resources, conditions and deployment history — and **Sync**
+destination, managed resources, conditions and deployment history, and **Sync**
 or **Refresh from Git** it from the row, each on the click; **Sync with prune…**,
 which deletes what Git no longer declares, asks first. It reads and writes Argo's own custom resources over the Kubernetes
 connection you already have: no Argo API server, no URL to paste, no `argocd`
 binary, no second login.
 
-**Fleet** — an "All clusters" toggle aggregating any kind across every
+**Fleet:** an "All clusters" toggle aggregating any kind across every
 connected cluster into one list, with a Cluster column and an honest
 "n of m clusters serve X" when a kind isn't available everywhere.
 
-**Switch** — a Ctrl/Cmd+P cluster switcher that fuzzy-searches every context by
+**Switch:** a Ctrl/Cmd+P cluster switcher that fuzzy-searches every context by
 name, cluster or kubeconfig file, so a 200-entry kubeconfig full of generated
 EKS ARNs is three keystrokes away rather than a scroll. Pin the clusters you
-live in. Every cluster is colour-coded prod / staging / dev — a red band sits
+live in. Every cluster is colour-coded prod / staging / dev: a red band sits
 under the command bar whenever you're pointed at production, and you can correct
 the guess by right-clicking a tab.
 
@@ -370,7 +374,7 @@ Microsoft Store listing.
 kubeNimbus is at 1.0, and this is where it has and has not been exercised:
 
 - The macOS and Linux downloads from Releases are not signed with a
-  certificate (see above), and there is no auto-update — a new version is a new
+  certificate (see above), and there is no auto-update: a new version is a new
   download (the AppImage can update through AppImageUpdate). On Windows the
   Microsoft Store build, the only Windows channel, is signed and updates itself.
 - Windows has had the most hands-on use. The Linux and macOS builds are
@@ -379,10 +383,10 @@ kubeNimbus is at 1.0, and this is where it has and has not been exercised:
   changes, scales or can be edited, and exec/port-forward/apply/delete are
   unavailable there by nature. It's for seeing the app, not for practising
   against.
-- Helm is read-only — install, upgrade and rollback stay Helm's job.
-- Argo CD support covers browsing, syncing and refreshing Applications. Creating
-  or editing them is a YAML edit like any other custom resource, and terminating
-  a sync that is already running is not offered.
+- Helm is read-only: install, upgrade and rollback stay Helm's job.
+- Argo CD support covers browsing, syncing and refreshing Applications, and
+  terminating a sync that is already running. Creating or editing them is a
+  YAML edit like any other custom resource.
 - Usage history is session-scoped and capped at 30 minutes **by design**.
   Long-range metrics is Prometheus's job, and a permanent non-goal here.
 
@@ -390,18 +394,18 @@ kubeNimbus is at 1.0, and this is where it has and has not been exercised:
 telemetry. kubeNimbus makes no network connection other than to the clusters
 you point it at.
 
-Bugs and gaps are worth reporting — the
+Bugs and gaps are worth reporting: the
 [issue templates](https://github.com/Shman4ik/kubeNimbus/issues/new/choose)
 ask for the two things that make a Kubernetes-client bug tractable.
 
 ## Tech stack
 
-- **.NET 10**, with **NativeAOT** as the shipping configuration — not an
+- **.NET 10**, with **NativeAOT** as the shipping configuration, not an
   afterthought. Every dependency is chosen to survive trimming and AOT.
 - `KubernetesClient.Aot` (source-generated serialization) as the only cluster
   dependency in the engine.
-- [Avalonia 12](https://avaloniaui.net/) — Fluent theme, Inter, DataGrid,
-  AvaloniaEdit — with `CommunityToolkit.Mvvm` and compiled bindings only.
+- [Avalonia 12](https://avaloniaui.net/) (Fluent theme, Inter, DataGrid,
+  AvaloniaEdit) with `CommunityToolkit.Mvvm` and compiled bindings only.
 - [TUnit](https://tunit.dev/) on Microsoft.Testing.Platform, run against a
   **real cluster** rather than mocks.
 
@@ -409,10 +413,10 @@ ask for the two things that make a Kubernetes-client bug tractable.
 
 | Project | |
 |---|---|
-| `src/KubeNimbus.Core` | The engine: kubeconfig, `ClusterClient` (discovery, watch, logs, exec, port-forward, apply, metrics, Helm, RBAC). **Zero UI dependencies** — reusable for a future CLI. |
+| `src/KubeNimbus.Core` | The engine: kubeconfig, `ClusterClient` (discovery, watch, logs, exec, port-forward, apply, metrics, Helm, RBAC). **Zero UI dependencies**, reusable for a future CLI. |
 | `src/KubeNimbus.App` | The Avalonia desktop shell. |
 | `tests/KubeNimbus.Core.Tests` | TUnit integration tests against a live cluster; they skip cleanly without one. |
-| `tools/Screenshot` | Headless visual-verification harness — renders real views to PNG with no display. Dev-only. |
+| `tools/Screenshot` | Headless visual-verification harness: renders real views to PNG with no display. Dev-only. |
 
 ## Building from source
 
@@ -425,7 +429,7 @@ dotnet build KubeNimbus.slnx
 dotnet run --project src/KubeNimbus.App
 ```
 
-For a release-shaped binary (needs a native toolchain — MSVC on Windows,
+For a release-shaped binary (needs a native toolchain: MSVC on Windows,
 `clang` + `zlib1g-dev` on Linux, Xcode CLT on macOS):
 
 ```bash
@@ -435,9 +439,9 @@ dotnet publish src/KubeNimbus.App -c Release -r linux-x64 -p:PublishAot=true -o 
 ### A cluster to try it against
 
 `scripts/sandbox-up` spins up a throwaway single-node k3s cluster in Docker,
-preloaded with demo workloads picked to light up every part of the UI — healthy
+preloaded with demo workloads picked to light up every part of the UI (healthy
 and deliberately-broken pods, CRDs, Helm releases, RBAC subjects, PVCs, and
-jobs that keep firing so the live watch is visibly live:
+jobs that keep firing so the live watch is visibly live):
 
 ```bash
 ./scripts/sandbox-up.sh                     # sandbox-up.ps1 on Windows
@@ -445,8 +449,8 @@ export KUBECONFIG=.sandbox/kubeconfig.yaml
 dotnet run --project src/KubeNimbus.App
 ```
 
-The same kubeconfig is what the integration tests auto-discover. Flags — a
-second cluster for the fleet views, custom port, bare cluster — are in
+The same kubeconfig is what the integration tests auto-discover. Flags (a
+second cluster for the fleet views, custom port, bare cluster) are in
 [scripts/README.md](scripts/README.md); tear down with `./scripts/sandbox-down.sh`.
 
 ## Contributing
@@ -458,7 +462,7 @@ and the best thing to read first.
 
 Security issues go through
 [private reporting](https://github.com/Shman4ik/kubeNimbus/security/advisories/new),
-not the issue tracker — see [SECURITY.md](SECURITY.md).
+not the issue tracker. See [SECURITY.md](SECURITY.md).
 
 By participating you agree to the
 [Code of Conduct](CODE_OF_CONDUCT.md).
@@ -469,7 +473,8 @@ By participating you agree to the
 a native client that is on screen in about 0.2 s, streams rows while the query
 runs, and sends no telemetry. It shares this app's UI layer
 ([nimbusUi](https://github.com/Shman4ik/nimbusUi)), so the two look and behave
-like siblings. It reached 1.0 at the end of September and is at 1.2.0 now.
+like siblings. It reached 1.0 at the end of September 2026, and its site is
+[shman4ik.github.io/pgNimbus](https://shman4ik.github.io/pgNimbus/).
 
 ## Support
 
@@ -482,4 +487,4 @@ A star, a bug report or a recommendation to a colleague helps too.
 
 ## License
 
-[MIT](LICENSE) — free for commercial use, no subscription, no seat count.
+[MIT](LICENSE): free for commercial use, no subscription, no seat count.

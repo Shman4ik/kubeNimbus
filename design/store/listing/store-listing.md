@@ -10,10 +10,11 @@ Product ID `9MZ3C28M65PB`. Field limits are Partner Center's own: What's new 1,5
 description 10,000, short description 1,000, 20 product features of 200 characters each, 7 search
 terms. Every fenced block below is pasted as it stands.
 
-**"What's new" written for 1.0.0** (2026-10-25) and describes the changes since 0.8.0 that a Windows user sees; the
-rest of the listing was written for 0.7.0, with its closing line added on 2026-10-12 (the pgNimbus
-cross-mention; both listings carry one), and describes the whole app
-describes the whole app. (0.4.0 was submitted and failed certification on policy 10.5.1, below,
+**"What's new" was written for 1.0.0** (2026-10-25) and describes the changes since 0.8.0 that a
+Windows user sees; checked on 2026-10-26 against the v1.0.0 release notes, 1,174 of 1,500
+characters. The rest of the listing was written for 0.7.0, with its closing line added on
+2026-10-12 (the pgNimbus cross-mention; both listings carry one), and describes the whole app.
+(0.4.0 was submitted and failed certification on policy 10.5.1, below,
 which is why 0.6.0's text carried everything since 0.4.0.) Keep this file's date in step with the
 release it describes.
 
