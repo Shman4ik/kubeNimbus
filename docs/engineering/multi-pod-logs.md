@@ -144,6 +144,12 @@ page's "All pods, merged · 1 pod" printed it down the whole left edge, 160px of
 spent on nothing. Copy and Save keep the prefix either way, since a pasted log has no strip
 above it to say which pod it came from.
 
+**The pod column is as wide as the longest shown pod name, at most 150px**
+(`LongestSourceName`). Each row lays that name out invisibly under its own, so every row's
+column comes out the same width in whatever mono font is set, and the messages still line
+up. It used to be a fixed 150px, which left about 50px of empty space between a
+16-character `7b6c75c65f-vhz5p` and its timestamp (QA G-11).
+
 **The demo cluster runs this for real** (demo rule 4): its three
 `payment-service-report-generator` replicas exist precisely for this — two on the old
 ReplicaSet and one on the new — and their canned streams interleave by timestamp so that

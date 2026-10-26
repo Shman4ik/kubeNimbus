@@ -345,7 +345,7 @@
             </ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:LogLineViewModel">
-                <!-- The pod name is a fixed-width column so the messages line up down
+                <!-- The pod name is a column of one width so the messages line up down
                      the pane; without it every line's text starts at a different x and
                      a merged stream is harder to read than the separate ones were. Only
                      while more than one pod is shown (ShowSourceColumn): with one, it is
@@ -361,18 +361,24 @@
                                 ToolTip.Tip="Show this JSON line's fields, one per row">
                     <PathIcon Data="{StaticResource ChevronRightIconGeometry}" Width="8" Height="8" />
                   </ToggleButton>
-                  <TextBlock Grid.Column="1" Text="{Binding Source.ShortName}" Width="150" Margin="0,0,10,0"
-                             Classes="mono" FontSize="11"
-                             TextTrimming="CharacterEllipsis" VerticalAlignment="Top"
-                             Foreground="{Binding Source.Brush}"
-                             ToolTip.Tip="{Binding Source.PodName}">
-                    <TextBlock.IsVisible>
+                  <!-- The invisible longest name sizes the column, so every row's column is
+                       the same width and only as wide as the names need, in whatever mono
+                       font is set; MaxWidth trims a name too long to be worth the room. -->
+                  <Panel Grid.Column="1" MaxWidth="150" Margin="0,0,10,0" VerticalAlignment="Top">
+                    <Panel.IsVisible>
                       <MultiBinding Converter="{x:Static BoolConverters.And}">
                         <Binding Path="HasSource" />
                         <Binding Path="$parent[UserControl].((vm:WorkloadLogsTabViewModel)DataContext).ShowSourceColumn" />
                       </MultiBinding>
-                    </TextBlock.IsVisible>
-                  </TextBlock>
+                    </Panel.IsVisible>
+                    <TextBlock Text="{Binding $parent[UserControl].((vm:WorkloadLogsTabViewModel)DataContext).LongestSourceName}"
+                               Classes="mono" FontSize="11" Opacity="0" IsHitTestVisible="False" />
+                    <TextBlock Text="{Binding Source.ShortName}"
+                               Classes="mono" FontSize="11"
+                               TextTrimming="CharacterEllipsis"
+                               Foreground="{Binding Source.Brush}"
+                               ToolTip.Tip="{Binding Source.PodName}" />
+                  </Panel>
                   <!-- Severity as classes rather than a Foreground binding — see the
                        `.logError`/`.logWarn`/`.logInfo` styles in Theme.axaml for why a
                        binding that produces UnsetValue is not safe on this property. -->

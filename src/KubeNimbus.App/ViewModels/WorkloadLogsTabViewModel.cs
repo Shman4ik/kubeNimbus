@@ -324,6 +324,15 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
     [ObservableProperty]
     private bool _showSourceColumn;
 
+    /// <summary>
+    /// The longest pod name among the shown pods. Each row lays it out invisibly under its
+    /// own name, so the pod column is as wide as that name in the current mono font and no
+    /// wider: a fixed 150px left about 50px of empty space between a 16-character
+    /// "7b6c75c65f-vhz5p" and its timestamp (QA G-11).
+    /// </summary>
+    [ObservableProperty]
+    private string _longestSourceName = "";
+
     private bool _applyingFollowState;
 
     /// <summary>
@@ -1613,6 +1622,9 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
             : $"{included} of {Sources.Count} pods";
         Summary = $"{pods} · {_allLogLines.Count:N0} line{(_allLogLines.Count == 1 ? "" : "s")}";
         ShowSourceColumn = included > 1;
+        LongestSourceName = Sources.Where(s => s.IsIncluded)
+            .Select(s => s.ShortName)
+            .MaxBy(n => n.Length) ?? "";
     }
 
     /// <summary>
