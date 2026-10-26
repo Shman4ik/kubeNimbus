@@ -493,7 +493,10 @@ public sealed partial class RowActionViewModel : ObservableObject
         RowActionKind.Cordon => "Cordon",
         RowActionKind.Uncordon => "Uncordon",
         RowActionKind.Drain => "Drain",
-        RowActionKind.ArgoSync or RowActionKind.ArgoSyncPrune => "Sync",
+        RowActionKind.ArgoSync => "Sync",
+        // The whole verb leads, as its button says it: "… on prod-eu and prune" at the end
+        // of the sentence read as pruning the cluster.
+        RowActionKind.ArgoSyncPrune => "Sync and prune",
         RowActionKind.ArgoRefresh => "Refresh",
         RowActionKind.ArgoTerminate => "Stop syncing",
         RowActionKind.Trigger => "Run",
@@ -513,7 +516,6 @@ public sealed partial class RowActionViewModel : ObservableObject
         RowActionKind.Scale => _fromReplicas is { } from
             ? $" from {(from == 1 ? "1 replica" : $"{from} replicas")}{(_running is { } r ? $" ({r} running)" : "")} to"
             : " to",
-        RowActionKind.ArgoSyncPrune => " and prune",
         RowActionKind.Trigger => " now",
         _ => "",
     };
@@ -649,10 +651,12 @@ public sealed partial class RowActionViewModel : ObservableObject
     /// </summary>
     public bool IsDemo => _client is null;
 
-    public const string DemoNotice =
-        "Scale, restart, delete, cordon, drain, running or suspending a CronJob and the Argo CD actions all "
-        + "change objects on a live API server — the demo cluster has none. Everything else about this step is "
-        + "exactly what a real cluster shows.";
+    /// <summary>
+    /// The demo cluster's one line under the question: why this confirm is off, naming it. It
+    /// used to be one paragraph for every action, listing every verb in a box inside the strip's
+    /// card, three lines to say why one button was off (2026-10-26).
+    /// </summary>
+    public string DemoNotice => $"The demo cluster has no API server, so {ConfirmLabel} is off here.";
 
     /// <summary>
     /// The Job a run-now created, once the server has answered — the one follow-up any of
