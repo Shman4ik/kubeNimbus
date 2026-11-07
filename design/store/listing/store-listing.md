@@ -137,16 +137,24 @@ Free and open source (MIT)
 
 ## Search terms
 
-At most seven. Product names of other companies do not go in Store metadata.
+At most seven. Product names of other companies do not go in Store metadata, which is also why
+"kubernetes dashboard" is not one: it is the name of the Kubernetes project's own web UI.
+
+Changed on 2026-11-07 from single generic words (`cluster`, `devops`, `containers`, `yaml`) to the
+phrases someone looking for this kind of app types. Partner Center's acquisitions report showed that
+55 of the listing's 69 page views since August came from inside the Store app (search and browsing,
+which the report does not split) and 11 from links elsewhere, so the terms are the listing's main way in; the generic words compete with every container and DevOps tool in
+the Store. Partner Center does not report the queries themselves, so compare the page views per
+month after the change with the 30 to 32 of September and October.
 
 ```text
 kubernetes
 k8s
 kubectl
-cluster
-devops
-containers
-yaml
+kubernetes gui
+kubernetes client
+pod logs
+helm
 ```
 
 ## Screenshots
