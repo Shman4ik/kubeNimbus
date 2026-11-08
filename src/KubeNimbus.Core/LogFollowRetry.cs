@@ -39,12 +39,35 @@ public static class LogFollowRetry
         || run is { ContainerId.Length: > 0 };
 
     /// <summary>
-    /// True when a failed log request is the API server saying the container has not
-    /// started yet: a 400 for a container that had not started when it was asked for. Any
-    /// other failure (a 403, a 500, a dropped connection) is a verdict to show, not a wait.
+    /// True when a failed log request means the container has not started yet, for a
+    /// container that had not started when it was asked for. That is the API server's 400,
+    /// or the kubelet's 404 relayed by the API server
+    /// (<see cref="IsRelayedKubeletNotFound"/>). Any other failure (a 403, a 500, the API
+    /// server's own 404, a dropped connection) is a verdict to show, not a wait.
     /// </summary>
+    /// <remarks>
+    /// The 404 is #418. <c>GatedPodLogsLiveTests</c> met it in every full live run of 2026-11-08,
+    /// and never when the test ran alone. The sequence is a gated pod released, then its
+    /// log asked for while it comes up. Under load, the API server forwarded the request to
+    /// the kubelet before the kubelet had the container, and relayed the kubelet's 404:
+    /// <c>the server could not find the requested resource ( pods/log x)</c>. A pane treated
+    /// that as a failure, so a pod opened in the moment it started read as an error beside a
+    /// running pod. Requiring a container that had not started keeps it from looping: the
+    /// follow it leads to is asked of a started container, and that 404 stays a failure.
+    /// </remarks>
     public static bool IsNotStartedRefusal(Exception error, ContainerRun? atStart) =>
-        error is HttpRequestException { StatusCode: HttpStatusCode.BadRequest } && !HasStarted(atStart);
+        !HasStarted(atStart)
+        && error is HttpRequestException { StatusCode: var code } refusal
+        && (code == HttpStatusCode.BadRequest || (code == HttpStatusCode.NotFound && IsRelayedKubeletNotFound(refusal)));
+
+    /// <summary>
+    /// The kubelet's 404 as the API server relays it, <c>the server could not find the
+    /// requested resource ( pods/log x)</c>. The API server's own 404,
+    /// <c>pods "x" not found</c>, means the pod object is gone, and is never this.
+    /// </summary>
+    internal static bool IsRelayedKubeletNotFound(HttpRequestException error) =>
+        error.Message.Contains("could not find the requested resource", StringComparison.Ordinal)
+        && error.Message.Contains("pods/log", StringComparison.Ordinal);
 
     /// <summary>
     /// True when a follow that was refused or ended empty should be opened again now: the
@@ -62,8 +85,10 @@ public static class LogFollowRetry
     /// as <c>the server could not find the requested resource ( pods/log x)</c>, when the
     /// node no longer has a pod whose status still says its container ran. The API server
     /// answers a container that has not run from the pod's status, with the 400 that
-    /// <see cref="IsNotStartedRefusal"/> reads, so neither 404 is a pod coming up. A 404 for
-    /// a pod that is still there and not being deleted is not this, and stays a failure.
+    /// <see cref="IsNotStartedRefusal"/> reads. The kubelet's 404 for a container that had
+    /// not started when it was asked for is a pod coming up (#418), and
+    /// <see cref="IsNotStartedRefusal"/> takes it before this is asked. A 404 for a pod that
+    /// is still there and not being deleted is not this, and stays a failure.
     /// </summary>
     public static bool IsPodGone(Exception error, DynamicResource? podNow) =>
         IsNotFound(error) && (podNow is null || IsBeingDeleted(podNow));

@@ -37,6 +37,13 @@ it as the GitHub Release body, so headings must match tags exactly
   and its watches reconnect, with the usual notice. Before, a connection lost without a word (a
   VPN changing networks) could leave a list waiting until the system gave up on it.
 
+### Fixed
+
+- **Logs of a pod opened as it starts wait for it.** On a busy cluster, a log request for a
+  container that is just starting can be answered with "the server could not find the requested
+  resource". Both log panes showed that as a failure beside a running pod. They now wait for
+  the container, as they already did for "waiting to start".
+
 ## [1.0.0] - 2026-10-25
 
 The first 1.0 release. It covers everything since 0.8.0: right-click menus on more lists, opening a
