@@ -3305,3 +3305,23 @@ and three times with `DISABLE_HTTP2`.
 
 Not verified here: a trace from a real launch, which needs the QA VM; an exec plugin in the
 measured path; and a real distant cluster rather than the relay.
+
+### The connect order (2026-11-08)
+
+The same day as the HTTP/2 pass, the two serial steps the benchmark pointed at first were removed:
+
+- The Applications mode's seven built-in kinds start as soon as the tab is connected. Discovery
+  still decides Argo CD and drops a built-in kind the server does not list (`DropKind`).
+- The namespace list and the Helm probe go out with `/version`. `/version` stays the request
+  whose failure is reported; the other two are cancelled and their failures dropped.
+- `RefreshNamespacesCommand`, which nothing bound, went.
+- Batch H was added to `docs/qa/desktop-checks.md` for both passes.
+
+Measured on the sandbox at a 150 ms round trip: the Applications list in 757 ms (929 ms with
+HTTP/2 alone, 1430 ms in 1.0), and the namespace list at 538 ms instead of 737 ms. At 50 ms: 345 ms
+(443 ms, 638 ms).
+
+Verified: 894 App tests and 1123 Core tests against the sandbox, with one failure. That was
+`GatedPodLogsLiveTests`, #418 again, which has now failed in both full runs of the day and passed
+every time on its own. `While_the_catalog_is_read_the_page_says_so_and_nothing_else` now expects
+the page to name the kinds it reads while discovery runs.

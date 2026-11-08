@@ -255,6 +255,25 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
         _cts = new CancellationTokenSource();
         var token = _cts.Token;
 
+        // The built-in kinds start at once, at the versions every supported server serves.
+        // They used to wait for discovery, which cost the first screen discovery's round trip
+        // on a cold cache, and on a server without aggregated discovery its whole fan-out
+        // (docs/engineering/startup-performance.md). Discovery still decides Argo CD, whose
+        // version is never assumed, and drops a built-in kind the server does not list.
+        foreach (var (group, kind, plural) in WatchedKinds)
+        {
+            _kinds[kind] = new KindWatch(WellKnown(group, kind, plural));
+            StartScope(client, kind, @namespace: null);
+        }
+
+        _clockTimer = new DispatcherTimer { Interval = ClockTick };
+        _clockTimer.Tick += (_, _) => ScheduleRebuild();
+        _clockTimer.Start();
+        UpdateScope();
+
+        // The scopes just started are pending; say so now rather than on the first event.
+        RefreshStates();
+
         IReadOnlyList<ResourceDescriptor> catalog;
         try
         {
@@ -266,24 +285,26 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
         }
         catch (Exception)
         {
-            // Discovery failing is the tab's to report; the built-in kinds all have stable
-            // versions, so the list can still be read without it. Argo cannot — its version
-            // is never assumed.
+            // Discovery failing is the tab's to report; the built-in kinds are already being
+            // read without it. Argo cannot be — its version is never assumed.
             catalog = [];
         }
-        finally
+
+        // Suspended while discovery ran: a later start owns the state now.
+        if (token.IsCancellationRequested)
         {
-            _readingCatalog = false;
+            return;
         }
 
-        foreach (var (group, kind, plural) in WatchedKinds)
+        _readingCatalog = false;
+        if (catalog.Count > 0)
         {
-            var descriptor = catalog.FirstOrDefault(d => d.Group == group && d.Kind == kind)
-                ?? (catalog.Count == 0 ? WellKnown(group, kind, plural) : null);
-            if (descriptor is not null)
+            foreach (var (group, kind, _) in WatchedKinds)
             {
-                _kinds[kind] = new KindWatch(descriptor);
-                StartScope(client, kind, @namespace: null);
+                if (!catalog.Any(d => d.Group == group && d.Kind == kind))
+                {
+                    DropKind(kind);
+                }
             }
         }
 
@@ -293,13 +314,27 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
             StartScope(client, ArgoKind, @namespace: null);
         }
 
-        _clockTimer = new DispatcherTimer { Interval = ClockTick };
-        _clockTimer.Tick += (_, _) => ScheduleRebuild();
-        _clockTimer.Start();
         UpdateScope();
-
-        // The scopes just started are pending; say so now rather than on the first event.
         RefreshStates();
+    }
+
+    /// <summary>
+    /// Stops reading a built-in kind the server's discovery does not list (CronJob's
+    /// <c>batch/v1</c> before Kubernetes 1.21): its watch would only retry a 404 behind a
+    /// "reconnecting" warning. Before discovery answered, that kind was never started.
+    /// </summary>
+    private void DropKind(string kind)
+    {
+        var prefix = kind + "@";
+        foreach (var id in _scopes.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList())
+        {
+            _scopes[id].Cancel();
+            _scopes[id].Dispose();
+            _scopes.Remove(id);
+            _pending.Remove(id);
+        }
+
+        _kinds.Remove(kind);
     }
 
     private static ResourceDescriptor WellKnown(string group, string kind, string plural) =>

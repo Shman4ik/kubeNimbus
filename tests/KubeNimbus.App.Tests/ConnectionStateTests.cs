@@ -158,7 +158,9 @@ public class ConnectionStateTests
     /// "Connecting to …" (never told it had ended), "No applications found" (nothing was
     /// pending while the catalog was read, so the list counted as empty) and then
     /// "Reading …". Here a server answers <c>/version</c> and never answers anything else,
-    /// so the real connect stops exactly in that gap.
+    /// so the real connect stops exactly in that gap. Since the built-in kinds stopped waiting
+    /// for discovery (startup-performance.md), the page names them while discovery runs, and
+    /// discovery still keeps "No applications" away until it has answered.
     /// </summary>
     [Test]
     public async Task While_the_catalog_is_read_the_page_says_so_and_nothing_else()
@@ -189,7 +191,8 @@ public class ConnectionStateTests
             await Assert.That(notified).Contains(nameof(ApplicationsViewModel.IsConnecting));
             await Assert.That(applications.IsEmpty).IsFalse();
             await Assert.That(applications.IsLoading).IsTrue();
-            await Assert.That(applications.LoadingText).IsEqualTo("Reading the cluster's resource types…");
+            await Assert.That(applications.LoadingText)
+                .IsEqualTo("Reading Deployments, StatefulSets, DaemonSets, CronJobs, Jobs, ReplicaSets, Pods…");
         }
         finally
         {

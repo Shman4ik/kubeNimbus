@@ -126,6 +126,9 @@ public sealed partial class ClusterTabViewModel
     /// decode); a release installed later in the session shows up on the next
     /// connect/reconnect.
     /// </summary>
+    /// <summary>The Helm probe the connect started beside <c>/version</c>, taken by the first sidebar build.</summary>
+    private Task<bool>? _helmProbe;
+
     private async Task AddHelmSectionIfPresentAsync()
     {
         if (Client is null)
@@ -135,7 +138,10 @@ public sealed partial class ClusterTabViewModel
 
         try
         {
-            if (!await Client.HasHelmReleasesAsync())
+            // The connect starts this probe with /version (ConnectAsync); a later rebuild asks again.
+            var probe = _helmProbe ?? Client.HasHelmReleasesAsync();
+            _helmProbe = null;
+            if (!await probe)
             {
                 return;
             }
