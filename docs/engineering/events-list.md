@@ -141,3 +141,12 @@ excepted. A name no object can have (empty, `.`, `..`, or with `/` or `%`) never
 path: `new Uri(base, relative)` collapses dot segments, so a pod called `..` used to be a GET of
 its namespace. A stale UID (a StatefulSet pod recreated under the same name) is now "could not
 be resolved" rather than the new pod.
+
+**The Events tabs count and date an event as the list does.** The pod, node, Service and
+Ingress detail panes draw their Events through `EventRowViewModel`, which reads the same
+`Occurrences` and `LastSeen` as the list: a series counts by `series.count`, an event with no
+count happened once, and the time is local with its offset (`LocalTimeText.Exact`, the list's
+tooltip format), or "—" when the event carries none. Until 2026-11-08 the tabs read the raw
+`count` and `lastTimestamp`, so the desktop run's batch P found the pod tab printing "×0" and the
+API server's UTC beside an event the list showed as 23 times at local time. `EventRowCountTests`
+pins all three.

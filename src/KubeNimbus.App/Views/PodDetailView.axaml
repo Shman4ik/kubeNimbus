@@ -609,7 +609,7 @@
                       <TextBlock Grid.Row="0" Grid.Column="2" FontSize="10.5" Opacity="0.5" VerticalAlignment="Center" Margin="8,0,0,0">
                         <Run Text="{Binding Count, StringFormat='×{0}'}" />
                         <Run Text=" · " />
-                        <Run Text="{Binding LastSeen}" />
+                        <Run Text="{Binding LastSeenText}" />
                       </TextBlock>
                       <Button Grid.Row="0" Grid.Column="3" Classes="toolbar" Padding="4" Margin="4,0,0,0"
                               ToolTip.Tip="Open the object this event is about"
