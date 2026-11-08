@@ -333,8 +333,12 @@ in a narrower form: it waited for the pod's next Modified, which under load had 
 and gone before the refusal arrived, so a running pod read "waiting to start" for good (#309,
 found making `WorkloadLogsLiveTests` deterministic). Both now go through `LogFollowRetry` (Core):
 
-- `IsNotStartedRefusal`: a 400 for a container that had not started when it was asked for. A
-  403, a 500 or a 400 about a container that had run stays a failure, said as before.
+- `IsNotStartedRefusal`: a 400 for a container that had not started when it was asked for, or
+  the kubelet's 404 relayed for one, `the server could not find the requested resource ( pods/log
+  x)` (#418). Under load, the API server forwards the request before the kubelet has the
+  container; `GatedPodLogsLiveTests` met it in every full live run of 2026-11-08 and never alone.
+  A 403, a 500, the API server's own 404 (`pods "x" not found`, the object is gone) or a refusal
+  about a container that had run stays a failure, said as before.
 - `HasStarted`: the container has a run whose log can be read (running, terminated, or waiting
   with a container id). The watch-driven retries wait for this, so a scheduled pod with no
   container status is no longer asked only to be refused.

@@ -65,8 +65,13 @@ public class GatedPodLogsLiveTests
             catch (HttpRequestException ex)
             {
                 // Every refusal on the way is the server saying "not started yet", which the
-                // panes wait out instead of showing as the end (#184, #309).
-                await Assert.That(LogFollowRetry.IsNotStartedRefusal(ex, atStart)).IsTrue().Because(ex.Message);
+                // panes wait out instead of showing as the end (#184, #309, #418). The
+                // container's state right after is in the message, so a refusal that does not
+                // classify says what the pod was doing.
+                var then = await client.ReadResourceAsync(ResourceDescriptor.Pods, LiveCluster.Namespace, name, ct);
+                var runThen = then is null ? null : PodDetails.ContainerRunOf(then.Raw, "app");
+                await Assert.That(LogFollowRetry.IsNotStartedRefusal(ex, atStart)).IsTrue()
+                    .Because($"{ex.Message}; the container right after: {runThen?.State.ToString() ?? "no status"}");
                 refusals.Add(ex.Message);
             }
 

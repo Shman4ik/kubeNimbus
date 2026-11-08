@@ -79,6 +79,29 @@ public class LogFollowRetryTests
         await Assert.That(LogFollowRetry.IsNotStartedRefusal(new InvalidOperationException("x"), null)).IsFalse();
     }
 
+    /// <summary>
+    /// #418: under load the API server forwards a log request for a container that is just
+    /// starting to a kubelet that does not have it yet, and relays the kubelet's 404. For a
+    /// container that had not started when it was asked for, that is a wait like the 400.
+    /// </summary>
+    [Test]
+    public async Task The_kubelets_404_for_a_container_that_had_not_started_is_a_wait_too()
+    {
+        var kubelet = new HttpRequestException(
+            "the server could not find the requested resource ( pods/log gated-a19b11) (404 Not Found)", null, HttpStatusCode.NotFound);
+        var apiServer = new HttpRequestException("pods \"gated-a19b11\" not found (404 Not Found)", null, HttpStatusCode.NotFound);
+
+        await Assert.That(LogFollowRetry.IsNotStartedRefusal(kubelet, null)).IsTrue();
+        await Assert.That(LogFollowRetry.IsNotStartedRefusal(kubelet, Creating)).IsTrue();
+
+        // Asked of a container that had started, the kubelet's 404 is a failure or a pod going
+        // away (IsPodGone), never a wait, so the follow the wait leads to cannot loop.
+        await Assert.That(LogFollowRetry.IsNotStartedRefusal(kubelet, Running)).IsFalse();
+
+        // The API server's own 404 means the pod object is gone.
+        await Assert.That(LogFollowRetry.IsNotStartedRefusal(apiServer, null)).IsFalse();
+    }
+
     [Test]
     public async Task A_container_has_started_once_it_has_a_run_whose_log_can_be_read()
     {
