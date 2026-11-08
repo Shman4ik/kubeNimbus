@@ -1012,11 +1012,28 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             // The kubeconfig read, the CA and the exec plugin's one run (#283).
             StartupTrace.Mark("credentials", Context.Name);
 
-            // First and alone: it is the reachability check, so a cluster that cannot be
-            // reached fails here, once, with one report. It no longer runs the exec plugin
-            // (the build above does, and the fan-out reuses that token), so the order is
-            // about the report, not the plugin.
-            var version = await client.GetServerVersionAsync();
+            // /version is the reachability check: a cluster that cannot be reached fails here,
+            // once, with one report. The namespace list and the Helm probe need nothing from
+            // it, so they go out with it: under HTTP/2 they share the connection it opens and
+            // answer with it, a round trip sooner than after it. Their own failures go
+            // unreported when /version fails (docs/engineering/startup-performance.md). None
+            // of them runs the exec plugin; the build above did, once (#283).
+            var early = new CancellationTokenSource();
+            var namespaceList = client.ListResourceOnceAsync(ResourceDescriptor.Namespaces, cancellationToken: early.Token);
+            var helmProbe = client.HasHelmReleasesAsync(early.Token);
+            k8s.Models.VersionInfo version;
+            try
+            {
+                version = await client.GetServerVersionAsync();
+            }
+            catch
+            {
+                await early.CancelAsync();
+                ObserveFailure(namespaceList);
+                ObserveFailure(helmProbe);
+                throw;
+            }
+
             StartupTrace.Mark("version", Context.Name, version.GitVersion);
             Client = client;
             created = null;
@@ -1024,8 +1041,9 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             ApplyTransportNotices(client);
             SetConnectedStatus(version.GitVersion);
 
+            _helmProbe = helmProbe;
             var sidebar = BuildSidebarAsync();
-            var namespaces = RefreshNamespacesAsync();
+            var namespaces = ApplyNamespacesAsync(namespaceList);
             var metrics = Metrics.DetectAsync(Client);
             await namespaces;
             StartupTrace.Mark("namespaces", Context.Name);
@@ -1301,17 +1319,20 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         }
     }
 
-    [RelayCommand]
-    private async Task RefreshNamespacesAsync()
-    {
-        if (Client is null)
-        {
-            return;
-        }
+    /// <summary>A connect's early task that ended with its <c>/version</c>: its fault is read so it is never reported as unobserved.</summary>
+    private static void ObserveFailure(Task task) =>
+        task.ContinueWith(static t => _ = t.Exception, CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
 
+    /// <summary>
+    /// The namespace list <paramref name="listing"/> reads, into the picker. The connect starts
+    /// the read beside <c>/version</c>; this was a command once, and nothing ever bound it.
+    /// </summary>
+    private async Task ApplyNamespacesAsync(Task<IReadOnlyList<DynamicResource>> listing)
+    {
         try
         {
-            var namespaces = await Client.ListResourceOnceAsync(ResourceDescriptor.Namespaces);
+            var namespaces = await listing;
             MarkNamespacesListed();
             var previousSelection = SelectedNamespace;
             NamespaceOptions.Clear();

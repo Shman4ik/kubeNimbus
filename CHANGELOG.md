@@ -21,12 +21,17 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Changed
 
-- **Connecting is faster over a slow link.** kubeNimbus now talks to the API server over
-  HTTP/2, as kubectl does, so a connect and all of its watches share one connection instead of
-  opening nine. Against the test cluster with a 150 ms round trip, the Applications list is read
-  in 0.9 s instead of 1.4 s, and with 50 ms in 0.4 s instead of 0.6 s. A server or proxy that
-  does not offer HTTP/2 still gets HTTP/1.1, and setting `DISABLE_HTTP2` (the variable kubectl
-  reads too) goes back to HTTP/1.1 everywhere.
+- **Connecting takes about half as long over a slow link.**
+  - kubeNimbus now talks to the API server over HTTP/2, as kubectl does, so a connect and all of
+    its watches share one connection instead of opening nine.
+  - The Applications list starts reading workloads as soon as the cluster answers, instead of
+    first reading which resource types the cluster serves.
+  - The namespace list and the Helm check go out together with the first request, so the
+    namespace picker is filled when the cluster answers.
+  - Against the test cluster, the Applications list is read in 0.76 s instead of 1.43 s with a
+    150 ms round trip, and in 0.35 s instead of 0.64 s with 50 ms.
+  - A server or proxy that does not offer HTTP/2 still gets HTTP/1.1, and setting
+    `DISABLE_HTTP2` (the variable kubectl reads too) goes back to HTTP/1.1 everywhere.
 - **A connection that stops answering is noticed.** While watches are open, a connection with
   no traffic for 30 seconds is pinged, and one that does not answer within 15 seconds is dropped
   and its watches reconnect, with the usual notice. Before, a connection lost without a word (a

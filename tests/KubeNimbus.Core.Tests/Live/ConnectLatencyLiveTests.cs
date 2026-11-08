@@ -16,11 +16,12 @@ namespace KubeNimbus.Core.Tests.Live;
 /// <para>
 /// <see cref="ConnectLikeTheAppAsync"/> is <c>ClusterTabViewModel.ConnectAsync</c>'s order
 /// with the Applications mode's start beside it: the client is built (the kubeconfig read,
-/// the CA, any exec plugin), <c>/version</c> goes alone, then discovery, the namespace list
-/// and the metrics probe together. The Helm probe follows discovery (the sidebar), the
-/// Applications mode's seven watches follow discovery, and the first pod list follows the
-/// namespace list. Its phases are the ones <c>KUBENIMBUS_STARTUP_TRACE</c> writes from the
-/// real app (<c>docs/engineering/startup-performance.md</c>).
+/// the CA, any exec plugin), then <c>/version</c>, the namespace list and the Helm probe go
+/// out together. Once <c>/version</c> answers, discovery and the metrics probe start, and so
+/// do the Applications mode's seven watches, which do not wait for discovery. The sidebar is
+/// discovery and the Helm probe; the first pod list follows the namespace list. Its phases
+/// are the ones <c>KUBENIMBUS_STARTUP_TRACE</c> writes from the real app
+/// (<c>docs/engineering/startup-performance.md</c>).
 /// </para>
 /// </summary>
 public partial class ConnectLatencyLiveTests
@@ -155,6 +156,8 @@ public partial class ConnectLatencyLiveTests
         client.DiscoveryCacheDirectory = discoveryCache;
         Mark("credentials");
 
+        var namespaces = client.ListResourceOnceAsync(ResourceDescriptor.Namespaces, cancellationToken: ct);
+        var helm = client.HasHelmReleasesAsync(ct);
         Version negotiated;
         using (var response = await client.SendRequestAsync(HttpMethod.Get, "version", null, HttpCompletionOption.ResponseContentRead, ct))
         {
@@ -166,14 +169,13 @@ public partial class ConnectLatencyLiveTests
 
         using var watches = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var catalog = client.GetResourceCatalogAsync(ct);
-        var namespaces = client.ListResourceOnceAsync(ResourceDescriptor.Namespaces, cancellationToken: ct);
         var metrics = client.IsMetricsApiAvailableAsync(ct);
 
         var sidebar = Task.Run(async () =>
         {
             await catalog;
             Mark("catalog");
-            await client.HasHelmReleasesAsync(ct);
+            await helm;
             await metrics;
             Mark("sidebar");
         }, ct);
@@ -181,7 +183,6 @@ public partial class ConnectLatencyLiveTests
         var openWatches = new List<Task>();
         var applications = Task.Run(async () =>
         {
-            await catalog;
             var synced = ApplicationKinds.Select(_ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).ToArray();
             for (var i = 0; i < ApplicationKinds.Length; i++)
             {

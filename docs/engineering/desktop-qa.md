@@ -33,7 +33,7 @@ Measured from the run's own durations and tool-call counts unless marked as an e
 ./scripts/qa-preflight.ps1      # can it start? (ten seconds, fixes nothing)
 ./scripts/qa-seed.ps1           # fixtures, contexts, the narrow RBAC
 ./scripts/qa-report.ps1 -Clear
-(one kn-qa per batch: Q first, then the others, then V and R; each records with qa-result.ps1;
+(one kn-qa per batch: Q first, then the others, then V, H and R; each records with qa-result.ps1;
  qa-seed.ps1 -Reset where a batch says)
 ./scripts/qa-report.ps1         # the report, counts and failures first
 ```

@@ -16,22 +16,30 @@ writes (see below), and the file and member that runs it.
 4. `connect`, then `credentials`: `ClusterTabViewModel.ConnectAsync` builds the client.
    This reads the kubeconfig again, loads the CA and runs the exec plugin once (#283). On
    EKS, `aws eks get-token` alone is often most of a second.
-5. `version`: `GET /version`, alone. It is the reachability check: a cluster that cannot be
-   reached fails here once, with one report. It no longer runs the exec plugin. The comment
-   that said so was stale from #283 until this change.
-6. Then, together: discovery (`catalog`, written as `discovery cache` or `live discovery`),
-   the namespace list (`namespaces`) and the metrics probe, which reads the catalog.
-7. `sidebar`: discovery, then the Helm probe (`secrets?limit=1&fieldSelector=type=…`), one
-   after the other.
+5. `version`: `GET /version`, the reachability check. A cluster that cannot be reached fails
+   here once, with one report. The namespace list (`namespaces`) and the Helm probe
+   (`secrets?limit=1&fieldSelector=type=…`) go out with it: they need nothing from it, and
+   under HTTP/2 they share the connection it opens and answer with it. When `/version`
+   fails, they are cancelled and their failures are read and dropped (`ObserveFailure`), so
+   the report is still the one from `/version`. None of the three runs the exec plugin; the
+   build in step 4 did (#283), and a 401 is coalesced into one refresh
+   (`RefreshCoalesceWindow`).
+6. Once `/version` answers: discovery (`catalog`, written as `discovery cache` or
+   `live discovery`) and the metrics probe, which reads the catalog.
+7. `sidebar`: discovery and the Helm probe, which by then has usually answered.
 8. `resources list`: the first list of the Resources mode. A restored Pods tab, or a tab with
-   nothing restored, starts it as soon as the namespace list has answered, because the
-   restored namespace is checked against that list (`ApplyInitialView`). Any other restored
-   kind waits for the sidebar.
+   nothing restored, starts it as soon as the namespace list has answered, which is now about
+   when `/version` does. It waits for the namespace list because the restored namespace is
+   checked against it (`ApplyInitialView`). Any other restored kind waits for the sidebar.
 9. `applications rows` and `applications read`: the Applications mode, the default first
-   screen. `ApplicationsViewModel.StartAsync` waits for discovery, then opens seven
-   cluster-wide watches: Deployment, StatefulSet, DaemonSet, CronJob, Job, ReplicaSet and
-   Pod. It adds Argo CD's `Application` when discovery lists it. The first phase is the
-   first rows on screen; the second is every watch listed.
+   screen. `ApplicationsViewModel.StartAsync` opens its seven cluster-wide watches
+   (Deployment, StatefulSet, DaemonSet, CronJob, Job, ReplicaSet and Pod) as soon as the tab
+   is connected, at the versions every supported server serves (`WellKnown`). Discovery
+   still decides Argo CD's `Application`, whose version is never assumed, and drops a
+   built-in kind the server does not list (`DropKind`: CronJob's `batch/v1` before
+   Kubernetes 1.21). Until discovery answers, the page still counts it as a read, so "No
+   applications" waits for it. The first phase is the first rows on screen; the second is
+   every watch listed.
 
 The discovery cache (`DiscoveryCache`, six hours, keyed by server, context, user and
 kubeconfig path, checked against the server version) makes step 6 a file read. It is empty
@@ -88,21 +96,28 @@ Limits of the model:
 
 ## The numbers (2026-11-08, k3s v1.33.4, Windows 11)
 
-Milliseconds from before the client is built. Medians of five cold connects.
+Milliseconds from before the client is built. Medians of five cold connects. Three runs:
+1.0's order and HTTP/1.1, the same order with HTTP/2 (#436), and the order above (#437).
 
-| RTT | HTTP | connections | credentials | version | namespaces | catalog | sidebar | resources list | applications read |
-|---|---|---|---|---|---|---|---|---|---|
-| 0 ms | 1.1 | 9 | 39 | 91 | 99 | 96 | 105 | 179 | 166 |
-| 0 ms | 2 | 1 | 34 | 62 | 68 | 68 | 83 | 106 | 115 |
-| 50 ms | 1.1 | 9 | 36 | 261 | 445 | 378 | 484 | 628 | 619 |
-| 50 ms | 2 | 1 | 36 | 236 | 330 | 327 | 397 | 421 | 422 |
-| 150 ms | 1.1 | 9 | 37 | 546 | 1039 | 871 | 1070 | 1417 | 1418 |
-| 150 ms | 2 | 1 | 31 | 536 | 731 | 731 | 899 | 918 | 917 |
+| RTT | run | connections | version | namespaces | catalog | sidebar | resources list | applications read |
+|---|---|---|---|---|---|---|---|---|
+| 0 ms | 1.0, HTTP/1.1 | 9 | 90 | 97 | 95 | 104 | 184 | 182 |
+| 0 ms | HTTP/2 | 1 | 55 | 59 | 58 | 68 | 122 | 128 |
+| 0 ms | HTTP/2, new order | 1 | 68 | 71 | 73 | 73 | 109 | 112 |
+| 50 ms | 1.0, HTTP/1.1 | 9 | 262 | 457 | 399 | 498 | 636 | 638 |
+| 50 ms | HTTP/2 | 1 | 244 | 340 | 341 | 425 | 444 | 443 |
+| 50 ms | HTTP/2, new order | 1 | 231 | 231 | 321 | 321 | 335 | 345 |
+| 150 ms | 1.0, HTTP/1.1 | 9 | 567 | 1054 | 889 | 1098 | 1428 | 1430 |
+| 150 ms | HTTP/2 | 1 | 536 | 737 | 737 | 910 | 932 | 929 |
+| 150 ms | HTTP/2, new order | 1 | 537 | 538 | 724 | 724 | 756 | 757 |
 
-HTTP/2 reads the Applications list about a third sooner at both distances: 1418 to 917 ms at
-150 ms, and 619 to 422 ms at 50 ms. The HTTP/2 rows are with the 4 MiB stream window
-described below. Before it, the 150 ms row read `resources list` 1109 and
-`applications read` 1109.
+Against 1.0, the Applications list is read in about half the time at both distances: 1430 to
+757 ms at 150 ms, and 638 to 345 ms at 50 ms. HTTP/2 gave the first third. The order gave the
+rest, and it fills the namespace picker when `/version` answers rather than a round trip
+later. The HTTP/2 rows use the 4 MiB stream window described below. Before it, the 150 ms
+HTTP/2 row read `resources list` 1109 and `applications read` 1109. The benchmark follows
+the app's order, so it only measures the order the code has: the first two runs were taken
+before #437 changed it.
 
 ## Why every request asks for HTTP/2 (`ApiServerHttpVersion`)
 
@@ -144,20 +159,16 @@ upgrade that this change does not touch.
 
 ## What the numbers say next
 
-With HTTP/2 at 150 ms, the critical path is `/version` (about 3.5 round trips with the
-handshakes), then the steps below that still run one after another. Each removes a round
-trip or more from the path. None of them is built yet, and each needs the trace from a real
-launch before and after:
+With HTTP/2 and the order above, at 150 ms the critical path is `/version` (about 3.5 round
+trips with the handshakes), then one more round trip for the first lists. These are left:
 
-- The Applications mode waits for discovery only for Argo CD. Its seven kinds have stable
-  versions, and `WellKnown` already covers a failed discovery. Starting them after
-  `/version` saves the catalog's round trip on a cold cache. On a server without aggregated
-  discovery, it saves the whole legacy fan-out.
-- The Helm probe needs no catalog. Run beside discovery, it saves the sidebar one round trip.
-- A restored namespace could start its pod list before the namespace list answers, and move
-  to All namespaces if the list shows the namespace gone.
+- The Applications watches and the first pod list could go out with `/version` too, which
+  is the last round trip on the path. They are started from the tab's connected state, so
+  this means opening them before the tab knows the cluster answers, and closing them
+  cleanly when it does not.
 - The discovery cache could serve an entry of any age at once and refresh it behind the
-  sidebar, instead of expiring after six hours.
-- The namespace list could go out with `/version`. Refresh is already coalesced
-  (`RefreshCoalesceWindow`), so several 401s cost one plugin run. The order exists for the
-  single failure report, which the fan-out would have to keep.
+  sidebar, instead of expiring after six hours. The first launch of a day would then draw
+  the sidebar from the cache. The cost is that kinds removed from the server since the last
+  launch show until the refresh lands.
+- An exec plugin is still paid before anything goes out. `aws eks get-token` caches nothing
+  itself, and hard rule 4 forbids the app to keep its token between launches.

@@ -5,7 +5,8 @@ are cheapest to run. It started as the 0.7.0 pre-release run (PRs #295, #296, #2
 #304, #307) and is kept as the regression suite: **a new release adds the checks for its own
 PRs under a new batch and retires none until the behaviour is gone.** 1.0 added batch V for
 its bundles (PRs #412, #414 and #415; PR #416's checks are C-17 to C-22, and PR #413 changed
-packaging only) and batch R for the verification issues no batch covered yet. How a run
+packaging only) and batch R for the verification issues no batch covered yet. 1.1 added batch H
+for the startup trace, HTTP/2 and the connect order (PRs #436 and #437). How a run
 works, what it costs and why it is built this way: [desktop-qa](../engineering/desktop-qa.md).
 
 ## Running it
@@ -28,7 +29,7 @@ one changed; a batch says when it needs that.
 
 **The run order.** Batch Q goes first, because it checks `qa-ui.ps1`, which every other batch
 relies on. Then C, L1, L2, Y, G1, G2, T, P, K, S and M, with W and A only when the preflight
-says the VM has what they need. Then V, and R last. R-9 is the last check of the whole run:
+says the VM has what they need. Then V, H, and R last. R-9 is the last check of the whole run:
 it opens a log that may leave UI Automation unable to read the window for minutes, and any
 check after it would stall on that.
 
@@ -905,6 +906,78 @@ C. PR #415's fourth check (the log pane's ⋯ → Copy at a narrow width) is G-1
   runs, so the freeze PR #415 gives the screenshot harness (a style it adds after the app's) has
   not reached the app. Draining the shared node is not allowed: record UNSURE "not allowed on
   the shared node" without arming Drain.
+
+## Batch H — 1.1: the startup trace, HTTP/2 and the connect order (#436, #437)
+
+Setup: `qa-seed.ps1 -Reset`, and the app stopped (`qa-app.ps1 -Stop`). Every check here starts
+the app itself. `qa-app.ps1` starts it with `Start-Process`, which passes the session's
+environment on, so a variable set in the same PowerShell session before `qa-app.ps1` reaches
+the app. Remove each variable again before the next check. Trace files go in
+`$env:TEMP\kubenimbus-qa\`. The sandbox's API server is the port of the `server:` line in the
+kubeconfig `qa-app.ps1` prints, 6550 by default. Batches G, T and P now run over HTTP/2: a FAIL
+there that passes when repeated with `$env:DISABLE_HTTP2 = '1'` belongs to #436, and the report
+should say so.
+
+- **H-1 [text]** (#436, #437) A first launch writes its trace. `$t =
+  "$env:TEMP\kubenimbus-qa\h1-trace.tsv"; Remove-Item $t -ErrorAction SilentlyContinue;
+  $env:KUBENIMBUS_STARTUP_TRACE = $t; ./scripts/qa-app.ps1 -NoBuild`. The profile is fresh, so
+  there is no workspace and no discovery cache. Wait for the Applications list (`wait -Match
+  shop-web -Timeout 60`), then `Get-Content $t`. Expected, quoted whole:
+  - one line each for `main`, `kubeconfig read` and `window opened`;
+  - one line each, with the subject `kubenimbus-sandbox`, for `connect`, `credentials`,
+    `version` (its detail the server's version, `v1.33.4+k3s1`), `namespaces`, `catalog` (its
+    detail `live discovery`), `sidebar`, `resources list`, `applications rows` and
+    `applications read`;
+  - no phase twice for one subject;
+  - each line starting with whole milliseconds.
+
+  Then `./scripts/qa-app.ps1 -Stop -KeepProfile` for H-2, and note the folder it prints.
+- **H-2 [text]** (#436) A second launch reads the discovery cache. `$t2 =
+  "$env:TEMP\kubenimbus-qa\h2-trace.tsv"; $env:KUBENIMBUS_STARTUP_TRACE = $t2;
+  ./scripts/qa-app.ps1 -NoBuild -ProfileDir <kept folder>`. Once `shop-web` shows, `Get-Content
+  $t2`: the `catalog` line's detail is `discovery cache`, and `version`, `namespaces` and
+  `resources list` are there for the restored tab. Then `./scripts/qa-app.ps1 -Stop` and
+  `Remove-Item Env:KUBENIMBUS_STARTUP_TRACE`.
+- **H-3 [text]** (#436) The app reaches the API server on one connection, and on many with
+  HTTP/2 off.
+  1. `./scripts/qa-app.ps1 -NoBuild`, wait for `shop-web`, then Resources → Pods with namespace
+     `qa-shop`, so both modes' watches are open.
+  2. Count the connections: `$p = (Get-Content "$env:TEMP\kubenimbus-qa\app.pid" -Raw |
+     ConvertFrom-Json).Pid; @(Get-NetTCPConnection -OwningProcess $p -State Established
+     -ErrorAction SilentlyContinue | Where-Object RemotePort -eq 6550).Count`. Expected: 1 or 2.
+  3. `./scripts/qa-app.ps1 -Stop`, `$env:DISABLE_HTTP2 = '1'`, then steps 1 and 2 again.
+     Expected: 8 or more.
+  4. `./scripts/qa-app.ps1 -Stop` and `Remove-Item Env:DISABLE_HTTP2`.
+
+  Quote both counts. **Before #436** the first count was the second one.
+- **H-4 [input]** (#436) One cut ends every watch on the shared connection, and they all come
+  back.
+  1. `./scripts/qa-netcut.ps1 start`, then `./scripts/qa-app.ps1 -NoBuild`.
+  2. Ctrl+P → `qa-cut`. Its Applications list shows `shop-web`.
+  3. Resources → Pods, `qa-shop`. Both modes now read through the one connection.
+  4. `./scripts/qa-netcut.ps1 cut`, wait 20 s. The Pods list shows the dropped-watch InfoBar
+     (the wording P-6 quotes).
+  5. `./scripts/qa-netcut.ps1 restore`. Within 60 s the InfoBar is gone (`wait`), and back in
+     Applications `shop-web` is listed with no warning line.
+
+  Then `./scripts/qa-app.ps1 -Stop`. If step 5 does not recover, also try it with
+  `DISABLE_HTTP2=1` and say which way it fails.
+- **H-5 [text]** (#437) The namespace list and the Helm probe now go out with the first
+  request, and their results still land. Fresh start (`./scripts/qa-app.ps1 -NoBuild`), then
+  Resources:
+  - the sidebar has the Helm section (`find -Name Helm -Within SidebarItems`);
+  - `NamespaceButton`'s flyout (a real `click`) lists `qa-shop` and `demo-shop`;
+  - the status bar says nothing about a namespace list that could not be read.
+
+  Then `./scripts/qa-app.ps1 -Stop`.
+
+Not in this batch:
+- **The keep-alive pings.** `qa-netcut` resets the connections; it cannot drop one silently,
+  which is the case the pings exist for.
+- **A TLS-terminating proxy without HTTP/2.** Covered by `ApiServerHttpVersionTests`.
+- **An exec plugin in the trace.** The sandbox's admin user is a client certificate.
+- **The trace's numbers.** On a local sandbox the round trip is near zero. The numbers that
+  matter are on `docs/engineering/startup-performance.md`.
 
 ## Batch R — open verification issues
 

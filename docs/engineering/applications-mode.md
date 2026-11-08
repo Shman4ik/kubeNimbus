@@ -156,8 +156,12 @@ and Argo's own Degraded/Unknown when nothing read from the workloads explains it
 4. **No verdict before the data (UI rule 18).** "No applications found" is said only after every
    read has delivered `Synced` or been refused. Rows appear as soon as they can be built, and
    while some kinds are still arriving the title line says "Still reading Pods…" instead of a
-   spinner over rows that are already useful. The catalog read before the first watch counts
-   as a read too ("Reading the cluster's resource types…"), and "Connecting to …" ends when
+   spinner over rows that are already useful. The seven built-in kinds start as soon as the
+   tab is connected, without waiting for discovery
+   ([startup-performance](startup-performance.md)). Discovery still counts as a read until it
+   answers: it decides Argo CD's kind and drops a built-in kind the server does not list, so
+   "No applications" waits for it. When nothing else is pending the page says "Reading the
+   cluster's resource types…". "Connecting to …" ends when
    the reads start, not when the tab's connect finishes: the tab is connected after `/version`
    but still connecting through namespaces, discovery and the metrics probe. On an EKS cluster
    signed in through AWS SSO that gap was seconds, and the page drew "Connecting to …",
