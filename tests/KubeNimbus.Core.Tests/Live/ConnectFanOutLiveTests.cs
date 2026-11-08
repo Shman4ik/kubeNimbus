@@ -10,9 +10,9 @@ namespace KubeNimbus.Core.Tests.Live;
 /// server. Connect reads <c>/version</c> first and alone — the reachability check; since #283
 /// the client's build runs the exec plugin, not this request — and only then fans out
 /// discovery, the namespace list, the metrics probe and the first pod list together
-/// (<c>ClusterTabViewModel.ConnectAsync</c>). These drive that same sequence of Core calls and observe it from the outside: how often the
-/// plugin ran, and how many discovery requests a loopback proxy in front of the real server
-/// saw in flight at once.
+/// (<c>ClusterTabViewModel.ConnectAsync</c>). These drive that same sequence of Core calls and
+/// observe it from the outside: how often the plugin ran, and how many discovery requests a
+/// loopback proxy in front of the real server saw in flight at once.
 /// </summary>
 public partial class ConnectFanOutLiveTests
 {
