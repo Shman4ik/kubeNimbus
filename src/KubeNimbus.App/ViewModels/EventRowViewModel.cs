@@ -18,9 +18,24 @@ public sealed class EventRowViewModel(DynamicResource e)
     /// </summary>
     public string Message { get; } = InvisibleCharacters.Reveal(e.Message().Trim());
 
-    public int Count { get; } = e.Count();
+    /// <summary>
+    /// How many times the event happened, counted the way the Events list and kubectl count it
+    /// (<see cref="EventFields.Occurrences"/>): the series count, else <c>count</c>, else
+    /// <c>deprecatedCount</c>, and never less than one. The tabs used to read the raw
+    /// <c>count</c> alone and printed "×0" beside an event the list said happened 23 times
+    /// (the 2026-11-08 desktop run, batch P).
+    /// </summary>
+    public int Count { get; } = e.Occurrences();
 
-    public DateTimeOffset? LastSeen { get; } = e.LastTimestamp();
+    /// <summary>When the event last happened, by the list's own chain (<see cref="EventFields.LastSeen"/>).</summary>
+    public DateTimeOffset? LastSeen { get; } = e.LastSeen();
+
+    /// <summary>
+    /// <see cref="LastSeen"/> in local time with its UTC offset, as the Events list's tooltip
+    /// prints it (<see cref="LocalTimeText.Exact"/>), or "—" when the event carries no time.
+    /// The tabs used to print the raw value, which is the API server's UTC.
+    /// </summary>
+    public string LastSeenText { get; } = e.LastSeen() is { } at ? LocalTimeText.Exact(at) : "—";
 
     /// <summary>Warning/Normal → warn/ok, for the same statusPill/statusDot visual the resource list uses.</summary>
     public string Health { get; } = string.Equals(e.Type(), "Warning", StringComparison.OrdinalIgnoreCase) ? "warn" : "ok";

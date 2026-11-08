@@ -381,7 +381,7 @@
                       <TextBlock Grid.Row="0" Grid.Column="2" FontSize="10.5" Opacity="0.5" VerticalAlignment="Center" Margin="8,0,0,0">
                         <Run Text="{Binding Count, StringFormat='×{0}'}" />
                         <Run Text=" · " />
-                        <Run Text="{Binding LastSeen}" />
+                        <Run Text="{Binding LastSeenText}" />
                       </TextBlock>
                       <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Text="{Binding Message}" FontSize="11.5" Opacity="0.75"
                                  TextWrapping="Wrap" Margin="0,3,0,0" />

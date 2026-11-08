@@ -39,6 +39,9 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Fixed
 
+- **The Events tab of a pod, node, Service or Ingress counts and dates an event as the Events
+  list does.** An event that had happened many times read "×0", and its time was printed in
+  UTC. The tab now shows the same count as the list and the time in local time with its offset.
 - **Logs of a pod opened as it starts wait for it.** On a busy cluster, a log request for a
   container that is just starting can be answered with "the server could not find the requested
   resource". Both log panes showed that as a failure beside a running pod. They now wait for
