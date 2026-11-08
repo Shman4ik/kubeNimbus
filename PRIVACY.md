@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Effective 24 October 2026. This policy covers kubeNimbus, the desktop Kubernetes
+Effective 8 November 2026. This policy covers kubeNimbus, the desktop Kubernetes
 client, in every form it is distributed: the Microsoft Store package, the installers
 and archives on the GitHub Releases page, and builds made from this repository.
 
@@ -109,7 +109,12 @@ run to the next there.
 None of these files contains a password, token, certificate or other credential. The app
 never copies credentials out of your kubeconfig, which stays where it is. On macOS and Linux
 the folders and files are readable by your user only. kubeNimbus writes no log file and no
-crash report.
+crash report. The one exception is a startup trace you ask for: if you set the environment
+variable `KUBENIMBUS_STARTUP_TRACE` to a file path, each launch appends one line per startup
+step to that file, holding a time in milliseconds, the step's name, the kubeconfig context name
+and, for some steps, the server's Kubernetes version, a resource kind, a count of rows or
+whether the resource types came from the cache. Set to `stderr`, it
+writes the same lines to standard error instead. The app never sets this variable itself.
 
 Logs, metrics history and resource lists live in memory while the app is open and are not
 saved. Secret values are shown masked until you ask for them, and revealing one decodes it in

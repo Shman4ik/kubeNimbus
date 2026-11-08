@@ -328,6 +328,18 @@ credential and are still sent. The failure view's "Signs in with" reads "no cred
 user entry is empty)" (`ConnectionReport.EmptyUserEntry`). `EmptyUserEntryTests` connects both
 shapes to a loopback server and checks that no `Authorization` header arrives.
 
+## Requests ask for HTTP/2 (2026-11)
+
+Every request and watch asks for HTTP/2 and takes HTTP/1.1 from a server or proxy that offers
+nothing better (`ApiServerHttpVersion`), so a connect and its watches share one TLS connection
+instead of opening nine. `DISABLE_HTTP2`, the variable client-go reads, turns it off. The
+handler pings a quiet connection (30 s, then 15 s for the answer) so a silently dead one is
+dropped and every watch on it reconnects, opens another connection when a server's stream cap
+is reached, and starts each stream with a 4 MiB window. The measurements and the reasoning are
+on [startup-performance](startup-performance.md). A hand-built `HttpRequestMessage` is
+HTTP/1.1, which is how the app spoke HTTP/1.1 without anyone deciding so: every request goes
+through `ClusterClient.SendRequestAsync`, which sets the version.
+
 ## A plugin's stderr is redacted before it is shown (S1-6)
 
 `ExecCredentialCapture.Translate` replaces JWT-shaped strings (`eyJ…` segments joined by dots)

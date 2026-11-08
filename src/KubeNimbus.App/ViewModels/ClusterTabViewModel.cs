@@ -397,7 +397,14 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     [ObservableProperty]
     private string _healthFilterEmptyDetail = "";
 
-    partial void OnIsListLoadingChanged(bool value) => RecomputeListEmpty();
+    partial void OnIsListLoadingChanged(bool value)
+    {
+        RecomputeListEmpty();
+        if (!value && IsConnected)
+        {
+            StartupTrace.Mark("resources list", Context.Name, $"{SelectedKind?.Descriptor.Kind}, {Rows.Count} rows");
+        }
+    }
 
     /// <summary>
     /// The server's sentence when this user may not list the kind here (a 403 on the list's
@@ -990,6 +997,7 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             // A tab that already has a client (a connect that got past /version and failed
             // later) keeps it and re-resolves its credentials in place, so whatever holds
             // that object sees the retry too.
+            StartupTrace.Mark("connect", Context.Name);
             ClusterClient client;
             if (Client is { } existing)
             {
@@ -1001,10 +1009,15 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
                 client = created = await ClusterClient.ConnectAsync(Context);
             }
 
-            // First and alone: it is the reachability check, and it is the request that
-            // runs an exec credential plugin. Everything after it reuses that token, so
-            // the fan-out below cannot start a dozen `aws eks get-token`s at once.
+            // The kubeconfig read, the CA and the exec plugin's one run (#283).
+            StartupTrace.Mark("credentials", Context.Name);
+
+            // First and alone: it is the reachability check, so a cluster that cannot be
+            // reached fails here, once, with one report. It no longer runs the exec plugin
+            // (the build above does, and the fan-out reuses that token), so the order is
+            // about the report, not the plugin.
             var version = await client.GetServerVersionAsync();
+            StartupTrace.Mark("version", Context.Name, version.GitVersion);
             Client = client;
             created = null;
             IsConnected = true;
@@ -1015,10 +1028,12 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             var namespaces = RefreshNamespacesAsync();
             var metrics = Metrics.DetectAsync(Client);
             await namespaces;
+            StartupTrace.Mark("namespaces", Context.Name);
             var startedPods = StartInitialPods();
             try
             {
                 await Task.WhenAll(sidebar, metrics);
+                StartupTrace.Mark("sidebar", Context.Name);
                 if (startedPods) ReconcileInitialPods();
                 else ApplyInitialView(fallbackNamespace: Context.Namespace);
             }

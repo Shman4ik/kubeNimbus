@@ -62,6 +62,13 @@ public sealed partial class ClusterClient : IDisposable
 
     public ClusterContext Context { get; }
 
+    /// <summary>
+    /// The HTTP version every request asks for: 2.0 unless <c>DISABLE_HTTP2</c> is set, read
+    /// once when the client is built (<see cref="ApiServerHttpVersion"/>). Tests set it to
+    /// compare the two in one process.
+    /// </summary>
+    internal Version RequestVersion { get; set; } = ApiServerHttpVersion.Current;
+
     /// <summary>The proxy from the cluster's <c>proxy-url</c>, or null when requests go direct. Tests read it.</summary>
     internal IWebProxy? Proxy { get; private set; }
 
@@ -130,6 +137,7 @@ public sealed partial class ClusterClient : IDisposable
         configuration.FirstMessageHandlerSetup = h =>
         {
             previous?.Invoke(h);
+            ApiServerHttpVersion.Configure(h);
             handler = h;
         };
 
@@ -803,7 +811,7 @@ public sealed partial class ClusterClient : IDisposable
         // two reads, and one request should carry one client's credentials to that same
         // client's handler.
         var client = _client;
-        var request = new HttpRequestMessage(method, new Uri(client.BaseUri, relativePath)) { Content = content };
+        var request = ApiServerHttpVersion.NewRequest(method, new Uri(client.BaseUri, relativePath), content, RequestVersion);
         if (accept is not null) request.Headers.TryAddWithoutValidation("Accept", accept);
         if (client.Credentials is { } credentials)
         {

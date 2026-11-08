@@ -104,6 +104,10 @@ Full text: [tech-stack](docs/engineering/tech-stack.md).
   `ApiServerWebSocketBuilder`, on exec and port-forward (`ApiServerTlsTests`). kubeNimbus
   sends impersonation and reads `tokenFile` itself. The library's typed API is unused; every
   kind goes through the generic JSON watch ([connecting](docs/engineering/connecting.md)).
+- **Every request asks for HTTP/2, through `ClusterClient.SendRequestAsync` only**
+  (`ApiServerHttpVersion`: or lower, `DISABLE_HTTP2`, pings, a 4 MiB stream window). A
+  hand-built `HttpRequestMessage` is HTTP/1.1, which is how the app spoke it by accident and
+  opened nine connections per connect ([startup-performance](docs/engineering/startup-performance.md)).
 - **App**: Avalonia 12 (Fluent, DataGrid, AvaloniaEdit, `SvcSystems.UI.Terminal`),
   `CommunityToolkit.Mvvm` source generators (no hand-written INPC), compiled bindings only.
 - **Every AvaloniaEdit `TextEditor` goes through `Editing/EditorDefaults`** (`Apply` /
@@ -272,7 +276,8 @@ same PR.** Read only those pages. [The full index](docs/engineering/README.md) d
   [cluster-switcher](docs/engineering/cluster-switcher.md),
   [several-namespaces](docs/engineering/several-namespaces.md),
   [fleet-views](docs/engineering/fleet-views.md),
-  [machine-terminal](docs/engineering/machine-terminal.md).
+  [machine-terminal](docs/engineering/machine-terminal.md),
+  [startup-performance](docs/engineering/startup-performance.md).
 - Applications and GitOps: [applications-mode](docs/engineering/applications-mode.md),
   [argo-cd](docs/engineering/argo-cd.md), [helm-releases](docs/engineering/helm-releases.md).
 - Logs: [multi-pod-logs](docs/engineering/multi-pod-logs.md),
