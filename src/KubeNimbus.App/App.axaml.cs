@@ -4,6 +4,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Styling;
 using KubeNimbus.App.ViewModels;
 using KubeNimbus.App.Views;
+using KubeNimbus.Core;
 using KubeNimbus.Core.Settings;
 using Nimbus.Ui.Fonts;
 
@@ -107,6 +108,10 @@ public partial class App : Application
             {
                 DataContext = new MainWindowViewModel(),
             };
+            if (StartupTrace.IsEnabled)
+            {
+                desktop.MainWindow.Opened += (_, _) => StartupTrace.Mark("window opened");
+            }
 
             // No-op unless the process was started with `--smoke-test`. Called from
             // here, on the window the app really builds, so CI's launch check cannot

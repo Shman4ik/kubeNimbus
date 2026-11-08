@@ -833,6 +833,12 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
 
     private void RefreshStates()
     {
+        if (StartupTrace.IsEnabled && HasStarted && !_readingCatalog)
+        {
+            if (_ordered.Count > 0) StartupTrace.Mark("applications rows", _tab.Context.Name, $"{_ordered.Count} applications");
+            if (_pending.Count == 0) StartupTrace.Mark("applications read", _tab.Context.Name, $"{_ordered.Count} applications");
+        }
+
         OnPropertyChanged(nameof(IsLoading));
         OnPropertyChanged(nameof(LoadingText));
         OnPropertyChanged(nameof(IsPartiallyLoaded));

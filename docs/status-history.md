@@ -3273,3 +3273,35 @@ Known and not fixed:
   resource grid's ⌘C has the same limit.
 - Three focus fixes made in the app belong in nimbusUi, for pgNimbus too: the overlay card's Tab
   cycle, the ComboBox focus ring, and the capsule strip's Shift+Tab trap.
+
+### Startup measurement and HTTP/2 (2026-11-08)
+
+The owner asked whether the order of the connect path's API calls could make a first launch feel
+faster, for example by reading the namespace list sooner. A read of the connect path
+(`ClusterTabViewModel.ConnectAsync`, `ApplicationsViewModel.StartAsync`) gave the timeline on
+[startup-performance](engineering/startup-performance.md), and two findings. The Applications
+mode, the first screen, waits for discovery although only Argo CD needs it. Every request went
+out as HTTP/1.1, because a hand-built `HttpRequestMessage` is HTTP/1.1 and the library sets 2.0
+only on its own typed calls. The owner chose to measure first and switch to HTTP/2, leaving the
+reordering for later.
+
+What shipped:
+
+- `StartupTrace` and `KUBENIMBUS_STARTUP_TRACE`: one line per startup phase, first time only, to a
+  file or stderr, off unless set. `PRIVACY.md` gained a paragraph and a new Effective date.
+- `ApiServerHttpVersion`: every request asks for HTTP/2 or lower, `DISABLE_HTTP2` as client-go
+  reads it, pings at 30 s and 15 s, `EnableMultipleHttp2Connections`, and a 4 MiB stream window.
+  The window was added after the first benchmark showed the 290 KB pod list barely faster under
+  HTTP/2 at a 150 ms round trip.
+- `ConnectLatencyLiveTests` with `DelayingTcpRelay`. Measured on the sandbox (k3s v1.33.4,
+  Windows 11): one connection per connect under HTTP/2 against nine. The Applications list was
+  read in 917 ms instead of 1418 ms at a 150 ms round trip, and in 422 ms instead of 619 ms at
+  50 ms.
+
+Verified: both suites on the sandbox, 1123 Core tests (1105 passed, 17 skipped for Linux, macOS
+or Argo CD, one failed) and 894 App tests, all passed. The one failure was
+`GatedPodLogsLiveTests`, the flaky 404 of #418. Run alone it then passed three times under HTTP/2
+and three times with `DISABLE_HTTP2`.
+
+Not verified here: a trace from a real launch, which needs the QA VM; an exec plugin in the
+measured path; and a real distant cluster rather than the relay.

@@ -16,6 +16,7 @@ internal static class Program
         // once the window has rendered instead of waiting to be closed. See SmokeTest
         // for why the check lives in the app rather than outside it. A launch without
         // the flag takes exactly the path it always did.
+        StartupTrace.Mark("main");
         args = SmokeTest.Consume(args);
         ApplyIsolatedProfile();
 

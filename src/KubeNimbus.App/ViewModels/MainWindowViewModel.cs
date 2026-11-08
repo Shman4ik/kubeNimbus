@@ -666,6 +666,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         if (await LoadContextsAsync())
         {
+            StartupTrace.Mark("kubeconfig read");
             await RestoreWorkspaceAsync();
         }
     }

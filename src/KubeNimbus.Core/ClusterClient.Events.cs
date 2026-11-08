@@ -36,8 +36,13 @@ public sealed partial class ClusterClient
             if (forceRefresh || _resourceCatalog is null)
             {
                 _resourceCatalog = await DiscoverResourcesAsync(cancellationToken).ConfigureAwait(false);
+                StartupTrace.Mark("catalog", Context.Name, "live discovery");
                 if (_discoveryComplete && _serverVersion is { } freshVersion)
                     await cache.WriteAsync(identity, freshVersion, _resourceCatalog, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                StartupTrace.Mark("catalog", Context.Name, "discovery cache");
             }
             return _resourceCatalog;
         }

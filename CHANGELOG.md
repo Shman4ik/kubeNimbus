@@ -11,6 +11,27 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+### Added
+
+- **A startup trace for a slow launch.** Set `KUBENIMBUS_STARTUP_TRACE` to a file path (or to
+  `stderr`) and kubeNimbus writes one line per step of its start, from the process starting to
+  the first rows of each list: reading the kubeconfig, the credential plugin, the server's
+  version, the namespaces, the resource types and each list, each with its time in
+  milliseconds. Nothing is written unless the variable is set.
+
+### Changed
+
+- **Connecting is faster over a slow link.** kubeNimbus now talks to the API server over
+  HTTP/2, as kubectl does, so a connect and all of its watches share one connection instead of
+  opening nine. Against the test cluster with a 150 ms round trip, the Applications list is read
+  in 0.9 s instead of 1.4 s, and with 50 ms in 0.4 s instead of 0.6 s. A server or proxy that
+  does not offer HTTP/2 still gets HTTP/1.1, and setting `DISABLE_HTTP2` (the variable kubectl
+  reads too) goes back to HTTP/1.1 everywhere.
+- **A connection that stops answering is noticed.** While watches are open, a connection with
+  no traffic for 30 seconds is pinged, and one that does not answer within 15 seconds is dropped
+  and its watches reconnect, with the usual notice. Before, a connection lost without a word (a
+  VPN changing networks) could leave a list waiting until the system gave up on it.
+
 ## [1.0.0] - 2026-10-25
 
 The first 1.0 release. It covers everything since 0.8.0: right-click menus on more lists, opening a
