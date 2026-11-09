@@ -312,7 +312,14 @@ and Argo's own Degraded/Unknown when nothing read from the workloads explains it
    that ConfigMap is read from **Argo's own namespace, never the Application's** unless the two
    are the same — `ArgoUi.ConfigMapNamespace`, whose rule is in
    [argo-cd](argo-cd.md#where-open-in-argo-cd-goes). The button's tooltip names the host it
-   opens and where the address came from; only http and https are opened.
+   opens and where the address came from; only http and https are opened. The link is the
+   **first** item of the action row, left of Restart… (#440): it shows once the ConfigMap has
+   been read, which can be seconds after the page opened, and as the last item it pushed the
+   right-anchored buttons left under a pointer already on its way to Sync. The tab remembers
+   the address per Argo namespace (`ApplicationsViewModel.KnownArgoUiBaseUrl`, memory only), so
+   later pages show the link at once; each page still reads the ConfigMap and records what it
+   found. `ApplicationsChecks.ActionsHoldStill` (scenario `applications-page-sync`) gives the
+   page an address and fails if any button moves.
 7. **Esc returns to the list with the same row selected**, from anywhere on the page except a
    text box, whose Esc is its own. The page takes focus when it opens, and that is posted at
    Background priority from `ApplicationsView` rather than done on attach: a double-click
