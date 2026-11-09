@@ -343,8 +343,11 @@ do but not what it collects, stores or shares. Four rules keep that from happeni
    as wrong as one that omits.
 4. **The listing text lives in [`design/store/listing/store-listing.md`](design/store/listing/store-listing.md)**
    — What's new, short description, description, features, keywords, certification notes and the
-   privacy URL — so it is reviewed like code. Nothing uploads it; pasting it into Partner Center is a
-   manual step, like the screenshots.
+   privacy URL — so it is reviewed like code, and its six translations (French, German, Italian,
+   Portuguese (Brazil), Russian, Spanish, the same set as pgNimbus) beside it as
+   `store-listing.<lang>.md`. A change to the English description, short description, features or
+   search terms changes the translations in the same PR. Nothing uploads them; pasting them into
+   Partner Center is a manual step, like the screenshots.
 
 Store hero art and the trailer are generated from committed screenshots and demo recordings;
 their sources, checks and Partner Center fields are in [`design/store/README.md`](design/store/README.md).

@@ -3,7 +3,8 @@
 The listing has the same presentation pieces as pgNimbus: the app icon and
 poster, eight screenshots, a short feature trailer with a thumbnail, and a
 wide hero image behind the Store's title and install button. Listing text and
-the upload fields live in [listing/store-listing.md](listing/store-listing.md).
+the upload fields live in [listing/store-listing.md](listing/store-listing.md),
+and the six translated listings beside it (`listing/store-listing.<lang>.md`).
 
 ## Generated media
 
@@ -60,6 +61,10 @@ when upload requirements change.
    `kubeNimbus - Kubernetes Client` and paste the reviewed short description,
    description and product features from `listing/store-listing.md`.
 3. Keep the eight screenshots in their documented order and add their captions.
+   The six translated languages (French, German, Italian, Portuguese (Brazil),
+   Russian, Spanish) take the same reserved name and the same eight English
+   screenshots, with the text and captions from `listing/store-listing.<lang>.md`
+   and an empty "What's new".
 4. Under Trailers and additional assets, upload the MP4, its thumbnail and
    title, and the 16:9 Super hero art. These are separate upload fields; the
    poster is not a substitute for the hero.

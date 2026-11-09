@@ -215,8 +215,10 @@ in the log. Escape sent by computer-use does not reach the app either; the harne
 - [ ] Microsoft Store listing text. The source is
       `design/store/listing/store-listing.md`; update its "What's new in this version"
       for this release and paste the changed fields into Partner Center, which is where
-      the listing actually lives. Check that the privacy policy URL in the listing
-      opens the policy.
+      the listing actually lives. "What's new" is English only. If the description, short
+      description, features or search terms changed, update the six translations beside it
+      (`store-listing.<lang>.md`) and paste them into their languages too. Check that the
+      privacy policy URL in the listing opens the policy.
 - [ ] Microsoft Store trailer and hero art: check the media in `design/store/`
       against the surfaces this release shows, rebuild when needed, and upload
       the MP4, thumbnail and 16:9 hero as separate fields. The sources, format
