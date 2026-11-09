@@ -660,6 +660,28 @@ public sealed partial class ApplicationsViewModel : ObservableObject, IAsyncDisp
     /// <summary>The snapshot the rows were last built from — what the application page reads.</summary>
     internal ClusterSnapshot? LastSnapshot { get; private set; }
 
+    /// <summary>
+    /// Argo CD's UI address per Argo namespace, as the last application page in this tab read
+    /// it from <c>argocd-cm</c>, so the next page shows "Open in Argo CD" at once instead of a
+    /// round trip later (#440). Memory only, like the rest of the tab's state; every page
+    /// still reads the ConfigMap and records what it found, so a removed address is forgotten.
+    /// </summary>
+    private readonly Dictionary<string, Uri> _argoUiBaseUrls = new(StringComparer.Ordinal);
+
+    internal Uri? KnownArgoUiBaseUrl(string argoNamespace) => _argoUiBaseUrls.GetValueOrDefault(argoNamespace);
+
+    internal void RememberArgoUiBaseUrl(string argoNamespace, Uri? baseUrl)
+    {
+        if (baseUrl is null)
+        {
+            _argoUiBaseUrls.Remove(argoNamespace);
+        }
+        else
+        {
+            _argoUiBaseUrls[argoNamespace] = baseUrl;
+        }
+    }
+
     /// <summary>Raised after every rebuild, so an open application page can refresh from the same snapshot.</summary>
     public event EventHandler? Rebuilt;
 

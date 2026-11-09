@@ -52,8 +52,18 @@
            Sync fires on its click, since it applies what Git already declares, and the strip
            is its result line; Sync with prune, which deletes, is on Sync's arrow and asks
            first. Edit YAML opens the existing editor, and Open in Argo CD exists only when
-           argocd-cm names Argo's URL. -->
+           argocd-cm names Argo's URL. That link comes first: it shows once argocd-cm has been
+           read, seconds after the page opened, and the row is anchored to the right edge, so
+           only a control left of the buttons can appear without moving them under the
+           pointer (#440, ApplicationsChecks.ActionsHoldStill). -->
       <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Bottom" Margin="0,0,0,2">
+        <Button Classes="linkText" Command="{Binding OpenInArgoCommand}" IsVisible="{Binding HasArgoUrl}"
+                Margin="0,0,8,0" VerticalAlignment="Center" ToolTip.Tip="{Binding ArgoUrlTip}">
+          <StackPanel Orientation="Horizontal" Spacing="4">
+            <TextBlock Text="Open in Argo CD" />
+            <PathIcon Data="{StaticResource OpenInNewIconGeometry}" Width="11" Height="11" />
+          </StackPanel>
+        </Button>
         <Button Content="Restart…" Command="{Binding RestartCommand}"
                 ToolTip.Tip="Rollout restart: stamps restartedAt so the controller rolls its pods" />
         <SplitButton Content="Sync" Command="{Binding SyncCommand}" IsVisible="{Binding IsArgo}"
@@ -85,13 +95,6 @@
         </SplitButton>
         <Button Content="Edit YAML…" Command="{Binding EditYamlCommand}"
                 ToolTip.Tip="Open the workload's manifest in the YAML editor (Resources mode)" />
-        <Button Classes="linkText" Command="{Binding OpenInArgoCommand}" IsVisible="{Binding HasArgoUrl}"
-                Margin="8,0,0,0" VerticalAlignment="Center" ToolTip.Tip="{Binding ArgoUrlTip}">
-          <StackPanel Orientation="Horizontal" Spacing="4">
-            <TextBlock Text="Open in Argo CD" />
-            <PathIcon Data="{StaticResource OpenInNewIconGeometry}" Width="11" Height="11" />
-          </StackPanel>
-        </Button>
       </StackPanel>
     </Grid>
 

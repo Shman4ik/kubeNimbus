@@ -883,19 +883,38 @@ public sealed partial class ApplicationPageViewModel : ObservableObject
             return;
         }
 
+        // What an earlier page in this tab read, shown at once (#440); the read below still
+        // runs, so a changed or removed address is taken up a moment later.
+        if (_list.KnownArgoUiBaseUrl(argoNamespace) is { } known)
+        {
+            ShowArgoUrl(known, argoNamespace, argo);
+        }
+
         try
         {
             var cm = await client.ReadResourceAsync(ResourceDescriptor.ConfigMaps, argoNamespace, ArgoUi.ConfigMapName, _cts.Token);
-            if (ArgoUi.BaseUrl(cm) is { } baseUrl)
+            var baseUrl = ArgoUi.BaseUrl(cm);
+            _list.RememberArgoUiBaseUrl(argoNamespace, baseUrl);
+            if (baseUrl is not null)
             {
-                ArgoUrlTip = $"Opens {baseUrl.Host} in your browser — the address {ArgoUi.ConfigMapName} in {argoNamespace} names.";
-                ArgoUrl = ArgoUi.ApplicationUrl(baseUrl, argo);
+                ShowArgoUrl(baseUrl, argoNamespace, argo);
+            }
+            else
+            {
+                ArgoUrl = null;
             }
         }
         catch (Exception)
         {
-            // Not readable (a 403 is the common case): the action stays hidden, as specified.
+            // Not readable (a 403 is the common case): the action stays hidden, as specified,
+            // or keeps the address an earlier read in this tab found.
         }
+    }
+
+    private void ShowArgoUrl(Uri baseUrl, string argoNamespace, ArgoApplication argo)
+    {
+        ArgoUrlTip = $"Opens {baseUrl.Host} in your browser — the address {ArgoUi.ConfigMapName} in {argoNamespace} names.";
+        ArgoUrl = ArgoUi.ApplicationUrl(baseUrl, argo);
     }
 
     private static string StripNoLogs(string reason)

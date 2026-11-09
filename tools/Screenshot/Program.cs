@@ -723,7 +723,10 @@ void Capture(string name, ThemeVariant theme, Func<Control> build, bool again = 
     if (name == "cluster-tab-yaml-editor")
         LayoutChecks.RowIsLevel(window, LayoutChecks.Find<YamlEditorView, Button>(window, b => b.Classes.Contains("accent")), "YAML toolbar");
     if (name == "applications-page-sync")
+    {
         LayoutChecks.RowIsLevel(window, LayoutChecks.Find<ApplicationPageView, SplitButton>(window, _ => true), "Application page actions");
+        ApplicationsChecks.ActionsHoldStill(window);
+    }
     if (name == "cluster-tab-port-forward")
         LayoutChecks.RowIsLevel(window, LayoutChecks.Find<PortForwardView, Button>(window, b => Avalonia.Automation.AutomationProperties.GetName(b)?.EndsWith("forwarding", StringComparison.Ordinal) == true), "Port-forward form");
     if (name == "cluster-tab-rbac-who-can")

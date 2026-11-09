@@ -3325,3 +3325,12 @@ Verified: 894 App tests and 1123 Core tests against the sandbox, with one failur
 `GatedPodLogsLiveTests`, #418 again, which has now failed in both full runs of the day and passed
 every time on its own. `While_the_catalog_is_read_the_page_says_so_and_nothing_else` now expects
 the page to name the kinds it reads while discovery runs.
+
+### The application page's actions hold still (2026-11-09, #440)
+
+The owner found that "Open in Argo CD" appeared a few seconds after an application page opened
+and pushed Restart…, Sync and Edit YAML… left, so a click meant for Sync landed elsewhere. The
+link is now the first item of the action row, and the tab remembers Argo's address per Argo
+namespace, so later pages show it at once. `ApplicationsChecks.ActionsHoldStill` fails the
+harness if any button moves when the link shows. No published screenshot shows the link (the
+demo cluster has no Argo UI), so none changed.
