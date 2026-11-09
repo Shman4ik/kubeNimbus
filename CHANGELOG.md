@@ -41,6 +41,14 @@ of a pod that is just starting, and buttons that moved on an application's page.
   no traffic for 30 seconds is pinged, and one that does not answer within 15 seconds is dropped
   and its watches reconnect, with the usual notice. Before, a connection lost without a word (a
   VPN changing networks) could leave a list waiting until the system gave up on it.
+- **The logs of several pods put each message right after the pod's name.** The pod column was
+  a fixed 150 px, so a short name left a gap before the time; it is now as wide as the longest
+  name shown, up to 150 px (#425).
+- **A sync with prune says so first.** Its question reads "Sync and prune Application checkout in
+  argocd on prod-eu", the words on its button; before, the prune came after the cluster's name
+  and read as pruning the cluster. In the demo cluster, the notice that an action is turned off
+  is one line that names that action (#426).
+- Avalonia 12.1.5 (#433).
 
 ### Fixed
 

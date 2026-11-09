@@ -87,10 +87,15 @@ public class GatedPodLogsLiveTests
 
         Console.WriteLine($"refusals while the pod came up: [{string.Join(" | ", refusals)}]");
         await Assert.That(LogFollowRetry.ShouldFollowAgain(atStart, now)).IsTrue();
+        // The ways the server has said "not started" here: a 400 that the container "is not
+        // available" or "is waiting to start", and the kubelet's own 404 for the pod's log,
+        // relayed while the container is being created (#418, LogFollowRetry.IsRelayedKubeletNotFound).
         foreach (var refusal in refusals)
         {
             await Assert.That(refusal.Contains("is not available", StringComparison.Ordinal)
-                || refusal.Contains("is waiting to start", StringComparison.Ordinal)).IsTrue().Because(refusal);
+                || refusal.Contains("is waiting to start", StringComparison.Ordinal)
+                || (refusal.Contains("could not find the requested resource", StringComparison.Ordinal)
+                    && refusal.Contains("pods/log", StringComparison.Ordinal))).IsTrue().Because(refusal);
         }
 
         // Following again reads the container's lines.
