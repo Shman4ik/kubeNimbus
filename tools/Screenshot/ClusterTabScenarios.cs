@@ -1700,11 +1700,20 @@ internal static class ClusterTabScenarios
         // The pane's own follow goes to the offline client and is refused at once. Since #319
         // a pane with lines says how its stream ended, so that refusal would print over the
         // fixture's lines as "No connection could be made…", a state of the harness and not
-        // of the pane this scenario shows. Let it land, then clear what it said.
-        for (var i = 0; i < 300 && detail.LogStatus is null; i++)
+        // of the pane this scenario shows. Let it land, then clear what it said. Up to 10 s,
+        // as HelmReleaseDetail waits: on Windows a refused connection to 127.0.0.1:1 takes
+        // about two seconds, and since #437 the refusal came after the old 3 s wait, so the
+        // README's pod-detail image drew the refusal over the lines (found in the 1.1.0
+        // release pass).
+        for (var i = 0; i < 1000 && detail.LogStatus is null; i++)
         {
             Dispatcher.UIThread.RunJobs();
             Thread.Sleep(10);
+        }
+
+        if (detail.LogStatus is null)
+        {
+            throw new InvalidOperationException("The pod detail fixture's offline follow was not refused within 10 s.");
         }
 
         detail.LogStatus = null;

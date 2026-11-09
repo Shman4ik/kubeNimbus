@@ -777,8 +777,12 @@ C. PR #415's fourth check (the log pane's ⋯ → Copy at a narrow width) is G-1
   `kubectl -n qa-shop logs deploy/qa-ticker --tail=1`, read right after it. Click the row again
   (the list keeps the focus), `keys -Keys "+l"`, wait 5 s, `keys -Keys "{ESC}"`: `find -Name
   "Maximize inspector"` says the split is back, the pane's highest tick is within 5 of
-  kubectl's, and 15 s later it is again, about 15 higher. Then `wheel -Id LogItems -Delta 3` (the
-  pane scrolls up and stops following) and note the lowest tick on screen. Click the row,
+  kubectl's, and 15 s later it is again, about 15 higher. Then scroll up further than a
+  maximized pane is tall: `keys -Keys "{HOME}"` with `LogItems` focused, or `wheel -Id LogItems`
+  until the lowest tick on screen is at least 60 below kubectl's newest, and note the lowest
+  tick. A few wheel notches are not enough: the maximized pane then shows the tail again, and a
+  pane whose last line is on screen is at the bottom and follows (`LogTail`), which is what the
+  1.1.0 run's `-Delta 3` measured (a FAIL of the check, not of the app). Click the row,
   Shift+L, wait 5 s, Esc: the lowest tick is the noted one (within 2), and 15 s later the pane
   has still not moved to the tail. Repeat both halves on the Deployment: Deployments,
   the `qa-ticker` row, L opens its `Logs (all pods)` pane. **Before #403** the split showed lines
@@ -812,7 +816,11 @@ C. PR #415's fourth check (the log pane's ⋯ → Copy at a narrow width) is G-1
   jsonpath='{.data.first}'` reads `changed` and the panel is gone (`wait-gone -Match "Apply
   conflict"`). Needing a second click is a FAIL. Then the other path: change `second: two` to
   `second: changed`, Review…, Cancel: the conflict card comes back with its own Force apply.
-  Click that once: the forced preview opens with the same headline, and `{.data.second}` still
+  Before clicking it, `wait-gone -Match "A force apply would take"` (the panel is gone) and
+  `find -Name "Force apply"` lists exactly one element. In the 1.1.0 run the first Cancel click
+  did not register, so the click landed on the panel's own Force apply, which writes at once.
+  Click that once: the forced preview opens headed "The server would make 1 change:" (forced, it
+  has nothing left to conflict with, so the conflict wording is gone), and `{.data.second}` still
   reads `two`; the preview's Force apply then writes `changed`. That path takes two clicks by
   design ([apply-preview](../engineering/apply-preview.md), rule 3); say in the observation
   which of the two paths matches #404's report (the first click did nothing, the second
@@ -921,8 +929,9 @@ should say so.
 - **H-1 [text]** (#436, #437) A first launch writes its trace. `$t =
   "$env:TEMP\kubenimbus-qa\h1-trace.tsv"; Remove-Item $t -ErrorAction SilentlyContinue;
   $env:KUBENIMBUS_STARTUP_TRACE = $t; ./scripts/qa-app.ps1 -NoBuild`. The profile is fresh, so
-  there is no workspace and no discovery cache. Wait for the Applications list (`wait -Match
-  shop-web -Timeout 60`), then `Get-Content $t`. Expected, quoted whole:
+  there is no workspace and no discovery cache. Wait for the Applications list: it is virtualized
+  and `shop-web` can sit below the rows it has realized, so `set-text -Id FilterBox -Text shop`
+  first, then `wait -Match shop-web -Timeout 60`. Then `Get-Content $t`. Expected, quoted whole:
   - one line each for `main`, `kubeconfig read` and `window opened`;
   - one line each, with the subject `kubenimbus-sandbox`, for `connect`, `credentials`,
     `version` (its detail the server's version, `v1.33.4+k3s1`), `namespaces`, `catalog` (its
@@ -944,9 +953,11 @@ should say so.
      `qa-shop`, so both modes' watches are open.
   2. Count the connections: `$p = (Get-Content "$env:TEMP\kubenimbus-qa\app.pid" -Raw |
      ConvertFrom-Json).Pid; @(Get-NetTCPConnection -OwningProcess $p -State Established
-     -ErrorAction SilentlyContinue | Where-Object RemotePort -eq 6550).Count`. Expected: 1 or 2.
+     -ErrorAction SilentlyContinue | Where-Object RemotePort -eq 6550).Count`, three times a few
+     seconds apart, and take the highest. Expected: 1 or 2.
   3. `./scripts/qa-app.ps1 -Stop`, `$env:DISABLE_HTTP2 = '1'`, then steps 1 and 2 again.
-     Expected: 8 or more.
+     Expected: 5 or more (the 1.1.0 run read 6, 6 and 7). The verdict is the contrast with
+     step 2, not the exact number, which follows how many watches the two modes open.
   4. `./scripts/qa-app.ps1 -Stop` and `Remove-Item Env:DISABLE_HTTP2`.
 
   Quote both counts. **Before #436** the first count was the second one.
