@@ -10,6 +10,14 @@ Product ID `9MZ3C28M65PB`. Field limits are Partner Center's own: What's new 1,5
 description 10,000, short description 1,000, 20 product features of 200 characters each, 7 search
 terms. Every fenced block below is pasted as it stands.
 
+The listing is also published in French, German, Italian, Portuguese (Brazil), Russian and
+Spanish, the same six languages as pgNimbus's (added 2026-11-09). Each translation is a file beside
+this one, `store-listing.<lang>.md`, with the short description, description, features, search
+terms and screenshot captions; the product name and the eight screenshots are the English ones,
+because the app's interface is English only. "What's new" is not translated, so that a release
+changes one text, not seven. A change to any other translated field here changes the six files in
+the same PR.
+
 **"What's new" was written for 1.0.0** (2026-10-25) and describes the changes since 0.8.0 that a
 Windows user sees; checked on 2026-10-26 against the v1.0.0 release notes, 1,174 of 1,500
 characters. The rest of the listing was written for 0.7.0, with its closing line added on
