@@ -11,6 +11,11 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-09
+
+Connecting takes about half as long over a slow link, and three fixes: the Events tabs, the logs
+of a pod that is just starting, and buttons that moved on an application's page.
+
 ### Added
 
 - **A startup trace for a slow launch.** Set `KUBENIMBUS_STARTUP_TRACE` to a file path (or to
@@ -46,6 +51,11 @@ it as the GitHub Release body, so headings must match tags exactly
   container that is just starting can be answered with "the server could not find the requested
   resource". Both log panes showed that as a failure beside a running pod. They now wait for
   the container, as they already did for "waiting to start".
+- **The buttons on an application's page stay where they are.** "Open in Argo CD" appears once
+  kubeNimbus has read Argo CD's address, which can be a few seconds after the page opens, and it
+  pushed Restart…, Sync and Edit YAML… to the left, so a click meant for Sync could land on
+  another button. The link now sits left of the buttons, and later pages in the same tab show
+  it at once (#440).
 
 ## [1.0.0] - 2026-10-25
 
@@ -1425,7 +1435,8 @@ First public release. Everything below is new.
 - Usage history is session-scoped and bounded at 30 minutes by design. Long-range
   metrics history is a non-goal — that's Prometheus's job.
 
-[Unreleased]: https://github.com/Shman4ik/kubeNimbus/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/Shman4ik/kubeNimbus/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v1.1.0
 [1.0.0]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v1.0.0
 [0.8.0]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.8.0
 [0.7.0]: https://github.com/Shman4ik/kubeNimbus/releases/tag/v0.7.0

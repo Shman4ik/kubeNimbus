@@ -56,13 +56,11 @@ data-collection answers stay as they are (no data is collected).
 ## What's new in this version
 
 ```text
-1.0: New: a right-click menu on the Applications list (Open, Restart, Show in Resources, Copy name, and Argo CD's Sync and Refresh), and on the port-forwards list, Helm releases and an Argo CD application's resources. "Open a YAML file…" in the menu and the palette opens a local file in the YAML editor with the same Review and apply. Select several Deployments, StatefulSets or DaemonSets and press R to restart them all after one confirmation.
+1.1: Connecting takes about half as long over a slow link. kubeNimbus now talks to the cluster over HTTP/2, as kubectl does, so a connect and all of its live lists share one connection. The Applications list starts reading as soon as the cluster answers, and the namespace list arrives with that first answer. A connection that stops answering is now noticed within about 45 seconds, and its lists reconnect.
 
-A saved cluster tab whose context is missing from the kubeconfig is no longer dropped: the status bar says so and the tab returns when the context does.
+Fixed: the Events tab of a pod, node, Service or Ingress showed "×0" and a UTC time for an event that had happened many times. It now counts and dates the event as the Events list does. Logs of a pod opened as it starts now wait for it instead of showing an error. On an application's page, the Restart, Sync and Edit YAML buttons no longer move when the Open in Argo CD link appears.
 
-Accessibility: the keyboard now walks the Applications list and every overlay (the palette, the cluster switcher, the preferences) without leaving it, a log line can be selected, copied and expanded from the keyboard, and screen readers read the rows of the node, Helm and Argo CD lists by name.
-
-Fixed: a following log pane stays on its last line after Shift+L and Esc, a pod that has not started shows a wait and loads its selected range once it runs, a selection of several rows survives a re-sort, and the palette in the Applications mode acts on what is on screen.
+If kubeNimbus starts slowly for you, set KUBENIMBUS_STARTUP_TRACE to a file path, and it writes how long each step of the start took.
 ```
 
 ## Short description
