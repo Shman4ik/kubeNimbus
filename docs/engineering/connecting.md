@@ -340,6 +340,20 @@ on [startup-performance](startup-performance.md). A hand-built `HttpRequestMessa
 HTTP/1.1, which is how the app spoke HTTP/1.1 without anyone deciding so: every request goes
 through `ClusterClient.SendRequestAsync`, which sets the version.
 
+**An unreachable server is reported by the first request that hears it** (`TransportFailure`).
+Under HTTP/2, `SocketsHttpHandler` makes one connection attempt at a time per pool, and an
+attempt that fails fails only one of the requests waiting on it; the next waits for the next
+attempt. A refused port on Windows takes 2 s per attempt, so with `/version`, the namespace
+list and the Helm probe sent together the three heard their failures at 2, 4 and 6 s in no
+fixed order, and the first 1.1 build showed "Connection failed" after 4.4 s where 1.0 had taken
+2.4 s (the smoke test's unreachable-cluster scenario, measured before the tag). An address that
+does not answer costs about 21 s per attempt, so the same wait would have doubled there too.
+`ConnectAsync` awaits `TransportFailure.FirstOf(version, namespaces, helm)`: the version, unless
+a companion fails first with a connection, name, TLS or proxy failure, which is then thrown as
+the connect's failure, so `ConnectionReport` reads the same exception type it always did. A
+companion's other failures (a 403 on the namespace list) stay its own. The cost: a transient
+failure of a companion's attempt now fails the connect, which the Retry button answers.
+
 ## A plugin's stderr is redacted before it is shown (S1-6)
 
 `ExecCredentialCapture.Translate` replaces JWT-shaped strings (`eyJ…` segments joined by dots)

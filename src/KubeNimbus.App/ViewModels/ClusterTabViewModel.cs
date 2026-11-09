@@ -1019,16 +1019,21 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
             // unreported when /version fails (docs/engineering/startup-performance.md). None
             // of them runs the exec plugin; the build above did, once (#283).
             var early = new CancellationTokenSource();
+            var versionRequest = client.GetServerVersionAsync(early.Token);
             var namespaceList = client.ListResourceOnceAsync(ResourceDescriptor.Namespaces, cancellationToken: early.Token);
             var helmProbe = client.HasHelmReleasesAsync(early.Token);
             k8s.Models.VersionInfo version;
             try
             {
-                version = await client.GetServerVersionAsync();
+                // Whichever of the three hears an unreachable server first reports it: under
+                // HTTP/2 they wait on one connection attempt at a time, and /version could be
+                // the one that waited for a second attempt (TransportFailure).
+                version = await TransportFailure.FirstOf(versionRequest, namespaceList, helmProbe);
             }
             catch
             {
                 await early.CancelAsync();
+                ObserveFailure(versionRequest);
                 ObserveFailure(namespaceList);
                 ObserveFailure(helmProbe);
                 throw;
