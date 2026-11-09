@@ -248,6 +248,49 @@ internal static class ApplicationsChecks
         Console.WriteLine($"Applications interaction passed ({rows} applications; arrows, Enter, Esc, /, {CommandBindings.ShortcutLabel(CommandId.FilterList)}, chips, header sort by pointer, {CommandBindings.ShortcutLabel(CommandId.NamespacePicker)} namespace picker, two namespaces by pointer, double-click then Esc, one click on and off, mode switch, Applications segment back to the list).");
     }
 
+    /// <summary>
+    /// #440: "Open in Argo CD" shows once <c>argocd-cm</c> has been read, seconds after the
+    /// page opened, and it used to push Restart…, Sync and Edit YAML… left under a pointer that
+    /// was on its way to one of them. Gives the demo page an address, checks that the link
+    /// showed and nothing else moved, and takes it away again so the capture is unchanged.
+    /// </summary>
+    internal static void ActionsHoldStill(Window window)
+    {
+        var view = window.GetVisualDescendants().OfType<ApplicationPageView>().First(v => v.IsEffectivelyVisible);
+        var page = (ApplicationPageViewModel)view.DataContext!;
+        if (page.HasArgoUrl)
+            throw new InvalidOperationException("The demo page already has an Argo CD address, so the check cannot watch one arrive.");
+
+        var actions = view.GetVisualDescendants().OfType<Control>()
+            .Where(c => c is SplitButton || c is Button { Content: "Restart…" or "Edit YAML…" })
+            .ToList();
+        if (actions.Count != 3)
+            throw new InvalidOperationException($"Expected Restart…, Sync and Edit YAML… on the page, found {actions.Count} controls.");
+
+        var before = actions.Select(c => c.TranslatePoint(default, window)).ToList();
+        page.ArgoUrl = new Uri("https://argocd.example.test/applications/argocd/checkout");
+        SettlePage(window);
+        window.UpdateLayout();
+
+        var link = view.GetVisualDescendants().OfType<Button>()
+            .FirstOrDefault(b => ReferenceEquals(b.Command, page.OpenInArgoCommand) && b.IsEffectivelyVisible && b.Bounds.Width > 0)
+            ?? throw new InvalidOperationException("Open in Argo CD did not show once the page had an address.");
+        for (var i = 0; i < actions.Count; i++)
+        {
+            var after = actions[i].TranslatePoint(default, window);
+            if (after != before[i])
+                throw new InvalidOperationException($"{actions[i].GetType().Name} moved from {before[i]} to {after} when Open in Argo CD showed.");
+        }
+
+        if (link.TranslatePoint(new Point(link.Bounds.Width, 0), window)!.Value.X > before.Min(p => p!.Value.X))
+            throw new InvalidOperationException("Open in Argo CD is not left of the page's buttons.");
+
+        page.ArgoUrl = null;
+        SettlePage(window);
+        window.UpdateLayout();
+        Console.WriteLine("Application page actions held still when Open in Argo CD showed.");
+    }
+
     /// <summary>Opens the namespace picker for its screenshot: two namespaces chosen, so the checks show.</summary>
     internal static void OpenNamespacePicker(Window window)
     {
