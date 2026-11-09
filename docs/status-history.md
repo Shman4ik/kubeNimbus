@@ -3325,3 +3325,16 @@ Verified: 894 App tests and 1123 Core tests against the sandbox, with one failur
 `GatedPodLogsLiveTests`, #418 again, which has now failed in both full runs of the day and passed
 every time on its own. `While_the_catalog_is_read_the_page_says_so_and_nothing_else` now expects
 the page to name the kinds it reads while discovery runs.
+
+### An unreachable server is reported after one attempt again (2026-11-09)
+
+Measured before the 1.1.0 tag with the smoke test's unreachable-cluster scenario: "Connection
+failed" came 4.4 s after the first frame, against 2.4 s in 1.0 and 2.4 s with `DISABLE_HTTP2=1`.
+Under HTTP/2, `SocketsHttpHandler` makes one connection attempt at a time per pool and a failed
+attempt fails one waiting request, so the three requests a connect sends together heard a
+refused port at 2, 4 and 6 s (a console probe against `127.0.0.1:1` showed it outside the app).
+Starting `/version` first did not help, because the order is not fixed. `TransportFailure.FirstOf`
+now lets whichever request hears the transport failure first fail the connect: 2.4 s again in
+three runs, with the same failure view. Verified: `TransportFailureTests` (5) and the App suite
+(898). Not measured: an address that does not answer at all (about 21 s per attempt on Windows),
+where the same doubling applied.
