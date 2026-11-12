@@ -40,7 +40,7 @@ reasoning, is in CLAUDE.md.
 
 ## Setting up
 
-You need the **.NET 10 SDK**. NativeAOT publishing additionally needs a native
+You need the **.NET 11 SDK**. NativeAOT publishing additionally needs a native
 toolchain: MSVC on Windows, `clang` + `zlib1g-dev` on Linux, Xcode command line
 tools on macOS.
 
@@ -81,7 +81,7 @@ dotnet build KubeNimbus.slnx
 
 # Tests. Integration tests skip cleanly with no cluster, so run them with one.
 # `--project` is required: passing the csproj positionally prints a hint and
-# exits 0 without running a single test under the .NET 10 MTP runner.
+# exits 0 without running a single test under the .NET 11 MTP runner.
 dotnet test --project tests/KubeNimbus.Core.Tests/KubeNimbus.Core.Tests.csproj
 
 # Headless visual check — renders real Views into PNGs, no display needed.

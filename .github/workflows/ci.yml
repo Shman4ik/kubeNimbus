@@ -203,7 +203,7 @@ jobs:
       # Integration tests skip themselves when no sandbox cluster is reachable
       # (see SandboxCluster.TryGetContextAsync), so this stays green without one.
       #
-      # `--project` is REQUIRED, not stylistic. Under the .NET 10 Microsoft
+      # `--project` is REQUIRED, not stylistic. Under the .NET 11 Microsoft
       # .Testing.Platform runner (pinned in global.json), passing the csproj
       # positionally prints "Specifying a project for 'dotnet test' should be
       # via '--project'" and exits 0 WITHOUT RUNNING ANYTHING — a green job that

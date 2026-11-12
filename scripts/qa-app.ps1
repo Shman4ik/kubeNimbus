@@ -123,7 +123,7 @@ if (-not $NoBuild -and -not $Exe) {
     if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
 }
 
-$exe = if ($Exe) { (Resolve-Path $Exe).Path } else { Join-Path $repo 'src/KubeNimbus.App/bin/Debug/net10.0/kubeNimbus.exe' }
+$exe = if ($Exe) { (Resolve-Path $Exe).Path } else { Join-Path $repo 'src/KubeNimbus.App/bin/Debug/net11.0/kubeNimbus.exe' }
 if (-not (Test-Path $exe)) { throw "No build at $exe." }
 
 if ($ProfileDir) {

@@ -18,7 +18,7 @@
   <a href="https://github.com/Shman4ik/kubeNimbus/releases/latest"><img src="https://img.shields.io/github/v/release/Shman4ik/kubeNimbus?include_prereleases&sort=semver" alt="Latest release"></a>
   <a href="https://apps.microsoft.com/detail/9MZ3C28M65PB"><img src="https://img.shields.io/badge/Microsoft%20Store-install-0078D4?logo=windows" alt="Microsoft Store"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT licensed"></a>
-  <img src="https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet" alt=".NET 10">
+  <img src="https://img.shields.io/badge/.NET-11-512BD4?logo=dotnet" alt=".NET 11">
   <img src="https://img.shields.io/badge/Avalonia-12-8B44AC" alt="Avalonia 12">
   <img src="https://img.shields.io/badge/NativeAOT-shipping%20config-success" alt="NativeAOT">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Platforms: Windows, macOS and Linux">
@@ -400,7 +400,7 @@ ask for the two things that make a Kubernetes-client bug tractable.
 
 ## Tech stack
 
-- **.NET 10**, with **NativeAOT** as the shipping configuration, not an
+- **.NET 11**, with **NativeAOT** as the shipping configuration, not an
   afterthought. Every dependency is chosen to survive trimming and AOT.
 - `KubernetesClient.Aot` (source-generated serialization) as the only cluster
   dependency in the engine.
@@ -420,7 +420,7 @@ ask for the two things that make a Kubernetes-client bug tractable.
 
 ## Building from source
 
-Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0).
+Requires the [.NET 11 SDK](https://dotnet.microsoft.com/download/dotnet/11.0).
 
 ```bash
 git clone https://github.com/Shman4ik/kubeNimbus.git

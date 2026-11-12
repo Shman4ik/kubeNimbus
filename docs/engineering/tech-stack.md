@@ -8,7 +8,7 @@ which now have a page of their own in this directory.
 
 ## Tech stack
 
-- **net10.0** everywhere. NativeAOT is the shipping config.
+- **net11.0** everywhere. NativeAOT is the shipping config.
 - **KubeNimbus.Core** — references ONLY the official Kubernetes client, via the
   **`KubernetesClient.Aot`** package (source-generated serialization). NEVER swap
   it for the reflection-based `KubernetesClient` — that one does not survive

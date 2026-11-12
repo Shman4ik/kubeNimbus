@@ -227,7 +227,7 @@ public class PortForwardRegistryTests
                     user:
                       token: not-a-credential
                 """, ct);
-            using var client = ClusterClient.Connect(new ClusterContext("silent", "silent", null, "silent", path));
+            using var client = await ClusterClient.ConnectAsync(new ClusterContext("silent", "silent", null, "silent", path), ct);
             var tab = TestObjects.Tab();
             var registry = new PortForwardRegistry();
             var pane = PortForwardTabViewModel.ForService(

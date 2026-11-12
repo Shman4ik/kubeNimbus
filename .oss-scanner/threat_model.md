@@ -7,7 +7,7 @@ the reasons behind most of the code named below.
 
 ## What this project does and where untrusted input enters
 
-kubeNimbus is a desktop Kubernetes client (.NET 10, Avalonia). `src/KubeNimbus.Core` is the engine (KubernetesClient,
+kubeNimbus is a desktop Kubernetes client (.NET 11, Avalonia). `src/KubeNimbus.Core` is the engine (KubernetesClient,
 kubeconfig, list+watch, logs, exec, port-forward, server-side apply); `src/KubeNimbus.App` is the UI. The user and
 their kubeconfig are trusted: a kubeconfig can run programs through exec-plugin auth by design, exactly as with
 `kubectl`. What is not trusted:
@@ -52,7 +52,7 @@ The image has every NuGet package restored and a k3s binary. Nothing needs the n
 dotnet test --project tests/KubeNimbus.Core.Tests/KubeNimbus.Core.Tests.csproj -c Release --no-build
 dotnet test --project tests/KubeNimbus.App.Tests/KubeNimbus.App.Tests.csproj -c Release --no-build
 # one class (run the test executable; --project with a positional csproj silently runs nothing):
-tests/KubeNimbus.Core.Tests/bin/Release/net10.0/KubeNimbus.Core.Tests --treenode-filter "/*/*/PathSegmentTests/*"
+tests/KubeNimbus.Core.Tests/bin/Release/net11.0/KubeNimbus.Core.Tests --treenode-filter "/*/*/PathSegmentTests/*"
 ```
 
 - **A loopback stand-in is the usual reproducer.** `tests/KubeNimbus.Core.Tests/ScriptedApiServer.cs` is a scripted

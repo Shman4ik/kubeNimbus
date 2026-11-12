@@ -93,7 +93,7 @@ or publish yourself unless a rule below asks for it.
   binding, anything touching serialization. Known-acceptable warnings: `Avalonia.Controls.DataGrid`
   IL2104/IL3053. **Any other new trim/AOT warning is a failure.**
 - If the SDK is missing, Ubuntu's own archive has it:
-  `apt-get install -y dotnet-sdk-10.0 dotnet-sdk-aot-10.0` (move blocked PPAs in
+  `apt-get install -y dotnet-sdk-11.0 dotnet-sdk-aot-11.0` (move blocked PPAs in
   `/etc/apt/sources.list.d/` aside first). Do not use the dotnet-install script —
   every host it uses is blocked here.
 - **Never start the desktop app or drive its UI** — no `dotnet run --project

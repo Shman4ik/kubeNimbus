@@ -94,7 +94,7 @@ AOT/trimming-compatible from day one. Positioning and benchmarks: [mission](docs
 
 Full text: [tech-stack](docs/engineering/tech-stack.md).
 
-- **net10.0** everywhere. **Core references only `KubernetesClient.Aot`**; NEVER the
+- **net11.0** everywhere. **Core references only `KubernetesClient.Aot`**; NEVER the
   reflection-based `KubernetesClient`, which does not survive NativeAOT.
 - **Kubeconfig files are read by `KubeconfigReader`, never the library's loaders**
   (`LoadKubeConfig*`, `BuildConfigFromConfigFile*`, `BuildDefaultConfig`), which froze
