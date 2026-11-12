@@ -47,7 +47,7 @@ dotnet build "$root/KubeNimbus.slnx" -c "$configuration" -nologo -v q
 status=0
 ran=0
 for suite in KubeNimbus.Core.Tests KubeNimbus.App.Tests; do
-  exe="$root/tests/$suite/bin/$configuration/net10.0/$suite"
+  exe="$root/tests/$suite/bin/$configuration/net11.0/$suite"
   [[ -x "$exe" ]] || exe="$exe.exe"
   echo "== $suite"
   code=0

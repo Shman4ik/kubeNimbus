@@ -83,7 +83,7 @@ network, and the relay counts the connections.
   an explicit test:
 
 ```bash
-tests/KubeNimbus.Core.Tests/bin/Debug/net10.0/KubeNimbus.Core.Tests.exe --treenode-filter "/*/*/ConnectLatencyLiveTests/Connect_phases_by_round_trip_time" --output Detailed
+tests/KubeNimbus.Core.Tests/bin/Debug/net11.0/KubeNimbus.Core.Tests.exe --treenode-filter "/*/*/ConnectLatencyLiveTests/Connect_phases_by_round_trip_time" --output Detailed
 ```
 
 Limits of the model:

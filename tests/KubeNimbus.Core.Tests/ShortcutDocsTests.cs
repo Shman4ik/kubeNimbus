@@ -42,7 +42,7 @@ public class ShortcutDocsTests
         }
     }
 
-    // The tests run from bin/<config>/net10.0; walk up to the directory that holds the
+    // The tests run from bin/<config>/net11.0; walk up to the directory that holds the
     // repository's own marker rather than hardcoding a relative hop count. Then from
     // $KUBENIMBUS_REPO_ROOT, for a build made with --artifacts-path outside the repository
     // (the test platform sets the working directory to the binary's folder).

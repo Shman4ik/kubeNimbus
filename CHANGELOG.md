@@ -11,6 +11,10 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ## [Unreleased]
 
+### Changed
+
+- .NET 11 (SDK 11.0.100), Avalonia 12.1.6, TUnit 1.83.8 and SvcSystems.UI.Terminal 2.3.4.
+
 ## [1.1.0] - 2026-11-09
 
 Connecting takes about half as long over a slow link, and three fixes: the Events tabs, the logs

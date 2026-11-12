@@ -394,7 +394,7 @@ touches: `libSkiaSharp.dll` 11.1 MB, `av_libglesv2.dll` (ANGLE) 5.1 MB,
 Two traps for whoever measures it next. `IlcOptimizationPreference`, the name
 most samples and blog posts use, is the pre-.NET 8 spelling: it is silently
 ignored, the response file keeps `-O`, and the binary comes out the size it
-was, so check `obj/<platform>/Release/net10.0/<rid>/native/kubeNimbus.ilc.rsp`
+was, so check `obj/<platform>/Release/net11.0/<rid>/native/kubeNimbus.ilc.rsp`
 for `--Os` rather than trusting the property name. And `UseSystemResourceKeys`,
 the next size switch people reach for, stays off: it replaces the framework's
 exception messages with resource keys, and the connection failure view quotes

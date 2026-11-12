@@ -13,7 +13,7 @@ which now have a page of their own in this directory.
 dotnet build KubeNimbus.slnx
 
 # Run Core tests against the sandbox cluster (skips if none).
-# `--project` is MANDATORY: under the .NET 10 Microsoft.Testing.Platform runner
+# `--project` is MANDATORY: under the .NET 11 Microsoft.Testing.Platform runner
 # (pinned in global.json) a positional csproj prints "Specifying a project for
 # 'dotnet test' should be via '--project'" and exits 0 having run NOTHING. That
 # silently passed for a while in CI — if a change to the suite looks suspiciously
@@ -119,7 +119,7 @@ the checkpoint commit too — this is the local SDK
 test executable directly works and is what these 137 results come from:
 
 ```powershell
-tests/KubeNimbus.Core.Tests/bin/Debug/net10.0/KubeNimbus.Core.Tests.exe
+tests/KubeNimbus.Core.Tests/bin/Debug/net11.0/KubeNimbus.Core.Tests.exe
 ```
 
 CI pins `10.0.100` via `global.json` and still uses `--project`, so it is

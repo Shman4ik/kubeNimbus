@@ -281,13 +281,13 @@ a queue; the repo and the market have both moved.
   infrastructure, or a credential this machine does not have. Everything else is
   decided with evidence and written into `TRAIN.md`.
 - **Where it runs.** The intended home is a Claude Code cloud session (Linux). The
-  `SessionStart` hook installs the .NET 10 SDK, the AOT toolchain and Xvfb; use the
+  `SessionStart` hook installs the .NET 11 SDK, the AOT toolchain and Xvfb; use the
   commands exactly as `CLAUDE.md` gives them, publish `linux-x64`, and wrap
   `--smoke-test` in `xvfb-run -a`. Docker is usually unavailable there, so a "live
   cluster" item is feasible only if `./scripts/sandbox-up.sh` actually comes up — try
   once in SURVEY, record the answer in State, and select accordingly. On the owner's
   Windows machine instead: if `dotnet test --project …` reports "Zero tests ran", run
-  `tests/<Project>/bin/Debug/net10.0/<Project>.exe` directly (local SDK quirk), and
+  `tests/<Project>/bin/Debug/net11.0/<Project>.exe` directly (local SDK quirk), and
   NativeAOT needs the vcvars recipe in `CLAUDE.md`. Either way, scratch output goes
   to a temp directory, never into the repo.
 - **Never on the owner's desktop.** No step starts the desktop app, drives it through UI

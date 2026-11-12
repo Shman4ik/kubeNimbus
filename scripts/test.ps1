@@ -51,7 +51,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $failed = $false
 $ran = $false
 foreach ($suite in 'KubeNimbus.Core.Tests', 'KubeNimbus.App.Tests') {
-    $exe = Join-Path $root "tests/$suite/bin/$Configuration/net10.0/$suite"
+    $exe = Join-Path $root "tests/$suite/bin/$Configuration/net11.0/$suite"
     if (-not (Test-Path $exe)) { $exe = "$exe.exe" }
 
     Write-Host "== $suite"

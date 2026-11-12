@@ -5,7 +5,7 @@
 # the same 3-4 minutes to rediscover the same two facts: that the container has
 # no .NET SDK, and that every host the dotnet-install script reaches
 # (builds.dotnet.microsoft.com, aka.ms, dot.net) answers 403 through the agent
-# proxy. Ubuntu's own archive is not blocked and carries dotnet-sdk-10.0, which
+# proxy. Ubuntu's own archive is not blocked and carries dotnet-sdk-11.0, which
 # is the route that works here.
 #
 # Local sessions are left alone: `dotnet` is already on a developer's machine,
@@ -39,13 +39,13 @@ apt_update() {
   apt-get update -o APT::Update::Error-Mode=any -qq >/dev/null 2>&1
 }
 
-# dotnet-sdk-aot-10.0 is the half that makes `-p:PublishAot=true` work; clang and
+# dotnet-sdk-aot-11.0 is the half that makes `-p:PublishAot=true` work; clang and
 # the zlib headers are what ILCompiler links against. xvfb/xdotool/imagemagick are
 # how a headless session drives and photographs the real window — the screenshot
 # harness needs no display, but "does the published binary actually open a
 # window" does, and that is the check three broken release binaries went out for
 # want of.
-PACKAGES=(dotnet-sdk-10.0 dotnet-sdk-aot-10.0 clang zlib1g-dev xvfb xdotool imagemagick)
+PACKAGES=(dotnet-sdk-11.0 dotnet-sdk-aot-11.0 clang zlib1g-dev xvfb xdotool imagemagick)
 
 MISSING=()
 for pkg in "${PACKAGES[@]}"; do
