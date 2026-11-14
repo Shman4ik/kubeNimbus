@@ -399,7 +399,11 @@ Seven things are load-bearing:
    replace an action that is busy or draining: re-arming over a running loop would leave it
    evicting with nothing on screen reporting it. Portainer reached the same rule from the
    other direction in [portainer#4006](https://github.com/portainer/portainer/issues/4006)
-   — a drain should be issued to one node at a time.
+   — a drain should be issued to one node at a time. For the same reason a Refresh (F5) or a
+   kind or namespace switch, which rebuilds the list and clears an idle strip, keeps a running
+   one: `RestartWatch` and every arm path share `IsRowActionRunning`. Before that, a Refresh
+   dropped the strip mid-drain, so the loop kept evicting with no Stop on screen and the tab's
+   `DisposeAsync` had nothing left to cancel (`RowActionStripSurvivalTests`).
 
 **Eviction is posted as `policy/v1`**, which the API server has served since 1.22 and which
 `kubectl` itself sends; `policy/v1beta1` was removed in 1.25. A server too old for it

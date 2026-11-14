@@ -409,4 +409,138 @@ public class KubeconfigReaderTests
         await Assert.That(configuration.TlsServerName).IsEqualTo("api.c.example");
         await Assert.That(configuration.AccessToken).IsEqualTo("not-a-real-token");
     }
+
+    /// <summary>
+    /// The reader is recursive; a file nested past the cap is refused with its position
+    /// instead of overflowing the stack, which would kill the process while contexts are
+    /// enumerated.
+    /// </summary>
+    [Test]
+    public async Task Nesting_past_the_depth_cap_is_refused_with_its_position()
+    {
+        var deep = "clusters: " + new string('[', 100_000) + new string(']', 100_000);
+
+        var exception = await Assert.That(() => KubeconfigReader.Parse(deep)).Throws<YamlException>();
+
+        await Assert.That(exception!.Message).StartsWith("Line 1, column ");
+        await Assert.That(exception.Message).Contains("deeper than 256 levels");
+    }
+
+    [Test]
+    public async Task Nesting_up_to_the_cap_still_reads()
+    {
+        // The top-level mapping is depth 0 and the n-th bracket depth n, so this reaches 256.
+        var text = "preferences: " + new string('[', 256) + new string(']', 256) + "\ncurrent-context: ok";
+
+        await Assert.That(KubeconfigReader.Parse(text).Configuration.CurrentContext).IsEqualTo("ok");
+    }
+
+    [Test]
+    public async Task A_merge_key_with_a_mapping_supplies_the_shared_fields()
+    {
+        var config = KubeconfigReader.Parse("""
+            clusters:
+            - name: a
+              cluster: &base
+                server: https://shared.example:6443
+                certificate-authority-data: Q0E=
+            - name: b
+              cluster:
+                <<: *base
+                tls-server-name: b.example
+            users:
+            - name: u
+              user:
+                exec: &exec
+                  command: aws
+                  args: [eks, get-token]
+            - name: v
+              user:
+                exec:
+                  <<: *exec
+            """).Configuration;
+
+        var b = config.Clusters.Single(c => c.Name == "b").ClusterEndpoint!;
+        await Assert.That(b.Server).IsEqualTo("https://shared.example:6443");
+        await Assert.That(b.CertificateAuthorityData).IsEqualTo("Q0E=");
+        await Assert.That(b.TlsServerName).IsEqualTo("b.example");
+        var exec = config.Users.Single(u => u.Name == "v").UserCredentials!.ExternalExecution!;
+        await Assert.That(exec.Command).IsEqualTo("aws");
+        await Assert.That(exec.Arguments).IsEquivalentTo(new[] { "eks", "get-token" });
+    }
+
+    [Test]
+    public async Task A_merge_key_with_a_list_takes_the_earlier_mapping_first()
+    {
+        var config = KubeconfigReader.Parse("""
+            x-first: &first {server: https://first.example, tls-server-name: first.example}
+            x-second: &second {server: https://second.example, certificate-authority: ca.crt}
+            clusters:
+            - name: c
+              cluster:
+                <<: [*first, *second]
+            """).Configuration;
+
+        var endpoint = config.Clusters.Single().ClusterEndpoint!;
+        await Assert.That(endpoint.Server).IsEqualTo("https://first.example");
+        await Assert.That(endpoint.TlsServerName).IsEqualTo("first.example");
+        await Assert.That(endpoint.CertificateAuthority).IsEqualTo("ca.crt");
+    }
+
+    [Test]
+    public async Task A_key_written_in_the_mapping_wins_over_the_merge_wherever_it_stands()
+    {
+        var config = KubeconfigReader.Parse("""
+            x-base: &base {server: https://base.example, tls-server-name: base.example}
+            clusters:
+            - name: before
+              cluster:
+                server: https://before.example
+                <<: *base
+            - name: after
+              cluster:
+                <<: *base
+                tls-server-name: after.example
+            """).Configuration;
+
+        var before = config.Clusters.Single(c => c.Name == "before").ClusterEndpoint!;
+        var after = config.Clusters.Single(c => c.Name == "after").ClusterEndpoint!;
+        await Assert.That(before.Server).IsEqualTo("https://before.example");
+        await Assert.That(before.TlsServerName).IsEqualTo("base.example");
+        await Assert.That(after.Server).IsEqualTo("https://base.example");
+        await Assert.That(after.TlsServerName).IsEqualTo("after.example");
+    }
+
+    [Test]
+    [Arguments("<<: https://not-a-mapping.example")]
+    [Arguments("<<: [{server: https://ok.example}, just-text]")]
+    public async Task A_merge_key_whose_value_is_not_mappings_is_refused(string line)
+    {
+        var exception = await Assert.That(() => KubeconfigReader.Parse($"""
+            clusters:
+            - name: c
+              cluster:
+                {line}
+            """)).Throws<YamlException>();
+
+        await Assert.That(exception!.Message).StartsWith("Line 4, column ");
+        await Assert.That(exception.Message).Contains("merge key");
+    }
+
+    [Test]
+    public async Task A_quoted_merge_key_is_an_ordinary_key()
+    {
+        var config = KubeconfigReader.Parse("""
+            x-base: &base {server: https://base.example}
+            clusters:
+            - name: c
+              cluster:
+                "<<": *base
+                tls-server-name: c.example
+            """).Configuration;
+
+        var endpoint = config.Clusters.Single().ClusterEndpoint!;
+        await Assert.That(endpoint.Server).IsNull();
+        await Assert.That(endpoint.TlsServerName).IsEqualTo("c.example");
+    }
 }

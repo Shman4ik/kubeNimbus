@@ -81,6 +81,20 @@ with `HttpCompletionOption.ResponseHeadersRead`:
   second warning with exactly one `Reset` and one list in the run (mutation-checked: without the
   `Synced` it times out with "Reset, Synced, lost, lost"). `ClusterTabReconnectTests` pins the
   list's half: rows and selection unchanged, the line cleared, another warning kept.
+- **A kind that cannot be watched is listed once and held** (2026-11). Discovery lists a kind
+  that supports `list`, and metrics.k8s.io's PodMetrics and NodeMetrics support `get` and
+  `list` only, so the watch after their list failed on every attempt (a 405), or threw an
+  `ArgumentNullException` escaping a null resourceVersion when the list response carried none,
+  and the pane said "Watch connection lost … retrying" for ever. `WatchResourceAsync` now passes
+  `descriptor.AllowsVerb("watch")` to `PumpAsync`; when that is false (verbs known, `watch` not
+  among them; absent verbs still mean "not known" and allow it), or the list returned no
+  resourceVersion to resume from, the pump emits Reset, the rows and Synced and then waits on
+  its cancellation token: no `connectionLost`, no retry, no socket and no loop, so such an
+  entry in `WatchCache`'s idle set costs only the objects it holds. A Refresh relists through
+  `WatchCache.Relist`, which starts a new pump. A watch frame without a resourceVersion no
+  longer clears the one the pump would resume from. `UnwatchableKindTests` pins the three cases
+  over HTTP (one list request, no watch request, no warning after two backoffs' worth of time,
+  and two lists after a Relist).
 - **A 401 is not a transient failure.** It means the credential expired or was revoked,
   and retrying with it fails the same way for ever — which the loop used to do. On a 401
   it calls `ClusterClient.RefreshCredentialsAsync` (re-read the kubeconfig, re-run the

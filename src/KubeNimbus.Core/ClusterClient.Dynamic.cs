@@ -43,7 +43,10 @@ public sealed partial class ClusterClient
             resourceVersionOf: static r => r.ResourceVersion,
             connectionLost: connectionLost,
             cancellationToken: cancellationToken,
-            extraQuery: SelectorQuery(fieldSelector, labelSelector));
+            extraQuery: SelectorQuery(fieldSelector, labelSelector),
+            // A kind discovery says cannot be watched is listed once and held (see PumpAsync).
+            // Verbs that are absent mean "not known", which AllowsVerb reads as allowed.
+            watchable: descriptor.AllowsVerb("watch"));
 
     /// <summary>One full (non-watching) list — used for events, typeahead and one-shot lookups.</summary>
     public async Task<IReadOnlyList<DynamicResource>> ListResourceOnceAsync(

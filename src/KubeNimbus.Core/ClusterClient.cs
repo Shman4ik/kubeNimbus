@@ -355,14 +355,15 @@ public sealed partial class ClusterClient : IDisposable
         Func<T, string?> resourceVersionOf,
         Action<Exception>? connectionLost,
         [EnumeratorCancellation] CancellationToken cancellationToken,
-        string extraQuery = "")
+        string extraQuery = "",
+        bool watchable = true)
         where T : class
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var channel = Channel.CreateUnbounded<ResourceEvent<T>>(
             new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
 
-        var pump = PumpAsync(listPath, listPage, deserialize, resourceVersionOf, channel.Writer, connectionLost, extraQuery, linked.Token);
+        var pump = PumpAsync(listPath, listPage, deserialize, resourceVersionOf, channel.Writer, connectionLost, extraQuery, watchable, linked.Token);
         try
         {
             await foreach (var evt in channel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
@@ -392,6 +393,7 @@ public sealed partial class ClusterClient : IDisposable
         ChannelWriter<ResourceEvent<T>> writer,
         Action<Exception>? connectionLost,
         string extraQuery,
+        bool watchable,
         CancellationToken ct)
         where T : class
     {
@@ -426,9 +428,23 @@ public sealed partial class ClusterClient : IDisposable
                         backoff = InitialBackoff;
                     }
 
+                    if (!watchable || resourceVersion is not { } resumeFrom)
+                    {
+                        // Nothing to watch: discovery said the kind has no `watch` verb
+                        // (metrics.k8s.io's PodMetrics and NodeMetrics: get and list only), or
+                        // the list carried no resourceVersion to resume from. Asking anyway
+                        // failed on every attempt (a 405, or a null dereference), and the pane
+                        // said "Watch connection lost … retrying" for ever. The list stands as
+                        // read until the reader leaves; a Refresh relists through a new pump.
+                        // This holds no socket and runs no loop, so an idle WatchCache entry
+                        // in this state costs only the objects it keeps.
+                        await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false);
+                        continue;
+                    }
+
                     var relist = await StreamWatchAsync(
-                        listPath, resourceVersion!, deserialize, resourceVersionOf, writer,
-                        rv => resourceVersion = rv, extraQuery, connectionLost, ct,
+                        listPath, resumeFrom, deserialize, resourceVersionOf, writer,
+                        rv => resourceVersion = rv ?? resourceVersion, extraQuery, connectionLost, ct,
                         opened: () =>
                         {
                             if (reconnecting)
