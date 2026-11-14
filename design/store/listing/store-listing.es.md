@@ -1,11 +1,11 @@
 # Microsoft Store listing text: Spanish
 
-The Spanish Store listing (Partner Center → kubeNimbus → the submission → Store listings → Spanish), translated from [`store-listing.md`](store-listing.md) at release 1.1.0. Every fenced block below is pasted as it stands. "What's new in this version" is left empty in this language, and the product name is the same as in English. When the English description, short description, features or search terms change, change this file in the same PR.
+The Spanish Store listing (Partner Center → kubeNimbus → the submission → Store listings → Spanish), translated from [`store-listing.md`](store-listing.md) at release 1.1.0, with the additions of 2026-11-14. Every fenced block below is pasted as it stands. "What's new in this version" is left empty in this language, and the product name is the same as in English. When the English description, short description, features or search terms change, change this file in the same PR.
 
 ## Short description
 
 ```text
-Un cliente gráfico de Kubernetes (K8s) rápido, gratuito y de código abierto para Windows. Encuentra aplicaciones con problemas, sigue los logs de los Pods, abre terminales en contenedores y edita YAML. Nativo, sin telemetría, sin cuenta y sin suscripción.
+Un cliente gráfico de Kubernetes (K8s) rápido, gratuito y de código abierto para Windows. Encuentra aplicaciones con problemas, sigue los logs de los Pods, ve la CPU y la memoria sin instalar Prometheus, abre terminales en contenedores y edita YAML. Inicia sesión en AWS EKS, Google GKE y Azure AKS a través de tu kubeconfig. Nativo, sin telemetría, sin cuenta y sin suscripción.
 ```
 
 ## Description
@@ -17,7 +17,10 @@ Encuentra el problema
 La vista Applications muestra primero lo que necesita atención. Cada aplicación de Argo CD, y cada carga de trabajo que ninguna aplicación gestiona, tiene un veredicto de salud y una explicación en una línea, ambos tomados del propio estado del clúster. Abre una aplicación para ver en qué se basa ese veredicto: sus Pods, una línea de tiempo y la última ejecución del Pod que falla. El explorador completo de Resources queda a un clic.
 
 Conéctate con lo que ya usas
-kubeNimbus lee todos los contextos de $KUBECONFIG y ~/.kube/config, incluido el inicio de sesión con plugins exec para AWS EKS, Google GKE y Azure AKS, y también clústeres detrás de un proxy. Abre varios clústeres en pestañas, selecciona varios namespaces o usa una lista única con todos los clústeres conectados. Producción, staging y desarrollo tienen colores distintos. Las contraseñas, los tokens y los certificados nunca se copian al almacenamiento de la aplicación.
+kubeNimbus lee todos los contextos de $KUBECONFIG y ~/.kube/config, incluido el inicio de sesión con plugins exec para AWS EKS, Google GKE y Azure AKS, y también clústeres detrás de un proxy. Una sesión caducada se recupera sin cerrar la pestaña. Con permisos limitados, kubeNimbus muestra lo que puedes leer e indica lo que no pudo leer. Abre varios clústeres en pestañas, selecciona varios namespaces o usa una lista única con todos los clústeres conectados. Producción, staging y desarrollo tienen colores distintos. Las contraseñas, los tokens y los certificados nunca se copian al almacenamiento de la aplicación.
+
+CPU y memoria, sin nada que instalar
+kubeNimbus lee la API de métricas que tu clúster ya ofrece (metrics-server). Las listas de Pods y nodos muestran la CPU y la memoria en vivo, el detalle del Pod las representa en gráficos de los últimos 30 minutos de tu sesión, y la lista Nodes muestra la capacidad usada y solicitada. No hacen falta Prometheus ni ningún agente en el clúster. En un clúster sin metrics-server, esas columnas se ocultan en lugar de mostrar errores.
 
 Inspecciona sin salir de la aplicación
 • Listas de recursos en vivo para cada tipo de recurso que ofrece tu clúster, incluidos los recursos personalizados. Las listas se actualizan mediante watches de Kubernetes, con búsqueda, ordenación y selección de columnas.
@@ -59,6 +62,8 @@ Se abre en Applications: estado de salud y una explicación en una línea para c
 Aplicación de escritorio nativa: sin runtime de .NET que instalar
 Sin telemetría ni cuenta; las credenciales nunca se guardan
 Todos los tipos de recurso de tu clúster, recursos personalizados incluidos
+CPU y memoria desde metrics-server: sin Prometheus
+Inicio de sesión en AWS EKS, Google GKE y Azure AKS desde tu kubeconfig
 Logs de Pods en vivo: búsqueda, regex, filtros por nivel, salto a errores
 Todos los Pods de una carga de trabajo en un único log combinado
 Un terminal real en el contenedor (vi, top y mc funcionan)

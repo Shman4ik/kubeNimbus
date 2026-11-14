@@ -1,11 +1,11 @@
 # Microsoft Store listing text: German
 
-The German Store listing (Partner Center → kubeNimbus → the submission → Store listings → German), translated from [`store-listing.md`](store-listing.md) at release 1.1.0. Every fenced block below is pasted as it stands. "What's new in this version" is left empty in this language, and the product name is the same as in English. When the English description, short description, features or search terms change, change this file in the same PR.
+The German Store listing (Partner Center → kubeNimbus → the submission → Store listings → German), translated from [`store-listing.md`](store-listing.md) at release 1.1.0, with the additions of 2026-11-14. Every fenced block below is pasted as it stands. "What's new in this version" is left empty in this language, and the product name is the same as in English. When the English description, short description, features or search terms change, change this file in the same PR.
 
 ## Short description
 
 ```text
-Ein schneller, kostenloser Open-Source-Kubernetes-Client (K8s) mit grafischer Oberfläche für Windows. Finden Sie fehlerhafte Anwendungen, verfolgen Sie Pod-Logs, öffnen Sie Container-Terminals und bearbeiten Sie YAML. Nativ, ohne Telemetrie, ohne Konto und ohne Abonnement.
+Ein schneller, kostenloser Open-Source-Kubernetes-Client (K8s) mit grafischer Oberfläche für Windows. Finden Sie fehlerhafte Anwendungen, verfolgen Sie Pod-Logs, sehen Sie CPU und Arbeitsspeicher ohne Prometheus-Installation, öffnen Sie Container-Terminals und bearbeiten Sie YAML. Meldet sich über Ihre kubeconfig bei AWS EKS, Google GKE und Azure AKS an. Nativ, ohne Telemetrie, ohne Konto und ohne Abonnement.
 ```
 
 ## Description
@@ -19,7 +19,11 @@ Die Ansicht Applications zeigt zuerst, was Aufmerksamkeit braucht. Jede Argo CD 
 
 Mit dem verbinden, was Sie schon nutzen
 
-kubeNimbus liest jeden Kontext in $KUBECONFIG und ~/.kube/config, einschließlich der Anmeldung per exec-Plugin für AWS EKS, Google GKE und Azure AKS, und erreicht auch Cluster hinter einem Proxy. Öffnen Sie mehrere Cluster in Tabs, wählen Sie mehrere Namespaces aus oder nutzen Sie eine gemeinsame Liste über alle verbundenen Cluster. Production, Staging und Development haben jeweils eigene Farben. Passwörter, Tokens und Zertifikate werden nie in den Speicher der App kopiert.
+kubeNimbus liest jeden Kontext in $KUBECONFIG und ~/.kube/config, einschließlich der Anmeldung per exec-Plugin für AWS EKS, Google GKE und Azure AKS, und erreicht auch Cluster hinter einem Proxy. Eine abgelaufene Sitzung wird wieder aufgenommen, ohne dass der Tab geschlossen werden muss. Bei eingeschränkten Berechtigungen zeigt kubeNimbus, was Sie lesen dürfen, und sagt, was es nicht lesen konnte. Öffnen Sie mehrere Cluster in Tabs, wählen Sie mehrere Namespaces aus oder nutzen Sie eine gemeinsame Liste über alle verbundenen Cluster. Production, Staging und Development haben jeweils eigene Farben. Passwörter, Tokens und Zertifikate werden nie in den Speicher der App kopiert.
+
+CPU und Arbeitsspeicher, ohne etwas zu installieren
+
+kubeNimbus liest die Metrics-API, die Ihr Cluster bereits bereitstellt (metrics-server). Pod- und Node-Listen zeigen CPU und Arbeitsspeicher live, die Pod-Details stellen beides für die letzten 30 Minuten Ihrer Sitzung als Diagramm dar, und die Nodes-Liste zeigt genutzte und angeforderte Kapazität. Weder Prometheus noch ein Agent im Cluster ist nötig. Auf einem Cluster ohne metrics-server werden diese Spalten ausgeblendet, statt Fehler anzuzeigen.
 
 Untersuchen, ohne die App zu verlassen
 
@@ -66,6 +70,8 @@ Startet mit Applications: Health-Status und einzeilige Begründung für jede App
 Native Desktop-App: keine .NET-Runtime nötig
 Keine Telemetrie, kein Konto; Zugangsdaten werden nie gespeichert
 Jeder Ressourcentyp Ihres Clusters, auch benutzerdefinierte Ressourcen
+CPU und Arbeitsspeicher aus metrics-server: kein Prometheus nötig
+Anmeldung bei AWS EKS, Google GKE und Azure AKS aus Ihrer kubeconfig
 Live-Pod-Logs: Suche, Regex, Level-Filter, Sprung zum Fehler
 Alle Pods eines Workloads in einem zusammengeführten Log-Stream
 Ein echtes Terminal im Container (vi, top und mc funktionieren)

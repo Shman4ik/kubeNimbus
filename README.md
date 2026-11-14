@@ -47,6 +47,11 @@
 - **A native app, ready to run.** Self-contained NativeAOT builds for Windows,
   macOS and Linux, with no .NET runtime to install. Live lists use watches, and
   logs stream as they arrive.
+- **Works with the cluster you have.** CPU and memory come from the metrics API
+  your cluster already serves (metrics-server), with no Prometheus to install.
+  AWS, Google and Azure sign-in runs through your kubeconfig's exec plugin, and
+  an expired session is picked up again without closing the tab. Under narrow
+  RBAC it shows what you may read and says what it could not.
 - **Your clusters stay yours.** No telemetry, account or in-cluster agent.
   Credentials stay in your kubeconfig chain. MIT licensed, including commercial
   use, with no subscription or seat limit.
