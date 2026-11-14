@@ -1,11 +1,11 @@
 # Microsoft Store listing text: Portuguese (Brazil)
 
-The Brazilian Portuguese Store listing (Partner Center → kubeNimbus → the submission → Store listings → Portuguese (Brazil)), translated from [`store-listing.md`](store-listing.md) at release 1.1.0. Every fenced block below is pasted as it stands. "What's new in this version" is left empty in this language, and the product name is the same as in English. When the English description, short description, features or search terms change, change this file in the same PR.
+The Brazilian Portuguese Store listing (Partner Center → kubeNimbus → the submission → Store listings → Portuguese (Brazil)), translated from [`store-listing.md`](store-listing.md) at release 1.1.0, with the additions of 2026-11-14. Every fenced block below is pasted as it stands. "What's new in this version" is left empty in this language, and the product name is the same as in English. When the English description, short description, features or search terms change, change this file in the same PR.
 
 ## Short description
 
 ```text
-Um cliente GUI de Kubernetes (K8s) rápido, gratuito e de código aberto para Windows. Encontre aplicações com problemas, acompanhe logs de Pods, abra terminais em contêineres e edite YAML. Nativo, sem telemetria, sem conta e sem assinatura.
+Um cliente GUI de Kubernetes (K8s) rápido, gratuito e de código aberto para Windows. Encontre aplicações com problemas, acompanhe logs de Pods, veja CPU e memória sem instalar o Prometheus, abra terminais em contêineres e edite YAML. Faz login no AWS EKS, no Google GKE e no Azure AKS pelo seu kubeconfig. Nativo, sem telemetria, sem conta e sem assinatura.
 ```
 
 ## Description
@@ -17,7 +17,10 @@ Encontre o problema
 A tela "Applications" mostra primeiro o que precisa de atenção. Cada aplicação do Argo CD, e cada workload que nenhuma aplicação acompanha, tem um veredito de saúde e uma explicação em uma linha, ambos tirados do próprio status do cluster. Abra uma aplicação para ver em que se baseia esse veredito: seus Pods, uma linha do tempo e a última execução do Pod que está falhando. O explorador completo de "Resources" está a um clique de distância.
 
 Conecte-se com o que você já usa
-O kubeNimbus lê todos os contextos em $KUBECONFIG e ~/.kube/config, inclusive o login por plugin exec do AWS EKS, do Google GKE e do Azure AKS, e também clusters atrás de proxy. Abra vários clusters em abas, selecione vários namespaces ou use uma lista única com todos os clusters conectados. Produção, homologação (staging) e desenvolvimento têm cores distintas. Senhas, tokens e certificados nunca são copiados para o armazenamento do app.
+O kubeNimbus lê todos os contextos em $KUBECONFIG e ~/.kube/config, inclusive o login por plugin exec do AWS EKS, do Google GKE e do Azure AKS, e também clusters atrás de proxy. Um login expirado é retomado sem fechar a aba. Com permissões restritas, o kubeNimbus mostra o que você pode ler e informa o que não conseguiu ler. Abra vários clusters em abas, selecione vários namespaces ou use uma lista única com todos os clusters conectados. Produção, homologação (staging) e desenvolvimento têm cores distintas. Senhas, tokens e certificados nunca são copiados para o armazenamento do app.
+
+CPU e memória, sem nada para instalar
+O kubeNimbus lê a API de métricas que o seu cluster já oferece (metrics-server). As listas de Pods e de nós mostram CPU e memória ao vivo, o detalhe do Pod as exibe em gráficos dos últimos 30 minutos da sua sessão, e a lista Nodes mostra a capacidade usada e requisitada. Não é preciso ter Prometheus nem agente no cluster. Em um cluster sem metrics-server, essas colunas ficam ocultas em vez de mostrar erros.
 
 Inspecione sem sair do app
 • Listas de recursos ao vivo para todos os tipos de recurso que o seu cluster oferece, inclusive recursos personalizados. As listas se atualizam por watches do Kubernetes, com busca, ordenação e seleção de colunas.
@@ -59,6 +62,8 @@ Abre em Applications: estado de saúde e uma explicação em uma linha para cada
 App desktop nativo: sem runtime do .NET para instalar
 Sem telemetria, sem conta; credenciais nunca são armazenadas
 Todos os tipos de recurso do cluster, inclusive recursos personalizados
+CPU e memória pelo metrics-server: sem Prometheus
+Login no AWS EKS, Google GKE e Azure AKS pelo seu kubeconfig
 Logs de Pods ao vivo: busca, regex, filtros por nível, salto para erros
 Todos os Pods de um workload em um único fluxo de logs
 Um terminal de verdade no contêiner (vi, top e mc funcionam)

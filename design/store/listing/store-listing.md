@@ -26,6 +26,13 @@ characters. The rest of the listing was written for 0.7.0, with its closing line
 which is why 0.6.0's text carried everything since 0.4.0.) Keep this file's date in step with the
 release it describes.
 
+On 2026-11-14 the short description, the description ("Connect with what you already use" and
+the new "CPU and memory, with nothing to install") and the product features gained two things
+the app already did and the listing did not say: usage read from metrics-server with no
+Prometheus, and cloud sign-in that survives an expired session. The competitor survey of that
+date ([`docs/research/2026-11-14-competitor-delta.md`](../../../docs/research/2026-11-14-competitor-delta.md))
+found both among the most-reacted open requests in other clients' trackers.
+
 ## Product name
 
 The reserved Store name is selected for both English and English (United States):
@@ -74,7 +81,7 @@ If kubeNimbus starts slowly for you, set KUBENIMBUS_STARTUP_TRACE to a file path
 ## Short description
 
 ```text
-A fast, free, open-source Kubernetes (K8s) GUI client for Windows. Find unhealthy applications, follow pod logs, open container terminals and edit YAML. Native, with no telemetry, no account and no subscription.
+A fast, free, open-source Kubernetes (K8s) GUI client for Windows. Find unhealthy applications, follow pod logs, see CPU and memory with no Prometheus to install, open container terminals and edit YAML. Signs in to AWS EKS, Google GKE and Azure AKS through your kubeconfig. Native, with no telemetry, no account and no subscription.
 ```
 
 ## Description
@@ -86,7 +93,10 @@ Find the problem
 Applications puts what needs attention first. Every Argo CD application, and every workload no application tracks, has a health verdict and a one-line reason from the cluster's own status. Open an app for the facts behind that verdict, its pods, a timeline, and the crashing pod's last run. The full Resources explorer is one click away.
 
 Connect with what you already use
-kubeNimbus reads every context in $KUBECONFIG and ~/.kube/config, including exec-plugin sign-in for AWS EKS, Google GKE and Azure AKS, and clusters behind a proxy. Open several clusters in tabs, select several namespaces, or use a fleet list across connected clusters. Production, staging and development have distinct colours. Passwords, tokens and certificates are never copied into app storage.
+kubeNimbus reads every context in $KUBECONFIG and ~/.kube/config, including exec-plugin sign-in for AWS EKS, Google GKE and Azure AKS, and clusters behind a proxy. An expired sign-in is picked up again without closing the tab. With narrow permissions, kubeNimbus shows what you may read and says what it could not. Open several clusters in tabs, select several namespaces, or use a fleet list across connected clusters. Production, staging and development have distinct colours. Passwords, tokens and certificates are never copied into app storage.
+
+CPU and memory, with nothing to install
+kubeNimbus reads the metrics API your cluster already serves (metrics-server). Pod and node lists show live CPU and memory, pod detail graphs them over the last 30 minutes of your session, and the Nodes list shows used and requested capacity. No Prometheus and no in-cluster agent is needed. On a cluster without metrics-server those columns are hidden instead of showing errors.
 
 Inspect without leaving the app
 • Live resource lists for every kind your cluster serves, custom resources included. Lists update through Kubernetes watches, with search, sorting and column selection.
@@ -128,6 +138,8 @@ Opens on Applications: health and a one-line reason for every app
 Native desktop app: no .NET runtime to install
 No telemetry, no account; credentials are never stored
 Every kind your cluster serves, custom resources included
+CPU and memory from metrics-server: no Prometheus needed
+AWS EKS, Google GKE and Azure AKS sign-in from your kubeconfig
 Live pod logs: search, regex, level filters, error jump
 All of a workload's pods in one merged log stream
 A real terminal in the container (vi, top and mc work)

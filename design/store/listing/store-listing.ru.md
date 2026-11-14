@@ -1,11 +1,11 @@
 # Microsoft Store listing text: Russian
 
-The Russian Store listing (Partner Center → kubeNimbus → the submission → Store listings → Russian), translated from [`store-listing.md`](store-listing.md) at release 1.1.0. Every fenced block below is pasted as it stands. "What's new in this version" is left empty in this language, and the product name is the same as in English. When the English description, short description, features or search terms change, change this file in the same PR.
+The Russian Store listing (Partner Center → kubeNimbus → the submission → Store listings → Russian), translated from [`store-listing.md`](store-listing.md) at release 1.1.0, with the additions of 2026-11-14. Every fenced block below is pasted as it stands. "What's new in this version" is left empty in this language, and the product name is the same as in English. When the English description, short description, features or search terms change, change this file in the same PR.
 
 ## Short description
 
 ```text
-Быстрый бесплатный клиент Kubernetes (K8s) с открытым кодом для Windows. Находите неработающие приложения, следите за логами подов, открывайте терминал в контейнере и правьте YAML. Нативное приложение без телеметрии, учётной записи и подписки.
+Быстрый бесплатный клиент Kubernetes (K8s) с открытым кодом для Windows. Находите неработающие приложения, следите за логами подов, смотрите CPU и память без установки Prometheus, открывайте терминал в контейнере и правьте YAML. Вход в AWS EKS, Google GKE и Azure AKS работает через ваш kubeconfig. Нативное приложение без телеметрии, учётной записи и подписки.
 ```
 
 ## Description
@@ -17,7 +17,10 @@ kubeNimbus — быстрый бесплатный настольный клие
 Раздел Applications первым показывает то, что требует внимания. У каждого приложения Argo CD и у каждой рабочей нагрузки, которую не отслеживает ни одно приложение, есть вердикт о состоянии и причина в одну строку, взятая из собственного статуса кластера. Откройте приложение, чтобы увидеть факты, на которых основан вердикт: его поды, хронологию и последний запуск упавшего пода. Полный обозреватель Resources — в один клик.
 
 Подключайтесь тем, чем уже пользуетесь
-kubeNimbus читает все контексты из $KUBECONFIG и ~/.kube/config, включая вход через exec-плагины для AWS EKS, Google GKE и Azure AKS, и кластеры за прокси. Открывайте несколько кластеров во вкладках, выбирайте несколько пространств имён или используйте общий список по всем подключённым кластерам. Production, staging и development выделены разными цветами. Пароли, токены и сертификаты никогда не копируются в хранилище приложения.
+kubeNimbus читает все контексты из $KUBECONFIG и ~/.kube/config, включая вход через exec-плагины для AWS EKS, Google GKE и Azure AKS, и кластеры за прокси. Истёкшая сессия возобновляется без закрытия вкладки. При ограниченных правах kubeNimbus показывает то, что вам можно читать, и сообщает, что прочитать не удалось. Открывайте несколько кластеров во вкладках, выбирайте несколько пространств имён или используйте общий список по всем подключённым кластерам. Production, staging и development выделены разными цветами. Пароли, токены и сертификаты никогда не копируются в хранилище приложения.
+
+CPU и память: ничего устанавливать не нужно
+kubeNimbus читает API метрик, который уже отдаёт ваш кластер (metrics-server). Списки подов и узлов показывают текущее потребление CPU и памяти, детали пода рисуют график за последние 30 минут вашего сеанса, а список Nodes показывает занятую и запрошенную ёмкость. Prometheus и агент внутри кластера не нужны. В кластере без metrics-server эти столбцы скрываются, а не показывают ошибки.
 
 Исследуйте, не выходя из приложения
 • Живые списки ресурсов для каждого вида, который отдаёт ваш кластер, включая пользовательские ресурсы. Списки обновляются через watch в Kubernetes, с поиском, сортировкой и выбором столбцов.
@@ -59,6 +62,8 @@ One line per field.
 Нативное приложение: среду выполнения .NET ставить не нужно
 Без телеметрии и учётной записи; учётные данные не хранятся
 Каждый вид, который отдаёт кластер, включая пользовательские ресурсы
+CPU и память из metrics-server: Prometheus не нужен
+Вход в AWS EKS, Google GKE и Azure AKS из вашего kubeconfig
 Живые логи подов: поиск, regex, фильтры по уровню, переход к ошибке
 Все поды рабочей нагрузки в одном объединённом потоке логов
 Настоящий терминал в контейнере (vi, top и mc работают)
