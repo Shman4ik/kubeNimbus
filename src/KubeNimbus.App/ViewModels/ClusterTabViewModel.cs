@@ -302,8 +302,11 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
         // SelectedKind notification below, after its own visibility passes.
         LoadHiddenColumns(layout);
 
-        // A selection is a question about the list it was made in.
+        // A selection is a question about the list it was made in. Nor is a row remembered
+        // across a Refresh carried over: a ConfigMap may share a Pod's name.
         SetSelectedRows([]);
+        _reselectKey = null;
+        SelectedRow = null;
 
         // Unhealthy-only is a mode that outlives the kind, but whether it *applies* is
         // a property of the kind. No rebuild of its own: SetSort below rebuilds anyway.

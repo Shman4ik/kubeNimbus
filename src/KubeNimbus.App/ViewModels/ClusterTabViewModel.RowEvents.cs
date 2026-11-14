@@ -108,7 +108,13 @@ public sealed partial class ClusterTabViewModel
                 // list request — the empty state and the loading state swapped places,
                 // which is the exact failure UI rule 18 exists to prevent. Synced below
                 // is the honest end; the first row arriving is the other one.
+                //
+                // A watch sends one only when it starts (its first list, or a Refresh that
+                // restarted the shared source); a relist after 410 Gone is a diff with no Reset
+                // (ListAndEmitAsync). The selected row is selected again by key once the list
+                // delivers it, and the open pod and node panes are rebound to the new rows.
                 IsListLoading = true;
+                RememberSelectionForRelist();
                 _stagedRows?.Clear();
                 Rows.Clear();
                 _rowsByKey.Clear();
@@ -131,6 +137,11 @@ public sealed partial class ClusterTabViewModel
                 }
 
                 _lostWatchWarning = null;
+                if (_pendingNamespaces.Count == 0)
+                {
+                    ConcludeListSync();
+                }
+
                 break;
 
             case ResourceEventType.Added or ResourceEventType.Modified when evt.Resource is { } resource:
@@ -151,6 +162,7 @@ public sealed partial class ClusterTabViewModel
                     _rowsByKey[resource.Key] = row;
                     Metrics.ApplyLastSample(resource.Key, row);
                     AddRow(row);
+                    RebindLiveTabs(row);
                 }
 
                 break;
@@ -163,6 +175,7 @@ public sealed partial class ClusterTabViewModel
                     Rows.Remove(removed);
                 }
 
+                MarkLiveTabsDeleted(ResourceRowViewModel.KeyFor("", resource.Key));
                 break;
         }
     }

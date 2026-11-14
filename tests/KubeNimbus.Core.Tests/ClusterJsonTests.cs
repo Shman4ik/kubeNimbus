@@ -166,9 +166,10 @@ public class ClusterJsonTests
             }
         }
 
-        // Listed, then the oversized frame ended the watch, then a relist (a second Reset) and
-        // the next watch's frame.
-        await Assert.That(string.Join(",", events)).IsEqualTo("Reset,listed,Synced,Reset,listed,Synced,after");
+        // Listed, then the oversized frame ended the watch, then a relist and the next watch's
+        // frame. The relist is a diff against what the reader holds: "listed" is unchanged, so
+        // it sends only the Synced, and no second Reset (WatchRelistDiffTests).
+        await Assert.That(string.Join(",", events)).IsEqualTo("Reset,listed,Synced,Synced,after");
         await Assert.That(reported.Count).IsEqualTo(1);
         await Assert.That(reported[0]).IsTypeOf<UnreadableObjectException>();
         await Assert.That(reported[0].Message).Contains("larger than 32 MiB (Application huge)");

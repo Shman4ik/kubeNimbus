@@ -505,8 +505,8 @@ which now have a page of their own in this directory.
      first. So Reset cleared the flag, cleared the rows, and `IsListEmpty` went true — an
      empty-namespace verdict, delivered while the request was still in flight. The fix is
      a frame that means what the state needs: `ResourceEventType.Synced`, written after
-     the last page of the initial list. Reset now turns loading back *on* (a 410-Gone
-     relist is a load too), Synced turns it off, and so does the first row, because the
+     the last page of the initial list. Reset now turns loading back *on* (a Refresh
+     is a load too; a 410-Gone relist is a diff with no Reset since 2026-11), Synced turns it off, and so does the first row, because the
      list paginates and hiding page one behind a spinner until page four lands is the
      same unresponsiveness facing the other way. `WorkloadLogsTabViewModel` had the
      identical bug in `IsResolvingPods` and got the identical fix.

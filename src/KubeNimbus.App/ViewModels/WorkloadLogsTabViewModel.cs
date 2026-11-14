@@ -475,9 +475,9 @@ public sealed partial class WorkloadLogsTabViewModel : InspectorTabViewModelBase
         switch (evt.Type)
         {
             case ResourceEventType.Reset:
-                // Deliberately NOT a clear. A Reset is the informer relisting (initial
-                // sync, or a 410 Gone), and every pod still there arrives again as Added
-                // immediately after — dropping the sources would cancel healthy streams
+                // Deliberately NOT a clear. A Reset is the informer listing from the start
+                // (its first list; a 410 Gone relist is a diff with no Reset), and every pod
+                // still there arrives again as Added immediately after — dropping the sources would cancel healthy streams
                 // and throw away the buffered lines a reconnect has no way to refetch.
                 // A pod that really went away during the gap is caught by its own log
                 // stream ending, which the API server does when the pod does.

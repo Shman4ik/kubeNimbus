@@ -17,6 +17,15 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Fixed
 
+- **The list no longer blanks after a laptop sleep or a VPN drop.** When the watch had been away
+  longer than the cluster keeps its history, the list emptied, showed the spinner and lost the
+  selected row before filling in again. It now stays on screen and only the objects that
+  changed, appeared or went away are updated.
+- **Refresh keeps the selected row selected**, and an open pod or node pane keeps following the
+  object after a Refresh or a namespace change instead of freezing on its last state.
+- **A pod or node pane says when its object has been deleted**, as the Service pane already did.
+- **A watch the cluster keeps rejecting no longer reads the whole list in a tight loop.** It
+  now waits longer between attempts, up to 30 seconds.
 - **A running drain or bulk delete keeps its strip.** Refreshing the list or switching to another
   kind or namespace while a node was draining, or while several rows were being deleted, removed
   the strip that reports it, so the work went on with nothing on screen and no Stop, and closing

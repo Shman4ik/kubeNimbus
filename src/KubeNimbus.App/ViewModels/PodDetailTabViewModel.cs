@@ -23,7 +23,7 @@ namespace KubeNimbus.App.ViewModels;
 /// <see cref="ResourceRowViewModel"/> instance the live list uses, so
 /// container status stays current without a second watch.
 /// </summary>
-public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
+public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase, ILiveRowTab
 {
     /// <summary>
     /// Log scrollback cap. Read from settings once per tab rather than held as a
@@ -45,7 +45,7 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
 
     /// <summary>Null on the demo cluster — see <see cref="InspectorTabViewModelBase.IsDemo"/>.</summary>
     private readonly ClusterClient? _client;
-    private readonly ResourceRowViewModel _row;
+    private ResourceRowViewModel _row;
     private readonly Action<InspectorTabViewModelBase> _openTab;
     private readonly Func<OwnerRef, string?, Task> _openOwner;
     private readonly List<LogLineViewModel> _allLogLines = [];
@@ -500,6 +500,39 @@ public sealed partial class PodDetailTabViewModel : InspectorTabViewModelBase
             Dispatcher.UIThread.Post(RefreshFromRow);
         }
     }
+
+    /// <summary>
+    /// The pod is gone: the list said Deleted, or listed its namespace again without it. What
+    /// the pane shows is its last state, and an InfoBar above every tab says so, as the Service
+    /// pane does (#264). Cleared when the list delivers the pod again.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isDeleted;
+
+    public const string DeletedHeadline = "This pod was deleted";
+
+    public string DeletedDetail =>
+        $"{_row.Namespace}/{_row.Name} was deleted while this pane was open. What it shows is the pod as it was last seen.";
+
+    ResourceRowViewModel ILiveRowTab.Row => _row;
+
+    bool ILiveRowTab.IsOf(ResourceDescriptor descriptor) => descriptor is { Kind: "Pod", Group: "" };
+
+    void ILiveRowTab.Rebind(ResourceRowViewModel row)
+    {
+        IsDeleted = false;
+        if (ReferenceEquals(row, _row))
+        {
+            return;
+        }
+
+        _row.PropertyChanged -= OnRowChanged;
+        _row = row;
+        _row.PropertyChanged += OnRowChanged;
+        RefreshFromRow();
+    }
+
+    void ILiveRowTab.MarkDeleted() => IsDeleted = true;
 
     partial void OnSelectedContainerChanged(ContainerViewModel? value)
     {

@@ -56,7 +56,9 @@ public sealed partial class ClusterTabViewModel
                 }
             }
 
-            RestartWatch();
+            // The same kind read again: the selected row is selected again once it is listed,
+            // by key, since every row is a new object (ClusterTabViewModel.LiveTabs.cs).
+            RestartWatch(keepSelection: true);
         }
     }
 
@@ -82,9 +84,21 @@ public sealed partial class ClusterTabViewModel
     /// </summary>
     internal bool IsRowActionRunning => PendingRowAction is { IsWorking: true };
 
-    private void RestartWatch()
+    private void RestartWatch(bool keepSelection = false)
     {
         StopWatch();
+
+        // The rows are about to go. Only a Refresh keeps the selection: after a kind or
+        // namespace change a row with the same name is another object.
+        _reselectKey = null;
+        if (keepSelection)
+        {
+            RememberSelectionForRelist();
+        }
+        else
+        {
+            SelectedRow = null;
+        }
 
         // An armed scale/restart/delete is a question about the list that is being torn
         // down here (Refresh, kind switched, namespace switched, fleet toggled). Its target
@@ -419,6 +433,11 @@ public sealed partial class ClusterTabViewModel
             {
                 // This namespace's rows only, in one pass and one notification — the fleet
                 // view's cluster-scoped Reset, with the namespace in the cluster's place.
+                if (SelectedRow is { } selected && string.Equals(selected.Namespace, tagged.Namespace, StringComparison.Ordinal))
+                {
+                    RememberSelectionForRelist();
+                }
+
                 _pendingNamespaces.Add(tagged.Namespace);
                 _watchedNamespaces.Add(tagged.Namespace);
                 FlushStagedRows();
@@ -453,6 +472,7 @@ public sealed partial class ClusterTabViewModel
                 {
                     IsListLoading = false;
                     ConnectionWarning = null;
+                    ConcludeListSync();
                 }
 
                 break;
