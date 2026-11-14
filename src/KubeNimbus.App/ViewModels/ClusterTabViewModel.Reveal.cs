@@ -69,6 +69,9 @@ public sealed partial class ClusterTabViewModel
         {
             TrySelectPendingReveal();
         }
+
+        // The row selected before a Refresh or a Reset (ClusterTabViewModel.LiveTabs.cs).
+        TrySelectRemembered();
     }
 
     private void TrySelectPendingReveal()

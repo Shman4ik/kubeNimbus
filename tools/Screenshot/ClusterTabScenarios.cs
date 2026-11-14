@@ -228,6 +228,33 @@ internal static class ClusterTabScenarios
     }
 
     /// <summary>
+    /// A pod deleted while its pane is open: the list's Deleted marks the pane (ILiveRowTab),
+    /// which keeps the pod's last state under an InfoBar that says so, as the Service pane does.
+    /// </summary>
+    public static ClusterTabViewModel DemoPodDetailDeleted()
+    {
+        var tab = DemoPodDetail();
+        if (tab.SelectedRow is { } row)
+        {
+            tab.Apply(new ResourceEvent<DynamicResource>(ResourceEventType.Deleted, row.Resource));
+        }
+
+        return tab;
+    }
+
+    /// <summary>The node counterpart of <see cref="DemoPodDetailDeleted"/>: a node removed while its pane is open.</summary>
+    public static ClusterTabViewModel NodeDetailDeleted()
+    {
+        var tab = OpenNode("demo-worker-1", tabIndex: 0);
+        if (tab.SelectedRow is { } row)
+        {
+            tab.Apply(new ResourceEvent<DynamicResource>(ResourceEventType.Deleted, row.Resource));
+        }
+
+        return tab;
+    }
+
+    /// <summary>
     /// #319: Previous on a demo pod whose container has restarted — a snapshot with lines in
     /// it, which says so above them rather than only as the empty pane's placeholder.
     /// </summary>

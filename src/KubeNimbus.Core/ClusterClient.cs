@@ -344,6 +344,9 @@ public sealed partial class ClusterClient : IDisposable
     /// <summary>
     /// Generic informer loop: paginated initial list (emitting Added per item
     /// after a Reset), then a resumable watch against <paramref name="listPath"/>.
+    /// A relist inside the same stream (410 Gone, an <c>ERROR</c> frame, a lost first list)
+    /// is a diff against what the reader already holds, keyed by <paramref name="keyOf"/>,
+    /// and never another Reset (see <see cref="ListAndEmitAsync{T}"/>).
     /// <paramref name="extraQuery"/> is appended verbatim to the watch request's own
     /// query string (it must already start with <c>&amp;</c> and be escaped); the
     /// paginated list applies the same narrowing through <paramref name="listPage"/>.
@@ -353,6 +356,7 @@ public sealed partial class ClusterClient : IDisposable
         Func<string?, CancellationToken, Task<(IList<T> Items, string? Continue, string? ResourceVersion)>> listPage,
         Func<JsonElement, T?> deserialize,
         Func<T, string?> resourceVersionOf,
+        Func<T, string> keyOf,
         Action<Exception>? connectionLost,
         [EnumeratorCancellation] CancellationToken cancellationToken,
         string extraQuery = "",
@@ -363,7 +367,7 @@ public sealed partial class ClusterClient : IDisposable
         var channel = Channel.CreateUnbounded<ResourceEvent<T>>(
             new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
 
-        var pump = PumpAsync(listPath, listPage, deserialize, resourceVersionOf, channel.Writer, connectionLost, extraQuery, watchable, linked.Token);
+        var pump = PumpAsync(listPath, listPage, deserialize, resourceVersionOf, keyOf, channel.Writer, connectionLost, extraQuery, watchable, linked.Token);
         try
         {
             await foreach (var evt in channel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
@@ -390,6 +394,7 @@ public sealed partial class ClusterClient : IDisposable
         Func<string?, CancellationToken, Task<(IList<T> Items, string? Continue, string? ResourceVersion)>> listPage,
         Func<JsonElement, T?> deserialize,
         Func<T, string?> resourceVersionOf,
+        Func<T, string> keyOf,
         ChannelWriter<ResourceEvent<T>> writer,
         Action<Exception>? connectionLost,
         string extraQuery,
@@ -407,25 +412,56 @@ public sealed partial class ClusterClient : IDisposable
             // back (#363); see the lost-connection catch below.
             var reconnecting = false;
 
+            // What the reader holds, by key: every object this stream has delivered and not
+            // deleted. A relist is a diff against it rather than a Reset (see ListAndEmitAsync).
+            var held = new Dictionary<string, T>(StringComparer.Ordinal);
+
+            // Relists asked for by the server (410 Gone, an ERROR frame) with no watch event
+            // between them. The first one runs at once: after a laptop sleep or a VPN drop the
+            // resourceVersion has simply expired. A second in a row means the watch fails the
+            // same way every time ("Too large resource version" behind a load balancer whose
+            // API servers disagree), and without a pause that was a tight loop of full lists.
+            var relistsInARow = 0;
+
+            async Task BackOffAsync()
+            {
+                await Task.Delay(backoff, ct).ConfigureAwait(false);
+                backoff = backoff * 2 > MaxBackoff ? MaxBackoff : backoff * 2;
+            }
+
+            async Task RelistAskedAsync()
+            {
+                needRelist = true;
+                if (++relistsInARow > 1)
+                {
+                    await BackOffAsync().ConfigureAwait(false);
+                }
+            }
+
+            await writer.WriteAsync(ResourceEvent<T>.Reset, ct).ConfigureAwait(false);
+
             while (!ct.IsCancellationRequested)
             {
                 try
                 {
                     if (needRelist)
                     {
-                        await writer.WriteAsync(ResourceEvent<T>.Reset, ct).ConfigureAwait(false);
-                        resourceVersion = await ListAndEmitAsync(listPage, writer, ct).ConfigureAwait(false);
+                        resourceVersion = await ListAndEmitAsync(listPage, keyOf, resourceVersionOf, held, writer, ct).ConfigureAwait(false);
 
-                        // The initial list is complete. Reset was the *start* of it, so
+                        // The list is complete. Reset was the *start* of the first one, so
                         // this is the only frame that can honestly end a "loading" state:
                         // an empty namespace produces a Reset and no Added at all, so a
                         // consumer with nothing else to wait for is left choosing between
                         // a spinner that never stops and an empty list rendered while the
-                        // list request is still in flight (UI rule 18).
+                        // list request is still in flight (UI rule 18). After a relist it
+                        // says the reader is current again, which clears a warning line.
                         await writer.WriteAsync(ResourceEvent<T>.Synced, ct).ConfigureAwait(false);
                         needRelist = false;
                         reconnecting = false;
-                        backoff = InitialBackoff;
+                        if (relistsInARow == 0)
+                        {
+                            backoff = InitialBackoff;
+                        }
                     }
 
                     if (!watchable || resourceVersion is not { } resumeFrom)
@@ -443,8 +479,14 @@ public sealed partial class ClusterClient : IDisposable
                     }
 
                     var relist = await StreamWatchAsync(
-                        listPath, resumeFrom, deserialize, resourceVersionOf, writer,
-                        rv => resourceVersion = rv ?? resourceVersion, extraQuery, connectionLost, ct,
+                        listPath, resumeFrom, deserialize, resourceVersionOf, keyOf, held, writer,
+                        rv =>
+                        {
+                            // Any frame, a bookmark included, says this watch works.
+                            resourceVersion = rv ?? resourceVersion;
+                            relistsInARow = 0;
+                        },
+                        extraQuery, connectionLost, ct,
                         opened: () =>
                         {
                             if (reconnecting)
@@ -457,11 +499,14 @@ public sealed partial class ClusterClient : IDisposable
                         }).ConfigureAwait(false);
                     if (relist)
                     {
-                        needRelist = true;
+                        await RelistAskedAsync().ConfigureAwait(false);
                     }
-                    // Otherwise the watch closed cleanly (server timeout): loop resumes
-                    // from the last observed resourceVersion with no relist.
-                    backoff = InitialBackoff;
+                    else if (relistsInARow == 0)
+                    {
+                        // The watch closed cleanly (server timeout): loop resumes from the
+                        // last observed resourceVersion with no relist.
+                        backoff = InitialBackoff;
+                    }
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
                 {
@@ -469,7 +514,7 @@ public sealed partial class ClusterClient : IDisposable
                 }
                 catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Gone)
                 {
-                    needRelist = true;
+                    await RelistAskedAsync().ConfigureAwait(false);
                 }
                 catch (Exception ex) when (WatchRefusedException.From(ex) is { } refused)
                 {
@@ -529,8 +574,8 @@ public sealed partial class ClusterClient : IDisposable
                         $"Watch connection lost ({Describe(ex)}); retrying in {backoff.TotalSeconds:0}s.", ex));
 
                     // The retry resumes from the last resourceVersion and keeps what the reader
-                    // holds: a relist would start with a Reset, and every list clears its rows
-                    // and selection on one, at every backoff of an outage. But a reader clears
+                    // holds: a relist would cost a full list at every backoff of an outage (and
+                    // before relists became diffs, a Reset that blanked every list). But a reader clears
                     // its "connection lost" line on the next frame, and a resumed watch on a
                     // quiet collection sends none: the QA run left a Service pane on "retrying in
                     // 16s" for minutes with a healthy watch behind it (#363). So the first
@@ -575,25 +620,67 @@ public sealed partial class ClusterClient : IDisposable
         _ => ex.GetType().Name,
     };
 
+    /// <summary>
+    /// Lists the collection page by page and tells the reader what changed against
+    /// <paramref name="held"/>, the objects it already holds: an <c>Added</c> for a key it does
+    /// not hold, a <c>Modified</c> for one whose resourceVersion moved, nothing for one that did
+    /// not, and once the last page is in, a <c>Deleted</c> for every held key the list no longer
+    /// names. On the stream's first list <paramref name="held"/> is empty, so that is an
+    /// <c>Added</c> per object after the Reset, as before.
+    /// </summary>
+    /// <remarks>
+    /// A relist used to start with a Reset, on which every list clears its rows, its selection
+    /// and its warning and shows the spinner again: after a laptop sleep or a VPN drop longer
+    /// than the API server's watch cache keeps, the list blanked, and on a 10 000-pod list every
+    /// reader received 10 000 <c>Added</c> again. If the list fails part-way, what it delivered
+    /// is already in <paramref name="held"/>, and the next attempt diffs against that.
+    /// </remarks>
     private static async Task<string?> ListAndEmitAsync<T>(
         Func<string?, CancellationToken, Task<(IList<T> Items, string? Continue, string? ResourceVersion)>> listPage,
+        Func<T, string> keyOf,
+        Func<T, string?> resourceVersionOf,
+        Dictionary<string, T> held,
         ChannelWriter<ResourceEvent<T>> writer,
         CancellationToken ct)
         where T : class
     {
         string? continueToken = null;
         string? resourceVersion = null;
+        HashSet<string>? listed = held.Count == 0 ? null : new HashSet<string>(StringComparer.Ordinal);
         do
         {
             var (items, next, rv) = await listPage(continueToken, ct).ConfigureAwait(false);
             foreach (var item in items)
             {
-                await writer.WriteAsync(new ResourceEvent<T>(ResourceEventType.Added, item), ct).ConfigureAwait(false);
+                var key = keyOf(item);
+                listed?.Add(key);
+                ResourceEventType? type = ResourceEventType.Added;
+                if (held.TryGetValue(key, out var before))
+                {
+                    type = resourceVersionOf(item) is { } now && now == resourceVersionOf(before)
+                        ? null
+                        : ResourceEventType.Modified;
+                }
+
+                held[key] = item;
+                if (type is { } t)
+                {
+                    await writer.WriteAsync(new ResourceEvent<T>(t, item), ct).ConfigureAwait(false);
+                }
             }
 
             resourceVersion = rv ?? resourceVersion;
             continueToken = next;
         } while (!string.IsNullOrEmpty(continueToken));
+
+        if (listed is not null && listed.Count < held.Count)
+        {
+            foreach (var (key, gone) in held.Where(pair => !listed.Contains(pair.Key)).ToList())
+            {
+                held.Remove(key);
+                await writer.WriteAsync(new ResourceEvent<T>(ResourceEventType.Deleted, gone), ct).ConfigureAwait(false);
+            }
+        }
 
         return resourceVersion;
     }
@@ -608,6 +695,8 @@ public sealed partial class ClusterClient : IDisposable
         string resourceVersion,
         Func<JsonElement, T?> deserialize,
         Func<T, string?> resourceVersionOf,
+        Func<T, string> keyOf,
+        Dictionary<string, T> held,
         ChannelWriter<ResourceEvent<T>> writer,
         Action<string?> updateResourceVersion,
         string extraQuery,
@@ -722,6 +811,15 @@ public sealed partial class ClusterClient : IDisposable
             };
             if (mapped is { } m)
             {
+                if (m == ResourceEventType.Deleted)
+                {
+                    held.Remove(keyOf(resource));
+                }
+                else
+                {
+                    held[keyOf(resource)] = resource;
+                }
+
                 await writer.WriteAsync(new ResourceEvent<T>(m, resource), ct).ConfigureAwait(false);
             }
         }

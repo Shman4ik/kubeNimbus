@@ -38,11 +38,11 @@ namespace KubeNimbus.App.ViewModels;
 /// icon on the chrome row and its outcome an InfoBar under it while there is one to report.
 /// </para>
 /// </remarks>
-public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
+public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase, ILiveRowTab
 {
     /// <summary>Null on the demo cluster — see <see cref="InspectorTabViewModelBase.IsDemo"/>.</summary>
     private readonly ClusterClient? _client;
-    private readonly ResourceRowViewModel _row;
+    private ResourceRowViewModel _row;
     private readonly Func<OwnerRef, string?, Task>? _openPod;
     private readonly OpenNamedLogs? _openLogs;
     private readonly CancellationTokenSource _cts = new();
@@ -292,6 +292,39 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
             RefreshFromRow();
         }
     }
+
+    /// <summary>
+    /// The node is gone: the Nodes list said Deleted, or listed the nodes again without it.
+    /// What the pane shows is its last state, and an InfoBar above every tab says so, as the
+    /// Service pane does (#264). Cleared when the list delivers the node again.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isDeleted;
+
+    public const string DeletedHeadline = "This node was deleted";
+
+    public string DeletedDetail =>
+        $"{NodeName} was removed from the cluster while this pane was open. What it shows is the node as it was last seen.";
+
+    ResourceRowViewModel ILiveRowTab.Row => _row;
+
+    bool ILiveRowTab.IsOf(ResourceDescriptor descriptor) => NodeActions.IsNodeKind(descriptor);
+
+    void ILiveRowTab.Rebind(ResourceRowViewModel row)
+    {
+        IsDeleted = false;
+        if (ReferenceEquals(row, _row))
+        {
+            return;
+        }
+
+        _row.PropertyChanged -= OnRowChanged;
+        _row = row;
+        _row.PropertyChanged += OnRowChanged;
+        RefreshFromRow();
+    }
+
+    void ILiveRowTab.MarkDeleted() => IsDeleted = true;
 
     /// <summary>
     /// Re-reads everything the node object itself carries. Cheap and idempotent, so it
@@ -717,8 +750,8 @@ public sealed partial class NodeDetailTabViewModel : InspectorTabViewModelBase
     /// One frame of the pods-on-node watch. Rows are updated in place and kept in
     /// namespace/name order, so a Modified never costs the reader their selection; the
     /// requested figures follow every change once the initial list is complete, and are
-    /// withheld while a list (the first, or a relist after a 410) is still arriving —
-    /// a half-read node would print as a half-empty one.
+    /// withheld while the first list is still arriving — a half-read node would print as a
+    /// half-empty one. A relist after a 410 is a diff with no Reset, so it never is.
     /// </summary>
     internal void ApplyPodEvent(ResourceEvent<DynamicResource> evt)
     {

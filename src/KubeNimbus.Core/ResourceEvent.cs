@@ -2,7 +2,11 @@ namespace KubeNimbus.Core;
 
 public enum ResourceEventType
 {
-    /// <summary>Consumers must clear their local cache; a fresh list follows (initial sync or 410-Gone relist).</summary>
+    /// <summary>
+    /// Consumers must clear their local cache; a fresh list follows. Sent once at the start of a
+    /// stream (the first list, or a restarted source such as <see cref="WatchCache.Relist"/>), never
+    /// for a relist inside a stream after 410 Gone, which arrives as Added, Modified and Deleted.
+    /// </summary>
     Reset,
     Added,
     Modified,

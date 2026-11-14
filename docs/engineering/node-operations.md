@@ -107,8 +107,10 @@ is only their result line. The drain asks, with its plan (2026-10-07; both used 
     namespace/name), and kept in namespace/name order by insertion, so a status change
     never costs the reader their selection.
   - The allocatable-vs-requested arithmetic follows every change once the initial list is
-    `Synced`, and is **withheld while a list is still arriving** — the first one, or a
-    relist after a 410 — because a half-read node prints as a half-empty one (UI rule 18).
+    `Synced`, and is **withheld while the first list is still arriving**, because a half-read
+    node prints as a half-empty one (UI rule 18). A relist after a 410 is a diff against the
+    pods already held, with no `Reset`, so it never passes through a half-empty set
+    ([aot-watch-and-discovery](aot-watch-and-discovery.md)).
     The pane opens in the loading state for the same reason: "no pods here" is a verdict it
     does not have until the list has landed.
   - The Refresh button on the Pods tab is gone (UI rule 1: a live list has nothing to
@@ -345,9 +347,10 @@ Seven things are load-bearing:
    drain runs one watch for its whole life (`PodsOnNodeWatch` in `ClusterClient.Nodes.cs`):
    its initial list is the plan's input, and between passes the loop waits for the pod set
    to change instead of sleeping. Three details carry the weight:
-   - **A relist is collected aside and swapped in whole on `Synced`.** The drain reads "no
-     pods left" as "drained", so it must never see the half-filled set a relist (after a
-     410) passes through.
+   - **A list is collected aside and swapped in whole on `Synced`.** The drain reads "no
+     pods left" as "drained", so it must never see the half-filled set a list passes
+     through. Since relists became diffs (2026-11) that is only the first list; a relist
+     after a 410 removes a pod only by a `Deleted` for a pod the new list no longer names.
    - **A PodDisruptionBudget's 429 still has a timer, because that is its contract** —
      "not now, ask again later". While a pod is held back the wait also ends after
      `EvictionRetryInterval` (5s, kubectl drain's own), measured as a deadline so a pod

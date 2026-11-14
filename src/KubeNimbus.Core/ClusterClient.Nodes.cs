@@ -438,10 +438,11 @@ public sealed partial class ClusterClient
         }
 
         /// <summary>
-        /// Folds one frame in. A relist (the initial one, or after a 410) is collected
-        /// aside and swapped in whole on Synced: the drain reads "no pods left" as
-        /// "drained", so it must never be shown the half-filled dictionary a relist passes
-        /// through on its way to complete.
+        /// Folds one frame in. A list that starts with a Reset (the stream's first) is
+        /// collected aside and swapped in whole on Synced: the drain reads "no pods left" as
+        /// "drained", so it must never be shown the half-filled dictionary a list passes
+        /// through on its way to complete. A relist after a 410 is a diff with no Reset, so
+        /// it only ever removes a pod by a Deleted the new list confirms.
         /// </summary>
         private void Apply(ResourceEvent<DynamicResource> evt)
         {
