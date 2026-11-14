@@ -74,16 +74,32 @@ public sealed partial class ClusterTabViewModel
         _watchCts = null;
     }
 
+    /// <summary>
+    /// The strip's action is in flight — a request, a drain's eviction loop or a bulk loop.
+    /// Such a strip is never replaced by a newly armed one and never dropped when the list is
+    /// rebuilt; every arm path and <see cref="RestartWatch"/> share this one test, so they
+    /// cannot drift apart.
+    /// </summary>
+    internal bool IsRowActionRunning => PendingRowAction is { IsWorking: true };
+
     private void RestartWatch()
     {
         StopWatch();
 
         // An armed scale/restart/delete is a question about the list that is being torn
-        // down here (kind switched, namespace switched, fleet toggled). Its target row
-        // is about to leave the screen, so the strip goes with it rather than lingering
+        // down here (Refresh, kind switched, namespace switched, fleet toggled). Its target
+        // row is about to leave the screen, so the strip goes with it rather than lingering
         // over a list it no longer belongs to. A *completed* action's result strip is
         // dismissed the same way, which is correct: the answer was already read.
-        PendingRowAction = null;
+        //
+        // A *running* action stays: a drain's eviction loop and a bulk delete live in the
+        // strip, and dropping it would leave the loop running with nothing on screen, no
+        // Stop, and nothing for DisposeAsync to cancel. The strip names its cluster and its
+        // target, so it stays truthful over another list.
+        if (!IsRowActionRunning)
+        {
+            PendingRowAction = null;
+        }
 
         // A refusal was about the list being torn down; the next one asks again (#339).
         ListRefusal = null;
@@ -165,10 +181,10 @@ public sealed partial class ClusterTabViewModel
                 // reads, or one this list showed a moment ago, is given its rows at once.
                 await foreach (var batch in client.Watches.WatchAsync(
                     descriptor, @namespace,
-                    connectionLost: ex => Dispatcher.UIThread.Post(() => OnListConnectionLost(ex)),
+                    connectionLost: ex => Dispatcher.UIThread.Post(() => OnListConnectionLost(ex, token)),
                     cancellationToken: token).InBatches(cancellationToken: token))
                 {
-                    await Dispatcher.UIThread.InvokeAsync(() => ApplyBatch(batch));
+                    await Dispatcher.UIThread.InvokeAsync(() => ApplyBatch(batch, token));
                 }
             }
             catch (OperationCanceledException)
@@ -186,6 +202,37 @@ public sealed partial class ClusterTabViewModel
         }, token);
 
         Metrics.Start(descriptor, [("", client)], namespaces, token);
+    }
+
+    /// <summary>
+    /// A batch posted by the watch that owns <paramref name="token"/>. The post is queued on
+    /// the UI thread, so it can run after <see cref="StopWatch"/> cleared the list for another
+    /// kind or namespace: a cancelled watch's batch is dropped, never applied to the new list.
+    /// </summary>
+    internal void ApplyBatch(IReadOnlyList<ResourceEvent<DynamicResource>> events, CancellationToken token)
+    {
+        if (!token.IsCancellationRequested)
+        {
+            ApplyBatch(events);
+        }
+    }
+
+    /// <summary>The fleet counterpart of <see cref="ApplyBatch(IReadOnlyList{ResourceEvent{DynamicResource}}, CancellationToken)"/>.</summary>
+    internal void ApplyFleetBatch(IReadOnlyList<FleetResourceEvent> events, CancellationToken token)
+    {
+        if (!token.IsCancellationRequested)
+        {
+            ApplyFleetBatch(events);
+        }
+    }
+
+    /// <summary>A lost connection reported by the watch that owns <paramref name="token"/>; an old watch's is dropped.</summary>
+    internal void OnListConnectionLost(Exception ex, CancellationToken token)
+    {
+        if (!token.IsCancellationRequested)
+        {
+            OnListConnectionLost(ex);
+        }
     }
 
     /// <summary>What the list's watch reports between frames: a lost connection, or an object it could not read.</summary>
@@ -276,6 +323,11 @@ public sealed partial class ClusterTabViewModel
             {
                 Dispatcher.UIThread.Post(() =>
                 {
+                    if (token.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
                     Status = $"Watch ended: {ex.Message}";
                     IsListLoading = false;
                     RecomputeListEmpty();
@@ -461,8 +513,13 @@ public sealed partial class ClusterTabViewModel
             {
                 var targets = await ClusterFleet.ResolveAsync(
                     members, descriptor.Group, descriptor.Kind,
-                    memberUnavailable: (member, ex) => Dispatcher.UIThread.Post(
-                        () => ConnectionWarning = $"{member.ClusterName}: {ex.Message}"),
+                    memberUnavailable: (member, ex) => Dispatcher.UIThread.Post(() =>
+                    {
+                        if (!token.IsCancellationRequested)
+                        {
+                            ConnectionWarning = $"{member.ClusterName}: {ex.Message}";
+                        }
+                    }),
                     cancellationToken: token);
 
                 // The Pod descriptor of each member, for the same reason the target
@@ -479,6 +536,12 @@ public sealed partial class ClusterTabViewModel
 
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
+                    // An older run's targets must not replace the set the current run wrote.
+                    if (token.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
                     _fleetTargets.Clear();
                     foreach (var target in targets)
                     {
@@ -527,7 +590,7 @@ public sealed partial class ClusterTabViewModel
                     }),
                     cancellationToken: token).InBatches(cancellationToken: token))
                 {
-                    await Dispatcher.UIThread.InvokeAsync(() => ApplyFleetBatch(batch));
+                    await Dispatcher.UIThread.InvokeAsync(() => ApplyFleetBatch(batch, token));
                 }
 
                 // Every member's watch ended (each refused, #339, or failed for good): each said
@@ -548,6 +611,11 @@ public sealed partial class ClusterTabViewModel
             {
                 Dispatcher.UIThread.Post(() =>
                 {
+                    if (token.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
                     Status = $"Fleet watch ended: {ex.Message}";
                     IsListLoading = false;
                     RecomputeListEmpty();

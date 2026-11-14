@@ -1316,7 +1316,7 @@ public sealed partial class RowActionViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(IsDraining))]
     private void StopDrain() => _drainCts?.Cancel();
 
-    /// <summary>Cancels a drain this strip owns when the tab or the app is going away.</summary>
+    /// <summary>Cancels a drain or a bulk loop this strip owns when the tab or the app is going away.</summary>
     public void CancelDrain()
     {
         _drainCts?.Cancel();

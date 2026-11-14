@@ -405,7 +405,7 @@ public sealed partial class ClusterTabViewModel
         // the loop running with nothing on screen reporting it. Portainer reached the
         // same rule from the other direction (portainer#4006) — a drain should be issued
         // to one node at a time, and a single-slot strip is what enforces that here.
-        if (PendingRowAction is { IsBusy: true } or { IsDraining: true } or { IsDeletingMany: true })
+        if (IsRowActionRunning)
         {
             return null;
         }

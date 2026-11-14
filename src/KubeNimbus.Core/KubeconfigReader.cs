@@ -348,7 +348,9 @@ internal static class KubeconfigReader
     /// <summary>
     /// The first document of <paramref name="text"/> as a tree, or null for an empty stream
     /// or an empty document. Aliases resolve to the node their anchor named; a mapping key
-    /// given twice keeps its last value; a key that is not a single value is skipped.
+    /// given twice keeps its last value; a key that is not a single value is skipped; a plain
+    /// <c>&lt;&lt;</c> key is a YAML merge key, applied as kubectl's go-yaml applies it.
+    /// Nesting deeper than <see cref="MaxDepth"/> is refused with a <see cref="YamlException"/>.
     /// </summary>
     private static Node? LoadFirstDocument(string text)
     {
@@ -360,12 +362,26 @@ internal static class KubeconfigReader
         }
 
         parser.Consume<DocumentStart>();
-        var root = ReadNode(parser, new Dictionary<AnchorName, Node>());
+        var root = ReadNode(parser, new Dictionary<AnchorName, Node>(), depth: 0);
         return root is ScalarNode { Text: null } ? null : root;
     }
 
-    private static Node ReadNode(IParser parser, Dictionary<AnchorName, Node> anchors)
+    /// <summary>
+    /// How deep collections may nest. A kubeconfig is about five levels deep; the reader is
+    /// recursive, and a corrupt or hostile file on <c>$KUBECONFIG</c> nested a hundred
+    /// thousand levels would overflow the stack, which no catch survives: the process dies
+    /// while contexts are enumerated. The same cap <see cref="ClusterJson"/> uses for JSON.
+    /// </summary>
+    internal const int MaxDepth = 256;
+
+    private static Node ReadNode(IParser parser, Dictionary<AnchorName, Node> anchors, int depth)
     {
+        if (depth > MaxDepth)
+        {
+            var at = parser.Current?.Start ?? Mark.Empty;
+            throw new YamlException(at, at, $"The file nests deeper than {MaxDepth} levels, which no kubeconfig does.");
+        }
+
         if (parser.TryConsume<AnchorAlias>(out var alias))
         {
             return anchors.TryGetValue(alias.Value, out var target)
@@ -385,7 +401,7 @@ internal static class KubeconfigReader
             var sequence = Remember(anchors, sequenceStart.Anchor, new SeqNode([], sequenceStart.Start));
             while (!parser.TryConsume<SequenceEnd>(out _))
             {
-                sequence.Items.Add(ReadNode(parser, anchors));
+                sequence.Items.Add(ReadNode(parser, anchors, depth + 1));
             }
 
             return sequence;
@@ -393,17 +409,64 @@ internal static class KubeconfigReader
 
         var mappingStart = parser.Consume<MappingStart>();
         var mapping = Remember(anchors, mappingStart.Anchor, new MapNode(new Dictionary<string, Node>(StringComparer.Ordinal), mappingStart.Start));
+        Node? merge = null;
         while (!parser.TryConsume<MappingEnd>(out _))
         {
-            var key = ReadNode(parser, anchors);
-            var value = ReadNode(parser, anchors);
-            if (key is ScalarNode { Text: { } name })
+            // A plain << is a merge key; a quoted "<<" is an ordinary key with that text.
+            var isMerge = parser.Accept<Scalar>(out var keyScalar)
+                && keyScalar.Style == ScalarStyle.Plain && keyScalar.Value == "<<";
+            var key = ReadNode(parser, anchors, depth + 1);
+            var value = ReadNode(parser, anchors, depth + 1);
+            if (isMerge)
+            {
+                merge = value;
+            }
+            else if (key is ScalarNode { Text: { } name })
             {
                 mapping.Children[name] = value;
             }
         }
 
+        if (merge is not null)
+        {
+            ApplyMerge(mapping, merge);
+        }
+
         return mapping;
+    }
+
+    /// <summary>
+    /// Applies a merge key's value to <paramref name="mapping"/>. kubectl's go-yaml does, so an
+    /// entry that shares <c>server</c>, <c>certificate-authority-data</c> or <c>exec</c>
+    /// through <c>&lt;&lt;: *base</c> has those fields; storing the key as a literal child
+    /// silently lost them. The value is a mapping or a list of mappings; a key written in the
+    /// mapping itself wins wherever it stands, and in a list the earlier mapping wins (the YAML
+    /// merge-key rules).
+    /// </summary>
+    private static void ApplyMerge(MapNode mapping, Node merge)
+    {
+        List<MapNode> sources = merge switch
+        {
+            MapNode single => [single],
+            SeqNode { Items: var items } when items.All(i => i is MapNode) => [.. items.Cast<MapNode>()],
+            _ => throw new YamlException(merge.Start, merge.Start,
+                $"The value of a << merge key should be a mapping or a list of mappings, not {Describe(merge)}."),
+        };
+
+        foreach (var source in sources)
+        {
+            // An anchor merged into itself (`&a {<<: *a}`) adds nothing, and enumerating the
+            // dictionary being added to would throw.
+            if (ReferenceEquals(source, mapping))
+            {
+                continue;
+            }
+
+            foreach (var (key, value) in source.Children)
+            {
+                mapping.Children.TryAdd(key, value);
+            }
+        }
     }
 
     private static T Remember<T>(Dictionary<AnchorName, Node> anchors, AnchorName anchor, T node) where T : Node

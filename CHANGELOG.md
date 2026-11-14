@@ -15,6 +15,23 @@ it as the GitHub Release body, so headings must match tags exactly
 
 - .NET 11 (SDK 11.0.100), Avalonia 12.1.6, TUnit 1.83.8 and SvcSystems.UI.Terminal 2.3.4.
 
+### Fixed
+
+- **A running drain or bulk delete keeps its strip.** Refreshing the list or switching to another
+  kind or namespace while a node was draining, or while several rows were being deleted, removed
+  the strip that reports it, so the work went on with nothing on screen and no Stop, and closing
+  the tab did not stop it either. The strip now stays until the work ends.
+- **A list no longer shows rows from the one you just left.** Switching kind or namespace while a
+  large list was still arriving could put a few of the old kind's rows into the new list, or show
+  the old list's "connection lost" over it.
+- **Kinds that cannot be watched open and stay quiet.** PodMetrics and NodeMetrics (and any kind
+  whose API serves `list` but not `watch`) showed "Watch connection lost … retrying" for ever.
+  They are now read once; Refresh reads them again.
+- **Kubeconfig files that use YAML merge keys are read as kubectl reads them.** An entry that
+  took its `server`, `certificate-authority-data` or `exec` from a shared block through
+  `<<: *name` lost those fields.
+- **A corrupt, deeply nested kubeconfig is reported as unreadable** instead of ending the app.
+
 ## [1.1.0] - 2026-11-09
 
 Connecting takes about half as long over a slow link, and three fixes: the Events tabs, the logs

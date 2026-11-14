@@ -1566,10 +1566,10 @@ public sealed partial class ClusterTabViewModel : ObservableObject, IAsyncDispos
     {
         await Applications.DisposeAsync();
 
-        // A drain runs in this process and in this strip. Closing the tab stops it —
-        // which is the honest behaviour and the one the confirm warned about, but it has
-        // to be an explicit cancel rather than a task left running against a disposed
-        // client.
+        // A drain or a bulk loop runs in this process and in this strip, which a Refresh or
+        // a kind switch keeps on screen while it runs. Closing the tab stops it — the honest
+        // behaviour and the one the confirm warned about, but it has to be an explicit
+        // cancel rather than a task left running against a disposed client.
         PendingRowAction?.CancelDrain();
         if (_logTargetsCts is not null)
         {

@@ -110,6 +110,18 @@ file — and read, with `as-uid`, into `KubeconfigDocument.Impersonations` inste
 "Impersonation" below) — and the parse error names its line and column (YamlDotNet 18 no
 longer puts them in the message). `KubeconfigReaderTests` pins each of these.
 
+Two more, from a 2026-11 review. **YAML merge keys are applied**, as kubectl's go-yaml applies
+them: an entry that shares `server`, `certificate-authority-data` or `exec` through
+`<<: *base` used to keep the `<<` as a literal child that nothing read, and lost those fields
+without a word. The value is a mapping or a list of mappings; a key written in the mapping
+itself wins wherever it stands, and in a list the earlier mapping wins; a `<<` whose value is
+neither is a `YamlException`, and a quoted `"<<"` is an ordinary key. **Nesting is capped at
+256 levels** (`KubeconfigReader.MaxDepth`, the cap `ClusterJson` uses for JSON): the reader is
+recursive, and a corrupt file on `$KUBECONFIG` nested deep enough overflowed the stack, which
+no catch survives, so the process died while the context list was read. Past the cap the file
+is a `YamlException` with its line and column, which the context enumeration reports as one
+unreadable file (`KubeconfigReadFailure`) and the connection report as "Could not read it".
+
 ## `proxy-url` is read by kubeNimbus, because the library drops it (FEAT-54)
 
 `KubernetesClient.Aot`'s cluster model has no `proxy-url`, so its YAML reader discards the

@@ -279,6 +279,11 @@ load-bearing.
    after the request in flight; that request's row says the server may or may not have acted on
    it, and the result line counts what is left ("Stopped. 3 of 8 Pods deleted, 5 left."). The
    strip cannot be dismissed while it runs, and closing the tab cancels it (`CancelDrain`).
+   A Refresh or a kind or namespace switch rebuilds the list but keeps a running strip
+   (`IsRowActionRunning`, the same test every arm path uses): dropping it once left the loop
+   deleting with no Stop on screen and nothing for the tab's close to cancel. The strip names
+   its count and cluster, so it stays truthful over another list
+   (`RowActionStripSurvivalTests`).
 5. **The targets are captured when the strip is armed** (`BulkTarget`: the row's own client
    and descriptor), so moving the selection while the strip is open cannot re-aim it.
 6. **A right click inside a multi-row selection keeps it** (`RowLogsGesture`): the row menu's

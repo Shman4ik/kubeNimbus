@@ -180,7 +180,7 @@ public sealed partial class ClusterTabViewModel
             return null;
         }
 
-        if (PendingRowAction is { IsBusy: true } or { IsDraining: true } or { IsDeletingMany: true })
+        if (IsRowActionRunning)
         {
             return null;
         }
