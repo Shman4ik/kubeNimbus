@@ -17,7 +17,7 @@
        of a 300px dock. The owner chips now ride the container row, and every tab's
        tools ride the tab strip's row (see `ListBox.segmented` /
        `TabControl.headerless` in Theme.axaml). -->
-  <Grid RowDefinitions="Auto,Auto,*" Margin="10,8,10,10">
+  <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="10,8,10,10">
 
     <!-- Identity row: which container you are looking at, what owns the pod, and the
          two things you do to a container. The container picker is a single
@@ -341,7 +341,16 @@
       </StackPanel>
     </Grid>
 
-    <TabControl Grid.Row="2" Classes="headerless" SelectedIndex="{Binding SelectedDetailTabIndex}">
+    <!-- Once the pod is deleted the pane is its last state, and says so above every tab, as the
+         Service pane does (#264). The live list sets it (ILiveRowTab). -->
+    <Border Grid.Row="2" Classes="infoBar warn" Margin="0,0,0,6" IsVisible="{Binding IsDeleted}">
+      <StackPanel Spacing="2">
+        <TextBlock Text="{x:Static vm:PodDetailTabViewModel.DeletedHeadline}" FontWeight="SemiBold" FontSize="12" />
+        <TextBlock Text="{Binding DeletedDetail}" FontSize="11.5" Opacity="0.75" TextWrapping="Wrap" />
+      </StackPanel>
+    </Border>
+
+    <TabControl Grid.Row="3" Classes="headerless" SelectedIndex="{Binding SelectedDetailTabIndex}">
       <TabItem Header="Logs">
         <Grid RowDefinitions="Auto,*">
           <StackPanel Grid.Row="0">

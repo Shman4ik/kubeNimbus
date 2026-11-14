@@ -99,6 +99,13 @@ public sealed partial class ClusterTabViewModel
                 existing.IsPreview = false;
             }
 
+            // The pane may hold a row from before a Refresh or a namespace change; the row
+            // being opened is the live one.
+            if (existing is ILiveRowTab live && (!ReferenceEquals(live.Row, row) || live.IsDeleted))
+            {
+                live.Rebind(row);
+            }
+
             SelectedInspectorTab = existing;
             return;
         }

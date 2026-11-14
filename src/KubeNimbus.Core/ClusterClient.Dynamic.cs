@@ -16,7 +16,9 @@ public sealed partial class ClusterClient
     /// <summary>
     /// Live stream of one resource kind, informer-style: a Reset, one Added per existing
     /// object (paginated), Synced, then the watch, resuming from the last resourceVersion on
-    /// a dropped connection and relisting on 410 Gone.<paramref name="labelSelector"/> narrows both the initial list
+    /// a dropped connection and relisting on 410 Gone; a relist reaches the reader as the
+    /// Added, Modified and Deleted that bring what it holds up to date, then Synced, never as
+    /// a second Reset. <paramref name="labelSelector"/> narrows both the initial list
     /// and the watch to the objects a workload owns, and <paramref name="fieldSelector"/>
     /// to the objects a server-side field names (the pods on one node) — each the same
     /// selector on both halves, or the watch would report additions the list never
@@ -41,6 +43,7 @@ public sealed partial class ClusterClient
             // "came from the list" and "came from the watch" indistinguishable.
             deserialize: el => DynamicResource.FromListItem(el, descriptor),
             resourceVersionOf: static r => r.ResourceVersion,
+            keyOf: static r => r.Key,
             connectionLost: connectionLost,
             cancellationToken: cancellationToken,
             extraQuery: SelectorQuery(fieldSelector, labelSelector),

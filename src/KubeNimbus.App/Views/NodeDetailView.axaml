@@ -83,6 +83,15 @@
         <SelectableTextBlock Text="{Binding NodeShellNotice}" TextWrapping="Wrap" FontSize="12" />
       </DockPanel>
     </Border>
+
+    <!-- Once the node is gone the pane is its last state, and says so above every tab, as the
+         Service pane does (#264). The live list sets it (ILiveRowTab). -->
+    <Border Classes="infoBar warn" Margin="0,0,0,8" IsVisible="{Binding IsDeleted}">
+      <StackPanel Spacing="2">
+        <TextBlock Text="{x:Static vm:NodeDetailTabViewModel.DeletedHeadline}" FontWeight="SemiBold" FontSize="12" />
+        <TextBlock Text="{Binding DeletedDetail}" FontSize="11.5" Opacity="0.75" TextWrapping="Wrap" />
+      </StackPanel>
+    </Border>
     </StackPanel>
 
     <TabControl Grid.Row="1" Classes="headerless" SelectedIndex="{Binding SelectedTabIndex}">

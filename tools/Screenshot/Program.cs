@@ -292,6 +292,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
     // The demo cluster, built by running the real ConnectCommand — see ClusterTabScenarios.
     ("cluster-tab-demo-list", () => HostInMainWindow(ClusterTabScenarios.DemoList())),
     ("cluster-tab-demo-pod-detail", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetail(), height: 1000)),
+    ("cluster-tab-demo-pod-detail-deleted", () => HostInMainWindow(ClusterTabScenarios.DemoPodDetailDeleted(), height: 1000)),
     ("cluster-tab-demo-exec-unavailable", () => HostInMainWindow(ClusterTabScenarios.DemoExecUnavailable())),
     // Multi-pod logs. Taller than the default for the same reason pod detail is: the
     // whole point is how many merged lines you can read at once. The second shot is the
@@ -384,6 +385,7 @@ var scenarios = new (string Name, Func<Control> Build)[]
     ("cluster-tab-node-capacity-no-metrics", () => HostInMainWindow(ClusterTabScenarios.NodeCapacityNoMetrics())),
     ("cluster-tab-node-capacity-narrow-rbac", () => HostInMainWindow(ClusterTabScenarios.NodeCapacityNarrowRbac())),
     ("cluster-tab-node-detail", () => HostInMainWindow(ClusterTabScenarios.NodeDetail(), height: 1000)),
+    ("cluster-tab-node-detail-deleted", () => HostInMainWindow(ClusterTabScenarios.NodeDetailDeleted(), height: 1000)),
     ("cluster-tab-node-detail-pods", () => HostInMainWindow(ClusterTabScenarios.NodeDetailPods(), height: 1000)),
     ("ux-node-pods-sort", () => HostInMainWindow(ClusterTabScenarios.NodeDetailPods(), height: 1000)),
     ("cluster-tab-node-detail-events", () => HostInMainWindow(ClusterTabScenarios.NodeDetailEvents(), height: 1000)),

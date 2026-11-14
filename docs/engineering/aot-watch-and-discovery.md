@@ -61,6 +61,42 @@ with `HttpCompletionOption.ResponseHeadersRead`:
   paginated initial list (Reset + Added per item) → resumable watch →
   relist on `ERROR` frame / 410 Gone → exponential backoff with
   `connectionLost` callback on transient failures.
+- **A relist is a diff** (2026-11, project review). A stream sends one `Reset`, at its start;
+  every later list in the same stream (after 410 Gone, an `ERROR` frame, a 401, a frame too
+  large, or a first list that failed part-way) goes through `ListAndEmitAsync` against the
+  objects the pump has delivered and not deleted (`held`, by `DynamicResource.Key`): an `Added`
+  for a new key, a `Modified` for one whose resourceVersion moved, nothing for one that did
+  not, then a `Deleted` for every held key the list no longer names, and a `Synced`. Before,
+  every relist began with a `Reset`, on which every list clears its rows, its selection and its
+  warning and shows the spinner: after a laptop sleep or a VPN drop longer than the API
+  server's watch cache keeps, the list blanked, and a 10 000-pod list sent 10 000 `Added` to
+  every reader again. `WatchCache` needs nothing for it (its entry applies `Added`, `Modified`
+  and `Deleted` as it always did), nor does the drain's pod set, which can now only ever
+  shrink by a confirmed `Deleted`. `WatchRelistDiffTests` pins it over HTTP: a relist after an
+  `ERROR` frame and after a 410 on the watch request each arrive as `Modified b, Added d,
+  Deleted c, Synced` with one `Reset` in the run, and an unchanged list as a bare `Synced`
+  (all three fail against the old pump with a second `Reset`).
+- **A relist the server asks for again at once backs off.** The first relist after a 410 or an
+  `ERROR` frame runs at once (the resourceVersion simply expired); a second with no watch
+  frame in between (a bookmark counts) waits the backoff, which doubles up to 30 s and is reset
+  only by a watch that delivered something. Before, a watch that failed every time ("Too large
+  resource version" behind a load balancer whose API servers disagree) was a tight loop of full
+  lists: `WatchRelistDiffTests` counted 1 059 lists in 2.5 s against the old pump, and three
+  against this one.
+- **What the list keeps across a `Reset`** (`ClusterTabViewModel.LiveTabs.cs`). A `Reset` still
+  arrives at a watch's start, which includes Refresh (`WatchCache.Relist` restarts the source,
+  so F5 still shows the list loading, UI rule 18). Every row is then a new object, so two things
+  are held by key rather than by object: the selection (remembered on the `Reset` or by Refresh
+  itself, selected again when the row is listed, dropped when the reader selects something
+  else or the list syncs without it; a kind change clears it, since a ConfigMap may share a
+  Pod's name), and the pod and node panes (`ILiveRowTab`), which read a row of this list rather
+  than a watch of their own. A new row of the same object is handed to the pane, reopening the
+  object rebinds the pane found by key, a `Deleted` marks the pane deleted (an InfoBar above
+  every tab, as the Service pane does), and when the list syncs without an object it covers
+  (same kind, namespace in scope, not a fleet row) the pane is marked deleted too, which is the
+  deletion a Refresh would otherwise hide. A list of another kind says nothing about the pane:
+  it stays as it was until the list is back on its kind, a known gap (it reads no watch of its
+  own). `ClusterTabRelistTests` pins both halves.
 - **A resumed watch that is answered after a lost connection is followed by a `Synced`**
   (#363). The retry resumes from the last resourceVersion, and a reader clears its "Watch
   connection lost …; retrying in Ns." line on the next frame, but a resumed watch on a quiet
@@ -203,6 +239,9 @@ list on every flip.
   connections per cluster and the objects they hold in memory; nothing is written to disk.
 - **Refresh relists** (`WatchCache.Relist`): the entry's source restarts in place, so every
   reader sees a `Reset` and a fresh list. A cache would otherwise answer F5 with what it held.
+  The resource list keeps its selection and its pod and node panes across it by key (see "What
+  the list keeps across a `Reset`" above). A relist the source does itself (410 Gone) is a diff
+  and reaches the entry with no `Reset`.
 - **A failed reconnect clears the cache** (`ShowReconnectFailureAsync`), so the next good
   connect reads everything again. A source that fails ends its readers with the failure and
   is dropped; the next reader starts a new one.
