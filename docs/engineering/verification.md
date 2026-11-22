@@ -538,6 +538,19 @@ runs of all 49 `ux-*` scenarios (each rendered twice per theme) passed the check
 each other byte for byte, and the 18 published screenshots rendered byte-identical to the
 committed ones.
 
+**A check that presses keys in a log pane waits for `LogSettle` before the first press.**
+`ux-log-line-keys` (#236) waited only for the first log line, then pressed Up and read
+`LogLines[^1]` as "the newest line". A line flushed by the pane's 100 ms timer during the press
+became the newest one instead, so the check failed with "Up in a focused log list did not put
+the keys on the newest line" or "A second Up … did not move to the line before", and when it did
+pass, which line the keys ended on decided the PNG. It failed the nightly double render on five
+of the seven nights from 2026-11-16 to 2026-11-22, all on one commit; on this machine the replay
+usually ends before the check starts, so it passed locally every time. With the replay slowed to
+60 ms a line, the old check failed three runs of three with CI's messages, and the check that
+waits for `LogSettle` passed three of three. The sixth failure that week was
+`ux-mac-edit-routing`'s row-filter count ("0 of 14") failing the tooltip probe once; it did not
+reproduce in eight local runs and is not fixed here.
+
 **An indeterminate ProgressBar is drawn empty, and a scenario that shows one is rendered twice on
 every run (#388, 2026-10-24).** `cluster-tab-node-drain-running` came out with a different hash on
 every render, in both themes, on `main` too: the row action strip's busy bar (`IsWorking`, a 28px
