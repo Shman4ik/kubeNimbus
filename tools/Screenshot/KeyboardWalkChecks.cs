@@ -158,11 +158,13 @@ internal static class KeyboardWalkChecks
         var focus = TopLevel.GetTopLevel(window)!.FocusManager!;
         var list = window.GetVisualDescendants().OfType<ItemsControl>().First(c => c.Name == "LogItems" && c.IsEffectivelyVisible);
         var pane = (PodDetailTabViewModel)list.FindAncestorOfType<PodDetailView>()!.DataContext!;
-        for (var i = 0; i < 500 && pane.LogLines.Count == 0; i++)
-        {
-            Settle();
-            Thread.Sleep(20);
-        }
+
+        // Until the demo replay has ended, not until the first line has arrived: a line flushed
+        // between the Up and the check behind it became the newest one, so the keys sat on the
+        // line before it, and the nightly double render (#360) failed on one night in two. The
+        // PNG moved with it, since which line the keys ended on depended on when the presses ran.
+        LogSettle.Run(window);
+        Settle();
 
         var lines = pane.LogLines;
         if (lines.Count < 3 || !lines.Any(l => l.IsJson))
