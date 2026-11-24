@@ -13,7 +13,7 @@ it as the GitHub Release body, so headings must match tags exactly
 
 ### Changed
 
-- .NET 11 (SDK 11.0.100), Avalonia 12.1.6, TUnit 1.83.8 and SvcSystems.UI.Terminal 2.3.4.
+- .NET 11 (SDK 11.0.100), Avalonia 12.2.0, TUnit 1.83.8 and SvcSystems.UI.Terminal 2.3.4.
 
 ### Fixed
 
